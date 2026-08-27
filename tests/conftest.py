@@ -19,8 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, c
 from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
+from app.db.models.actor import Actor
 from app.db.session import get_session
+from app.domain.actors import ActorType
 from app.main import create_app
+from app.services import actors as actors_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -120,3 +123,37 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://tracker.test") as http_client:
         yield http_client
+
+
+@pytest.fixture
+async def system_actor(db_session: AsyncSession) -> Actor:
+    """Системный актор. Создаётся миграцией, поэтому здесь только читается."""
+    return await actors_service.get_system_actor(db_session)
+
+
+@pytest.fixture
+async def owner(db_session: AsyncSession) -> Actor:
+    """Владелец-человек: инициатор запросов в тестах API."""
+    actor, _ = await actors_service.ensure_actor(
+        db_session,
+        actor_type=ActorType.HUMAN,
+        key="owner",
+        display_name="Owner",
+    )
+    return actor
+
+
+@pytest.fixture
+async def owner_secret(db_session: AsyncSession, system_actor: Actor, owner: Actor) -> str:
+    """Секрет рабочего токена владельца."""
+    issued = await actors_service.issue_token(
+        db_session, owner, initiator=system_actor, name="tests"
+    )
+    return issued.secret
+
+
+@pytest.fixture
+async def auth_client(client: AsyncClient, owner_secret: str) -> AsyncClient:
+    """Клиент с заголовком авторизации: всё под `/api/v1` требует токена."""
+    client.headers["Authorization"] = f"Bearer {owner_secret}"
+    return client
