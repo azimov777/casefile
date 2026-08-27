@@ -20,10 +20,12 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
 from app.db.models.actor import Actor
+from app.db.models.queue import Queue
 from app.db.session import get_session
 from app.domain.actors import ActorType
 from app.main import create_app
 from app.services import actors as actors_service
+from app.services import queues as queues_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -157,3 +159,19 @@ async def auth_client(client: AsyncClient, owner_secret: str) -> AsyncClient:
     """Клиент с заголовком авторизации: всё под `/api/v1` требует токена."""
     client.headers["Authorization"] = f"Bearer {owner_secret}"
     return client
+
+
+@pytest.fixture
+async def queue(db_session: AsyncSession, owner: Actor) -> Queue:
+    """Очередь `TRK` с набором по умолчанию из глобальных справочников.
+
+    Нужна почти каждому тесту очередей, справочников и (начиная с задачи 05) задач:
+    очередь — единственный способ получить рабочую конфигурацию процесса.
+    """
+    return await queues_service.create_queue(
+        db_session,
+        initiator=owner,
+        key="TRK",
+        name="Трекер",
+        description="Задачи по разработке трекера",
+    )
