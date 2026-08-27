@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentActorDep, CursorQuery, LimitQuery, SessionDep
 from app.api.schemas.common import CollectionResponse, DataResponse
+from app.api.schemas.events import ChangelogEntryRead
 from app.api.schemas.issues import (
     IssueAssign,
     IssueCreate,
@@ -29,6 +30,7 @@ from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.catalogs import CatalogKind
 from app.services import actors as actors_service
+from app.services import events as events_service
 from app.services import issues as service
 from app.services import queues as queues_service
 from app.services.issues import IssueChanges
@@ -174,6 +176,38 @@ async def read_issue(
 ) -> DataResponse[IssueRead]:
     issue = await service.read_issue(session, issue_key, initiator=current_actor)
     return DataResponse[IssueRead](data=IssueRead.of(issue))
+
+
+@router.get("/{issue_key}/changelog", summary="Read the issue changelog")
+async def read_issue_changelog(
+    issue_key: IssueKeyPath,
+    session: SessionDep,
+    current_actor: CurrentActorDep,
+    limit: LimitQuery = DEFAULT_PAGE_SIZE,
+    cursor: CursorQuery = None,
+) -> CollectionResponse[ChangelogEntryRead]:
+    """История изменений задачи: кто, когда и с какого значения на какое.
+
+    Порядок хронологический, от старого к новому: так историю читают, и так работает
+    единственная в проекте курсорная пагинация. Первая запись у любой задачи —
+    `issue.created`, и список изменений у неё пуст: у создания нет «было».
+
+    Значения в записи — ссылки на момент события (`open`, `TRK.open`, ключ актора), а
+    не указатели на строки справочников. Поэтому переименованный или удалённый статус
+    не портит историю задним числом.
+    """
+    issue = await service.get_issue_by_key(session, issue_key)
+    page = await events_service.list_changelog(
+        session,
+        issue,
+        initiator=current_actor,
+        limit=limit,
+        cursor=cursor,
+    )
+    return CollectionResponse[ChangelogEntryRead].of(
+        [ChangelogEntryRead.of(entry, issue_key=issue.key) for entry in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.patch("/{issue_key}", summary="Update an issue")
