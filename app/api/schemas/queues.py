@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.catalogs import IssueTypeRead, ResolutionRead, StatusRead
 from app.api.schemas.common import unset_field
+from app.api.schemas.fields import FieldRead
 from app.db.models.queue import Queue
 from app.domain.queues import MAX_QUEUE_KEY_LENGTH, QUEUE_KEY_PATTERN
 from app.services.catalogs import format_entry_ref
@@ -121,19 +122,6 @@ class QueueIssueTypesUpdate(BaseModel):
     )
 
 
-class QueueFieldStub(BaseModel):
-    """Заглушка локального поля очереди.
-
-    Реестра полей ещё нет — он появится в задаче 04, которая заменит эту модель
-    настоящей. Ключ в конфигурации присутствует уже сейчас и всегда содержит пустой
-    список: клиент, написанный сегодня, не должен переписываться завтра только потому,
-    что в ответе появилось новое поле.
-    """
-
-    key: str
-    name: str
-
-
 class QueueWorkflowStub(BaseModel):
     """Заглушка воркфлоу очереди. Задача 07 заменит модель настоящим графом переходов."""
 
@@ -152,9 +140,13 @@ class QueueConfigRead(BaseModel):
     issue_types: list[IssueTypeRead] = Field(description="Issue types allowed in this queue")
     statuses: list[StatusRead] = Field(description="Global statuses plus the queue's own")
     resolutions: list[ResolutionRead] = Field(description="Global resolutions plus the queue's own")
-    fields: list[QueueFieldStub] = Field(
+    fields: list[FieldRead] = Field(
         default_factory=list,
-        description="Always empty until the field registry lands (task 04)",
+        description=(
+            "Custom fields available in this queue — global ones plus its own — in display "
+            "order. Hidden fields are left out; a field without issue type restrictions "
+            "applies to every type."
+        ),
     )
     workflows: list[QueueWorkflowStub] = Field(
         default_factory=list,
@@ -168,4 +160,5 @@ class QueueConfigRead(BaseModel):
             issue_types=[IssueTypeRead.of(entry) for entry in config.issue_types],
             statuses=[StatusRead.of(entry) for entry in config.statuses],
             resolutions=[ResolutionRead.of(entry) for entry in config.resolutions],
+            fields=[FieldRead.of(field) for field in config.fields],
         )
