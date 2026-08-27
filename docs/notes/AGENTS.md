@@ -5,7 +5,7 @@
 копятся и не удаляются. Формат записи — в `docs/CONVENTIONS.md`, раздел «Заметки».
 
 ## Файлы
-- `db.md` — PostgreSQL, SQLAlchemy, Alembic: ключи, имена ограничений, автогенерация миграций
+- `db.md` — PostgreSQL, SQLAlchemy, Alembic: ключи, перечисления, пагинация, миграции
 - `docker.md` — сборка образов и контуры compose: слои зависимостей, различия dev и prod
 - `python.md` — поведение библиотек: pydantic-settings, ruff, декларативный слой SQLAlchemy
 - `testing.md` — инфраструктура тестов: откат транзакций, цикл событий, тестовая база

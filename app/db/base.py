@@ -1,10 +1,11 @@
 """Базовый класс моделей SQLAlchemy и общие для всех таблиц колонки."""
 
+import enum
 import uuid
 from datetime import datetime
 from typing import Any, ClassVar
 
-from sqlalchemy import DateTime, MetaData, func, text
+from sqlalchemy import DateTime, Enum, MetaData, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -70,3 +71,46 @@ class BaseModel(UUIDPrimaryKeyMixin, TimestampsMixin, Base):
     """Базовый класс таблиц проекта: `id`, `created_at`, `updated_at` из соглашений."""
 
     __abstract__ = True
+
+    # `eager_defaults` обязателен для всего проекта, и вот почему. `updated_at`
+    # вычисляет база (`onupdate=func.now()`), поэтому после UPDATE SQLAlchemy считает
+    # локальное значение устаревшим и помечает атрибут протухшим. Первое же обращение
+    # к нему — например, при сборке ответа Pydantic — пытается сходить в базу за
+    # свежим значением, а это происходит уже вне async-контекста: MissingGreenlet.
+    # С этим флагом SQLAlchemy дописывает `RETURNING updated_at` в сам UPDATE, и
+    # второго обращения не требуется. Для INSERT то же самое работает по умолчанию,
+    # поэтому ошибка проявляется только на изменении и только в живом запуске.
+    __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
+
+
+def string_enum(python_type: type[enum.Enum], *, name: str, length: int = 32) -> Enum:
+    """Перечисление как VARCHAR с ограничением CHECK, а не как тип PostgreSQL.
+
+    Так во всём проекте. Причина: native enum в PostgreSQL расширяется через
+    `ALTER TYPE ... ADD VALUE`, и добавленное значение нельзя использовать в той же
+    транзакции — миграция, которая заводит значение и тут же им пользуется, падает.
+    Плюс каждый такой тип надо создавать и удалять в миграции руками, иначе
+    `downgrade` оставляет за собой мусор.
+
+    `VARCHAR` + `CHECK` даёт ту же целостность, расширяется заменой одного
+    ограничения и в питоновском коде читается всё тем же enum — преобразованием
+    занимается SQLAlchemy.
+
+    `create_constraint=True` указывать обязательно: с версии 1.4 у SQLAlchemy это
+    значение по умолчанию — `False`, и без него `native_enum=False` даёт голый VARCHAR
+    вообще без проверки. Схема при этом выглядит правильной, а в колонку записывается
+    любая строка.
+
+    `values_callable` заставляет хранить значение (`"human"`), а не имя члена
+    (`"HUMAN"`): по умолчанию SQLAlchemy пишет имя, и в базе оказывается регистр,
+    которого нет ни в API, ни в коде.
+    """
+    return Enum(
+        python_type,
+        name=name,
+        length=length,
+        native_enum=False,
+        create_constraint=True,
+        validate_strings=True,
+        values_callable=lambda members: [member.value for member in members],
+    )

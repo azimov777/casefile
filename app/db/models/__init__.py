@@ -6,5 +6,7 @@
 """
 
 from app.db.base import Base, BaseModel
+from app.db.models.actor import Actor
+from app.db.models.api_token import ApiToken
 
-__all__ = ["Base", "BaseModel"]
+__all__ = ["Actor", "ApiToken", "Base", "BaseModel"]
