@@ -2,12 +2,13 @@
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import UnauthorizedError
 from app.db.models.actor import Actor
+from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.db.session import get_session
 from app.services.auth import authenticate_by_token
 
@@ -40,3 +41,18 @@ async def get_current_actor(session: SessionDep, credentials: CredentialsDep) ->
 
 CurrentActorDep = Annotated[Actor, Depends(get_current_actor)]
 """Текущий актор. Зависимость кешируется на запрос, поэтому лишнего похода в БД нет."""
+
+
+# Параметры пагинации объявлены здесь, а не в каждом роутере: коллекции во всём API
+# листаются одинаково, и три копии одного объявления неизбежно разъехались бы по
+# границам и описаниям. Через `Annotated`, а не значением по умолчанию: так требует
+# современный стиль FastAPI, и вызов `Query` не оказывается в списке аргументов, где
+# он вычисляется один раз на всё приложение.
+#
+# Границы объявлены и здесь, и в `resolve_limit`, и это не дубль по недосмотру:
+# параметр запроса даёт их в OpenAPI и отсекает мусор на входе, а проверка в сценарии
+# работает для MCP и фоновых вызовов, которые мимо FastAPI не проходят.
+LimitQuery = Annotated[int, Query(ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE, description="Page size")]
+CursorQuery = Annotated[
+    str | None, Query(description="Cursor from `meta.next_cursor` of a previous page")
+]

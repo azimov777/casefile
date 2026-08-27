@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Query, Response, status
 
-from app.api.deps import CurrentActorDep, SessionDep
+from app.api.deps import CurrentActorDep, CursorQuery, LimitQuery, SessionDep
 from app.api.schemas.actors import (
     ActorCreate,
     ActorRead,
@@ -19,27 +19,16 @@ from app.api.schemas.actors import (
     ApiTokenRead,
 )
 from app.api.schemas.common import CollectionResponse, DataResponse
-from app.db.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE
+from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.actors import ActorType
 from app.services import actors as service
 
 router = APIRouter(prefix="/actors", tags=["actors"])
 
-# Параметры пагинации объявлены через Annotated, а не значением по умолчанию:
-# так требует современный стиль FastAPI, и заодно вызов Query не оказывается
-# в списке аргументов, где он вычисляется один раз на всё приложение.
-# Границы объявлены и здесь, и в `resolve_limit`, и это не дубль по недосмотру:
-# параметр запроса даёт их в OpenAPI и отсекает мусор на входе, а проверка в сценарии
-# работает для MCP и фоновых вызовов, которые мимо FastAPI не проходят.
 ActorKeyPath = Annotated[
     str, Path(description="Actor key, unique across the installation", examples=["release_bot"])
 ]
 TokenIdPath = Annotated[uuid.UUID, Path(description="Identifier of the token to revoke")]
-
-LimitQuery = Annotated[int, Query(ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE, description="Page size")]
-CursorQuery = Annotated[
-    str | None, Query(description="Cursor from `meta.next_cursor` of a previous page")
-]
 
 
 @router.get("", summary="List actors")
