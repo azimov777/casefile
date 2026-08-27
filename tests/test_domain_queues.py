@@ -21,12 +21,14 @@ from app.domain.catalogs import (
 from app.domain.errors import (
     InvalidCatalogKeyError,
     InvalidCatalogRefError,
+    InvalidIssueKeyError,
     InvalidQueueKeyError,
 )
 from app.domain.queues import (
     FIRST_ISSUE_NUMBER,
     format_issue_key,
     normalize_queue_key,
+    parse_issue_key,
     validate_queue_key,
 )
 
@@ -58,6 +60,25 @@ def test_queue_key_error_explains_the_pattern() -> None:
 
 def test_issue_key_is_built_from_queue_key_and_number() -> None:
     assert format_issue_key(normalize_queue_key("trk"), FIRST_ISSUE_NUMBER) == "TRK-1"
+
+
+def test_issue_key_survives_a_round_trip() -> None:
+    """Разбор обратен сборке: ссылка на задачу приезжает в значениях кастомных полей."""
+    assert parse_issue_key(format_issue_key("TRK", 123)) == ("TRK", 123)
+    assert parse_issue_key(" trk-123 ") == ("TRK", 123)
+
+
+@pytest.mark.parametrize("raw", ["TRK", "TRK-", "TRK-0", "TRK-007", "TRK-1-2", "TRK-x"])
+def test_broken_issue_keys_are_rejected(raw: str) -> None:
+    """`TRK-007` и `TRK-7` не должны указывать на одну задачу двумя способами."""
+    with pytest.raises(InvalidIssueKeyError):
+        parse_issue_key(raw)
+
+
+def test_broken_queue_half_of_an_issue_key_reports_the_queue_key() -> None:
+    """Половины ключа проверяются каждая своей ошибкой — как и в ссылке `TRK.open`."""
+    with pytest.raises(InvalidQueueKeyError):
+        parse_issue_key("-1")
 
 
 @pytest.mark.parametrize("raw", ["open", "OPEN", " open "])

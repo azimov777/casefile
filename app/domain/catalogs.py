@@ -5,16 +5,31 @@
 только собственное поле: у статуса это обязательная категория, у типа задачи — иконка.
 
 Область действия: запись либо глобальная (доступна всем очередям), либо локальная для
-одной очереди. Адресация повторяет договорённость о полях из задачи 04: глобальная
-запись адресуется голым ключом (`open`), локальная — с префиксом очереди (`TRK.open`).
+одной очереди. Глобальная запись адресуется голым ключом (`open`), локальная — с
+префиксом очереди (`TRK.open`).
+
+Сам разбор ссылки живёт не здесь, а в `app/domain/refs.py`: тот же формат у ключей
+реестра полей (`TRK.severity`), и две реализации одного формата рано или поздно
+разошлись бы. Функции ниже — тонкие обёртки, добавляющие к общей механике вид
+справочника и его коды ошибок.
 """
 
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 
 from app.domain.errors import InvalidCatalogKeyError, InvalidCatalogRefError
-from app.domain.queues import normalize_queue_key, validate_queue_key
+from app.domain.queues import normalize_queue_key
+from app.domain.refs import (
+    MAX_SCOPED_KEY_LENGTH,
+    REF_SEPARATOR,
+    SCOPED_KEY_PATTERN,
+    ScopedRef,
+    build_scoped_ref,
+    format_scoped_ref,
+    normalize_scoped_key,
+    parse_scoped_ref,
+    validate_scoped_key,
+)
 
 
 class StatusCategory(StrEnum):
@@ -42,103 +57,57 @@ class CatalogKind(StrEnum):
     RESOLUTION = "resolution"
 
 
-# Ключи справочников — snake_case латиницей, как ключи полей в соглашениях.
-# Точка в шаблон не входит намеренно: она разделяет очередь и ключ в ссылке `TRK.open`,
-# и ключ с точкой сделал бы разбор ссылки неоднозначным.
-CATALOG_KEY_PATTERN = r"^[a-z][a-z0-9_]{1,63}$"
-MAX_CATALOG_KEY_LENGTH = 64
-
-_CATALOG_KEY_RE = re.compile(CATALOG_KEY_PATTERN)
+#: Шаблон ключа справочника — общий шаблон ключа с областью действия. Точка в него не
+#: входит намеренно: она разделяет очередь и ключ в ссылке `TRK.open`.
+CATALOG_KEY_PATTERN = SCOPED_KEY_PATTERN
+MAX_CATALOG_KEY_LENGTH = MAX_SCOPED_KEY_LENGTH
 
 #: Разделитель ссылки на локальную запись: `<КЛЮЧ ОЧЕРЕДИ>.<ключ записи>`.
-CATALOG_REF_SEPARATOR = "."
+CATALOG_REF_SEPARATOR = REF_SEPARATOR
 
-
-@dataclass(frozen=True, slots=True)
-class CatalogRef:
-    """Разобранная ссылка на запись справочника.
-
-    `queue_key is None` — запись глобальная. Разбор и сборка ссылки живут рядом,
-    чтобы формат нельзя было случайно продублировать по-своему в другом месте.
-    """
-
-    key: str
-    queue_key: str | None = None
-
-    @property
-    def is_global(self) -> bool:
-        return self.queue_key is None
-
-    def __str__(self) -> str:
-        return format_catalog_ref(self.key, queue_key=self.queue_key)
+#: Разобранная ссылка на запись справочника. Тот же тип, что у ссылки на поле:
+#: формат один, и различать их нечем — различается только вид объекта в ошибках.
+CatalogRef = ScopedRef
 
 
 def normalize_catalog_key(key: str) -> str:
     """Канонический вид ключа справочника: без пробелов по краям, в нижнем регистре."""
-    return key.strip().lower()
+    return normalize_scoped_key(key)
 
 
 def validate_catalog_key(key: str, *, kind: CatalogKind) -> str:
     """Проверяет ключ записи справочника и возвращает канонический вид."""
-    normalized = normalize_catalog_key(key)
-    if not _CATALOG_KEY_RE.match(normalized):
-        raise InvalidCatalogKeyError(
-            details={
-                "kind": kind.value,
-                "key": key,
-                "reason": "pattern_mismatch",
-                "pattern": CATALOG_KEY_PATTERN,
-            },
-        )
-    return normalized
+    return validate_scoped_key(key, kind=kind.value, error=InvalidCatalogKeyError)
 
 
 def format_catalog_ref(key: str, *, queue_key: str | None) -> str:
     """Собирает ссылку: глобальная запись — голый ключ, локальная — с префиксом очереди."""
-    if queue_key is None:
-        return key
-    return f"{queue_key}{CATALOG_REF_SEPARATOR}{key}"
+    return format_scoped_ref(key, queue_key=queue_key)
 
 
 def parse_catalog_ref(ref: str, *, kind: CatalogKind) -> CatalogRef:
     """Разбирает ссылку `open` или `TRK.open` и проверяет обе половины.
-
-    Ссылка приезжает из пути URL и из тела запроса, поэтому проверяется здесь целиком:
-    ключ очереди — по шаблону очередей, ключ записи — по шаблону справочников. Всё,
-    что не разобралось, — `invalid_catalog_ref` с указанием ожидаемого формата.
 
     Регистр приводится к каноническому: `trk.OPEN` находит ту же запись, что и
     `TRK.open`. Это общее для проекта правило — адресация существующего объекта мягкая,
     создание строгое (шаблон стоит в схеме создания). Иначе один и тот же ключ REST
     отвергал бы, а MCP и фоновые вызовы, идущие мимо схем FastAPI, выполняли бы.
     """
-    candidate = ref.strip()
-    if not candidate:
-        raise InvalidCatalogRefError(details={"kind": kind.value, "ref": ref, "reason": "empty"})
-
-    queue_part, separator, key_part = candidate.partition(CATALOG_REF_SEPARATOR)
-    if not separator:
-        return CatalogRef(key=validate_catalog_key(candidate, kind=kind))
-    if CATALOG_REF_SEPARATOR in key_part:
-        raise InvalidCatalogRefError(
-            details={
-                "kind": kind.value,
-                "ref": ref,
-                "reason": "too_many_separators",
-                "expected": f"<QUEUE>{CATALOG_REF_SEPARATOR}<key> or <key>",
-            },
-        )
-    return CatalogRef(
-        key=validate_catalog_key(key_part, kind=kind),
-        queue_key=validate_queue_key(queue_part),
+    return parse_scoped_ref(
+        ref,
+        kind=kind.value,
+        key_error=InvalidCatalogKeyError,
+        ref_error=InvalidCatalogRefError,
     )
 
 
 def build_catalog_ref(key: str, *, queue_key: str | None, kind: CatalogKind) -> CatalogRef:
     """Проверенная ссылка из двух половин: так её собирают тела запросов на создание."""
-    return CatalogRef(
-        key=validate_catalog_key(key, kind=kind),
-        queue_key=None if queue_key is None else validate_queue_key(queue_key),
+    return build_scoped_ref(
+        key,
+        queue_key=queue_key,
+        kind=kind.value,
+        key_error=InvalidCatalogKeyError,
     )
 
 
