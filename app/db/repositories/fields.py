@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.catalog import IssueType
 from app.db.models.field import Field, FieldIssueType
 from app.db.pagination import Page, paginate
+from app.domain.fields import FieldValueType
 
 
 class FieldRepository:
@@ -84,6 +85,15 @@ class FieldRepository:
         if not include_hidden:
             statement = statement.where(Field.is_hidden.is_(False))
         statement = statement.order_by(Field.display_order, Field.created_at, Field.id)
+        return list((await self._session.scalars(statement)).unique())
+
+    async def list_by_value_type(self, value_type: FieldValueType) -> list[Field]:
+        """Все поля такого типа значения, в любой области и включая скрытые.
+
+        Скрытые нужны наравне с видимыми: скрытие убирает поле из конфигурации, но
+        значения в задачах остаются, и ссылка из скрытого поля так же реальна.
+        """
+        statement = select(Field).where(Field.value_type == value_type)
         return list((await self._session.scalars(statement)).unique())
 
     async def count_issue_type_bindings(self, issue_type_id: uuid.UUID) -> int:

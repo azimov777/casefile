@@ -4,66 +4,45 @@
 правок: статус с задачами нельзя удалить, категорию такого статуса нельзя
 переопределить, очередь с задачами нельзя стереть, у поля со значениями нельзя
 поменять тип и нельзя удалить вариант перечисления, которым пользуются. Каждая из
-этих проверок должна пересчитать задачи, но самой таблицы задач ещё нет — она
-появляется в задаче 05.
+этих проверок должна пересчитать задачи — и делает это отсюда.
 
-Поэтому здесь заглушки, и это временное состояние, а не архитектура. Задача 05 обязана
-заменить тела функций настоящими запросами; до тех пор они честно отвечают «ноль» и
-сами следят за тем, чтобы это не превратилось в тихую дыру: как только в реестре
-моделей появится таблица `issues`, каждая функция начнёт падать с понятным сообщением.
-Тихо разрешить удаление статуса, под которым стоят пятьсот задач, нельзя ничем.
+Отдельный модуль, а не метод репозитория напрямую, — ради направления зависимостей.
+Сценарии справочников и полей не должны знать про сценарии задач: иначе три модуля
+замкнулись бы в цикл (задачи проверяют статусы, статусы считают задачи). Здесь же
+лежит тонкая прослойка, которая знает только про таблицу задач и ничего — про её
+сценарии.
+
+Функции ничего не проверяют и ничего не запрещают: они отвечают числом, а решение
+принимает вызывающий сценарий. Транзакцию не фиксируют — границу держит вход в
+приложение.
 """
 
 import uuid
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Base
-
-#: Имя таблицы задач. Её появление в метаданных — признак того, что задача 05 сделана
-#: и заглушки пора заменить настоящими запросами.
-ISSUES_TABLE = "issues"
-
-_REPLACEMENT_HINT = (
-    "Issue table exists: replace the stubs in app/services/issue_usage.py "
-    "with real queries before catalog protection can be trusted"
-)
-
-
-def _assert_still_a_stub() -> None:
-    """Страховка от молчаливой дыры: заглушка обязана исчезнуть вместе с задачей 05.
-
-    Проверка идёт по реестру моделей, а не по базе: она бесплатна и срабатывает ровно
-    в тот момент, когда автор задачи 05 импортирует модель `Issue` в
-    `app/db/models/__init__.py`. `NotImplementedError` здесь — правильная реакция:
-    это ошибка разработки, а не ситуация, которую должен обрабатывать клиент.
-    """
-    if ISSUES_TABLE in Base.metadata.tables:
-        raise NotImplementedError(_REPLACEMENT_HINT)
+from app.db.repositories import IssueRepository
 
 
 async def count_issues_with_status(session: AsyncSession, status_id: uuid.UUID) -> int:
-    """Сколько задач стоит в этом статусе. Задача 05: `SELECT count(*) ... WHERE status_id = ?`."""
-    _assert_still_a_stub()
-    return 0
+    """Сколько задач стоит в этом статусе."""
+    return await IssueRepository(session).count_by_status(status_id)
 
 
 async def count_issues_with_issue_type(session: AsyncSession, issue_type_id: uuid.UUID) -> int:
     """Сколько задач этого типа."""
-    _assert_still_a_stub()
-    return 0
+    return await IssueRepository(session).count_by_issue_type(issue_type_id)
 
 
 async def count_issues_with_resolution(session: AsyncSession, resolution_id: uuid.UUID) -> int:
     """Сколько задач закрыто с этой резолюцией."""
-    _assert_still_a_stub()
-    return 0
+    return await IssueRepository(session).count_by_resolution(resolution_id)
 
 
 async def count_issues_in_queue(session: AsyncSession, queue_id: uuid.UUID) -> int:
     """Сколько задач в очереди. От этого зависит, можно ли очередь удалить."""
-    _assert_still_a_stub()
-    return 0
+    return await IssueRepository(session).count_in_queue(queue_id)
 
 
 async def move_issues_to_status(
@@ -76,11 +55,17 @@ async def move_issues_to_status(
     """Переносит задачи из одного статуса в другой и возвращает число перенесённых.
 
     `queue_id` сужает перенос до одной очереди; `None` — переносить во всех.
-    Задача 05: `UPDATE issues SET status_id = :to WHERE status_id = :from [AND queue_id = ...]`.
-    Проверку допустимости целевого статуса делает вызывающий сценарий — здесь только запрос.
+    Проверку допустимости целевого статуса делает вызывающий сценарий — здесь только
+    запрос. Массовый `UPDATE` идёт мимо объектов сессии и мимо единой точки применения
+    изменений: журнала он не пишет и события не порождает. Это осознанно — перенос
+    сотни задач одной строкой истории понятнее сотни одинаковых записей, — но задача 06
+    обязана решить это явно, а не унаследовать молчание.
     """
-    _assert_still_a_stub()
-    return 0
+    return await IssueRepository(session).move_to_status(
+        from_status_id=from_status_id,
+        to_status_id=to_status_id,
+        queue_id=queue_id,
+    )
 
 
 async def count_issues_with_field(session: AsyncSession, field_ref: str) -> int:
@@ -91,30 +76,23 @@ async def count_issues_with_field(session: AsyncSession, field_ref: str) -> int:
 
     Адресация — ссылкой (`severity`, `TRK.severity`), потому что именно она служит
     ключом в `values`; формат описан в `app/domain/fields.py`.
-    Задача 05: `SELECT count(*) FROM issues WHERE values ? :ref` — оператор `?`
-    ложится на GIN-индекс по `values`.
     """
-    _assert_still_a_stub()
-    return 0
+    return await IssueRepository(session).count_with_field(field_ref)
 
 
 async def count_issues_with_field_value(
     session: AsyncSession,
     field_ref: str,
-    value: str,
+    value: Any,
 ) -> int:
     """Сколько задач держит в этом поле именно это значение.
 
     Нужна, чтобы не дать выбросить вариант перечисления, которым уже пользуются:
     задачи остались бы со значением, которого нет в списке вариантов.
 
-    Множественное поле хранит массив, одиночное — скаляр, поэтому запрос обязан
-    учитывать оба случая. Задача 05:
-    `WHERE values @> jsonb_build_object(:ref, :value)
-        OR values @> jsonb_build_object(:ref, jsonb_build_array(:value))`.
+    Множественное поле хранит массив, одиночное — скаляр, и запрос учитывает оба случая.
     """
-    _assert_still_a_stub()
-    return 0
+    return await IssueRepository(session).count_with_field_value(field_ref, value)
 
 
 async def missing_issue_keys(session: AsyncSession, keys: set[str]) -> set[str]:
@@ -122,10 +100,7 @@ async def missing_issue_keys(session: AsyncSession, keys: set[str]) -> set[str]:
 
     Нужна валидатору кастомных полей: поле типа «ссылка на задачу» не должно принимать
     ключ несуществующей задачи. Одним запросом на весь набор, а не по ключу за раз.
-
-    Пока таблицы задач нет, функция отвечает «ничего не пропало», и это единственная
-    заглушка модуля, чей ответ разрешает действие, а не запрещает. Задача 05:
-    `SELECT key FROM issues WHERE key = ANY(:keys)` и разность множеств.
     """
-    _assert_still_a_stub()
-    return set()
+    if not keys:
+        return set()
+    return keys - await IssueRepository(session).existing_keys(keys)

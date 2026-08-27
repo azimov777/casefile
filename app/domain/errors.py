@@ -115,6 +115,68 @@ class QueueNotEmptyError(ConflictError):
     message = "Queue still has issues"
 
 
+# --- Задачи ---------------------------------------------------------------------
+
+
+class IssueNotFoundError(NotFoundError):
+    """Задачи с таким ключом нет."""
+
+    code = "issue_not_found"
+    message = "Issue not found"
+
+
+class IssueVersionConflictError(ConflictError):
+    """Версия задачи разошлась: её изменили между чтением и записью.
+
+    Отдельный код, а не общий `conflict`: клиент по нему понимает, что нужно перечитать
+    задачу и повторить изменение, а не что запрос был неверным. Тихая перезапись здесь
+    хуже отказа — потерянное чужое изменение обнаруживается спустя дни.
+    """
+
+    code = "version_conflict"
+    message = "Issue was changed by someone else"
+
+
+class IssueReferencedError(ConflictError):
+    """На задачу ссылаются кастомные поля других задач: удалять её нельзя.
+
+    Тихое удаление оставило бы в чужих значениях ключ, за которым ничего нет: форма
+    показала бы пустое поле, фильтр по нему не нашёл бы ничего, а понять причину было бы
+    нельзя. Сначала снимают ссылки, потом удаляют задачу.
+    """
+
+    code = "issue_referenced"
+    message = "Issue is referenced by other issues"
+
+
+class InvalidIssueSummaryError(ValidationError):
+    """Название задачи пустое, многострочное или слишком длинное."""
+
+    code = "invalid_issue_summary"
+    message = "Issue summary is invalid"
+
+
+class InvalidIssueDescriptionError(ValidationError):
+    """Описание задачи длиннее допустимого."""
+
+    code = "invalid_issue_description"
+    message = "Issue description is invalid"
+
+
+class InvalidIssueDeadlineError(ValidationError):
+    """Дедлайн пришёл без таймзоны: домысливать её за клиента нельзя."""
+
+    code = "invalid_issue_deadline"
+    message = "Issue deadline is invalid"
+
+
+class InvalidIssueTagsError(ValidationError):
+    """Тег задачи многострочный, слишком длинный, либо тегов слишком много."""
+
+    code = "invalid_issue_tags"
+    message = "Issue tags are invalid"
+
+
 # --- Справочники: статусы, типы задач, резолюции ---------------------------------
 
 
