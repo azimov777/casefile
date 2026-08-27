@@ -223,6 +223,23 @@ async def test_category_is_locked_while_issues_sit_in_the_status(
     assert entry.category is StatusCategory.IN_PROGRESS
 
 
+async def test_field_of_another_kind_is_not_swallowed(
+    db_session: AsyncSession, owner: Actor
+) -> None:
+    """Иконка у статуса — дефект вызывающего кода, а не поле, которое можно тихо забыть.
+
+    Через HTTP такое не пройдёт: у каждого справочника своя схема. Но сценарий зовут
+    ещё из MCP и из фоновых процессов, где схем нет, и молчаливый успех означал бы,
+    что вызывающий уверен в применённом изменении, которого не было.
+    """
+    entry = await service.get_entry(db_session, CatalogKind.STATUS, key="open", queue=None)
+
+    with pytest.raises(ValueError, match="icon belongs to issue types"):
+        await service.update_entry(
+            db_session, entry, CatalogKind.STATUS, initiator=owner, icon="fire"
+        )
+
+
 async def test_queue_default_status_cannot_be_deactivated(
     db_session: AsyncSession, owner: Actor, queue: Queue
 ) -> None:

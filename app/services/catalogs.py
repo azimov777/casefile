@@ -150,6 +150,28 @@ async def count_usage(session: AsyncSession, kind: CatalogKind, entry_id: uuid.U
             return await issue_usage.count_issues_with_resolution(session, entry_id)
 
 
+def reject_fields_of_another_kind(
+    kind: CatalogKind,
+    *,
+    category: StatusCategory | None = None,
+    icon: str | None = None,
+) -> None:
+    """Отвергает поля, которых у этого справочника нет.
+
+    Категория есть только у статуса, иконка — только у типа задачи. Молча проглотить
+    лишний параметр нельзя: вызывающий получил бы успешный ответ и уверенность, что
+    поле применено. Через HTTP такое не пройдёт — там у каждого справочника своя
+    схема, — но сценарий вызывается ещё и из MCP, и из фоновых процессов.
+
+    `ValueError`, а не доменная ошибка: это дефект вызывающего кода, а не ситуация,
+    которую должен обрабатывать клиент.
+    """
+    if category is not None and kind is not CatalogKind.STATUS:
+        raise ValueError(f"category belongs to statuses only, got {kind.value}")
+    if icon is not None and kind is not CatalogKind.ISSUE_TYPE:
+        raise ValueError(f"icon belongs to issue types only, got {kind.value}")
+
+
 async def get_entry(
     session: AsyncSession,
     kind: CatalogKind,
@@ -226,6 +248,7 @@ async def create_entry(
     """
     spec = spec_for(kind)
     ensure_allowed(initiator, f"{kind.value}.create")
+    reject_fields_of_another_kind(kind, category=category, icon=icon or None)
     normalized = validate_catalog_key(key, kind=kind)
 
     if kind is CatalogKind.STATUS and category is None:
@@ -285,18 +308,19 @@ async def update_entry(
     существует отображаемое название, которое менять можно сколько угодно.
     """
     ensure_allowed(initiator, f"{kind.value}.update", target=entry)
+    reject_fields_of_another_kind(kind, category=category, icon=icon)
 
     if is_active is False and entry.is_active:
         await _ensure_not_queue_default(session, entry, kind, reason="cannot_deactivate")
 
-    if category is not None and kind is CatalogKind.STATUS:
+    if category is not None:
         await _apply_status_category(session, entry, category)
 
     if name is not None:
         entry.name = name.strip()
     if is_active is not None:
         entry.is_active = is_active
-    if icon is not None and kind is CatalogKind.ISSUE_TYPE:
+    if icon is not None:
         entry.icon = icon.strip()
 
     await session.flush()
