@@ -68,6 +68,19 @@ class ValidationError(AppError):
     message = "Validation failed"
 
 
+class UnauthorizedError(AppError):
+    """Запрос не аутентифицирован: токена нет, он неизвестен, отозван или актор отключён.
+
+    Код один на все случаи — так требуют соглашения. Различать причины позволяет
+    `details.reason`: клиенту этого хватает, чтобы понять, добавлять заголовок или
+    перевыпускать токен.
+    """
+
+    code = "unauthorized"
+    status_code = 401
+    message = "Authentication required"
+
+
 class PermissionDeniedError(AppError):
     """Действие запрещено. В v1 ролей нет, но точка отказа существует с самого начала."""
 
