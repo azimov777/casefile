@@ -18,6 +18,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.sentinels import UNSET, is_set
 from app.db.models.actor import Actor
 from app.db.models.catalog import IssueType
 from app.db.models.field import Field
@@ -49,12 +50,6 @@ from app.domain.fields import (
 from app.services import catalogs as catalogs_service
 from app.services import issue_usage
 from app.services.permissions import ensure_allowed
-
-#: «Значение по умолчанию не передавали». Отличать это от переданного `null`
-#: обязательно: `null` снимает умолчание, отсутствие ключа его не трогает. Сентинел
-#: свой, а не `UNSET` из схем API: сценарий вызывается ещё из MCP и из фоновых
-#: процессов, а слой `services` не имеет права зависеть от `api`.
-_UNCHANGED_DEFAULT: Any = object()
 
 
 def field_ref(field: Field) -> str:
@@ -225,7 +220,7 @@ async def update_field(
     value_type: FieldValueType | None = None,
     is_multiple: bool | None = None,
     options: list[FieldOption] | None = None,
-    default_value: Any = _UNCHANGED_DEFAULT,
+    default_value: Any = UNSET,
     display_order: int | None = None,
     issue_types: list[IssueType] | None = None,
 ) -> Field:
@@ -280,7 +275,7 @@ async def update_field(
     if display_order is not None:
         field.display_order = display_order
 
-    if default_value is not _UNCHANGED_DEFAULT:
+    if is_set(default_value):
         field.default_value = _validated_default(
             ref=field_ref(field),
             value_type=target_type,
@@ -325,6 +320,17 @@ async def delete_field(session: AsyncSession, field: Field, *, initiator: Actor)
             },
         )
     await FieldRepository(session).delete(field)
+
+
+async def issue_reference_refs(session: AsyncSession) -> list[str]:
+    """Ссылки всех полей, которые хранят ссылку на задачу.
+
+    Нужны удалению задачи: чтобы понять, ссылается ли кто-то на неё, надо знать, под
+    какими ключами в `values` вообще могут лежать ключи задач. Реестр знает это, а
+    таблица задач — нет, поэтому список собирается здесь.
+    """
+    fields = await FieldRepository(session).list_by_value_type(FieldValueType.ISSUE)
+    return [field_ref(field) for field in fields]
 
 
 async def validate_issue_values(
