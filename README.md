@@ -75,7 +75,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
      -d '{"key": "TRK", "name": "Трекер"}' \
      http://localhost:8000/api/v1/queues
 
-# конфигурация целиком: типы, статусы, резолюции одним запросом
+# конфигурация целиком: типы, статусы, резолюции и поля одним запросом
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/queues/TRK/config
 
 # архивация вместо удаления: очередь с задачами удалить нельзя
@@ -120,6 +120,53 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 Ключи адресуются без учёта регистра (`trk.in_review` найдёт ту же запись), а вот придумать
 кривой ключ при создании нельзя: ключи очередей — латиница в верхнем регистре, ключи
 справочников — snake_case в нижнем.
+
+
+## Кастомные поля
+
+Разным процессам нужны разные атрибуты: у бага — серьёзность, у релиза — версия сборки. Поля
+описываются в реестре и хранятся в `values JSONB` задачи, поэтому **новое поле не требует
+миграции**. Область действия как у справочников: глобальное поле адресуется голым ключом
+(`business_value`), локальное — с префиксом очереди (`TRK.severity`).
+
+```bash
+# перечисление, только для багов этой очереди, со значением по умолчанию
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"key": "severity", "name": "Серьёзность", "value_type": "enum", "queue": "TRK",
+          "issue_types": ["bug"], "is_required": true, "default_value": "minor",
+          "options": [{"key": "minor", "name": "Мелкая"},
+                      {"key": "critical", "name": "Критическая"}]}' \
+     http://localhost:8000/api/v1/fields
+
+# какие поля есть у задачи такого типа в этой очереди
+curl -H "Authorization: Bearer $TOKEN" \
+     'http://localhost:8000/api/v1/fields?queue=TRK&issue_type=bug'
+```
+
+Типы значений: `string`, `text`, `number`, `date`, `datetime`, `boolean`, `enum`, `actor`
+(ссылка на актора), `issue` (ссылка на задачу). Любое поле может быть множественным
+(`is_multiple`) — тогда оно хранит массив значений того же типа.
+
+Формат записи в JSONB зафиксирован в докстринге `app/domain/fields.py` и обязателен для всех:
+его читают история изменений, поиск и автоматика. Ключ в `values` — это **ссылка** на поле, а
+не его ключ, иначе глобальное `severity` и локальное `TRK.severity` затирали бы друг друга.
+
+Что нельзя менять: ключ поля (под ним лежат значения в задачах) и — у поля, в котором уже есть
+данные, — тип и множественность. Переименование, обязательность и порядок показа меняются
+всегда. Удалить поле со значениями нельзя: его **скрывают** (`PATCH` с `is_hidden: true`) —
+поле исчезает из конфигурации очереди, но данные и история остаются читаемыми.
+
+Валидатор значений возвращает **все** замечания сразу, а не первое: фронт подсвечивает всю
+форму за один ответ, агент исправляет запрос за одну попытку.
+
+```json
+{"error": {"code": "field_values_invalid",
+           "message": "Custom field values failed validation",
+           "details": {"fields": [{"field": "TRK.severity", "reason": "required",
+                                   "allowed": ["minor", "critical"]},
+                                  {"field": "TRK.due_on", "reason": "invalid_date",
+                                   "expected": "YYYY-MM-DD"}]}}}
+```
 
 
 ## Команды разработки
