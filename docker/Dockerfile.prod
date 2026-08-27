@@ -1,0 +1,46 @@
+# Продакшен-образ: многостадийная сборка. Компиляторы и заголовки остаются в
+# стадии builder, в рантайм уезжает только готовое виртуальное окружение и код.
+
+FROM python:3.14-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Ставятся только рантайм-зависимости (без группы dev). Сам проект после установки
+# удаляется: в рантайм код приезжает файлами, а не колесом.
+COPY pyproject.toml ./
+RUN mkdir -p app && touch app/__init__.py \
+    && pip install --no-cache-dir . \
+    && pip uninstall -y tracker
+
+
+FROM python:3.14-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH=/app
+
+RUN useradd --create-home --uid 1000 tracker
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR /app
+COPY --chown=tracker:tracker alembic.ini ./
+COPY --chown=tracker:tracker app ./app
+
+USER tracker
+
+EXPOSE 8000
+
+# Без --reload: в продакшене перезапуск по изменению файлов не нужен и опасен.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

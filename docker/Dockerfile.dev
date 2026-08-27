@@ -1,0 +1,28 @@
+# Образ для разработки: код монтируется томом, поэтому внутрь копируется только
+# описание зависимостей. Правка исходника подхватывается автоперезапуском uvicorn
+# и не требует пересборки образа.
+FROM python:3.14-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# curl нужен проверке здоровья контейнера, build-essential — сборке колёс,
+# для которых нет готовых под эту версию Python.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Зависимости ставятся отдельным слоем, до появления кода: правка исходника
+# не должна тянуть переустановку пакетов. Слой пересобирается только при
+# изменении pyproject.toml.
+COPY pyproject.toml ./
+RUN mkdir -p app && touch app/__init__.py \
+    && pip install --no-cache-dir -e ".[dev]"
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

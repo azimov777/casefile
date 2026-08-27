@@ -1,0 +1,78 @@
+# Контур разработки. Поднимается одной командой: docker compose up
+#
+# Сервисы migrate, test и lint спрятаны за профилем tools: они не должны стартовать
+# вместе с сервером. Запускаются точечно: docker compose run --rm <сервис>.
+
+name: tracker
+
+x-app-environment: &app-environment
+  TRACKER_ENVIRONMENT: local
+  TRACKER_DEBUG: "true"
+  TRACKER_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+  TRACKER_TEST_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}_test
+  TRACKER_CORS_ORIGINS: ${TRACKER_CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+
+x-app-service: &app-service
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.dev
+  image: tracker-dev:latest
+  environment: *app-environment
+  volumes:
+    # Исходники монтируются целиком: правка файла видна контейнеру сразу.
+    - ./:/app
+    # Анонимный том прячет .venv хоста — виртуальное окружение внутри своё, системное.
+    - /app/.venv
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tracker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracker}
+      POSTGRES_DB: ${POSTGRES_DB:-tracker}
+    ports:
+      # Порт наружу — чтобы смотреть базу клиентом с хоста; приложение ходит по сети compose.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tracker} -d ${POSTGRES_DB:-tracker}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *app-service
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "${TRACKER_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Миграции — явный шаг, а не часть старта приложения: несколько реплик, применяющих
+  # миграции одновременно, дают гонку и испорченную схему.
+  migrate:
+    <<: *app-service
+    command: alembic upgrade head
+    profiles: ["tools"]
+
+  test:
+    <<: *app-service
+    command: pytest
+    profiles: ["tools"]
+
+  lint:
+    <<: *app-service
+    command: sh -c "ruff check . && ruff format --check ."
+    profiles: ["tools"]
+
+volumes:
+  pgdata:

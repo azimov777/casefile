@@ -1,0 +1,62 @@
+# Продакшен-контур: тот же набор сервисов, что и в разработке, но из прод-образа.
+# Отличия от dev: код внутри образа, тома с исходниками нет, автоперезапуска нет,
+# порт БД наружу не публикуется, значения секретов обязательны.
+#
+# Запуск: docker compose -f docker-compose.prod.yml up -d --build
+
+name: tracker-prod
+
+x-app-environment: &app-environment
+  TRACKER_ENVIRONMENT: production
+  TRACKER_DEBUG: "false"
+  TRACKER_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER обязателен}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}@db:5432/${POSTGRES_DB:?POSTGRES_DB обязателен}
+  TRACKER_CORS_ORIGINS: ${TRACKER_CORS_ORIGINS:?TRACKER_CORS_ORIGINS обязателен}
+
+x-app-service: &app-service
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.prod
+  image: tracker-prod:latest
+  environment: *app-environment
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER обязателен}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB обязателен}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    <<: *app-service
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "${TRACKER_PORT:-8000}:8000"
+    healthcheck:
+      # curl в прод-образе нет намеренно: проверка идёт средствами самого Python.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  migrate:
+    <<: *app-service
+    command: alembic upgrade head
+    restart: "no"
+    profiles: ["tools"]
+
+volumes:
+  pgdata:
