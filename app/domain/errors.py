@@ -90,6 +90,13 @@ class InvalidQueueKeyError(ValidationError):
     message = "Queue key is invalid"
 
 
+class InvalidIssueKeyError(ValidationError):
+    """Ключ задачи не разбирается: ожидается `КЛЮЧ-НОМЕР`, например `TRK-123`."""
+
+    code = "invalid_issue_key"
+    message = "Issue key is invalid"
+
+
 class QueueArchivedError(ConflictError):
     """Очередь в архиве: новые задачи в неё не заводятся.
 
@@ -216,3 +223,89 @@ class StatusCategoryLockedError(ConflictError):
 
     code = "status_category_locked"
     message = "Status category cannot be changed while issues use the status"
+
+
+# --- Реестр полей ---------------------------------------------------------------
+
+
+class InvalidFieldKeyError(ValidationError):
+    """Ключ поля не соответствует шаблону или занят системным полем задачи."""
+
+    code = "invalid_field_key"
+    message = "Field key is invalid"
+
+
+class InvalidFieldRefError(ValidationError):
+    """Ссылка на поле не разбирается: ожидается `key` или `QUEUE.key`."""
+
+    code = "invalid_field_ref"
+    message = "Field reference is invalid"
+
+
+class FieldNotFoundError(NotFoundError):
+    """Поля с такой ссылкой нет."""
+
+    code = "field_not_found"
+    message = "Field not found"
+
+
+class FieldKeyTakenError(ConflictError):
+    """Ключ поля занят в этой области: глобально либо внутри очереди."""
+
+    code = "field_key_taken"
+    message = "Field key is already taken in this scope"
+
+
+class InvalidFieldDefinitionError(ValidationError):
+    """Описание поля противоречит само себе.
+
+    Перечисление без вариантов, варианты у не-перечисления, дубли ключей вариантов,
+    значение по умолчанию не того типа. Причина — в `details.reason`: код один, потому
+    что для клиента это одна ситуация «поле описано неверно, вот что именно».
+    """
+
+    code = "invalid_field_definition"
+    message = "Field definition is invalid"
+
+
+class FieldTypeLockedError(ConflictError):
+    """У поля есть значения: тип и множественность менять нельзя.
+
+    Смена типа задним числом переопределила бы уже записанное: строка «2026-08-27»
+    осталась бы в JSONB, но читалась бы как число, а история изменений — как ссылка на
+    актора. Переименование и обязательность менять можно сколько угодно.
+    """
+
+    code = "field_type_locked"
+    message = "Field type cannot be changed while the field has values"
+
+
+class FieldInUseError(ConflictError):
+    """Поле используется задачами: жёстко удалить его нельзя, только скрыть.
+
+    Скрытое поле остаётся в реестре: значения в задачах никуда не деваются и история
+    изменений остаётся читаемой, но новые значения в него не пишутся и в конфигурации
+    очереди его больше нет.
+    """
+
+    code = "field_in_use"
+    message = "Field is in use"
+
+
+class FieldUnavailableError(ValidationError):
+    """Поле существует, но в этой очереди или у этого типа задачи неприменимо."""
+
+    code = "field_unavailable"
+    message = "Field is not available here"
+
+
+class FieldValuesInvalidError(ValidationError):
+    """Значения кастомных полей не прошли проверку.
+
+    В `details.fields` лежит **весь** список замечаний, а не первое: фронту нужно
+    подсветить всю форму за один ответ, а агенту — исправить запрос за одну попытку.
+    Форма записи описана в `app/domain/fields.py` (`FieldIssue`).
+    """
+
+    code = "field_values_invalid"
+    message = "Custom field values failed validation"
