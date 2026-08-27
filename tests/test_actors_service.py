@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.actor import Actor
+from app.db.pagination import MAX_PAGE_SIZE, InvalidPageSizeError
 from app.domain.actors import SYSTEM_ACTOR_ID, SYSTEM_ACTOR_KEY, ActorType
 from app.domain.errors import (
     ActorInactiveError,
@@ -30,6 +31,21 @@ async def test_system_actor_is_seeded_by_migration(db_session: AsyncSession) -> 
     assert system.id == SYSTEM_ACTOR_ID
     assert system.key == SYSTEM_ACTOR_KEY
     assert system.type is ActorType.SYSTEM
+
+
+async def test_page_size_is_checked_outside_http_too(
+    db_session: AsyncSession,
+    owner: Actor,
+) -> None:
+    """Проверка живёт в сценарии, а не только в параметре запроса.
+
+    Иначе MCP и фоновые вызовы, идущие мимо FastAPI, получили бы другое поведение
+    на том же самом входе.
+    """
+    with pytest.raises(InvalidPageSizeError) as error:
+        await service.list_actors(db_session, initiator=owner, limit=MAX_PAGE_SIZE + 1)
+
+    assert error.value.details["max"] == MAX_PAGE_SIZE
 
 
 async def test_create_actor_normalizes_key(db_session: AsyncSession, owner: Actor) -> None:

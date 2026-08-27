@@ -19,7 +19,7 @@ from app.api.schemas.actors import (
     ApiTokenRead,
 )
 from app.api.schemas.common import CollectionResponse, DataResponse
-from app.db.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.db.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.domain.actors import ActorType
 from app.services import actors as service
 
@@ -28,7 +28,10 @@ router = APIRouter(prefix="/actors", tags=["actors"])
 # Параметры пагинации объявлены через Annotated, а не значением по умолчанию:
 # так требует современный стиль FastAPI, и заодно вызов Query не оказывается
 # в списке аргументов, где он вычисляется один раз на всё приложение.
-LimitQuery = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE, description="Page size")]
+# Границы объявлены и здесь, и в `resolve_limit`, и это не дубль по недосмотру:
+# параметр запроса даёт их в OpenAPI и отсекает мусор на входе, а проверка в сценарии
+# работает для MCP и фоновых вызовов, которые мимо FastAPI не проходят.
+LimitQuery = Annotated[int, Query(ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE, description="Page size")]
 CursorQuery = Annotated[
     str | None, Query(description="Cursor from `meta.next_cursor` of a previous page")
 ]
@@ -101,7 +104,9 @@ async def update_actor(
 ) -> DataResponse[ActorRead]:
     """Меняет только переданные поля: непереданное остаётся как было."""
     actor = await service.get_actor_by_key(session, actor_key)
-    changes = payload.model_dump(exclude_unset=True, exclude_none=True)
+    # `exclude_unset` — единственный фильтр: явный `null` схема уже отвергла,
+    # поэтому «не передано» здесь не может притвориться «передано как null».
+    changes = payload.model_dump(exclude_unset=True)
     actor = await service.update_actor(session, actor, initiator=current_actor, **changes)
     return DataResponse[ActorRead](data=ActorRead.model_validate(actor))
 

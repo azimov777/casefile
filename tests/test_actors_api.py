@@ -157,6 +157,46 @@ async def test_patch_changes_only_passed_fields(auth_client: AsyncClient) -> Non
     assert data["display_name"] == "Бот"
 
 
+async def test_explicit_null_is_an_error_not_a_silent_skip(auth_client: AsyncClient) -> None:
+    """`null` у поля без осмысленного `null` обязан быть ошибкой.
+
+    Молча отбросить его — значит ответить 200 на запрос, который ничего не сделал:
+    клиент останется уверен, что поле изменено.
+    """
+    await auth_client.post(
+        "/api/v1/actors",
+        json={"type": "agent", "key": "null_bot", "display_name": "Бот"},
+    )
+
+    response = await auth_client.patch("/api/v1/actors/null_bot", json={"display_name": None})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert (await auth_client.get("/api/v1/actors/null_bot")).json()["data"][
+        "display_name"
+    ] == "Бот"
+
+
+async def test_empty_patch_changes_nothing(auth_client: AsyncClient) -> None:
+    """Пустое тело — законный запрос без изменений, в отличие от явного `null`."""
+    await auth_client.post(
+        "/api/v1/actors",
+        json={"type": "agent", "key": "untouched_bot", "display_name": "Бот"},
+    )
+
+    response = await auth_client.patch("/api/v1/actors/untouched_bot", json={})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["display_name"] == "Бот"
+
+
+async def test_page_size_out_of_range_is_rejected(auth_client: AsyncClient) -> None:
+    """Потолок выборки не срезается молча: клиент узнаёт, что запросил невозможное."""
+    response = await auth_client.get("/api/v1/actors", params={"limit": 100_000})
+
+    assert response.status_code == 422
+
+
 async def test_token_lifecycle(auth_client: AsyncClient, owner: Actor) -> None:
     """Выпуск, работа новым токеном, отзыв и отказ отозванному — один сквозной сценарий."""
     issued = await auth_client.post(
