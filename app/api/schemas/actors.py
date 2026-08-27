@@ -6,10 +6,10 @@
 
 import uuid
 from datetime import datetime
-from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.schemas.common import unset_field
 from app.domain.actors import ACTOR_KEY_PATTERN, ActorType
 
 
@@ -42,32 +42,19 @@ class ActorCreate(BaseModel):
 
 
 class ActorUpdate(BaseModel):
-    """Частичное обновление: применяются только переданные поля."""
+    """Частичное обновление: применяются только переданные поля.
+
+    Ни у имени, ни у признака активности нет осмысленного `null`, поэтому оба поля
+    объявлены не-nullable: передать `null` схема не даст. Молча отбросить его было бы
+    хуже отказа — клиент получил бы 200 и уверенность, что поле изменено.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    display_name: str | None = Field(default=None, min_length=1, max_length=255)
-    is_active: bool | None = Field(
-        default=None,
+    display_name: str = unset_field(min_length=1, max_length=255, examples=["Релизный бот"])
+    is_active: bool = unset_field(
         description="Deactivated actor keeps its history but can no longer authenticate",
     )
-
-    @model_validator(mode="after")
-    def _reject_explicit_null(self) -> Self:
-        """Явный `null` — ошибка, а не «поле не передано».
-
-        Ни у имени, ни у признака активности нет осмысленного `null`, поэтому склеить
-        эти два случая было бы молчаливым сбоем: клиент получил бы 200 и уверенность,
-        что поле изменено. Отличать «не передано» от «передано как null» по-настоящему
-        придётся в задаче 05 — там `null` у полей задачи означает «очистить».
-
-        `None` в объявлении остаётся только как значение «не передано»; сюда оно
-        попадает уже отфильтрованным по `model_fields_set`.
-        """
-        nulled = sorted(name for name in self.model_fields_set if getattr(self, name) is None)
-        if nulled:
-            raise ValueError(f"fields cannot be null: {', '.join(nulled)}")
-        return self
 
 
 class ApiTokenRead(BaseModel):

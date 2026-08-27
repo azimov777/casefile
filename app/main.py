@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.errors import register_exception_handlers
-from app.api.router import api_router
+from app.api.router import api_router, generate_operation_id
 from app.api.routes import health
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
@@ -40,6 +40,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
         debug=settings.debug,
         lifespan=lifespan,
+        # Генератор задан на приложении, а не на роутерах: он должен действовать на все
+        # маршруты, включая те, что подключаются мимо `api_router`.
+        generate_unique_id_function=generate_operation_id,
     )
     app.state.settings = settings
 

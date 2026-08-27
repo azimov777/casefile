@@ -1,10 +1,5 @@
 """Актор: человек, агент или система. Инициатор любого действия в трекере."""
 
-# Отложенные аннотации: `ApiToken` импортирован только для проверки типов — обратный
-# импорт во время исполнения замкнул бы модели в цикл. SQLAlchemy разбирает такую
-# аннотацию сам, находя класс по имени в своём реестре.
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, true
@@ -14,6 +9,9 @@ from app.db.base import BaseModel, string_enum
 from app.domain.actors import ActorType
 
 if TYPE_CHECKING:
+    # Только для проверки типов: импорт во время исполнения замкнул бы модели в цикл.
+    # Аннотация от этого не ломается — Python 3.14 вычисляет аннотации отложенно
+    # (PEP 649), а SQLAlchemy находит класс по имени в своём реестре.
     from app.db.models.api_token import ApiToken
 
 

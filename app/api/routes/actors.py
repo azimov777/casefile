@@ -7,7 +7,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Path, Query, Response, status
 
 from app.api.deps import CurrentActorDep, SessionDep
 from app.api.schemas.actors import (
@@ -31,6 +31,11 @@ router = APIRouter(prefix="/actors", tags=["actors"])
 # Границы объявлены и здесь, и в `resolve_limit`, и это не дубль по недосмотру:
 # параметр запроса даёт их в OpenAPI и отсекает мусор на входе, а проверка в сценарии
 # работает для MCP и фоновых вызовов, которые мимо FastAPI не проходят.
+ActorKeyPath = Annotated[
+    str, Path(description="Actor key, unique across the installation", examples=["release_bot"])
+]
+TokenIdPath = Annotated[uuid.UUID, Path(description="Identifier of the token to revoke")]
+
 LimitQuery = Annotated[int, Query(ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE, description="Page size")]
 CursorQuery = Annotated[
     str | None, Query(description="Cursor from `meta.next_cursor` of a previous page")
@@ -87,7 +92,7 @@ async def read_current_actor(current_actor: CurrentActorDep) -> DataResponse[Act
 
 @router.get("/{actor_key}", summary="Read an actor")
 async def read_actor(
-    actor_key: str,
+    actor_key: ActorKeyPath,
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[ActorRead]:
@@ -97,7 +102,7 @@ async def read_actor(
 
 @router.patch("/{actor_key}", summary="Update an actor")
 async def update_actor(
-    actor_key: str,
+    actor_key: ActorKeyPath,
     payload: ActorUpdate,
     session: SessionDep,
     current_actor: CurrentActorDep,
@@ -113,7 +118,7 @@ async def update_actor(
 
 @router.get("/{actor_key}/tokens", summary="List actor tokens")
 async def list_tokens(
-    actor_key: str,
+    actor_key: ActorKeyPath,
     session: SessionDep,
     current_actor: CurrentActorDep,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
@@ -136,7 +141,7 @@ async def list_tokens(
     summary="Issue an API token",
 )
 async def issue_token(
-    actor_key: str,
+    actor_key: ActorKeyPath,
     payload: ApiTokenCreate,
     session: SessionDep,
     current_actor: CurrentActorDep,
@@ -157,8 +162,8 @@ async def issue_token(
     summary="Revoke an API token",
 )
 async def revoke_token(
-    actor_key: str,
-    token_id: uuid.UUID,
+    actor_key: ActorKeyPath,
+    token_id: TokenIdPath,
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> Response:
