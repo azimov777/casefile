@@ -6,8 +6,9 @@
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import asyncpg
 import pytest
@@ -20,11 +21,13 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
 from app.db.models.actor import Actor
+from app.db.models.issue import Issue
 from app.db.models.queue import Queue
 from app.db.session import get_session
 from app.domain.actors import ActorType
 from app.main import create_app
 from app.services import actors as actors_service
+from app.services import issues as issues_service
 from app.services import queues as queues_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -175,3 +178,27 @@ async def queue(db_session: AsyncSession, owner: Actor) -> Queue:
         name="Трекер",
         description="Задачи по разработке трекера",
     )
+
+
+@pytest.fixture
+def make_issue(
+    db_session: AsyncSession,
+    owner: Actor,
+    queue: Queue,
+) -> Callable[..., Awaitable[Issue]]:
+    """Фабрика задач: очередь и название по умолчанию, остальное — как попросят.
+
+    Нужна половине тестов проекта, а не только тестам задач: защита справочников и
+    реестра полей проверяется настоящими задачами, а не подменой счётчиков.
+    """
+
+    async def _make(**kwargs: Any) -> Issue:
+        return await issues_service.create_issue(
+            db_session,
+            initiator=kwargs.pop("initiator", owner),
+            queue=kwargs.pop("queue", queue),
+            summary=kwargs.pop("summary", "Починить выдачу ключей"),
+            **kwargs,
+        )
+
+    return _make

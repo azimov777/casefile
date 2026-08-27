@@ -3,16 +3,24 @@
 Сюда подключаются роутеры предметных областей — по одному на задачу из `docs/tasks`.
 Префикс задаётся здесь один раз, отдельные роутеры про версию не знают.
 
-Аутентификация объявлена на самом роутере, а не на каждом эндпоинте. Так новый маршрут
-защищён по умолчанию: чтобы оставить его открытым, это придётся сделать осознанно, а
-забыть авторизацию — нельзя. Вне `/api/v1` остаётся только `/health` для мониторинга.
+Аутентификация и формы ошибок объявлены на самом роутере, а не на каждом эндпоинте.
+Так новый маршрут защищён по умолчанию: чтобы оставить его открытым, это придётся
+сделать осознанно, а забыть авторизацию — нельзя. Обратный порядок держался бы на
+внимательности семнадцати задач подряд. Вне `/api/v1` остаётся только `/health` для
+мониторинга.
+
+Важное ограничение FastAPI 0.141, о которое легко споткнуться: `route_class`,
+`dependencies` и `responses` родительского роутера **не** наследуются роутерами,
+подключёнными через `include_router`, — кроме зависимостей и ответов, которые FastAPI
+переносит явно. Поэтому всё, что обязано действовать на каждый маршрут, объявляется
+здесь через поддерживаемые параметры, а не через собственный класс маршрута.
 """
 
 from fastapi import APIRouter, Depends
 from fastapi.routing import APIRoute
 
 from app.api.deps import get_current_actor
-from app.api.routes import actors, catalogs, fields, queues
+from app.api.routes import actors, catalogs, fields, issues, queues
 from app.api.schemas.common import ErrorResponse
 
 # Формы ошибок объявлены один раз на весь версионированный API, а не повторены в каждом
@@ -52,3 +60,4 @@ api_router.include_router(actors.router)
 api_router.include_router(queues.router)
 api_router.include_router(catalogs.router)
 api_router.include_router(fields.router)
+api_router.include_router(issues.router)
