@@ -12,9 +12,10 @@
 лежит тонкая прослойка, которая знает только про таблицу задач и ничего — про её
 сценарии.
 
-Функции ничего не проверяют и ничего не запрещают: они отвечают числом, а решение
-принимает вызывающий сценарий. Транзакцию не фиксируют — границу держит вход в
-приложение.
+Функции-счётчики ничего не проверяют и ничего не запрещают: они отвечают числом, а
+решение принимает вызывающий сценарий. Исключение одно — `move_issues_to_status`: она
+меняет данные и потому пишет журнал и событие, как и положено любой мутации.
+Транзакцию не фиксируют — границу держит вход в приложение.
 """
 
 import uuid
@@ -22,7 +23,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.actor import Actor
+from app.db.models.catalog import Status
+from app.db.models.queue import Queue
 from app.db.repositories import IssueRepository
+from app.services import events as events_service
 
 
 async def count_issues_with_status(session: AsyncSession, status_id: uuid.UUID) -> int:
@@ -48,24 +53,52 @@ async def count_issues_in_queue(session: AsyncSession, queue_id: uuid.UUID) -> i
 async def move_issues_to_status(
     session: AsyncSession,
     *,
-    from_status_id: uuid.UUID,
-    to_status_id: uuid.UUID,
-    queue_id: uuid.UUID | None = None,
+    initiator: Actor,
+    source: Status,
+    target: Status,
+    queue: Queue | None = None,
 ) -> int:
     """Переносит задачи из одного статуса в другой и возвращает число перенесённых.
 
-    `queue_id` сужает перенос до одной очереди; `None` — переносить во всех.
-    Проверку допустимости целевого статуса делает вызывающий сценарий — здесь только
-    запрос. Массовый `UPDATE` идёт мимо объектов сессии и мимо единой точки применения
-    изменений: журнала он не пишет и события не порождает. Это осознанно — перенос
-    сотни задач одной строкой истории понятнее сотни одинаковых записей, — но задача 06
-    обязана решить это явно, а не унаследовать молчание.
+    `queue` сужает перенос до одной очереди; `None` — переносить во всех. Проверку
+    допустимости целевого статуса делает вызывающий сценарий — здесь только запрос и
+    запись следов.
+
+    ## Что перенос оставляет после себя, и почему именно так
+
+    Задача 05 оставила этот вопрос открытым: массовый `UPDATE` идёт мимо единой точки
+    применения изменений, журнала не писал и событий не порождал. Задача 06 закрывает
+    его **несимметрично**, и это осознанный выбор, а не полумера.
+
+    **Журнал — по записи на каждую задачу.** История ведётся по задаче, и дыра в ней
+    недопустима: концепция ставит историю изменений первой механикой, а задача, у
+    которой статус поменялся и в истории об этом пусто, необъяснима для того, кто её
+    потом читает. «Одна запись на весь перенос» вешать просто некуда — у записи журнала
+    есть обязательный владелец-задача.
+
+    **Событие — одно на весь перенос.** Шина кормит автоматику, уведомления и вебхуки.
+    Сотня одинаковых `issue.status_changed` там означала бы сотню уведомлений об
+    административной операции и сотню срабатываний правил, каждое из которых породит
+    новые события. Поэтому перенос даёт одно `status.issues_moved` со списком ключей.
+
+    Следствие, которое обязан знать автор правила автоматики: **триггер на
+    `issue.status_changed` массовый перенос не поймает.** Правилу, которому это важно,
+    надо подписываться и на `status.issues_moved`.
     """
-    return await IssueRepository(session).move_to_status(
-        from_status_id=from_status_id,
-        to_status_id=to_status_id,
-        queue_id=queue_id,
+    moved = await IssueRepository(session).move_to_status(
+        from_status_id=source.id,
+        to_status_id=target.id,
+        queue_id=None if queue is None else queue.id,
     )
+    await events_service.record_issues_moved(
+        session,
+        initiator=initiator,
+        source=source,
+        target=target,
+        queue=queue,
+        issues=moved,
+    )
+    return len(moved)
 
 
 async def count_issues_with_field(session: AsyncSession, field_ref: str) -> int:

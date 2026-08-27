@@ -83,6 +83,11 @@ async def test_issues_of_another_queue_are_not_counted(
 
 
 # --- Перенос между статусами -------------------------------------------------------
+#
+# Сценарий принимает объекты статусов и очереди, а не идентификаторы: с задачи 06 он
+# пишет запись в историю каждой перенесённой задачи и одно событие на весь перенос, и
+# для того и другого нужны ссылки (`open`, `TRK.open`) и инициатор. Что именно перенос
+# оставляет после себя, проверяет `tests/test_events_service.py`.
 
 
 async def test_move_between_statuses_touches_only_the_source(
@@ -98,7 +103,7 @@ async def test_move_between_statuses_touches_only_the_source(
     await make_issue(status=in_progress)
 
     moved = await issue_usage.move_issues_to_status(
-        db_session, from_status_id=source.id, to_status_id=target.id
+        db_session, initiator=owner, source=source, target=target
     )
 
     assert moved == 2
@@ -124,7 +129,7 @@ async def test_move_narrowed_to_a_queue_leaves_other_queues_alone(
     )
 
     moved = await issue_usage.move_issues_to_status(
-        db_session, from_status_id=source.id, to_status_id=target.id, queue_id=queue.id
+        db_session, initiator=owner, source=source, target=target, queue=queue
     )
 
     assert moved == 1
@@ -142,7 +147,7 @@ async def test_move_raises_the_version_of_the_moved_issues(
     issue = await make_issue()
 
     await issue_usage.move_issues_to_status(
-        db_session, from_status_id=source.id, to_status_id=target.id
+        db_session, initiator=owner, source=source, target=target
     )
 
     await db_session.refresh(issue)

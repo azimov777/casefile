@@ -18,7 +18,7 @@ from sqlalchemy import ForeignKey, String, UniqueConstraint, text, true
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
 from app.db.base import BaseModel, string_enum
-from app.domain.catalogs import MAX_CATALOG_KEY_LENGTH, StatusCategory
+from app.domain.catalogs import MAX_CATALOG_KEY_LENGTH, StatusCategory, format_catalog_ref
 
 if TYPE_CHECKING:
     from app.db.models.queue import Queue
@@ -65,6 +65,26 @@ class CatalogEntryMixin:
         return relationship(
             lazy="selectin",
             foreign_keys=lambda: [cls.queue_id],
+        )
+
+    @property
+    def ref(self) -> str:
+        """Ссылка на запись: `open` у глобальной, `TRK.open` у локальной.
+
+        Живёт на модели, а не только в сценарии справочников, из-за направления
+        зависимостей. Ссылка нужна ещё и сценарию событий (`app/services/events.py`),
+        который собирает из неё полезную нагрузку, а импортировать оттуда
+        `app/services/catalogs.py` нельзя: справочники зависят от `issue_usage`, тот —
+        от событий, и получилось бы кольцо. Второй же реализации формата у проекта быть
+        не должно — `catalogs.format_entry_ref` зовёт это свойство.
+
+        Ключ очереди берётся из связи, а не из контекста вызова: контекст можно
+        перепутать и отдать запись одной очереди под именем другой. У глобальной записи
+        (`queue_id IS NULL`) обращения к базе не происходит вовсе.
+        """
+        return format_catalog_ref(
+            self.key,
+            queue_key=self.queue.key if self.queue_id is not None else None,
         )
 
     @declared_attr.directive

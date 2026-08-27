@@ -4,10 +4,15 @@
 
 Всё, что меняет задачу, проходит через `apply_issue_changes`. Она принимает «что
 меняем» (`IssueChanges`) и «кто меняет» (`initiator`), а возвращает список фактических
-изменений — поле, было, стало. Задача 06 подключит к этой же точке журнал изменений и
-outbox, задача 07 — проверку переходов, задача 13 — автоматику. Если бы мутации были
-размазаны по эндпоинтам, каждая из этих задач превращалась бы в обход всех мест, где
-что-то меняется, а забытое место обнаруживалось бы как пропавшая история.
+изменений — поле, было, стало. К этой точке уже подключены журнал изменений и outbox
+(задача 06), задача 07 подключит проверку переходов, задача 13 — автоматику. Если бы
+мутации были размазаны по эндпоинтам, каждая из этих задач превращалась бы в обход
+всех мест, где что-то меняется, а забытое место обнаруживалось бы как пропавшая
+история.
+
+Создание, изменение и удаление задачи пишут журнал и событие **в той же транзакции**,
+что и сама правка. Мутация, сделанная мимо этих трёх функций, не попадёт ни в историю,
+ни в шину событий.
 
 «Фактических» — не формальность. Поле, переданное со значением, равным текущему,
 записи не даёт и версию не увеличивает: иначе журнал заполнился бы пустыми строками, а
@@ -65,6 +70,7 @@ from app.domain.issues import (
 )
 from app.domain.queues import format_issue_key, parse_issue_key
 from app.services import catalogs as catalogs_service
+from app.services import events as events_service
 from app.services import fields as fields_service
 from app.services import queues as queues_service
 from app.services import workflow as workflow_service
@@ -253,7 +259,11 @@ async def create_issue(
         values=stored_values,
         version=1,
     )
-    return await IssueRepository(session).add(issue)
+    await IssueRepository(session).add(issue)
+    # Журнал и событие — в той же транзакции, что и сама задача: откат уносит всё
+    # трое разом, и подписчик никогда не узнает о задаче, которой не появилось.
+    await events_service.record_issue_created(session, issue, initiator=initiator)
+    return issue
 
 
 # --- Изменение -------------------------------------------------------------------
@@ -311,11 +321,24 @@ async def apply_issue_changes(
     await _apply_values(session, issue, changes, target_type, type_changed, recorded)
 
     if not recorded:
+        # Нечего записывать — значит, нечего и рассылать: клиент прислал то, что уже
+        # стоит. Версия не растёт, журнал не пополняется, событие не рождается.
         return IssueMutation(issue=issue)
 
     issue.version += 1
     await session.flush()
-    return IssueMutation(issue=issue, changes=tuple(recorded))
+    # Порядок важен: сначала flush изменений, потом запись журнала и события. Снимок
+    # задачи в полезной нагрузке обязан быть состоянием **после** изменения, включая
+    # новую версию и `updated_at`, который проставляет база.
+    changes = tuple(recorded)
+    await events_service.record_issue_changed(
+        session,
+        issue,
+        initiator=initiator,
+        action=action,
+        changes=changes,
+    )
+    return IssueMutation(issue=issue, changes=changes)
 
 
 async def update_issue(
@@ -426,6 +449,10 @@ async def delete_issue(session: AsyncSession, issue: Issue, *, initiator: Actor)
     """
     ensure_allowed(initiator, "issue.delete", target=issue)
     await _ensure_not_referenced(session, issue)
+    # Событие собирается **до** удаления: после него снимок строить уже не из чего.
+    # Записи журнала у удаления нет — история уезжает вместе с задачей каскадом, и
+    # запись, сделанная сейчас, была бы удалена в этой же транзакции.
+    await events_service.record_issue_deleted(session, issue, initiator=initiator)
     await IssueRepository(session).delete(issue)
 
 

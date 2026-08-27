@@ -140,16 +140,22 @@ class IssueRepository:
         from_status_id: uuid.UUID,
         to_status_id: uuid.UUID,
         queue_id: uuid.UUID | None = None,
-    ) -> int:
-        """Переносит задачи между статусами и возвращает число перенесённых.
+    ) -> list[tuple[uuid.UUID, str]]:
+        """Переносит задачи между статусами и возвращает идентификатор и ключ каждой.
 
         Версия задачи увеличивается тем же запросом. Иначе клиент, прочитавший задачу
         до переноса, прошёл бы проверку оптимистичной блокировки и записал бы поверх
         нового статуса, ничего не заметив.
 
+        `RETURNING` появился в задаче 06: перенос обязан оставить запись в истории
+        каждой затронутой задачи, а для этого нужны их идентификаторы. Цена известна и
+        принята: перенос ста тысяч задач вернёт сто тысяч строк в память. Считать это
+        ограничением стоит с самого начала — перенос делается ради удаления статуса, и
+        такие объёмы в нём реальны.
+
         `synchronize_session=False`: массовый `UPDATE` идёт мимо объектов сессии, и
         загруженные задачи после него держат старый статус. Для сценария переноса это
-        безопасно — он отдаёт число, а не объекты, — но помнить об этом обязательно.
+        безопасно — он отдаёт ключи, а не объекты, — но помнить об этом обязательно.
         """
         statement = (
             update(Issue)
@@ -159,8 +165,8 @@ class IssueRepository:
         )
         if queue_id is not None:
             statement = statement.where(Issue.queue_id == queue_id)
-        result = await self._session.execute(statement)
-        return result.rowcount
+        result = await self._session.execute(statement.returning(Issue.id, Issue.key))
+        return [(row.id, row.key) for row in result]
 
     async def _count(self, condition: Any) -> int:
         statement = select(func.count()).select_from(Issue).where(condition)

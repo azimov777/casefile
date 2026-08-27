@@ -104,7 +104,12 @@ def entry_ref(entry: CatalogEntry) -> CatalogRef:
 
 
 def format_entry_ref(entry: CatalogEntry) -> str:
-    return format_catalog_ref(entry.key, queue_key=entry_ref(entry).queue_key)
+    """Ссылка строкой. Формат один на проект и живёт на модели (`CatalogEntryMixin.ref`).
+
+    Обёртка оставлена ради вызывающих: их два десятка, и заменять их на обращение к
+    свойству ради экономии одной строки значило бы тронуть половину проекта.
+    """
+    return entry.ref
 
 
 def ensure_available_in_queue(entry: CatalogEntry, *, kind: CatalogKind, queue: Queue) -> None:
@@ -437,11 +442,14 @@ async def move_issues(
         ensure_available_in_queue(source, kind=CatalogKind.STATUS, queue=scope_queue)
         ensure_available_in_queue(target, kind=CatalogKind.STATUS, queue=scope_queue)
 
+    # Инициатор передаётся дальше не для проверки прав (она уже сделана выше), а для
+    # истории: каждая перенесённая задача получает запись журнала с этим актором.
     moved = await issue_usage.move_issues_to_status(
         session,
-        from_status_id=source.id,
-        to_status_id=target.id,
-        queue_id=None if scope_queue is None else scope_queue.id,
+        initiator=initiator,
+        source=source,
+        target=target,
+        queue=scope_queue,
     )
     return IssuesMoved(source=source, target=target, moved=moved)
 
