@@ -2,11 +2,12 @@
 
 Главное здесь — не создание записей, а отказы: статус с задачами нельзя удалить и
 нельзя переопределить его категорию, запись очереди по умолчанию нельзя отключить.
-Пока таблицы задач нет, счётчик задач подменяется в тестах — сама подмена и есть
-описание контракта, который задача 05 обязана выполнить в `app/services/issue_usage.py`.
+Задачи в этих тестах настоящие: счётчики из `app/services/issue_usage.py` перестали
+быть заглушками в задаче 05, и подменять их больше нечем и незачем — подмена скрыла бы
+расхождение между запросом и тем, что он должен считать.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import pytest
 from sqlalchemy import select
@@ -31,26 +32,31 @@ from app.domain.errors import (
     StatusNotFoundError,
 )
 from app.services import catalogs as service
-from app.services import issue_usage
 from app.services import queues as queues_service
+
+MakeIssue = Callable[..., Awaitable[object]]
 
 
 @pytest.fixture
-def issues_in_status(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], None]:
-    """Подменяет счётчик задач в статусе.
+def issues_in_status(
+    db_session: AsyncSession,
+    owner: Actor,
+    make_issue: MakeIssue,
+) -> Callable[..., Awaitable[None]]:
+    """Заводит несколько задач в указанном статусе.
 
-    Таблицы `issues` ещё нет, поэтому «в статусе стоят задачи» воспроизводится
-    подменой функции-порта. Проверяется при этом настоящая ветка сценария, а не
-    заглушка: задача 05 заменит тело функции запросом, и тесты продолжат работать.
+    Настоящие задачи, а не подменённый счётчик: проверка «статус занят» обязана
+    опираться на тот же запрос, которым пользуется рабочий код.
     """
 
-    def _set(count: int) -> None:
-        async def _count(session: AsyncSession, status_id: object) -> int:
-            return count
+    async def _create(count: int, status_ref: str = "open") -> None:
+        status = await queues_service.resolve_catalog_ref(
+            db_session, CatalogKind.STATUS, status_ref, initiator=owner
+        )
+        for _ in range(count):
+            await make_issue(status=status)
 
-        monkeypatch.setattr(issue_usage, "count_issues_with_status", _count)
-
-    return _set
+    return _create
 
 
 # --- Начальный набор -------------------------------------------------------------
@@ -187,9 +193,8 @@ async def test_rename_keeps_the_key(db_session: AsyncSession, owner: Actor) -> N
 
 
 async def test_category_changes_while_the_status_is_empty(
-    db_session: AsyncSession, owner: Actor, issues_in_status: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor
 ) -> None:
-    issues_in_status(0)
     entry = await service.get_entry(db_session, CatalogKind.STATUS, key="in_progress", queue=None)
 
     updated = await service.update_entry(
@@ -204,10 +209,10 @@ async def test_category_changes_while_the_status_is_empty(
 
 
 async def test_category_is_locked_while_issues_sit_in_the_status(
-    db_session: AsyncSession, owner: Actor, issues_in_status: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor, issues_in_status: Callable[..., Awaitable[None]]
 ) -> None:
     """Смена категории задним числом переопределяет, какие задачи считаются закрытыми."""
-    issues_in_status(7)
+    await issues_in_status(2, "in_progress")
     entry = await service.get_entry(db_session, CatalogKind.STATUS, key="in_progress", queue=None)
 
     with pytest.raises(StatusCategoryLockedError) as error:
@@ -219,7 +224,7 @@ async def test_category_is_locked_while_issues_sit_in_the_status(
             category=StatusCategory.DONE,
         )
 
-    assert error.value.details["issues"] == 7
+    assert error.value.details["issues"] == 2
     assert entry.category is StatusCategory.IN_PROGRESS
 
 
@@ -278,10 +283,10 @@ async def test_unused_status_is_deleted(db_session: AsyncSession, owner: Actor) 
 async def test_status_with_issues_is_not_deleted(
     db_session: AsyncSession,
     owner: Actor,
-    issues_in_status: Callable[[int], None],
+    issues_in_status: Callable[..., Awaitable[None]],
 ) -> None:
     """Тихое удаление оставило бы задачи со ссылкой в никуда и сломало доски."""
-    issues_in_status(3)
+    await issues_in_status(3)
     entry = await service.get_entry(db_session, CatalogKind.STATUS, key="open", queue=None)
 
     with pytest.raises(StatusInUseError) as error:
@@ -333,27 +338,19 @@ async def test_deleting_an_issue_type_releases_it_from_queues(
 async def test_issues_are_moved_between_statuses(
     db_session: AsyncSession,
     owner: Actor,
-    monkeypatch: pytest.MonkeyPatch,
+    issues_in_status: Callable[..., Awaitable[None]],
 ) -> None:
     """Перенос — отдельный явный шаг, после которого удаление статуса проходит."""
-    captured: dict[str, object] = {}
-
-    async def _move(session: AsyncSession, **kwargs: object) -> int:
-        captured.update(kwargs)
-        return 5
-
-    monkeypatch.setattr(issue_usage, "move_issues_to_status", _move)
-    source = await service.get_entry(db_session, CatalogKind.STATUS, key="open", queue=None)
+    await issues_in_status(2, "in_progress")
+    source = await service.get_entry(db_session, CatalogKind.STATUS, key="in_progress", queue=None)
     target = await service.get_entry(db_session, CatalogKind.STATUS, key="closed", queue=None)
 
     result = await service.move_issues(db_session, initiator=owner, source=source, target=target)
 
-    assert result.moved == 5
-    assert captured == {
-        "from_status_id": source.id,
-        "to_status_id": target.id,
-        "queue_id": None,
-    }
+    assert result.moved == 2
+    await service.delete_entry(db_session, source, CatalogKind.STATUS, initiator=owner)
+    with pytest.raises(StatusNotFoundError):
+        await service.get_entry(db_session, CatalogKind.STATUS, key="in_progress", queue=None)
 
 
 async def test_moving_into_the_same_status_is_rejected(
@@ -392,16 +389,10 @@ async def test_move_narrowed_to_one_queue_accepts_a_local_target(
     db_session: AsyncSession,
     owner: Actor,
     queue: Queue,
-    monkeypatch: pytest.MonkeyPatch,
+    issues_in_status: Callable[..., Awaitable[None]],
 ) -> None:
     """С указанной очередью перенос затрагивает только её задачи — локальная цель законна."""
-    captured: dict[str, object] = {}
-
-    async def _move(session: AsyncSession, **kwargs: object) -> int:
-        captured.update(kwargs)
-        return 2
-
-    monkeypatch.setattr(issue_usage, "move_issues_to_status", _move)
+    await issues_in_status(2)
     source = await service.get_entry(db_session, CatalogKind.STATUS, key="open", queue=None)
     target = await service.create_entry(
         db_session,
@@ -418,4 +409,4 @@ async def test_move_narrowed_to_one_queue_accepts_a_local_target(
     )
 
     assert result.moved == 2
-    assert captured["queue_id"] == queue.id
+    assert await service.count_usage(db_session, CatalogKind.STATUS, target.id) == 2

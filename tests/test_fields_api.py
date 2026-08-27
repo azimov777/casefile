@@ -1,26 +1,12 @@
 """Эндпоинты реестра полей: адресация ссылками, области действия, конфигурация очереди."""
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
-import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.queue import Queue
-from app.services import issue_usage
 
-
-@pytest.fixture
-def issues_with_field(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], None]:
-    """Подменяет счётчик задач со значением поля: таблицы `issues` ещё нет."""
-
-    def _set(count: int) -> None:
-        async def _count(session: AsyncSession, field_ref: str) -> int:
-            return count
-
-        monkeypatch.setattr(issue_usage, "count_issues_with_field", _count)
-
-    return _set
+MakeIssue = Callable[..., Awaitable[object]]
 
 
 SEVERITY = {
@@ -240,16 +226,18 @@ async def test_issue_type_restrictions_are_replaced_wholesale(
 
 
 async def test_unused_field_is_deleted_and_a_used_one_is_not(
-    auth_client: AsyncClient, queue: Queue, issues_with_field: Callable[[int], None]
+    auth_client: AsyncClient, queue: Queue, make_issue: MakeIssue
 ) -> None:
+    """Поле со значениями можно только скрыть; освободить его — значит убрать значения."""
     await auth_client.post("/api/v1/fields", json=SEVERITY | {"queue": "TRK"})
+    issue = await make_issue(values={"TRK.severity": "critical"})
 
-    issues_with_field(4)
     refused = await auth_client.delete("/api/v1/fields/TRK.severity")
     assert refused.status_code == 409
     assert refused.json()["error"]["code"] == "field_in_use"
 
-    issues_with_field(0)
+    assert (await auth_client.delete(f"/api/v1/issues/{issue.key}")).status_code == 204
+
     deleted = await auth_client.delete("/api/v1/fields/TRK.severity")
     assert deleted.status_code == 204
     assert (await auth_client.get("/api/v1/fields/TRK.severity")).status_code == 404

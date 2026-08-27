@@ -4,12 +4,13 @@
 тоже здесь: домен её сделать не может, а без неё валидатор отвечал бы клиенту
 «такого поля нет» там, где поле есть.
 
-Счётчик задач со значением поля подменяется: таблицы `issues` ещё нет. Сама подмена и
-есть описание контракта, который задача 05 обязана выполнить в
-`app/services/issue_usage.py`.
+Задачи со значениями полей в этих тестах настоящие: счётчики из
+`app/services/issue_usage.py` перестали быть заглушками в задаче 05, и подменять их
+больше нечем — подмена скрыла бы расхождение между запросом и тем, что он должен считать.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,38 +33,24 @@ from app.domain.errors import (
 from app.domain.fields import FieldOption, FieldValueType
 from app.services import catalogs as catalogs_service
 from app.services import fields as service
-from app.services import issue_usage
 from app.services import queues as queues_service
 
+MakeIssue = Callable[..., Awaitable[object]]
+
 
 @pytest.fixture
-def issues_with_field(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], None]:
-    """Подменяет счётчик задач, у которых поле заполнено.
+def issues_with_value(make_issue: MakeIssue) -> Callable[..., Awaitable[None]]:
+    """Заводит задачи, у которых заполнено указанное поле.
 
-    Проверяется настоящая ветка сценария, а не заглушка: задача 05 заменит тело
-    функции запросом, и тесты продолжат работать.
+    Настоящие задачи, а не подменённый счётчик: запрет менять тип поля с данными
+    обязан опираться на тот же запрос по `values JSONB`, которым пользуется рабочий код.
     """
 
-    def _set(count: int) -> None:
-        async def _count(session: AsyncSession, field_ref: str) -> int:
-            return count
+    async def _create(count: int, ref: str = "severity", value: Any = "высокая") -> None:
+        for _ in range(count):
+            await make_issue(values={ref: value})
 
-        monkeypatch.setattr(issue_usage, "count_issues_with_field", _count)
-
-    return _set
-
-
-@pytest.fixture
-def issues_with_option(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], None]:
-    """Подменяет счётчик задач, у которых в поле стоит конкретный вариант перечисления."""
-
-    def _set(count: int) -> None:
-        async def _count(session: AsyncSession, field_ref: str, value: str) -> int:
-            return count
-
-        monkeypatch.setattr(issue_usage, "count_issues_with_field_value", _count)
-
-    return _set
+    return _create
 
 
 async def issue_type(session: AsyncSession, owner: Actor, ref: str) -> IssueType:
@@ -331,10 +318,10 @@ async def test_default_value_is_stored_in_the_canonical_shape(
 
 
 async def test_renaming_and_toggling_required_are_always_allowed(
-    db_session: AsyncSession, owner: Actor, issues_with_field: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor, issues_with_value: Callable[..., Awaitable[None]]
 ) -> None:
     field = await make_field(db_session, owner)
-    issues_with_field(42)
+    await issues_with_value(1)
 
     updated = await service.update_field(
         db_session, field, initiator=owner, name="Критичность", is_required=True
@@ -344,10 +331,10 @@ async def test_renaming_and_toggling_required_are_always_allowed(
 
 
 async def test_value_type_of_a_field_with_data_cannot_be_changed(
-    db_session: AsyncSession, owner: Actor, issues_with_field: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor, issues_with_value: Callable[..., Awaitable[None]]
 ) -> None:
     field = await make_field(db_session, owner)
-    issues_with_field(3)
+    await issues_with_value(3)
 
     with pytest.raises(FieldTypeLockedError) as info:
         await service.update_field(
@@ -358,11 +345,11 @@ async def test_value_type_of_a_field_with_data_cannot_be_changed(
 
 
 async def test_multiplicity_of_a_field_with_data_cannot_be_changed(
-    db_session: AsyncSession, owner: Actor, issues_with_field: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor, issues_with_value: Callable[..., Awaitable[None]]
 ) -> None:
     """Множественность — часть формы записи в JSONB, а не косметика."""
     field = await make_field(db_session, owner)
-    issues_with_field(1)
+    await issues_with_value(1)
 
     with pytest.raises(FieldTypeLockedError):
         await service.update_field(db_session, field, initiator=owner, is_multiple=True)
@@ -381,7 +368,7 @@ async def test_value_type_of_an_untouched_field_can_be_changed(
 
 
 async def test_option_in_use_cannot_be_dropped_from_the_list(
-    db_session: AsyncSession, owner: Actor, issues_with_option: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor, issues_with_value: Callable[..., Awaitable[None]]
 ) -> None:
     field = await make_field(
         db_session,
@@ -389,7 +376,7 @@ async def test_option_in_use_cannot_be_dropped_from_the_list(
         value_type=FieldValueType.ENUM,
         options=[FieldOption(key="minor", name="Мелкая"), FieldOption(key="major", name="Крупная")],
     )
-    issues_with_option(7)
+    await issues_with_value(1, value="minor")
 
     with pytest.raises(FieldInUseError) as info:
         await service.update_field(
@@ -404,7 +391,7 @@ async def test_option_in_use_cannot_be_dropped_from_the_list(
 
 
 async def test_option_can_always_be_renamed(
-    db_session: AsyncSession, owner: Actor, issues_with_option: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor, issues_with_value: Callable[..., Awaitable[None]]
 ) -> None:
     """Хранится ключ, а не название, поэтому переименование ничего не ломает."""
     field = await make_field(
@@ -413,7 +400,7 @@ async def test_option_can_always_be_renamed(
         value_type=FieldValueType.ENUM,
         options=[FieldOption(key="minor", name="Мелкая")],
     )
-    issues_with_option(7)
+    await issues_with_value(1, value="minor")
 
     updated = await service.update_field(
         db_session, field, initiator=owner, options=[FieldOption(key="minor", name="Небольшая")]
@@ -439,10 +426,10 @@ async def test_default_can_be_dropped_and_left_alone_separately(
 
 
 async def test_field_with_values_cannot_be_deleted_only_hidden(
-    db_session: AsyncSession, owner: Actor, issues_with_field: Callable[[int], None]
+    db_session: AsyncSession, owner: Actor, issues_with_value: Callable[..., Awaitable[None]]
 ) -> None:
     field = await make_field(db_session, owner)
-    issues_with_field(5)
+    await issues_with_value(1)
 
     with pytest.raises(FieldInUseError) as info:
         await service.delete_field(db_session, field, initiator=owner)

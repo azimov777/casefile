@@ -5,7 +5,7 @@
 задач, получить чужой локальный статус по умолчанию или потерять счётчик номеров.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,21 +24,9 @@ from app.domain.errors import (
 )
 from app.services import actors as actors_service
 from app.services import catalogs as catalogs_service
-from app.services import issue_usage
 from app.services import queues as service
 
-
-@pytest.fixture
-def issues_in_queue(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], None]:
-    """Подменяет счётчик задач очереди: таблицы `issues` ещё нет (см. `issue_usage`)."""
-
-    def _set(count: int) -> None:
-        async def _count(session: AsyncSession, queue_id: object) -> int:
-            return count
-
-        monkeypatch.setattr(issue_usage, "count_issues_in_queue", _count)
-
-    return _set
+MakeIssue = Callable[..., Awaitable[object]]
 
 
 # --- Создание --------------------------------------------------------------------
@@ -387,15 +375,17 @@ async def test_queue_with_issues_is_not_deleted(
     db_session: AsyncSession,
     owner: Actor,
     queue: Queue,
-    issues_in_queue: Callable[[int], None],
+    make_issue: MakeIssue,
 ) -> None:
     """Вместо удаления — архивация: ключи задач переживают саму очередь."""
-    issues_in_queue(12)
+    await make_issue()
+    await make_issue()
 
     with pytest.raises(QueueNotEmptyError) as error:
         await service.delete_queue(db_session, queue, initiator=owner)
 
-    assert error.value.details["issues"] == 12
+    assert error.value.details["issues"] == 2
+    assert error.value.details["hint"] == "archive the queue instead"
 
 
 # --- Нумерация -------------------------------------------------------------------

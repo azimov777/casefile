@@ -1,26 +1,16 @@
 """Эндпоинты справочников: адресация ссылками, области действия, защита от удаления."""
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.actor import Actor
 from app.db.models.queue import Queue
-from app.services import issue_usage
+from app.domain.catalogs import CatalogKind
+from app.services import queues as queues_service
 
-
-@pytest.fixture
-def issues_in_status(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], None]:
-    """Подменяет счётчик задач в статусе: таблицы `issues` ещё нет (см. `issue_usage`)."""
-
-    def _set(count: int) -> None:
-        async def _count(session: AsyncSession, status_id: object) -> int:
-            return count
-
-        monkeypatch.setattr(issue_usage, "count_issues_with_status", _count)
-
-    return _set
+MakeIssue = Callable[..., Awaitable[object]]
 
 
 async def test_global_catalog_is_listed_without_a_queue(auth_client: AsyncClient) -> None:
@@ -136,33 +126,28 @@ async def test_disabled_entry_disappears_from_the_queue_configuration(
 
 
 async def test_status_with_issues_is_not_deleted(
-    auth_client: AsyncClient, issues_in_status: Callable[[int], None]
+    auth_client: AsyncClient, make_issue: MakeIssue
 ) -> None:
-    issues_in_status(4)
+    await make_issue()
+    await make_issue()
 
     response = await auth_client.delete("/api/v1/statuses/open")
 
     assert response.status_code == 409
     error = response.json()["error"]
     assert error["code"] == "status_in_use"
-    assert error["details"]["issues"] == 4
+    assert error["details"]["issues"] == 2
 
 
 async def test_status_is_deleted_after_its_issues_are_moved(
-    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    auth_client: AsyncClient, make_issue: MakeIssue, db_session: AsyncSession, owner: Actor
 ) -> None:
     """Полный сценарий из задачи: перенести задачи, затем удалить опустевший статус."""
-    moved_from: dict[str, object] = {}
-
-    async def _move(session: AsyncSession, **kwargs: object) -> int:
-        moved_from.update(kwargs)
-        return 4
-
-    async def _count(session: AsyncSession, status_id: object) -> int:
-        return 0 if moved_from else 4
-
-    monkeypatch.setattr(issue_usage, "move_issues_to_status", _move)
-    monkeypatch.setattr(issue_usage, "count_issues_with_status", _count)
+    in_progress = await queues_service.resolve_catalog_ref(
+        db_session, CatalogKind.STATUS, "in_progress", initiator=owner
+    )
+    for _ in range(4):
+        await make_issue(status=in_progress)
 
     rejected = await auth_client.delete("/api/v1/statuses/in_progress")
     assert rejected.status_code == 409
