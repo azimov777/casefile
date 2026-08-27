@@ -14,6 +14,7 @@ Docker и Docker Compose. Больше ничего: Python, зависимос�
 cp .env.example .env          # необязательно: у дев-контура есть значения по умолчанию
 docker compose up -d          # поднимает PostgreSQL и сервер
 docker compose run --rm migrate   # применяет миграции
+docker compose run --rm init      # заводит владельца и печатает его первый токен
 curl http://localhost:8000/health
 ```
 
@@ -25,6 +26,43 @@ curl http://localhost:8000/health
 
 Документация API — http://localhost:8000/docs, схема — http://localhost:8000/openapi.json.
 
+## Доступ к API
+
+Все маршруты `/api/v1` требуют токена — исключений нет. Вне защиты остался только `/health`:
+он для Docker и мониторинга и в контракт с фронтендом не входит.
+
+```bash
+curl -H "Authorization: Bearer trk_..." http://localhost:8000/api/v1/actors/me
+```
+
+Первый токен взять неоткуда, кроме командной строки: выпустить его через API нельзя, потому
+что API уже требует токен. Это и делает `docker compose run --rm init` — заводит
+актора-владельца и печатает его секрет. Команда идемпотентна: повторный запуск второго
+владельца не создаёт, но выпускает новый токен, и это же способ вернуть себе доступ.
+
+Токен показывается **один раз**: в базе лежит только его хеш, восстановить секрет нельзя.
+
+Дальше акторы и токены заводятся через API — одним и тем же механизмом для людей и агентов:
+
+```bash
+# завести агента
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"type": "agent", "key": "release_bot", "display_name": "Релизный бот"}' \
+     http://localhost:8000/api/v1/actors
+
+# выпустить ему токен (секрет виден только в этом ответе)
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"name": "ci"}' \
+     http://localhost:8000/api/v1/actors/release_bot/tokens
+
+# отозвать токен
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+     http://localhost:8000/api/v1/actors/release_bot/tokens/$TOKEN_ID
+```
+
+Системный актор (`system`) создаётся миграцией, от его имени работают автоматика и фоновые
+процессы. Через API он защищён: его нельзя изменить и нельзя выпустить ему токен.
+
 ## Команды разработки
 
 | Что нужно | Команда |
@@ -32,6 +70,8 @@ curl http://localhost:8000/health
 | Поднять контур | `docker compose up -d` |
 | Логи сервера | `docker compose logs -f api` |
 | Применить миграции | `docker compose run --rm migrate` |
+| Завести владельца и первый токен | `docker compose run --rm init` |
+| Выпустить токен актору | `docker compose run --rm --entrypoint python api -m app.cli issue-token --actor release_bot` |
 | Создать миграцию | `docker compose run --rm migrate alembic revision --autogenerate -m "описание"` |
 | Откатить миграцию | `docker compose run --rm migrate alembic downgrade -1` |
 | Прогнать тесты | `docker compose run --rm test` |
@@ -102,9 +142,10 @@ app/
   mcp/          MCP-сервер для агентов
   domain/       доменные модели и правила
   services/     сценарии: транзакции, события
-  db/           модели SQLAlchemy, сессии, миграции
+  db/           модели SQLAlchemy, репозитории, сессии, миграции
   automation/   движок автоматики
   core/         конфиг, логирование, базовые исключения
+  cli.py        командная строка: первичная настройка установки
 docker/         образы для разработки и продакшена
 docs/           концепция, соглашения, задания
 tests/          тесты и общие фикстуры

@@ -58,5 +58,13 @@ services:
     restart: "no"
     profiles: ["tools"]
 
+  # Первичная настройка установки: владелец и его первый токен. Без неё API заперт —
+  # каждый маршрут `/api/v1` требует токена, а выпустить первый токен через API нельзя.
+  init:
+    <<: *app-service
+    command: python -m app.cli init
+    restart: "no"
+    profiles: ["tools"]
+
 volumes:
   pgdata:

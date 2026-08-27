@@ -64,6 +64,14 @@ services:
     command: alembic upgrade head
     profiles: ["tools"]
 
+  # Первичная настройка установки: владелец и его первый токен. Без неё API заперт —
+  # каждый маршрут `/api/v1` требует токена, а выпустить первый токен через API нельзя.
+  # Идемпотентна: повторный запуск не создаёт второго владельца, но выпускает новый токен.
+  init:
+    <<: *app-service
+    command: python -m app.cli init
+    profiles: ["tools"]
+
   test:
     <<: *app-service
     command: pytest
