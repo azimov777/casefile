@@ -29,6 +29,20 @@ class ActorRepository:
         statement = select(Actor).where(Actor.key == key)
         return (await self._session.scalars(statement)).one_or_none()
 
+    async def existing_keys(self, keys: set[str]) -> set[str]:
+        """Какие из ключей принадлежат существующим акторам.
+
+        Одним запросом на весь набор, а не по ключу за раз: значения кастомных полей
+        со ссылками на акторов проверяются пачкой при каждом сохранении задачи, и
+        отдельный `SELECT` на каждую ссылку превратил бы это в десяток запросов.
+        Отвечает про существование, а не про активность: отключённый актор остаётся
+        законной ссылкой в уже записанных данных.
+        """
+        if not keys:
+            return set()
+        statement = select(Actor.key).where(Actor.key.in_(keys))
+        return set((await self._session.scalars(statement)).all())
+
     async def list_page(
         self,
         *,

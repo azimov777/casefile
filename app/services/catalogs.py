@@ -22,7 +22,7 @@ from app.db.models.actor import Actor
 from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.models.queue import Queue
 from app.db.pagination import Page
-from app.db.repositories import CatalogRepository, QueueRepository
+from app.db.repositories import CatalogRepository, FieldRepository, QueueRepository
 from app.domain.catalogs import (
     CatalogKind,
     CatalogRef,
@@ -346,6 +346,10 @@ async def delete_entry(
     которым пользуются задачи или который выбран в очереди по умолчанию, удалить и
     так нельзя, а разрешение «этот тип можно заводить в этой очереди» без самого типа
     ничего не значит.
+
+    А вот ограничение поля этим типом каскадом уносить нельзя, и потому удаление
+    отклоняется: поле «только для багов» после исчезновения типа `bug` стало бы полем
+    для всех типов — молча и необратимо. Сначала снимают ограничение, потом удаляют тип.
     """
     ensure_allowed(initiator, f"{kind.value}.delete", target=entry)
 
@@ -361,6 +365,7 @@ async def delete_entry(
         )
 
     await _ensure_not_queue_default(session, entry, kind, reason="cannot_delete")
+    await _ensure_not_field_restriction(session, entry, kind)
     await CatalogRepository(session, spec_for(kind).model).delete(entry)
 
 
@@ -495,5 +500,31 @@ async def _ensure_not_queue_default(
                 "ref": format_entry_ref(entry),
                 "reason": f"{reason}_queue_default",
                 "queues": queue_keys,
+            },
+        )
+
+
+async def _ensure_not_field_restriction(
+    session: AsyncSession,
+    entry: CatalogEntry,
+    kind: CatalogKind,
+) -> None:
+    """Тип задачи, которым ограничено поле, удалять нельзя.
+
+    Внешний ключ в `field_issue_types` объявлен с каскадом — он нужен, чтобы удаление
+    очереди уносило её локальные типы вместе с ограничениями. Здесь каскад как раз
+    вреден: он расширил бы применимость поля вместо того, чтобы удаление отклонить.
+    Поэтому запрет стоит в сценарии, а не в схеме.
+    """
+    if kind is not CatalogKind.ISSUE_TYPE:
+        return
+    restricted = await FieldRepository(session).count_issue_type_bindings(entry.id)
+    if restricted:
+        raise spec_for(kind).in_use(
+            details={
+                "kind": kind.value,
+                "ref": format_entry_ref(entry),
+                "reason": "restricts_fields",
+                "fields": restricted,
             },
         )

@@ -1,13 +1,14 @@
 """Сценарии по очередям: создание, настройка, архивация, выдача номеров задач.
 
 Очередь владеет процессом, поэтому здесь же собирается её конфигурация целиком —
-типы задач, статусы и резолюции одним вызовом. Этот сценарий — основной источник
+типы задач, статусы, резолюции и поля одним вызовом. Этот сценарий — основной источник
 данных для формы создания задачи во фронтенде и для агента, который только что
 подключился к незнакомой очереди.
 
-Зависимость на справочники односторонняя: очереди знают про них, они про очереди — нет.
-Поэтому разрешение ссылок вида `TRK.open` живёт здесь: чтобы найти запись справочника
-по ссылке, надо сначала найти очередь, а это дело сценариев очередей.
+Зависимость на справочники и на реестр полей односторонняя: очереди знают про них, они
+про очереди — нет. Поэтому разрешение ссылок вида `TRK.open` и `TRK.severity` живёт
+здесь: чтобы найти объект по ссылке, надо сначала найти очередь, а это дело сценариев
+очередей.
 
 Транзакцию функции не фиксируют: границу держит вход в приложение.
 """
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.actor import Actor
 from app.db.models.catalog import IssueType, Resolution, Status
+from app.db.models.field import Field
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import CatalogRepository, QueueRepository
@@ -36,8 +38,10 @@ from app.domain.errors import (
     QueueNotEmptyError,
     QueueNotFoundError,
 )
+from app.domain.fields import parse_field_ref
 from app.domain.queues import format_issue_key, validate_queue_key
 from app.services import catalogs as catalogs_service
+from app.services import fields as fields_service
 from app.services import issue_usage
 from app.services.permissions import ensure_allowed
 
@@ -51,13 +55,15 @@ class QueueConfig:
     клиент соберёт свой набор вызовов и получит слегка разное представление о процессе.
 
     В набор входят только активные записи: конфигурация отвечает на вопрос «чем можно
-    пользоваться сейчас», а не «что когда-либо заводили».
+    пользоваться сейчас», а не «что когда-либо заводили». Скрытые поля по той же
+    причине в конфигурацию не попадают.
     """
 
     queue: Queue
     issue_types: list[IssueType]
     statuses: list[Status]
     resolutions: list[Resolution]
+    fields: list[Field]
 
 
 async def get_queue_by_key(session: AsyncSession, key: str) -> Queue:
@@ -96,6 +102,27 @@ async def resolve_catalog_ref(
     parsed = parse_catalog_ref(ref, kind=kind)
     queue = await resolve_scope(session, parsed.queue_key)
     return await catalogs_service.get_entry(session, kind, key=parsed.key, queue=queue)
+
+
+async def resolve_field_ref(
+    session: AsyncSession,
+    ref: str,
+    *,
+    initiator: Actor,
+) -> Field:
+    """Находит поле по ссылке `severity` или `TRK.severity`.
+
+    Живёт здесь по той же причине, что и `resolve_catalog_ref`: ссылка на локальный
+    объект содержит ключ очереди, и разрешить его умеет только тот, кто знает про
+    очереди. Обратная зависимость замкнула бы сценарии полей и очередей в цикл.
+
+    Разбор ссылки — той же функцией, что разбирает `TRK.open`: формат один на весь
+    проект, и второй разбор истолковал бы одну и ту же строку иначе.
+    """
+    ensure_allowed(initiator, "field.read")
+    parsed = parse_field_ref(ref)
+    queue = await resolve_scope(session, parsed.queue_key)
+    return await fields_service.get_field(session, key=parsed.key, queue=queue)
 
 
 async def read_queue(session: AsyncSession, key: str, *, initiator: Actor) -> Queue:
@@ -337,7 +364,13 @@ async def get_queue_config(
     *,
     initiator: Actor,
 ) -> QueueConfig:
-    """Конфигурация очереди целиком: типы задач, статусы и резолюции одним запросом."""
+    """Конфигурация очереди целиком: типы задач, статусы, резолюции и поля одним запросом.
+
+    Поля отдаются в порядке показа и без ограничения по типу задачи: конфигурация
+    описывает очередь целиком, а какие поля применимы к конкретному типу, видно по
+    их собственному списку типов. Сузить набор до пары «очередь + тип» можно
+    запросом `GET /api/v1/fields?queue=TRK&issue_type=bug`.
+    """
     ensure_allowed(initiator, "queue.read", target=queue)
     repository = QueueRepository(session)
     return QueueConfig(
@@ -345,6 +378,7 @@ async def get_queue_config(
         issue_types=await repository.list_issue_types(queue.id, active_only=True),
         statuses=await CatalogRepository(session, Status).list_available(queue.id),
         resolutions=await CatalogRepository(session, Resolution).list_available(queue.id),
+        fields=await fields_service.applicable_fields(session, queue=queue),
     )
 
 

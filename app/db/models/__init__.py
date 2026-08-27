@@ -9,6 +9,7 @@ from app.db.base import Base, BaseModel
 from app.db.models.actor import Actor
 from app.db.models.api_token import ApiToken
 from app.db.models.catalog import CatalogEntryMixin, IssueType, Resolution, Status
+from app.db.models.field import Field, FieldIssueType
 from app.db.models.queue import Queue, QueueIssueType
 
 __all__ = [
@@ -17,6 +18,8 @@ __all__ = [
     "Base",
     "BaseModel",
     "CatalogEntryMixin",
+    "Field",
+    "FieldIssueType",
     "IssueType",
     "Queue",
     "QueueIssueType",
