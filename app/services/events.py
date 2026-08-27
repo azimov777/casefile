@@ -1,0 +1,474 @@
+"""Журнал изменений и outbox: запись, чтение, обработка воркером.
+
+## Запись идёт в той же транзакции, что и изменение
+
+Функции `record_*` вызываются из сценариев задач и ничего не фиксируют — границу
+транзакции держит вход в приложение. В этом весь смысл outbox: событие появляется
+тогда и только тогда, когда изменение зафиксировано. Откат транзакции уносит и
+изменение, и запись журнала, и событие; рассылка при этом ещё не начиналась, потому
+что её делает отдельный процесс.
+
+Прямая рассылка из обработчика запроса — та самая ошибка, ради которой outbox и
+существует: вебхук ушёл, уведомление доставлено, а транзакция откатилась.
+
+## Полезная нагрузка самодостаточна
+
+В событии лежит состояние объекта **после** изменения и список «было → стало».
+Подписчику незачем идти в базу за контекстом, и дело не в экономии запросов: пока
+событие лежало в очереди, задачу успели изменить ещё раз, и база отдала бы не то
+состояние, о котором событие.
+
+## Обработка
+
+`process_next_event` берёт одно событие, раздаёт подписчикам и обновляет его состояние.
+Одно событие за вызов, потому что воркер оборачивает каждый вызов в свою транзакцию:
+падение на третьем событии не должно откатывать обработку первых двух.
+"""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.db.models.actor import Actor
+from app.db.models.catalog import Status
+from app.db.models.event import ChangelogEntry, OutboxEvent
+from app.db.models.issue import Issue
+from app.db.models.queue import Queue
+from app.db.pagination import Page
+from app.db.repositories import ChangelogRepository, OutboxRepository
+from app.domain.events import (
+    EventType,
+    ObjectType,
+    OutboxStatus,
+    changed_fields,
+    encode_changes,
+    event_type_for,
+)
+from app.domain.issues import IssueChange
+from app.services.event_bus import (
+    MAX_ERROR_LENGTH,
+    DeliveryOutcome,
+    EventEnvelope,
+    SubscriberRegistry,
+    deliver,
+)
+from app.services.event_bus import registry as default_registry
+from app.services.permissions import ensure_allowed
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    """Сколько раз и с какой паузой повторять доставку.
+
+    Пауза удваивается с каждой попыткой и упирается в потолок. Постоянная пауза здесь
+    не годится: подписчик падает либо мгновенно (ошибка в коде — повторы бесполезны),
+    либо из-за недоступного внешнего сервиса, которому нужно время. Растущая пауза
+    обслуживает оба случая одним правилом.
+    """
+
+    max_attempts: int
+    base_delay: timedelta
+    max_delay: timedelta
+
+    @classmethod
+    def from_settings(cls) -> RetryPolicy:
+        settings = get_settings()
+        return cls(
+            max_attempts=settings.outbox_max_attempts,
+            base_delay=timedelta(seconds=settings.outbox_retry_delay),
+            max_delay=timedelta(seconds=settings.outbox_max_retry_delay),
+        )
+
+    def delay_after(self, attempts: int) -> timedelta:
+        """Пауза перед попыткой номер `attempts + 1`."""
+        grown = self.base_delay * (2 ** max(attempts - 1, 0))
+        return min(grown, self.max_delay)
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessedEvent:
+    """Итог обработки одного события: что раздавали, кому и чем кончилось."""
+
+    envelope: EventEnvelope
+    outcome: DeliveryOutcome
+    status: OutboxStatus
+    attempts: int
+
+
+# --- Запись: задачи ---------------------------------------------------------------
+
+
+async def record_issue_created(
+    session: AsyncSession,
+    issue: Issue,
+    *,
+    initiator: Actor,
+) -> ChangelogEntry:
+    """Запись «задача создана» и событие `issue.created`.
+
+    Список изменений пуст: у создания нет «было», а состояние новой задачи целиком
+    уезжает в полезную нагрузку. Псевдоизменения «было пусто, стало значение» по
+    каждому полю удвоили бы карточку задачи в её же истории и ничего не добавили.
+    """
+    entry = await _write_changelog(
+        session,
+        issue=issue,
+        actor=initiator,
+        event_type=EventType.ISSUE_CREATED,
+        changes=(),
+    )
+    await _publish_issue_event(
+        session,
+        issue=issue,
+        actor=initiator,
+        event_type=EventType.ISSUE_CREATED,
+        changes=(),
+    )
+    return entry
+
+
+async def record_issue_changed(
+    session: AsyncSession,
+    issue: Issue,
+    *,
+    initiator: Actor,
+    action: str,
+    changes: tuple[IssueChange, ...],
+) -> ChangelogEntry | None:
+    """Запись об изменении задачи и событие соответствующего типа.
+
+    Пустой список изменений — законный результат единой точки применения изменений
+    (клиент прислал то, что уже стоит), и записи он не даёт: иначе журнал заполнился бы
+    строками «сменил приоритет с normal на normal», а автоматика срабатывала бы на
+    изменение, которого не было. Отсюда `None` в возвращаемом типе.
+
+    Тип события выводится из действия и набора изменённых полей
+    (`app/domain/events.py`), а не передаётся вызывающим: словарь действий и словарь
+    событий должны оставаться одним словарём.
+    """
+    if not changes:
+        return None
+
+    event_type = event_type_for(action, changed_fields(changes))
+    entry = await _write_changelog(
+        session,
+        issue=issue,
+        actor=initiator,
+        event_type=event_type,
+        changes=changes,
+    )
+    await _publish_issue_event(
+        session,
+        issue=issue,
+        actor=initiator,
+        event_type=event_type,
+        changes=changes,
+    )
+    return entry
+
+
+async def record_issue_deleted(
+    session: AsyncSession,
+    issue: Issue,
+    *,
+    initiator: Actor,
+) -> OutboxEvent:
+    """Событие `issue.deleted`. Записи журнала не даёт, и это не упущение.
+
+    История удаляемой задачи уезжает вместе с ней (`ON DELETE CASCADE`), поэтому
+    запись, сделанная перед удалением, была бы удалена в той же транзакции. Факт
+    удаления живёт событием: у него ссылки на задачу нет, а полезная нагрузка содержит
+    полный снимок — по нему видно, что именно исчезло.
+
+    Зовётся **до** удаления: после него собрать снимок уже не из чего.
+    """
+    return await _publish_issue_event(
+        session,
+        issue=issue,
+        actor=initiator,
+        event_type=EventType.ISSUE_DELETED,
+        changes=(),
+    )
+
+
+async def record_issues_moved(
+    session: AsyncSession,
+    *,
+    initiator: Actor,
+    source: Status,
+    target: Status,
+    queue: Queue | None,
+    issues: list[tuple[uuid.UUID, str]],
+) -> list[ChangelogEntry]:
+    """Массовый перенос задач: запись журнала на каждую задачу, событие — одно на всех.
+
+    Асимметрия намеренная, и вот её причина.
+
+    Журнал ведётся по задаче, и дыра в нём недопустима: концепция проекта ставит
+    историю изменений первой механикой, а задача, у которой статус поменялся и в
+    истории об этом ничего нет, необъяснима для того, кто её потом читает.
+
+    Событие — другое дело. Шина кормит автоматику, уведомления и вебхуки, и сотня
+    одинаковых `issue.status_changed` там означала бы сотню уведомлений об
+    административной операции и сотню срабатываний правил, каждое из которых породит
+    новые события. Поэтому перенос даёт одно событие `status.issues_moved` со списком
+    ключей: подписчик, которому нужны отдельные задачи, разберёт список сам, а
+    подписчик, которому нужны настоящие изменения статуса, не захлебнётся.
+
+    Оборотная сторона, о которой обязан знать автор правила автоматики: триггер на
+    `issue.status_changed` массовый перенос **не поймает**. Это цена, выбранная
+    сознательно, а не забытая ветка.
+    """
+    if not issues:
+        return []
+
+    change = IssueChange(field="status", before=source.ref, after=target.ref)
+    entries = [
+        ChangelogEntry(
+            issue_id=issue_id,
+            actor_id=initiator.id,
+            event_type=EventType.ISSUE_STATUS_CHANGED.value,
+            changes=encode_changes((change,)),
+        )
+        for issue_id, _ in issues
+    ]
+    await ChangelogRepository(session).add_all(entries)
+
+    # Ключи перечислены целиком, а не срезаны до первых N: срезанный список неотличим
+    # от полного, и подписчик молча пропустил бы часть задач. Размер нагрузки при этом
+    # растёт вместе с переносом — это известное ограничение, а не недосмотр.
+    await _publish(
+        session,
+        event_type=EventType.STATUS_ISSUES_MOVED,
+        object_type=ObjectType.STATUS,
+        object_id=source.id,
+        object_key=source.ref,
+        actor=initiator,
+        payload={
+            "status": {"from": source.ref, "to": target.ref},
+            "queue": None if queue is None else queue.key,
+            "count": len(issues),
+            "issues": [key for _, key in issues],
+        },
+    )
+    return entries
+
+
+# --- Чтение -----------------------------------------------------------------------
+
+
+async def list_changelog(
+    session: AsyncSession,
+    issue: Issue,
+    *,
+    initiator: Actor,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> Page[ChangelogEntry]:
+    """История изменений задачи страницами, от старого к новому."""
+    ensure_allowed(initiator, "issue.changelog", target=issue)
+    return await ChangelogRepository(session).list_page(
+        issue_id=issue.id,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+# --- Обработка --------------------------------------------------------------------
+
+
+async def process_next_event(
+    session: AsyncSession,
+    *,
+    registry: SubscriberRegistry | None = None,
+    policy: RetryPolicy | None = None,
+    now: datetime | None = None,
+) -> ProcessedEvent | None:
+    """Берёт одно необработанное событие и раздаёт его подписчикам.
+
+    Возвращает `None`, когда брать нечего, — воркер по этому признаку уходит спать.
+
+    Событие считается обработанным, только когда отработали **все** подписчики: строка
+    помечается доставленной, а имена отработавших копятся в `delivered_to`. Повтор идёт
+    только по оставшимся — подписчик, сделавший свою работу, не должен делать её второй
+    раз из-за соседа, который упал.
+
+    Транзакцию функция не фиксирует. Это и есть механизм переживания перезапуска:
+    строка события заблокирована `FOR UPDATE` до конца транзакции, и убитый посреди
+    работы процесс откатывает её целиком — событие снова становится необработанным.
+    """
+    moment = now or datetime.now(UTC)
+    retry = policy or RetryPolicy.from_settings()
+    subscribers = registry or default_registry
+
+    event = await OutboxRepository(session).claim_next(now=moment)
+    if event is None:
+        return None
+
+    envelope = _envelope(event)
+    already_done = set(event.delivered_to)
+    pending = [
+        subscriber
+        for subscriber in subscribers.matching(event.event_type)
+        if subscriber.name not in already_done
+    ]
+    outcome = await deliver(session, envelope, pending)
+
+    # JSONB-колонку нельзя менять на месте: SQLAlchemy не отслеживает мутации внутри
+    # значения, и UPDATE просто не уйдёт. Присваивается всегда новый список.
+    event.delivered_to = [*event.delivered_to, *outcome.delivered]
+
+    if outcome.failed:
+        event.attempts += 1
+        event.last_error = "; ".join(
+            f"{failure.name}: {failure.error}" for failure in outcome.failures
+        )[:MAX_ERROR_LENGTH]
+        if event.attempts >= retry.max_attempts:
+            # Попытки исчерпаны: событие помечено «не доставлено» и само больше не
+            # повторится. Молча удалять или бесконечно повторять его нельзя — первое
+            # прячет проблему, второе занимает воркер мёртвым подписчиком навсегда.
+            event.status = OutboxStatus.FAILED
+            event.processed_at = moment
+        else:
+            event.available_at = moment + retry.delay_after(event.attempts)
+    else:
+        event.status = OutboxStatus.DELIVERED
+        event.processed_at = moment
+        event.last_error = None
+
+    await session.flush()
+    return ProcessedEvent(
+        envelope=envelope,
+        outcome=outcome,
+        status=event.status,
+        attempts=event.attempts,
+    )
+
+
+# --- Внутреннее -------------------------------------------------------------------
+
+
+def issue_snapshot(issue: Issue) -> dict[str, Any]:
+    """Задача в JSON-виде для полезной нагрузки события.
+
+    Повторяет форму ответа API (`app/api/schemas/issues.py`), но живёт здесь, а не там:
+    `services` не имеет права зависеть от `api`, а событие обязано выглядеть одинаково
+    и для подписчика внутри процесса, и для вебхука наружу.
+
+    Время — строкой ISO 8601, ссылки справочников — строками, акторы — ключами: в JSONB
+    объекты `datetime` не кладутся, а ORM-объект не переживает транзакцию, в которой
+    событие родилось.
+    """
+    return {
+        "id": str(issue.id),
+        "key": issue.key,
+        "queue": issue.queue.key,
+        "issue_type": issue.issue_type.ref,
+        "status": issue.status.ref,
+        "resolution": None if issue.resolution is None else issue.resolution.ref,
+        "priority": issue.priority.value,
+        "summary": issue.summary,
+        "description": issue.description,
+        "author": issue.author.key,
+        "assignee": None if issue.assignee is None else issue.assignee.key,
+        "followers": [follower.key for follower in issue.followers],
+        "deadline": _moment(issue.deadline),
+        "tags": list(issue.tags),
+        "values": dict(issue.values),
+        "version": issue.version,
+        "created_at": _moment(issue.created_at),
+        "updated_at": _moment(issue.updated_at),
+    }
+
+
+async def _write_changelog(
+    session: AsyncSession,
+    *,
+    issue: Issue,
+    actor: Actor,
+    event_type: EventType,
+    changes: tuple[IssueChange, ...],
+) -> ChangelogEntry:
+    entry = ChangelogEntry(
+        issue_id=issue.id,
+        actor_id=actor.id,
+        event_type=event_type.value,
+        changes=encode_changes(changes),
+    )
+    return await ChangelogRepository(session).add(entry)
+
+
+async def _publish_issue_event(
+    session: AsyncSession,
+    *,
+    issue: Issue,
+    actor: Actor,
+    event_type: EventType,
+    changes: tuple[IssueChange, ...],
+) -> OutboxEvent:
+    return await _publish(
+        session,
+        event_type=event_type,
+        object_type=ObjectType.ISSUE,
+        object_id=issue.id,
+        object_key=issue.key,
+        actor=actor,
+        payload={
+            "issue": issue_snapshot(issue),
+            "changes": encode_changes(changes),
+            # Имена изменённых полей отдельным списком: подписчик почти всегда сначала
+            # спрашивает «моё поле трогали?» и только потом лезет за значениями.
+            "fields": list(changed_fields(changes)),
+        },
+    )
+
+
+async def _publish(
+    session: AsyncSession,
+    *,
+    event_type: EventType,
+    object_type: ObjectType,
+    object_id: uuid.UUID,
+    object_key: str,
+    actor: Actor,
+    payload: dict[str, Any],
+) -> OutboxEvent:
+    event = OutboxEvent(
+        event_type=event_type.value,
+        object_type=object_type.value,
+        object_id=object_id,
+        object_key=object_key,
+        actor_id=actor.id,
+        actor_key=actor.key,
+        payload=payload,
+    )
+    return await OutboxRepository(session).add(event)
+
+
+def _envelope(event: OutboxEvent) -> EventEnvelope:
+    """Строка outbox — в контракт подписчика.
+
+    Полезная нагрузка копируется поверхностно: подписчик, дописавший что-то в словарь,
+    не должен менять то, что лежит в базе.
+    """
+    return EventEnvelope(
+        id=event.id,
+        event_type=event.event_type,
+        object_type=event.object_type,
+        object_id=event.object_id,
+        object_key=event.object_key,
+        actor_key=event.actor_key,
+        payload=dict(event.payload),
+        created_at=event.created_at,
+    )
+
+
+def _moment(value: datetime | None) -> str | None:
+    """Время в событии — строка ISO 8601 в UTC: тот же формат, что в API и в журнале."""
+    return None if value is None else value.astimezone(UTC).isoformat()

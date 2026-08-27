@@ -39,6 +39,31 @@ class Settings(BaseSettings):
     database_pool_size: int = 5
     database_max_overflow: int = 10
 
+    # --- Воркер шины событий -----------------------------------------------------
+    # Настройки, а не константы в коде: паузу повтора и потолок попыток приходится
+    # подбирать под конкретную установку (медленный вебхук, недоступный внешний сервис),
+    # и делать это перевыкладкой образа неправильно.
+    outbox_poll_interval: float = Field(
+        default=1.0,
+        gt=0,
+        description="Seconds the events worker sleeps when the outbox is empty",
+    )
+    outbox_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        description="Delivery attempts before an event is marked as failed",
+    )
+    outbox_retry_delay: float = Field(
+        default=10.0,
+        gt=0,
+        description="Base delay before the next delivery attempt; doubles with every attempt",
+    )
+    outbox_max_retry_delay: float = Field(
+        default=600.0,
+        gt=0,
+        description="Upper bound for the growing retry delay",
+    )
+
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
     cors_origins: Annotated[list[str], NoDecode] = Field(
