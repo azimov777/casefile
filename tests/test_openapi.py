@@ -10,7 +10,6 @@ import re
 import pytest
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
-from fastapi.routing import APIRoute
 
 # Свободная форма допустима ровно в двух местах, оба задокументированы в соглашениях.
 FREEFORM_SCHEMAS = {"details", "values"}
@@ -23,21 +22,34 @@ def schema(app: FastAPI) -> dict:
     return get_openapi(title=app.title, version=app.version, routes=app.routes)
 
 
-def _routes(app: FastAPI) -> list[APIRoute]:
-    return [route for route in app.routes if isinstance(route, APIRoute)]
+def _operation_ids(schema: dict) -> list[str]:
+    """Идентификаторы операций берутся из схемы, а не из `app.routes`.
+
+    С версии FastAPI 0.141 подключённые роутеры не разворачиваются в `app.routes`:
+    там лежат объекты `_IncludedRouter`, и отбор по `isinstance(route, APIRoute)`
+    возвращает пустой список. Проверка при этом продолжает проходить — на пустом
+    множестве, — то есть перестаёт что-либо стеречь. Схема же собирается тем самым
+    кодом, который отдаёт `/openapi.json` фронтенду, и врать не может.
+    """
+    return [
+        operation["operationId"]
+        for methods in schema["paths"].values()
+        for operation in methods.values()
+        if "operationId" in operation
+    ]
 
 
-def test_operation_ids_are_unique(app: FastAPI) -> None:
+def test_operation_ids_are_unique(schema: dict) -> None:
     """FastAPI уникальности не гарантирует: два обработчика могут получить одно имя."""
-    ids = [route.operation_id or route.unique_id for route in _routes(app)]
+    ids = _operation_ids(schema)
 
+    assert ids, "schema exposes no operations at all"
     assert len(ids) == len(set(ids)), f"duplicate operation ids: {sorted(ids)}"
 
 
-def test_operation_ids_are_readable_snake_case(app: FastAPI) -> None:
+def test_operation_ids_are_readable_snake_case(schema: dict) -> None:
     """Иначе в клиенте появятся имена вида `read_actor_api_v1_actors__actor_key__get`."""
-    for route in _routes(app):
-        operation_id = route.operation_id or route.unique_id
+    for operation_id in _operation_ids(schema):
         assert OPERATION_ID_PATTERN.match(operation_id), operation_id
 
 
