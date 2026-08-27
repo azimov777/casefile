@@ -11,10 +11,12 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.errors import AppError
 from app.core.logging import get_logger
+from app.db.session import integrity_conflict
 
 logger = get_logger("api.errors")
 
@@ -92,6 +94,20 @@ async def handle_http_exception(request: Request, exc: Exception) -> JSONRespons
     return error_response(exc.status_code, code, detail)
 
 
+async def handle_integrity_error(request: Request, exc: Exception) -> JSONResponse:
+    """Нарушение ограничения БД внутри запроса — это `409`, а не пятисотка.
+
+    Сюда попадает нарушение, обнаруженное при `flush` (дубликат ключа, ссылка на
+    удалённую строку). Нарушение, обнаруженное при коммите, переводит в ту же ошибку
+    `app/db/session.py` — обе ветки зовут одну функцию, чтобы клиент не различал, в
+    какой момент база сказала «нет».
+    """
+    assert isinstance(exc, IntegrityError)
+    logger.warning("Integrity error at %s %s", request.method, request.url.path)
+    conflict = integrity_conflict(exc)
+    return error_response(conflict.status_code, conflict.code, conflict.message, conflict.details)
+
+
 async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
     """Всё, что не предусмотрено: наружу уходит код без подробностей, подробности — в лог."""
     logger.exception("Unhandled error at %s %s", request.method, request.url.path)
@@ -103,4 +119,5 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, handle_app_error)
     app.add_exception_handler(RequestValidationError, handle_request_validation_error)
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
+    app.add_exception_handler(IntegrityError, handle_integrity_error)
     app.add_exception_handler(Exception, handle_unexpected_error)

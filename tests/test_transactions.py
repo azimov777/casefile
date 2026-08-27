@@ -3,6 +3,14 @@
 Проверяются оба входа — HTTP-запрос через `get_session` и прямой `session_scope`, которым
 пользуются воркеры. Тесты идут мимо фикстуры `app`: она подменяет `get_session` сессией
 теста, а проверить надо именно настоящую зависимость.
+
+Отдельная история — падение самого коммита. Оно возможно у отложенных ограничений
+(`DEFERRABLE INITIALLY DEFERRED`): вставка проходит, а `COMMIT` отказывает. Такой отказ
+случается уже после того, как обработчик вернул результат, и без специальных мер уходит
+мимо обработчиков ошибок — клиент получает оборванный ответ вместо оболочки ошибки.
+Меры две, и обе проверяются здесь: `SessionDep` объявлен с областью `function`
+(`app/api/deps.py`), а нарушение целостности переводится в `conflict`
+(`app/db/session.py`).
 """
 
 from collections.abc import AsyncIterator
@@ -19,6 +27,7 @@ from app.db import session as session_module
 from app.main import create_app
 
 PROBE_TABLE = "transaction_probe"
+DEFERRED_PROBE_TABLE = "deferred_probe"
 
 
 @pytest.fixture
@@ -29,6 +38,28 @@ async def probe_table(engine: AsyncEngine) -> AsyncIterator[None]:
     yield
     async with engine.begin() as connection:
         await connection.execute(text(f"DROP TABLE {PROBE_TABLE}"))
+
+
+@pytest.fixture
+async def deferred_probe_table(engine: AsyncEngine) -> AsyncIterator[None]:
+    """Таблица с отложенным ограничением: единственный способ уронить именно коммит.
+
+    Ограничение проверяется в конце транзакции, а не на вставке, поэтому две одинаковые
+    строки вставляются успешно и отказывает `COMMIT`. Дубликат ключа задачи ведёт себя
+    так же, если ограничение объявлено отложенным, — а вести себя иначе клиент не должен.
+    """
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                f"CREATE TABLE {DEFERRED_PROBE_TABLE} ("
+                "value integer, "
+                f"CONSTRAINT uq_{DEFERRED_PROBE_TABLE}_value UNIQUE (value) "
+                "DEFERRABLE INITIALLY DEFERRED)"
+            )
+        )
+    yield
+    async with engine.begin() as connection:
+        await connection.execute(text(f"DROP TABLE {DEFERRED_PROBE_TABLE}"))
 
 
 @pytest.fixture
@@ -56,6 +87,31 @@ async def probe_client(app_sessionmaker: None) -> AsyncIterator[AsyncClient]:
         if value < 0:
             raise ConflictError("Probe failed on purpose")
         return {"value": value}
+
+    @application.post("/probe-deferred/{value}")
+    async def _probe_deferred(value: int, session: SessionDep) -> dict[str, int]:
+        """Две одинаковые строки: обе вставляются, отказывает коммит."""
+        for _ in range(2):
+            await session.execute(
+                text(f"INSERT INTO {DEFERRED_PROBE_TABLE} (value) VALUES (:value)"),
+                {"value": value},
+            )
+        return {"value": value}
+
+    @application.post("/probe-duplicate-issue-key")
+    async def _probe_duplicate_issue_key(session: SessionDep) -> dict[str, str]:
+        """Дубликат ключа задачи, обнаруженный сразу на вставке, а не на коммите."""
+        await session.execute(
+            text(
+                "INSERT INTO issues (key, queue_id, issue_type_id, status_id, "
+                "summary, author_id) "
+                "SELECT :key, q.id, q.default_issue_type_id, q.default_status_id, "
+                ":summary, q.owner_id FROM queues q WHERE q.key = :queue"
+            ),
+            {"key": "DUP-1", "summary": "Проба", "queue": "DUP"},
+        )
+        await session.flush()
+        return {"key": "DUP-1"}
 
     transport = ASGITransport(app=application)
     async with AsyncClient(transport=transport, base_url="http://tracker.test") as client:
@@ -113,3 +169,62 @@ async def test_session_scope_rolls_back_on_error(
             raise ConflictError("Worker failed on purpose")
 
     assert await _stored_values(engine) == []
+
+
+async def test_failing_commit_reaches_the_client_as_a_conflict(
+    probe_client: AsyncClient,
+    deferred_probe_table: None,
+    engine: AsyncEngine,
+) -> None:
+    """Упавший коммит обязан прийти клиенту единой оболочкой ошибки, а не пятисоткой.
+
+    Без области `function` у `SessionDep` этот тест падает не проверкой, а
+    `RuntimeError: Caught handled exception, but response already started`: FastAPI
+    закрывает зависимости после отправки ответа, и обработчику ошибок уже некуда писать.
+    """
+    response = await probe_client.post("/probe-deferred/1")
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "conflict"
+    assert error["details"]["reason"] == "integrity_violation"
+
+    async with engine.connect() as connection:
+        stored = await connection.execute(text(f"SELECT value FROM {DEFERRED_PROBE_TABLE}"))
+    assert list(stored.scalars()) == []
+
+
+async def test_duplicate_issue_key_is_a_conflict_not_a_five_hundred(
+    probe_client: AsyncClient,
+    engine: AsyncEngine,
+) -> None:
+    """Тот же ответ, когда база отказывает не на коммите, а сразу на вставке.
+
+    Клиент не должен различать эти два случая: и там, и там это конфликт состояния.
+    Очередь заводится и убирается прямо здесь — тест идёт мимо фикстур с откатом,
+    потому что проверяет настоящую границу транзакции.
+    """
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO queues (key, name, owner_id, default_issue_type_id, "
+                "default_status_id) "
+                "SELECT 'DUP', 'Проба', a.id, t.id, s.id FROM actors a, issue_types t, statuses s "
+                "WHERE a.key = 'system' AND t.key = 'task' AND t.queue_id IS NULL "
+                "AND s.key = 'open' AND s.queue_id IS NULL"
+            )
+        )
+    try:
+        first = await probe_client.post("/probe-duplicate-issue-key")
+        assert first.status_code == 200
+
+        second = await probe_client.post("/probe-duplicate-issue-key")
+
+        assert second.status_code == 409
+        error = second.json()["error"]
+        assert error["code"] == "conflict"
+        assert error["details"]["constraint"] == "uq_issues_key"
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(text("DELETE FROM issues WHERE key = 'DUP-1'"))
+            await connection.execute(text("DELETE FROM queues WHERE key = 'DUP'"))

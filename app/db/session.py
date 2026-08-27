@@ -14,7 +14,9 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -23,6 +25,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import get_settings
+from app.core.errors import ConflictError
 
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
@@ -69,6 +72,52 @@ async def dispose_engine() -> None:
     _sessionmaker = None
 
 
+def integrity_conflict(exc: IntegrityError) -> ConflictError:
+    """Нарушение ограничения целостности — это конфликт состояния, а не пятисотка.
+
+    Дубликат ключа, ссылка на удалённую строку, нарушенная проверка — всё это ответ
+    базы на состояние данных, и клиенту важно отличить его от сбоя сервера: по `409` он
+    перечитает объект и повторит запрос, по `500` — позовёт разработчика.
+
+    Наружу уходит только имя ограничения, а не текст ошибки драйвера: в нём бывают
+    значения строк, которым в ответе делать нечего. Имя ограничения задано соглашением
+    об именах (`app/db/base.py`), поэтому оно устойчиво и полезно в отладке.
+    """
+    constraint = _constraint_name(exc)
+    details: dict[str, Any] = {"reason": "integrity_violation"}
+    if constraint is not None:
+        details["constraint"] = constraint
+    return ConflictError(message="Database constraint violated", details=details)
+
+
+def _constraint_name(exc: IntegrityError) -> str | None:
+    """Имя нарушенного ограничения из исключения драйвера, если драйвер его сообщил.
+
+    У asyncpg настоящая ошибка лежит в `__cause__` обёртки SQLAlchemy; у других
+    драйверов атрибута может не быть вовсе, поэтому доступ защищённый.
+    """
+    for candidate in (exc.orig, getattr(exc.orig, "__cause__", None)):
+        name = getattr(candidate, "constraint_name", None)
+        if name:
+            return str(name)
+    return None
+
+
+async def commit(session: AsyncSession) -> None:
+    """Фиксирует транзакцию и переводит нарушение ограничения в доменный конфликт.
+
+    Единственное место, где выполняется `commit`. Ошибка целостности здесь особенно
+    коварна: отложенные ограничения (`DEFERRABLE INITIALLY DEFERRED`) роняют не запрос,
+    а именно коммит, и без перевода клиент получил бы голую пятисотку вместо понятного
+    `conflict`.
+    """
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise integrity_conflict(exc) from exc
+
+
 @asynccontextmanager
 async def session_scope() -> AsyncIterator[AsyncSession]:
     """Сессия с транзакцией: единственное место, где живёт граница фиксации изменений.
@@ -84,7 +133,7 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
             await session.rollback()
             raise
         else:
-            await session.commit()
+            await commit(session)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -93,6 +142,11 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     Обработчик отработал без исключения — коммит; вылетело любое исключение, включая
     доменное, — откат. Одна и та же функция сервиса, вызванная из REST, из MCP и из
     воркера, фиксируется одинаково, потому что фиксирует её один и тот же код.
+
+    Момент коммита у HTTP-запроса сдвинут вперёд объявлением зависимости:
+    `SessionDep` в `app/api/deps.py` просит область `function`. Без неё FastAPI закрыл
+    бы зависимость уже после отправки ответа, и упавший коммит было бы некуда доложить.
+    Поведение от этого не меняется — меняется только момент.
     """
     async with session_scope() as session:
         yield session

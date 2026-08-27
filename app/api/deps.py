@@ -12,7 +12,15 @@ from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.db.session import get_session
 from app.services.auth import authenticate_by_token
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# `scope="function"` — не украшение, а единственное, что доводит упавший коммит до
+# клиента. FastAPI держит два стека завершения зависимостей: обычный закрывается уже
+# **после** отправки ответа, и исключение из него превращается в
+# `RuntimeError: Caught handled exception, but response already started` — клиент
+# получает оборванный ответ вместо оболочки ошибки. Стек с областью `function`
+# закрывается до отправки, и коммит, упавший на отложенном ограничении
+# (`DEFERRABLE INITIALLY DEFERRED`), успевает стать нормальным `409 conflict`.
+# Границу транзакции это не раздваивает: она по-прежнему одна, в `session_scope`.
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 """Сессия БД на время запроса. Тесты подменяют её через `app.dependency_overrides`."""
 
 # `auto_error=False` обязателен: со значением по умолчанию FastAPI сам отвечает
