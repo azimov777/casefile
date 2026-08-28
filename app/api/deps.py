@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Query
+from fastapi import Depends, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,4 +63,17 @@ CurrentActorDep = Annotated[Actor, Depends(get_current_actor)]
 LimitQuery = Annotated[int, Query(ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE, description="Page size")]
 CursorQuery = Annotated[
     str | None, Query(description="Cursor from `meta.next_cursor` of a previous page")
+]
+
+
+# Ключ задачи в пути. Объявлен здесь, а не в роутере задач: тем же ключом адресуют
+# задачу связи и всё, что появится дальше, а два объявления одного параметра
+# разъехались бы описаниями в сгенерированном клиенте.
+#
+# Без `pattern`: параметр адресует существующую задачу, а адресация в проекте мягкая.
+# Невнятный ключ отвергает домен кодом `invalid_issue_key` с ожидаемым форматом в
+# `details` — шаблон в пути такого объяснения дать не может.
+IssueKeyPath = Annotated[
+    str,
+    Path(description="Issue key, immutable and never reused", examples=["TRK-123"]),
 ]

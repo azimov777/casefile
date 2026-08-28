@@ -14,7 +14,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentActorDep, CursorQuery, LimitQuery, SessionDep
+from app.api.deps import CurrentActorDep, CursorQuery, IssueKeyPath, LimitQuery, SessionDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.events import ChangelogEntryRead
 from app.api.schemas.issues import (
@@ -36,14 +36,6 @@ from app.services import queues as queues_service
 from app.services.issues import IssueChanges
 
 router = APIRouter(prefix="/issues", tags=["issues"])
-
-# Без `pattern`: параметр адресует существующую задачу, а адресация в проекте мягкая.
-# Невнятный ключ отвергает домен кодом `invalid_issue_key` с ожидаемым форматом в
-# `details` — шаблон в пути такого объяснения дать не может.
-IssueKeyPath = Annotated[
-    str,
-    Path(description="Issue key, immutable and never reused", examples=["TRK-123"]),
-]
 
 QueueFilterQuery = Annotated[
     str | None,
