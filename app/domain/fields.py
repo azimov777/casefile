@@ -157,6 +157,8 @@ SYSTEM_FIELD_KEYS = frozenset(
         "deadline",
         "tags",
         "links",
+        "comments",
+        "checklist",
         "values",
         "version",
         "created_at",

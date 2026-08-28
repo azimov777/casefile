@@ -20,8 +20,8 @@ from app.domain.events import (
 from app.domain.issues import IssueChange, IssueField
 
 #: Действия, которые сценарии задач передают в `apply_issue_changes` и `ensure_allowed`,
-#: плюс действия над связями (задача 08): они меняют не саму задачу, а её окружение, но
-#: событие обязаны порождать так же.
+#: плюс действия над окружением задачи: связями (задача 08), обсуждением и чеклистом
+#: (задача 09). Саму строку задачи они не меняют, но событие обязаны порождать так же.
 #: Список записан руками: он должен ломаться при появлении нового действия без события,
 #: а вычисленный из самого словаря — не сломался бы никогда.
 MUTATING_ACTIONS = (
@@ -31,9 +31,20 @@ MUTATING_ACTIONS = (
     "issue.assign",
     "issue.follow",
     "issue.unfollow",
+    "issue.tag",
+    "issue.untag",
     "issue.delete",
     "link.create",
     "link.delete",
+    "comment.create",
+    "comment.update",
+    "comment.delete",
+    "checklist.item_add",
+    "checklist.item_update",
+    "checklist.item_check",
+    "checklist.item_uncheck",
+    "checklist.item_move",
+    "checklist.item_remove",
 )
 
 

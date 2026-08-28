@@ -528,3 +528,63 @@ class InvalidTreeDepthError(ValidationError):
 
     code = "invalid_tree_depth"
     message = "Tree depth is out of range"
+
+
+# --- Комментарии -----------------------------------------------------------------
+
+
+class CommentNotFoundError(NotFoundError):
+    """Комментария с таким идентификатором у этой задачи нет.
+
+    Один код и на несуществующий комментарий, и на существующий, но принадлежащий
+    другой задаче: комментарий адресуется в пути своей задачей, и «есть, но не в этой
+    задаче» для клиента то же самое, что «нет».
+    """
+
+    code = "comment_not_found"
+    message = "Comment not found"
+
+
+class CommentDeletedError(ConflictError):
+    """Комментарий удалён: править и удалять его повторно нечего.
+
+    Удаление мягкое, поэтому строка на месте и читается — но текста у неё уже нет, и
+    правка вернула бы удалённое высказывание в ленту задним числом.
+    """
+
+    code = "comment_deleted"
+    message = "Comment is deleted"
+
+
+class InvalidCommentBodyError(ValidationError):
+    """Текст комментария пуст или длиннее допустимого."""
+
+    code = "invalid_comment_body"
+    message = "Comment body is invalid"
+
+
+# --- Чеклист ---------------------------------------------------------------------
+
+
+class ChecklistItemNotFoundError(NotFoundError):
+    """Пункта чеклиста с таким идентификатором у этой задачи нет.
+
+    Как и у комментария, чужой пункт неотличим от несуществующего: пункт адресуется в
+    пути своей задачей, и по идентификатору из чужой задачи его не переставить.
+    """
+
+    code = "checklist_item_not_found"
+    message = "Checklist item not found"
+
+
+class InvalidChecklistItemError(ValidationError):
+    """Пункт чеклиста нарушает правило: пустой текст, перенос строки, потолок пунктов.
+
+    Причина всегда в `details.reason`: `required`, `multiline_not_allowed`,
+    `too_long`, `too_many_items`, `timezone_required`. Один код на все случаи — по
+    той же схеме, что у значений кастомных полей: клиент читает причину, а не
+    заводит обработчик под каждый вид нарушения.
+    """
+
+    code = "invalid_checklist_item"
+    message = "Checklist item is invalid"

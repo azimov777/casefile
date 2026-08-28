@@ -47,6 +47,13 @@ class ObjectType(StrEnum):
     #: выбрать «главную» сторону было бы произволом, а подписчику нужны обе. Ключи
     #: обеих задач лежат в `object_key` и в полезной нагрузке.
     LINK = "link"
+    #: Комментарий. Объект — сам комментарий, а не задача: подписчик уведомлений
+    #: адресует ответ и упоминание конкретной записи обсуждения, а не задаче целиком.
+    #: Ключ задачи при этом лежит в `object_key` и в полезной нагрузке.
+    COMMENT = "comment"
+    #: Пункт чеклиста. Объект — пункт по той же причине: отметка о выполнении
+    #: относится к пункту, а не к задаче, у которой их может быть сотня.
+    CHECKLIST_ITEM = "checklist_item"
 
 
 class EventType(StrEnum):
@@ -70,6 +77,21 @@ class EventType(StrEnum):
     STATUS_ISSUES_MOVED = "status.issues_moved"
     LINK_CREATED = "link.created"
     LINK_DELETED = "link.deleted"
+    COMMENT_CREATED = "comment.created"
+    COMMENT_UPDATED = "comment.updated"
+    #: Удаление комментария мягкое: строка остаётся в ленте плашкой без текста.
+    #: Событие всё равно нужно — уведомление о комментарии могло уйти раньше, и
+    #: подписчик, ведущий свою копию обсуждения, обязан узнать, что текста больше нет.
+    COMMENT_DELETED = "comment.deleted"
+    CHECKLIST_ITEM_ADDED = "checklist.item_added"
+    CHECKLIST_ITEM_UPDATED = "checklist.item_updated"
+    #: Отметка и её снятие — два типа, а не один с флагом в нагрузке: «пункт
+    #: выполнен» — самое частое условие автоматики и уведомлений, и подписчик должен
+    #: отбирать его по типу, не разбирая полезную нагрузку каждого изменения пункта.
+    CHECKLIST_ITEM_CHECKED = "checklist.item_checked"
+    CHECKLIST_ITEM_UNCHECKED = "checklist.item_unchecked"
+    CHECKLIST_ITEM_MOVED = "checklist.item_moved"
+    CHECKLIST_ITEM_REMOVED = "checklist.item_removed"
 
 
 class OutboxStatus(StrEnum):
@@ -98,12 +120,30 @@ ACTION_EVENTS: dict[str, EventType] = {
     # тип больше ради того же самого «у задачи изменился набор наблюдателей».
     "issue.follow": EventType.ISSUE_UPDATED,
     "issue.unfollow": EventType.ISSUE_UPDATED,
+    # Теги — поле задачи, поэтому их правка даёт обычный `issue.updated`, как и
+    # подписка. Отдельные действия нужны только проверке прав: «пометить задачу»
+    # и «переписать её название» — разные по смыслу операции, и когда появятся
+    # роли, разрешать их придётся по отдельности.
+    "issue.tag": EventType.ISSUE_UPDATED,
+    "issue.untag": EventType.ISSUE_UPDATED,
     "issue.delete": EventType.ISSUE_DELETED,
     # Связи не меняют строку задачи, поэтому и события у них свои, а не `issue.updated`:
     # подписчик, которому интересны только поля задачи, не должен разбирать поток
     # изменений связей, а подписчику связей не нужны все правки названий.
     "link.create": EventType.LINK_CREATED,
     "link.delete": EventType.LINK_DELETED,
+    # Обсуждение и чеклист не меняют строку задачи, поэтому события у них свои, а не
+    # `issue.updated`: подписчику, которому нужны поля задачи, незачем разбирать поток
+    # реплик, а движку уведомлений об упоминаниях — все правки названий.
+    "comment.create": EventType.COMMENT_CREATED,
+    "comment.update": EventType.COMMENT_UPDATED,
+    "comment.delete": EventType.COMMENT_DELETED,
+    "checklist.item_add": EventType.CHECKLIST_ITEM_ADDED,
+    "checklist.item_update": EventType.CHECKLIST_ITEM_UPDATED,
+    "checklist.item_check": EventType.CHECKLIST_ITEM_CHECKED,
+    "checklist.item_uncheck": EventType.CHECKLIST_ITEM_UNCHECKED,
+    "checklist.item_move": EventType.CHECKLIST_ITEM_MOVED,
+    "checklist.item_remove": EventType.CHECKLIST_ITEM_REMOVED,
 }
 
 
