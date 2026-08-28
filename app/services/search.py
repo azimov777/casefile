@@ -85,6 +85,7 @@ from app.domain.search import (
     SearchValue,
     SearchValueKind,
     SortTerm,
+    SprintScope,
     SystemField,
     SystemFieldSpec,
     SystemTerm,
@@ -184,6 +185,37 @@ async def search_issues(
     порядок у сохранённого фильтра не украшение: «мои горящие» без сортировки по
     дедлайну отвечают на другой вопрос.
     """
+    resolved = await resolve_issue_filter(
+        session,
+        initiator=initiator,
+        query=query,
+        structured=structured,
+        saved_filter_id=saved_filter_id,
+        sort=sort,
+        fields=fields,
+    )
+    page = await IssueSearchRepository(session).search_page(resolved, limit=limit, cursor=cursor)
+    return SearchOutcome(page=page, resolved=resolved)
+
+
+async def resolve_issue_filter(
+    session: AsyncSession,
+    *,
+    initiator: Actor,
+    query: str | None = None,
+    structured: Sequence[StructuredTerm] = (),
+    saved_filter_id: uuid.UUID | None = None,
+    sort: Sequence[str] = (),
+    fields: Sequence[str] = (),
+) -> ResolvedFilter:
+    """Склейка всех источников отбора в один разрешённый фильтр, без самой выборки.
+
+    Отдельно от `search_issues`, потому что выборка бывает не только страницей поиска:
+    доска отбирает задачи тем же фильтром, но упорядочивает их своим рангом и потому
+    строит запрос сама (`app/db/repositories/boards.py`). Разрешение имён и значений
+    при этом обязано остаться одним — иначе доска понимала бы `assignee: me()` иначе,
+    чем поиск, и расхождение было бы молчаливым.
+    """
     ensure_allowed(initiator, "issue.search")
 
     parts: list[SearchFilter] = []
@@ -204,9 +236,7 @@ async def search_issues(
     if sort:
         merged = replace(merged, sort=parse_sort_terms(sort))
 
-    resolved = await resolve_filter(session, merged, initiator=initiator, fields=fields)
-    page = await IssueSearchRepository(session).search_page(resolved, limit=limit, cursor=cursor)
-    return SearchOutcome(page=page, resolved=resolved)
+    return await resolve_filter(session, merged, initiator=initiator, fields=fields)
 
 
 def filter_from_structured(
@@ -448,6 +478,8 @@ async def _resolve_system_value(
             return (await _queue(session, condition, value)).id
         case SearchValueKind.PROJECT_KEY:
             return (await _project(session, condition, value)).id
+        case SearchValueKind.SPRINT_REF:
+            return await _sprint(session, condition, value)
         case SearchValueKind.CATALOG_REF:
             entry = await _catalog_entry(session, condition, spec, value, initiator=initiator)
             return entry.id
@@ -493,6 +525,45 @@ async def _project(session: AsyncSession, condition: Condition, value: SearchVal
         return await projects_service.get_project_by_key(session, key)
     except AppError as exc:
         raise _value_rejected(condition, value, exc, key) from exc
+
+
+async def _sprint(
+    session: AsyncSession,
+    condition: Condition,
+    value: SearchValue,
+) -> uuid.UUID | SprintScope:
+    """Спринт по идентификатору либо маркер «текущий».
+
+    `current` не разрешается в один спринт намеренно: активный спринт свой у каждой
+    доски, и подстановка одного идентификатора превратила бы общий фильтр в фильтр
+    случайной доски. Маркер доезжает до компилятора и становится подзапросом — так же,
+    как категория статуса.
+
+    Импорт внутри функции — по той же причине, что у проектов выше: сценарии досок
+    опираются на этот модуль, и импорт на уровне модуля замкнул бы их в цикл.
+    """
+    from app.services import boards as boards_service
+
+    raw = _plain_text(condition, value)
+    if raw.strip().lower() == SprintScope.CURRENT.value:
+        return SprintScope.CURRENT
+    try:
+        sprint_id = uuid.UUID(raw.strip())
+    except ValueError as exc:
+        raise SearchValueInvalidError(
+            details={
+                "field": condition.name,
+                "position": value.position,
+                "value": raw,
+                "reason": "invalid_sprint_ref",
+                "expected": "a sprint UUID or the word `current`",
+            },
+        ) from exc
+    try:
+        sprint = await boards_service.get_sprint_by_id(session, sprint_id)
+    except AppError as exc:
+        raise _value_rejected(condition, value, exc, raw) from exc
+    return sprint.id
 
 
 async def _catalog_entry(

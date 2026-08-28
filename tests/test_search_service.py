@@ -377,9 +377,13 @@ async def test_a_reserved_name_without_a_filter_is_refused_not_searched_in_jsonb
     owner: Actor,
     queue: Queue,
 ) -> None:
-    """`sprint` появится в задаче 11; молчаливый уход в JSONB дал бы пустую выдачу."""
+    """`links` фильтра пока не имеет; молчаливый уход в JSONB дал бы пустую выдачу.
+
+    `sprint` из этого набора ушёл в задаче 11 — ровно тем же способом, что `project` в
+    задаче 10: описанием поля, а не правкой списка недоступных имён.
+    """
     with pytest.raises(SearchFieldUnknownError) as error:
-        await _keys(db_session, owner, "sprint: alpha")
+        await _keys(db_session, owner, "links: TRK-1")
 
     assert error.value.details["reason"] == "not_searchable"
 

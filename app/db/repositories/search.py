@@ -44,11 +44,13 @@ from sqlalchemy import Select, and_, case, false, func, not_, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.db.models.board import Sprint
 from app.db.models.catalog import Status
 from app.db.models.comment import Comment
 from app.db.models.issue import Issue, IssueFollower
 from app.db.pagination import Page, decode_sort_cursor, encode_sort_cursor, resolve_limit
 from app.db.sql import ilike_contains
+from app.domain.boards import SprintState
 from app.domain.fields import FieldValueType
 from app.domain.issues import IssuePriority
 from app.domain.search import (
@@ -59,6 +61,7 @@ from app.domain.search import (
     ResolvedFilter,
     ResolvedSort,
     SearchValueKind,
+    SprintScope,
     SystemField,
     SystemTerm,
     Term,
@@ -97,28 +100,52 @@ class IssueSearchRepository:
         собрать из них курсор иначе было бы нечем, а второй запрос за теми же
         значениями означал бы удвоение работы на каждую страницу.
         """
-        size = resolve_limit(limit)
         keys = [(_sort_expression(term), term.descending) for term in resolved.sort]
-
-        statement: Select[Any] = select(Issue, *(expression for expression, _ in keys))
+        statement: Select[Any] = select(Issue)
         condition = compile_filter(resolved)
         if condition is not None:
             statement = statement.where(condition)
-        if cursor is not None:
-            values, item_id = decode_sort_cursor(cursor, arity=len(keys))
-            statement = statement.where(_after_cursor(keys, values, item_id))
+        return await issue_page(self._session, statement, keys, limit=limit, cursor=cursor)
 
-        statement = statement.order_by(*_order_by(keys)).limit(size + 1)
-        rows = list(await self._session.execute(statement))
 
-        if len(rows) <= size:
-            return Page(items=[row[0] for row in rows], next_cursor=None)
-        page = rows[:size]
-        last = page[-1]
-        return Page(
-            items=[row[0] for row in page],
-            next_cursor=encode_sort_cursor(list(last[1:]), last[0].id),
-        )
+async def issue_page(
+    session: AsyncSession,
+    statement: Select[Any],
+    keys: Sequence[tuple[ColumnElement[Any], bool]],
+    *,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> Page[Issue]:
+    """Страница задач по готовому запросу и набору ключей порядка.
+
+    Отдельная функция, а не тело метода, потому что упорядоченных страниц задач в
+    проекте две: поиск сортирует по полям задачи, доска — по своему рангу с соединением
+    таблицы `issue_ranks`. Общее у них всё, кроме первых двух строк: `NULLS LAST` в обе
+    стороны, тайбрейкер по `id`, лишняя запрошенная запись как признак следующей
+    страницы и разбор курсора. Вторая копия этого набора разошлась бы на границе с
+    пустым значением ключа — и разошлась бы молча, потерянной записью между страницами.
+
+    `statement` приходит уже с `FROM` и `WHERE`; значения ключей сортировки
+    дописываются сюда, потому что иначе курсор собирать не из чего, а второй запрос за
+    теми же значениями удваивал бы работу на каждую страницу.
+    """
+    size = resolve_limit(limit)
+    statement = statement.add_columns(*(expression for expression, _ in keys))
+    if cursor is not None:
+        values, item_id = decode_sort_cursor(cursor, arity=len(keys))
+        statement = statement.where(after_cursor_condition(keys, values, item_id))
+
+    statement = statement.order_by(*order_by_keys(keys)).limit(size + 1)
+    rows = list(await session.execute(statement))
+
+    if len(rows) <= size:
+        return Page(items=[row[0] for row in rows], next_cursor=None)
+    page = rows[:size]
+    last = page[-1]
+    return Page(
+        items=[row[0] for row in page],
+        next_cursor=encode_sort_cursor(list(last[1:]), last[0].id),
+    )
 
 
 def compile_filter(resolved: ResolvedFilter) -> ColumnElement[bool] | None:
@@ -160,6 +187,8 @@ def _system_body(term: SystemTerm) -> ColumnElement[bool]:
             return _scalar(Issue.queue_id, term.operator, term.values)
         case SearchValueKind.PROJECT_KEY:
             return _scalar(Issue.project_id, term.operator, term.values)
+        case SearchValueKind.SPRINT_REF:
+            return _sprint(term.operator, term.values)
         case SearchValueKind.CATALOG_REF:
             return _scalar(_CATALOG_COLUMNS[term.field], term.operator, term.values)
         case SearchValueKind.ACTOR_KEY:
@@ -212,6 +241,8 @@ def _system_empty(field: SystemField) -> ColumnElement[bool]:
             return Issue.deadline.is_(None)
         case SystemField.PROJECT:
             return Issue.project_id.is_(None)
+        case SystemField.SPRINT:
+            return Issue.sprint_id.is_(None)
         case SystemField.DESCRIPTION:
             return Issue.description == ""
         case SystemField.TAGS:
@@ -235,6 +266,27 @@ def _followers(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]
         select(IssueFollower.issue_id).where(IssueFollower.actor_id.in_(list(values)))
     )
     return not_(member) if operator in NEGATIVE_OPERATORS else member
+
+
+def _sprint(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
+    """Спринт задачи: идентификаторы и маркер «текущий» в одном условии.
+
+    `current` разворачивается в подзапрос по активным спринтам, а не в подставленный
+    идентификатор: активный спринт свой у каждой доски, и `sprint: current` означает
+    «задача в чьём-нибудь активном спринте». Подзапрос, а не соединение, — по той же
+    причине, что у категории статуса: соединение пришлось бы тащить через всю сборку
+    запроса и следить, чтобы оно не задвоило строки.
+    """
+    ids = [value for value in values if isinstance(value, uuid.UUID)]
+    parts: list[ColumnElement[bool]] = []
+    if ids:
+        parts.append(Issue.sprint_id.in_(ids))
+    if any(value is SprintScope.CURRENT for value in values):
+        parts.append(
+            Issue.sprint_id.in_(select(Sprint.id).where(Sprint.state == SprintState.ACTIVE))
+        )
+    matching = or_(*parts)
+    return not_(matching) if operator in NEGATIVE_OPERATORS else matching
 
 
 def _status_category(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
@@ -562,7 +614,7 @@ def _sort_expression(term: ResolvedSort) -> ColumnElement[Any]:
             return Issue.created_at
 
 
-def _order_by(keys: Sequence[tuple[ColumnElement[Any], bool]]) -> list[Any]:
+def order_by_keys(keys: Sequence[tuple[ColumnElement[Any], bool]]) -> list[Any]:
     """Порядок с явным `NULLS LAST` и обязательным тайбрейкером в конце.
 
     `NULLS LAST` задан для обоих направлений намеренно, хотя PostgreSQL по умолчанию
@@ -578,7 +630,7 @@ def _order_by(keys: Sequence[tuple[ColumnElement[Any], bool]]) -> list[Any]:
     return order
 
 
-def _after_cursor(
+def after_cursor_condition(
     keys: Sequence[tuple[ColumnElement[Any], bool]],
     values: Sequence[Any],
     item_id: uuid.UUID,
