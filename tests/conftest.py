@@ -22,12 +22,14 @@ from sqlalchemy.pool import NullPool
 from app.core.config import Settings, get_settings
 from app.db.models.actor import Actor
 from app.db.models.issue import Issue
+from app.db.models.project import Portfolio, Project
 from app.db.models.queue import Queue
 from app.db.session import get_session
 from app.domain.actors import ActorType
 from app.main import create_app
 from app.services import actors as actors_service
 from app.services import issues as issues_service
+from app.services import projects as projects_service
 from app.services import queues as queues_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -178,6 +180,43 @@ async def queue(db_session: AsyncSession, owner: Actor) -> Queue:
         name="Трекер",
         description="Задачи по разработке трекера",
     )
+
+
+@pytest.fixture
+def make_project(db_session: AsyncSession, owner: Actor) -> Callable[..., Awaitable[Project]]:
+    """Фабрика проектов: ключ и название по умолчанию, остальное — как попросят.
+
+    Проект не привязан к очереди намеренно: он собирает задачи из разных очередей, и
+    фикстура, требующая очередь, подталкивала бы писать тесты «проект одной очереди» —
+    то есть проверять не то, ради чего проект существует.
+    """
+
+    async def _make(**kwargs: Any) -> Project:
+        return await projects_service.create_project(
+            db_session,
+            initiator=kwargs.pop("initiator", owner),
+            key=kwargs.pop("key", "alpha"),
+            name=kwargs.pop("name", "Платформа доставки"),
+            **kwargs,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_portfolio(db_session: AsyncSession, owner: Actor) -> Callable[..., Awaitable[Portfolio]]:
+    """Фабрика портфелей."""
+
+    async def _make(**kwargs: Any) -> Portfolio:
+        return await projects_service.create_portfolio(
+            db_session,
+            initiator=kwargs.pop("initiator", owner),
+            key=kwargs.pop("key", "platform"),
+            name=kwargs.pop("name", "Платформа"),
+            **kwargs,
+        )
+
+    return _make
 
 
 @pytest.fixture

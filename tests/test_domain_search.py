@@ -202,15 +202,27 @@ def test_every_searchable_name_is_reserved_by_the_field_registry() -> None:
 
 
 def test_a_reserved_name_without_a_filter_is_not_a_custom_field() -> None:
-    """`project` появится в задаче 10; до тех пор запрос по нему — отказ, а не JSONB.
+    """`sprint` появится в задаче 11; до тех пор запрос по нему — отказ, а не JSONB.
 
     Провалиться в реестр такое имя не должно: поиск по несуществующему кастомному полю
     отдал бы пустую выдачу, и это выглядело бы как «ничего не нашлось».
     """
-    assert system_field_spec("project") is None
-    assert is_reserved_name("project")
+    assert system_field_spec("sprint") is None
     assert is_reserved_name("sprint")
+    assert is_reserved_name("links")
     assert not is_reserved_name("severity")
+
+
+def test_a_name_that_got_its_filter_leaves_the_reserved_set() -> None:
+    """`project` перестал быть недоступным в задаче 10 — вычитанием, а не правкой списка.
+
+    Набор недоступных имён считается как «зарезервировано системой минус то, у чего есть
+    описание фильтра». Тест стережёт именно этот механизм: если следующая задача добавит
+    поле, забыв убрать имя из отдельного списка, ошибка вылезет здесь, а не пустой
+    выдачей у клиента.
+    """
+    assert system_field_spec("project") is not None
+    assert not is_reserved_name("project")
 
 
 def test_a_queue_prefixed_name_is_never_a_system_field() -> None:

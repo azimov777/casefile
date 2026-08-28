@@ -21,7 +21,8 @@ from app.domain.issues import IssueChange, IssueField
 
 #: Действия, которые сценарии задач передают в `apply_issue_changes` и `ensure_allowed`,
 #: плюс действия над окружением задачи: связями (задача 08), обсуждением и чеклистом
-#: (задача 09). Саму строку задачи они не меняют, но событие обязаны порождать так же.
+#: (задача 09), проектами и портфелями (задача 10). Саму строку задачи они не меняют,
+#: но событие обязаны порождать так же.
 #: Список записан руками: он должен ломаться при появлении нового действия без события,
 #: а вычисленный из самого словаря — не сломался бы никогда.
 MUTATING_ACTIONS = (
@@ -45,6 +46,15 @@ MUTATING_ACTIONS = (
     "checklist.item_uncheck",
     "checklist.item_move",
     "checklist.item_remove",
+    "issue.set_project",
+    "project.create",
+    "project.update",
+    "project.archive",
+    "project.restore",
+    "portfolio.create",
+    "portfolio.update",
+    "portfolio.archive",
+    "portfolio.restore",
 )
 
 

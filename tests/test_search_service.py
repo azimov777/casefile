@@ -377,9 +377,9 @@ async def test_a_reserved_name_without_a_filter_is_refused_not_searched_in_jsonb
     owner: Actor,
     queue: Queue,
 ) -> None:
-    """`project` появится в задаче 10; молчаливый уход в JSONB дал бы пустую выдачу."""
+    """`sprint` появится в задаче 11; молчаливый уход в JSONB дал бы пустую выдачу."""
     with pytest.raises(SearchFieldUnknownError) as error:
-        await _keys(db_session, owner, "project: alpha")
+        await _keys(db_session, owner, "sprint: alpha")
 
     assert error.value.details["reason"] == "not_searchable"
 
