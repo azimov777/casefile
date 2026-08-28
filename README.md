@@ -413,7 +413,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 
 **Поля.** Системные адресуются именем (`queue`, `key`, `status`, `status_category`,
 `issue_type`, `resolution`, `priority`, `summary`, `description`, `author`, `assignee`,
-`followers`, `deadline`, `tags`, `project`, `sprint`, `created_at`, `updated_at`), кастомные — ссылкой
+`followers`, `deadline`, `tags`, `project`, `created_at`, `updated_at`), кастомные — ссылкой
 (`severity` у глобального, `TRK.severity` у локального). Отдельно есть `text` — вхождение
 подстроки сразу в название, описание и ленту обсуждения.
 
@@ -541,7 +541,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 списков: новых задач он не принимает, но уже собранные остаются, прогресс продолжает
 считаться, а поля правятся. Возврат — `POST /projects/{key}/unarchive`; оба идемпотентны.
 
-## Доски и спринты
+## Доски
 
 Доска — рабочий экран: она берёт задачи **сохранённым фильтром** (задача 12), раскладывает их
 по колонкам и хранит собственный порядок карточек. Своих условий отбора у доски нет
@@ -613,46 +613,6 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json
 клиенту знать незачем — при перенумерации доски все они меняются, сохраняя порядок. Задача,
 которую никто не двигал, стоит там, где встала по времени создания: строки ранга у неё нет, а
 позиция всё равно есть.
-
-**Спринт — единица планирования, состояние идёт в одну сторону:** `planned` → `active` →
-`completed`. Активный спринт у доски не более одного.
-
-```bash
-curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"board": "<uuid доски>", "name": "Спринт 42", "goal": "Закрыть выдачу ключей"}' \
-     http://localhost:8000/api/v1/sprints
-
-curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"issues": ["TRK-1", "TRK-2", "OPS-7"]}' \
-     http://localhost:8000/api/v1/sprints/<uuid>/issues
-
-curl -X POST -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/sprints/<uuid>/start
-
-# завершение: куда девать незакрытые — решает вызывающий, умолчания нет
-curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"unfinished": "sprint", "sprint": "<uuid следующего>"}' \
-     http://localhost:8000/api/v1/sprints/<uuid>/complete
-```
-
-В ответе завершения — ключи переехавших задач: собрать их второй раз будет неоткуда, состав
-спринта нигде не хранится отдельно от самих задач. Закрытые остаются в спринте — он и есть
-запись о том, что команда успела.
-
-**Спринт стал полем поиска.** `sprint: current` находит задачи активных спринтов, `sprint:
-empty()` — бэклог, `sprint: <uuid>` — конкретный спринт. Тем же словарём пользуется параметр
-`sprint` у колонки доски: `backlog`, `current` или идентификатор.
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" -G http://localhost:8000/api/v1/search/issues \
-     --data-urlencode 'query=sprint: current and status_category: != done'
-
-# бэклог доски: её задачи, не взятые ни в один спринт, в порядке ранга
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/boards/<uuid>/backlog
-```
-
-**Удаления с последствиями нет.** Доска со спринтами отвечает `board_has_sprints`: спринт
-хранит принадлежность задач, и каскад унёс бы её молча. Спринт удаляется, только пока он пуст
-и не запущен, — маршрут существует ради опечатки при планировании, а не ради уборки истории.
 
 ## История изменений и события
 
@@ -861,8 +821,9 @@ docker compose restart worker scheduler
 иначе правило работало бы не на том наборе задач, который показывает интерфейс.
 
 Функции языка вычисляются в момент запуска, поэтому `updated_at: <= today() - 7d` означает
-семь дней от сегодняшнего дня, а не от дня выкладки, а `sprint: current` — активный спринт
-любой доски. Поменять набор задач без правки кода можно, привязав сохранённый фильтр:
+семь дней от сегодняшнего дня, а не от дня выкладки, а `assignee: me()` — актора, от имени
+которого идёт правило. Поменять набор задач без правки кода можно, привязав сохранённый
+фильтр:
 
 ```bash
 curl -X PATCH -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -1097,6 +1058,17 @@ docker compose run --rm migrate
 ```
 
 Автогенерация видит только те модели, которые импортированы в `app/db/models/__init__.py`.
+
+**Ревизия `remove sprints` (`4a7c9e1b53d8`) — необратимая потеря данных.** Она удаляет
+таблицу `sprints` и колонку `issues.sprint_id`: сущность «спринт» из продукта убрана
+намеренно (`docs/CONCEPT.md`, раздел «Доски»). На свежей установке накатывать её нечего — там
+спринтов и не было. На установке, где спринты уже заводили, состав спринтов и их названия
+пропадут безвозвратно: `downgrade` вернёт схему, но не данные — восстанавливать их неоткуда.
+Если эти данные ещё нужны, снимите дамп **до** наката:
+
+```bash
+docker compose exec db pg_dump -U tracker -t sprints -t issues tracker > sprints-backup.sql
+```
 
 ### Тесты
 
