@@ -20,7 +20,18 @@ from fastapi import APIRouter, Depends
 from fastapi.routing import APIRoute
 
 from app.api.deps import get_current_actor
-from app.api.routes import actors, catalogs, fields, issues, links, queues, workflows
+from app.api.routes import (
+    actors,
+    catalogs,
+    checklists,
+    comments,
+    fields,
+    issues,
+    links,
+    queues,
+    tags,
+    workflows,
+)
 from app.api.schemas.common import ErrorResponse
 
 # Формы ошибок объявлены один раз на весь версионированный API, а не повторены в каждом
@@ -62,4 +73,7 @@ api_router.include_router(catalogs.router)
 api_router.include_router(fields.router)
 api_router.include_router(issues.router)
 api_router.include_router(links.router)
+api_router.include_router(comments.router)
+api_router.include_router(checklists.router)
+api_router.include_router(tags.router)
 api_router.include_router(workflows.router)
