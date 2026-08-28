@@ -97,6 +97,38 @@ class Settings(BaseSettings):
         description="Issues one scheduled rule processes per tick; the rest wait for the next",
     )
 
+    # --- Уведомления --------------------------------------------------------------
+    # Окно склейки и границы ожидания — настройки, а не константы: и то и другое
+    # подбирается под темп конкретной установки. Минутное окно на живом потоке из
+    # десяти агентов склеит слишком много, а таймаут ожидания упирается в то, сколько
+    # держит соединение конкретный MCP-клиент.
+    notification_digest_window: float = Field(
+        default=60.0,
+        ge=0,
+        description=(
+            "Seconds a fresh unread notification stays open for merging repeats of the "
+            "same event on the same object. 0 disables merging"
+        ),
+    )
+    notification_wait_timeout: float = Field(
+        default=25.0,
+        gt=0,
+        description="Default seconds an inbox wait call blocks before returning empty",
+    )
+    notification_wait_max_timeout: float = Field(
+        default=60.0,
+        gt=0,
+        description="Upper bound for a requested inbox wait timeout",
+    )
+    notification_wait_poll_interval: float = Field(
+        default=2.0,
+        gt=0,
+        description=(
+            "Seconds between the fallback inbox checks made while waiting; the wait is "
+            "woken by PostgreSQL notifications and this is only the safety net"
+        ),
+    )
+
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
     cors_origins: Annotated[list[str], NoDecode] = Field(

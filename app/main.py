@@ -16,6 +16,7 @@ from app.api.routes import health
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, session_scope
+from app.db.wakeup import hub as wakeup_hub
 from app.services import automation as automation_service
 
 logger = get_logger("main")
@@ -27,7 +28,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     logger.info("Starting tracker %s in %s environment", __version__, settings.environment)
     await _sync_automation_rules()
+    # Слушатель оповещений поднимается процессом, а не первым ожиданием: ленивый подъём
+    # оставил бы за собой соединение, которое некому закрыть в разовом скрипте или в
+    # тесте. Не подключился — ожидание переходит на контрольный опрос и говорит об этом
+    # в лог, а API стартует как ни в чём не бывало.
+    await wakeup_hub.start()
     yield
+    await wakeup_hub.close()
     await dispose_engine()
     logger.info("Stopping tracker")
 

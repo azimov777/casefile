@@ -163,6 +163,7 @@ subscribe = registry.subscribe
 SUBSCRIBER_MODULES: tuple[str, ...] = (
     "app.services.event_log",
     "app.automation.subscriber",
+    "app.services.notification_subscriber",
 )
 
 
