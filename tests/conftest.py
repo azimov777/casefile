@@ -21,17 +21,20 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
 from app.db.models.actor import Actor
+from app.db.models.automation import AutomationRule
 from app.db.models.board import Board, Sprint
 from app.db.models.catalog import Status
 from app.db.models.issue import Issue
 from app.db.models.project import Portfolio, Project
 from app.db.models.queue import Queue
 from app.db.models.saved_filter import SavedFilter
+from app.db.repositories import AutomationRuleRepository
 from app.db.session import get_session
 from app.domain.actors import ActorType
 from app.domain.catalogs import CatalogKind
 from app.main import create_app
 from app.services import actors as actors_service
+from app.services import automation as automation_service
 from app.services import boards as boards_service
 from app.services import issues as issues_service
 from app.services import projects as projects_service
@@ -339,3 +342,44 @@ def make_issue(
         )
 
     return _make
+
+
+@pytest.fixture
+async def automation_rules(db_session: AsyncSession) -> dict[str, AutomationRule]:
+    """Строки состояния под все объявленные правила, все — выключенными.
+
+    Синхронизация в фикстуре, а не в тесте: движок ищет правило по строке в базе, и
+    тест без неё проверял бы «правил нет», думая, что проверяет «правило не сработало».
+
+    Реестр правил глобальный на процесс, поэтому сюда попадают и правила, объявленные
+    в самих тестовых модулях. Это безопасно: сработать может только правило, у которого
+    строка включена, а включает её тест — внутри своей транзакции.
+    """
+    await automation_service.sync_rules(db_session)
+    return {rule.rule_key: rule for rule in await AutomationRuleRepository(db_session).list_all()}
+
+
+@pytest.fixture
+def enable_rule(
+    db_session: AsyncSession,
+    owner: Actor,
+    automation_rules: dict[str, AutomationRule],
+) -> Callable[..., Awaitable[AutomationRule]]:
+    """Включает правило и настраивает его — тем же сценарием, что и `PATCH` из API.
+
+    Через сценарий, а не присваиванием в модель: проверка параметров и пересчёт
+    расписания живут там, и тест, который их обходит, проверял бы состояние, которого
+    настоящая настройка получить не может.
+    """
+
+    async def _enable(rule_key: str, **kwargs: Any) -> AutomationRule:
+        view = await automation_service.update_rule(
+            db_session,
+            automation_rules[rule_key],
+            initiator=kwargs.pop("initiator", owner),
+            is_enabled=kwargs.pop("is_enabled", True),
+            **kwargs,
+        )
+        return view.rule
+
+    return _enable
