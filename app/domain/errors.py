@@ -588,3 +588,78 @@ class InvalidChecklistItemError(ValidationError):
 
     code = "invalid_checklist_item"
     message = "Checklist item is invalid"
+
+
+# --- Поиск ------------------------------------------------------------------------
+
+
+class InvalidSearchQueryError(ValidationError):
+    """Строка запроса не разбирается.
+
+    В `details` обязательно лежат `position` (индекс символа в строке, с нуля) и
+    `reason`. Без позиции агент, получивший «invalid query», уходит в слепой перебор:
+    он не видит, какое место строки сервер счёл ошибкой.
+    """
+
+    code = "invalid_search_query"
+    message = "Search query cannot be parsed"
+
+
+class SearchFieldUnknownError(ValidationError):
+    """Имя из запроса не разрешается в поле.
+
+    Причина — в `details.reason`: `unknown_field` (такого поля нет), `not_searchable`
+    (имя занято системой, но искать по нему пока нечем), `not_sortable`,
+    `not_selectable`. Один код на все случаи: для клиента это одна ситуация «имя не
+    подходит, вот почему», и заводить обработчик под каждый вид незачем.
+    """
+
+    code = "search_field_unknown"
+    message = "Search field is unknown"
+
+
+class SearchOperatorNotSupportedError(ValidationError):
+    """Оператор неприменим к этому полю: список допустимых — в `details.allowed`."""
+
+    code = "search_operator_not_supported"
+    message = "Search operator is not supported for this field"
+
+
+class SearchValueInvalidError(ValidationError):
+    """Значение условия не подходит полю.
+
+    Сюда же сведены ненайденные очередь, статус и актор, названные в фильтре: для
+    клиента это не «объект не найден», а неверное значение фильтра, и `404` на поиске
+    сбивал бы с толку. Исходный код лежит в `details.reason`.
+    """
+
+    code = "search_value_invalid"
+    message = "Search value is invalid"
+
+
+# --- Сохранённые фильтры -----------------------------------------------------------
+
+
+class SavedFilterNotFoundError(NotFoundError):
+    """Сохранённого фильтра с таким идентификатором нет."""
+
+    code = "saved_filter_not_found"
+    message = "Saved filter not found"
+
+
+class SavedFilterNameTakenError(ConflictError):
+    """Имя фильтра уникально у владельца: два одноимённых фильтра неразличимы в списке."""
+
+    code = "saved_filter_name_taken"
+    message = "Saved filter name is already taken by this owner"
+
+
+class InvalidSavedFilterError(ValidationError):
+    """Описание фильтра противоречит само себе: пустое имя либо не ровно один источник.
+
+    Строка запроса и структурный фильтр — два способа сказать одно и то же, и хранить
+    их вместе значило бы завести вопрос «какой из них главный», ответа на который нет.
+    """
+
+    code = "invalid_saved_filter"
+    message = "Saved filter definition is invalid"
