@@ -76,6 +76,7 @@ from app.domain.workflows import filled_field_names
 from app.services import catalogs as catalogs_service
 from app.services import events as events_service
 from app.services import fields as fields_service
+from app.services import links as links_service
 from app.services import queues as queues_service
 from app.services import workflow as workflow_service
 from app.services.permissions import ensure_allowed
@@ -310,6 +311,10 @@ async def apply_issue_changes(
     type_changed = is_set(changes.issue_type) and changes.issue_type.id != issue.issue_type_id
     if is_set(changes.issue_type):
         await _ensure_issue_type_allowed(session, queue, target_type)
+        if type_changed:
+            # Вторая половина правила «у эпика нет родителя». Первая стоит при создании
+            # связи; без этой запрет обходился бы сменой типа уже подчинённой задачи.
+            await links_service.ensure_issue_type_allows_parent(session, issue, target_type)
         target_status = changes.status if is_set(changes.status) else issue.status
         await workflow_service.ensure_status_in_assigned_workflow(
             session,

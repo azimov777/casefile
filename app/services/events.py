@@ -39,6 +39,7 @@ from app.db.models.actor import Actor
 from app.db.models.catalog import Status
 from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.issue import Issue
+from app.db.models.link import IssueLink
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import ChangelogRepository, OutboxRepository
@@ -51,6 +52,7 @@ from app.domain.events import (
     event_type_for,
 )
 from app.domain.issues import IssueChange
+from app.domain.links import LINKS_CHANGE_FIELD, visible_type
 from app.services.event_bus import (
     MAX_ERROR_LENGTH,
     DeliveryOutcome,
@@ -271,6 +273,46 @@ async def record_issues_moved(
     return entries
 
 
+# --- Запись: связи ----------------------------------------------------------------
+
+
+async def record_link_created(
+    session: AsyncSession,
+    link: IssueLink,
+    *,
+    initiator: Actor,
+) -> list[ChangelogEntry]:
+    """Запись «связь заведена» в историю **обеих** задач и одно событие `link.created`.
+
+    Асимметрия ровно обратная массовому переносу статусов: там сто записей журнала и
+    одно событие, здесь две записи журнала и одно событие. Причина общая — журнал
+    ведётся по задаче, а событие по факту.
+
+    Две записи, потому что связь одинаково значима для обеих сторон, а история читается
+    по одной задаче: без записи у второй стороны блокировка появлялась бы у неё
+    ниоткуда. Формулировки при этом разные — каждая сторона видит связь своим именем
+    (`depends_on` у одной, `blocks` у другой), и это то же самое вычисление, что в API.
+
+    Событие одно, потому что факт один. Два события про одну связь заставили бы каждого
+    подписчика их склеивать, а забывший склеить прислал бы два уведомления об одном.
+    """
+    return await _record_link_change(session, link, initiator=initiator, removed=False)
+
+
+async def record_link_deleted(
+    session: AsyncSession,
+    link: IssueLink,
+    *,
+    initiator: Actor,
+) -> list[ChangelogEntry]:
+    """То же самое для удаления связи. Зовётся **до** удаления строки.
+
+    После удаления собрать записи уже не из чего: обе стороны и автор читаются из самой
+    связи, а `ON DELETE CASCADE` в задачах уносит её без всякого следа.
+    """
+    return await _record_link_change(session, link, initiator=initiator, removed=True)
+
+
 # --- Чтение -----------------------------------------------------------------------
 
 
@@ -438,6 +480,80 @@ async def _publish_issue_event(
             "fields": list(changed_fields(changes)),
         },
     )
+
+
+async def _record_link_change(
+    session: AsyncSession,
+    link: IssueLink,
+    *,
+    initiator: Actor,
+    removed: bool,
+) -> list[ChangelogEntry]:
+    """Общее тело записи для заведения и удаления связи: различие ровно в направлении."""
+    action = "link.delete" if removed else "link.create"
+    event_type = event_type_for(action)
+
+    entries: list[ChangelogEntry] = []
+    for issue, other, from_source in (
+        (link.source, link.target, True),
+        (link.target, link.source, False),
+    ):
+        # Имя связи для каждой стороны своё: у одной `depends_on`, у другой `blocks`.
+        # Считается тем же доменным правилом, что и в ответе API, — иначе история и
+        # карточка задачи назвали бы одну связь по-разному.
+        value = {
+            "type": visible_type(link.link_type, from_source=from_source).value,
+            "issue": other.key,
+        }
+        entries.append(
+            ChangelogEntry(
+                issue_id=issue.id,
+                actor_id=initiator.id,
+                event_type=event_type.value,
+                changes=encode_changes(
+                    (
+                        IssueChange(
+                            field=LINKS_CHANGE_FIELD,
+                            before=value if removed else None,
+                            after=None if removed else value,
+                        ),
+                    )
+                ),
+            )
+        )
+    await ChangelogRepository(session).add_all(entries)
+
+    await _publish(
+        session,
+        event_type=event_type,
+        object_type=ObjectType.LINK,
+        object_id=link.id,
+        object_key=_link_key(link),
+        actor=initiator,
+        payload={
+            "link": {
+                "id": str(link.id),
+                "type": link.link_type.value,
+                "source": link.source.key,
+                "target": link.target.key,
+                "author": link.author.key,
+            },
+            # Снимки обеих задач целиком — по общему правилу полезной нагрузки: пока
+            # событие лежит в очереди, задачи успевают измениться, и поход подписчика
+            # в базу вернул бы не то состояние, о котором событие. У связи «объект
+            # события» один, а задач две, поэтому и снимка два.
+            "issues": {
+                "source": issue_snapshot(link.source),
+                "target": issue_snapshot(link.target),
+            },
+        },
+    )
+    return entries
+
+
+def _link_key(link: IssueLink) -> str:
+    """Читаемый ключ связи для события: обе стороны и тип в каноническом направлении."""
+    return f"{link.source.key}:{link.link_type.value}:{link.target.key}"
 
 
 async def _publish(
