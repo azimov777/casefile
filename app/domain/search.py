@@ -31,9 +31,11 @@
 Порядок явный, а не «как получится»: реестр уже не даёт завести кастомное поле с ключом
 системного, но без явной последовательности `status` однажды начал бы искаться в JSONB.
 
-Имя, которое зарезервировано системой, но искать по нему пока нечем (`project`, `sprint`,
-`links`), отвергается ошибкой, а не проваливается в реестр: молчаливый уход в JSONB дал бы
-пустую выдачу вместо внятного «этого фильтра ещё нет».
+Имя, которое зарезервировано системой, но искать по нему пока нечем (`sprint`, `links`),
+отвергается ошибкой, а не проваливается в реестр: молчаливый уход в JSONB дал бы пустую
+выдачу вместо внятного «этого фильтра ещё нет». Набор таких имён вычисляется вычитанием,
+поэтому появившийся фильтр уходит из него сам — так `project` перестал быть недоступным
+в задаче 10, и достаточно было одного описания в `SEARCHABLE_SYSTEM_FIELDS`.
 
 ## Даты сравниваются по календарному дню
 
@@ -273,6 +275,7 @@ class SystemField(StrEnum):
     FOLLOWERS = "followers"
     DEADLINE = "deadline"
     TAGS = "tags"
+    PROJECT = "project"
     CREATED_AT = "created_at"
     UPDATED_AT = "updated_at"
 
@@ -282,6 +285,7 @@ class SearchValueKind(StrEnum):
 
     ISSUE_KEY = "issue_key"
     QUEUE_KEY = "queue_key"
+    PROJECT_KEY = "project_key"
     CATALOG_REF = "catalog_ref"
     STATUS_CATEGORY = "status_category"
     ACTOR_KEY = "actor_key"
@@ -380,6 +384,17 @@ SEARCHABLE_SYSTEM_FIELDS: dict[SystemField, SystemFieldSpec] = {
             is_sortable=True,
         ),
         SystemFieldSpec(SystemField.TAGS, SearchValueKind.TAG, _TEXT_OPERATORS, is_nullable=True),
+        # Проект — надочередная ось: `project: alpha and queue: != TRK` находит задачи
+        # проекта во всех очередях, кроме одной. Значение — ключ проекта, а не ссылка с
+        # областью действия: у проекта области нет, он не принадлежит очереди.
+        # `is_nullable`, потому что задача вне проекта — обычное состояние, и
+        # `project: empty()` обязано находить именно её.
+        SystemFieldSpec(
+            SystemField.PROJECT,
+            SearchValueKind.PROJECT_KEY,
+            _EXACT_OPERATORS,
+            is_nullable=True,
+        ),
         SystemFieldSpec(
             SystemField.CREATED_AT, SearchValueKind.MOMENT, _ORDERED_OPERATORS, is_sortable=True
         ),
@@ -394,9 +409,10 @@ SEARCHABLE_SYSTEM_FIELDS: dict[SystemField, SystemFieldSpec] = {
 #: кастомное поле, и то стало бы недостижимым для поиска — молча.
 SYSTEM_FIELD_ALIASES: dict[str, SystemField] = {"type": SystemField.ISSUE_TYPE}
 
-#: Зарезервированные имена, по которым искать пока нечем. Явный список, а не «всё
-#: остальное»: `project` и `sprint` появятся в задачах 10 и 11, и до тех пор запрос по
-#: ним обязан отвечать «ещё нет», а не уходить в JSONB за пустым результатом.
+#: Зарезервированные имена, по которым искать пока нечем. Набор вычисляется вычитанием,
+#: поэтому имя уходит из него ровно тогда, когда у него появляется описание фильтра:
+#: `project` ушёл в задаче 10, `sprint` уйдёт в задаче 11. До тех пор запрос по такому
+#: имени обязан отвечать «ещё нет», а не уходить в JSONB за пустым результатом.
 NOT_SEARCHABLE_SYSTEM_FIELDS: frozenset[str] = frozenset(
     SYSTEM_FIELD_KEYS
     - {field.value for field in SEARCHABLE_SYSTEM_FIELDS}
@@ -421,6 +437,7 @@ SELECTABLE_FIELDS: frozenset[str] = frozenset(
         "followers",
         "deadline",
         "tags",
+        "project",
         "values",
         "version",
         "created_at",
@@ -453,7 +470,7 @@ def system_field_spec(name: str) -> SystemFieldSpec | None:
 
 
 def is_reserved_name(name: str) -> bool:
-    """Имя занято системой, но искать по нему нечем: `project`, `sprint`, `links`."""
+    """Имя занято системой, но искать по нему нечем: `sprint`, `links`, `comments`."""
     return "." not in name and name.strip().lower() in NOT_SEARCHABLE_SYSTEM_FIELDS
 
 

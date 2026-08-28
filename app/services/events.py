@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +43,7 @@ from app.db.models.comment import Comment
 from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.issue import Issue
 from app.db.models.link import IssueLink
+from app.db.models.project import Portfolio, Project
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import ChangelogRepository, OutboxRepository
@@ -58,6 +59,7 @@ from app.domain.events import (
 )
 from app.domain.issues import IssueChange
 from app.domain.links import LINKS_CHANGE_FIELD, visible_type
+from app.domain.projects import PlanningKind
 from app.services.event_bus import (
     MAX_ERROR_LENGTH,
     DeliveryOutcome,
@@ -442,6 +444,81 @@ async def record_checklist_change(
     return entry
 
 
+# --- Запись: проекты и портфели ---------------------------------------------------
+
+
+async def record_planning_change(
+    session: AsyncSession,
+    entity: Project | Portfolio,
+    *,
+    initiator: Actor,
+    action: str,
+    changes: tuple[IssueChange, ...] = (),
+) -> OutboxEvent:
+    """Событие о проекте или портфеле. Записи в журнал изменений при этом **нет**.
+
+    Это не упущение, а следствие устройства журнала: `changelog_entries.issue_id` —
+    обязательная колонка, потому что история читается по задаче и адресуется её ключом.
+    Проект задачей не является, и приписывать его правки какой-нибудь из его задач было
+    бы враньём в чужой истории.
+
+    Обратная сторона названа прямо, чтобы её не «чинили»: истории у проекта в v1 нет,
+    и восстановить, кто и когда сдвинул срок, можно только по потоку событий. Заводить
+    ради этого вторую таблицу истории — работа отдельной задачи, а не побочный эффект
+    этой.
+
+    Что при этом **попадает** в историю задачи: добавление её в проект и удаление из
+    него. Это правка поля `project` самой задачи, она идёт через
+    `apply_issue_changes` и даёт обычную запись `issue.updated`.
+    """
+    kind = PlanningKind.PORTFOLIO if isinstance(entity, Portfolio) else PlanningKind.PROJECT
+    return await _publish(
+        session,
+        event_type=event_type_for(action),
+        object_type=ObjectType.PORTFOLIO if kind is PlanningKind.PORTFOLIO else ObjectType.PROJECT,
+        object_id=entity.id,
+        object_key=entity.key,
+        actor=initiator,
+        payload={
+            kind.value: planning_snapshot(entity),
+            "changes": encode_changes(changes),
+            "fields": list(changed_fields(changes)),
+        },
+    )
+
+
+def planning_snapshot(entity: Project | Portfolio) -> dict[str, Any]:
+    """Проект или портфель в JSON-виде для полезной нагрузки события.
+
+    Прогресса здесь нет, и это осознанно. Прогресс — производная от задач, он меняется
+    без всякого касания к проекту, и снимок с ним означал бы цифру, устаревшую к
+    моменту доставки. Подписчик, которому нужен прогресс, спрашивает его у API в тот
+    момент, когда собирается показать.
+
+    Форма повторяет ответ API, но живёт здесь по общему правилу: `services` не имеет
+    права зависеть от `api`, а событие обязано выглядеть одинаково и для подписчика
+    внутри процесса, и для вебхука наружу.
+    """
+    parent = entity.parent if isinstance(entity, Portfolio) else entity.portfolio
+    return {
+        "id": str(entity.id),
+        "key": entity.key,
+        "name": entity.name,
+        "description": entity.description,
+        "status": entity.status.value,
+        "lead": entity.lead.key,
+        "members": [member.key for member in entity.members],
+        "start_date": _day(entity.start_date),
+        "end_date": _day(entity.end_date),
+        "tags": list(entity.tags),
+        "portfolio": None if parent is None else parent.key,
+        "is_archived": entity.is_archived,
+        "archived_at": _moment(entity.archived_at),
+        "created_at": _moment(entity.created_at),
+        "updated_at": _moment(entity.updated_at),
+    }
+
+
 # --- Чтение -----------------------------------------------------------------------
 
 
@@ -562,6 +639,9 @@ def issue_snapshot(issue: Issue) -> dict[str, Any]:
         "followers": [follower.key for follower in issue.followers],
         "deadline": _moment(issue.deadline),
         "tags": list(issue.tags),
+        # Проект — ключом, как очередь и акторы: подписчику нужен адрес, а не строка
+        # таблицы, которая к моменту доставки могла измениться.
+        "project": None if issue.project is None else issue.project.key,
         "values": dict(issue.values),
         "version": issue.version,
         "created_at": _moment(issue.created_at),
@@ -841,3 +921,12 @@ def _envelope(event: OutboxEvent) -> EventEnvelope:
 def _moment(value: datetime | None) -> str | None:
     """Время в событии — строка ISO 8601 в UTC: тот же формат, что в API и в журнале."""
     return None if value is None else value.astimezone(UTC).isoformat()
+
+
+def _day(value: date | None) -> str | None:
+    """Календарная дата в событии — строка `YYYY-MM-DD`, без домысленного времени.
+
+    Приводить её к моменту нельзя: полночь какого часового пояса имелась бы в виду,
+    из значения не следует, а подстановка UTC сдвинула бы дату у половины читателей.
+    """
+    return None if value is None else value.isoformat()

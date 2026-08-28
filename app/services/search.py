@@ -20,7 +20,7 @@
 ## Порядок разрешения имени
 
 1. Системное поле (`app/domain/search.py`) — разрешается в колонку.
-2. Зарезервированное системой имя без поиска (`project`, `sprint`) — отказ с причиной.
+2. Зарезервированное системой имя без поиска (`sprint`, `links`) — отказ с причиной.
 3. Реестр полей — кастомное поле, значение в `values JSONB`.
 
 Порядок явный. Реестр уже не даёт завести кастомное поле с ключом системного, поэтому
@@ -446,6 +446,8 @@ async def _resolve_system_value(
     match spec.kind:
         case SearchValueKind.QUEUE_KEY:
             return (await _queue(session, condition, value)).id
+        case SearchValueKind.PROJECT_KEY:
+            return (await _project(session, condition, value)).id
         case SearchValueKind.CATALOG_REF:
             entry = await _catalog_entry(session, condition, spec, value, initiator=initiator)
             return entry.id
@@ -473,6 +475,22 @@ async def _queue(session: AsyncSession, condition: Condition, value: SearchValue
     key = _plain_text(condition, value)
     try:
         return await queues_service.get_queue_by_key(session, key)
+    except AppError as exc:
+        raise _value_rejected(condition, value, exc, key) from exc
+
+
+async def _project(session: AsyncSession, condition: Condition, value: SearchValue) -> Any:
+    """Проект по ключу. Ненайденный проект — неверное значение фильтра, а не `404`.
+
+    Импорт внутри функции: сценарии проектов опираются на этот модуль (список задач
+    проекта — это тот же поиск со склеенным условием), и импорт на уровне модуля
+    замкнул бы их в цикл. Ровно тот же приём, что и с сохранёнными фильтрами выше.
+    """
+    from app.services import projects as projects_service
+
+    key = _plain_text(condition, value)
+    try:
+        return await projects_service.get_project_by_key(session, key)
     except AppError as exc:
         raise _value_rejected(condition, value, exc, key) from exc
 

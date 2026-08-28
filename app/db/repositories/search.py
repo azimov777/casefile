@@ -158,6 +158,8 @@ def _system_body(term: SystemTerm) -> ColumnElement[bool]:
     match term.kind:
         case SearchValueKind.QUEUE_KEY:
             return _scalar(Issue.queue_id, term.operator, term.values)
+        case SearchValueKind.PROJECT_KEY:
+            return _scalar(Issue.project_id, term.operator, term.values)
         case SearchValueKind.CATALOG_REF:
             return _scalar(_CATALOG_COLUMNS[term.field], term.operator, term.values)
         case SearchValueKind.ACTOR_KEY:
@@ -208,6 +210,8 @@ def _system_empty(field: SystemField) -> ColumnElement[bool]:
             return Issue.resolution_id.is_(None)
         case SystemField.DEADLINE:
             return Issue.deadline.is_(None)
+        case SystemField.PROJECT:
+            return Issue.project_id.is_(None)
         case SystemField.DESCRIPTION:
             return Issue.description == ""
         case SystemField.TAGS:

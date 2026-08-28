@@ -46,6 +46,7 @@ from app.core.sentinels import UNSET, is_set
 from app.db.models.actor import Actor
 from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.models.issue import Issue
+from app.db.models.project import Project
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import IssueRepository, QueueRepository
@@ -58,6 +59,7 @@ from app.domain.errors import (
     IssueResolutionNotAllowedError,
     IssueResolutionRequiredError,
     IssueVersionConflictError,
+    ProjectArchivedError,
 )
 from app.domain.fields import apply_value_changes
 from app.domain.issues import (
@@ -107,6 +109,11 @@ class IssueChanges:
     priority: IssuePriority = UNSET
     assignee: Actor | None = UNSET
     deadline: datetime | None = UNSET
+    #: Проект, в который входит задача; `null` выводит её из проекта. Обычное поле
+    #: задачи, а не отдельная механика: сценарии проекта (`app/services/projects.py`)
+    #: — обёртки над этой же точкой, поэтому добавление задачи в проект попадает и в
+    #: историю задачи, и в шину событий, как любая другая правка.
+    project: Project | None = UNSET
     tags: Sequence[str] = UNSET
     values: Mapping[str, Any] = UNSET
     followers: Sequence[Actor] = UNSET
@@ -195,6 +202,7 @@ async def create_issue(
     deadline: datetime | None = None,
     tags: Sequence[str] = (),
     values: Mapping[str, Any] | None = None,
+    project: Project | None = None,
 ) -> Issue:
     """Заводит задачу в очереди.
 
@@ -232,6 +240,8 @@ async def create_issue(
             resolution, kind=CatalogKind.RESOLUTION, queue=queue
         )
     _ensure_resolution_state(target_status, resolution)
+    if project is not None and project.is_archived:
+        raise ProjectArchivedError(details={"key": project.key, "reason": "cannot_accept_issues"})
 
     # Все проверки — до выдачи номера. Порядок здесь и есть та самая экономия ключей:
     # доменные проверки дешёвые, но отказывают чаще всего, а номер, взятый и потерянный
@@ -266,6 +276,7 @@ async def create_issue(
         author=issue_author,
         assignee=assignee,
         followers=watchers,
+        project=project,
         deadline=stored_deadline,
         tags=stored_tags,
         values=stored_values,
@@ -345,6 +356,13 @@ async def apply_issue_changes(
         )
     if is_set(changes.assignee) and changes.assignee is not None:
         _require_active(changes.assignee, "cannot_be_assignee")
+    if is_set(changes.project) and changes.project is not None and changes.project.is_archived:
+        # Проверка стоит здесь, а не только в сценарии проекта: то же изменение
+        # приходит обычным `PATCH /issues/{key}` с полем `project`, и запрет,
+        # написанный лишь в одном из двух входов, обходился бы вторым.
+        raise ProjectArchivedError(
+            details={"key": changes.project.key, "reason": "cannot_accept_issues"},
+        )
 
     recorded: list[IssueChange] = []
     _apply_scalars(issue, changes, recorded)
@@ -751,6 +769,18 @@ def _apply_scalars(issue: Issue, changes: IssueChanges, recorded: list[IssueChan
         if after != issue.deadline:
             _record(recorded, IssueField.DEADLINE, _moment(issue.deadline), _moment(after))
             issue.deadline = after
+    if is_set(changes.project):
+        after_id = None if changes.project is None else changes.project.id
+        if after_id != issue.project_id:
+            # В журнал уезжает ключ проекта, а не идентификатор: история читается
+            # человеком и агентом, и ссылка на строку таблицы им ничего не говорит.
+            _record(
+                recorded,
+                IssueField.PROJECT,
+                _planning_key(issue.project),
+                _planning_key(changes.project),
+            )
+            issue.project = changes.project
 
 
 def _apply_tags(issue: Issue, changes: IssueChanges, recorded: list[IssueChange]) -> None:
@@ -847,6 +877,10 @@ def _entry_ref(entry: Resolution | None) -> str | None:
 
 def _actor_key(actor: Actor | None) -> str | None:
     return None if actor is None else actor.key
+
+
+def _planning_key(project: Project | None) -> str | None:
+    return None if project is None else project.key
 
 
 def _moment(value: datetime | None) -> str | None:
