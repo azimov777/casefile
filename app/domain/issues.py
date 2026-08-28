@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from app.core.errors import AppError
 from app.domain.errors import (
     InvalidIssueDeadlineError,
     InvalidIssueDescriptionError,
@@ -84,6 +85,10 @@ class IssueField(StrEnum):
     FOLLOWERS = "followers"
     DEADLINE = "deadline"
     TAGS = "tags"
+    #: Проект, в который входит задача. Поле задачи, а не свойство проекта: добавление
+    #: задачи в проект меняет строку задачи, и в её истории это обязано быть видно
+    #: наравне со сменой исполнителя. Значение в журнале — ключ проекта или `null`.
+    PROJECT = "project"
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +191,11 @@ def validate_deadline(deadline: datetime | None) -> datetime | None:
     return deadline.astimezone(UTC)
 
 
-def normalize_tags(tags: Iterable[str]) -> list[str]:
+def normalize_tags(
+    tags: Iterable[str],
+    *,
+    error: type[AppError] = InvalidIssueTagsError,
+) -> list[str]:
     """Приводит набор тегов к каноническому виду, сохраняя порядок.
 
     Повторы отбрасываются без учёта регистра, а вот сам регистр сохраняется: тег —
@@ -197,6 +206,12 @@ def normalize_tags(tags: Iterable[str]) -> list[str]:
     Пустой тег выбрасывается молча (это опечатка вида `["a", ""]`, а не запрос), а
     слишком длинный или многострочный отвергается: молча обрезать значение, которое
     потом станет фильтром, нельзя.
+
+    `error` передаёт вызывающий, потому что теги есть не только у задачи: проект и
+    портфель помечаются по тем же правилам, но их отказ обязан приходить с их
+    собственным кодом. Второй реализации у правил при этом не появляется — а появись
+    она, теги задачи и теги проекта разошлись бы обработкой регистра, и одинаковые на
+    вид метки перестали бы совпадать.
     """
     normalized: list[str] = []
     seen: set[str] = set()
@@ -205,11 +220,11 @@ def normalize_tags(tags: Iterable[str]) -> list[str]:
         if not value:
             continue
         if "\n" in value or "\r" in value:
-            raise InvalidIssueTagsError(
+            raise error(
                 details={"field": "tags", "reason": "multiline_not_allowed", "tag": tag},
             )
         if len(value) > MAX_TAG_LENGTH:
-            raise InvalidIssueTagsError(
+            raise error(
                 details={
                     "field": "tags",
                     "reason": "too_long",
@@ -225,7 +240,7 @@ def normalize_tags(tags: Iterable[str]) -> list[str]:
         normalized.append(value)
 
     if len(normalized) > MAX_TAGS:
-        raise InvalidIssueTagsError(
+        raise error(
             details={
                 "field": "tags",
                 "reason": "too_many",

@@ -32,6 +32,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import BaseModel, string_enum
 from app.db.models.actor import Actor
 from app.db.models.catalog import IssueType, Resolution, Status
+from app.db.models.project import Project
 from app.db.models.queue import Queue
 from app.domain.issues import IssuePriority
 from app.domain.queues import MAX_ISSUE_KEY_LENGTH
@@ -62,6 +63,10 @@ class Issue(BaseModel):
         Index("ix_issues_queue_id_status_id", "queue_id", "status_id"),
         Index("ix_issues_assignee_id", "assignee_id"),
         Index("ix_issues_deadline", "deadline"),
+        # Задачи проекта — основной запрос списка проекта и единственный источник его
+        # прогресса. Проект собирает задачи из разных очередей, поэтому индекс по
+        # `queue_id` тут ничем не помогает: выборка идёт поперёк очередей.
+        Index("ix_issues_project_id", "project_id"),
         # Курсорная пагинация во всём проекте идёт по паре `(created_at, id)`. На
         # справочниках это не имело значения, на таблице задач — уже имеет: без
         # индекса каждая страница означала бы сортировку всей таблицы.
@@ -137,6 +142,19 @@ class Issue(BaseModel):
         nullable=True,
     )
 
+    # Проект, в который входит задача. Не более одного: множественное членство
+    # немедленно породило бы вопрос «в прогресс какого проекта её засчитывать». `NULL`
+    # — обычное состояние, а не недооформленность: большинство задач ни в один проект
+    # не входит. Без `ondelete`: проекты не удаляют, их архивируют.
+    #
+    # Колонка отдельная, а не свойство очереди: проект и очередь — разные оси. Очередь
+    # владеет процессом, проект собирает результат из нескольких очередей сразу.
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("projects.id"),
+        default=None,
+        nullable=True,
+    )
+
     # Дедлайн — момент времени с зоной, а не дата: соглашения требуют ISO 8601 с
     # таймзоной для всех дат контракта, и язык запросов из задачи 12 сравнивает его
     # диапазонами. Дата без времени осталась кастомным полям — там тип `date` есть.
@@ -177,6 +195,7 @@ class Issue(BaseModel):
     issue_type: Mapped[IssueType] = relationship(lazy="selectin")
     status: Mapped[Status] = relationship(lazy="selectin")
     resolution: Mapped[Resolution | None] = relationship(lazy="selectin")
+    project: Mapped[Project | None] = relationship(lazy="selectin")
     author: Mapped[Actor] = relationship(lazy="selectin", foreign_keys=[author_id])
     # `foreign_keys` обязателен у обеих связей на акторов: путей внешних ключей между
     # задачей и актором два, и выбрать между ними SQLAlchemy не может.

@@ -15,6 +15,13 @@ from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.field import Field, FieldIssueType
 from app.db.models.issue import Issue, IssueFollower
 from app.db.models.link import IssueLink
+from app.db.models.project import (
+    PlanningEntityMixin,
+    Portfolio,
+    PortfolioMember,
+    Project,
+    ProjectMember,
+)
 from app.db.models.queue import Queue, QueueIssueType
 from app.db.models.saved_filter import SavedFilter
 from app.db.models.workflow import Transition, Workflow, WorkflowStatus
@@ -35,6 +42,11 @@ __all__ = [
     "IssueLink",
     "IssueType",
     "OutboxEvent",
+    "PlanningEntityMixin",
+    "Portfolio",
+    "PortfolioMember",
+    "Project",
+    "ProjectMember",
     "Queue",
     "QueueIssueType",
     "Resolution",

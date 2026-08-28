@@ -663,3 +663,107 @@ class InvalidSavedFilterError(ValidationError):
 
     code = "invalid_saved_filter"
     message = "Saved filter definition is invalid"
+
+
+# --- Проекты и портфели ------------------------------------------------------------
+
+
+class ProjectNotFoundError(NotFoundError):
+    """Проекта с таким ключом или идентификатором нет."""
+
+    code = "project_not_found"
+    message = "Project not found"
+
+
+class PortfolioNotFoundError(NotFoundError):
+    """Портфеля с таким ключом или идентификатором нет."""
+
+    code = "portfolio_not_found"
+    message = "Portfolio not found"
+
+
+class ProjectKeyTakenError(ConflictError):
+    """Ключ проекта уникален на установку: по нему адресуют проект и фильтруют задачи."""
+
+    code = "project_key_taken"
+    message = "Project key is already taken"
+
+
+class PortfolioKeyTakenError(ConflictError):
+    """Ключ портфеля уникален на установку.
+
+    Пространства имён у проектов и портфелей при этом **разные**: `alpha` может быть и
+    проектом, и портфелем. Они адресуются разными путями (`/projects/alpha` против
+    `/portfolios/alpha`) и разными фильтрами, поэтому общий запрет только мешал бы.
+    """
+
+    code = "portfolio_key_taken"
+    message = "Portfolio key is already taken"
+
+
+class InvalidProjectKeyError(ValidationError):
+    """Ключ проекта не подходит под шаблон: шаблон уходит в `details.pattern`."""
+
+    code = "invalid_project_key"
+    message = "Project key is invalid"
+
+
+class InvalidPortfolioKeyError(ValidationError):
+    """Ключ портфеля не подходит под шаблон."""
+
+    code = "invalid_portfolio_key"
+    message = "Portfolio key is invalid"
+
+
+class InvalidProjectError(ValidationError):
+    """Поле проекта нарушает правило: пустое имя, вывернутый период, лишние участники.
+
+    Один код на все поля, как у сохранённого фильтра: конкретное поле и причина лежат
+    в `details`, и заводить отдельный код под каждое поле значило бы растить контракт
+    быстрее, чем растёт польза от него.
+    """
+
+    code = "invalid_project"
+    message = "Project definition is invalid"
+
+
+class InvalidPortfolioError(ValidationError):
+    """То же самое для портфеля."""
+
+    code = "invalid_portfolio"
+    message = "Portfolio definition is invalid"
+
+
+class PortfolioCycleError(ConflictError):
+    """Вложение замкнуло бы кольцо портфелей.
+
+    Проверяется на произвольной глубине, а не только на прямом «A внутри B, B внутри
+    A»: кольцо из трёх портфелей ломает обход состава ровно так же, как из двух. Та же
+    механика, что у иерархии задач (`link_cycle_detected`).
+    """
+
+    code = "portfolio_cycle_detected"
+    message = "Portfolio nesting would create a cycle"
+
+
+class ProjectArchivedError(ConflictError):
+    """Проект в архиве и новых задач не принимает.
+
+    Ровно та же граница, что у архивной очереди: архив запрещает **приём новой
+    работы**, а не правку самого объекта. Переименовать архивный проект или поправить
+    его описание можно — это исправление записи, а не продолжение работы в нём.
+    """
+
+    code = "project_archived"
+    message = "Project is archived"
+
+
+class PortfolioArchivedError(ConflictError):
+    """Портфель в архиве: вкладывать в него проекты и портфели нельзя.
+
+    Та же граница, что у архивного проекта: приём нового состава запрещён, правка
+    собственных полей — нет.
+    """
+
+    code = "portfolio_archived"
+    message = "Portfolio is archived"

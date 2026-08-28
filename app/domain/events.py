@@ -54,6 +54,12 @@ class ObjectType(StrEnum):
     #: Пункт чеклиста. Объект — пункт по той же причине: отметка о выполнении
     #: относится к пункту, а не к задаче, у которой их может быть сотня.
     CHECKLIST_ITEM = "checklist_item"
+    #: Проект и портфель. Объект — сам проект: подписчик дашборда следит за проектом, а
+    #: не за очередью, из которой в него попала задача. Смена проекта у задачи при этом
+    #: остаётся событием **задачи** (`issue.updated` с полем `project`) — она меняет
+    #: строку задачи, и её история не должна зависеть от того, куда её переложили.
+    PROJECT = "project"
+    PORTFOLIO = "portfolio"
 
 
 class EventType(StrEnum):
@@ -92,6 +98,20 @@ class EventType(StrEnum):
     CHECKLIST_ITEM_UNCHECKED = "checklist.item_unchecked"
     CHECKLIST_ITEM_MOVED = "checklist.item_moved"
     CHECKLIST_ITEM_REMOVED = "checklist.item_removed"
+    PROJECT_CREATED = "project.created"
+    PROJECT_UPDATED = "project.updated"
+    #: Архивация и возврат из архива — отдельные типы, а не `project.updated` с полем в
+    #: нагрузке. Причина та же, по которой выделен `issue.status_changed`: «проект
+    #: выбыл из работы» — самое частое условие дашбордов и уведомлений, и подписчик
+    #: должен отбирать его по типу, не разбирая список изменений каждой правки
+    #: названия. Возврат — свой тип, а не тот же самый: подписчик, который на архивацию
+    #: что-то закрыл, обязан узнать об обратном событии, а не искать его в `changes`.
+    PROJECT_ARCHIVED = "project.archived"
+    PROJECT_RESTORED = "project.restored"
+    PORTFOLIO_CREATED = "portfolio.created"
+    PORTFOLIO_UPDATED = "portfolio.updated"
+    PORTFOLIO_ARCHIVED = "portfolio.archived"
+    PORTFOLIO_RESTORED = "portfolio.restored"
 
 
 class OutboxStatus(StrEnum):
@@ -144,6 +164,20 @@ ACTION_EVENTS: dict[str, EventType] = {
     "checklist.item_uncheck": EventType.CHECKLIST_ITEM_UNCHECKED,
     "checklist.item_move": EventType.CHECKLIST_ITEM_MOVED,
     "checklist.item_remove": EventType.CHECKLIST_ITEM_REMOVED,
+    # Проект и портфель меняются своими сценариями, но задача при добавлении в проект
+    # меняется обычным путём: `issue.set_project` — это правка поля `project`, поэтому
+    # она даёт `issue.updated`, а не собственный тип. Отдельное действие нужно проверке
+    # прав: «переложить задачу в другой проект» и «переписать её название» — разные по
+    # смыслу операции, и когда появятся роли, разрешать их придётся по отдельности.
+    "issue.set_project": EventType.ISSUE_UPDATED,
+    "project.create": EventType.PROJECT_CREATED,
+    "project.update": EventType.PROJECT_UPDATED,
+    "project.archive": EventType.PROJECT_ARCHIVED,
+    "project.restore": EventType.PROJECT_RESTORED,
+    "portfolio.create": EventType.PORTFOLIO_CREATED,
+    "portfolio.update": EventType.PORTFOLIO_UPDATED,
+    "portfolio.archive": EventType.PORTFOLIO_ARCHIVED,
+    "portfolio.restore": EventType.PORTFOLIO_RESTORED,
 }
 
 

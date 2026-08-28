@@ -9,6 +9,7 @@ from app.db.repositories.events import ChangelogRepository, OutboxRepository
 from app.db.repositories.fields import FieldRepository
 from app.db.repositories.issues import IssueRepository
 from app.db.repositories.links import IssueLinkRepository
+from app.db.repositories.projects import PortfolioRepository, ProjectRepository
 from app.db.repositories.queues import QueueRepository
 from app.db.repositories.saved_filters import SavedFilterRepository
 from app.db.repositories.search import IssueSearchRepository
@@ -26,6 +27,8 @@ __all__ = [
     "IssueRepository",
     "IssueSearchRepository",
     "OutboxRepository",
+    "PortfolioRepository",
+    "ProjectRepository",
     "QueueRepository",
     "SavedFilterRepository",
     "WorkflowRepository",
