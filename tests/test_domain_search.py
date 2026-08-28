@@ -214,7 +214,7 @@ def test_a_reserved_name_without_a_filter_is_not_a_custom_field() -> None:
 
 
 def test_a_name_that_got_its_filter_leaves_the_reserved_set() -> None:
-    """`project` и `sprint` перестали быть недоступными — вычитанием, а не правкой списка.
+    """`project` перестал быть недоступным вычитанием, а не правкой списка.
 
     Набор недоступных имён считается как «зарезервировано системой минус то, у чего есть
     описание фильтра». Тест стережёт именно этот механизм: если следующая задача добавит
@@ -223,8 +223,6 @@ def test_a_name_that_got_its_filter_leaves_the_reserved_set() -> None:
     """
     assert system_field_spec("project") is not None
     assert not is_reserved_name("project")
-    assert system_field_spec("sprint") is not None
-    assert not is_reserved_name("sprint")
 
 
 def test_a_queue_prefixed_name_is_never_a_system_field() -> None:

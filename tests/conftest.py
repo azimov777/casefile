@@ -22,7 +22,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import Settings, get_settings
 from app.db.models.actor import Actor
 from app.db.models.automation import AutomationRule
-from app.db.models.board import Board, Sprint
+from app.db.models.board import Board
 from app.db.models.catalog import Status
 from app.db.models.issue import Issue
 from app.db.models.project import Portfolio, Project
@@ -295,25 +295,6 @@ def make_board(
             initiator=kwargs.pop("initiator", owner),
             name=kwargs.pop("name", "Доска команды"),
             saved_filter=saved_filter,
-            **kwargs,
-        )
-
-    return _make
-
-
-@pytest.fixture
-def make_sprint(
-    db_session: AsyncSession,
-    owner: Actor,
-) -> Callable[..., Awaitable[Sprint]]:
-    """Фабрика спринтов. Доску передаёт тест: спринт без неё не существует."""
-
-    async def _make(board: Board, **kwargs: Any) -> Sprint:
-        return await boards_service.create_sprint(
-            db_session,
-            initiator=kwargs.pop("initiator", owner),
-            board=board,
-            name=kwargs.pop("name", "Спринт 1"),
             **kwargs,
         )
 

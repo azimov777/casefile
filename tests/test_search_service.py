@@ -379,8 +379,8 @@ async def test_a_reserved_name_without_a_filter_is_refused_not_searched_in_jsonb
 ) -> None:
     """`links` фильтра пока не имеет; молчаливый уход в JSONB дал бы пустую выдачу.
 
-    `sprint` из этого набора ушёл в задаче 11 — ровно тем же способом, что `project` в
-    задаче 10: описанием поля, а не правкой списка недоступных имён.
+    `project` из этого набора ушёл в задаче 10 — описанием поля, а не правкой списка
+    недоступных имён.
     """
     with pytest.raises(SearchFieldUnknownError) as error:
         await _keys(db_session, owner, "links: TRK-1")

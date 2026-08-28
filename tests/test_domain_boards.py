@@ -1,4 +1,4 @@
-"""Домен досок без базы: названия, лимит, период спринта и виртуальная шкала порядка.
+"""Домен досок без базы: названия, лимит колонок и виртуальная шкала порядка.
 
 Виртуальная позиция — единственное место домена досок, где есть что ломать молча:
 она сравнивается с явными рангами как число одного ряда, и потеря точности здесь
@@ -13,17 +13,15 @@ from app.domain.boards import (
     MAX_BOARD_COLUMNS,
     MAX_COLUMN_STATUSES,
     RANK_SCALE,
-    SprintState,
     ensure_column_capacity,
     ensure_column_count,
     ensure_column_statuses,
     validate_board_name,
     validate_column_name,
-    validate_sprint_period,
     validate_wip_limit,
     virtual_position,
 )
-from app.domain.errors import InvalidBoardError, InvalidSprintError
+from app.domain.errors import InvalidBoardError
 from app.domain.ranking import POSITION_STEP, next_position, position_between
 
 
@@ -74,27 +72,6 @@ def test_the_column_ceiling_counts_the_result_not_the_attempt() -> None:
         ensure_column_capacity(MAX_BOARD_COLUMNS)
     with pytest.raises(InvalidBoardError):
         ensure_column_count(MAX_BOARD_COLUMNS + 1)
-
-
-def test_a_sprint_period_cannot_be_inside_out() -> None:
-    """Однодневный спринт законен, вывернутый — нет."""
-    validate_sprint_period(None, None)
-    validate_sprint_period(datetime(2026, 8, 1, tzinfo=UTC).date(), None)
-    same_day = datetime(2026, 8, 1, tzinfo=UTC).date()
-    validate_sprint_period(same_day, same_day)
-
-    with pytest.raises(InvalidSprintError) as error:
-        validate_sprint_period(
-            datetime(2026, 8, 10, tzinfo=UTC).date(),
-            datetime(2026, 8, 1, tzinfo=UTC).date(),
-        )
-
-    assert error.value.details["reason"] == "before_start"
-
-
-def test_the_sprint_state_chain_is_one_way() -> None:
-    """Набор состояний закрыт: возврата из `completed` в домене не предусмотрено."""
-    assert [state.value for state in SprintState] == ["planned", "active", "completed"]
 
 
 # --- Виртуальная шкала порядка -----------------------------------------------------

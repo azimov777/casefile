@@ -24,7 +24,6 @@ from app.db.repositories.boards import BoardIssueRepository
 from app.domain.boards import virtual_position
 from app.domain.catalogs import CatalogKind, StatusCategory
 from app.domain.errors import (
-    BoardHasSprintsError,
     BoardStatusTakenError,
     InvalidBoardError,
     InvalidBoardMoveError,
@@ -59,11 +58,6 @@ async def _column_keys(
         initiator=owner,
         **kwargs,
     )
-    return [issue.key for issue in outcome.page.items]
-
-
-async def _backlog_keys(session: AsyncSession, board: Board, *, owner: Actor) -> list[str]:
-    outcome = await service.list_backlog(session, board, initiator=owner)
     return [issue.key for issue in outcome.page.items]
 
 
@@ -203,24 +197,6 @@ async def test_a_status_used_by_a_board_column_cannot_be_deleted(
     assert error.value.details["reason"] == "board_columns_exist"
 
 
-async def test_a_board_with_sprints_is_not_deleted(
-    db_session: AsyncSession,
-    owner: Actor,
-    queue: Queue,
-    make_board: MakeBoard,
-    make_sprint: Callable[..., Awaitable[Any]],
-    resolve_status: ResolveStatus,
-) -> None:
-    """Спринт хранит принадлежность задач, и каскад унёс бы её молча."""
-    board = await make_board(
-        columns=[ColumnDraft(name="Открыт", statuses=[await resolve_status("open")])],
-    )
-    await make_sprint(board)
-
-    with pytest.raises(BoardHasSprintsError):
-        await service.delete_board(db_session, board, initiator=owner)
-
-
 # --- Сборка доски ------------------------------------------------------------------
 
 
@@ -273,49 +249,6 @@ async def test_the_column_list_cannot_be_widened_beyond_the_board(
     assert await _column_keys(db_session, board, 0, owner=owner, query="priority: normal") == []
 
 
-async def test_the_backlog_holds_the_issues_outside_any_sprint(
-    db_session: AsyncSession,
-    owner: Actor,
-    queue: Queue,
-    make_board: MakeBoard,
-    make_issue: MakeIssue,
-    make_sprint: Callable[..., Awaitable[Any]],
-    resolve_status: ResolveStatus,
-) -> None:
-    board = await make_board(
-        columns=[ColumnDraft(name="Открыт", statuses=[await resolve_status("open")])],
-    )
-    sprint = await make_sprint(board)
-    taken = await make_issue(summary="Взята в спринт")
-    left = await make_issue(summary="Осталась в бэклоге")
-    await service.add_sprint_issues(db_session, sprint, initiator=owner, issues=[taken])
-
-    assert await _backlog_keys(db_session, board, owner=owner) == [left.key]
-
-
-async def test_the_column_can_be_narrowed_to_the_current_sprint(
-    db_session: AsyncSession,
-    owner: Actor,
-    queue: Queue,
-    make_board: MakeBoard,
-    make_issue: MakeIssue,
-    make_sprint: Callable[..., Awaitable[Any]],
-    resolve_status: ResolveStatus,
-) -> None:
-    """`sprint: current` — самый частый вопрос доски, и сервер знает ответ сам."""
-    board = await make_board(
-        columns=[ColumnDraft(name="Открыт", statuses=[await resolve_status("open")])],
-    )
-    sprint = await make_sprint(board)
-    taken = await make_issue(summary="Взята в спринт")
-    await make_issue(summary="Осталась в бэклоге")
-    await service.add_sprint_issues(db_session, sprint, initiator=owner, issues=[taken])
-    await service.start_sprint(db_session, sprint, initiator=owner)
-
-    assert await _column_keys(db_session, board, 0, owner=owner, sprint="current") == [taken.key]
-    assert await _column_keys(db_session, board, 0, owner=owner, sprint="backlog") != [taken.key]
-
-
 # --- Ранжирование ------------------------------------------------------------------
 
 
@@ -344,7 +277,7 @@ async def test_an_unranked_issue_stands_where_it_was_created(
         .values(created_at=earlier.created_at - timedelta(seconds=1))
     )
 
-    assert await _backlog_keys(db_session, board, owner=owner) == [earlier.key, later.key]
+    assert await _column_keys(db_session, board, 0, owner=owner) == [earlier.key, later.key]
     assert (await db_session.scalars(select(IssueRank))).all() == []
 
 
@@ -366,7 +299,7 @@ async def test_a_card_moved_to_the_top_stays_there(
 
     await service.rank_issue(db_session, board, third, initiator=owner, after=None)
 
-    assert await _backlog_keys(db_session, board, owner=owner) == [
+    assert await _column_keys(db_session, board, 0, owner=owner) == [
         third.key,
         first.key,
         second.key,
@@ -390,7 +323,7 @@ async def test_a_card_moved_to_the_bottom_stays_there(
 
     await service.rank_issue(db_session, board, first, initiator=owner, before=None)
 
-    assert await _backlog_keys(db_session, board, owner=owner) == [second.key, first.key]
+    assert await _column_keys(db_session, board, 0, owner=owner) == [second.key, first.key]
 
 
 async def test_a_card_stands_right_after_its_anchor(
@@ -411,7 +344,7 @@ async def test_a_card_stands_right_after_its_anchor(
 
     await service.rank_issue(db_session, board, third, initiator=owner, after=first)
 
-    assert await _backlog_keys(db_session, board, owner=owner) == [
+    assert await _column_keys(db_session, board, 0, owner=owner) == [
         first.key,
         third.key,
         second.key,
@@ -436,7 +369,7 @@ async def test_a_card_stands_right_before_its_anchor(
 
     await service.rank_issue(db_session, board, third, initiator=owner, before=second)
 
-    assert await _backlog_keys(db_session, board, owner=owner) == [
+    assert await _column_keys(db_session, board, 0, owner=owner) == [
         first.key,
         third.key,
         second.key,
@@ -493,12 +426,12 @@ async def test_the_gap_running_out_renumbers_the_board(
 
     # Якорь берётся из текущей выдачи, а не назначается: у трёх задач одна виртуальная
     # позиция, и кто из них первый, решает тайбрейкер по случайному `id`.
-    before = await _backlog_keys(db_session, board, owner=owner)
+    before = await _column_keys(db_session, board, 0, owner=owner)
     anchor_key = next(key for key in before if key != third.key)
     anchor = first if first.key == anchor_key else second
 
     await service.rank_issue(db_session, board, third, initiator=owner, after=anchor)
-    after = await _backlog_keys(db_session, board, owner=owner)
+    after = await _column_keys(db_session, board, 0, owner=owner)
 
     # Перенумерация раздала явные ранги всем задачам доски, и они различны: именно это
     # она и обязана обеспечить. Конкретные числа проверять нельзя — переставленная
