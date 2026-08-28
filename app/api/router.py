@@ -31,6 +31,7 @@ from app.api.routes import (
     filters,
     issues,
     links,
+    notifications,
     portfolios,
     projects,
     queues,
@@ -91,3 +92,4 @@ api_router.include_router(search.router)
 api_router.include_router(filters.router)
 api_router.include_router(workflows.router)
 api_router.include_router(automation.router)
+api_router.include_router(notifications.router)
