@@ -26,9 +26,11 @@ from app.api.routes import (
     checklists,
     comments,
     fields,
+    filters,
     issues,
     links,
     queues,
+    search,
     tags,
     workflows,
 )
@@ -76,4 +78,6 @@ api_router.include_router(links.router)
 api_router.include_router(comments.router)
 api_router.include_router(checklists.router)
 api_router.include_router(tags.router)
+api_router.include_router(search.router)
+api_router.include_router(filters.router)
 api_router.include_router(workflows.router)
