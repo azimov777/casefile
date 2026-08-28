@@ -159,6 +159,45 @@ async def test_paging_is_stable_when_the_sort_key_repeats(
     assert len(seen) == len(set(seen))
 
 
+async def test_paging_survives_issues_created_between_pages(
+    auth_client: AsyncClient,
+    queue: object,
+) -> None:
+    """Курсор не смещается от вставок: задача, добавленная между страницами, ничего не рушит.
+
+    Ради этого пагинация и курсорная, а не по смещению: `OFFSET` после вставки сдвинул
+    бы окно, и одна из уже показанных задач приехала бы второй раз, а одна непоказанная
+    исчезла бы совсем. Проверяется отсутствие дублей и полнота исходного набора —
+    место новой задачи в порядке не определено, потому что время создания у всех
+    задач теста одинаково.
+    """
+    original = {
+        (await _create_issue(auth_client, summary=f"Задача {index}"))["key"] for index in range(4)
+    }
+
+    first = (
+        await auth_client.get("/api/v1/search/issues", params={"limit": 2, "fields": ["key"]})
+    ).json()
+    seen = [item["key"] for item in first["data"]]
+
+    # Вставка между страницами — тот самый случай, ради которого курсор и заведён.
+    await _create_issue(auth_client, summary="Появилась между страницами")
+
+    cursor = first["meta"]["next_cursor"]
+    while cursor is not None:
+        page = (
+            await auth_client.get(
+                "/api/v1/search/issues",
+                params={"limit": 2, "fields": ["key"], "cursor": cursor},
+            )
+        ).json()
+        seen.extend(item["key"] for item in page["data"])
+        cursor = page["meta"]["next_cursor"]
+
+    assert len(seen) == len(set(seen)), "задача попала в выдачу дважды"
+    assert original <= set(seen), "задача выпала между страницами"
+
+
 async def test_a_cursor_from_another_sort_is_refused(
     auth_client: AsyncClient,
     queue: object,
