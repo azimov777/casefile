@@ -413,7 +413,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 
 **Поля.** Системные адресуются именем (`queue`, `key`, `status`, `status_category`,
 `issue_type`, `resolution`, `priority`, `summary`, `description`, `author`, `assignee`,
-`followers`, `deadline`, `tags`, `project`, `created_at`, `updated_at`), кастомные — ссылкой
+`followers`, `deadline`, `tags`, `project`, `sprint`, `created_at`, `updated_at`), кастомные — ссылкой
 (`severity` у глобального, `TRK.severity` у локального). Отдельно есть `text` — вхождение
 подстроки сразу в название, описание и ленту обсуждения.
 
@@ -434,7 +434,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 (`fields=TRK.severity`) оставляет в `values` только его.
 
 Пустой запрос — законный: он означает «все задачи». Имя, занятое системой, но ещё без фильтра
-(`sprint`, `links`), отвечает отказом с причиной `not_searchable`, а не молча ищет в JSONB.
+(`links`, `comments`), отвечает отказом с причиной `not_searchable`, а не молча ищет в JSONB.
 
 ### Сохранённые фильтры
 
@@ -540,6 +540,119 @@ curl -H "Authorization: Bearer $TOKEN" \
 **Удаления нет — есть архив.** `POST /projects/{key}/archive` убирает проект из рабочих
 списков: новых задач он не принимает, но уже собранные остаются, прогресс продолжает
 считаться, а поля правятся. Возврат — `POST /projects/{key}/unarchive`; оба идемпотентны.
+
+## Доски и спринты
+
+Доска — рабочий экран: она берёт задачи **сохранённым фильтром** (задача 12), раскладывает их
+по колонкам и хранит собственный порядок карточек. Своих условий отбора у доски нет
+намеренно: второй способ описать отбор разошёлся бы с языком запросов, и одна и та же доска
+показывала бы разное во фронте и в автодействии.
+
+```bash
+# фильтр, который доска показывает
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"name": "Задачи TRK", "query": "queue: TRK"}' \
+     http://localhost:8000/api/v1/filters
+
+# доска с колонками: колонка — это набор статусов, а не один статус
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"name": "Доска команды", "saved_filter": "<uuid фильтра>",
+          "columns": [{"name": "Открыт", "statuses": ["open"]},
+                      {"name": "Работа", "statuses": ["in_progress"], "wip_limit": 2},
+                      {"name": "Закрыт", "statuses": ["closed"]}]}' \
+     http://localhost:8000/api/v1/boards
+
+# задачи одной колонки — страницей, с выбором полей
+curl -H "Authorization: Bearer $TOKEN" -G \
+     "http://localhost:8000/api/v1/boards/<uuid>/columns/<uuid колонки>/issues" \
+     --data-urlencode 'fields=summary' --data-urlencode 'fields=assignee'
+```
+
+**Доска собирается покомпонентно, а не одним ответом.** Одна доска тянет тысячи задач, и
+оболочка ответа кладёт под `data` ровно одну коллекцию: карточка доски отдаёт настройки и
+колонки, каждая колонка — свою страницу со своим курсором и своим `fields`. Счётчиков задач в
+колонке нет — курсорная пагинация не считает `total`, а отдельный `COUNT` по фильтру доски
+самый дорогой запрос API. `wip_limit` — то, что доска показывает, а не то, что она стережёт:
+перемещение карточки идёт переходом воркфлоу, и второй запрет поверх него означал бы, что
+одно и то же изменение статуса проходит из карточки задачи и отклоняется с доски.
+
+**Перемещение карточки между колонками — это переход воркфлоу.** Доска не пишет статус
+напрямую, поэтому через неё нельзя обойти ни одну проверку процесса:
+
+```bash
+# отказ, если такого ребра в графе нет: 409 transition_not_allowed
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"column": "<uuid колонки>"}' \
+     http://localhost:8000/api/v1/boards/<uuid>/issues/TRK-3/column
+
+# закрытие требует резолюции — она принимается тем же запросом
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"column": "<uuid колонки Закрыт>", "resolution": "done"}' \
+     http://localhost:8000/api/v1/boards/<uuid>/issues/TRK-3/column
+```
+
+Если в колонке несколько статусов, целевой обязан назвать вызывающий (`"status": "TRK.review"`):
+угадывать значило бы переводить задачу в статус, которого никто не просил.
+
+**Порядок карточек задаётся соседом.** Отдельный маршрут, потому что перестановка не меняет
+задачу вовсе: версия не растёт, история не пополняется, статус не трогается.
+
+```bash
+# в начало списка
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"after": null}' \
+     http://localhost:8000/api/v1/boards/<uuid>/issues/TRK-4/rank
+
+# сразу за TRK-4;  {"before": null} ставит в самый конец
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"after": "TRK-4"}' \
+     http://localhost:8000/api/v1/boards/<uuid>/issues/TRK-2/rank
+```
+
+Позиция наружу не отдаётся: место задаётся соседом, а внутреннее число разреженной шкалы
+клиенту знать незачем — при перенумерации доски все они меняются, сохраняя порядок. Задача,
+которую никто не двигал, стоит там, где встала по времени создания: строки ранга у неё нет, а
+позиция всё равно есть.
+
+**Спринт — единица планирования, состояние идёт в одну сторону:** `planned` → `active` →
+`completed`. Активный спринт у доски не более одного.
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"board": "<uuid доски>", "name": "Спринт 42", "goal": "Закрыть выдачу ключей"}' \
+     http://localhost:8000/api/v1/sprints
+
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"issues": ["TRK-1", "TRK-2", "OPS-7"]}' \
+     http://localhost:8000/api/v1/sprints/<uuid>/issues
+
+curl -X POST -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/sprints/<uuid>/start
+
+# завершение: куда девать незакрытые — решает вызывающий, умолчания нет
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"unfinished": "sprint", "sprint": "<uuid следующего>"}' \
+     http://localhost:8000/api/v1/sprints/<uuid>/complete
+```
+
+В ответе завершения — ключи переехавших задач: собрать их второй раз будет неоткуда, состав
+спринта нигде не хранится отдельно от самих задач. Закрытые остаются в спринте — он и есть
+запись о том, что команда успела.
+
+**Спринт стал полем поиска.** `sprint: current` находит задачи активных спринтов, `sprint:
+empty()` — бэклог, `sprint: <uuid>` — конкретный спринт. Тем же словарём пользуется параметр
+`sprint` у колонки доски: `backlog`, `current` или идентификатор.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -G http://localhost:8000/api/v1/search/issues \
+     --data-urlencode 'query=sprint: current and status_category: != done'
+
+# бэклог доски: её задачи, не взятые ни в один спринт, в порядке ранга
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/boards/<uuid>/backlog
+```
+
+**Удаления с последствиями нет.** Доска со спринтами отвечает `board_has_sprints`: спринт
+хранит принадлежность задач, и каскад унёс бы её молча. Спринт удаляется, только пока он пуст
+и не запущен, — маршрут существует ради опечатки при планировании, а не ради уборки истории.
 
 ## История изменений и события
 
