@@ -79,28 +79,18 @@ class RuleView:
 async def sync_rules(session: AsyncSession) -> list[str]:
     """Заводит строки состояния под новые объявления. Возвращает ключи заведённых.
 
-    Идемпотентна и безопасна при параллельном старте нескольких процессов: строка
-    заводится только под ключ, которого ещё нет, а гонку двух процессов ловит
-    уникальность `rule_key` — проигравший получит конфликт целостности на коммите, и это
-    правильный исход для команды, которую всё равно повторят при следующем старте.
-    """
-    definitions = engine.registered_rules()
-    repository = AutomationRuleRepository(session)
-    existing = await repository.existing_keys()
+    Идемпотентна и переживает одновременный старт: её зовут три процесса — API в
+    lifespan, воркер и планировщик первым шагом цикла, — и на пустой базе они делают это
+    одновременно. Строки заводятся одной атомарной вставкой (`insert_missing`), поэтому
+    гонка не даёт ни конфликта целостности, ни второй строки под тот же ключ.
 
-    created: list[str] = []
-    for definition in definitions:
-        if definition.key in existing:
-            continue
-        await repository.add(
-            AutomationRule(
-                rule_key=definition.key,
-                is_enabled=False,
-                params=definition.default_params(),
-            )
-        )
-        created.append(definition.key)
-    return created
+    Возвращаются ключи, заведённые **этим** вызовом: проигравший гонку получает пустой
+    список. Вызывающий пишет его в лог, и список того, что вызов пытался завести, вводил
+    бы в заблуждение ровно при том старте, ради которого лог и читают.
+    """
+    return await AutomationRuleRepository(session).insert_missing(
+        {definition.key: definition.default_params() for definition in engine.registered_rules()}
+    )
 
 
 # --- Чтение -------------------------------------------------------------------------

@@ -9,10 +9,12 @@
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.automation import AutomationRule, AutomationRun
@@ -26,11 +28,6 @@ class AutomationRuleRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def add(self, rule: AutomationRule) -> AutomationRule:
-        self._session.add(rule)
-        await self._session.flush()
-        return rule
-
     async def flush(self) -> None:
         await self._session.flush()
 
@@ -41,9 +38,40 @@ class AutomationRuleRepository:
     async def get_by_id(self, rule_id: uuid.UUID) -> AutomationRule | None:
         return await self._session.get(AutomationRule, rule_id)
 
-    async def existing_keys(self) -> set[str]:
-        """Ключи, у которых уже есть строка состояния. Нужны синхронизации реестра."""
-        return set((await self._session.scalars(select(AutomationRule.rule_key))).all())
+    async def insert_missing(self, params_by_key: Mapping[str, dict[str, Any]]) -> list[str]:
+        """Заводит строки под ключи, которых ещё нет. Возвращает **заведённые** ключи.
+
+        Одна вставка с `ON CONFLICT DO NOTHING`, а не «прочитать существующие ключи и
+        добавить недостающие». Синхронизацию запускают три процесса сразу — API в
+        lifespan, воркер и планировщик первым шагом цикла, — и на пустой базе они делают
+        это одновременно. Между чтением и вставкой успевает вклиниться другой процесс,
+        поэтому проверка перед вставкой гонку не закрывает ни в каком порядке: закрывает
+        её только атомарность самой вставки.
+
+        `RETURNING` отдаёт строки, которые вставились на самом деле, а не те, которые
+        вставить пытались: вызывающий пишет этот список в лог, и у проигравшего гонку он
+        обязан быть пустым.
+
+        Существующую строку вставка не трогает — ни включённость, ни параметры, ни
+        привязку к очереди: это состояние, настроенное человеком, а объявление из кода
+        его не переопределяет.
+        """
+        if not params_by_key:
+            return []
+        statement = (
+            # Таблица, а не модель: ORM-вставка с `RETURNING` ждёт строку на каждую
+            # переданную, а `DO NOTHING` их как раз пропускает.
+            pg_insert(AutomationRule.__table__)
+            .values(
+                [
+                    {"rule_key": key, "params": params}
+                    for key, params in sorted(params_by_key.items())
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=[AutomationRule.rule_key])
+            .returning(AutomationRule.rule_key)
+        )
+        return sorted((await self._session.execute(statement)).scalars().all())
 
     async def list_all(self) -> list[AutomationRule]:
         statement = select(AutomationRule).order_by(AutomationRule.rule_key)

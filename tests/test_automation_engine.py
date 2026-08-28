@@ -15,14 +15,15 @@
 видит человек.
 """
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.automation import engine
 from app.automation.context import RuleContext
@@ -267,6 +268,58 @@ async def test_synchronisation_is_idempotent(db_session: AsyncSession) -> None:
 
     assert created == []
     assert (await automation_service.get_rule(db_session, "t13_tagger")).is_enabled is True
+
+
+@pytest.fixture
+def committing_sessions(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    """Фабрика сессий на отдельных соединениях, с настоящим коммитом.
+
+    Гонку на уникальном ключе нельзя поставить обычной `db_session`: она живёт внутри
+    одной транзакции теста, которая в конце откатывается, а конфликт виден только между
+    разными транзакциями, каждая со своим коммитом. Плата за это — убирать за собой
+    приходится руками: откат теста сюда не достаёт.
+    """
+    return async_sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
+
+
+async def test_parallel_synchronisation_survives_the_race(
+    committing_sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """Три процесса, стартовавшие на пустой базе одновременно, не падают и не двоят строки.
+
+    Ровно то, что происходит при подъёме контура с нуля: API в lifespan, воркер и
+    планировщик заводят строки правил в одну и ту же секунду.
+    """
+    keys = sorted(definition.key for definition in automation_service.definitions())
+    # Барьер, а не надежда на планировщик задач: без него первый вызов успевал бы
+    # закоммитить строки до того, как второй начнёт вставку, и тест проверял бы
+    # последовательный запуск под видом одновременного.
+    barrier = asyncio.Barrier(3)
+
+    async def sync() -> list[str]:
+        async with committing_sessions() as session:
+            await barrier.wait()
+            created = await automation_service.sync_rules(session)
+            await session.commit()
+            return created
+
+    try:
+        results = await asyncio.gather(sync(), sync(), sync())
+
+        # Ключ заводит ровно один из трёх, и он же его возвращает: остальные двое
+        # получают пустой список, а не тот, который собирались завести.
+        assert sorted(key for created in results for key in created) == keys
+        async with committing_sessions() as session:
+            rows = await session.execute(
+                select(AutomationRule.rule_key, func.count())
+                .where(AutomationRule.rule_key.in_(keys))
+                .group_by(AutomationRule.rule_key)
+            )
+            assert sorted(rows.all()) == [(key, 1) for key in keys]
+    finally:
+        async with committing_sessions() as session:
+            await session.execute(delete(AutomationRule).where(AutomationRule.rule_key.in_(keys)))
+            await session.commit()
 
 
 # --- Триггеры -------------------------------------------------------------------------
