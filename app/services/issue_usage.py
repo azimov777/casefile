@@ -24,9 +24,11 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.actor import Actor
-from app.db.models.catalog import Status
+from app.db.models.catalog import Resolution, Status
 from app.db.models.queue import Queue
 from app.db.repositories import IssueRepository
+from app.domain.catalogs import StatusCategory
+from app.domain.errors import IssueResolutionNotAllowedError, IssueResolutionRequiredError
 from app.services import events as events_service
 
 
@@ -50,12 +52,22 @@ async def count_issues_in_queue(session: AsyncSession, queue_id: uuid.UUID) -> i
     return await IssueRepository(session).count_in_queue(queue_id)
 
 
+async def count_issues_in_queue_by_type(
+    session: AsyncSession,
+    queue_id: uuid.UUID,
+    issue_type_id: uuid.UUID,
+) -> int:
+    """Сколько задач пары «очередь + тип» мешает убрать настройку процесса."""
+    return await IssueRepository(session).count_in_queue_by_type(queue_id, issue_type_id)
+
+
 async def move_issues_to_status(
     session: AsyncSession,
     *,
     initiator: Actor,
     source: Status,
     target: Status,
+    resolution: Resolution | None = None,
     queue: Queue | None = None,
 ) -> int:
     """Переносит задачи из одного статуса в другой и возвращает число перенесённых.
@@ -85,9 +97,23 @@ async def move_issues_to_status(
     `issue.status_changed` массовый перенос не поймает.** Правилу, которому это важно,
     надо подписываться и на `status.issues_moved`.
     """
+    if target.category is StatusCategory.DONE and resolution is None:
+        raise IssueResolutionRequiredError(
+            details={
+                "status": target.ref,
+                "category": target.category.value,
+                "reason": "mass_move_requires_resolution",
+            }
+        )
+    if target.category is not StatusCategory.DONE and resolution is not None:
+        raise IssueResolutionNotAllowedError(
+            details={"status": target.ref, "category": target.category.value}
+        )
+
     moved = await IssueRepository(session).move_to_status(
         from_status_id=source.id,
         to_status_id=target.id,
+        resolution_id=None if resolution is None else resolution.id,
         queue_id=None if queue is None else queue.id,
     )
     await events_service.record_issues_moved(
@@ -95,6 +121,7 @@ async def move_issues_to_status(
         initiator=initiator,
         source=source,
         target=target,
+        resolution_after=None if resolution is None else resolution.ref,
         queue=queue,
         issues=moved,
     )

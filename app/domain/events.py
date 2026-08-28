@@ -85,6 +85,7 @@ class OutboxStatus(StrEnum):
 ACTION_EVENTS: dict[str, EventType] = {
     "issue.create": EventType.ISSUE_CREATED,
     "issue.update": EventType.ISSUE_UPDATED,
+    "issue.transition": EventType.ISSUE_STATUS_CHANGED,
     "issue.assign": EventType.ISSUE_ASSIGNED,
     # Подписка и отписка — это изменение поля `followers`, а не отдельная механика:
     # заводить им собственный тип значило бы обязать каждого подписчика знать на один

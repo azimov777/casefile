@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -26,6 +29,9 @@ from app.db.base import BaseModel
 from app.db.models.actor import Actor
 from app.db.models.catalog import IssueType, Status
 from app.domain.queues import MAX_QUEUE_KEY_LENGTH
+
+if TYPE_CHECKING:
+    from app.db.models.workflow import Workflow
 
 
 class Queue(BaseModel):
@@ -113,9 +119,9 @@ class Queue(BaseModel):
 class QueueIssueType(BaseModel):
     """Разрешённый в очереди тип задачи.
 
-    Отдельная таблица связи, а не список ключей в очереди: в задаче 07 к паре
-    «очередь + тип задачи» привяжется воркфлоу, и вешать его будет некуда, если связь
-    останется неявной.
+    Отдельная таблица связи, а не список ключей в очереди: к этой паре привязан
+    обязательный воркфлоу. Третья таблица назначения дублировала бы уже существующую
+    сущность и позволила бы двум источникам разойтись.
 
     Каскад по обоим ключам: удаление очереди уносит её привязки, удаление типа задачи —
     тоже. Второе безопасно, потому что тип, которым пользуются задачи или который
@@ -123,7 +129,14 @@ class QueueIssueType(BaseModel):
     """
 
     __tablename__ = "queue_issue_types"
-    __table_args__ = (UniqueConstraint("queue_id", "issue_type_id"),)
+    __table_args__ = (
+        UniqueConstraint("queue_id", "issue_type_id"),
+        ForeignKeyConstraint(
+            ["workflow_id", "queue_id"],
+            ["workflows.id", "workflows.queue_id"],
+        ),
+        Index("ix_queue_issue_types_workflow_id", "workflow_id"),
+    )
 
     queue_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("queues.id", ondelete="CASCADE"),
@@ -133,5 +146,10 @@ class QueueIssueType(BaseModel):
         ForeignKey("issue_types.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # Единственная привязка процесса к паре «очередь + тип задачи». Внешний ключ без
+    # каскада: удалить назначенный воркфлоу нельзя, а удаление самой очереди проходит,
+    # потому что обе строки исчезают в одном операторе и `NO ACTION` проверяется в конце.
+    workflow_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
 
     issue_type: Mapped[IssueType] = relationship(lazy="joined", innerjoin=True)
+    workflow: Mapped[Workflow] = relationship(lazy="joined", innerjoin=True)

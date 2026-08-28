@@ -203,8 +203,9 @@ async def record_issues_moved(
     initiator: Actor,
     source: Status,
     target: Status,
+    resolution_after: str | None,
     queue: Queue | None,
-    issues: list[tuple[uuid.UUID, str]],
+    issues: list[tuple[uuid.UUID, str, str | None]],
 ) -> list[ChangelogEntry]:
     """Массовый перенос задач: запись журнала на каждую задачу, событие — одно на всех.
 
@@ -228,16 +229,26 @@ async def record_issues_moved(
     if not issues:
         return []
 
-    change = IssueChange(field="status", before=source.ref, after=target.ref)
-    entries = [
-        ChangelogEntry(
-            issue_id=issue_id,
-            actor_id=initiator.id,
-            event_type=EventType.ISSUE_STATUS_CHANGED.value,
-            changes=encode_changes((change,)),
+    status_change = IssueChange(field="status", before=source.ref, after=target.ref)
+    entries: list[ChangelogEntry] = []
+    for issue_id, _, resolution_before in issues:
+        changes = [status_change]
+        if resolution_before != resolution_after:
+            changes.append(
+                IssueChange(
+                    field="resolution",
+                    before=resolution_before,
+                    after=resolution_after,
+                )
+            )
+        entries.append(
+            ChangelogEntry(
+                issue_id=issue_id,
+                actor_id=initiator.id,
+                event_type=EventType.ISSUE_STATUS_CHANGED.value,
+                changes=encode_changes(changes),
+            )
         )
-        for issue_id, _ in issues
-    ]
     await ChangelogRepository(session).add_all(entries)
 
     # Ключи перечислены целиком, а не срезаны до первых N: срезанный список неотличим
@@ -254,7 +265,7 @@ async def record_issues_moved(
             "status": {"from": source.ref, "to": target.ref},
             "queue": None if queue is None else queue.key,
             "count": len(issues),
-            "issues": [key for _, key in issues],
+            "issues": [key for _, key, _ in issues],
         },
     )
     return entries

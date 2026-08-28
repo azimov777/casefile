@@ -59,8 +59,9 @@ async def test_resolution_is_counted_only_where_it_is_set(
     done = await queues_service.resolve_catalog_ref(
         db_session, CatalogKind.RESOLUTION, "done", initiator=owner
     )
+    closed = await _status(db_session, owner, "closed")
     await make_issue()
-    await make_issue(resolution=done)
+    await make_issue(status=closed, resolution=done)
 
     assert await issue_usage.count_issues_with_resolution(db_session, done.id) == 1
 
@@ -98,12 +99,19 @@ async def test_move_between_statuses_touches_only_the_source(
     source = await _status(db_session, owner, "open")
     target = await _status(db_session, owner, "closed")
     in_progress = await _status(db_session, owner, "in_progress")
+    resolution = await queues_service.resolve_catalog_ref(
+        db_session, CatalogKind.RESOLUTION, "done", initiator=owner
+    )
     await make_issue()
     await make_issue()
     await make_issue(status=in_progress)
 
     moved = await issue_usage.move_issues_to_status(
-        db_session, initiator=owner, source=source, target=target
+        db_session,
+        initiator=owner,
+        source=source,
+        target=target,
+        resolution=resolution,
     )
 
     assert moved == 2
@@ -120,6 +128,9 @@ async def test_move_narrowed_to_a_queue_leaves_other_queues_alone(
 ) -> None:
     source = await _status(db_session, owner, "open")
     target = await _status(db_session, owner, "closed")
+    resolution = await queues_service.resolve_catalog_ref(
+        db_session, CatalogKind.RESOLUTION, "done", initiator=owner
+    )
     other = await queues_service.create_queue(
         db_session, initiator=owner, key="OPS", name="Эксплуатация"
     )
@@ -129,7 +140,12 @@ async def test_move_narrowed_to_a_queue_leaves_other_queues_alone(
     )
 
     moved = await issue_usage.move_issues_to_status(
-        db_session, initiator=owner, source=source, target=target, queue=queue
+        db_session,
+        initiator=owner,
+        source=source,
+        target=target,
+        resolution=resolution,
+        queue=queue,
     )
 
     assert moved == 1
@@ -144,10 +160,17 @@ async def test_move_raises_the_version_of_the_moved_issues(
     """Иначе клиент со старой версией записал бы поверх нового статуса, ничего не заметив."""
     source = await _status(db_session, owner, "open")
     target = await _status(db_session, owner, "closed")
+    resolution = await queues_service.resolve_catalog_ref(
+        db_session, CatalogKind.RESOLUTION, "done", initiator=owner
+    )
     issue = await make_issue()
 
     await issue_usage.move_issues_to_status(
-        db_session, initiator=owner, source=source, target=target
+        db_session,
+        initiator=owner,
+        source=source,
+        target=target,
+        resolution=resolution,
     )
 
     await db_session.refresh(issue)

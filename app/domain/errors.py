@@ -254,7 +254,8 @@ class StatusInUseError(ConflictError):
     Удаление такого статуса запрещено намеренно. Тихое удаление оставило бы задачи со
     ссылкой в никуда и сломало доски и расчёт прогресса проектов, а удаление «с
     переносом» одним движением слишком легко сделать не глядя. Перенос задач в другой
-    статус — отдельный явный сценарий, после него удаление проходит.
+    статус — отдельный явный сценарий; затем статус убирают из живых графов и только
+    после этого удаляют из справочника.
     """
 
     code = "status_in_use"
@@ -371,3 +372,83 @@ class FieldValuesInvalidError(ValidationError):
 
     code = "field_values_invalid"
     message = "Custom field values failed validation"
+
+
+# --- Воркфлоу --------------------------------------------------------------------
+
+
+class WorkflowNotFoundError(NotFoundError):
+    """Воркфлоу с таким идентификатором нет."""
+
+    code = "workflow_not_found"
+    message = "Workflow not found"
+
+
+class WorkflowNameTakenError(ConflictError):
+    """Имя воркфлоу уникально внутри очереди."""
+
+    code = "workflow_name_taken"
+    message = "Workflow name is already taken in this queue"
+
+
+class TransitionNotFoundError(NotFoundError):
+    """Перехода с таким идентификатором нет в указанном воркфлоу."""
+
+    code = "transition_not_found"
+    message = "Workflow transition not found"
+
+
+class InvalidWorkflowGraphError(ValidationError):
+    """Граф не образует цельный процесс от начального статуса до завершения."""
+
+    code = "invalid_workflow_graph"
+    message = "Workflow graph is invalid"
+
+
+class WorkflowAssignmentError(ConflictError):
+    """Воркфлоу нельзя назначить типу, не оставив существующие задачи вне графа."""
+
+    code = "workflow_assignment_conflict"
+    message = "Workflow cannot be assigned to this issue type"
+
+
+class WorkflowInUseError(ConflictError):
+    """Назначенный типам задач воркфлоу нельзя удалить."""
+
+    code = "workflow_in_use"
+    message = "Workflow is assigned to issue types"
+
+
+class WorkflowStatusInUseError(ConflictError):
+    """Из графа нельзя убрать статус, в котором стоят задачи этого процесса."""
+
+    code = "workflow_status_in_use"
+    message = "Workflow status is used by issues"
+
+
+class TransitionNotAllowedError(ConflictError):
+    """Текущий воркфлоу не разрешает запрошенную смену статуса."""
+
+    code = "transition_not_allowed"
+    message = "Workflow transition is not allowed"
+
+
+class TransitionRequirementsError(ValidationError):
+    """Переход существует, но обязательные поля в целевом состоянии не заполнены."""
+
+    code = "transition_requirements_not_met"
+    message = "Workflow transition requirements are not met"
+
+
+class IssueResolutionRequiredError(ValidationError):
+    """Задача в статусе категории `done` обязана иметь резолюцию."""
+
+    code = "issue_resolution_required"
+    message = "Resolution is required for a done status"
+
+
+class IssueResolutionNotAllowedError(ValidationError):
+    """У незавершённой задачи резолюции быть не должно."""
+
+    code = "issue_resolution_not_allowed"
+    message = "Resolution is only allowed for a done status"

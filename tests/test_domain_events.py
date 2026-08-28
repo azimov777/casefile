@@ -25,6 +25,7 @@ from app.domain.issues import IssueChange, IssueField
 MUTATING_ACTIONS = (
     "issue.create",
     "issue.update",
+    "issue.transition",
     "issue.assign",
     "issue.follow",
     "issue.unfollow",

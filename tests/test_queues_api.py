@@ -116,6 +116,26 @@ async def test_queue_renders_a_local_default_status(
         queue=queue,
         category=StatusCategory.NEW,
     )
+    workflow = (await auth_client.get("/api/v1/queues/TRK/config")).json()["data"]["workflows"][0]
+    added = await auth_client.post(
+        f"/api/v1/workflows/{workflow['id']}/statuses",
+        json={
+            "status": "TRK.backlog",
+            "transitions": [
+                {
+                    "name": "Move to backlog",
+                    "from_status": "open",
+                    "to_status": "TRK.backlog",
+                },
+                {
+                    "name": "Start backlog item",
+                    "from_status": "TRK.backlog",
+                    "to_status": "in_progress",
+                },
+            ],
+        },
+    )
+    assert added.status_code == 200
     await auth_client.patch("/api/v1/queues/TRK", json={"default_status": "TRK.backlog"})
 
     response = await auth_client.get("/api/v1/queues/TRK")
@@ -134,10 +154,16 @@ async def test_config_returns_the_whole_process_in_one_request(
     assert [status["key"] for status in data["statuses"]] == ["open", "in_progress", "closed"]
     assert [status["category"] for status in data["statuses"]] == ["new", "in_progress", "done"]
     assert [item["key"] for item in data["resolutions"]] == ["done", "rejected", "duplicate"]
-    # Ключи-заглушки присутствуют с самого начала: клиент, написанный сегодня, не
-    # должен переписываться, когда в задачах 04 и 07 они наполнятся.
     assert data["fields"] == []
-    assert data["workflows"] == []
+    assert len(data["workflows"]) == 1
+    workflow = data["workflows"][0]
+    assert workflow["name"] == "Default workflow"
+    assert set(workflow["issue_types"]) == {"task", "bug", "epic"}
+    assert [status["ref"] for status in workflow["statuses"]] == [
+        "open",
+        "in_progress",
+        "closed",
+    ]
 
 
 async def test_issue_types_are_replaced_wholesale(auth_client: AsyncClient, queue: Queue) -> None:

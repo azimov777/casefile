@@ -161,6 +161,30 @@ async def test_status_is_deleted_after_its_issues_are_moved(
         "moved": 4,
     }
 
+    workflow = (await auth_client.get("/api/v1/queues/TRK/config")).json()["data"]["workflows"][0]
+    replaced = await auth_client.put(
+        f"/api/v1/workflows/{workflow['id']}",
+        json={
+            "name": workflow["name"],
+            "initial_status": "open",
+            "statuses": ["open", "closed"],
+            "transitions": [
+                {
+                    "name": "Complete",
+                    "from_status": "open",
+                    "to_status": "closed",
+                    "requires_resolution": True,
+                },
+                {
+                    "name": "Reopen",
+                    "from_status": "closed",
+                    "to_status": "open",
+                },
+            ],
+        },
+    )
+    assert replaced.status_code == 200
+
     deleted = await auth_client.delete("/api/v1/statuses/in_progress")
     assert deleted.status_code == 204
 

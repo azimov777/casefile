@@ -116,9 +116,31 @@ class QueueRepository:
         )
         return await self._session.scalar(statement) is not None
 
-    async def bind_issue_type(self, queue_id: uuid.UUID, issue_type_id: uuid.UUID) -> None:
-        self._session.add(QueueIssueType(queue_id=queue_id, issue_type_id=issue_type_id))
+    async def get_issue_type_binding(
+        self,
+        queue_id: uuid.UUID,
+        issue_type_id: uuid.UUID,
+    ) -> QueueIssueType | None:
+        statement = select(QueueIssueType).where(
+            QueueIssueType.queue_id == queue_id,
+            QueueIssueType.issue_type_id == issue_type_id,
+        )
+        return (await self._session.scalars(statement)).unique().one_or_none()
+
+    async def bind_issue_type(
+        self,
+        queue_id: uuid.UUID,
+        issue_type_id: uuid.UUID,
+        workflow_id: uuid.UUID,
+    ) -> QueueIssueType:
+        binding = QueueIssueType(
+            queue_id=queue_id,
+            issue_type_id=issue_type_id,
+            workflow_id=workflow_id,
+        )
+        self._session.add(binding)
         await self._session.flush()
+        return binding
 
     async def unbind_issue_types(
         self, queue_id: uuid.UUID, issue_type_ids: list[uuid.UUID]

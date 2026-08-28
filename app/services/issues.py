@@ -5,7 +5,7 @@
 Всё, что меняет задачу, проходит через `apply_issue_changes`. Она принимает «что
 меняем» (`IssueChanges`) и «кто меняет» (`initiator`), а возвращает список фактических
 изменений — поле, было, стало. К этой точке уже подключены журнал изменений и outbox
-(задача 06), задача 07 подключит проверку переходов, задача 13 — автоматику. Если бы
+(задача 06) и проверка переходов (задача 07); задача 13 подключит автоматику. Если бы
 мутации были размазаны по эндпоинтам, каждая из этих задач превращалась бы в обход
 всех мест, где что-то меняется, а забытое место обнаруживалось бы как пропавшая
 история.
@@ -34,8 +34,9 @@ version_conflict`. Проверка стоит в единой точке, а н
 Транзакцию функции не фиксируют: границу держит вход в приложение.
 """
 
+import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -48,12 +49,14 @@ from app.db.models.issue import Issue
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import IssueRepository, QueueRepository
-from app.domain.catalogs import CatalogKind
+from app.domain.catalogs import CatalogKind, StatusCategory
 from app.domain.errors import (
     ActorInactiveError,
     CatalogEntryUnavailableError,
     IssueNotFoundError,
     IssueReferencedError,
+    IssueResolutionNotAllowedError,
+    IssueResolutionRequiredError,
     IssueVersionConflictError,
 )
 from app.domain.fields import apply_value_changes
@@ -69,6 +72,7 @@ from app.domain.issues import (
     validate_summary,
 )
 from app.domain.queues import format_issue_key, parse_issue_key
+from app.domain.workflows import filled_field_names
 from app.services import catalogs as catalogs_service
 from app.services import events as events_service
 from app.services import fields as fields_service
@@ -216,10 +220,17 @@ async def create_issue(
     await _ensure_issue_type_allowed(session, queue, target_type)
     target_status = status or queue.default_status
     catalogs_service.ensure_available_in_queue(target_status, kind=CatalogKind.STATUS, queue=queue)
+    await workflow_service.ensure_status_in_assigned_workflow(
+        session,
+        queue=queue,
+        issue_type=target_type,
+        status=target_status,
+    )
     if resolution is not None:
         catalogs_service.ensure_available_in_queue(
             resolution, kind=CatalogKind.RESOLUTION, queue=queue
         )
+    _ensure_resolution_state(target_status, resolution)
 
     # Все проверки — до выдачи номера. Порядок здесь и есть та самая экономия ключей:
     # доменные проверки дешёвые, но отказывают чаще всего, а номер, взятый и потерянный
@@ -299,14 +310,30 @@ async def apply_issue_changes(
     type_changed = is_set(changes.issue_type) and changes.issue_type.id != issue.issue_type_id
     if is_set(changes.issue_type):
         await _ensure_issue_type_allowed(session, queue, target_type)
+        target_status = changes.status if is_set(changes.status) else issue.status
+        await workflow_service.ensure_status_in_assigned_workflow(
+            session,
+            queue=queue,
+            issue_type=target_type,
+            status=target_status,
+        )
+    status_changed = is_set(changes.status) and changes.status.id != issue.status_id
     if is_set(changes.status):
         catalogs_service.ensure_available_in_queue(
             changes.status, kind=CatalogKind.STATUS, queue=queue
         )
-        if changes.status.id != issue.status_id:
+        if status_changed:
             await workflow_service.ensure_transition_allowed(
                 session, issue, target_status=changes.status, initiator=initiator
             )
+    changes = _normalize_resolution_changes(issue, changes)
+    if status_changed:
+        await workflow_service.ensure_transition_requirements(
+            session,
+            issue,
+            target_status=changes.status,
+            filled_fields=filled_fields_for(issue, changes),
+        )
     if is_set(changes.resolution) and changes.resolution is not None:
         catalogs_service.ensure_available_in_queue(
             changes.resolution, kind=CatalogKind.RESOLUTION, queue=queue
@@ -339,6 +366,79 @@ async def apply_issue_changes(
         changes=changes,
     )
     return IssueMutation(issue=issue, changes=changes)
+
+
+async def transition_issue(
+    session: AsyncSession,
+    issue: Issue,
+    transition_id: uuid.UUID,
+    *,
+    initiator: Actor,
+    changes: IssueChanges | None = None,
+    expected_version: int | None = None,
+) -> IssueMutation:
+    """Выполняет выбранное ребро и дополнительные поля одной мутацией.
+
+    `resolution` и `values`, переданные вместе с действием, проверяются в целевом
+    состоянии. Поэтому закрытие не требует предварительного PATCH и всё равно даёт
+    одну версию, одну запись истории и одно событие.
+    """
+    requested = changes or IssueChanges()
+    if is_set(requested.status) or is_set(requested.issue_type):
+        raise ValueError("transition_issue chooses status and issue type itself")
+
+    # Сначала проверяем выбранное ребро и права, затем добавляем его цель в будущие
+    # изменения и проверяем требования уже с переданными полями.
+    transition = await workflow_service.selected_transition(
+        session,
+        issue,
+        transition_id,
+        initiator=initiator,
+    )
+
+    combined = replace(requested, status=transition.to_status)
+    normalized = _normalize_resolution_changes(issue, combined)
+    workflow_service.ensure_transition_fields(
+        issue,
+        transition,
+        filled_fields=filled_fields_for(issue, normalized),
+    )
+    return await apply_issue_changes(
+        session,
+        issue,
+        initiator=initiator,
+        changes=normalized,
+        action="issue.transition",
+        expected_version=expected_version,
+    )
+
+
+def filled_fields_for(issue: Issue, changes: IssueChanges | None = None) -> frozenset[str]:
+    """Заполненные поля текущего или будущего состояния для условий перехода."""
+    changes = changes or IssueChanges()
+
+    def chosen(name: str, current: Any) -> Any:
+        value = getattr(changes, name)
+        return value if is_set(value) else current
+
+    values = (
+        apply_value_changes(issue.values, changes.values)
+        if is_set(changes.values)
+        else issue.values
+    )
+    return filled_field_names(
+        values,
+        system_values={
+            IssueField.SUMMARY.value: chosen("summary", issue.summary),
+            IssueField.DESCRIPTION.value: chosen("description", issue.description),
+            IssueField.RESOLUTION.value: chosen("resolution", issue.resolution),
+            IssueField.PRIORITY.value: chosen("priority", issue.priority),
+            IssueField.ASSIGNEE.value: chosen("assignee", issue.assignee),
+            IssueField.FOLLOWERS.value: chosen("followers", issue.followers),
+            IssueField.DEADLINE.value: chosen("deadline", issue.deadline),
+            IssueField.TAGS.value: chosen("tags", issue.tags),
+        },
+    )
 
 
 async def update_issue(
@@ -481,6 +581,44 @@ async def _ensure_not_referenced(session: AsyncSession, issue: Issue) -> None:
 
 
 # --- Внутреннее ------------------------------------------------------------------
+
+
+def _normalize_resolution_changes(issue: Issue, changes: IssueChanges) -> IssueChanges:
+    """Приводит резолюцию к инварианту целевой категории статуса.
+
+    Выход из `done` добавляет явное `resolution=None` в тот же набор изменений. Поэтому
+    сброс виден в журнале и событии рядом со сменой статуса, а не происходит вторым
+    скрытым UPDATE. Явная попытка поставить резолюцию незавершённой задаче отвергается:
+    успешный ответ с молча отброшенным полем был бы ложью клиенту.
+    """
+    target_status = changes.status if is_set(changes.status) else issue.status
+    target_resolution = changes.resolution if is_set(changes.resolution) else issue.resolution
+
+    if target_status.category is not StatusCategory.DONE:
+        if is_set(changes.resolution) and changes.resolution is not None:
+            raise IssueResolutionNotAllowedError(
+                details={
+                    "status": target_status.ref,
+                    "category": target_status.category.value,
+                }
+            )
+        if target_resolution is not None:
+            changes = replace(changes, resolution=None)
+            target_resolution = None
+
+    _ensure_resolution_state(target_status, target_resolution)
+    return changes
+
+
+def _ensure_resolution_state(status: Status, resolution: Resolution | None) -> None:
+    if status.category is StatusCategory.DONE and resolution is None:
+        raise IssueResolutionRequiredError(
+            details={"status": status.ref, "category": status.category.value}
+        )
+    if status.category is not StatusCategory.DONE and resolution is not None:
+        raise IssueResolutionNotAllowedError(
+            details={"status": status.ref, "category": status.category.value}
+        )
 
 
 def _ensure_version(issue: Issue, expected_version: int | None) -> None:

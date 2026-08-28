@@ -28,6 +28,7 @@ from app.domain.catalogs import (
     DEFAULT_ISSUE_TYPE_KEY,
     DEFAULT_STATUS_KEY,
     CatalogKind,
+    StatusCategory,
     parse_catalog_ref,
 )
 from app.domain.errors import (
@@ -43,6 +44,7 @@ from app.domain.queues import format_issue_key, validate_queue_key
 from app.services import catalogs as catalogs_service
 from app.services import fields as fields_service
 from app.services import issue_usage
+from app.services import workflow as workflow_service
 from app.services.permissions import ensure_allowed
 
 
@@ -64,6 +66,7 @@ class QueueConfig:
     statuses: list[Status]
     resolutions: list[Resolution]
     fields: list[Field]
+    workflows: list[workflow_service.WorkflowView]
 
 
 async def get_queue_by_key(session: AsyncSession, key: str) -> Queue:
@@ -198,6 +201,7 @@ async def create_queue(
         available=statuses,
         preferred_key=DEFAULT_STATUS_KEY,
     )
+    _ensure_default_status_usable(default_status)
 
     queue = await repository.add(
         Queue(
@@ -209,8 +213,13 @@ async def create_queue(
             default_status=default_status,
         )
     )
+    workflow = await workflow_service.create_default_workflow(
+        session,
+        queue,
+        initiator=initiator,
+    )
     for issue_type in issue_types:
-        await repository.bind_issue_type(queue.id, issue_type.id)
+        await repository.bind_issue_type(queue.id, issue_type.id, workflow.id)
     return queue
 
 
@@ -253,6 +262,9 @@ async def update_queue(
             session, CatalogKind.STATUS, default_status_ref, initiator=initiator
         )
         catalogs_service.ensure_available_in_queue(entry, kind=CatalogKind.STATUS, queue=queue)
+        assert isinstance(entry, Status)
+        _ensure_default_status_usable(entry)
+        await workflow_service.ensure_queue_default_status_supported(session, queue, entry)
         queue.default_status = entry
 
     await session.flush()
@@ -309,10 +321,43 @@ async def set_issue_types(
     current_ids = {entry.id for entry in current}
     requested_ids = {entry.id for entry in requested}
 
+    removed = [entry for entry in current if entry.id not in requested_ids]
+    for entry in removed:
+        issues = await issue_usage.count_issues_in_queue_by_type(session, queue.id, entry.id)
+        if issues:
+            raise CatalogEntryUnavailableError(
+                details={
+                    "kind": CatalogKind.ISSUE_TYPE.value,
+                    "ref": catalogs_service.format_entry_ref(entry),
+                    "queue": queue.key,
+                    "reason": "issue_type_has_issues",
+                    "issues": issues,
+                    "hint": "move or delete those issues first",
+                }
+            )
+
+    # Новому типу достаётся процесс типа по умолчанию: у пары «очередь + тип» процесс
+    # обязателен, а выбрать его этот сценарий не может — он про набор типов, а не про
+    # процессы. Другой назначается отдельным вызовом, где видно, каким задачам он
+    # разрешит переходы.
+    default_binding = await repository.get_issue_type_binding(
+        queue.id,
+        queue.default_issue_type_id,
+    )
+    if default_binding is None:
+        # Недостижимо: тип по умолчанию всегда входит в набор очереди, а привязка
+        # заводится вместе с очередью. Явная ошибка вместо `None` в следующей строке —
+        # чтобы повреждённая конфигурация называла себя, а не падала на атрибуте.
+        raise RuntimeError("Queue default issue type has no workflow binding")
+
     await repository.unbind_issue_types(queue.id, list(current_ids - requested_ids))
     for entry in requested:
         if entry.id not in current_ids:
-            await repository.bind_issue_type(queue.id, entry.id)
+            await repository.bind_issue_type(
+                queue.id,
+                entry.id,
+                default_binding.workflow_id,
+            )
     return await repository.list_issue_types(queue.id)
 
 
@@ -379,6 +424,11 @@ async def get_queue_config(
         statuses=await CatalogRepository(session, Status).list_available(queue.id),
         resolutions=await CatalogRepository(session, Resolution).list_available(queue.id),
         fields=await fields_service.applicable_fields(session, queue=queue),
+        workflows=await workflow_service.list_queue_workflows(
+            session,
+            queue,
+            initiator=initiator,
+        ),
     )
 
 
@@ -400,6 +450,26 @@ async def allocate_issue_number(session: AsyncSession, queue: Queue) -> int:
 async def allocate_issue_key(session: AsyncSession, queue: Queue) -> str:
     """Следующий ключ задачи (`TRK-123`). Формат собирается в одном месте на весь проект."""
     return format_issue_key(queue.key, await allocate_issue_number(session, queue))
+
+
+def _ensure_default_status_usable(status: Status) -> None:
+    """Статус по умолчанию не может быть завершением процесса.
+
+    Задача, заведённая без явного статуса, попадает именно в него, а статус категории
+    `done` требует резолюции. Очередь с таким умолчанием принимала бы только задачи,
+    созданные сразу закрытыми, — и это выяснилось бы при первой попытке завести
+    обычную задачу, а не при настройке очереди.
+    """
+    if status.category is StatusCategory.DONE:
+        raise CatalogEntryUnavailableError(
+            details={
+                "kind": CatalogKind.STATUS.value,
+                "ref": catalogs_service.format_entry_ref(status),
+                "category": status.category.value,
+                "reason": "default_status_cannot_be_done",
+                "hint": "pick a status in category new or in_progress",
+            }
+        )
 
 
 async def _resolve_global_issue_types(

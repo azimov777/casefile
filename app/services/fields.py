@@ -24,7 +24,7 @@ from app.db.models.catalog import IssueType
 from app.db.models.field import Field
 from app.db.models.queue import Queue
 from app.db.pagination import Page
-from app.db.repositories import ActorRepository, FieldRepository
+from app.db.repositories import ActorRepository, FieldRepository, WorkflowRepository
 from app.domain.catalogs import CatalogKind
 from app.domain.errors import (
     CatalogEntryUnavailableError,
@@ -256,9 +256,13 @@ async def update_field(
         await _ensure_removed_options_are_free(session, field, target_options)
 
     if issue_types is not None:
-        await FieldRepository(session).set_issue_types(
-            field, _validated_issue_types(field.queue, issue_types)
+        restrictions = _validated_issue_types(field.queue, issue_types)
+        await _ensure_workflow_requirements_remain_applicable(
+            session,
+            field,
+            restrictions,
         )
+        await FieldRepository(session).set_issue_types(field, restrictions)
 
     field.value_type = target_type
     field.is_multiple = target_multiple
@@ -271,6 +275,8 @@ async def update_field(
     if is_required is not None:
         field.is_required = is_required
     if is_hidden is not None:
+        if is_hidden and not field.is_hidden:
+            await _ensure_not_workflow_requirement(session, field)
         field.is_hidden = is_hidden
     if display_order is not None:
         field.display_order = display_order
@@ -319,7 +325,54 @@ async def delete_field(session: AsyncSession, field: Field, *, initiator: Actor)
                 "hint": "hide the field instead",
             },
         )
+    await _ensure_not_workflow_requirement(session, field)
     await FieldRepository(session).delete(field)
+
+
+async def _ensure_not_workflow_requirement(
+    session: AsyncSession,
+    field: Field,
+) -> None:
+    reference = field_ref(field)
+    transitions = await WorkflowRepository(session).count_required_field_usage(reference)
+    if transitions:
+        raise FieldInUseError(
+            details={
+                "ref": reference,
+                "reason": "workflows_exist",
+                "transitions": transitions,
+                "hint": "remove the field from workflow transition requirements first",
+            }
+        )
+
+
+async def _ensure_workflow_requirements_remain_applicable(
+    session: AsyncSession,
+    field: Field,
+    restrictions: list[IssueType],
+) -> None:
+    if not restrictions:
+        return
+    allowed = {issue_type.id for issue_type in restrictions}
+    bindings = await WorkflowRepository(session).assignments_requiring_field(field_ref(field))
+    incompatible = [
+        {
+            "queue": binding.workflow.queue.key,
+            "issue_type": binding.issue_type.ref,
+            "workflow_id": str(binding.workflow_id),
+        }
+        for binding in bindings
+        if binding.issue_type_id not in allowed
+    ]
+    if incompatible:
+        raise FieldInUseError(
+            details={
+                "ref": field_ref(field),
+                "reason": "required_field_not_applicable",
+                "assignments": incompatible,
+                "hint": "remove the requirement or keep the field applicable",
+            }
+        )
 
 
 async def issue_reference_refs(session: AsyncSession) -> list[str]:

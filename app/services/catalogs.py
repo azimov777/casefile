@@ -22,7 +22,12 @@ from app.db.models.actor import Actor
 from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.models.queue import Queue
 from app.db.pagination import Page
-from app.db.repositories import CatalogRepository, FieldRepository, QueueRepository
+from app.db.repositories import (
+    CatalogRepository,
+    FieldRepository,
+    QueueRepository,
+    WorkflowRepository,
+)
 from app.domain.catalogs import (
     CatalogKind,
     CatalogRef,
@@ -317,6 +322,18 @@ async def update_entry(
 
     if is_active is False and entry.is_active:
         await _ensure_not_queue_default(session, entry, kind, reason="cannot_deactivate")
+        if kind is CatalogKind.STATUS:
+            workflows = await WorkflowRepository(session).count_status_usage(entry.id)
+            if workflows:
+                raise StatusInUseError(
+                    details={
+                        "kind": kind.value,
+                        "ref": format_entry_ref(entry),
+                        "reason": "workflows_exist",
+                        "workflows": workflows,
+                        "hint": "remove the status from those workflows first",
+                    }
+                )
 
     if category is not None:
         await _apply_status_category(session, entry, category)
@@ -369,7 +386,24 @@ async def delete_entry(
             },
         )
 
+    # Сначала сохраняем более конкретный прежний контракт: статус, выбранный по
+    # умолчанию, сообщает очереди-потребители. Только после этого проверяем графы,
+    # иначе добавление воркфлоу меняло бы причину уже известного конфликта.
     await _ensure_not_queue_default(session, entry, kind, reason="cannot_delete")
+
+    if kind is CatalogKind.STATUS:
+        workflows = await WorkflowRepository(session).count_status_usage(entry.id)
+        if workflows:
+            raise StatusInUseError(
+                details={
+                    "kind": kind.value,
+                    "ref": format_entry_ref(entry),
+                    "reason": "workflows_exist",
+                    "workflows": workflows,
+                    "hint": "remove the status from those workflows first",
+                }
+            )
+
     await _ensure_not_field_restriction(session, entry, kind)
     await CatalogRepository(session, spec_for(kind).model).delete(entry)
 
@@ -389,6 +423,7 @@ async def move_issues(
     initiator: Actor,
     source: Status,
     target: Status,
+    resolution: Resolution | None = None,
     queue: Queue | None = None,
 ) -> IssuesMoved:
     """Переносит задачи из одного статуса в другой — явный сценарий, а не побочный эффект.
@@ -442,6 +477,55 @@ async def move_issues(
         ensure_available_in_queue(source, kind=CatalogKind.STATUS, queue=scope_queue)
         ensure_available_in_queue(target, kind=CatalogKind.STATUS, queue=scope_queue)
 
+    if resolution is not None:
+        if scope_queue is None:
+            if resolution.queue_id is not None:
+                raise CatalogEntryUnavailableError(
+                    details={
+                        "kind": CatalogKind.RESOLUTION.value,
+                        "ref": format_entry_ref(resolution),
+                        "reason": "resolution_must_be_global",
+                    }
+                )
+            if not resolution.is_active:
+                raise CatalogEntryUnavailableError(
+                    details={
+                        "kind": CatalogKind.RESOLUTION.value,
+                        "ref": format_entry_ref(resolution),
+                        "reason": "inactive",
+                    }
+                )
+        else:
+            ensure_available_in_queue(
+                resolution,
+                kind=CatalogKind.RESOLUTION,
+                queue=scope_queue,
+            )
+
+    bindings = await WorkflowRepository(session).assignments_for_issues_in_status(
+        source.id,
+        queue_id=None if scope_queue is None else scope_queue.id,
+    )
+    unsupported = [
+        {
+            "queue": binding.workflow.queue.key,
+            "issue_type": binding.issue_type.ref,
+            "workflow_id": str(binding.workflow_id),
+        }
+        for binding in bindings
+        if target.id not in {link.status_id for link in binding.workflow.status_links}
+    ]
+    if unsupported:
+        raise CatalogEntryUnavailableError(
+            details={
+                "kind": CatalogKind.STATUS.value,
+                "ref": format_entry_ref(target),
+                "reason": "status_not_in_workflow",
+                "assignments": unsupported,
+                "hint": "add the target status to every affected workflow first",
+            }
+        )
+
     # Инициатор передаётся дальше не для проверки прав (она уже сделана выше), а для
     # истории: каждая перенесённая задача получает запись журнала с этим актором.
     moved = await issue_usage.move_issues_to_status(
@@ -449,6 +533,7 @@ async def move_issues(
         initiator=initiator,
         source=source,
         target=target,
+        resolution=resolution,
         queue=scope_queue,
     )
     return IssuesMoved(source=source, target=target, moved=moved)
@@ -476,6 +561,18 @@ async def _apply_status_category(
                 "requested": category.value,
                 "issues": used_by,
             },
+        )
+    workflows = await WorkflowRepository(session).count_status_usage(entry.id)
+    if workflows:
+        raise StatusCategoryLockedError(
+            details={
+                "ref": format_entry_ref(entry),
+                "category": entry.category.value,
+                "requested": category.value,
+                "reason": "workflows_exist",
+                "workflows": workflows,
+                "hint": "remove the status from those workflows first",
+            }
         )
     entry.category = category
 

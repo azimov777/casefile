@@ -13,6 +13,7 @@ from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.field import Field, FieldIssueType
 from app.db.models.issue import Issue, IssueFollower
 from app.db.models.queue import Queue, QueueIssueType
+from app.db.models.workflow import Transition, Workflow, WorkflowStatus
 
 __all__ = [
     "Actor",
@@ -31,4 +32,7 @@ __all__ = [
     "QueueIssueType",
     "Resolution",
     "Status",
+    "Transition",
+    "Workflow",
+    "WorkflowStatus",
 ]

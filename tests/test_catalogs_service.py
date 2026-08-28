@@ -31,8 +31,10 @@ from app.domain.errors import (
     StatusKeyTakenError,
     StatusNotFoundError,
 )
+from app.domain.workflows import TransitionDefinition
 from app.services import catalogs as service
 from app.services import queues as queues_service
+from app.services import workflow as workflow_service
 
 MakeIssue = Callable[..., Awaitable[object]]
 
@@ -339,15 +341,54 @@ async def test_issues_are_moved_between_statuses(
     db_session: AsyncSession,
     owner: Actor,
     issues_in_status: Callable[..., Awaitable[None]],
+    queue: Queue,
 ) -> None:
-    """Перенос — отдельный явный шаг, после которого удаление статуса проходит."""
+    """После переноса статус сначала убирается из живого графа, затем из каталога."""
     await issues_in_status(2, "in_progress")
     source = await service.get_entry(db_session, CatalogKind.STATUS, key="in_progress", queue=None)
     target = await service.get_entry(db_session, CatalogKind.STATUS, key="closed", queue=None)
+    resolution = await service.get_entry(
+        db_session,
+        CatalogKind.RESOLUTION,
+        key="done",
+        queue=None,
+    )
 
-    result = await service.move_issues(db_session, initiator=owner, source=source, target=target)
+    result = await service.move_issues(
+        db_session,
+        initiator=owner,
+        source=source,
+        target=target,
+        resolution=resolution,
+    )
 
     assert result.moved == 2
+    (view,) = await workflow_service.list_queue_workflows(
+        db_session,
+        queue,
+        initiator=owner,
+    )
+    await workflow_service.replace_workflow_graph(
+        db_session,
+        view.workflow,
+        initiator=owner,
+        name=view.workflow.name,
+        initial_status="open",
+        statuses=["open", "closed"],
+        transitions=[
+            TransitionDefinition(
+                name="Complete",
+                source_status="open",
+                target_status="closed",
+                requires_resolution=True,
+            ),
+            TransitionDefinition(
+                name="Reopen",
+                source_status="closed",
+                target_status="open",
+            ),
+        ],
+    )
     await service.delete_entry(db_session, source, CatalogKind.STATUS, initiator=owner)
     with pytest.raises(StatusNotFoundError):
         await service.get_entry(db_session, CatalogKind.STATUS, key="in_progress", queue=None)
@@ -402,6 +443,29 @@ async def test_move_narrowed_to_one_queue_accepts_a_local_target(
         name="Бэклог",
         queue=queue,
         category=StatusCategory.NEW,
+    )
+    (view,) = await workflow_service.list_queue_workflows(
+        db_session,
+        queue,
+        initiator=owner,
+    )
+    await workflow_service.add_status(
+        db_session,
+        view.workflow,
+        initiator=owner,
+        status_ref="TRK.backlog",
+        transitions=[
+            TransitionDefinition(
+                name="Move to backlog",
+                source_status="open",
+                target_status="TRK.backlog",
+            ),
+            TransitionDefinition(
+                name="Start backlog item",
+                source_status="TRK.backlog",
+                target_status="in_progress",
+            ),
+        ],
     )
 
     result = await service.move_issues(

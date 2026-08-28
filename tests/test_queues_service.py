@@ -22,9 +22,11 @@ from app.domain.errors import (
     QueueNotEmptyError,
     QueueNotFoundError,
 )
+from app.domain.workflows import TransitionDefinition
 from app.services import actors as actors_service
 from app.services import catalogs as catalogs_service
 from app.services import queues as service
+from app.services import workflow as workflow_service
 
 MakeIssue = Callable[..., Awaitable[object]]
 
@@ -173,6 +175,29 @@ async def test_local_status_can_become_the_queue_default(
         name="Бэклог",
         queue=queue,
         category=StatusCategory.NEW,
+    )
+    (view,) = await workflow_service.list_queue_workflows(
+        db_session,
+        queue,
+        initiator=owner,
+    )
+    await workflow_service.add_status(
+        db_session,
+        view.workflow,
+        initiator=owner,
+        status_ref="TRK.backlog",
+        transitions=[
+            TransitionDefinition(
+                name="Move to backlog",
+                source_status="open",
+                target_status="TRK.backlog",
+            ),
+            TransitionDefinition(
+                name="Start backlog item",
+                source_status="TRK.backlog",
+                target_status="in_progress",
+            ),
+        ],
     )
 
     updated = await service.update_queue(

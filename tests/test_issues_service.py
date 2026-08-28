@@ -243,17 +243,20 @@ async def test_change_carries_the_previous_and_the_new_value(
 ) -> None:
     """Из этих записей задача 06 соберёт журнал и полезную нагрузку события."""
     issue = await make_issue()
-    closed = await _entry(db_session, owner, CatalogKind.STATUS, "closed")
+    in_progress = await _entry(db_session, owner, CatalogKind.STATUS, "in_progress")
 
     mutation = await service.update_issue(
-        db_session, issue, initiator=owner, changes=service.IssueChanges(status=closed)
+        db_session,
+        issue,
+        initiator=owner,
+        changes=service.IssueChanges(status=in_progress),
     )
 
     (change,) = mutation.changes
     assert (change.field, change.before, change.after) == (
         IssueField.STATUS.value,
         "open",
-        "closed",
+        "in_progress",
     )
 
 

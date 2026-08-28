@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.catalogs import IssueTypeRead, ResolutionRead, StatusRead
 from app.api.schemas.common import unset_field
 from app.api.schemas.fields import FieldRead
+from app.api.schemas.workflows import WorkflowGraphRead
 from app.db.models.queue import Queue
 from app.domain.queues import MAX_QUEUE_KEY_LENGTH, QUEUE_KEY_PATTERN
 from app.services.catalogs import format_entry_ref
@@ -122,13 +123,6 @@ class QueueIssueTypesUpdate(BaseModel):
     )
 
 
-class QueueWorkflowStub(BaseModel):
-    """Заглушка воркфлоу очереди. Задача 07 заменит модель настоящим графом переходов."""
-
-    issue_type: str
-    name: str
-
-
 class QueueConfigRead(BaseModel):
     """Конфигурация очереди целиком — всё, что нужно, чтобы завести в ней задачу.
 
@@ -148,9 +142,9 @@ class QueueConfigRead(BaseModel):
             "applies to every type."
         ),
     )
-    workflows: list[QueueWorkflowStub] = Field(
+    workflows: list[WorkflowGraphRead] = Field(
         default_factory=list,
-        description="Always empty until workflows land (task 07)",
+        description="Editable workflow graphs, including issue type assignments and live impact",
     )
 
     @classmethod
@@ -161,4 +155,5 @@ class QueueConfigRead(BaseModel):
             statuses=[StatusRead.of(entry) for entry in config.statuses],
             resolutions=[ResolutionRead.of(entry) for entry in config.resolutions],
             fields=[FieldRead.of(field) for field in config.fields],
+            workflows=[WorkflowGraphRead.of(workflow) for workflow in config.workflows],
         )

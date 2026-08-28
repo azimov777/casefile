@@ -161,9 +161,9 @@ async def delete_status(
 ) -> Response:
     """Отклоняется, если в статусе стоят задачи или он выбран очередью по умолчанию.
 
-    Задачи переносят отдельным вызовом `POST /statuses/{ref}/move-issues`, после чего
-    удаление проходит. Ненужный, но используемый статус правильнее отключить
-    (`PATCH` с `is_active: false`): история изменений останется читаемой.
+    Задачи переносят отдельным вызовом `POST /statuses/{ref}/move-issues`, затем статус
+    убирают из воркфлоу. Ненужный, но используемый статус нельзя отключить до правки
+    графов: иначе переходы в него стали бы неисполняемыми.
     """
     entry = await queues_service.resolve_catalog_ref(
         session, CatalogKind.STATUS, status_ref, initiator=current_actor
@@ -186,11 +186,22 @@ async def move_status_issues(
     target = await queues_service.resolve_catalog_ref(
         session, CatalogKind.STATUS, payload.target_status, initiator=current_actor
     )
+    resolution = (
+        None
+        if payload.resolution is None
+        else await queues_service.resolve_catalog_ref(
+            session,
+            CatalogKind.RESOLUTION,
+            payload.resolution,
+            initiator=current_actor,
+        )
+    )
     moved = await service.move_issues(
         session,
         initiator=current_actor,
         source=source,
         target=target,
+        resolution=resolution,
         queue=await _scope(session, payload.queue),
     )
     return DataResponse[MoveIssuesResult](

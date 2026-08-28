@@ -175,6 +175,10 @@ class MoveIssuesRequest(BaseModel):
         examples=["TRK.backlog"],
         description="Reference of the status to move issues into",
     )
+    resolution: str | None = Field(
+        default=None,
+        description="Resolution reference, required when the target status is done",
+    )
     queue: str | None = Field(
         default=None,
         description=(

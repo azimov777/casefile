@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import lazyload, load_only, selectinload
 
 from app.db.models.actor import Actor
 from app.db.models.issue import Issue
@@ -98,6 +99,16 @@ class IssueRepository:
     async def count_in_queue(self, queue_id: uuid.UUID) -> int:
         return await self._count(Issue.queue_id == queue_id)
 
+    async def count_in_queue_by_type(
+        self,
+        queue_id: uuid.UUID,
+        issue_type_id: uuid.UUID,
+    ) -> int:
+        """Сколько задач конкретного типа живёт в очереди."""
+        return await self._count(
+            (Issue.queue_id == queue_id) & (Issue.issue_type_id == issue_type_id)
+        )
+
     async def count_with_field(self, field_ref: str) -> int:
         """Сколько задач имеет значение этого поля.
 
@@ -139,34 +150,66 @@ class IssueRepository:
         *,
         from_status_id: uuid.UUID,
         to_status_id: uuid.UUID,
+        resolution_id: uuid.UUID | None,
         queue_id: uuid.UUID | None = None,
-    ) -> list[tuple[uuid.UUID, str]]:
-        """Переносит задачи между статусами и возвращает идентификатор и ключ каждой.
+    ) -> list[tuple[uuid.UUID, str, str | None]]:
+        """Переносит задачи и возвращает снимок ключа и прежней резолюции каждой.
 
         Версия задачи увеличивается тем же запросом. Иначе клиент, прочитавший задачу
         до переноса, прошёл бы проверку оптимистичной блокировки и записал бы поверх
         нового статуса, ничего не заметив.
 
-        `RETURNING` появился в задаче 06: перенос обязан оставить запись в истории
-        каждой затронутой задачи, а для этого нужны их идентификаторы. Цена известна и
-        принята: перенос ста тысяч задач вернёт сто тысяч строк в память. Считать это
-        ограничением стоит с самого начала — перенос делается ради удаления статуса, и
-        такие объёмы в нём реальны.
+        Строки сначала блокируются и читаются: история обязана запомнить прежнюю
+        резолюцию, если перенос закрывает или переоткрывает задачи. Без `FOR UPDATE`
+        задача могла бы измениться между снимком и массовым UPDATE, и история описала
+        бы не то состояние. Цена известна и принята: перенос ста тысяч задач держит в
+        памяти сто тысяч снимков.
+
+        Снимок намеренно узкий: `load_only` и `lazyload("*")` оставляют от задачи ключ
+        и ссылку на резолюцию, а не полный объект с семью связями. Иначе один перенос
+        разворачивался бы в восемь запросов и полную материализацию задач, из которых
+        сценарию нужны два поля.
 
         `synchronize_session=False`: массовый `UPDATE` идёт мимо объектов сессии, и
         загруженные задачи после него держат старый статус. Для сценария переноса это
         безопасно — он отдаёт ключи, а не объекты, — но помнить об этом обязательно.
         """
-        statement = (
-            update(Issue)
+        source = (
+            select(Issue)
+            .options(
+                lazyload("*"),
+                load_only(Issue.key),
+                selectinload(Issue.resolution),
+            )
             .where(Issue.status_id == from_status_id)
-            .values(status_id=to_status_id, version=Issue.version + 1, updated_at=func.now())
-            .execution_options(synchronize_session=False)
         )
         if queue_id is not None:
-            statement = statement.where(Issue.queue_id == queue_id)
-        result = await self._session.execute(statement.returning(Issue.id, Issue.key))
-        return [(row.id, row.key) for row in result]
+            source = source.where(Issue.queue_id == queue_id)
+        issues = list((await self._session.scalars(source.with_for_update())).unique())
+        if not issues:
+            return []
+
+        snapshots = [
+            (
+                issue.id,
+                issue.key,
+                None if issue.resolution is None else issue.resolution.ref,
+            )
+            for issue in issues
+        ]
+        statement = (
+            update(Issue)
+            .where(Issue.id.in_([issue.id for issue in issues]))
+            .values(
+                status_id=to_status_id,
+                resolution_id=resolution_id,
+                version=Issue.version + 1,
+                updated_at=func.now(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self._session.execute(statement)
+        return snapshots
 
     async def _count(self, condition: Any) -> int:
         statement = select(func.count()).select_from(Issue).where(condition)
