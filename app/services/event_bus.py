@@ -160,7 +160,10 @@ subscribe = registry.subscribe
 #: Модули, объявляющие подписчиков. Воркер импортирует их перед стартом — иначе
 #: декораторы не выполнятся и реестр останется пустым. Задачи 13, 14 и 15 дописывают
 #: сюда свои модули; трогать воркер при этом не нужно.
-SUBSCRIBER_MODULES: tuple[str, ...] = ("app.services.event_log",)
+SUBSCRIBER_MODULES: tuple[str, ...] = (
+    "app.services.event_log",
+    "app.automation.subscriber",
+)
 
 
 def load_subscribers() -> tuple[str, ...]:
