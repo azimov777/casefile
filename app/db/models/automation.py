@@ -167,7 +167,7 @@ class AutomationRun(BaseModel):
     rule_key: Mapped[str] = mapped_column(String(MAX_RULE_KEY_LENGTH), nullable=False)
 
     #: Задача, по которой сработало правило. NULL у срабатывания, не привязанного к
-    #: задаче (событие доски или спринта), и у записи, чья задача уже удалена.
+    #: задаче (событие доски), и у записи, чья задача уже удалена.
     issue_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("issues.id", ondelete="SET NULL"),
         default=None,

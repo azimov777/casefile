@@ -96,7 +96,7 @@ class RuleContext:
     initiator: Actor
     params: BaseModel
     #: Задача, по которой работает правило. `None` у триггера на событие, не связанное
-    #: с задачей (доска, спринт, массовый перенос): такое правило работает с событием.
+    #: с задачей (доска, массовый перенос): такое правило работает с событием.
     issue: Issue | None = None
     #: Событие, вызвавшее срабатывание. `None` у автодействия и макроса.
     event: EventEnvelope | None = None
@@ -243,8 +243,8 @@ class RuleContext:
         """Меняет поля задачи через единую точку изменений.
 
         Именованные аргументы — поля `IssueChanges`: `summary`, `priority`, `assignee`,
-        `deadline`, `tags`, `values`, `project`, `sprint`. Непереданное поле не
-        трогается, `None` очищает то, что очищается.
+        `deadline`, `tags`, `values`, `project`. Непереданное поле не трогается, `None`
+        очищает то, что очищается.
         """
         target = issue or self.target
         mutation = await issues_service.update_issue(

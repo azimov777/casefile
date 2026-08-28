@@ -44,14 +44,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.sentinels import UNSET, is_set
 from app.db.models.actor import Actor
-from app.db.models.board import Sprint
 from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.models.issue import Issue
 from app.db.models.project import Project
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import IssueRepository, QueueRepository
-from app.domain.boards import SprintState
 from app.domain.catalogs import CatalogKind, StatusCategory
 from app.domain.errors import (
     ActorInactiveError,
@@ -62,7 +60,6 @@ from app.domain.errors import (
     IssueResolutionRequiredError,
     IssueVersionConflictError,
     ProjectArchivedError,
-    SprintStateError,
 )
 from app.domain.fields import apply_value_changes
 from app.domain.issues import (
@@ -117,10 +114,6 @@ class IssueChanges:
     #: — обёртки над этой же точкой, поэтому добавление задачи в проект попадает и в
     #: историю задачи, и в шину событий, как любая другая правка.
     project: Project | None = UNSET
-    #: Спринт, в который взята задача; `null` возвращает её в бэклог. Тоже обычное поле
-    #: задачи: сценарии спринта (`app/services/boards.py`) — обёртки над этой же точкой,
-    #: поэтому взятие задачи в спринт попадает и в её историю, и в шину событий.
-    sprint: Sprint | None = UNSET
     tags: Sequence[str] = UNSET
     values: Mapping[str, Any] = UNSET
     followers: Sequence[Actor] = UNSET
@@ -210,7 +203,6 @@ async def create_issue(
     tags: Sequence[str] = (),
     values: Mapping[str, Any] | None = None,
     project: Project | None = None,
-    sprint: Sprint | None = None,
 ) -> Issue:
     """Заводит задачу в очереди.
 
@@ -250,8 +242,6 @@ async def create_issue(
     _ensure_resolution_state(target_status, resolution)
     if project is not None and project.is_archived:
         raise ProjectArchivedError(details={"key": project.key, "reason": "cannot_accept_issues"})
-    if sprint is not None:
-        _ensure_sprint_accepts(sprint)
 
     # Все проверки — до выдачи номера. Порядок здесь и есть та самая экономия ключей:
     # доменные проверки дешёвые, но отказывают чаще всего, а номер, взятый и потерянный
@@ -287,7 +277,6 @@ async def create_issue(
         assignee=assignee,
         followers=watchers,
         project=project,
-        sprint=sprint,
         deadline=stored_deadline,
         tags=stored_tags,
         values=stored_values,
@@ -374,8 +363,6 @@ async def apply_issue_changes(
         raise ProjectArchivedError(
             details={"key": changes.project.key, "reason": "cannot_accept_issues"},
         )
-    if is_set(changes.sprint) and changes.sprint is not None:
-        _ensure_sprint_accepts(changes.sprint)
 
     recorded: list[IssueChange] = []
     _apply_scalars(issue, changes, recorded)
@@ -794,18 +781,6 @@ def _apply_scalars(issue: Issue, changes: IssueChanges, recorded: list[IssueChan
                 _planning_key(changes.project),
             )
             issue.project = changes.project
-    if is_set(changes.sprint):
-        after_id = None if changes.sprint is None else changes.sprint.id
-        if after_id != issue.sprint_id:
-            # У спринта ключа нет — в журнал уезжает идентификатор строкой. Название
-            # было бы читаемее, но оно меняется, и история ссылалась бы в никуда.
-            _record(
-                recorded,
-                IssueField.SPRINT,
-                _sprint_id(issue.sprint),
-                _sprint_id(changes.sprint),
-            )
-            issue.sprint = changes.sprint
 
 
 def _apply_tags(issue: Issue, changes: IssueChanges, recorded: list[IssueChange]) -> None:
@@ -906,28 +881,6 @@ def _actor_key(actor: Actor | None) -> str | None:
 
 def _planning_key(project: Project | None) -> str | None:
     return None if project is None else project.key
-
-
-def _sprint_id(sprint: Sprint | None) -> str | None:
-    return None if sprint is None else str(sprint.id)
-
-
-def _ensure_sprint_accepts(sprint: Sprint) -> None:
-    """Завершённый спринт новых задач не принимает.
-
-    Спринт после завершения — это запись о том, что команда успела сделать. Задача,
-    добавленная в него задним числом, переписала бы уже сделанный вывод, и заметить это
-    было бы нельзя: состав спринта нигде не зафиксирован отдельно от самих задач.
-    """
-    if sprint.state is SprintState.COMPLETED:
-        raise SprintStateError(
-            details={
-                "sprint": str(sprint.id),
-                "state": sprint.state.value,
-                "expected": [SprintState.PLANNED.value, SprintState.ACTIVE.value],
-                "reason": "cannot_accept_issues",
-            },
-        )
 
 
 def _moment(value: datetime | None) -> str | None:

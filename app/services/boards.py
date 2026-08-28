@@ -1,18 +1,17 @@
-"""Сценарии досок, колонок, спринтов и ранжирования карточек.
+"""Сценарии досок, колонок и ранжирования карточек.
 
-Один модуль на четыре сущности — как проекты и портфели в `app/services/projects.py`:
-доска не существует без колонок, спринт не существует без доски, а ранг не существует
-без обоих. Разложить их по файлам значило бы получить кольцо импортов ради красоты
-оглавления.
+Один модуль на три сущности — как проекты и портфели в `app/services/projects.py`:
+доска не существует без колонок, а ранг не существует без обоих. Разложить их по файлам
+значило бы получить кольцо импортов ради красоты оглавления.
 
 ## Доска ничего не отбирает сама
 
-Список задач колонки, бэклога и спринта — это **поиск с приклеенным условием**, ровно
-как список задач проекта (`app/services/projects.py`, `list_project_issues`). Доска
-добавляет к сохранённому фильтру условие по статусам колонки и по спринту, склеивает
-всё по `and` и отдаёт в `app/services/search.py`. Поэтому клиент может сузить выдачу
-своим запросом, но не может выйти за пределы доски, а язык запросов и выбор
-возвращаемых полей работают здесь ровно так же, как в общем поиске.
+Список задач колонки — это **поиск с приклеенным условием**, ровно как список задач
+проекта (`app/services/projects.py`, `list_project_issues`). Доска добавляет к
+сохранённому фильтру условие по статусам колонки, склеивает всё по `and` и отдаёт в
+`app/services/search.py`. Поэтому клиент может сузить выдачу своим запросом, но не
+может выйти за пределы доски, а язык запросов и выбор возвращаемых полей работают здесь
+ровно так же, как в общем поиске.
 
 Своего набора условий у доски нет и быть не должно: второй способ описать отбор
 разошёлся бы с языком запросов на первом же краевом случае, и одна и та же доска
@@ -44,7 +43,6 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,39 +50,29 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.sentinels import UNSET, is_set
 from app.db.models.actor import Actor
-from app.db.models.board import Board, BoardColumn, BoardColumnStatus, Sprint
+from app.db.models.board import Board, BoardColumn, BoardColumnStatus
 from app.db.models.catalog import Status
 from app.db.models.issue import Issue
 from app.db.models.saved_filter import SavedFilter
 from app.db.pagination import Page
-from app.db.repositories import BoardIssueRepository, BoardRepository, SprintRepository
+from app.db.repositories import BoardIssueRepository, BoardRepository
 from app.db.repositories.search import compile_filter
 from app.domain.boards import (
-    SprintState,
-    UnfinishedPolicy,
     ensure_column_capacity,
     ensure_column_count,
     ensure_column_statuses,
     validate_board_description,
     validate_board_name,
     validate_column_name,
-    validate_sprint_goal,
-    validate_sprint_name,
-    validate_sprint_period,
     validate_wip_limit,
 )
 from app.domain.errors import (
     BoardColumnNotFoundError,
-    BoardHasSprintsError,
     BoardNotFoundError,
-    BoardSprintActiveError,
     BoardStatusTakenError,
     InvalidBoardError,
     InvalidBoardMoveError,
     IssueNotOnBoardError,
-    SprintNotEmptyError,
-    SprintNotFoundError,
-    SprintStateError,
 )
 from app.domain.issues import IssueChange
 from app.domain.ranking import position_between
@@ -94,11 +82,6 @@ from app.services import issues as issues_service
 from app.services import search as search_service
 from app.services.catalogs import format_entry_ref
 from app.services.permissions import ensure_allowed
-
-#: Значение параметра «область спринта», означающее бэклог доски. Слово, а не пустая
-#: строка: параметр принимает ещё идентификатор спринта и `current`, и «пусто» в этом
-#: ряду читалось бы как «фильтра нет», то есть ровно наоборот.
-SPRINT_SCOPE_BACKLOG = "backlog"
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,36 +97,6 @@ class BoardChanges:
     name: str = UNSET
     description: str = UNSET
     saved_filter: SavedFilter = UNSET
-
-
-@dataclass(frozen=True, slots=True)
-class SprintChanges:
-    """Что меняем в спринте. Состояние сюда не входит.
-
-    Запуск и завершение — отдельные сценарии со своими проверками и своими событиями:
-    «поменять поле `state` на `active`» и «запустить спринт» должны быть одной
-    операцией, иначе спринт можно было бы завершить, не разобравшись с незакрытыми
-    задачами.
-    """
-
-    name: str = UNSET
-    goal: str = UNSET
-    start_date: date | None = UNSET
-    end_date: date | None = UNSET
-
-
-@dataclass(frozen=True, slots=True)
-class SprintCompletion:
-    """Итог завершения спринта: сам спринт и то, куда уехали незакрытые задачи.
-
-    Ключи задач возвращаются вызывающему, а не только уезжают в событие: клиент,
-    закрывший спринт, обязан увидеть список переехавшего сразу — второй раз его собрать
-    будет уже неоткуда, состав спринта нигде не хранится отдельно от самих задач.
-    """
-
-    sprint: Sprint
-    moved: tuple[str, ...] = ()
-    target: Sprint | None = None
 
 
 # --- Чтение ------------------------------------------------------------------------
@@ -198,42 +151,6 @@ def get_column(board: Board, column_id: uuid.UUID) -> BoardColumn:
     raise BoardColumnNotFoundError(details={"column": str(column_id), "board": str(board.id)})
 
 
-async def get_sprint_by_id(session: AsyncSession, sprint_id: uuid.UUID) -> Sprint:
-    """Спринт по идентификатору или `sprint_not_found`.
-
-    Зовётся ещё и поиском при разрешении `sprint: <uuid>`, поэтому прав не проверяет:
-    точка входа интерфейса — `read_sprint`.
-    """
-    sprint = await SprintRepository(session).get_by_id(sprint_id)
-    if sprint is None:
-        raise SprintNotFoundError(details={"id": str(sprint_id)})
-    return sprint
-
-
-async def read_sprint(session: AsyncSession, sprint_id: uuid.UUID, *, initiator: Actor) -> Sprint:
-    ensure_allowed(initiator, "sprint.read")
-    return await get_sprint_by_id(session, sprint_id)
-
-
-async def list_sprints(
-    session: AsyncSession,
-    *,
-    initiator: Actor,
-    board: Board | None = None,
-    state: SprintState | None = None,
-    limit: int | None = None,
-    cursor: str | None = None,
-) -> Page[Sprint]:
-    """Страница спринтов в порядке создания."""
-    ensure_allowed(initiator, "sprint.list")
-    return await SprintRepository(session).list_page(
-        board_id=None if board is None else board.id,
-        state=state,
-        limit=limit,
-        cursor=cursor,
-    )
-
-
 # --- Сборка доски ------------------------------------------------------------------
 
 
@@ -243,7 +160,6 @@ async def list_column_issues(
     column: BoardColumn,
     *,
     initiator: Actor,
-    sprint: str | None = None,
     query: str | None = None,
     fields: Sequence[str] = (),
     limit: int | None = None,
@@ -266,7 +182,7 @@ async def list_column_issues(
         board,
         initiator=initiator,
         query=query,
-        extra=[_column_term(column), *_sprint_terms(sprint)],
+        extra=[_column_term(column)],
         fields=fields,
     )
     page = await BoardIssueRepository(session).page(
@@ -276,81 +192,6 @@ async def list_column_issues(
         cursor=cursor,
     )
     return search_service.SearchOutcome(page=page, resolved=resolved)
-
-
-async def list_backlog(
-    session: AsyncSession,
-    board: Board,
-    *,
-    initiator: Actor,
-    query: str | None = None,
-    fields: Sequence[str] = (),
-    limit: int | None = None,
-    cursor: str | None = None,
-) -> search_service.SearchOutcome:
-    """Бэклог доски: задачи её фильтра, не взятые ни в один спринт, в порядке ранга.
-
-    По колонкам бэклог не раскладывается намеренно: колонки описывают ход работы, а в
-    бэклоге работа ещё не началась. Разложить его по статусам можно обычным запросом
-    (`?query=status: open`) — своего параметра для этого доска не заводит.
-    """
-    ensure_allowed(initiator, "board.read", target=board)
-    resolved = await _board_filter(
-        session,
-        board,
-        initiator=initiator,
-        query=query,
-        extra=_sprint_terms(SPRINT_SCOPE_BACKLOG),
-        fields=fields,
-    )
-    page = await BoardIssueRepository(session).page(
-        board.id,
-        compile_filter(resolved),
-        limit=limit,
-        cursor=cursor,
-    )
-    return search_service.SearchOutcome(page=page, resolved=resolved)
-
-
-async def list_sprint_issues(
-    session: AsyncSession,
-    sprint: Sprint,
-    *,
-    initiator: Actor,
-    query: str | None = None,
-    structured: Sequence[search_service.StructuredTerm] = (),
-    saved_filter_id: uuid.UUID | None = None,
-    sort: Sequence[str] = (),
-    fields: Sequence[str] = (),
-    limit: int | None = None,
-    cursor: str | None = None,
-) -> search_service.SearchOutcome:
-    """Задачи спринта — это поиск с приклеенным условием `sprint: <id>`.
-
-    В отличие от колонки, здесь работает обычная сортировка поиска, а не ранг доски:
-    список спринта отвечает на вопрос «что в него взято», а не «в каком порядке это
-    лежит на доске». Порядок карточек живёт на доске, и там он ранговый.
-
-    Фильтр доски сюда **не** приклеивается, и это осознанно: задача, взятая в спринт и
-    переставшая подходить под фильтр доски, всё равно в спринте — иначе она молча
-    исчезла бы из состава и не попала в перенос при завершении.
-    """
-    ensure_allowed(initiator, "sprint.read", target=sprint)
-    scope = search_service.StructuredTerm(
-        name=SystemField.SPRINT.value,
-        values=[str(sprint.id)],
-    )
-    return await search_service.search_issues(
-        session,
-        initiator=initiator,
-        query=query,
-        structured=[scope, *structured],
-        saved_filter_id=saved_filter_id,
-        sort=sort,
-        fields=fields,
-        limit=limit,
-        cursor=cursor,
-    )
 
 
 # --- Доска -------------------------------------------------------------------------
@@ -454,20 +295,11 @@ async def update_board(
 async def delete_board(session: AsyncSession, board: Board, *, initiator: Actor) -> None:
     """Удаляет доску вместе с колонками и рангами.
 
-    Ранги уезжают каскадом, и это правильно: они — способ смотреть, а не данные о
-    работе. Спринты каскадом уносить нельзя — они хранят принадлежность задач, поэтому
-    доска со спринтами удаление отклоняет.
+    Задачи не трогаются вовсе: доска отбирает их фильтром и владеть ими не может.
+    Каскадом уезжают только колонки и ранги, и это правильно — они способ смотреть, а не
+    данные о работе.
     """
     ensure_allowed(initiator, "board.delete", target=board)
-    sprints = await BoardRepository(session).count_sprints(board.id)
-    if sprints:
-        raise BoardHasSprintsError(
-            details={
-                "board": str(board.id),
-                "sprints": sprints,
-                "hint": "delete the sprints first",
-            },
-        )
     # Событие собирается **до** удаления: после него снимок строить уже не из чего.
     await events_service.record_board_change(
         session,
@@ -747,300 +579,6 @@ async def rank_issue(
     return position
 
 
-# --- Спринты -----------------------------------------------------------------------
-
-
-async def create_sprint(
-    session: AsyncSession,
-    *,
-    initiator: Actor,
-    board: Board,
-    name: str,
-    goal: str = "",
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> Sprint:
-    """Заводит спринт доски в состоянии «планируется».
-
-    Сразу активным спринт не заводится: запуск — отдельное решение команды, и у доски
-    активный спринт не более одного. Слить создание с запуском значило бы получать
-    отказ «уже есть активный» на попытку **запланировать** следующий.
-    """
-    ensure_allowed(initiator, "sprint.create", target=board)
-    validate_sprint_period(start_date, end_date)
-    sprint = Sprint(
-        board=board,
-        name=validate_sprint_name(name),
-        goal=validate_sprint_goal(goal),
-        start_date=start_date,
-        end_date=end_date,
-        state=SprintState.PLANNED,
-    )
-    await SprintRepository(session).add(sprint)
-    await events_service.record_sprint_change(
-        session,
-        sprint,
-        initiator=initiator,
-        action="sprint.create",
-    )
-    return sprint
-
-
-async def update_sprint(
-    session: AsyncSession,
-    sprint: Sprint,
-    *,
-    initiator: Actor,
-    changes: SprintChanges,
-) -> tuple[Sprint, tuple[IssueChange, ...]]:
-    """Единая точка изменения спринта: применяются только переданные поля.
-
-    Править можно и активный, и завершённый спринт: это исправление записи, а не
-    продолжение работы в нём. Так же ведёт себя архивный проект.
-    """
-    ensure_allowed(initiator, "sprint.update", target=sprint)
-
-    recorded: list[IssueChange] = []
-    if is_set(changes.name):
-        name = validate_sprint_name(changes.name)
-        if name != sprint.name:
-            recorded.append(IssueChange(field="name", before=sprint.name, after=name))
-            sprint.name = name
-    if is_set(changes.goal):
-        goal = validate_sprint_goal(changes.goal)
-        if goal != sprint.goal:
-            recorded.append(IssueChange(field="goal", before=sprint.goal, after=goal))
-            sprint.goal = goal
-
-    # Период проверяется целиком, а не по одной границе: клиент вправе прислать только
-    # `end_date`, и сравнивать её надо с той датой начала, которая останется после
-    # правки, а не с той, что была до неё.
-    start = changes.start_date if is_set(changes.start_date) else sprint.start_date
-    end = changes.end_date if is_set(changes.end_date) else sprint.end_date
-    validate_sprint_period(start, end)
-    if is_set(changes.start_date) and changes.start_date != sprint.start_date:
-        recorded.append(
-            IssueChange(
-                field="start_date",
-                before=_day(sprint.start_date),
-                after=_day(changes.start_date),
-            )
-        )
-        sprint.start_date = changes.start_date
-    if is_set(changes.end_date) and changes.end_date != sprint.end_date:
-        recorded.append(
-            IssueChange(
-                field="end_date",
-                before=_day(sprint.end_date),
-                after=_day(changes.end_date),
-            )
-        )
-        sprint.end_date = changes.end_date
-
-    if not recorded:
-        return sprint, ()
-
-    await SprintRepository(session).flush()
-    await events_service.record_sprint_change(
-        session,
-        sprint,
-        initiator=initiator,
-        action="sprint.update",
-        changes=tuple(recorded),
-    )
-    return sprint, tuple(recorded)
-
-
-async def start_sprint(session: AsyncSession, sprint: Sprint, *, initiator: Actor) -> Sprint:
-    """Запускает запланированный спринт.
-
-    Не идемпотентно, в отличие от архивации проекта: повторный запуск означает, что
-    клиент видит не то состояние, а тихий успех скрыл бы от него уже идущий спринт —
-    возможно, чужой. Запустить завершённый нельзя вовсе: возврата из `completed` нет,
-    незакрытые задачи уже уехали, и восстанавливать их состав неоткуда.
-    """
-    ensure_allowed(initiator, "sprint.start", target=sprint)
-    _ensure_state(sprint, SprintState.PLANNED, reason="cannot_start")
-
-    active = await SprintRepository(session).active_of_board(sprint.board_id)
-    if active is not None:
-        raise BoardSprintActiveError(
-            details={
-                "board": str(sprint.board_id),
-                "active_sprint": str(active.id),
-                "reason": "complete_it_first",
-            },
-        )
-
-    before = sprint.state.value
-    sprint.state = SprintState.ACTIVE
-    sprint.started_at = datetime.now(UTC)
-    await SprintRepository(session).flush()
-    await events_service.record_sprint_change(
-        session,
-        sprint,
-        initiator=initiator,
-        action="sprint.start",
-        changes=(IssueChange(field="state", before=before, after=sprint.state.value),),
-    )
-    return sprint
-
-
-async def complete_sprint(
-    session: AsyncSession,
-    sprint: Sprint,
-    *,
-    initiator: Actor,
-    unfinished: UnfinishedPolicy,
-    target: Sprint | None = None,
-) -> SprintCompletion:
-    """Завершает активный спринт, уводя незакрытые задачи туда, куда сказал вызывающий.
-
-    Выбор принимает вызывающий, а не система: «перенести в следующий спринт» и «вернуть
-    в бэклог» — разные способы работать, и молчаливое умолчание однажды растащило бы
-    чужой спринт. Значения по умолчанию у `unfinished` поэтому нет.
-
-    Закрытые задачи остаются в спринте: он и есть запись о том, что команда успела.
-
-    Каждая незакрытая задача проходит через единую точку изменения — с записью в
-    историю, ростом версии и событием. Цена названа прямо: спринт на двести незакрытых
-    задач даст двести записей истории и двести событий. Массовый `UPDATE` был бы
-    дешевле и оставил бы дыру в истории ровно там, где потом спросят «куда делась моя
-    задача».
-    """
-    ensure_allowed(initiator, "sprint.complete", target=sprint)
-    _ensure_state(sprint, SprintState.ACTIVE, reason="cannot_complete")
-    destination = _completion_target(sprint, unfinished, target)
-
-    moved: list[str] = []
-    for issue in await SprintRepository(session).unfinished_issues(sprint.id):
-        mutation = await issues_service.apply_issue_changes(
-            session,
-            issue,
-            initiator=initiator,
-            changes=issues_service.IssueChanges(sprint=destination),
-            action="issue.set_sprint",
-        )
-        if mutation.changed:
-            moved.append(issue.key)
-
-    before = sprint.state.value
-    sprint.state = SprintState.COMPLETED
-    sprint.completed_at = datetime.now(UTC)
-    await SprintRepository(session).flush()
-    await events_service.record_sprint_change(
-        session,
-        sprint,
-        initiator=initiator,
-        action="sprint.complete",
-        changes=(
-            IssueChange(field="state", before=before, after=sprint.state.value),
-            IssueChange(
-                field="unfinished",
-                before=None,
-                after=None if destination is None else str(destination.id),
-            ),
-        ),
-        issues=moved,
-    )
-    return SprintCompletion(sprint=sprint, moved=tuple(moved), target=destination)
-
-
-async def delete_sprint(session: AsyncSession, sprint: Sprint, *, initiator: Actor) -> None:
-    """Удаляет пустой спринт.
-
-    Существует ради опечатки при планировании, а не ради уборки истории: спринт с
-    задачами удаление отклоняет, потому что унесло бы их принадлежность молча, а
-    активный — потому что это отмена идущей работы, а не исправление записи.
-    """
-    ensure_allowed(initiator, "sprint.delete", target=sprint)
-    if sprint.state is SprintState.ACTIVE:
-        raise SprintStateError(
-            details={
-                "sprint": str(sprint.id),
-                "state": sprint.state.value,
-                "expected": [SprintState.PLANNED.value, SprintState.COMPLETED.value],
-                "reason": "cannot_delete",
-            },
-        )
-    issues = await SprintRepository(session).count_issues(sprint.id)
-    if issues:
-        raise SprintNotEmptyError(
-            details={
-                "sprint": str(sprint.id),
-                "issues": issues,
-                "hint": "take the issues out of the sprint first",
-            },
-        )
-    # Событие собирается **до** удаления: после него снимок строить уже не из чего.
-    await events_service.record_sprint_change(
-        session,
-        sprint,
-        initiator=initiator,
-        action="sprint.delete",
-    )
-    await SprintRepository(session).delete(sprint)
-
-
-async def add_sprint_issues(
-    session: AsyncSession,
-    sprint: Sprint,
-    *,
-    initiator: Actor,
-    issues: Sequence[Issue],
-) -> list[issues_service.IssueMutation]:
-    """Берёт задачи в спринт. Задача, уже взятая в него, изменения не даёт.
-
-    Каждая задача проходит через единую точку изменения, поэтому у каждой растёт версия
-    и появляется запись в истории. Клиент, державший версию для оптимистичной
-    блокировки, обязан задачу перечитать.
-
-    Задача из **другого** спринта переезжает молча — как и при смене проекта: отказ
-    означал бы обязательный двухшаговый ритуал «сначала вынь, потом положи», а переезд
-    виден в истории задачи как обычное изменение поля.
-    """
-    return [
-        await issues_service.apply_issue_changes(
-            session,
-            issue,
-            initiator=initiator,
-            changes=issues_service.IssueChanges(sprint=sprint),
-            action="issue.set_sprint",
-        )
-        for issue in issues
-    ]
-
-
-async def remove_sprint_issue(
-    session: AsyncSession,
-    sprint: Sprint,
-    *,
-    initiator: Actor,
-    issue: Issue,
-) -> issues_service.IssueMutation:
-    """Возвращает задачу из спринта в бэклог.
-
-    Задача, взятая в **другой** спринт, не трогается: убрать её отсюда нельзя, потому
-    что здесь её нет. Отказ честнее молчания — иначе клиент, перепутавший спринт,
-    получил бы `204` и уверенность, что задача вынута.
-    """
-    if issue.sprint_id != sprint.id:
-        raise SprintNotFoundError(
-            details={
-                "id": str(sprint.id),
-                "issue": issue.key,
-                "reason": "issue_not_in_sprint",
-            },
-        )
-    return await issues_service.apply_issue_changes(
-        session,
-        issue,
-        initiator=initiator,
-        changes=issues_service.IssueChanges(sprint=None),
-        action="issue.set_sprint",
-    )
-
-
 # --- Внутреннее --------------------------------------------------------------------
 
 
@@ -1081,21 +619,6 @@ def _column_term(column: BoardColumn) -> search_service.StructuredTerm:
         name=SystemField.STATUS.value,
         values=[format_entry_ref(link.status) for link in column.status_links],
     )
-
-
-def _sprint_terms(scope: str | None) -> list[search_service.StructuredTerm]:
-    """Условие по спринту из параметра области.
-
-    Словарь значений маленький и закрытый: `backlog` — задачи вне спринтов, `current` —
-    активный спринт доски, идентификатор — конкретный спринт, ничего — все задачи
-    фильтра. `backlog` превращается в `sprint: empty()`, потому что «значения нет» в
-    проекте выражается ровно так и вторым способом не выражается.
-    """
-    if scope is None:
-        return []
-    if scope.strip().lower() == SPRINT_SCOPE_BACKLOG:
-        return [search_service.StructuredTerm(name=SystemField.SPRINT.value, values=[None])]
-    return [search_service.StructuredTerm(name=SystemField.SPRINT.value, values=[scope])]
 
 
 async def _neighbour_positions(
@@ -1268,59 +791,6 @@ def _renumber(board: Board) -> None:
         column.position = position
 
 
-def _completion_target(
-    sprint: Sprint,
-    unfinished: UnfinishedPolicy,
-    target: Sprint | None,
-) -> Sprint | None:
-    """Куда уводить незакрытые задачи, с проверкой самого целевого спринта."""
-    if unfinished is UnfinishedPolicy.BACKLOG:
-        return None
-    if target is None:
-        raise InvalidBoardError(
-            details={"field": "sprint", "reason": "required", "policy": unfinished.value},
-        )
-    if target.id == sprint.id:
-        raise InvalidBoardError(
-            details={"field": "sprint", "reason": "same_sprint", "sprint": str(sprint.id)},
-        )
-    if target.board_id != sprint.board_id:
-        raise InvalidBoardError(
-            details={
-                "field": "sprint",
-                "reason": "other_board",
-                "board": str(sprint.board_id),
-                "sprint": str(target.id),
-            },
-        )
-    if target.state is SprintState.COMPLETED:
-        raise SprintStateError(
-            details={
-                "sprint": str(target.id),
-                "state": target.state.value,
-                "expected": [SprintState.PLANNED.value, SprintState.ACTIVE.value],
-                "reason": "cannot_accept_issues",
-            },
-        )
-    return target
-
-
-def _ensure_state(sprint: Sprint, expected: SprintState, *, reason: str) -> None:
-    if sprint.state is not expected:
-        raise SprintStateError(
-            details={
-                "sprint": str(sprint.id),
-                "state": sprint.state.value,
-                "expected": [expected.value],
-                "reason": reason,
-            },
-        )
-
-
 def _with(changes: issues_service.IssueChanges, **fields: Any) -> issues_service.IssueChanges:
     """Дописывает поля в набор изменений задачи, не собирая его заново."""
     return replace(changes, **fields)
-
-
-def _day(value: date | None) -> str | None:
-    return None if value is None else value.isoformat()

@@ -32,7 +32,7 @@
 полезную нагрузку — единственный канал между изменением и его последствием.
 
 Передавать её параметром пришлось бы через каждый сценарий, который правилу разрешено
-звать: задачи, комментарии, связи, чеклист, спринты. Пять сигнатур сегодня и все
+звать: задачи, комментарии, связи, чеклист, доски. Пять сигнатур сегодня и все
 будущие — ради значения, которое на всём протяжении вызова одно и то же. Поэтому здесь
 стоит контекстная переменная, а движок автоматики оборачивает в неё выполнение правила
 (`automation_cause`). Это ровно тот случай, для которого `contextvars` и существует:
@@ -44,7 +44,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -56,7 +56,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.sentinels import UNSET, UnsetType, is_set
 from app.db.models.actor import Actor
-from app.db.models.board import Board, Sprint
+from app.db.models.board import Board
 from app.db.models.catalog import Status
 from app.db.models.checklist import ChecklistItem
 from app.db.models.comment import Comment
@@ -568,7 +568,7 @@ def planning_snapshot(entity: Project | Portfolio) -> dict[str, Any]:
     }
 
 
-# --- Запись: доски и спринты ------------------------------------------------------
+# --- Запись: доски ----------------------------------------------------------------
 
 
 async def record_board_change(
@@ -640,38 +640,6 @@ async def record_issue_ranked(
     )
 
 
-async def record_sprint_change(
-    session: AsyncSession,
-    sprint: Sprint,
-    *,
-    initiator: Actor,
-    action: str,
-    changes: tuple[IssueChange, ...] = (),
-    issues: Sequence[str] = (),
-) -> OutboxEvent:
-    """Событие о спринте.
-
-    `issues` заполняется только у завершения: ключи задач, которые ушли из спринта, и
-    то, куда они ушли, лежат в `changes`. Без списка подписчик знал бы, что спринт
-    закрыт, но не знал бы, что именно переехало, — а перечитать это потом уже неоткуда:
-    состав спринта нигде не хранится отдельно от самих задач.
-    """
-    return await _publish(
-        session,
-        event_type=event_type_for(action),
-        object_type=ObjectType.SPRINT,
-        object_id=sprint.id,
-        object_key=str(sprint.id),
-        actor=initiator,
-        payload={
-            "sprint": sprint_snapshot(sprint),
-            "changes": encode_changes(changes),
-            "fields": list(changed_fields(changes)),
-            "issues": list(issues),
-        },
-    )
-
-
 def board_snapshot(board: Board) -> dict[str, Any]:
     """Доска в JSON-виде для полезной нагрузки события.
 
@@ -695,23 +663,6 @@ def board_snapshot(board: Board) -> dict[str, Any]:
         ],
         "created_at": _moment(board.created_at),
         "updated_at": _moment(board.updated_at),
-    }
-
-
-def sprint_snapshot(sprint: Sprint) -> dict[str, Any]:
-    """Спринт в JSON-виде для полезной нагрузки события."""
-    return {
-        "id": str(sprint.id),
-        "board": str(sprint.board_id),
-        "name": sprint.name,
-        "goal": sprint.goal,
-        "start_date": _day(sprint.start_date),
-        "end_date": _day(sprint.end_date),
-        "state": sprint.state.value,
-        "started_at": _moment(sprint.started_at),
-        "completed_at": _moment(sprint.completed_at),
-        "created_at": _moment(sprint.created_at),
-        "updated_at": _moment(sprint.updated_at),
     }
 
 
@@ -838,9 +789,6 @@ def issue_snapshot(issue: Issue) -> dict[str, Any]:
         # Проект — ключом, как очередь и акторы: подписчику нужен адрес, а не строка
         # таблицы, которая к моменту доставки могла измениться.
         "project": None if issue.project is None else issue.project.key,
-        # Спринт — идентификатором строкой: ключа у него нет, адресуют его именно так,
-        # и название, положенное сюда, стало бы ссылкой, которая однажды укажет в никуда.
-        "sprint": None if issue.sprint is None else str(issue.sprint_id),
         "values": dict(issue.values),
         "version": issue.version,
         "created_at": _moment(issue.created_at),

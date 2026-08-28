@@ -20,7 +20,7 @@
 ## Порядок разрешения имени
 
 1. Системное поле (`app/domain/search.py`) — разрешается в колонку.
-2. Зарезервированное системой имя без поиска (`sprint`, `links`) — отказ с причиной.
+2. Зарезервированное системой имя без поиска (`links`, `comments`) — отказ с причиной.
 3. Реестр полей — кастомное поле, значение в `values JSONB`.
 
 Порядок явный. Реестр уже не даёт завести кастомное поле с ключом системного, поэтому
@@ -85,7 +85,6 @@ from app.domain.search import (
     SearchValue,
     SearchValueKind,
     SortTerm,
-    SprintScope,
     SystemField,
     SystemFieldSpec,
     SystemTerm,
@@ -478,8 +477,6 @@ async def _resolve_system_value(
             return (await _queue(session, condition, value)).id
         case SearchValueKind.PROJECT_KEY:
             return (await _project(session, condition, value)).id
-        case SearchValueKind.SPRINT_REF:
-            return await _sprint(session, condition, value)
         case SearchValueKind.CATALOG_REF:
             entry = await _catalog_entry(session, condition, spec, value, initiator=initiator)
             return entry.id
@@ -525,45 +522,6 @@ async def _project(session: AsyncSession, condition: Condition, value: SearchVal
         return await projects_service.get_project_by_key(session, key)
     except AppError as exc:
         raise _value_rejected(condition, value, exc, key) from exc
-
-
-async def _sprint(
-    session: AsyncSession,
-    condition: Condition,
-    value: SearchValue,
-) -> uuid.UUID | SprintScope:
-    """Спринт по идентификатору либо маркер «текущий».
-
-    `current` не разрешается в один спринт намеренно: активный спринт свой у каждой
-    доски, и подстановка одного идентификатора превратила бы общий фильтр в фильтр
-    случайной доски. Маркер доезжает до компилятора и становится подзапросом — так же,
-    как категория статуса.
-
-    Импорт внутри функции — по той же причине, что у проектов выше: сценарии досок
-    опираются на этот модуль, и импорт на уровне модуля замкнул бы их в цикл.
-    """
-    from app.services import boards as boards_service
-
-    raw = _plain_text(condition, value)
-    if raw.strip().lower() == SprintScope.CURRENT.value:
-        return SprintScope.CURRENT
-    try:
-        sprint_id = uuid.UUID(raw.strip())
-    except ValueError as exc:
-        raise SearchValueInvalidError(
-            details={
-                "field": condition.name,
-                "position": value.position,
-                "value": raw,
-                "reason": "invalid_sprint_ref",
-                "expected": "a sprint UUID or the word `current`",
-            },
-        ) from exc
-    try:
-        sprint = await boards_service.get_sprint_by_id(session, sprint_id)
-    except AppError as exc:
-        raise _value_rejected(condition, value, exc, raw) from exc
-    return sprint.id
 
 
 async def _catalog_entry(
