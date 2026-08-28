@@ -35,14 +35,19 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.sentinels import UNSET, UnsetType, is_set
 from app.db.models.actor import Actor
 from app.db.models.catalog import Status
+from app.db.models.checklist import ChecklistItem
+from app.db.models.comment import Comment
 from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.issue import Issue
 from app.db.models.link import IssueLink
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import ChangelogRepository, OutboxRepository
+from app.domain.checklists import CHECKLIST_CHANGE_FIELD
+from app.domain.comments import COMMENT_EXCERPT_LENGTH, COMMENTS_CHANGE_FIELD
 from app.domain.events import (
     EventType,
     ObjectType,
@@ -313,6 +318,130 @@ async def record_link_deleted(
     return await _record_link_change(session, link, initiator=initiator, removed=True)
 
 
+# --- Запись: обсуждение и чеклист -------------------------------------------------
+
+
+async def record_comment_created(
+    session: AsyncSession,
+    comment: Comment,
+    *,
+    issue: Issue,
+    initiator: Actor,
+) -> ChangelogEntry:
+    """Запись «комментарий добавлен» в историю задачи и событие `comment.created`."""
+    return await _record_comment_change(
+        session,
+        comment,
+        issue=issue,
+        initiator=initiator,
+        action="comment.create",
+        before=None,
+        previous=None,
+    )
+
+
+async def record_comment_updated(
+    session: AsyncSession,
+    comment: Comment,
+    *,
+    issue: Issue,
+    initiator: Actor,
+    previous_body: str,
+    previous_mentions: list[str],
+) -> ChangelogEntry:
+    """Запись о правке комментария и событие `comment.updated`.
+
+    Прежний текст передаёт сценарий, а не читает эта функция: к моменту вызова
+    комментарий уже изменён, и «было» из него не достать. Полный прежний текст уходит
+    в событие — подписчик, ведущий свою копию ленты, обязан знать, что именно
+    заменилось, — а в журнал попадает только отрывок.
+    """
+    return await _record_comment_change(
+        session,
+        comment,
+        issue=issue,
+        initiator=initiator,
+        action="comment.update",
+        before=_comment_value(comment, body=previous_body),
+        previous={"body": previous_body, "mentions": list(previous_mentions)},
+    )
+
+
+async def record_comment_deleted(
+    session: AsyncSession,
+    comment: Comment,
+    *,
+    issue: Issue,
+    initiator: Actor,
+    previous_body: str,
+    previous_mentions: list[str],
+) -> ChangelogEntry:
+    """Запись об удалении комментария и событие `comment.deleted`.
+
+    Удаление мягкое, но в журнале «стало» пусто: текста в ленте больше нет, и это то
+    самое изменение, о котором читатель истории спрашивает. Сам комментарий при этом
+    остаётся плашкой — дыры в обсуждении не образуется.
+    """
+    return await _record_comment_change(
+        session,
+        comment,
+        issue=issue,
+        initiator=initiator,
+        action="comment.delete",
+        before=_comment_value(comment, body=previous_body),
+        after=None,
+        previous={"body": previous_body, "mentions": list(previous_mentions)},
+    )
+
+
+async def record_checklist_change(
+    session: AsyncSession,
+    item: ChecklistItem,
+    *,
+    issue: Issue,
+    initiator: Actor,
+    action: str,
+    before: dict[str, Any] | None,
+    removed: bool = False,
+) -> ChangelogEntry:
+    """Запись об изменении пункта чеклиста и событие соответствующего типа.
+
+    Одна функция на все шесть действий с пунктом, а не шесть почти одинаковых: тип
+    события выводится из действия таблицей `ACTION_EVENTS`, а форма записи у всех
+    случаев общая — снимок пункта до и после. Отдельные обёртки лишь повторяли бы
+    друг друга и однажды разошлись бы формой значения.
+
+    Снимок «до» собирает сценарий **перед** изменением (`checklist_value`): после
+    присваивания прежнее состояние взять уже неоткуда.
+    """
+    event_type = event_type_for(action)
+    after = None if removed else checklist_value(item)
+    entry = await _write_changelog(
+        session,
+        issue=issue,
+        actor=initiator,
+        event_type=event_type,
+        changes=(IssueChange(field=CHECKLIST_CHANGE_FIELD, before=before, after=after),),
+    )
+    await _publish(
+        session,
+        event_type=event_type,
+        object_type=ObjectType.CHECKLIST_ITEM,
+        object_id=item.id,
+        object_key=f"{issue.key}:{item.id}",
+        actor=initiator,
+        payload={
+            "item": checklist_snapshot(item, issue=issue),
+            # Состояние до изменения целиком: подписчик, которому нужен переход
+            # «не выполнен → выполнен», иначе полез бы за ним в базу и прочитал бы
+            # состояние на момент доставки, а не на момент события.
+            "previous": before,
+            "issue": issue_snapshot(issue),
+        },
+    )
+    return entry
+
+
 # --- Чтение -----------------------------------------------------------------------
 
 
@@ -438,6 +567,119 @@ def issue_snapshot(issue: Issue) -> dict[str, Any]:
         "created_at": _moment(issue.created_at),
         "updated_at": _moment(issue.updated_at),
     }
+
+
+def comment_snapshot(comment: Comment, *, issue: Issue) -> dict[str, Any]:
+    """Комментарий в JSON-виде для полезной нагрузки события.
+
+    Повторяет форму ответа API, но живёт здесь по общему правилу: `services` не имеет
+    права зависеть от `api`, а событие обязано выглядеть одинаково для подписчика
+    внутри процесса и для вебхука наружу.
+
+    У удалённого комментария `body` пуст, а не отсутствует: строка остаётся плашкой в
+    ленте, и подписчик должен видеть именно это состояние.
+    """
+    return {
+        "id": str(comment.id),
+        "issue": issue.key,
+        "author": comment.author.key,
+        "body": comment.body,
+        "mentions": list(comment.mentions),
+        "is_deleted": comment.is_deleted,
+        "created_at": _moment(comment.created_at),
+        "edited_at": _moment(comment.edited_at),
+        "deleted_at": _moment(comment.deleted_at),
+    }
+
+
+def checklist_snapshot(item: ChecklistItem, *, issue: Issue) -> dict[str, Any]:
+    """Пункт чеклиста в JSON-виде для полезной нагрузки события."""
+    return {
+        "id": str(item.id),
+        "issue": issue.key,
+        "text": item.text,
+        "is_done": item.is_done,
+        "checked_by": None if item.checked_by is None else item.checked_by.key,
+        "checked_at": _moment(item.checked_at),
+        "assignee": None if item.assignee is None else item.assignee.key,
+        "deadline": _moment(item.deadline),
+        "position": item.position,
+    }
+
+
+def checklist_value(item: ChecklistItem) -> dict[str, Any]:
+    """Компактный снимок пункта для журнала изменений задачи.
+
+    Журналу достаточно того, по чему читатель истории узнаёт изменение: что за пункт,
+    что в нём написано, отмечен ли он и где стоит. Исполнитель и дедлайн пункта
+    остаются в событии — в истории задачи они превратили бы одну строку про галочку в
+    карточку подзадачи.
+    """
+    return {
+        "item": str(item.id),
+        "text": item.text,
+        "done": item.is_done,
+        "position": item.position,
+    }
+
+
+def _comment_value(comment: Comment, *, body: str) -> dict[str, Any]:
+    """Компактный снимок комментария для журнала изменений задачи.
+
+    В журнал идёт отрывок, а не весь текст: история задачи читается страницами, и
+    несколько правок комментария на 64 килобайта сделали бы её неподъёмной. Полный
+    текст при этом никуда не пропадает — он лежит в самой ленте (удаление мягкое) и
+    целиком уходит в событие.
+    """
+    excerpt = body[:COMMENT_EXCERPT_LENGTH]
+    if len(body) > COMMENT_EXCERPT_LENGTH:
+        excerpt = f"{excerpt}…"
+    return {"comment": str(comment.id), "excerpt": excerpt}
+
+
+async def _record_comment_change(
+    session: AsyncSession,
+    comment: Comment,
+    *,
+    issue: Issue,
+    initiator: Actor,
+    action: str,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | UnsetType | None = UNSET,
+    previous: dict[str, Any] | None,
+) -> ChangelogEntry:
+    """Общее тело записи для добавления, правки и удаления комментария.
+
+    Различие ровно в двух вещах: снимок «до» и снимок «после». `after` по умолчанию
+    считается из текущего состояния комментария — и только удаление передаёт `None`
+    явно, потому что строка после него остаётся, а текста в ленте уже нет.
+    """
+    event_type = event_type_for(action)
+    resolved_after = _comment_value(comment, body=comment.body) if not is_set(after) else after
+    entry = await _write_changelog(
+        session,
+        issue=issue,
+        actor=initiator,
+        event_type=event_type,
+        changes=(IssueChange(field=COMMENTS_CHANGE_FIELD, before=before, after=resolved_after),),
+    )
+    await _publish(
+        session,
+        event_type=event_type,
+        object_type=ObjectType.COMMENT,
+        object_id=comment.id,
+        object_key=f"{issue.key}:{comment.id}",
+        actor=initiator,
+        payload={
+            "comment": comment_snapshot(comment, issue=issue),
+            # Прежний текст и прежний состав упоминаний. Нужны движку уведомлений:
+            # упомянутый в старой редакции и упомянутый в новой — разные адресаты, и
+            # разницу считает подписчик, а не мы за него.
+            "previous": previous,
+            "issue": issue_snapshot(issue),
+        },
+    )
+    return entry
 
 
 async def _write_changelog(
