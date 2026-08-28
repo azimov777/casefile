@@ -17,6 +17,7 @@ from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.field import Field, FieldIssueType
 from app.db.models.issue import Issue, IssueFollower
 from app.db.models.link import IssueLink
+from app.db.models.notification import Notification, Subscription
 from app.db.models.project import (
     PlanningEntityMixin,
     Portfolio,
@@ -49,6 +50,7 @@ __all__ = [
     "IssueLink",
     "IssueRank",
     "IssueType",
+    "Notification",
     "OutboxEvent",
     "PlanningEntityMixin",
     "Portfolio",
@@ -61,6 +63,7 @@ __all__ = [
     "SavedFilter",
     "Sprint",
     "Status",
+    "Subscription",
     "Transition",
     "Workflow",
     "WorkflowStatus",

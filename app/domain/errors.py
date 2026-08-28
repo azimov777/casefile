@@ -981,3 +981,59 @@ class AutomationParamsInvalidError(ValidationError):
 
     code = "automation_params_invalid"
     message = "Automation rule parameters are invalid"
+
+
+# --- Уведомления -------------------------------------------------------------------
+
+
+class SubscriptionNotFoundError(NotFoundError):
+    """Подписки с таким идентификатором у этого актора нет.
+
+    Чужая подписка для клиента то же самое, что несуществующая: иначе по идентификатору
+    можно было бы выключить подписку актора, о котором запрос ничего не знал.
+    """
+
+    code = "subscription_not_found"
+    message = "Notification subscription not found"
+
+
+class SubscriptionExistsError(ConflictError):
+    """У актора уже есть подписка на эту область в этом канале.
+
+    Вторая строка на ту же область означала бы два ответа на вопрос «включено ли», и
+    выигрывал бы тот, который прочитали первым. Настраивают существующую подписку
+    (`PATCH`), а не заводят ещё одну.
+    """
+
+    code = "subscription_exists"
+    message = "Subscription for this scope already exists"
+
+
+class InvalidSubscriptionError(ValidationError):
+    """Описание подписки нарушает правило.
+
+    Один код на все поля, как у доски и правила автоматики: конкретное поле и причина
+    лежат в `details` (`scope_key`, `event_types`).
+    """
+
+    code = "invalid_subscription"
+    message = "Notification subscription is invalid"
+
+
+class NotificationNotFoundError(NotFoundError):
+    """Уведомления с таким идентификатором в инбоксе этого актора нет."""
+
+    code = "notification_not_found"
+    message = "Notification not found"
+
+
+class InvalidWaitTimeoutError(ValidationError):
+    """Запрошенное время ожидания вне допустимых границ.
+
+    Ошибка, а не тихое срезание до потолка: клиент, попросивший ждать десять минут и
+    получивший пустой ответ через минуту, решит, что уведомлений не было, — хотя на
+    деле его просто перестали ждать.
+    """
+
+    code = "invalid_wait_timeout"
+    message = "Wait timeout is out of range"

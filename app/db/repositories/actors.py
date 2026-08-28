@@ -43,6 +43,19 @@ class ActorRepository:
         statement = select(Actor.key).where(Actor.key.in_(keys))
         return set((await self._session.scalars(statement)).all())
 
+    async def list_by_keys(self, keys: set[str]) -> list[Actor]:
+        """Акторы по набору ключей, одним запросом.
+
+        Отличается от `existing_keys` тем, что отдаёт сами строки: движку уведомлений
+        нужен не факт существования, а идентификатор — в нагрузке события лежат ключи,
+        а в инбоксе адресат хранится ссылкой. Несуществующий ключ просто не вернётся:
+        актор, упомянутый в старом событии и с тех пор удалённый, — не ошибка доставки.
+        """
+        if not keys:
+            return []
+        statement = select(Actor).where(Actor.key.in_(keys))
+        return list((await self._session.scalars(statement)).unique())
+
     async def list_page(
         self,
         *,
