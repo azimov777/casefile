@@ -11,8 +11,22 @@ import pytest
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
-# Свободная форма допустима ровно в двух местах, оба задокументированы в соглашениях.
-FREEFORM_SCHEMAS = {"details", "values"}
+# Свободная форма допустима только там, где она задокументирована в соглашениях.
+# Имя поля целиком — исторические исключения, действующие во всех схемах; `Модель.поле`
+# — исключение ровно в одном месте. Новые исключения заводятся только вторым способом:
+# «поле с таким именем» разрешает свободную форму и там, где о ней никто не думал.
+FREEFORM_SCHEMAS = {
+    "details",
+    "values",
+    # Параметры правила автоматики. У каждого правила своя схема, объявленная в его же
+    # модуле, поэтому единого типа у них быть не может. Взамен схема отдаётся клиенту
+    # рядом со значениями — `params_schema` — и по ней интерфейс строит форму настройки:
+    # это больше, чем даёт любое другое свободное поле в контракте.
+    "AutomationRuleRead.params",
+    "AutomationRuleRead.params_schema",
+    "AutomationRuleUpdate.params",
+    "MacroRunRequest.params",
+}
 
 OPERATION_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -87,7 +101,7 @@ def test_no_objects_of_unknown_shape(schema: dict) -> None:
     unknown: list[str] = []
     for name, definition in schema["components"]["schemas"].items():
         for field, field_schema in definition.get("properties", {}).items():
-            if field in FREEFORM_SCHEMAS:
+            if field in FREEFORM_SCHEMAS or f"{name}.{field}" in FREEFORM_SCHEMAS:
                 continue
             if field_schema.get("type") == "object" and "additionalProperties" in field_schema:
                 unknown.append(f"{name}.{field}")

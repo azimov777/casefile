@@ -22,6 +22,7 @@ from fastapi.routing import APIRoute
 from app.api.deps import get_current_actor
 from app.api.routes import (
     actors,
+    automation,
     boards,
     catalogs,
     checklists,
@@ -89,3 +90,4 @@ api_router.include_router(tags.router)
 api_router.include_router(search.router)
 api_router.include_router(filters.router)
 api_router.include_router(workflows.router)
+api_router.include_router(automation.router)
