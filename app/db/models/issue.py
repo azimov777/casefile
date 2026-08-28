@@ -68,8 +68,29 @@ class Issue(BaseModel):
         Index("ix_issues_created_at_id", "created_at", "id"),
         # GIN по `values`: под него ложатся и `values ? :ref` (есть ли значение поля),
         # и `values @> :fragment` (равно ли значение) — на них держатся защита реестра
-        # полей и поиск по кастомным полям из задачи 12.
+        # полей и поиск по кастомным полям. Сравнения диапазонов по JSONB этот индекс
+        # не покрывает: `jsonb_ops` знает только про вхождение и наличие ключа.
         Index("ix_issues_values", "values", postgresql_using="gin"),
+        # GIN по `tags`: фильтр `tags @> '["release"]'` — основной запрос поиска по
+        # меткам. Без индекса он означал бы чтение всей таблицы, а метки стоят почти
+        # на каждой задаче.
+        Index("ix_issues_tags", "tags", postgresql_using="gin"),
+        # Триграммные индексы под полнотекстовый поиск: `ILIKE '%...%'` не ложится ни
+        # на один обычный индекс, потому что шаблон начинается с подстановки. GIN с
+        # `gin_trgm_ops` покрывает именно этот случай — ценой размера индекса и
+        # бесполезности на запросах короче трёх символов.
+        Index(
+            "ix_issues_summary_trgm",
+            "summary",
+            postgresql_using="gin",
+            postgresql_ops={"summary": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_issues_description_trgm",
+            "description",
+            postgresql_using="gin",
+            postgresql_ops={"description": "gin_trgm_ops"},
+        ),
         # Версия только растёт и начинается с единицы. Ноль или отрицательное значение
         # означали бы, что счётчик правили руками, и оптимистичная блокировка
         # перестала бы ловить конкурентную запись.

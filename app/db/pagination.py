@@ -14,8 +14,10 @@ import base64
 import binascii
 import json
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import Select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,6 +96,100 @@ def decode_text_cursor(cursor: str) -> str:
     if not isinstance(value, str):
         raise InvalidCursorError(details={"cursor": cursor})
     return value
+
+
+# Значение ключа сортировки уезжает клиенту в курсоре и возвращается обратно
+# параметром запроса, поэтому его тип надо восстановить точно: строка
+# `"2026-08-28T10:00:00+00:00"`, отданная драйверу вместо `datetime`, сравнится с
+# колонкой `timestamptz` не так, как ожидалось, — или не сравнится вовсе. Отсюда метка
+# типа рядом с каждым значением.
+
+
+def encode_sort_cursor(values: Sequence[Any], item_id: uuid.UUID) -> str:
+    """Курсор страницы, упорядоченной произвольным набором ключей.
+
+    Третий вид курсора в проекте, и он живёт здесь по тому же правилу, что и текстовый:
+    разбор курсора пишется один раз. Значения ключей сортировки хранятся вместе с типом,
+    потому что восстановить `datetime` из строки «по виду» нельзя, не гадая.
+
+    `item_id` — обязательный уникальный тайбрейкер. Без него две задачи с одинаковым
+    значением ключа сортировки провалились бы между страницами или задвоились.
+    """
+    payload = {"k": [_encode_cursor_value(value) for value in values], "id": str(item_id)}
+    return base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+
+
+def decode_sort_cursor(cursor: str, *, arity: int) -> tuple[list[Any], uuid.UUID]:
+    """Разбирает курсор сортировки и проверяет, что он от того же порядка.
+
+    Расхождение длины — это курсор от другой сортировки: клиент сменил `sort` посреди
+    обхода. Продолжать с ним нельзя, и молча начать сначала — тоже: страница пришла бы
+    не та, о которой клиент думает. Поэтому `invalid_cursor` с указанием ожидаемой длины.
+    """
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))
+        keys = payload["k"]
+        item_id = uuid.UUID(payload["id"])
+    except (binascii.Error, UnicodeError, ValueError, KeyError, TypeError) as exc:
+        raise InvalidCursorError(details={"cursor": cursor}) from exc
+    if not isinstance(keys, list) or len(keys) != arity:
+        raise InvalidCursorError(
+            details={"cursor": cursor, "reason": "sort_mismatch", "expected_keys": arity},
+        )
+    return [_decode_cursor_value(cursor, item) for item in keys], item_id
+
+
+def _encode_cursor_value(value: Any) -> list[Any]:
+    """Значение ключа сортировки с меткой типа.
+
+    Порядок проверок важен: `bool` — подкласс `int`, а `datetime` — подкласс `date`.
+    Без явного порядка `True` вернулось бы из курсора единицей, а момент времени —
+    календарной датой, и страница поехала бы на границе.
+    """
+    match value:
+        case None:
+            return ["n", None]
+        case bool():
+            return ["b", value]
+        case int():
+            return ["i", value]
+        case float():
+            return ["f", value]
+        case str():
+            return ["s", value]
+        case datetime():
+            return ["t", value.isoformat()]
+        case date():
+            return ["d", value.isoformat()]
+        case uuid.UUID():
+            return ["u", str(value)]
+        case _:
+            raise InvalidCursorError(
+                details={"reason": "unsupported_sort_value", "type": type(value).__name__},
+            )
+
+
+def _decode_cursor_value(cursor: str, item: Any) -> Any:
+    try:
+        tag, raw = item
+    except (TypeError, ValueError) as exc:
+        raise InvalidCursorError(details={"cursor": cursor}) from exc
+    try:
+        match tag:
+            case "n":
+                return None
+            case "b" | "i" | "f" | "s":
+                return raw
+            case "t":
+                return datetime.fromisoformat(raw)
+            case "d":
+                return date.fromisoformat(raw)
+            case "u":
+                return uuid.UUID(raw)
+            case _:
+                raise InvalidCursorError(details={"cursor": cursor, "reason": "unknown_value_tag"})
+    except (TypeError, ValueError) as exc:
+        raise InvalidCursorError(details={"cursor": cursor}) from exc
 
 
 def resolve_limit(limit: int | None) -> int:

@@ -25,6 +25,7 @@ from app.db.pagination import (
     paginate,
     resolve_limit,
 )
+from app.db.sql import ilike_contains
 from app.domain.issues import TagUsage
 
 
@@ -96,9 +97,10 @@ class IssueRepository:
         но правая часть `JOIN` без него не имеет права ссылаться на левую — и на
         разных версиях это отличается сообщением об ошибке, а не поведением.
 
-        Поиск идёт по вхождению, регистронезависимо. `%` и `_` в запросе экранируются:
-        без этого тег `100_percent` искался бы как «сто, любой символ, percent», и
-        подсказка отдавала бы совпадения, которых пользователь не просил.
+        Поиск идёт по вхождению, регистронезависимо, через общий `ilike_contains`:
+        `%` и `_` в запросе экранируются, иначе тег `100_percent` искался бы как «сто,
+        любой символ, percent». Функция общая с полнотекстовым поиском задачи 12 —
+        второе экранирование, написанное по месту, разошлось бы с этим молча.
         """
         tag_values = func.jsonb_array_elements_text(Issue.tags).table_valued("value").lateral()
         tag = tag_values.c.value
@@ -112,8 +114,7 @@ class IssueRepository:
         if queue_id is not None:
             statement = statement.where(Issue.queue_id == queue_id)
         if query:
-            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            statement = statement.where(tag.ilike(f"%{escaped}%", escape="\\"))
+            statement = statement.where(ilike_contains(tag, query))
         if cursor is not None:
             statement = statement.where(tag > decode_text_cursor(cursor))
 
