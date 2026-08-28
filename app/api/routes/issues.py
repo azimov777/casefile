@@ -32,6 +32,7 @@ from app.domain.catalogs import CatalogKind
 from app.services import actors as actors_service
 from app.services import events as events_service
 from app.services import issues as service
+from app.services import projects as projects_service
 from app.services import queues as queues_service
 from app.services.issues import IssueChanges
 
@@ -45,6 +46,10 @@ QueueFilterQuery = Annotated[
 
 async def _actor(session: AsyncSession, key: str | None) -> Actor | None:
     return None if key is None else await actors_service.get_actor_by_key(session, key)
+
+
+async def _project(session: AsyncSession, key: str | None) -> Any:
+    return None if key is None else await projects_service.get_project_by_key(session, key)
 
 
 async def _catalog_entry(
@@ -82,6 +87,10 @@ async def _changes(
     if "assignee" in given:
         assignee = await _actor(session, given["assignee"])
 
+    project: Any = UNSET
+    if "project" in given:
+        project = await _project(session, given["project"])
+
     return IssueChanges(
         summary=given.get("summary", UNSET),
         description=given.get("description", UNSET),
@@ -91,6 +100,7 @@ async def _changes(
         priority=given.get("priority", UNSET),
         assignee=assignee,
         deadline=given.get("deadline", UNSET),
+        project=project,
         tags=given.get("tags", UNSET),
         values=given.get("values", UNSET),
     )
@@ -155,6 +165,7 @@ async def create_issue(
         followers=followers,
         deadline=payload.deadline,
         tags=payload.tags,
+        project=await _project(session, payload.project),
         values=payload.values,
     )
     return DataResponse[IssueRead](data=IssueRead.of(issue))

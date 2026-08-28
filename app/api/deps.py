@@ -1,15 +1,22 @@
 """Зависимости FastAPI, общие для всех роутеров."""
 
+import uuid
 from typing import Annotated
 
 from fastapi import Depends, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.schemas.search import (
+    FieldsDescription,
+    QueryDescription,
+    SortDescription,
+)
 from app.core.errors import UnauthorizedError
 from app.db.models.actor import Actor
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.db.session import get_session
+from app.domain.search import MAX_QUERY_LENGTH, MAX_SORT_TERMS
 from app.services.auth import authenticate_by_token
 
 # `scope="function"` — не украшение, а единственное, что доводит упавший коммит до
@@ -76,4 +83,26 @@ CursorQuery = Annotated[
 IssueKeyPath = Annotated[
     str,
     Path(description="Issue key, immutable and never reused", examples=["TRK-123"]),
+]
+
+
+# Параметры поиска объявлены здесь по той же причине, что и параметры пагинации: их
+# принимают два роутера — общий поиск и список задач проекта, — и две копии описания
+# разъехались бы в сгенерированном клиенте, показав фронтенду разные подсказки для
+# одного и того же параметра.
+#
+# Импорт описаний из схем, а не повтор строк: тексты попадают ещё и в тело запроса
+# `POST /search/issues`, и третьего варианта формулировки быть не должно.
+QueryParam = Annotated[
+    str | None,
+    Query(max_length=MAX_QUERY_LENGTH, description=QueryDescription),
+]
+SortParam = Annotated[
+    list[str] | None,
+    Query(max_length=MAX_SORT_TERMS, description=SortDescription),
+]
+FieldsParam = Annotated[list[str] | None, Query(description=FieldsDescription)]
+SavedFilterParam = Annotated[
+    uuid.UUID | None,
+    Query(description="Run a saved filter; `query` narrows it further"),
 ]

@@ -29,6 +29,8 @@ from app.api.routes import (
     filters,
     issues,
     links,
+    portfolios,
+    projects,
     queues,
     search,
     tags,
@@ -77,6 +79,8 @@ api_router.include_router(issues.router)
 api_router.include_router(links.router)
 api_router.include_router(comments.router)
 api_router.include_router(checklists.router)
+api_router.include_router(projects.router)
+api_router.include_router(portfolios.router)
 api_router.include_router(tags.router)
 api_router.include_router(search.router)
 api_router.include_router(filters.router)

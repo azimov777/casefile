@@ -15,55 +15,24 @@
 `/issues/{issue_key}` и разбирался бы как ключ задачи — тихо и только в рантайме.
 """
 
-import uuid
-from typing import Annotated
+from fastapi import APIRouter
 
-from fastapi import APIRouter, Query
-
-from app.api.deps import CurrentActorDep, CursorQuery, LimitQuery, SessionDep
-from app.api.schemas.common import CollectionResponse
-from app.api.schemas.search import (
-    FieldsDescription,
-    IssueSearchRead,
-    IssueSearchRequest,
-    QueryDescription,
-    SortDescription,
+from app.api.deps import (
+    CurrentActorDep,
+    CursorQuery,
+    FieldsParam,
+    LimitQuery,
+    QueryParam,
+    SavedFilterParam,
+    SessionDep,
+    SortParam,
 )
+from app.api.schemas.common import CollectionResponse
+from app.api.schemas.search import IssueSearchRead, IssueSearchRequest, search_page
 from app.db.pagination import DEFAULT_PAGE_SIZE
-from app.domain.search import MAX_QUERY_LENGTH, MAX_SORT_TERMS
 from app.services import search as service
-from app.services.search import SearchOutcome
 
 router = APIRouter(prefix="/search", tags=["search"])
-
-QueryParam = Annotated[
-    str | None,
-    Query(max_length=MAX_QUERY_LENGTH, description=QueryDescription),
-]
-SortParam = Annotated[
-    list[str] | None,
-    Query(max_length=MAX_SORT_TERMS, description=SortDescription),
-]
-FieldsParam = Annotated[list[str] | None, Query(description=FieldsDescription)]
-SavedFilterParam = Annotated[
-    uuid.UUID | None,
-    Query(description="Run a saved filter; `query` narrows it further"),
-]
-
-
-def _page(outcome: SearchOutcome) -> CollectionResponse[IssueSearchRead]:
-    """Страница ответа: выбор полей берётся из разрешённого фильтра, а не считается заново."""
-    return CollectionResponse[IssueSearchRead].of(
-        [
-            IssueSearchRead.of(
-                issue,
-                fields=outcome.resolved.fields,
-                value_refs=outcome.resolved.value_refs,
-            )
-            for issue in outcome.page.items
-        ],
-        next_cursor=outcome.page.next_cursor,
-    )
 
 
 @router.get(
@@ -99,7 +68,7 @@ async def search_issues(
         limit=limit,
         cursor=cursor,
     )
-    return _page(outcome)
+    return search_page(outcome)
 
 
 @router.post(
@@ -130,4 +99,4 @@ async def search_issues_by_filter(
         limit=payload.limit,
         cursor=payload.cursor,
     )
-    return _page(outcome)
+    return search_page(outcome)

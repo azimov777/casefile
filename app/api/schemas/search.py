@@ -27,13 +27,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from app.api.schemas.common import CollectionResponse
 from app.db.models.issue import Issue
 from app.db.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.domain.catalogs import StatusCategory
 from app.domain.issues import IssuePriority
 from app.domain.search import MAX_QUERY_LENGTH, MAX_SORT_TERMS, Operator
 from app.services.catalogs import format_entry_ref
-from app.services.search import StructuredTerm
+from app.services.search import SearchOutcome, StructuredTerm
 
 QueryDescription = (
     "Query language string, for example `queue: TRK and status: open and assignee: me() "
@@ -126,6 +127,11 @@ class IssueFilterInput(BaseModel):
             "that dictionary is the single source of existing labels"
         ),
     )
+    project: list[str] = Field(
+        default_factory=list,
+        examples=[["alpha"]],
+        description="Project keys; `empty()` finds issues outside any project",
+    )
     summary: str | None = Field(default=None, description="Substring of the summary")
     description: str | None = Field(default=None, description="Substring of the description")
     text: str | None = Field(
@@ -163,6 +169,7 @@ class IssueFilterInput(BaseModel):
                 ("assignee", self.assignee),
                 ("followers", self.followers),
                 ("tags", self.tags),
+                ("project", self.project),
             )
             if values
         ]
@@ -252,6 +259,7 @@ class IssueSearchRead(BaseModel):
     followers: list[str] | None = None
     deadline: datetime | None = None
     tags: list[str] | None = None
+    project: str | None = Field(default=None, examples=["alpha"])
     values: dict[str, JsonValue] | None = None
     version: int | None = None
     created_at: datetime | None = None
@@ -283,6 +291,7 @@ class IssueSearchRead(BaseModel):
             "followers": [follower.key for follower in issue.followers],
             "deadline": issue.deadline,
             "tags": list(issue.tags),
+            "project": None if issue.project is None else issue.project.key,
             "values": _selected_values(issue, value_refs),
             "version": issue.version,
             "created_at": issue.created_at,
@@ -298,3 +307,23 @@ def _selected_values(issue: Issue, value_refs: tuple[str, ...]) -> dict[str, Jso
     if not value_refs:
         return issue.values
     return {ref: issue.values[ref] for ref in value_refs if ref in issue.values}
+
+
+def search_page(outcome: SearchOutcome) -> CollectionResponse[IssueSearchRead]:
+    """Итог поиска в страницу ответа: выбор полей берётся из разрешённого фильтра.
+
+    Живёт здесь, а не в роутере поиска, потому что страницу собирают два маршрута —
+    общий поиск и список задач проекта. Вычислять `fields` второй раз в каждом из них
+    значило бы завести второе толкование того, что именно просил клиент.
+    """
+    return CollectionResponse[IssueSearchRead].of(
+        [
+            IssueSearchRead.of(
+                issue,
+                fields=outcome.resolved.fields,
+                value_refs=outcome.resolved.value_refs,
+            )
+            for issue in outcome.page.items
+        ],
+        next_cursor=outcome.page.next_cursor,
+    )

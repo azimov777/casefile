@@ -48,6 +48,10 @@ TagsField = Field(
         "kept, duplicates are dropped case-insensitively"
     ),
 )
+ProjectDescription = (
+    "Key of the project the issue belongs to; null when it belongs to none. An issue is in "
+    "at most one project, and the project may collect issues from several queues"
+)
 ValuesDescription = (
     "Custom field values keyed by field reference (`severity`, `TRK.severity`). The shape "
     "of each value depends on the field type and is documented in the field registry"
@@ -83,6 +87,11 @@ class IssueRead(BaseModel):
     )
     deadline: datetime | None = Field(default=None, description=DeadlineDescription)
     tags: list[str] = TagsField
+    project: str | None = Field(
+        default=None,
+        examples=["alpha"],
+        description=ProjectDescription,
+    )
     values: dict[str, JsonValue] = Field(default_factory=dict, description=ValuesDescription)
     version: int = Field(
         description="Grows with every actual change; send it back to detect a lost update"
@@ -108,6 +117,7 @@ class IssueRead(BaseModel):
             followers=[follower.key for follower in issue.followers],
             deadline=issue.deadline,
             tags=list(issue.tags),
+            project=None if issue.project is None else issue.project.key,
             values=issue.values,
             version=issue.version,
             created_at=issue.created_at,
@@ -155,6 +165,7 @@ class IssueCreate(BaseModel):
     followers: list[str] = Field(default_factory=list, examples=[["release_bot"]])
     deadline: datetime | None = Field(default=None, description=DeadlineDescription)
     tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS)
+    project: str | None = Field(default=None, examples=["alpha"], description=ProjectDescription)
     values: dict[str, JsonValue] = Field(default_factory=dict, description=ValuesDescription)
 
 
@@ -187,6 +198,9 @@ class IssueUpdate(BaseModel):
         description=f"{DeadlineDescription}. Pass null to drop the deadline"
     )
     tags: list[str] = unset_field(max_length=MAX_TAGS, description="Replaces the whole set")
+    project: str | None = unset_field(
+        description=f"{ProjectDescription}. Pass null to take the issue out of its project"
+    )
     values: dict[str, JsonValue] = unset_field(
         description=(
             f"{ValuesDescription}. Partial: a null value clears the field, a key that is "
