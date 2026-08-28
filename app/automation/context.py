@@ -45,6 +45,7 @@ from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.models.checklist import ChecklistItem
 from app.db.models.comment import Comment
 from app.db.models.issue import Issue
+from app.db.models.notification import Notification
 from app.db.repositories import AutomationRunRepository, IssueLinkRepository
 from app.domain.automation import SkipReason
 from app.domain.catalogs import CatalogKind, StatusCategory
@@ -54,6 +55,7 @@ from app.services import checklists as checklists_service
 from app.services import comments as comments_service
 from app.services import issues as issues_service
 from app.services import links as links_service
+from app.services import notifications as notifications_service
 from app.services import queues as queues_service
 from app.services import workflow as workflow_service
 from app.services.event_bus import EventEnvelope
@@ -397,6 +399,46 @@ class RuleContext:
             RuleAction(action="comment", target=target.key, details={"comment": str(created.id)})
         )
         return created
+
+    async def notify(
+        self,
+        actor: Actor | str,
+        body: str,
+        *,
+        issue: Issue | None = None,
+        **details: Any,
+    ) -> Notification | None:
+        """Кладёт сообщение в инбокс актора.
+
+        Второй способ правила заговорить с человеком, кроме комментария, и они не
+        взаимозаменяемы. Комментарий виден всем, кто читает задачу, и остаётся в её
+        обсуждении; уведомление адресовано одному и живёт в его ленте. «Дедлайн
+        завтра» — это уведомление, «задача закрыта по правилу X» — комментарий.
+
+        Своей логики адресации здесь нет: правило называет актора, а решают всё
+        сценарий инбокса и подписки. Системному актору сообщение не уходит — правила
+        выполняются от его имени, и его инбокс никто не читает; такой вызов
+        записывается в журнал срабатываний с пометкой `skipped`, а не теряется молча.
+        """
+        target = actor if isinstance(actor, Actor) else await self.actor_by_key(actor)
+        subject = issue or self.issue
+        notification = await notifications_service.notify_actor(
+            self.session,
+            actor=target,
+            body=body,
+            details=details or None,
+            issue=subject,
+        )
+        self.actions.append(
+            RuleAction(
+                action="notify",
+                target=target.key,
+                details={"notification": str(notification.id)}
+                if notification is not None
+                else {"skipped": "system_actor"},
+            )
+        )
+        return notification
 
     async def add_checklist_item(
         self,
