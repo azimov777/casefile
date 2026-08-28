@@ -12,13 +12,20 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import lazyload, load_only, selectinload
 
 from app.db.models.actor import Actor
 from app.db.models.issue import Issue
-from app.db.pagination import Page, paginate
+from app.db.pagination import (
+    Page,
+    decode_text_cursor,
+    encode_text_cursor,
+    paginate,
+    resolve_limit,
+)
+from app.domain.issues import TagUsage
 
 
 class IssueRepository:
@@ -64,6 +71,59 @@ class IssueRepository:
         if queue_id is not None:
             statement = statement.where(Issue.queue_id == queue_id)
         return await paginate(self._session, statement, Issue, limit=limit, cursor=cursor)
+
+    async def list_tags_page(
+        self,
+        *,
+        queue_id: uuid.UUID | None = None,
+        query: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[TagUsage]:
+        """Страница словаря тегов: сам тег и число задач с ним, по алфавиту.
+
+        Отдельной таблицы у тегов нет — они лежат плоским списком в `issues.tags`
+        (`app/db/models/issue.py`), поэтому словарь собирается разворачиванием массива
+        (`jsonb_array_elements_text`) и группировкой. Это единственное место в проекте,
+        где `tags` разворачивается в строки: второй такой запрос, написанный в другом
+        модуле, неизбежно разошёлся бы с этим в регистре или в фильтре.
+
+        Порядок алфавитный, а не по частоте, и курсор идёт по самому тегу. Частота
+        меняется от каждой правки любой задачи, и страница, упорядоченная по ней,
+        теряла бы и дублировала теги между запросами; алфавит устойчив.
+
+        `LATERAL` указан явно. Для функции в `FROM` PostgreSQL подразумевает его сам,
+        но правая часть `JOIN` без него не имеет права ссылаться на левую — и на
+        разных версиях это отличается сообщением об ошибке, а не поведением.
+
+        Поиск идёт по вхождению, регистронезависимо. `%` и `_` в запросе экранируются:
+        без этого тег `100_percent` искался бы как «сто, любой символ, percent», и
+        подсказка отдавала бы совпадения, которых пользователь не просил.
+        """
+        tag_values = func.jsonb_array_elements_text(Issue.tags).table_valued("value").lateral()
+        tag = tag_values.c.value
+        statement = (
+            select(tag.label("tag"), func.count().label("issues"))
+            .select_from(Issue)
+            .join(tag_values, true())
+            .group_by(tag)
+            .order_by(tag)
+        )
+        if queue_id is not None:
+            statement = statement.where(Issue.queue_id == queue_id)
+        if query:
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            statement = statement.where(tag.ilike(f"%{escaped}%", escape="\\"))
+        if cursor is not None:
+            statement = statement.where(tag > decode_text_cursor(cursor))
+
+        size = resolve_limit(limit)
+        rows = list(await self._session.execute(statement.limit(size + 1)))
+        usages = [TagUsage(tag=row.tag, issues=row.issues) for row in rows]
+        if len(usages) <= size:
+            return Page(items=usages, next_cursor=None)
+        page = usages[:size]
+        return Page(items=page, next_cursor=encode_text_cursor(page[-1].tag))
 
     async def add(self, issue: Issue) -> Issue:
         self._session.add(issue)

@@ -9,6 +9,8 @@ from app.db.base import Base, BaseModel
 from app.db.models.actor import Actor
 from app.db.models.api_token import ApiToken
 from app.db.models.catalog import CatalogEntryMixin, IssueType, Resolution, Status
+from app.db.models.checklist import ChecklistItem
+from app.db.models.comment import Comment
 from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.field import Field, FieldIssueType
 from app.db.models.issue import Issue, IssueFollower
@@ -23,6 +25,8 @@ __all__ = [
     "BaseModel",
     "CatalogEntryMixin",
     "ChangelogEntry",
+    "ChecklistItem",
+    "Comment",
     "Field",
     "FieldIssueType",
     "Issue",

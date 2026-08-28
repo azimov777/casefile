@@ -3,6 +3,8 @@
 from app.db.repositories.actors import ActorRepository
 from app.db.repositories.api_tokens import ApiTokenRepository
 from app.db.repositories.catalogs import CatalogRepository
+from app.db.repositories.checklists import ChecklistRepository
+from app.db.repositories.comments import CommentRepository
 from app.db.repositories.events import ChangelogRepository, OutboxRepository
 from app.db.repositories.fields import FieldRepository
 from app.db.repositories.issues import IssueRepository
@@ -15,6 +17,8 @@ __all__ = [
     "ApiTokenRepository",
     "CatalogRepository",
     "ChangelogRepository",
+    "ChecklistRepository",
+    "CommentRepository",
     "FieldRepository",
     "IssueLinkRepository",
     "IssueRepository",

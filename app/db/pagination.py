@@ -69,6 +69,33 @@ def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
         raise InvalidCursorError(details={"cursor": cursor}) from exc
 
 
+def encode_text_cursor(value: str) -> str:
+    """Курсор страницы, упорядоченной по одному текстовому ключу.
+
+    Второй вид курсора в проекте, и он живёт здесь же, а не в репозитории, которому
+    понадобился. Причина в правиле «одна реализация пагинации»: разбор курсора,
+    написанный по месту, однажды истолкует испорченное значение иначе — отдаст
+    пятисотку вместо `invalid_cursor` или молча начнёт страницу с начала.
+
+    Нужен там, где порядок задаёт не время создания, а сама строка: словарь тегов
+    собирается агрегатом (`GROUP BY`), у его строк нет ни `created_at`, ни `id`, и
+    общий `paginate` к ним неприменим.
+    """
+    return base64.urlsafe_b64encode(json.dumps({"after": value}).encode("utf-8")).decode("ascii")
+
+
+def decode_text_cursor(cursor: str) -> str:
+    """Разбирает текстовый курсор. Любая порча значения — `invalid_cursor`."""
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))
+        value = payload["after"]
+    except (binascii.Error, UnicodeError, ValueError, KeyError, TypeError) as exc:
+        raise InvalidCursorError(details={"cursor": cursor}) from exc
+    if not isinstance(value, str):
+        raise InvalidCursorError(details={"cursor": cursor})
+    return value
+
+
 def resolve_limit(limit: int | None) -> int:
     """Проверяет размер страницы и подставляет значение по умолчанию.
 
