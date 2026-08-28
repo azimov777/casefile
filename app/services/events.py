@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -37,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.sentinels import UNSET, UnsetType, is_set
 from app.db.models.actor import Actor
+from app.db.models.board import Board, Sprint
 from app.db.models.catalog import Status
 from app.db.models.checklist import ChecklistItem
 from app.db.models.comment import Comment
@@ -519,6 +521,153 @@ def planning_snapshot(entity: Project | Portfolio) -> dict[str, Any]:
     }
 
 
+# --- Запись: доски и спринты ------------------------------------------------------
+
+
+async def record_board_change(
+    session: AsyncSession,
+    board: Board,
+    *,
+    initiator: Actor,
+    action: str,
+    changes: tuple[IssueChange, ...] = (),
+) -> OutboxEvent:
+    """Событие о доске. Записи в журнал изменений задачи при этом **нет**.
+
+    По той же причине, что у проекта: `changelog_entries.issue_id` обязателен, история
+    читается по задаче, и приписывать правку доски какой-нибудь из её задач было бы
+    враньём в чужой истории. Правка колонок сюда же — она меняет настройки доски.
+
+    Исключение — перемещение карточки между колонками: оно меняет **статус задачи**,
+    идёт через `apply_issue_changes` и потому даёт обычную запись `issue.status_changed`
+    в истории самой задачи. В событие доски оно не превращается вовсе.
+    """
+    return await _publish(
+        session,
+        event_type=event_type_for(action),
+        object_type=ObjectType.BOARD,
+        object_id=board.id,
+        object_key=str(board.id),
+        actor=initiator,
+        payload={
+            "board": board_snapshot(board),
+            "changes": encode_changes(changes),
+            "fields": list(changed_fields(changes)),
+        },
+    )
+
+
+async def record_issue_ranked(
+    session: AsyncSession,
+    board: Board,
+    issue: Issue,
+    *,
+    initiator: Actor,
+    position: int,
+) -> OutboxEvent:
+    """Карточку переставили на доске.
+
+    Объект события — доска, а не задача: ранг принадлежит доске, и подписчик,
+    держащий открытым один экран, обязан отбирать эти события по её идентификатору.
+    Строку задачи перестановка не меняет, поэтому ни версии, ни записи в истории у неё
+    не появляется — это и есть разница между «переставить карточку» и «перетащить её в
+    другую колонку», которая является переходом воркфлоу.
+
+    Позиция в нагрузке — внутреннее число разреженной шкалы, и полагаться на конкретное
+    значение нельзя: перенумерация доски меняет их все, сохраняя порядок. Подписчику
+    она нужна ровно затем, чтобы понять, куда встала карточка относительно соседей,
+    перечитав страницу.
+    """
+    return await _publish(
+        session,
+        event_type=event_type_for("board.rank"),
+        object_type=ObjectType.BOARD,
+        object_id=board.id,
+        object_key=str(board.id),
+        actor=initiator,
+        payload={
+            "board": board_snapshot(board),
+            "issue": issue_snapshot(issue),
+            "position": position,
+        },
+    )
+
+
+async def record_sprint_change(
+    session: AsyncSession,
+    sprint: Sprint,
+    *,
+    initiator: Actor,
+    action: str,
+    changes: tuple[IssueChange, ...] = (),
+    issues: Sequence[str] = (),
+) -> OutboxEvent:
+    """Событие о спринте.
+
+    `issues` заполняется только у завершения: ключи задач, которые ушли из спринта, и
+    то, куда они ушли, лежат в `changes`. Без списка подписчик знал бы, что спринт
+    закрыт, но не знал бы, что именно переехало, — а перечитать это потом уже неоткуда:
+    состав спринта нигде не хранится отдельно от самих задач.
+    """
+    return await _publish(
+        session,
+        event_type=event_type_for(action),
+        object_type=ObjectType.SPRINT,
+        object_id=sprint.id,
+        object_key=str(sprint.id),
+        actor=initiator,
+        payload={
+            "sprint": sprint_snapshot(sprint),
+            "changes": encode_changes(changes),
+            "fields": list(changed_fields(changes)),
+            "issues": list(issues),
+        },
+    )
+
+
+def board_snapshot(board: Board) -> dict[str, Any]:
+    """Доска в JSON-виде для полезной нагрузки события.
+
+    Колонки входят целиком: их число ограничено доменом, а подписчику, который держит
+    открытый экран, без них нечего перерисовывать. Задач здесь нет и быть не может —
+    доска собирает их фильтром, и снимок сотен карточек не пролез бы ни в одно событие.
+    """
+    return {
+        "id": str(board.id),
+        "name": board.name,
+        "description": board.description,
+        "saved_filter": str(board.saved_filter_id),
+        "columns": [
+            {
+                "id": str(column.id),
+                "name": column.name,
+                "statuses": sorted(link.status.ref for link in column.status_links),
+                "wip_limit": column.wip_limit,
+            }
+            for column in board.columns
+        ],
+        "created_at": _moment(board.created_at),
+        "updated_at": _moment(board.updated_at),
+    }
+
+
+def sprint_snapshot(sprint: Sprint) -> dict[str, Any]:
+    """Спринт в JSON-виде для полезной нагрузки события."""
+    return {
+        "id": str(sprint.id),
+        "board": str(sprint.board_id),
+        "name": sprint.name,
+        "goal": sprint.goal,
+        "start_date": _day(sprint.start_date),
+        "end_date": _day(sprint.end_date),
+        "state": sprint.state.value,
+        "started_at": _moment(sprint.started_at),
+        "completed_at": _moment(sprint.completed_at),
+        "created_at": _moment(sprint.created_at),
+        "updated_at": _moment(sprint.updated_at),
+    }
+
+
 # --- Чтение -----------------------------------------------------------------------
 
 
@@ -642,6 +791,9 @@ def issue_snapshot(issue: Issue) -> dict[str, Any]:
         # Проект — ключом, как очередь и акторы: подписчику нужен адрес, а не строка
         # таблицы, которая к моменту доставки могла измениться.
         "project": None if issue.project is None else issue.project.key,
+        # Спринт — идентификатором строкой: ключа у него нет, адресуют его именно так,
+        # и название, положенное сюда, стало бы ссылкой, которая однажды укажет в никуда.
+        "sprint": None if issue.sprint is None else str(issue.sprint_id),
         "values": dict(issue.values),
         "version": issue.version,
         "created_at": _moment(issue.created_at),

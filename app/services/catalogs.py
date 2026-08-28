@@ -23,6 +23,7 @@ from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import (
+    BoardRepository,
     CatalogRepository,
     FieldRepository,
     QueueRepository,
@@ -401,6 +402,23 @@ async def delete_entry(
                     "reason": "workflows_exist",
                     "workflows": workflows,
                     "hint": "remove the status from those workflows first",
+                }
+            )
+        # Колонки досок проверяются отдельно от воркфлоу, хотя причина у обеих проверок
+        # одна. Внешний ключ `board_column_statuses.status_id` объявлен с каскадом — он
+        # нужен, чтобы удаление очереди уносило её локальные статусы вместе с раскладкой
+        # по колонкам. Здесь каскад как раз вреден: он молча убрал бы статус из колонки
+        # и мог оставить её вовсе без статусов, а такая колонка показывает все задачи
+        # доски. Поэтому запрет стоит в сценарии, а не в схеме.
+        columns = await BoardRepository(session).count_columns_with_status(entry.id)
+        if columns:
+            raise StatusInUseError(
+                details={
+                    "kind": kind.value,
+                    "ref": format_entry_ref(entry),
+                    "reason": "board_columns_exist",
+                    "columns": columns,
+                    "hint": "remove the status from those board columns first",
                 }
             )
 

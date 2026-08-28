@@ -767,3 +767,136 @@ class PortfolioArchivedError(ConflictError):
 
     code = "portfolio_archived"
     message = "Portfolio is archived"
+
+
+# --- Доски, колонки и ранжирование -------------------------------------------------
+
+
+class BoardNotFoundError(NotFoundError):
+    """Доски с таким идентификатором нет."""
+
+    code = "board_not_found"
+    message = "Board not found"
+
+
+class BoardColumnNotFoundError(NotFoundError):
+    """Колонки с таким идентификатором у этой доски нет.
+
+    Один код и на несуществующую колонку, и на существующую, но принадлежащую другой
+    доске: колонка адресуется в пути своей доской, и «есть, но не твоя» для клиента то
+    же самое, что «нет».
+    """
+
+    code = "board_column_not_found"
+    message = "Board column not found"
+
+
+class InvalidBoardError(ValidationError):
+    """Описание доски или колонки нарушает правило.
+
+    Один код на все поля, как у проекта: конкретное поле и причина лежат в `details`
+    (`name`, `description`, `columns`, `statuses`, `wip_limit`), и отдельный код под
+    каждое поле растил бы контракт быстрее, чем пользу от него.
+    """
+
+    code = "invalid_board"
+    message = "Board definition is invalid"
+
+
+class BoardStatusTakenError(ConflictError):
+    """Статус уже разложен в другую колонку этой доски.
+
+    Один статус в двух колонках означал бы карточку, показанную дважды, и вопрос «в
+    какой она колонке» без единственного ответа. Сначала статус убирают из прежней
+    колонки, потом кладут в новую.
+    """
+
+    code = "board_status_taken"
+    message = "Status already belongs to another column of this board"
+
+
+class BoardHasSprintsError(ConflictError):
+    """У доски есть спринты: удалять её нельзя.
+
+    Спринт хранит принадлежность задач, и каскад унёс бы её вместе с доской — задачи
+    молча потеряли бы спринт, а история этого не объяснила бы. Спринты завершают и
+    удаляют явно, потом удаляют доску.
+    """
+
+    code = "board_has_sprints"
+    message = "Board still has sprints"
+
+
+class IssueNotOnBoardError(ConflictError):
+    """Задача не попадает в область доски: ранжировать и двигать её здесь нечего.
+
+    Область задаёт сохранённый фильтр доски. Молчаливое ранжирование задачи вне
+    области оставило бы в базе ранг, которого никто никогда не увидит, а клиент решил
+    бы, что карточка переставлена.
+    """
+
+    code = "issue_not_on_board"
+    message = "Issue is not in the scope of this board"
+
+
+class InvalidBoardMoveError(ValidationError):
+    """Перемещение карточки описано неоднозначно или неверно.
+
+    Причина — в `details.reason`: `status_required` (в колонке несколько статусов, и
+    выбрать целевой обязан вызывающий), `status_not_in_column`, `anchor_required`
+    (не указан ни `after`, ни `before`), `anchor_is_the_issue_itself`.
+    """
+
+    code = "invalid_board_move"
+    message = "Board move is not well defined"
+
+
+# --- Спринты -----------------------------------------------------------------------
+
+
+class SprintNotFoundError(NotFoundError):
+    """Спринта с таким идентификатором нет."""
+
+    code = "sprint_not_found"
+    message = "Sprint not found"
+
+
+class InvalidSprintError(ValidationError):
+    """Описание спринта нарушает правило: пустое имя, вывернутый период, длинная цель."""
+
+    code = "invalid_sprint"
+    message = "Sprint definition is invalid"
+
+
+class SprintStateError(ConflictError):
+    """Операция не подходит текущему состоянию спринта.
+
+    Запустить можно только запланированный, завершить — только активный. В `details`
+    лежат `state` и `expected`: клиент по ним понимает, что состояние он видел
+    устаревшее, а не что запрос был неверным.
+    """
+
+    code = "sprint_state_invalid"
+    message = "Sprint is not in a state that allows this operation"
+
+
+class BoardSprintActiveError(ConflictError):
+    """У доски уже есть активный спринт.
+
+    Второй активный спринт сделал бы бессмысленными и колонки доски, и фильтр
+    `sprint: current`: «текущий» перестал бы иметь единственный ответ.
+    """
+
+    code = "board_sprint_active"
+    message = "Board already has an active sprint"
+
+
+class SprintNotEmptyError(ConflictError):
+    """В спринте есть задачи: удалять его нельзя.
+
+    Удаление унесло бы принадлежность задач молча. Задачи сначала выводят из спринта
+    или завершают его с переносом.
+    """
+
+    code = "sprint_not_empty"
+    message = "Sprint still has issues"
