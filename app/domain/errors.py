@@ -900,3 +900,84 @@ class SprintNotEmptyError(ConflictError):
 
     code = "sprint_not_empty"
     message = "Sprint still has issues"
+
+
+# --- Автоматика --------------------------------------------------------------------
+
+
+class AutomationRuleNotFoundError(NotFoundError):
+    """Правила с таким ключом нет ни в реестре кода, ни в таблице состояния."""
+
+    code = "automation_rule_not_found"
+    message = "Automation rule not found"
+
+
+class AutomationRuleUnavailableError(ConflictError):
+    """Состояние правила в базе есть, а объявления в коде — нет.
+
+    Так выглядит правило, удалённое из репозитория: строка с его включённостью и
+    параметрами остаётся (вместе с журналом срабатываний, который иначе унесло бы
+    каскадом), но выполнять нечего. Молча считать такое правило выключенным нельзя —
+    оно значится включённым, и вопрос «почему оно не срабатывает» останется без ответа.
+    """
+
+    code = "automation_rule_unavailable"
+    message = "Automation rule has no declaration in the code"
+
+
+class AutomationRuleDisabledError(ConflictError):
+    """Правило выключено: запускать его вручную нельзя.
+
+    Выключенность — это не «спрятано из списка», а «не выполнять». Ручной запуск в
+    обход этого означал бы, что выключатель работает только для части способов запуска.
+    """
+
+    code = "automation_rule_disabled"
+    message = "Automation rule is disabled"
+
+
+class AutomationRuleKindError(ConflictError):
+    """Форма правила не та: вручную запускают макрос, а не триггер и не автодействие.
+
+    Триггер без события и автодействие без отбора получили бы контекст, которого у них
+    по определению нет, и упали бы уже внутри — с ошибкой, по которой не догадаться,
+    что дело в форме.
+    """
+
+    code = "automation_rule_kind_mismatch"
+    message = "This rule kind cannot be run this way"
+
+
+class AutomationRuleOutOfScopeError(ConflictError):
+    """Задача не входит в область правила: правило привязано к другой очереди.
+
+    Отбор по привязке идёт до вызова правила, а не внутри него. Иначе каждое правило
+    обязано было бы само помнить про свою привязку, и первое же забывшее увидело бы
+    задачи чужих очередей.
+    """
+
+    code = "automation_rule_out_of_scope"
+    message = "Issue is out of the scope of this rule"
+
+
+class InvalidAutomationRuleError(ValidationError):
+    """Объявление правила или его настройка нарушают правило.
+
+    Один код на все поля, как у доски и проекта: конкретное поле и причина лежат в
+    `details` (`key`, `name`, `events`, `schedule`, `query`, `saved_filter`).
+    """
+
+    code = "invalid_automation_rule"
+    message = "Automation rule definition is invalid"
+
+
+class AutomationParamsInvalidError(ValidationError):
+    """Параметры правила не прошли проверку его же схемой.
+
+    Проверка стоит при сохранении, а не при запуске: включённое правило с мусорными
+    параметрами падало бы в фоне, и заметили бы это нескоро — по несделанной работе,
+    а не по ошибке.
+    """
+
+    code = "automation_params_invalid"
+    message = "Automation rule parameters are invalid"

@@ -23,12 +23,30 @@
 `process_next_event` берёт одно событие, раздаёт подписчикам и обновляет его состояние.
 Одно событие за вызов, потому что воркер оборачивает каждый вызов в свою транзакцию:
 падение на третьем событии не должно откатывать обработку первых двух.
+
+## След автоматики приклеивается к событию, а не передаётся параметром
+
+Правило автоматики меняет задачу теми же сценариями, что и обычный запрос, и каждый из
+них публикует событие. Чтобы следующее правило могло понять, что изменение сделано
+автоматикой, и на какой глубине цепочки оно находится, эта отметка обязана попасть в
+полезную нагрузку — единственный канал между изменением и его последствием.
+
+Передавать её параметром пришлось бы через каждый сценарий, который правилу разрешено
+звать: задачи, комментарии, связи, чеклист, спринты. Пять сигнатур сегодня и все
+будущие — ради значения, которое на всём протяжении вызова одно и то же. Поэтому здесь
+стоит контекстная переменная, а движок автоматики оборачивает в неё выполнение правила
+(`automation_cause`). Это ровно тот случай, для которого `contextvars` и существует:
+значение принадлежит не вызову, а времени жизни задачи asyncio.
+
+Явности от этого не теряется: отметка видна в самом событии, а не подразумевается.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -49,6 +67,7 @@ from app.db.models.project import Portfolio, Project
 from app.db.models.queue import Queue
 from app.db.pagination import Page
 from app.db.repositories import ChangelogRepository, OutboxRepository
+from app.domain.automation import AUTOMATION_PAYLOAD_KEY, AutomationCause
 from app.domain.checklists import CHECKLIST_CHANGE_FIELD
 from app.domain.comments import COMMENT_EXCERPT_LENGTH, COMMENTS_CHANGE_FIELD
 from app.domain.events import (
@@ -71,6 +90,34 @@ from app.services.event_bus import (
 )
 from app.services.event_bus import registry as default_registry
 from app.services.permissions import ensure_allowed
+
+#: Правило автоматики, от имени которого сейчас идут изменения. `None` — обычный
+#: запрос человека или агента. Читается только при публикации события.
+_automation_cause: ContextVar[AutomationCause | None] = ContextVar(
+    "automation_cause",
+    default=None,
+)
+
+
+@contextmanager
+def automation_cause(cause: AutomationCause) -> Iterator[None]:
+    """Помечает все события, опубликованные внутри блока, как сделанные правилом.
+
+    Вложенность допустима и складывается правильно: движок передаёт уже увеличенную
+    глубину, а прежнее значение восстанавливается токеном, а не присваиванием `None`.
+    Обнуление сломало бы макрос, запущенный изнутри другого правила: цепочка после
+    возврата считалась бы начатой заново.
+    """
+    token = _automation_cause.set(cause)
+    try:
+        yield
+    finally:
+        _automation_cause.reset(token)
+
+
+def current_automation_cause() -> AutomationCause | None:
+    """Правило, от имени которого сейчас идут изменения, если оно есть."""
+    return _automation_cause.get()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1040,6 +1087,12 @@ async def _publish(
     actor: Actor,
     payload: dict[str, Any],
 ) -> OutboxEvent:
+    cause = _automation_cause.get()
+    if cause is not None:
+        # Ключ добавляется только когда изменение сделало правило: его отсутствие —
+        # это утверждение «сделал человек или агент», а не «неизвестно кто». Пустой
+        # словарь в каждом событии стёр бы разницу между этими двумя состояниями.
+        payload = {**payload, AUTOMATION_PAYLOAD_KEY: cause.to_payload()}
     event = OutboxEvent(
         event_type=event_type.value,
         object_type=object_type.value,

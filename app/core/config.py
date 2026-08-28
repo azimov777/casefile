@@ -64,6 +64,39 @@ class Settings(BaseSettings):
         description="Upper bound for the growing retry delay",
     )
 
+    # --- Движок автоматики -------------------------------------------------------
+    # Все четыре — защита от зацикливания и от волн событий, и все четыре настройки, а
+    # не константы: подобрать потолки можно только на живом наборе правил, а менять их
+    # перевыкладкой образа в тот момент, когда контур уже гоняет сам себя, поздно.
+    automation_max_chain_depth: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "How deep a rule-to-rule chain may go. 0 disables automation reacting to "
+            "its own changes entirely"
+        ),
+    )
+    automation_rate_limit: int = Field(
+        default=10,
+        ge=1,
+        description="Successful runs of one rule on one issue allowed inside the window",
+    )
+    automation_rate_window: float = Field(
+        default=60.0,
+        gt=0,
+        description="Seconds the automation rate limit looks back",
+    )
+    automation_tick_interval: float = Field(
+        default=30.0,
+        gt=0,
+        description="Seconds the scheduler sleeps between looking for due rules",
+    )
+    automation_batch_size: int = Field(
+        default=200,
+        ge=1,
+        description="Issues one scheduled rule processes per tick; the rest wait for the next",
+    )
+
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
     cors_origins: Annotated[list[str], NoDecode] = Field(
