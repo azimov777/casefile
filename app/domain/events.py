@@ -43,6 +43,10 @@ class ObjectType(StrEnum):
 
     ISSUE = "issue"
     STATUS = "status"
+    #: Связь между задачами. Объект события — сама связь, а не одна из двух задач:
+    #: выбрать «главную» сторону было бы произволом, а подписчику нужны обе. Ключи
+    #: обеих задач лежат в `object_key` и в полезной нагрузке.
+    LINK = "link"
 
 
 class EventType(StrEnum):
@@ -64,6 +68,8 @@ class EventType(StrEnum):
     #: Массовый перенос задач между статусами: одно событие на весь перенос, а не по
     #: событию на задачу. Почему так — в `app/services/issue_usage.py`.
     STATUS_ISSUES_MOVED = "status.issues_moved"
+    LINK_CREATED = "link.created"
+    LINK_DELETED = "link.deleted"
 
 
 class OutboxStatus(StrEnum):
@@ -93,6 +99,11 @@ ACTION_EVENTS: dict[str, EventType] = {
     "issue.follow": EventType.ISSUE_UPDATED,
     "issue.unfollow": EventType.ISSUE_UPDATED,
     "issue.delete": EventType.ISSUE_DELETED,
+    # Связи не меняют строку задачи, поэтому и события у них свои, а не `issue.updated`:
+    # подписчик, которому интересны только поля задачи, не должен разбирать поток
+    # изменений связей, а подписчику связей не нужны все правки названий.
+    "link.create": EventType.LINK_CREATED,
+    "link.delete": EventType.LINK_DELETED,
 }
 
 

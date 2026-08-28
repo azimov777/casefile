@@ -452,3 +452,79 @@ class IssueResolutionNotAllowedError(ValidationError):
 
     code = "issue_resolution_not_allowed"
     message = "Resolution is only allowed for a done status"
+
+
+# --- Связи между задачами --------------------------------------------------------
+
+
+class IssueLinkNotFoundError(NotFoundError):
+    """Связи с таким идентификатором у этой задачи нет.
+
+    Один код и на несуществующую связь, и на существующую, но принадлежащую другой
+    паре задач: связь адресуется в пути своей задачей, и «есть, но не твоя» для
+    клиента то же самое, что «нет».
+    """
+
+    code = "link_not_found"
+    message = "Issue link not found"
+
+
+class IssueLinkExistsError(ConflictError):
+    """Такая связь между этими задачами уже есть.
+
+    Проверяется после приведения к каноническому виду, поэтому «A blocks B» упирается
+    в уже существующую «B depends_on A»: это одна связь, записанная с разных сторон.
+    """
+
+    code = "link_already_exists"
+    message = "Issue link already exists"
+
+
+class SelfLinkError(ValidationError):
+    """Задачу нельзя связать с самой собой."""
+
+    code = "link_self_reference"
+    message = "Issue cannot be linked to itself"
+
+
+class LinkCycleError(ConflictError):
+    """Связь замкнула бы иерархию в кольцо.
+
+    Проверка идёт на произвольной глубине, а не только на прямом «А родитель Б, Б
+    родитель А»: кольцо из трёх и более задач так же ломает дерево — обход по нему не
+    заканчивается, а «родитель» перестаёт означать «выше».
+    """
+
+    code = "link_cycle_detected"
+    message = "Issue link would create a hierarchy cycle"
+
+
+class IssueParentExistsError(ConflictError):
+    """У задачи уже есть родитель: второго не бывает.
+
+    Иерархия обязана оставаться деревом. С двумя родителями одна и та же задача попала
+    бы в выдачу дерева дважды, а «в каком эпике задача» перестало бы иметь единственный
+    ответ. Прежнюю связь сначала удаляют, потом заводят новую.
+    """
+
+    code = "link_parent_exists"
+    message = "Issue already has a parent"
+
+
+class EpicParentError(ConflictError):
+    """У задачи типа «эпик» родителя быть не может.
+
+    Эпик — верхний уровень планирования; вложенный в задачу эпик означал бы, что
+    верхний уровень находится внутри нижнего. Ошибка возникает и при создании связи, и
+    при попытке сменить тип задачи, у которой родитель уже есть.
+    """
+
+    code = "epic_cannot_have_parent"
+    message = "An epic cannot have a parent issue"
+
+
+class InvalidTreeDepthError(ValidationError):
+    """Запрошена глубина дерева вне допустимых границ."""
+
+    code = "invalid_tree_depth"
+    message = "Tree depth is out of range"

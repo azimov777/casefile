@@ -19,7 +19,9 @@ from app.domain.events import (
 )
 from app.domain.issues import IssueChange, IssueField
 
-#: Действия, которые сценарии задач передают в `apply_issue_changes` и `ensure_allowed`.
+#: Действия, которые сценарии задач передают в `apply_issue_changes` и `ensure_allowed`,
+#: плюс действия над связями (задача 08): они меняют не саму задачу, а её окружение, но
+#: событие обязаны порождать так же.
 #: Список записан руками: он должен ломаться при появлении нового действия без события,
 #: а вычисленный из самого словаря — не сломался бы никогда.
 MUTATING_ACTIONS = (
@@ -30,6 +32,8 @@ MUTATING_ACTIONS = (
     "issue.follow",
     "issue.unfollow",
     "issue.delete",
+    "link.create",
+    "link.delete",
 )
 
 

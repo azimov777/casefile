@@ -156,6 +156,7 @@ SYSTEM_FIELD_KEYS = frozenset(
         "followers",
         "deadline",
         "tags",
+        "links",
         "values",
         "version",
         "created_at",
