@@ -413,7 +413,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 
 **Поля.** Системные адресуются именем (`queue`, `key`, `status`, `status_category`,
 `issue_type`, `resolution`, `priority`, `summary`, `description`, `author`, `assignee`,
-`followers`, `deadline`, `tags`, `created_at`, `updated_at`), кастомные — ссылкой
+`followers`, `deadline`, `tags`, `project`, `created_at`, `updated_at`), кастомные — ссылкой
 (`severity` у глобального, `TRK.severity` у локального). Отдельно есть `text` — вхождение
 подстроки сразу в название, описание и ленту обсуждения.
 
@@ -434,7 +434,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 (`fields=TRK.severity`) оставляет в `values` только его.
 
 Пустой запрос — законный: он означает «все задачи». Имя, занятое системой, но ещё без фильтра
-(`project`, `sprint`), отвечает отказом с причиной `not_searchable`, а не молча ищет в JSONB.
+(`sprint`, `links`), отвечает отказом с причиной `not_searchable`, а не молча ищет в JSONB.
 
 ### Сохранённые фильтры
 
@@ -462,6 +462,84 @@ curl -H "Authorization: Bearer $TOKEN" -G http://localhost:8000/api/v1/search/is
 запускает фильтр, а `today()` — сегодня. Описание проверяется при сохранении целиком, поэтому
 опечатка в имени поля становится ошибкой сразу, а не пустой выдачей через неделю.
 
+
+## Проекты и портфели
+
+Надочередной слой планирования. Очередь отражает процесс команды, проект — результат, ради
+которого работают несколько команд: он собирает задачи **из разных очередей**, а портфель
+объединяет проекты и другие портфели. Это разные оси, поэтому проект — отдельное поле задачи,
+а не свойство её очереди.
+
+```bash
+# портфель и проект внутри него
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"key": "platform", "name": "Платформа", "status": "in_progress"}' \
+     http://localhost:8000/api/v1/portfolios
+
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"key": "alpha", "name": "Доставка", "portfolio": "platform",
+          "start_date": "2026-01-01", "end_date": "2026-06-30"}' \
+     http://localhost:8000/api/v1/projects
+
+# состав: задачи из разных очередей одним запросом
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"issues": ["TRK-1", "TRK-2", "OPS-1"]}' \
+     http://localhost:8000/api/v1/projects/alpha/issues
+
+# убрать задачу из проекта — сама задача остаётся жить в своей очереди
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+     http://localhost:8000/api/v1/projects/alpha/issues/TRK-2
+```
+
+**Прогресс не хранится, а считается.** В карточке проекта лежит доля задач в статусах
+категории `done`, посчитанная в момент запроса; у портфеля она сложена по задачам **всех** его
+проектов-потомков, на любой глубине вложенности:
+
+```json
+{"data": {"key": "platform", "progress": {"total": 4, "done": 3, "ratio": 0.75},
+          "projects_count": 1, "portfolios_count": 1}}
+```
+
+Сумма по задачам, а не среднее от детей: портфель отвечает на вопрос «сколько работы под ним
+сделано», и мелкий проект, закрытый целиком, не должен двигать это число как крупный. У
+проекта без задач `ratio` равен `null`, а не нулю: «нечего считать» и «сделано 0%» — разные
+вещи. Колонки с процентом готовности в схеме нет и не будет — задачу закрывают из REST, из
+MCP и массовым переносом статуса, и хранимая доля разошлась бы с реальностью в первую же
+неделю.
+
+**Список задач проекта — это поиск.** Отдельного набора фильтров у него нет: работает тот же
+язык запросов, та же сортировка, тот же выбор полей и тот же курсор, а условие `project`
+приклеивается по `and`.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -G \
+     http://localhost:8000/api/v1/projects/alpha/issues \
+     --data-urlencode 'query=status_category: != done and priority: >= major' \
+     --data-urlencode 'fields=summary' --data-urlencode 'sort=-deadline'
+```
+
+Тем же именем проект адресуется и в общем поиске: `project: alpha`, а `project: empty()`
+находит задачи вне проектов.
+
+**Состав портфеля** отдаётся одним упорядоченным списком, где проекты и вложенные портфели
+различаются полем `kind`, — а не двумя коллекциями в одном ответе:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+     http://localhost:8000/api/v1/portfolios/platform/content
+```
+
+**Статус проекта — самостоятельное поле** (`not_started`, `in_progress`, `paused`, `done`), а
+не функция от статусов задач: проект бывает приостановлен при полностью закрытых задачах.
+
+**Вложенность без циклов.** Портфель кладётся в портфель через `PUT
+/portfolios/{key}/parent`, проект переносится через `PUT /projects/{key}/portfolio`; `null`
+вынимает объект наверх. Кольцо запрещено на произвольной глубине — отказ
+`portfolio_cycle_detected`, как `link_cycle_detected` у иерархии задач.
+
+**Удаления нет — есть архив.** `POST /projects/{key}/archive` убирает проект из рабочих
+списков: новых задач он не принимает, но уже собранные остаются, прогресс продолжает
+считаться, а поля правятся. Возврат — `POST /projects/{key}/unarchive`; оба идемпотентны.
 
 ## История изменений и события
 
