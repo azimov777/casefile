@@ -21,16 +21,22 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
 from app.db.models.actor import Actor
+from app.db.models.board import Board, Sprint
+from app.db.models.catalog import Status
 from app.db.models.issue import Issue
 from app.db.models.project import Portfolio, Project
 from app.db.models.queue import Queue
+from app.db.models.saved_filter import SavedFilter
 from app.db.session import get_session
 from app.domain.actors import ActorType
+from app.domain.catalogs import CatalogKind
 from app.main import create_app
 from app.services import actors as actors_service
+from app.services import boards as boards_service
 from app.services import issues as issues_service
 from app.services import projects as projects_service
 from app.services import queues as queues_service
+from app.services import saved_filters as saved_filters_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -213,6 +219,98 @@ def make_portfolio(db_session: AsyncSession, owner: Actor) -> Callable[..., Awai
             initiator=kwargs.pop("initiator", owner),
             key=kwargs.pop("key", "platform"),
             name=kwargs.pop("name", "Платформа"),
+            **kwargs,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_saved_filter(
+    db_session: AsyncSession,
+    owner: Actor,
+) -> Callable[..., Awaitable[SavedFilter]]:
+    """Фабрика сохранённых фильтров: источник задач для доски.
+
+    Отдельная фикстура, а не создание внутри фабрики доски: доска обязана строиться
+    поверх готового фильтра, и тест, которому нужен свой отбор, должен уметь его
+    задать — иначе проверять «доска показывает то, что отбирает её фильтр» было бы
+    нечем.
+    """
+
+    async def _make(**kwargs: Any) -> SavedFilter:
+        return await saved_filters_service.create_saved_filter(
+            db_session,
+            initiator=kwargs.pop("initiator", owner),
+            name=kwargs.pop("name", "Задачи доски"),
+            query=kwargs.pop("query", "queue: TRK"),
+            **kwargs,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def resolve_status(db_session: AsyncSession, owner: Actor) -> Callable[[str], Awaitable[Status]]:
+    """Ссылка справочника (`open`, `TRK.open`) в запись статуса.
+
+    Нужна тестам досок: колонка описывается набором статусов, и сценарий принимает
+    объекты, а не строки, — разрешение ссылки в проекте делает интерфейс.
+    """
+
+    async def _resolve(ref: str) -> Status:
+        entry = await queues_service.resolve_catalog_ref(
+            db_session,
+            CatalogKind.STATUS,
+            ref,
+            initiator=owner,
+        )
+        assert isinstance(entry, Status)
+        return entry
+
+    return _resolve
+
+
+@pytest.fixture
+def make_board(
+    db_session: AsyncSession,
+    owner: Actor,
+    make_saved_filter: Callable[..., Awaitable[SavedFilter]],
+) -> Callable[..., Awaitable[Board]]:
+    """Фабрика досок. Фильтр создаётся сам, если тест не передал свой.
+
+    Колонки тест задаёт сам: набор статусов — это и есть то, чем одна доска отличается
+    от другой, и умолчание здесь прятало бы половину проверяемого.
+    """
+
+    async def _make(**kwargs: Any) -> Board:
+        saved_filter = kwargs.pop("saved_filter", None)
+        if saved_filter is None:
+            saved_filter = await make_saved_filter()
+        return await boards_service.create_board(
+            db_session,
+            initiator=kwargs.pop("initiator", owner),
+            name=kwargs.pop("name", "Доска команды"),
+            saved_filter=saved_filter,
+            **kwargs,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_sprint(
+    db_session: AsyncSession,
+    owner: Actor,
+) -> Callable[..., Awaitable[Sprint]]:
+    """Фабрика спринтов. Доску передаёт тест: спринт без неё не существует."""
+
+    async def _make(board: Board, **kwargs: Any) -> Sprint:
+        return await boards_service.create_sprint(
+            db_session,
+            initiator=kwargs.pop("initiator", owner),
+            board=board,
+            name=kwargs.pop("name", "Спринт 1"),
             **kwargs,
         )
 
