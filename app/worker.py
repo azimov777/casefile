@@ -48,6 +48,7 @@ import signal
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, session_scope
+from app.services import automation as automation_service
 from app.services import events as events_service
 from app.services.event_bus import load_subscribers
 
@@ -113,9 +114,18 @@ async def run(settings: Settings | None = None) -> None:
     stop = asyncio.Event()
     _install_signal_handlers(stop)
 
+    synchronised = False
     try:
         while not stop.is_set():
             try:
+                if not synchronised:
+                    # Реестр правил автоматики синхронизируется внутри цикла, а не до
+                    # него, по той же причине, по которой цикл переживает сбой: при
+                    # первом запуске контура таблиц ещё нет, и падение здесь убило бы
+                    # процесс насмерть. Повторяется до первого успеха.
+                    async with session_scope() as session:
+                        await automation_service.sync_rules(session)
+                    synchronised = True
                 idle = await drain(stop) == 0
             except Exception:
                 # Сбой одного круга не должен убивать процесс, который обязан жить
