@@ -3,7 +3,7 @@
 from app.db.repositories.actors import ActorRepository
 from app.db.repositories.api_tokens import ApiTokenRepository
 from app.db.repositories.automation import AutomationRuleRepository, AutomationRunRepository
-from app.db.repositories.boards import BoardIssueRepository, BoardRepository, SprintRepository
+from app.db.repositories.boards import BoardIssueRepository, BoardRepository
 from app.db.repositories.catalogs import CatalogRepository
 from app.db.repositories.checklists import ChecklistRepository
 from app.db.repositories.comments import CommentRepository
@@ -42,7 +42,6 @@ __all__ = [
     "ProjectRepository",
     "QueueRepository",
     "SavedFilterRepository",
-    "SprintRepository",
     "SubscriptionRepository",
     "WorkflowRepository",
 ]

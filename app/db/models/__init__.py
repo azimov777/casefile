@@ -9,7 +9,7 @@ from app.db.base import Base, BaseModel
 from app.db.models.actor import Actor
 from app.db.models.api_token import ApiToken
 from app.db.models.automation import AutomationRule, AutomationRun
-from app.db.models.board import Board, BoardColumn, BoardColumnStatus, IssueRank, Sprint
+from app.db.models.board import Board, BoardColumn, BoardColumnStatus, IssueRank
 from app.db.models.catalog import CatalogEntryMixin, IssueType, Resolution, Status
 from app.db.models.checklist import ChecklistItem
 from app.db.models.comment import Comment
@@ -61,7 +61,6 @@ __all__ = [
     "QueueIssueType",
     "Resolution",
     "SavedFilter",
-    "Sprint",
     "Status",
     "Subscription",
     "Transition",

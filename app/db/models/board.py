@@ -1,4 +1,4 @@
-"""Доска, её колонки, спринты и ранг карточки.
+"""Доска, её колонки и ранг карточки.
 
 ## Доска не хранит условий отбора
 
@@ -29,12 +29,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
-    Date,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -46,15 +44,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import BaseModel, string_enum
+from app.db.base import BaseModel
 from app.db.models.catalog import Status
 from app.db.models.saved_filter import SavedFilter
-from app.domain.boards import (
-    MAX_BOARD_NAME_LENGTH,
-    MAX_COLUMN_NAME_LENGTH,
-    MAX_SPRINT_NAME_LENGTH,
-    SprintState,
-)
+from app.domain.boards import MAX_BOARD_NAME_LENGTH, MAX_COLUMN_NAME_LENGTH
 
 
 class Board(BaseModel):
@@ -173,64 +166,6 @@ class BoardColumnStatus(BaseModel):
 
     column: Mapped[BoardColumn] = relationship(back_populates="status_links")
     status: Mapped[Status] = relationship(lazy="joined", innerjoin=True)
-
-
-class Sprint(BaseModel):
-    """Спринт доски: имя, цель, период и состояние.
-
-    Активный спринт у доски не более одного — это держит частичный уникальный индекс.
-    Второй активный сделал бы бессмысленными и колонки доски, и фильтр `sprint: current`.
-    """
-
-    __tablename__ = "sprints"
-    __table_args__ = (
-        UniqueConstraint("board_id", "name"),
-        Index("ix_sprints_board_id_created_at_id", "board_id", "created_at", "id"),
-        # Частичный уникальный индекс, а не проверка в сценарии: два одновременных
-        # запуска спринта прошли бы проверку оба, и доска осталась бы с двумя активными.
-        Index(
-            "uq_sprints_board_id_active",
-            "board_id",
-            unique=True,
-            postgresql_where=text(f"state = '{SprintState.ACTIVE.value}'"),
-        ),
-        # Запрос «в каком спринте задача» ходит по `issues.sprint_id`, обратный —
-        # «какие спринты сейчас активны» (`sprint: current`) — по состоянию.
-        Index("ix_sprints_state", "state"),
-    )
-
-    board_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("boards.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    name: Mapped[str] = mapped_column(String(MAX_SPRINT_NAME_LENGTH), nullable=False)
-    # Пустая строка вместо NULL: «цели нет» и «цель пустая» — одно состояние.
-    goal: Mapped[str] = mapped_column(
-        Text,
-        default="",
-        server_default=text("''"),
-        nullable=False,
-    )
-
-    # Календарные даты, а не моменты времени, — как у проекта: спринт не начинается в
-    # 14:37, и хранимое время вынудило бы клиента его придумывать. `Date` указан явно:
-    # в `type_annotation_map` описан только `datetime`.
-    start_date: Mapped[date | None] = mapped_column(Date, default=None, nullable=True)
-    end_date: Mapped[date | None] = mapped_column(Date, default=None, nullable=True)
-
-    state: Mapped[SprintState] = mapped_column(
-        string_enum(SprintState, name="sprint_state", length=16),
-        default=SprintState.PLANNED,
-        server_default=text(f"'{SprintState.PLANNED.value}'"),
-        nullable=False,
-    )
-    #: Когда спринт фактически запустили и завершили. Планируемый период (`start_date`,
-    #: `end_date`) и фактический — разные вещи: спринт запускают не в тот день, на
-    #: который его планировали, и отчёт обязан различать план и факт.
-    started_at: Mapped[datetime | None] = mapped_column(default=None, nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(default=None, nullable=True)
-
-    board: Mapped[Board] = relationship(lazy="joined", innerjoin=True)
 
 
 class IssueRank(BaseModel):

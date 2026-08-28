@@ -31,7 +31,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseModel, string_enum
 from app.db.models.actor import Actor
-from app.db.models.board import Sprint
 from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.models.project import Project
 from app.db.models.queue import Queue
@@ -68,10 +67,6 @@ class Issue(BaseModel):
         # прогресса. Проект собирает задачи из разных очередей, поэтому индекс по
         # `queue_id` тут ничем не помогает: выборка идёт поперёк очередей.
         Index("ix_issues_project_id", "project_id"),
-        # Задачи спринта — основной запрос доски и единственный источник переноса при
-        # его завершении. Спринт собирает задачи поперёк очередей ровно как проект,
-        # поэтому индекс отдельный, а не по паре с очередью.
-        Index("ix_issues_sprint_id", "sprint_id"),
         # Курсорная пагинация во всём проекте идёт по паре `(created_at, id)`. На
         # справочниках это не имело значения, на таблице задач — уже имеет: без
         # индекса каждая страница означала бы сортировку всей таблицы.
@@ -160,19 +155,6 @@ class Issue(BaseModel):
         nullable=True,
     )
 
-    # Спринт, в который взята задача. Не более одного и по той же причине, что у
-    # проекта: при множественном членстве вопрос «в каком спринте задача горит» остался
-    # бы без единственного ответа. `NULL` — обычное состояние: задача в бэклоге.
-    #
-    # Без `ondelete`: спринт с задачами удалить нельзя (`sprint_not_empty`), а каскад
-    # унёс бы принадлежность молча. Спринт при этом принадлежит доске, а задача — нет:
-    # доска отбирает задачи фильтром и владеть ими не может.
-    sprint_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("sprints.id"),
-        default=None,
-        nullable=True,
-    )
-
     # Дедлайн — момент времени с зоной, а не дата: соглашения требуют ISO 8601 с
     # таймзоной для всех дат контракта, и язык запросов из задачи 12 сравнивает его
     # диапазонами. Дата без времени осталась кастомным полям — там тип `date` есть.
@@ -214,7 +196,6 @@ class Issue(BaseModel):
     status: Mapped[Status] = relationship(lazy="selectin")
     resolution: Mapped[Resolution | None] = relationship(lazy="selectin")
     project: Mapped[Project | None] = relationship(lazy="selectin")
-    sprint: Mapped[Sprint | None] = relationship(lazy="selectin")
     author: Mapped[Actor] = relationship(lazy="selectin", foreign_keys=[author_id])
     # `foreign_keys` обязателен у обеих связей на акторов: путей внешних ключей между
     # задачей и актором два, и выбрать между ними SQLAlchemy не может.

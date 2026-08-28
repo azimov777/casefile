@@ -1,4 +1,4 @@
-"""Выборки по доскам, спринтам и рангу карточек.
+"""Выборки по доскам и рангу карточек.
 
 Репозиторий не коммитит и не откатывает: границу транзакции держит вход в приложение.
 
@@ -47,13 +47,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.db.models.board import Board, BoardColumnStatus, IssueRank, Sprint
-from app.db.models.catalog import Status
+from app.db.models.board import Board, BoardColumnStatus, IssueRank
 from app.db.models.issue import Issue
 from app.db.pagination import Page, paginate
 from app.db.repositories.search import issue_page
-from app.domain.boards import RANK_SCALE, SprintState
-from app.domain.catalogs import StatusCategory
+from app.domain.boards import RANK_SCALE
 from app.domain.ranking import POSITION_STEP
 
 #: Микросекунд в секунде: множитель виртуальной шкалы. Вынесен константой, потому что
@@ -116,11 +114,6 @@ class BoardRepository:
         )
         return await self._session.scalar(statement) or 0
 
-    async def count_sprints(self, board_id: uuid.UUID) -> int:
-        """Сколько спринтов у доски. От ответа зависит, можно ли доску удалить."""
-        statement = select(func.count()).select_from(Sprint).where(Sprint.board_id == board_id)
-        return await self._session.scalar(statement) or 0
-
     async def add(self, board: Board) -> Board:
         self._session.add(board)
         await self._session.flush()
@@ -128,77 +121,6 @@ class BoardRepository:
 
     async def delete(self, board: Board) -> None:
         await self._session.delete(board)
-        await self._session.flush()
-
-    async def flush(self) -> None:
-        await self._session.flush()
-
-
-class SprintRepository:
-    """Доступ к таблице `sprints` и к задачам, взятым в спринт."""
-
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
-
-    async def get_by_id(self, sprint_id: uuid.UUID) -> Sprint | None:
-        statement = select(Sprint).where(Sprint.id == sprint_id)
-        return (await self._session.scalars(statement)).unique().one_or_none()
-
-    async def list_page(
-        self,
-        *,
-        board_id: uuid.UUID | None = None,
-        state: SprintState | None = None,
-        limit: int | None = None,
-        cursor: str | None = None,
-    ) -> Page[Sprint]:
-        """Страница спринтов в порядке создания."""
-        statement = select(Sprint)
-        if board_id is not None:
-            statement = statement.where(Sprint.board_id == board_id)
-        if state is not None:
-            statement = statement.where(Sprint.state == state)
-        return await paginate(self._session, statement, Sprint, limit=limit, cursor=cursor)
-
-    async def active_of_board(self, board_id: uuid.UUID) -> Sprint | None:
-        """Активный спринт доски. Их не больше одного — это держит частичный индекс."""
-        statement = select(Sprint).where(
-            Sprint.board_id == board_id,
-            Sprint.state == SprintState.ACTIVE,
-        )
-        return (await self._session.scalars(statement)).unique().one_or_none()
-
-    async def count_issues(self, sprint_id: uuid.UUID) -> int:
-        """Сколько задач взято в спринт. От ответа зависит, можно ли его удалить."""
-        statement = select(func.count()).select_from(Issue).where(Issue.sprint_id == sprint_id)
-        return await self._session.scalar(statement) or 0
-
-    async def unfinished_issues(self, sprint_id: uuid.UUID) -> list[Issue]:
-        """Задачи спринта, не дошедшие до статуса категории `done`.
-
-        Отдаются объектами, а не идентификаторами: каждую из них завершение спринта
-        проводит через единую точку изменения задачи, и без объекта туда не зайти.
-        Отсюда и ограничение, которое надо знать: завершение спринта на тысячу
-        незакрытых задач поднимет в память тысячу задач.
-
-        Категория статуса, а не его ключ: команда переименовывает «Закрыт» в «Готово»,
-        и от этого состав переноса меняться не должен.
-        """
-        statement = (
-            select(Issue)
-            .join(Status, Status.id == Issue.status_id)
-            .where(Issue.sprint_id == sprint_id, Status.category != StatusCategory.DONE)
-            .order_by(Issue.created_at, Issue.id)
-        )
-        return list((await self._session.scalars(statement)).unique())
-
-    async def add(self, sprint: Sprint) -> Sprint:
-        self._session.add(sprint)
-        await self._session.flush()
-        return sprint
-
-    async def delete(self, sprint: Sprint) -> None:
-        await self._session.delete(sprint)
         await self._session.flush()
 
     async def flush(self) -> None:
