@@ -15,7 +15,7 @@ from app.api.router import api_router, generate_operation_id
 from app.api.routes import health
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
-from app.db.session import dispose_engine, session_scope
+from app.db.session import dispose_engine, schema_is_missing, session_scope
 from app.db.wakeup import hub as wakeup_hub
 from app.services import automation as automation_service
 
@@ -47,12 +47,21 @@ async def _sync_automation_rules() -> None:
     быть вовсе. Ронять API из-за этого нельзя, а молчать — тем более: список правил
     окажется пустым, и объяснить это будет нечем. Синхронизацию повторяют планировщик и
     воркер при своём старте, поэтому пропущенный здесь заход не теряется.
+
+    Непромигрированная база при этом отделена от настоящего сбоя: она ожидаема, ей
+    хватает строки предупреждения, и трассировка на каждом старте с нуля мешала бы
+    заметить ту, что означает поломку.
     """
     try:
         async with session_scope() as session:
             created = await automation_service.sync_rules(session)
-    except Exception:
-        logger.exception("Automation rules are not synchronised; the registry may be incomplete")
+    except Exception as exc:
+        if schema_is_missing(exc):
+            logger.warning("Database schema is not migrated yet; rules are not synchronised")
+        else:
+            logger.exception(
+                "Automation rules are not synchronised; the registry may be incomplete"
+            )
         return
     if created:
         logger.info("Automation rules registered: %s", ", ".join(created))

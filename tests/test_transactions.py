@@ -11,6 +11,10 @@
 Меры две, и обе проверяются здесь: `SessionDep` объявлен с областью `function`
 (`app/api/deps.py`), а нарушение целостности переводится в `conflict`
 (`app/db/session.py`).
+
+Там же, в `app/db/session.py`, живёт разбор ошибок драйвера на «ожидаемое состояние
+старта» и «поломку» — `schema_is_missing`. Его проверки в конце файла: ошибаться он может
+только в одну из двух сторон, и обе дорого стоят, поэтому проверяются обе.
 """
 
 from collections.abc import AsyncIterator
@@ -19,6 +23,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import SessionDep
@@ -228,3 +233,47 @@ async def test_duplicate_issue_key_is_a_conflict_not_a_five_hundred(
         async with engine.begin() as connection:
             await connection.execute(text("DELETE FROM issues WHERE key = 'DUP-1'"))
             await connection.execute(text("DELETE FROM queues WHERE key = 'DUP'"))
+
+
+# --- Непромигрированная база отличается от поломки -----------------------------------
+
+
+async def test_missing_table_reads_as_an_unmigrated_schema(engine: AsyncEngine) -> None:
+    """Первые секунды контура таблиц нет, и это состояние обязано отличаться от сбоя.
+
+    Иначе воркер и планировщик пишут полноэкранную трассировку каждые пять секунд, пока
+    человек не применит миграции, — и настоящую ошибку старта в этой простыне не найти.
+    """
+    with pytest.raises(ProgrammingError) as failure:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1 FROM there_is_no_such_table"))
+
+    assert session_module.schema_is_missing(failure.value) is True
+
+
+async def test_missing_column_does_not_read_as_an_unmigrated_schema(
+    probe_table: None,
+    engine: AsyncEngine,
+) -> None:
+    """Таблица есть, а колонки нет — это миграции, применённые не до конца, то есть поломка.
+
+    Граница проверки проходит здесь намеренно: расширить её до «любой ошибки схемы»
+    значило бы превратить настоящий дефект выкладки в строку предупреждения.
+    """
+    with pytest.raises(ProgrammingError) as failure:
+        async with engine.connect() as connection:
+            await connection.execute(text(f"SELECT no_such_column FROM {PROBE_TABLE}"))
+
+    assert session_module.schema_is_missing(failure.value) is False
+
+
+async def test_integrity_violation_does_not_read_as_an_unmigrated_schema(
+    probe_table: None,
+    engine: AsyncEngine,
+) -> None:
+    """Нарушение целостности — сбой, и трассировку у него отбирать нельзя."""
+    with pytest.raises(IntegrityError) as failure:
+        async with engine.begin() as connection:
+            await connection.execute(text(f"INSERT INTO {PROBE_TABLE} VALUES (1), (1)"))
+
+    assert session_module.schema_is_missing(failure.value) is False

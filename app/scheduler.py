@@ -37,7 +37,7 @@ from datetime import UTC, datetime
 from app.automation import engine
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
-from app.db.session import dispose_engine, session_scope
+from app.db.session import dispose_engine, schema_is_missing, session_scope
 from app.services import automation as automation_service
 
 logger = get_logger("scheduler")
@@ -101,8 +101,15 @@ async def run(settings: Settings | None = None) -> None:
                         ", ".join(created) or "none",
                     )
                 await tick()
-            except Exception:
-                logger.exception("Automation scheduler cycle failed; retrying")
+            except Exception as exc:
+                # Непромигрированная база — ожидаемое состояние первых секунд контура, а
+                # не поломка: миграции применяются отдельным шагом и позже. Одна строка
+                # вместо трассировки каждые пять секунд; всё остальное по-прежнему
+                # уходит в лог целиком.
+                if schema_is_missing(exc):
+                    logger.warning("Database schema is not migrated yet; retrying")
+                else:
+                    logger.exception("Automation scheduler cycle failed; retrying")
                 await _sleep_until(stop, ERROR_BACKOFF_SECONDS)
                 continue
             await _sleep_until(stop, settings.automation_tick_interval)
