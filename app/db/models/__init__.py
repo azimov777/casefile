@@ -12,6 +12,7 @@ from app.db.models.catalog import CatalogEntryMixin, IssueType, Resolution, Stat
 from app.db.models.event import ChangelogEntry, OutboxEvent
 from app.db.models.field import Field, FieldIssueType
 from app.db.models.issue import Issue, IssueFollower
+from app.db.models.link import IssueLink
 from app.db.models.queue import Queue, QueueIssueType
 from app.db.models.workflow import Transition, Workflow, WorkflowStatus
 
@@ -26,6 +27,7 @@ __all__ = [
     "FieldIssueType",
     "Issue",
     "IssueFollower",
+    "IssueLink",
     "IssueType",
     "OutboxEvent",
     "Queue",

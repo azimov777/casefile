@@ -302,7 +302,8 @@ SQL и в ORM (`Issue.values`) ловушки нет. Она есть в мет�
 
 **Что:** к известному списку ложных срабатываний (`ck_actors_actor_type`,
 `ck_statuses_status_category`, `ck_fields_field_value_type`, `ck_issues_issue_priority`)
-добавился `ck_outbox_events_outbox_status`.
+добавился `ck_outbox_events_outbox_status`, а с задачей 08 — ещё и
+`ck_issue_links_issue_link_type`.
 **Почему важно:** список растёт с каждым новым перечислением, и это по-прежнему не
 расхождение схемы. Правило проверки неизменно: если в выводе **только** снятие CHECK у
 колонок-перечислений — модели и схема сошлись.

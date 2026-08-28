@@ -6,6 +6,7 @@ from app.db.repositories.catalogs import CatalogRepository
 from app.db.repositories.events import ChangelogRepository, OutboxRepository
 from app.db.repositories.fields import FieldRepository
 from app.db.repositories.issues import IssueRepository
+from app.db.repositories.links import IssueLinkRepository
 from app.db.repositories.queues import QueueRepository
 from app.db.repositories.workflows import WorkflowRepository
 
@@ -15,6 +16,7 @@ __all__ = [
     "CatalogRepository",
     "ChangelogRepository",
     "FieldRepository",
+    "IssueLinkRepository",
     "IssueRepository",
     "OutboxRepository",
     "QueueRepository",
