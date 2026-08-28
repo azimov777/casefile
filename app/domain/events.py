@@ -64,10 +64,6 @@ class ObjectType(StrEnum):
     #: ранг принадлежит доске, а не задаче, и подписчик, который держит открытой одну
     #: доску, обязан уметь отобрать эти события по её идентификатору.
     BOARD = "board"
-    #: Спринт. Объект — спринт, а не доска: инбокс и дашборд следят за конкретным
-    #: спринтом, а перенос задачи в него остаётся событием **задачи**
-    #: (`issue.updated` с полем `sprint`) — он меняет строку задачи.
-    SPRINT = "sprint"
 
 
 class EventType(StrEnum):
@@ -128,14 +124,6 @@ class EventType(StrEnum):
     #: его от правки настроек, не разбирая полезную нагрузку каждого изменения доски.
     #: Строку задачи оно не меняет и в её историю не попадает — ранг принадлежит доске.
     BOARD_ISSUE_RANKED = "board.issue_ranked"
-    SPRINT_CREATED = "sprint.created"
-    SPRINT_UPDATED = "sprint.updated"
-    #: Запуск и завершение — свои типы, а не `sprint.updated` с полем в нагрузке. Причина
-    #: та же, по которой выделены архивация проекта и смена статуса задачи: «спринт
-    #: начался» и «спринт закрыт» — самые частые условия уведомлений и отчётов.
-    SPRINT_STARTED = "sprint.started"
-    SPRINT_COMPLETED = "sprint.completed"
-    SPRINT_DELETED = "sprint.deleted"
 
 
 class OutboxStatus(StrEnum):
@@ -202,11 +190,6 @@ ACTION_EVENTS: dict[str, EventType] = {
     "portfolio.update": EventType.PORTFOLIO_UPDATED,
     "portfolio.archive": EventType.PORTFOLIO_ARCHIVED,
     "portfolio.restore": EventType.PORTFOLIO_RESTORED,
-    # Спринт задаётся полем задачи, как и проект: `issue.set_sprint` — это правка поля
-    # `sprint`, поэтому она даёт `issue.updated`, а не собственный тип. Отдельное
-    # действие нужно проверке прав: «взять задачу в спринт» и «переписать её название»
-    # — разные по смыслу операции.
-    "issue.set_sprint": EventType.ISSUE_UPDATED,
     "board.create": EventType.BOARD_CREATED,
     "board.update": EventType.BOARD_UPDATED,
     "board.delete": EventType.BOARD_DELETED,
@@ -217,11 +200,6 @@ ACTION_EVENTS: dict[str, EventType] = {
     "board.column_update": EventType.BOARD_UPDATED,
     "board.column_remove": EventType.BOARD_UPDATED,
     "board.rank": EventType.BOARD_ISSUE_RANKED,
-    "sprint.create": EventType.SPRINT_CREATED,
-    "sprint.update": EventType.SPRINT_UPDATED,
-    "sprint.start": EventType.SPRINT_STARTED,
-    "sprint.complete": EventType.SPRINT_COMPLETED,
-    "sprint.delete": EventType.SPRINT_DELETED,
 }
 
 

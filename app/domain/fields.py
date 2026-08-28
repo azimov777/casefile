@@ -172,7 +172,6 @@ SYSTEM_FIELD_KEYS = frozenset(
         "created_at",
         "updated_at",
         "project",
-        "sprint",
     }
 )
 

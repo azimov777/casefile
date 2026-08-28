@@ -223,7 +223,7 @@ def audience_of(event_type: str, payload: Mapping[str, Any]) -> EventAudience:
         return EventAudience(queue_key=payload.get("queue"))
     if event_type.startswith("issue."):
         return _issue_audience(payload)
-    # Доски и спринты причастных акторов не имеют: у них нет ни автора, ни участников.
+    # Доска причастных акторов не имеет: у неё нет ни автора, ни участников.
     # До подписчика на область `all` они всё равно дойдут — этим и объясняется пустая
     # аудитория вместо отказа.
     return EventAudience()
@@ -614,16 +614,6 @@ def _describe_board_ranked(payload: Mapping[str, Any]) -> NotificationSummary:
     )
 
 
-def _describe_sprint(payload: Mapping[str, Any], *, verb: str) -> NotificationSummary:
-    sprint = payload.get("sprint") or {}
-    issues = list(payload.get("issues") or ())
-    tail = f", {len(issues)} issues carried over" if issues else ""
-    return NotificationSummary(
-        body=f"Sprint {sprint.get('name', '?')} {verb}{tail}",
-        details={"sprint": sprint.get("id"), "issues": issues},
-    )
-
-
 def _describe_unknown(event_type: str, payload: Mapping[str, Any]) -> NotificationSummary:
     """Событие, для которого текста не написано.
 
@@ -691,11 +681,6 @@ _DESCRIBERS = {
     EventType.BOARD_UPDATED.value: lambda payload: _describe_board(payload, verb="updated"),
     EventType.BOARD_DELETED.value: lambda payload: _describe_board(payload, verb="deleted"),
     EventType.BOARD_ISSUE_RANKED.value: _describe_board_ranked,
-    EventType.SPRINT_CREATED.value: lambda payload: _describe_sprint(payload, verb="created"),
-    EventType.SPRINT_UPDATED.value: lambda payload: _describe_sprint(payload, verb="updated"),
-    EventType.SPRINT_STARTED.value: lambda payload: _describe_sprint(payload, verb="started"),
-    EventType.SPRINT_COMPLETED.value: lambda payload: _describe_sprint(payload, verb="completed"),
-    EventType.SPRINT_DELETED.value: lambda payload: _describe_sprint(payload, verb="deleted"),
 }
 
 
@@ -746,8 +731,6 @@ def object_type_of(event_type: str) -> str:
         return ObjectType.PORTFOLIO.value
     if event_type.startswith("board."):
         return ObjectType.BOARD.value
-    if event_type.startswith("sprint."):
-        return ObjectType.SPRINT.value
     if event_type == EventType.STATUS_ISSUES_MOVED:
         return ObjectType.STATUS.value
     return ObjectType.ISSUE.value

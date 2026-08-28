@@ -35,8 +35,8 @@
 `comments`), отвергается ошибкой, а не проваливается в реестр: молчаливый уход в JSONB
 дал бы пустую выдачу вместо внятного «этого фильтра ещё нет». Набор таких имён
 вычисляется вычитанием, поэтому появившийся фильтр уходит из него сам — так `project`
-перестал быть недоступным в задаче 10, а `sprint` в задаче 11, и достаточно было одного
-описания в `SEARCHABLE_SYSTEM_FIELDS`.
+перестал быть недоступным в задаче 10, и достаточно было одного описания в
+`SEARCHABLE_SYSTEM_FIELDS`.
 
 ## Даты сравниваются по календарному дню
 
@@ -277,20 +277,8 @@ class SystemField(StrEnum):
     DEADLINE = "deadline"
     TAGS = "tags"
     PROJECT = "project"
-    SPRINT = "sprint"
     CREATED_AT = "created_at"
     UPDATED_AT = "updated_at"
-
-
-class SprintScope(StrEnum):
-    """Значение фильтра по спринту, которое разрешается не в один спринт.
-
-    `current` означает «любой активный спринт». Подставить здесь один идентификатор
-    нельзя: активный спринт свой у каждой доски, а фильтр про доски не знает. Компилятор
-    превращает маркер в подзапрос — ровно так же, как категорию статуса.
-    """
-
-    CURRENT = "current"
 
 
 class SearchValueKind(StrEnum):
@@ -299,7 +287,6 @@ class SearchValueKind(StrEnum):
     ISSUE_KEY = "issue_key"
     QUEUE_KEY = "queue_key"
     PROJECT_KEY = "project_key"
-    SPRINT_REF = "sprint_ref"
     CATALOG_REF = "catalog_ref"
     STATUS_CATEGORY = "status_category"
     ACTOR_KEY = "actor_key"
@@ -409,17 +396,6 @@ SEARCHABLE_SYSTEM_FIELDS: dict[SystemField, SystemFieldSpec] = {
             _EXACT_OPERATORS,
             is_nullable=True,
         ),
-        # Спринт — ось планирования доски. Значение — идентификатор спринта либо слово
-        # `current`: «задачи текущего спринта» — самый частый вопрос доски, а какой
-        # именно спринт текущий, знает сервер, и заставлять клиента сначала его искать
-        # значило бы два запроса вместо одного. `is_nullable`, потому что задача вне
-        # спринта — обычное состояние, и `sprint: empty()` — это и есть бэклог.
-        SystemFieldSpec(
-            SystemField.SPRINT,
-            SearchValueKind.SPRINT_REF,
-            _EXACT_OPERATORS,
-            is_nullable=True,
-        ),
         SystemFieldSpec(
             SystemField.CREATED_AT, SearchValueKind.MOMENT, _ORDERED_OPERATORS, is_sortable=True
         ),
@@ -436,9 +412,9 @@ SYSTEM_FIELD_ALIASES: dict[str, SystemField] = {"type": SystemField.ISSUE_TYPE}
 
 #: Зарезервированные имена, по которым искать пока нечем. Набор вычисляется вычитанием,
 #: поэтому имя уходит из него ровно тогда, когда у него появляется описание фильтра:
-#: `project` ушёл в задаче 10, `sprint` — в задаче 11. Остались `links`, `comments`,
-#: `checklist`, `values` и `version`. До тех пор запрос по такому имени обязан отвечать
-#: «ещё нет», а не уходить в JSONB за пустым результатом.
+#: `project` ушёл в задаче 10. Остались `links`, `comments`, `checklist`, `values` и
+#: `version`. До тех пор запрос по такому имени обязан отвечать «ещё нет», а не уходить
+#: в JSONB за пустым результатом.
 NOT_SEARCHABLE_SYSTEM_FIELDS: frozenset[str] = frozenset(
     SYSTEM_FIELD_KEYS
     - {field.value for field in SEARCHABLE_SYSTEM_FIELDS}
@@ -464,7 +440,6 @@ SELECTABLE_FIELDS: frozenset[str] = frozenset(
         "deadline",
         "tags",
         "project",
-        "sprint",
         "values",
         "version",
         "created_at",

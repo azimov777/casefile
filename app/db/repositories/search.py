@@ -44,13 +44,11 @@ from sqlalchemy import Select, and_, case, false, func, not_, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.db.models.board import Sprint
 from app.db.models.catalog import Status
 from app.db.models.comment import Comment
 from app.db.models.issue import Issue, IssueFollower
 from app.db.pagination import Page, decode_sort_cursor, encode_sort_cursor, resolve_limit
 from app.db.sql import ilike_contains
-from app.domain.boards import SprintState
 from app.domain.fields import FieldValueType
 from app.domain.issues import IssuePriority
 from app.domain.search import (
@@ -61,7 +59,6 @@ from app.domain.search import (
     ResolvedFilter,
     ResolvedSort,
     SearchValueKind,
-    SprintScope,
     SystemField,
     SystemTerm,
     Term,
@@ -187,8 +184,6 @@ def _system_body(term: SystemTerm) -> ColumnElement[bool]:
             return _scalar(Issue.queue_id, term.operator, term.values)
         case SearchValueKind.PROJECT_KEY:
             return _scalar(Issue.project_id, term.operator, term.values)
-        case SearchValueKind.SPRINT_REF:
-            return _sprint(term.operator, term.values)
         case SearchValueKind.CATALOG_REF:
             return _scalar(_CATALOG_COLUMNS[term.field], term.operator, term.values)
         case SearchValueKind.ACTOR_KEY:
@@ -241,8 +236,6 @@ def _system_empty(field: SystemField) -> ColumnElement[bool]:
             return Issue.deadline.is_(None)
         case SystemField.PROJECT:
             return Issue.project_id.is_(None)
-        case SystemField.SPRINT:
-            return Issue.sprint_id.is_(None)
         case SystemField.DESCRIPTION:
             return Issue.description == ""
         case SystemField.TAGS:
@@ -266,27 +259,6 @@ def _followers(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]
         select(IssueFollower.issue_id).where(IssueFollower.actor_id.in_(list(values)))
     )
     return not_(member) if operator in NEGATIVE_OPERATORS else member
-
-
-def _sprint(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
-    """Спринт задачи: идентификаторы и маркер «текущий» в одном условии.
-
-    `current` разворачивается в подзапрос по активным спринтам, а не в подставленный
-    идентификатор: активный спринт свой у каждой доски, и `sprint: current` означает
-    «задача в чьём-нибудь активном спринте». Подзапрос, а не соединение, — по той же
-    причине, что у категории статуса: соединение пришлось бы тащить через всю сборку
-    запроса и следить, чтобы оно не задвоило строки.
-    """
-    ids = [value for value in values if isinstance(value, uuid.UUID)]
-    parts: list[ColumnElement[bool]] = []
-    if ids:
-        parts.append(Issue.sprint_id.in_(ids))
-    if any(value is SprintScope.CURRENT for value in values):
-        parts.append(
-            Issue.sprint_id.in_(select(Sprint.id).where(Sprint.state == SprintState.ACTIVE))
-        )
-    matching = or_(*parts)
-    return not_(matching) if operator in NEGATIVE_OPERATORS else matching
 
 
 def _status_category(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:

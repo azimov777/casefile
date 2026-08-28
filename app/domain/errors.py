@@ -815,18 +815,6 @@ class BoardStatusTakenError(ConflictError):
     message = "Status already belongs to another column of this board"
 
 
-class BoardHasSprintsError(ConflictError):
-    """У доски есть спринты: удалять её нельзя.
-
-    Спринт хранит принадлежность задач, и каскад унёс бы её вместе с доской — задачи
-    молча потеряли бы спринт, а история этого не объяснила бы. Спринты завершают и
-    удаляют явно, потом удаляют доску.
-    """
-
-    code = "board_has_sprints"
-    message = "Board still has sprints"
-
-
 class IssueNotOnBoardError(ConflictError):
     """Задача не попадает в область доски: ранжировать и двигать её здесь нечего.
 
@@ -849,57 +837,6 @@ class InvalidBoardMoveError(ValidationError):
 
     code = "invalid_board_move"
     message = "Board move is not well defined"
-
-
-# --- Спринты -----------------------------------------------------------------------
-
-
-class SprintNotFoundError(NotFoundError):
-    """Спринта с таким идентификатором нет."""
-
-    code = "sprint_not_found"
-    message = "Sprint not found"
-
-
-class InvalidSprintError(ValidationError):
-    """Описание спринта нарушает правило: пустое имя, вывернутый период, длинная цель."""
-
-    code = "invalid_sprint"
-    message = "Sprint definition is invalid"
-
-
-class SprintStateError(ConflictError):
-    """Операция не подходит текущему состоянию спринта.
-
-    Запустить можно только запланированный, завершить — только активный. В `details`
-    лежат `state` и `expected`: клиент по ним понимает, что состояние он видел
-    устаревшее, а не что запрос был неверным.
-    """
-
-    code = "sprint_state_invalid"
-    message = "Sprint is not in a state that allows this operation"
-
-
-class BoardSprintActiveError(ConflictError):
-    """У доски уже есть активный спринт.
-
-    Второй активный спринт сделал бы бессмысленными и колонки доски, и фильтр
-    `sprint: current`: «текущий» перестал бы иметь единственный ответ.
-    """
-
-    code = "board_sprint_active"
-    message = "Board already has an active sprint"
-
-
-class SprintNotEmptyError(ConflictError):
-    """В спринте есть задачи: удалять его нельзя.
-
-    Удаление унесло бы принадлежность задач молча. Задачи сначала выводят из спринта
-    или завершают его с переносом.
-    """
-
-    code = "sprint_not_empty"
-    message = "Sprint still has issues"
 
 
 # --- Автоматика --------------------------------------------------------------------
