@@ -1,4 +1,4 @@
-"""Доски: настройки, колонки, сборка по колонкам, бэклог и перемещение карточек.
+"""Доски: настройки, колонки, сборка по колонкам и перемещение карточек.
 
 Роутер только переводит HTTP в вызов сценария и обратно. Разрешение ссылок (`open` →
 статус, `TRK-1` → задача, идентификатор → доска) — тоже часть перевода: сценарий
@@ -45,7 +45,6 @@ from app.api.schemas.boards import (
     BoardRead,
     BoardUpdate,
     IssueRankSet,
-    SprintScopeDescription,
 )
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.issues import IssueRead
@@ -70,7 +69,6 @@ SavedFilterQuery = Annotated[
     uuid.UUID | None,
     Query(description="Saved filter UUID: list boards built on it"),
 ]
-SprintScopeQuery = Annotated[str | None, Query(description=SprintScopeDescription)]
 
 
 async def _status(session: AsyncSession, ref: str, *, initiator: Actor) -> Status:
@@ -207,10 +205,10 @@ async def delete_board(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> Response:
-    """Удаляет доску с колонками и рангами. Задачи и спринты при этом не трогаются.
+    """Удаляет доску с колонками и рангами. Задачи при этом не трогаются.
 
-    Доска со спринтами отвечает `board_has_sprints`: спринт хранит принадлежность задач,
-    и каскад унёс бы её молча.
+    Доска отбирает задачи сохранённым фильтром и владеть ими не может: после удаления
+    доски задачи остаются на месте, теряется только порядок карточек.
     """
     board = await service.read_board(session, board_id, initiator=current_actor)
     await service.delete_board(session, board, initiator=current_actor)
@@ -312,7 +310,6 @@ async def list_board_column_issues(
     column_id: ColumnIdPath,
     session: SessionDep,
     current_actor: CurrentActorDep,
-    sprint: SprintScopeQuery = None,
     query: QueryParam = None,
     fields: FieldsParam = None,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
@@ -320,9 +317,8 @@ async def list_board_column_issues(
 ) -> CollectionResponse[IssueSearchRead]:
     """Карточки одной колонки, в порядке ранга доски.
 
-    Отбор — это фильтр доски плюс статусы колонки плюс область спринта, склеенные по
-    `and`. Поэтому `query` может сузить выдачу языком запросов, но не может вывести её
-    за пределы колонки.
+    Отбор — это фильтр доски плюс статусы колонки, склеенные по `and`. Поэтому `query`
+    может сузить выдачу языком запросов, но не может вывести её за пределы колонки.
 
     Параметра сортировки здесь нет намеренно: порядок задаёт ранг доски, и возможность
     его переопределить сделала бы перетаскивание карточки бессмысленным.
@@ -333,40 +329,6 @@ async def list_board_column_issues(
         session,
         board,
         column,
-        initiator=current_actor,
-        sprint=sprint,
-        query=query,
-        fields=fields or (),
-        limit=limit,
-        cursor=cursor,
-    )
-    return search_page(outcome)
-
-
-@router.get(
-    "/{board_id}/backlog",
-    summary="List the backlog of a board",
-    response_model_exclude_unset=True,
-)
-async def list_board_backlog(
-    board_id: BoardIdPath,
-    session: SessionDep,
-    current_actor: CurrentActorDep,
-    query: QueryParam = None,
-    fields: FieldsParam = None,
-    limit: LimitQuery = DEFAULT_PAGE_SIZE,
-    cursor: CursorQuery = None,
-) -> CollectionResponse[IssueSearchRead]:
-    """Задачи доски, не взятые ни в один спринт, в порядке ранга.
-
-    По колонкам бэклог не раскладывается: колонки описывают ход работы, а в бэклоге она
-    ещё не началась. Разложить его по статусам можно обычным запросом
-    (`?query=status: open`).
-    """
-    board = await service.read_board(session, board_id, initiator=current_actor)
-    outcome = await service.list_backlog(
-        session,
-        board,
         initiator=current_actor,
         query=query,
         fields=fields or (),

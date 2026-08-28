@@ -132,14 +132,6 @@ class IssueFilterInput(BaseModel):
         examples=[["alpha"]],
         description="Project keys; `empty()` finds issues outside any project",
     )
-    sprint: list[str] = Field(
-        default_factory=list,
-        examples=[["current"]],
-        description=(
-            "Sprint UUIDs, or the word `current` for whichever sprints are active now. "
-            "`empty()` finds the backlog — issues outside any sprint"
-        ),
-    )
     summary: str | None = Field(default=None, description="Substring of the summary")
     description: str | None = Field(default=None, description="Substring of the description")
     text: str | None = Field(
@@ -178,7 +170,6 @@ class IssueFilterInput(BaseModel):
                 ("followers", self.followers),
                 ("tags", self.tags),
                 ("project", self.project),
-                ("sprint", self.sprint),
             )
             if values
         ]
@@ -269,7 +260,6 @@ class IssueSearchRead(BaseModel):
     deadline: datetime | None = None
     tags: list[str] | None = None
     project: str | None = Field(default=None, examples=["alpha"])
-    sprint: uuid.UUID | None = None
     values: dict[str, JsonValue] | None = None
     version: int | None = None
     created_at: datetime | None = None
@@ -302,7 +292,6 @@ class IssueSearchRead(BaseModel):
             "deadline": issue.deadline,
             "tags": list(issue.tags),
             "project": None if issue.project is None else issue.project.key,
-            "sprint": issue.sprint_id,
             "values": _selected_values(issue, value_refs),
             "version": issue.version,
             "created_at": issue.created_at,

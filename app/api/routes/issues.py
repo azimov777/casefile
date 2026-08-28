@@ -9,7 +9,6 @@
 соглашения. Адресация мягкая: `trk-123` находит ту же задачу.
 """
 
-import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Path, Query, Response, status
@@ -31,7 +30,6 @@ from app.db.models.catalog import IssueType, Resolution, Status
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.catalogs import CatalogKind
 from app.services import actors as actors_service
-from app.services import boards as boards_service
 from app.services import events as events_service
 from app.services import issues as service
 from app.services import projects as projects_service
@@ -52,10 +50,6 @@ async def _actor(session: AsyncSession, key: str | None) -> Actor | None:
 
 async def _project(session: AsyncSession, key: str | None) -> Any:
     return None if key is None else await projects_service.get_project_by_key(session, key)
-
-
-async def _sprint(session: AsyncSession, sprint_id: uuid.UUID | None) -> Any:
-    return None if sprint_id is None else await boards_service.get_sprint_by_id(session, sprint_id)
 
 
 async def _catalog_entry(
@@ -97,10 +91,6 @@ async def _changes(
     if "project" in given:
         project = await _project(session, given["project"])
 
-    sprint: Any = UNSET
-    if "sprint" in given:
-        sprint = await _sprint(session, given["sprint"])
-
     return IssueChanges(
         summary=given.get("summary", UNSET),
         description=given.get("description", UNSET),
@@ -111,7 +101,6 @@ async def _changes(
         assignee=assignee,
         deadline=given.get("deadline", UNSET),
         project=project,
-        sprint=sprint,
         tags=given.get("tags", UNSET),
         values=given.get("values", UNSET),
     )
@@ -177,7 +166,6 @@ async def create_issue(
         deadline=payload.deadline,
         tags=payload.tags,
         project=await _project(session, payload.project),
-        sprint=await _sprint(session, payload.sprint),
         values=payload.values,
     )
     return DataResponse[IssueRead](data=IssueRead.of(issue))

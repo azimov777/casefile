@@ -36,7 +36,6 @@ from app.api.routes import (
     projects,
     queues,
     search,
-    sprints,
     tags,
     workflows,
 )
@@ -86,7 +85,6 @@ api_router.include_router(checklists.router)
 api_router.include_router(projects.router)
 api_router.include_router(portfolios.router)
 api_router.include_router(boards.router)
-api_router.include_router(sprints.router)
 api_router.include_router(tags.router)
 api_router.include_router(search.router)
 api_router.include_router(filters.router)

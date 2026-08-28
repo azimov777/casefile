@@ -1,4 +1,4 @@
-"""Схемы досок, колонок и спринтов.
+"""Схемы досок и колонок.
 
 Связанные объекты приезжают ссылками: статусы колонки — ссылками справочника
 (`open`, `TRK.in_review`), сохранённый фильтр и доска — идентификаторами. Полные записи
@@ -9,9 +9,7 @@
 
 Как воркфлоу и сохранённый фильтр: у доски нет стабильного человеческого имени, которое
 не менялось бы. Ключ, который можно переименовать, в пути хуже идентификатора, а ключ,
-который переименовать нельзя, пришлось бы придумывать при создании каждой доски. То же
-относится к спринтам — их заводят по одному в две недели, и глобально уникальный ключ
-для каждого был бы данью формальности.
+который переименовать нельзя, пришлось бы придумывать при создании каждой доски.
 
 ## Позиция карточки наружу не отдаётся
 
@@ -23,23 +21,18 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.common import unset_field
-from app.db.models.board import Board, BoardColumn, Sprint
+from app.db.models.board import Board, BoardColumn
 from app.domain.boards import (
     MAX_BOARD_COLUMNS,
     MAX_BOARD_NAME_LENGTH,
     MAX_COLUMN_NAME_LENGTH,
     MAX_COLUMN_STATUSES,
-    MAX_SPRINT_GOAL_LENGTH,
-    MAX_SPRINT_NAME_LENGTH,
-    SprintState,
-    UnfinishedPolicy,
 )
-from app.services.boards import SprintCompletion
 from app.services.catalogs import format_entry_ref
 
 BoardNameField = Field(
@@ -56,12 +49,6 @@ ColumnNameField = Field(
     examples=["В работе"],  # noqa: RUF001
     description="Single line: it is shown in the column header",
 )
-SprintNameField = Field(
-    min_length=1,
-    max_length=MAX_SPRINT_NAME_LENGTH,
-    examples=["Спринт 42"],
-    description="Single line, unique within the board",
-)
 DescriptionText = "Empty string when there is no description"
 SavedFilterDescription = (
     "Saved filter that selects the issues of this board. The board adds columns and "
@@ -76,13 +63,6 @@ WipLimitDescription = (
     "Work-in-progress limit shown on the column header. It is a hint, not a gate: moving "
     "a card is a workflow transition, and a second gate on top of it would reject from "
     "the board what the issue card accepts"
-)
-PeriodDescription = (
-    "Calendar day `YYYY-MM-DD`, without a time of day: a sprint does not start at 14:37"
-)
-SprintScopeDescription = (
-    "Which issues to take: `backlog` for the ones outside any sprint, `current` for the "
-    "active sprint, a sprint UUID for a particular one. Omit for every issue of the board"
 )
 
 
@@ -115,9 +95,9 @@ class BoardColumnRead(BaseModel):
 class BoardRead(BaseModel):
     """Доска в ответе: настройки и колонки, но не задачи.
 
-    Задачи отдают `/boards/{id}/columns/{column_id}/issues` и `/boards/{id}/backlog` —
-    страницами. Вложить их сюда значило бы отдавать тысячи карточек там, где клиент
-    хотел увидеть название и состав колонок.
+    Задачи отдаёт `/boards/{id}/columns/{column_id}/issues` — страницами. Вложить их
+    сюда значило бы отдавать тысячи карточек там, где клиент хотел увидеть название и
+    состав колонок.
     """
 
     id: uuid.UUID
@@ -270,137 +250,4 @@ class BoardIssueMove(BaseModel):
         default=None,
         ge=1,
         description="Version the client last saw; omit it to skip the check",
-    )
-
-
-class SprintRead(BaseModel):
-    """Спринт в ответе."""
-
-    id: uuid.UUID
-    board: uuid.UUID = Field(description="Board this sprint belongs to")
-    name: str = SprintNameField
-    goal: str = Field(
-        examples=[""],
-        max_length=MAX_SPRINT_GOAL_LENGTH,
-        description="Empty string when the goal is not written down",
-    )
-    start_date: date | None = Field(default=None, description=PeriodDescription)
-    end_date: date | None = Field(default=None, description=PeriodDescription)
-    state: SprintState = Field(
-        examples=[SprintState.PLANNED],
-        description="`planned` → `active` → `completed`; the chain is one-way",
-    )
-    started_at: datetime | None = Field(
-        default=None,
-        description="When the sprint was actually started, as opposed to planned",
-    )
-    completed_at: datetime | None = None
-    created_at: datetime
-    updated_at: datetime
-
-    @classmethod
-    def of(cls, sprint: Sprint) -> SprintRead:
-        return cls(
-            id=sprint.id,
-            board=sprint.board_id,
-            name=sprint.name,
-            goal=sprint.goal,
-            start_date=sprint.start_date,
-            end_date=sprint.end_date,
-            state=sprint.state,
-            started_at=sprint.started_at,
-            completed_at=sprint.completed_at,
-            created_at=sprint.created_at,
-            updated_at=sprint.updated_at,
-        )
-
-
-class SprintCreate(BaseModel):
-    """Создание спринта. Заводится он запланированным: запуск — отдельное решение."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    board: uuid.UUID = Field(description="Board to plan the sprint on")
-    name: str = SprintNameField
-    goal: str = Field(default="", max_length=MAX_SPRINT_GOAL_LENGTH)
-    start_date: date | None = Field(default=None, description=PeriodDescription)
-    end_date: date | None = Field(default=None, description=PeriodDescription)
-
-
-class SprintUpdate(BaseModel):
-    """Частичное обновление спринта. Состояние меняют `start` и `complete`."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = unset_field(min_length=1, max_length=MAX_SPRINT_NAME_LENGTH)
-    goal: str = unset_field(
-        max_length=MAX_SPRINT_GOAL_LENGTH,
-        description="Pass an empty string to clear it",
-    )
-    start_date: date | None = unset_field(description=f"{PeriodDescription}. Pass null to drop it")
-    end_date: date | None = unset_field(description=f"{PeriodDescription}. Pass null to drop it")
-
-
-class SprintCompleteRequest(BaseModel):
-    """Завершение спринта: куда девать незакрытые задачи.
-
-    Значения по умолчанию у `unfinished` нет намеренно. «Перенести в следующий спринт» и
-    «вернуть в бэклог» — разные способы работать, решение за командой, а молчаливое
-    умолчание однажды растащило бы чужой спринт.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    unfinished: UnfinishedPolicy = Field(
-        examples=[UnfinishedPolicy.BACKLOG],
-        description="Where the issues that did not reach a `done` status go",
-    )
-    sprint: uuid.UUID | None = Field(
-        default=None,
-        description="Sprint to carry them over to; required when `unfinished` is `sprint`",
-    )
-
-
-class SprintCompletionRead(BaseModel):
-    """Итог завершения спринта: сам спринт и ключи переехавших задач.
-
-    Список возвращается сразу: второй раз его собрать будет неоткуда — состав спринта
-    нигде не хранится отдельно от самих задач, а закрытые остались в спринте.
-    """
-
-    sprint: SprintRead
-    moved: list[str] = Field(
-        default_factory=list,
-        examples=[["TRK-7", "TRK-9"]],
-        description="Keys of the unfinished issues that were carried over",
-    )
-    target: uuid.UUID | None = Field(
-        default=None,
-        description="Sprint they were carried over to; null means the backlog",
-    )
-
-    @classmethod
-    def of(cls, completion: SprintCompletion) -> SprintCompletionRead:
-        return cls(
-            sprint=SprintRead.of(completion.sprint),
-            moved=list(completion.moved),
-            target=None if completion.target is None else completion.target.id,
-        )
-
-
-class SprintIssuesAdd(BaseModel):
-    """Взятие задач в спринт.
-
-    Список, а не одна задача: спринт планируют разбором целиком, и запрос на задачу
-    превратил бы обычную операцию в полсотни запросов. Задача, уже взятая в спринт,
-    ошибкой не считается и изменений не даёт.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    issues: list[str] = Field(
-        min_length=1,
-        max_length=200,
-        examples=[["TRK-1", "OPS-42"]],
-        description="Issue keys; they may come from different queues",
     )

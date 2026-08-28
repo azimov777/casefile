@@ -52,11 +52,6 @@ ProjectDescription = (
     "Key of the project the issue belongs to; null when it belongs to none. An issue is in "
     "at most one project, and the project may collect issues from several queues"
 )
-SprintDescription = (
-    "UUID of the sprint the issue is taken into; null when it is in the backlog. An issue "
-    "is in at most one sprint. A sprint has no key: it is addressed by its identifier "
-    "everywhere, including the `sprint:` search filter"
-)
 ValuesDescription = (
     "Custom field values keyed by field reference (`severity`, `TRK.severity`). The shape "
     "of each value depends on the field type and is documented in the field registry"
@@ -97,7 +92,6 @@ class IssueRead(BaseModel):
         examples=["alpha"],
         description=ProjectDescription,
     )
-    sprint: uuid.UUID | None = Field(default=None, description=SprintDescription)
     values: dict[str, JsonValue] = Field(default_factory=dict, description=ValuesDescription)
     version: int = Field(
         description="Grows with every actual change; send it back to detect a lost update"
@@ -124,7 +118,6 @@ class IssueRead(BaseModel):
             deadline=issue.deadline,
             tags=list(issue.tags),
             project=None if issue.project is None else issue.project.key,
-            sprint=issue.sprint_id,
             values=issue.values,
             version=issue.version,
             created_at=issue.created_at,
@@ -173,7 +166,6 @@ class IssueCreate(BaseModel):
     deadline: datetime | None = Field(default=None, description=DeadlineDescription)
     tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS)
     project: str | None = Field(default=None, examples=["alpha"], description=ProjectDescription)
-    sprint: uuid.UUID | None = Field(default=None, description=SprintDescription)
     values: dict[str, JsonValue] = Field(default_factory=dict, description=ValuesDescription)
 
 
@@ -208,9 +200,6 @@ class IssueUpdate(BaseModel):
     tags: list[str] = unset_field(max_length=MAX_TAGS, description="Replaces the whole set")
     project: str | None = unset_field(
         description=f"{ProjectDescription}. Pass null to take the issue out of its project"
-    )
-    sprint: uuid.UUID | None = unset_field(
-        description=f"{SprintDescription}. Pass null to return the issue to the backlog"
     )
     values: dict[str, JsonValue] = unset_field(
         description=(
