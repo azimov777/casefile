@@ -202,7 +202,7 @@ async def test_the_changelog_of_both_issues_mentions_the_link(
     blocked_history = (await auth_client.get(f"/api/v1/issues/{blocked}/changelog")).json()
     blocker_history = (await auth_client.get(f"/api/v1/issues/{blocker}/changelog")).json()
 
-    assert blocked_history["data"][-1]["event"] == "link.created"
+    assert blocked_history["data"][-1]["event_type"] == "link.created"
     assert blocked_history["data"][-1]["changes"][0]["after"] == {
         "type": LinkType.DEPENDS_ON.value,
         "issue": blocker,

@@ -199,6 +199,11 @@ async def update_subscription(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[SubscriptionRead]:
+    """Меняет только переданные поля подписки.
+
+    Своей подписки: чужую поменять нельзя — иначе один актор перенастроил бы поток
+    уведомлений другому.
+    """
     subscription = await service.get_subscription(
         session,
         subscription_id,

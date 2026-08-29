@@ -150,6 +150,12 @@ async def read_field(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[FieldRead]:
+    """Описание поля: тип значения, множественность, варианты перечисления.
+
+    По нему интерфейс строит редактор значения, а агент понимает, что можно положить в
+    `values` задачи. Ссылка мягкая: `severity` — глобальное поле, `TRK.severity` —
+    локальное для очереди.
+    """
     field = await queues_service.resolve_field_ref(session, field_ref, initiator=current_actor)
     return DataResponse[FieldRead](data=FieldRead.of(field))
 

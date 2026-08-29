@@ -1,7 +1,7 @@
 """Зависимости FastAPI, общие для всех роутеров."""
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -104,6 +104,34 @@ IssueKeyPath = Annotated[
     str,
     Path(description="Issue key, immutable and never reused", examples=["TRK-123"]),
 ]
+
+
+# Ключ очереди и ссылка на запись справочника — здесь по той же причине, что и ключ
+# задачи: их принимают маршруты двух разных роутеров (очереди и справочники — свои,
+# редактор воркфлоу — чужие), а два объявления одного параметра разъезжаются описаниями
+# и примерами, и в сгенерированном клиенте один и тот же параметр выглядит по-разному.
+#
+# Без `pattern`: параметр адресует существующий объект, а адресация в проекте мягкая —
+# `trk` находит ту же очередь, что и `TRK`. Строгий шаблон стоит в схеме создания, где
+# ключ придумывают; невнятную ссылку справочника отвергает `parse_catalog_ref` кодом
+# `invalid_catalog_ref` — с ожидаемым форматом в `details`, чего шаблон дать не может.
+QueueKeyPath = Annotated[
+    str,
+    Path(description="Queue key, immutable once created", examples=["TRK"]),
+]
+
+
+def catalog_ref_path(kind: str) -> Any:
+    """Параметр пути со ссылкой на запись справочника нужного вида."""
+    return Path(
+        description=f"{kind} reference: `key` for a global entry, `QUEUE.key` for a local one",
+        examples=["open", "TRK.open"],
+    )
+
+
+StatusRefPath = Annotated[str, catalog_ref_path("Status")]
+IssueTypeRefPath = Annotated[str, catalog_ref_path("Issue type")]
+ResolutionRefPath = Annotated[str, catalog_ref_path("Resolution")]
 
 
 # Параметры поиска объявлены здесь по той же причине, что и параметры пагинации: их

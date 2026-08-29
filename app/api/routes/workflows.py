@@ -1,4 +1,15 @@
-"""REST редактора воркфлоу и переходов конкретной задачи."""
+"""REST редактора воркфлоу и переходов конкретной задачи.
+
+Два разных потребителя в одном роутере. Редактор (`/workflows/...`) собирает процесс:
+граф статусов и рёбер, который очередь назначает своим типам задач. Переходы задачи
+(`/issues/{issue_key}/transitions`) — то, что видит пользователь в карточке: какие
+кнопки у задачи есть прямо сейчас и что мешает нажать остальные.
+
+Граф правится двумя способами, и оба нужны: целиком (`PUT /workflows/{id}`) — так
+работает редактор процесса, где пользователь двигает всё сразу; по одному элементу
+(`/statuses`, `/transitions`) — так работает агент, которому дешевле добавить одно
+ребро, чем прислать граф из двадцати.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +19,13 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentActorDep, SessionDep
+from app.api.deps import (
+    CurrentActorDep,
+    IssueKeyPath,
+    IssueTypeRefPath,
+    QueueKeyPath,
+    SessionDep,
+)
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.issues import IssueRead
 from app.api.schemas.workflows import (
@@ -45,6 +62,11 @@ async def list_workflow_templates(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> CollectionResponse[WorkflowTemplateRead]:
+    """Готовые процессы, из которых можно собрать воркфлоу очереди одним запросом.
+
+    Набор хранится в коде и одинаков на всех установках. Это стартовые точки, а не
+    режимы работы: созданный из шаблона процесс дальше правится как любой другой.
+    """
     # `session` и актор присутствуют сознательно: маршрут защищён общей зависимостью,
     # а будущая модель прав не должна иметь публичную лазейку только потому, что набор
     # пока хранится в коде.
@@ -60,11 +82,19 @@ async def list_workflow_templates(
     summary="Create a workflow as a complete graph",
 )
 async def create_workflow(
-    queue_key: str,
+    queue_key: QueueKeyPath,
     payload: WorkflowGraphWrite,
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Заводит процесс очереди одним запросом: статусы, начальный статус и все рёбра.
+
+    Граф целиком, а не по частям: промежуточные состояния (статус без входящих рёбер,
+    ребро в статус, которого ещё нет) процесс отвергает, и собирать его по одному
+    означало бы отбиваться от собственных проверок на каждом шаге.
+
+    Назначить процесс типам задач можно тем же запросом — `issue_types` в теле.
+    """
     queue = await queues_service.get_queue_by_key(session, queue_key)
     workflow = await service.create_workflow(
         session,
@@ -92,11 +122,18 @@ async def create_workflow(
     summary="Create a workflow from a ready template",
 )
 async def create_workflow_from_template(
-    queue_key: str,
+    queue_key: QueueKeyPath,
     payload: WorkflowFromTemplateCreate,
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Материализует готовый шаблон в редактируемый граф этой очереди.
+
+    Шаблон — стартовая точка, а не режим работы: получившийся процесс дальше правится
+    как любой другой. Статуса нужной категории в справочнике может не оказаться — тогда
+    он заводится локальным статусом очереди, чтобы шаблон был самодостаточным, а не
+    инструкцией «сначала подготовьте справочник руками».
+    """
     queue = await queues_service.get_queue_by_key(session, queue_key)
     workflow = await service.create_from_template(
         session,
@@ -122,6 +159,12 @@ async def read_workflow(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Граф процесса целиком: статусы, рёбра, назначения типам задач и живой охват.
+
+    Охват (`impact`) — сколько задач стоит сейчас в каждом статусе графа. Он здесь
+    затем, чтобы правку процесса делали, видя её цену: удаление статуса, в котором
+    стоят сорок задач, — это не то же самое, что удаление пустого.
+    """
     workflow = await service.get_workflow(session, workflow_id, initiator=current_actor)
     return DataResponse[WorkflowGraphRead](
         data=WorkflowGraphRead.of(await service.view_workflow(session, workflow))
@@ -135,6 +178,17 @@ async def replace_workflow(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Заменяет граф целиком. Принимает и то, что отдал `GET`, — без переписывания.
+
+    Редактор процесса читает граф, правит его и присылает обратно, поэтому тело
+    принимается в двух видах: коротком (`WorkflowGraphWrite`) и ровно таком, какой
+    отдало чтение. Второй вариант несёт `id`, и он обязан совпасть с адресуемым
+    процессом: иначе сохранение уехало бы в чужой граф, а клиент увидел бы успех.
+
+    Рёбра, оставшиеся со своими идентификаторами, сохраняют их. Это важно для доски и
+    автоматики: они ссылаются на переход по идентификатору, и перевыпуск всех рёбер при
+    каждой правке процесса рвал бы эти ссылки без всякой причины.
+    """
     workflow = await service.get_workflow(session, workflow_id)
     if isinstance(payload, WorkflowGraphRead) and payload.id != workflow.id:
         raise WorkflowAssignmentError(
@@ -168,6 +222,11 @@ async def delete_workflow(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> Response:
+    """Удаляет процесс, не назначенный ни одному типу задач.
+
+    Назначенный не удаляется: у типа задачи не осталось бы процесса, и в очереди стало
+    бы нельзя завести задачу. Сначала назначьте типу другой процесс.
+    """
     workflow = await service.get_workflow(session, workflow_id)
     await service.delete_workflow(session, workflow, initiator=current_actor)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -184,6 +243,12 @@ async def clone_workflow(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Копия процесса внутри той же очереди, под новым именем.
+
+    Обычный способ безопасно поменять процесс: скопировать, поправить копию, назначить
+    её типу задач. Копия получает свои идентификаторы рёбер — ссылаться на переход
+    оригинала она не должна.
+    """
     source = await service.get_workflow(session, workflow_id)
     workflow = await service.clone_workflow(
         session,
@@ -201,12 +266,18 @@ async def clone_workflow(
     summary="Assign a workflow to a queue issue type",
 )
 async def assign_workflow(
-    queue_key: str,
-    issue_type_ref: str,
+    queue_key: QueueKeyPath,
+    issue_type_ref: IssueTypeRefPath,
     payload: WorkflowAssignmentWrite,
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Переключает тип задач очереди на другой процесс.
+
+    Процесс обязан принадлежать этой же очереди и содержать её статус по умолчанию:
+    иначе задача, заведённая без явного статуса, попадала бы в статус вне графа и
+    осталась бы без единого доступного перехода.
+    """
     queue = await queues_service.get_queue_by_key(session, queue_key)
     issue_type = await _resolve_issue_type(
         session,
@@ -241,6 +312,12 @@ async def add_workflow_status(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Добавляет статус в граф вместе с рёбрами, которые делают его достижимым.
+
+    Рёбра — тем же запросом, а не следующим: статус без входящего ребра недостижим, и
+    граф с ним процесс не примет. Отвечает графом целиком — правка одного элемента
+    меняет и охват, и доступность соседей.
+    """
     workflow = await service.get_workflow(session, workflow_id)
     await service.add_status(
         session,
@@ -268,6 +345,12 @@ async def remove_workflow_status(
         Query(description="Required when removing the current initial status"),
     ] = None,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Убирает статус из графа вместе со всеми его рёбрами.
+
+    Статус, в котором стоят задачи, не убирается: они остались бы вне процесса и без
+    переходов. Сколько их — видно в охвате, который отдаёт чтение графа; перенести их
+    умеет `POST /statuses/{status_ref}/move-issues`.
+    """
     workflow = await service.get_workflow(session, workflow_id)
     await service.remove_status(
         session,
@@ -288,6 +371,11 @@ async def add_workflow_transition(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Добавляет ребро между статусами, которые уже есть в графе.
+
+    Ребро без исходного статуса (`source_status: null`) означает «откуда угодно» — так
+    описывают отмену, доступную из любого места процесса.
+    """
     workflow = await service.get_workflow(session, workflow_id)
     await service.add_transition(
         session,
@@ -311,6 +399,11 @@ async def replace_workflow_transition(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Заменяет ребро целиком, сохраняя его идентификатор.
+
+    Идентификатор сохраняется намеренно: на переход ссылаются доска и автоматика, и
+    правка названия не должна рвать эти ссылки.
+    """
     workflow = await service.get_workflow(session, workflow_id)
     await service.update_transition(
         session,
@@ -334,6 +427,11 @@ async def delete_workflow_transition(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WorkflowGraphRead]:
+    """Убирает ребро из графа.
+
+    Отвечает графом, а не `204`: после удаления обычно надо увидеть, не остался ли
+    статус недостижимым, — а это видно только по графу целиком.
+    """
     workflow = await service.get_workflow(session, workflow_id)
     await service.delete_transition(
         session,
@@ -348,10 +446,16 @@ async def delete_workflow_transition(
 
 @router.get("/issues/{issue_key}/transitions", summary="List transitions for an issue")
 async def list_issue_transitions(
-    issue_key: str,
+    issue_key: IssueKeyPath,
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> CollectionResponse[IssueTransitionRead]:
+    """Кнопки карточки задачи: рёбра из её текущего статуса, доступные и нет.
+
+    Недоступные приезжают вместе с причиной — списком полей, которых им не хватает
+    (`missing_fields`). Прятать их значило бы оставить пользователя гадать, почему
+    задача не двигается; показывать без причины — предлагать кнопку, которая откажет.
+    """
     issue = await issues_service.get_issue_by_key(session, issue_key)
     transitions = await service.available_transitions(
         session,
@@ -369,12 +473,22 @@ async def list_issue_transitions(
     summary="Perform a workflow transition",
 )
 async def perform_issue_transition(
-    issue_key: str,
+    issue_key: IssueKeyPath,
     transition_id: TransitionIdPath,
     payload: IssueTransitionExecute,
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[IssueRead]:
+    """Выполняет переход вместе с полями, которых он требует, — одной мутацией.
+
+    Резолюция, исполнитель и значения полей передаются тем же запросом и проверяются в
+    целевом состоянии. Поэтому закрытие не требует предварительного `PATCH` и всё равно
+    даёт одну версию, одну запись истории и одно событие.
+
+    `version` здесь **обязателен**, в отличие от `PATCH /issues/{issue_key}`, где его
+    можно опустить. Переход — это ход в процессе, а не правка поля: если задачу успели
+    сдвинуть, повторять ход вслепую нельзя, и ответ будет `409 version_conflict`.
+    """
     issue = await issues_service.get_issue_by_key(session, issue_key)
     values = payload.model_dump(exclude_unset=True)
     expected_version = values.pop("version")

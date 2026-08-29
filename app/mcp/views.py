@@ -135,7 +135,7 @@ def _selected_values(entry: Issue, value_refs: Sequence[str]) -> dict[str, Any]:
 def changelog_entry(entry: ChangelogEntry) -> dict[str, Any]:
     """Запись истории изменений: кто, что и с какого значения на какое."""
     return {
-        "event": entry.event_type,
+        "event_type": entry.event_type,
         "actor": entry.actor.key,
         "changes": [dict(change) for change in entry.changes],
         "created_at": moment(entry.created_at),

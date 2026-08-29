@@ -8,10 +8,18 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, Response, status
+from fastapi import APIRouter, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentActorDep, CursorQuery, LimitQuery, SessionDep
+from app.api.deps import (
+    CurrentActorDep,
+    CursorQuery,
+    IssueTypeRefPath,
+    LimitQuery,
+    ResolutionRefPath,
+    SessionDep,
+    StatusRefPath,
+)
 from app.api.schemas.catalogs import (
     IssueTypeCreate,
     IssueTypeRead,
@@ -38,23 +46,6 @@ statuses_router = APIRouter(prefix="/statuses", tags=["catalogs"])
 issue_types_router = APIRouter(prefix="/issue-types", tags=["catalogs"])
 resolutions_router = APIRouter(prefix="/resolutions", tags=["catalogs"])
 
-
-def _ref_path(kind: str) -> object:
-    """Параметр пути со ссылкой на запись справочника.
-
-    Без `pattern`: адресация в проекте мягкая, регистр приводит домен, а невнятную
-    ссылку отвергает `parse_catalog_ref` кодом `invalid_catalog_ref` — с объяснением
-    ожидаемого формата в `details`, чего проверка по шаблону дать не может.
-    """
-    return Path(
-        description=f"{kind} reference: `key` for a global entry, `QUEUE.key` for a local one",
-        examples=["open", "TRK.open"],
-    )
-
-
-StatusRefPath = Annotated[str, _ref_path("Status")]
-IssueTypeRefPath = Annotated[str, _ref_path("Issue type")]
-ResolutionRefPath = Annotated[str, _ref_path("Resolution")]
 
 QueueFilterQuery = Annotated[
     str | None,
@@ -85,6 +76,11 @@ async def list_statuses(
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
 ) -> CollectionResponse[StatusRead]:
+    """Статусы: глобальные, а с параметром `queue` — ещё и собственные этой очереди.
+
+    Локальная запись вне своей очереди не показывается никогда: её ключ имеет смысл
+    только внутри неё.
+    """
     page = await service.list_entries(
         session,
         CatalogKind.STATUS,
@@ -125,6 +121,7 @@ async def read_status(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[StatusRead]:
+    """Карточка статуса по ссылке: `open` — глобальный, `TRK.open` — локальный."""
     entry = await queues_service.resolve_catalog_ref(
         session, CatalogKind.STATUS, status_ref, initiator=current_actor
     )
@@ -247,6 +244,11 @@ async def create_issue_type(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[IssueTypeRead]:
+    """Заводит тип задачи — глобальный или собственный для очереди.
+
+    Локальный тип создаётся передачей `queue`; его ключ адресуется как `TRK.incident` и
+    вне этой очереди не существует.
+    """
     entry = await service.create_entry(
         session,
         CatalogKind.ISSUE_TYPE,
@@ -265,6 +267,7 @@ async def read_issue_type(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[IssueTypeRead]:
+    """Карточка типа задачи по ссылке: `bug` — глобальный, `TRK.incident` — локальный."""
     entry = await queues_service.resolve_catalog_ref(
         session, CatalogKind.ISSUE_TYPE, issue_type_ref, initiator=current_actor
     )
@@ -278,6 +281,7 @@ async def update_issue_type(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[IssueTypeRead]:
+    """Меняет отображаемое название, иконку и активность. Ключ неизменяем."""
     entry = await queues_service.resolve_catalog_ref(
         session, CatalogKind.ISSUE_TYPE, issue_type_ref, initiator=current_actor
     )
@@ -322,6 +326,7 @@ async def list_resolutions(
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
 ) -> CollectionResponse[ResolutionRead]:
+    """Резолюции: глобальные, а с параметром `queue` — ещё и собственные этой очереди."""
     page = await service.list_entries(
         session,
         CatalogKind.RESOLUTION,
@@ -343,6 +348,7 @@ async def create_resolution(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[ResolutionRead]:
+    """Заводит резолюцию — глобальную или собственную для очереди."""
     entry = await service.create_entry(
         session,
         CatalogKind.RESOLUTION,
@@ -360,6 +366,7 @@ async def read_resolution(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[ResolutionRead]:
+    """Карточка резолюции по ссылке: `done` — глобальная, `TRK.wontfix` — локальная."""
     entry = await queues_service.resolve_catalog_ref(
         session, CatalogKind.RESOLUTION, resolution_ref, initiator=current_actor
     )
@@ -373,6 +380,7 @@ async def update_resolution(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[ResolutionRead]:
+    """Меняет отображаемое название и активность. Ключ неизменяем."""
     entry = await queues_service.resolve_catalog_ref(
         session, CatalogKind.RESOLUTION, resolution_ref, initiator=current_actor
     )

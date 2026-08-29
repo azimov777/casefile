@@ -49,7 +49,7 @@ class ChangelogEntryRead(BaseModel):
     id: uuid.UUID
     issue: str = Field(examples=["TRK-123"], description="Key of the issue")
     actor: str = Field(examples=["alice"], description="Key of the actor behind the change")
-    event: EventType = Field(
+    event_type: EventType = Field(
         examples=[EventType.ISSUE_STATUS_CHANGED],
         description="Event type this entry was recorded for",
     )
@@ -70,7 +70,7 @@ class ChangelogEntryRead(BaseModel):
             id=entry.id,
             issue=issue_key,
             actor=entry.actor.key,
-            event=EventType(entry.event_type),
+            event_type=EventType(entry.event_type),
             changes=[IssueChangeRead(**change) for change in entry.changes],
             created_at=entry.created_at,
         )

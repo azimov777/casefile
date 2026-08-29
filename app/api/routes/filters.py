@@ -90,6 +90,11 @@ async def read_saved_filter(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[SavedFilterRead]:
+    """Сохранённый фильтр: имя, строка запроса и разобранные условия.
+
+    Разобранные условия отдаются вместе со строкой затем, чтобы интерфейс мог показать
+    фильтр конструктором, не разбирая язык запросов у себя.
+    """
     saved = await service.read_saved_filter(session, filter_id, initiator=current_actor)
     return DataResponse[SavedFilterRead](data=SavedFilterRead.of(saved))
 

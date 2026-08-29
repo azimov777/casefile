@@ -6,9 +6,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, Response, status
+from fastapi import APIRouter, Query, Response, status
 
-from app.api.deps import CurrentActorDep, CursorQuery, LimitQuery, SessionDep
+from app.api.deps import (
+    CurrentActorDep,
+    CursorQuery,
+    LimitQuery,
+    QueueKeyPath,
+    SessionDep,
+)
 from app.api.schemas.catalogs import IssueTypeRead
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.queues import (
@@ -24,14 +30,6 @@ from app.services import queues as service
 
 router = APIRouter(prefix="/queues", tags=["queues"])
 
-# Без `pattern`: параметр адресует существующую очередь, а адресация в проекте
-# мягкая — `trk` находит ту же очередь, что и `TRK`. Строгий шаблон стоит в схеме
-# создания, где ключ придумывают.
-QueueKeyPath = Annotated[
-    str,
-    Path(description="Queue key, immutable once created", examples=["TRK"]),
-]
-
 
 @router.get("", summary="List queues")
 async def list_queues(
@@ -42,6 +40,11 @@ async def list_queues(
     is_archived: Annotated[bool | None, Query(description="Filter by the archived flag")] = None,
     owner: Annotated[str | None, Query(description="Filter by owner actor key")] = None,
 ) -> CollectionResponse[QueueRead]:
+    """Очереди установки, в порядке создания.
+
+    Архивные приезжают вместе с остальными: архив — признак очереди, а не отдельный
+    список. Навигации обычно нужен `is_archived=false`.
+    """
     owner_actor = None if owner is None else await actors_service.get_actor_by_key(session, owner)
     page = await service.list_queues(
         session,
@@ -89,6 +92,11 @@ async def read_queue(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[QueueRead]:
+    """Карточка очереди: ключ, название, владелец и умолчания.
+
+    Процесс, справочники и поля сюда не входят — их отдаёт одним запросом
+    `GET /queues/{queue_key}/config`.
+    """
     queue = await service.read_queue(session, queue_key, initiator=current_actor)
     return DataResponse[QueueRead](data=QueueRead.of(queue))
 
@@ -156,6 +164,7 @@ async def unarchive_queue(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[QueueRead]:
+    """Возвращает очередь из архива: в ней снова можно заводить задачи."""
     queue = await service.get_queue_by_key(session, queue_key)
     queue = await service.unarchive_queue(session, queue, initiator=current_actor)
     return DataResponse[QueueRead](data=QueueRead.of(queue))

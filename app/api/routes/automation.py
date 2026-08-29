@@ -90,6 +90,12 @@ async def read_automation_rule(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[AutomationRuleRead]:
+    """Правило: что оно делает, включено ли, к чему привязано и как настроено.
+
+    Вместе со значениями параметров приезжает их схема (`params_schema`) — по ней
+    интерфейс строит форму настройки, а не догадывается о ней. Правило объявлено кодом,
+    поэтому через API меняется только его состояние, но не поведение.
+    """
     view = await service.read_rule(session, rule_key, initiator=current_actor)
     return DataResponse[AutomationRuleRead](data=AutomationRuleRead.of(view))
 

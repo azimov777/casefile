@@ -42,6 +42,12 @@ async def list_actors(
     ] = None,
     is_active: Annotated[bool | None, Query(description="Filter by activity flag")] = None,
 ) -> CollectionResponse[ActorRead]:
+    """Все акторы установки: люди, агенты и системный.
+
+    Один список без разделения на людей и агентов: назначать задачу и адресовать
+    уведомление можно и тем и другим, и интерфейсу нужен общий выбор. Разделить его
+    умеет параметр `type`.
+    """
     page = await service.list_actors(
         session,
         initiator=current_actor,
@@ -62,6 +68,11 @@ async def create_actor(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[ActorRead]:
+    """Заводит человека или агента. Токен ему выпускается отдельным запросом.
+
+    Ключ неизменяем и уникален на всю установку: на него ссылаются задачи, подписки и
+    упоминания в комментариях, и переименование рвало бы эти ссылки задним числом.
+    """
     actor = await service.create_actor(
         session,
         initiator=current_actor,
@@ -76,6 +87,11 @@ async def create_actor(
 # объявления, и ниже `me` был бы съеден как значение ключа.
 @router.get("/me", summary="Actor behind the current token")
 async def read_current_actor(current_actor: CurrentActorDep) -> DataResponse[ActorRead]:
+    """Кому принадлежит токен, которым сделан запрос.
+
+    Первый запрос любого клиента: по нему интерфейс узнаёт, кто вошёл, а агент — от
+    чьего имени он действует. В базу не ходит — актор уже разрешён аутентификацией.
+    """
     return DataResponse[ActorRead](data=ActorRead.model_validate(current_actor))
 
 
@@ -85,6 +101,7 @@ async def read_actor(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[ActorRead]:
+    """Карточка актора по ключу. Адресация мягкая: `Alice` находит `alice`."""
     actor = await service.read_actor(session, actor_key, initiator=current_actor)
     return DataResponse[ActorRead](data=ActorRead.model_validate(actor))
 

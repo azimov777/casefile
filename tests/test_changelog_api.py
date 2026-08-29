@@ -36,7 +36,7 @@ async def test_the_history_of_a_fresh_issue_has_one_entry(
     entry = body["data"][0]
     assert entry["issue"] == key
     assert entry["actor"] == "owner"
-    assert entry["event"] == EventType.ISSUE_CREATED
+    assert entry["event_type"] == EventType.ISSUE_CREATED
     assert entry["changes"] == []
 
 
@@ -55,7 +55,7 @@ async def test_an_update_shows_up_in_the_history(
 
     body = (await auth_client.get(f"/api/v1/issues/{key}/changelog")).json()
 
-    assert [entry["event"] for entry in body["data"]] == [
+    assert [entry["event_type"] for entry in body["data"]] == [
         EventType.ISSUE_CREATED,
         # Среди изменений есть статус, поэтому событие получило свой тип, а не общий.
         EventType.ISSUE_STATUS_CHANGED,

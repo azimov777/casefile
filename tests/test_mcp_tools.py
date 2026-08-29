@@ -94,7 +94,7 @@ async def test_reading_an_issue_has_three_levels_of_detail(
     assert set(brief) == set(views.BRIEF_FIELDS)
     assert full["description"] == "Описание задачи"
     assert "changelog" not in full
-    assert [entry["event"] for entry in history["changelog"]["items"]] == [
+    assert [entry["event_type"] for entry in history["changelog"]["items"]] == [
         "issue.created",
         "comment.created",
     ]

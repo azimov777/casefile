@@ -166,6 +166,7 @@ async def read_webhook_subscription(
     session: SessionDep,
     current_actor: CurrentActorDep,
 ) -> DataResponse[WebhookSubscriptionRead]:
+    """Карточка подписки вебхука. Секрет в ответе не приезжает — он виден один раз."""
     subscription = await service.get_subscription(
         session,
         subscription_id,
