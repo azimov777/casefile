@@ -145,6 +145,28 @@ services:
     command: python -m app.cli init
     profiles: ["tools"]
 
+  # Поставляемые артефакты контракта: схема OpenAPI и справочник кодов ошибок.
+  # Пишутся в смонтированный исходный каталог, поэтому появляются прямо в репозитории.
+  # Базы команде не нужно: и схема, и справочник — свойства кода, а не установки.
+  schema:
+    <<: *app-service
+    command: >-
+      sh -c "python -m app.cli openapi --output openapi.json
+      && python -m app.cli errors --output docs/ERRORS.md"
+    depends_on: []
+    profiles: ["tools"]
+
+  # Демо-набор: очереди с разными процессами, задачи с историей, проект, доска и
+  # включённое правило автоматики. Всё создаётся сценариями, поэтому наполнение
+  # порождает события — воркер их разберёт, и у акторов появится непустой инбокс.
+  #
+  # Повторный запуск отказывает: набор — связный граф, доливать его нечем. Начать
+  # заново — docker compose down -v.
+  demo:
+    <<: *app-service
+    command: python -m app.cli demo
+    profiles: ["tools"]
+
   test:
     <<: *app-service
     command: pytest

@@ -117,5 +117,26 @@ services:
     restart: "no"
     profiles: ["tools"]
 
+  # Демо-набор есть и здесь — не ради продакшена, а ради проверки прод-контура: прогнать
+  # сквозные сценарии против него без данных не на чем, а заводить их руками означало бы
+  # проверять другой набор, чем в разработке. На боевой установке команду просто не
+  # запускают; сама она ничего не делает без явного вызова.
+  demo:
+    <<: *app-service
+    command: python -m app.cli demo
+    restart: "no"
+    profiles: ["tools"]
+
+  # Выгрузка схемы OpenAPI. В прод-образе код лежит в `/app` и записать туда результат
+  # нельзя — образ собран под непривилегированного пользователя, — поэтому файл пишется
+  # в стандартный вывод, а на хосте перенаправляется:
+  #
+  #   docker compose -f docker-compose.prod.yml run --rm --no-deps schema > openapi.json
+  schema:
+    <<: *app-service
+    command: python -m app.cli openapi
+    restart: "no"
+    profiles: ["tools"]
+
 volumes:
   pgdata:

@@ -1,12 +1,21 @@
 """Командная строка приложения.
 
-Нужна для того, чего нельзя сделать через API: завести первого владельца и выпустить
-ему первый токен. Все эндпоинты `/api/v1` требуют токена, поэтому без такой команды
-свежая установка оставалась бы запертой снаружи.
+Нужна для того, чего нельзя сделать через API:
+
+- `init` — завести первого владельца и выпустить ему первый токен. Все эндпоинты
+  `/api/v1` требуют токена, поэтому без такой команды свежая установка оставалась бы
+  запертой снаружи;
+- `issue-token` — выпустить токен существующему актору;
+- `openapi` и `errors` — выгрузить поставляемые артефакты контракта: схему для
+  генерации клиента и справочник кодов ошибок;
+- `demo` — наполнить установку осмысленными данными, чтобы фронтенд разрабатывался не
+  на пустой базе.
 
 Запуск в контуре разработки:
 
     docker compose run --rm init
+    docker compose run --rm schema
+    docker compose run --rm demo
     docker compose run --rm --entrypoint python api -m app.cli issue-token --actor owner
 
 Команды идут через `session_scope`: транзакцию фиксирует та же граница, что и у
@@ -15,14 +24,17 @@ HTTP-запроса, отдельной логики коммита здесь �
 
 import argparse
 import asyncio
+import json
 import sys
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from app.core.errors import AppError
 from app.core.logging import configure_logging
 from app.db.session import dispose_engine, session_scope
 from app.domain.actors import ActorType
 from app.services import actors as service
+from app.services import demo as demo_service
 
 DEFAULT_OWNER_KEY = "owner"
 DEFAULT_OWNER_NAME = "Owner"
@@ -70,6 +82,74 @@ async def _issue_token(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _openapi(args: argparse.Namespace) -> int:
+    """Выгружает схему OpenAPI — поставляемый артефакт, из которого фронтенд берёт типы.
+
+    Собирается тем же кодом, который отдаёт `/openapi.json`, и не требует ни базы, ни
+    поднятого сервера: схема — свойство кода, а не работающей установки.
+    """
+    # Импорт внутри команды, а не в начале модуля: `create_app` тянет за собой роутеры,
+    # реестр правил и настройки, а команды `init` и `issue-token` обходятся без них.
+    from fastapi.openapi.utils import get_openapi
+
+    from app.main import create_app
+
+    app = create_app()
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    _write(args.output, json.dumps(schema, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
+async def _errors(args: argparse.Namespace) -> int:
+    """Выгружает справочник кодов ошибок в Markdown."""
+    from app.api.contract import render_error_catalog
+
+    _write(args.output, render_error_catalog())
+    return 0
+
+
+async def _demo(args: argparse.Namespace) -> int:
+    """Наполняет установку демо-данными через обычные сценарии.
+
+    Прямых вставок в базу здесь нет намеренно: на данных, положенных мимо сценариев, не
+    проверить ни историю изменений, ни автоматику, ни уведомления — то есть ровно то,
+    ради чего демо-контур и нужен.
+
+    Повторный запуск отказывает вместо того, чтобы доложить недостающее: набор — это
+    связный граф задач, связей и рангов, и «долить» его нельзя, не заведя механику
+    сложнее самого набора. Отказ громкий: молча создать вторую копию половины объектов
+    было бы хуже любой ошибки.
+    """
+    async with session_scope() as session:
+        if await demo_service.demo_is_present(session):
+            print(
+                "demo data is already here: queues "
+                f"{demo_service.DEV_QUEUE_KEY} or {demo_service.OPS_QUEUE_KEY} exist.",
+                file=sys.stderr,
+            )
+            print(
+                "start over with a fresh database: docker compose down -v && "
+                "docker compose up -d && docker compose run --rm migrate",
+                file=sys.stderr,
+            )
+            return 1
+        report = await demo_service.seed_demo(session)
+    for line in report.lines():
+        print(line)
+    return 0
+
+
+def _write(output: str | None, text: str) -> None:
+    """Пишет результат в файл или в стандартный вывод, если файл не назван."""
+    if output is None:
+        print(text)
+        return
+    path = Path(output)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print(f"written: {path}")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description="Tracker maintenance")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -84,6 +164,17 @@ def _build_parser() -> argparse.ArgumentParser:
     issue.add_argument("--actor", required=True, help="Actor key")
     issue.add_argument("--name", default="cli", help="Name for the issued token")
     issue.set_defaults(handler=_issue_token)
+
+    schema = commands.add_parser("openapi", help="Dump the OpenAPI schema")
+    schema.add_argument("--output", default=None, help="File to write; stdout when omitted")
+    schema.set_defaults(handler=_openapi)
+
+    errors = commands.add_parser("errors", help="Dump the error code reference as Markdown")
+    errors.add_argument("--output", default=None, help="File to write; stdout when omitted")
+    errors.set_defaults(handler=_errors)
+
+    demo = commands.add_parser("demo", help="Fill the installation with demo data")
+    demo.set_defaults(handler=_demo)
 
     return parser
 
