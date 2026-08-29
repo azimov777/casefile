@@ -211,7 +211,7 @@ class Notification(BaseModel):
     #: Событие, из которого собрано уведомление; при склейке — последнее из них.
     #: Без внешнего ключа, по той же причине, по которой его нет у журнала срабатываний
     #: автоматики: строка outbox переживает удалённую задачу, но обратных гарантий нет,
-    #: а чистка старых событий однажды появится.
+    #: а с задачи 18 у очереди событий есть собственный срок хранения.
     event_id: Mapped[uuid.UUID | None] = mapped_column(default=None, nullable=True)
 
     object_type: Mapped[str] = mapped_column(String(MAX_OBJECT_TYPE_LENGTH), nullable=False)
