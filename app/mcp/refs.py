@@ -86,11 +86,6 @@ async def optional_issue_type(session: AsyncSession, ref: str | None, *, initiat
     return None if ref is None else await issue_type(session, ref, initiator=initiator)
 
 
-async def optional_resolution(session: AsyncSession, ref: str | None, *, initiator: Actor) -> Any:
-    """Резолюция или `None`, если ссылки нет."""
-    return None if ref is None else await resolution(session, ref, initiator=initiator)
-
-
 async def field(session: AsyncSession, ref: str, *, initiator: Actor) -> Field:
     """Поле реестра по ссылке (`severity`, `TRK.severity`)."""
     return await queues_service.resolve_field_ref(session, ref, initiator=initiator)
