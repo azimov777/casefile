@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Collection
 from datetime import datetime
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import Select, delete, false, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.event import ChangelogEntry, OutboxEvent
@@ -20,6 +20,11 @@ from app.domain.events import OutboxStatus
 #: объявлен здесь, а не в сценарии стрима, потому что его задают эти выборки: сценарий
 #: обязан пользоваться той же парой, а не собирать свою из чего попало.
 type StreamPosition = tuple[datetime, uuid.UUID]
+
+#: Состояния, в которых событие уже отработано и является историей, а не работой.
+#: `FAILED` сюда входит: попытки исчерпаны, само оно больше не повторится. Чистка
+#: удаляет только эти два — `PENDING` не трогает никогда, каким бы старым он ни был.
+PROCESSED_STATUSES: tuple[OutboxStatus, ...] = (OutboxStatus.DELIVERED, OutboxStatus.FAILED)
 
 
 class ChangelogRepository:
@@ -197,3 +202,98 @@ class OutboxRepository:
         if event_types:
             statement = statement.where(OutboxEvent.event_type.in_(sorted(event_types)))
         return await paginate(self._session, statement, OutboxEvent, limit=limit, cursor=cursor)
+
+    async def replay_floor(self, *, replay_limit: int) -> StreamPosition | None:
+        """Позиция самого старого события, которое обязано пережить чистку.
+
+        Это и есть защита обещания, данного `TRACKER_STREAM_REPLAY_LIMIT`: поток
+        пускает клиента, пока после его курсора лежит не больше `replay_limit`
+        событий, значит уцелеть обязаны `replay_limit + 1` самых свежих — у последнего
+        из них отставание равно ровно лимиту. Отсюда `OFFSET replay_limit`.
+
+        `None` означает, что событий в очереди меньше, чем обещает окно: удалять из неё
+        нельзя ничего, каким бы старым ни был её хвост.
+
+        Отбор по типам событий здесь не применяется намеренно. Поток, суженный
+        `event_types`, считает отставание только по своим типам, поэтому в абсолютных
+        событиях его окно шире; покрыть его полом нельзя ничем ограниченным, и обещание
+        поэтому сформулировано абсолютно — см. `app/domain/retention.py`.
+        """
+        statement = (
+            select(OutboxEvent.created_at, OutboxEvent.id)
+            .order_by(OutboxEvent.created_at.desc(), OutboxEvent.id.desc())
+            .offset(replay_limit)
+            .limit(1)
+        )
+        row = (await self._session.execute(statement)).one_or_none()
+        return None if row is None else (row[0], row[1])
+
+    def _expired(
+        self,
+        *,
+        cutoff: datetime,
+        floor: StreamPosition | None,
+    ) -> Select[tuple[uuid.UUID]]:
+        """Идентификаторы событий, которые чистка вправе удалить, от самых старых.
+
+        Два ограничителя разом: возраст и пол окна переподключения. Пол `None` —
+        удалять нельзя ничего, и выборка это выражает заведомо ложным условием, а не
+        отсутствием строки в коде вызывающего.
+        """
+        statement = (
+            select(OutboxEvent.id)
+            .where(
+                OutboxEvent.status.in_(PROCESSED_STATUSES),
+                OutboxEvent.created_at < cutoff,
+            )
+            .order_by(OutboxEvent.created_at, OutboxEvent.id)
+        )
+        if floor is None:
+            return statement.where(false())
+        return statement.where(tuple_(OutboxEvent.created_at, OutboxEvent.id) < floor)
+
+    async def count_expired(self, *, cutoff: datetime, floor: StreamPosition | None) -> int:
+        """Сколько событий чистка удалит, если её не ограничивать потолком прохода."""
+        expired = self._expired(cutoff=cutoff, floor=floor).subquery()
+        statement = select(func.count()).select_from(expired)
+        return int((await self._session.scalar(statement)) or 0)
+
+    async def count_kept_by_window(self, *, cutoff: datetime, floor: StreamPosition | None) -> int:
+        """Сколько отработанных событий старше срока держит окно переподключения.
+
+        Ненулевое значение — это и есть несогласованность срока с окном, выраженная
+        числом: строки, которые срок хранения удалил бы, а окно не даёт. Сравнивать
+        дни с событиями напрямую нельзя, а этот счётчик сравним с обоими.
+        """
+        statement = (
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(
+                OutboxEvent.status.in_(PROCESSED_STATUSES),
+                OutboxEvent.created_at < cutoff,
+            )
+        )
+        if floor is not None:
+            statement = statement.where(tuple_(OutboxEvent.created_at, OutboxEvent.id) >= floor)
+        return int((await self._session.scalar(statement)) or 0)
+
+    async def delete_expired(
+        self,
+        *,
+        cutoff: datetime,
+        floor: StreamPosition | None,
+        limit: int,
+    ) -> int:
+        """Удаляет одну пачку самых старых событий. Возвращает число удалённых строк.
+
+        Удаление идёт по списку идентификаторов, а не условием напрямую: `DELETE` с
+        `LIMIT` PostgreSQL не поддерживает, а без потолка одна команда сняла бы миллион
+        строк за раз — с блокировкой на всё время выполнения и разом выросшим WAL.
+        """
+        victims = self._expired(cutoff=cutoff, floor=floor).limit(limit)
+        statement = delete(OutboxEvent).where(OutboxEvent.id.in_(victims.scalar_subquery()))
+        result = await self._session.execute(
+            statement,
+            execution_options={"synchronize_session": False},
+        )
+        return result.rowcount or 0

@@ -9,11 +9,11 @@
 """
 
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -204,3 +204,79 @@ class AutomationRunRepository:
             AutomationRun.status == RunStatus.SUCCESS,
         )
         return await self._session.scalar(statement)
+
+    def _expired(
+        self,
+        *,
+        cutoff: datetime,
+        known_rule_keys: Collection[str] | None,
+        orphan: bool,
+    ) -> Select[tuple[uuid.UUID]]:
+        """Идентификаторы записей журнала под удаление, от самых старых.
+
+        `known_rule_keys` — ключи правил, объявленных в коде **сейчас**. Строку правила,
+        исчезнувшего из кода, синхронизация реестра не удаляет (иначе каскад унёс бы
+        вместе с ней весь журнал), поэтому отличить «журнал живого правила» от «журнала
+        правила, которого больше нет» можно только сверкой с реестром. Сверка идёт по
+        `rule_key` самой записи, а не через соединение с таблицей правил: копия ключа
+        лежит в строке журнала ровно для таких вопросов.
+
+        `known_rule_keys=None` означает «не различать»: срок один на весь журнал.
+        Допустимо только с `orphan=False` — с `orphan=True` это выбрало бы все строки
+        разом под самый короткий срок.
+        """
+        if orphan and known_rule_keys is None:
+            raise ValueError("Orphan runs cannot be selected without the list of known rules")
+        statement = (
+            select(AutomationRun.id)
+            .where(AutomationRun.created_at < cutoff)
+            .order_by(AutomationRun.created_at, AutomationRun.id)
+        )
+        if known_rule_keys is None:
+            return statement
+        keys = sorted(known_rule_keys)
+        if orphan:
+            return statement.where(AutomationRun.rule_key.notin_(keys))
+        return statement.where(AutomationRun.rule_key.in_(keys))
+
+    async def count_expired(
+        self,
+        *,
+        cutoff: datetime,
+        known_rule_keys: Collection[str] | None = None,
+        orphan: bool = False,
+    ) -> int:
+        """Сколько записей журнала старше срока."""
+        expired = self._expired(
+            cutoff=cutoff,
+            known_rule_keys=known_rule_keys,
+            orphan=orphan,
+        ).subquery()
+        statement = select(func.count()).select_from(expired)
+        return int((await self._session.scalar(statement)) or 0)
+
+    async def delete_expired(
+        self,
+        *,
+        cutoff: datetime,
+        limit: int,
+        known_rule_keys: Collection[str] | None = None,
+        orphan: bool = False,
+    ) -> int:
+        """Удаляет одну пачку самых старых записей. Возвращает число удалённых строк.
+
+        Пачкой, а не одной командой: журнал автоматики — самая быстрорастущая из трёх
+        таблиц на включённом правиле, и `DELETE` без потолка держал бы блокировку всё
+        время выполнения.
+        """
+        victims = self._expired(
+            cutoff=cutoff,
+            known_rule_keys=known_rule_keys,
+            orphan=orphan,
+        ).limit(limit)
+        statement = delete(AutomationRun).where(AutomationRun.id.in_(victims.scalar_subquery()))
+        result = await self._session.execute(
+            statement,
+            execution_options={"synchronize_session": False},
+        )
+        return result.rowcount or 0

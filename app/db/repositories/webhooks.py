@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Collection
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import Select, and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.webhook import WebhookDelivery, WebhookSubscription
@@ -184,3 +184,39 @@ class WebhookDeliveryRepository:
             .with_for_update(skip_locked=True)
         )
         return (await self._session.scalars(statement)).unique().one_or_none()
+
+    def _expired(self, *, cutoff: datetime) -> Select[tuple[uuid.UUID]]:
+        """Идентификаторы завершённых доставок старше срока, от самых старых.
+
+        `PENDING` не попадает сюда никогда, и это не оптимизация: в одной таблице
+        живут и очередь заданий, и журнал их исходов, поэтому доставка, ожидающая
+        следующей попытки, отличается от истории только статусом. Удалить её по сроку
+        значило бы потерять работу, а не убрать историю.
+        """
+        return (
+            select(WebhookDelivery.id)
+            .where(
+                WebhookDelivery.status.in_((DeliveryStatus.DELIVERED, DeliveryStatus.FAILED)),
+                WebhookDelivery.created_at < cutoff,
+            )
+            .order_by(WebhookDelivery.created_at, WebhookDelivery.id)
+        )
+
+    async def count_expired(self, *, cutoff: datetime) -> int:
+        """Сколько завершённых доставок старше срока."""
+        statement = select(func.count()).select_from(self._expired(cutoff=cutoff).subquery())
+        return int((await self._session.scalar(statement)) or 0)
+
+    async def delete_expired(self, *, cutoff: datetime, limit: int) -> int:
+        """Удаляет одну пачку самых старых завершённых доставок.
+
+        Эта таблица растёт быстрее двух остальных: одно событие кладёт строку на каждую
+        подходящую подписку, поэтому при трёх подписках её поток втрое выше базового.
+        """
+        victims = self._expired(cutoff=cutoff).limit(limit)
+        statement = delete(WebhookDelivery).where(WebhookDelivery.id.in_(victims.scalar_subquery()))
+        result = await self._session.execute(
+            statement,
+            execution_options={"synchronize_session": False},
+        )
+        return result.rowcount or 0

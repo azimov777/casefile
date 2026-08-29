@@ -204,6 +204,72 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Срок хранения журналов --------------------------------------------------
+    # Три таблицы пишутся на каждое событие установки и не чистятся сами. Сроки заданы
+    # по трём вместе, а не по каждой отдельно: `retention_outbox_days` — это ещё и
+    # глубина окна переподключения SSE, и назначить его независимо от
+    # `stream_replay_limit` значит молча сузить обещание, данное клиенту. Разошедшуюся
+    # пару чистка называет вслух, а само окно защищает полом, см. `app/domain/retention.py`.
+    #
+    # Значения по умолчанию ПРЕДЛОЖЕНЫ, а не выведены из нагрузки: сколько хранить
+    # историю — решение владельца установки, и на живом потоке его стоит пересмотреть.
+    retention_outbox_days: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "Days a processed outbox event is kept. It also bounds the /events feed and "
+            "the SSE reconnect window, so it is never chosen independently of "
+            "TRACKER_STREAM_REPLAY_LIMIT"
+        ),
+    )
+    retention_automation_runs_days: int = Field(
+        default=30,
+        ge=1,
+        description="Days a run of a rule still declared in code is kept",
+    )
+    retention_orphan_runs_days: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "Days a run of a rule no longer declared in code is kept. Shorter on "
+            "purpose: the journal of a live rule answers why it acted yesterday, the "
+            "journal of a rule that is gone answers nothing anyone asks"
+        ),
+    )
+    retention_webhook_deliveries_days: int = Field(
+        default=14,
+        ge=1,
+        description=(
+            "Days a finished webhook delivery is kept. Shortest of the three: one event "
+            "puts a row per subscription, so this table grows fastest"
+        ),
+    )
+    retention_batch_size: int = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Rows one DELETE removes. A single statement over a million rows holds the "
+            "lock for its whole run and inflates the WAL at once"
+        ),
+    )
+    retention_max_batches: int = Field(
+        default=100,
+        ge=1,
+        description=(
+            "Batches one pass makes per target before stopping. Hitting it is reported, "
+            "not silent: the rest waits for the next run"
+        ),
+    )
+    retention_interval_hours: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Hours between cleanups run by the automation scheduler. 0 disables them: "
+            "deleting data on a schedule nobody asked for needs consent, and the "
+            "command stays available either way"
+        ),
+    )
+
     # --- MCP-сервер для агентов ------------------------------------------------------
     # Отдельный процесс и отдельный порт: инструменты агента живут не в том же сервисе,
     # что REST фронтенда, и клиент MCP подключается прямо к нему.
