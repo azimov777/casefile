@@ -46,6 +46,7 @@ from app.db.models.checklist import ChecklistItem
 from app.db.models.comment import Comment
 from app.db.models.issue import Issue
 from app.db.models.notification import Notification
+from app.db.models.webhook import WebhookDelivery
 from app.db.repositories import AutomationRunRepository, IssueLinkRepository
 from app.domain.automation import SkipReason
 from app.domain.catalogs import CatalogKind, StatusCategory
@@ -57,6 +58,7 @@ from app.services import issues as issues_service
 from app.services import links as links_service
 from app.services import notifications as notifications_service
 from app.services import queues as queues_service
+from app.services import webhooks as webhooks_service
 from app.services import workflow as workflow_service
 from app.services.event_bus import EventEnvelope
 
@@ -439,6 +441,57 @@ class RuleContext:
             )
         )
         return notification
+
+    async def webhook(
+        self,
+        subscription: str,
+        body: str,
+        *,
+        issue: Issue | None = None,
+        **details: Any,
+    ) -> WebhookDelivery | None:
+        """Ставит задание на доставку вебхука по имени подписки.
+
+        Третий способ правила заговорить с внешним миром, и единственный, который
+        уходит **за пределы трекера**: комментарий виден читателям задачи, уведомление —
+        одному актору, вебхук дёргает чужую систему (бота, CI, скрипт).
+
+        Ставит **задание**, а не делает HTTP-запрос. Синхронный вызов задержал бы
+        обработку события на таймаут мёртвого адреса и уронил бы правило вместе со всей
+        его работой; отправкой занимается отдельный процесс (`app/webhooks.py`).
+        Отсюда следствие, которое правило обязано учитывать: возврат из этого метода
+        означает «вызов поставлен в очередь», а не «получатель его получил».
+
+        Подписка адресуется **именем**, а не идентификатором: имена настраивают люди в
+        параметрах правила, и UUID в них нечитаем. Несуществующее имя — ошибка правила
+        (опечатка в параметрах), а выключенная подписка или её фильтр типов — пропуск с
+        пометкой в журнале: чужая настройка не должна ронять правило.
+        """
+        target = await webhooks_service.get_subscription_by_name(
+            self.session,
+            subscription,
+            initiator=self.actor,
+        )
+        subject = issue or self.issue
+        outcome = await webhooks_service.enqueue_direct(
+            self.session,
+            target,
+            initiator=self.actor,
+            body=body,
+            details=details or None,
+            issue=subject,
+            rule_key=self.definition.key,
+        )
+        self.actions.append(
+            RuleAction(
+                action="webhook",
+                target=target.name,
+                details={"delivery": str(outcome.delivery.id)}
+                if outcome.delivery is not None
+                else {"skipped": outcome.skipped},
+            )
+        )
+        return outcome.delivery
 
     async def add_checklist_item(
         self,

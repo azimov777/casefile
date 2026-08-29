@@ -87,3 +87,15 @@ class PermissionDeniedError(AppError):
     code = "permission_denied"
     status_code = 403
     message = "Action is not allowed"
+
+
+class TooManyRequestsError(AppError):
+    """Ресурс исчерпан и просьба повторить позже, а не отказ навсегда.
+
+    Отдельное семейство рядом с `PermissionDeniedError`, потому что клиенту это разные
+    решения: по `403` он перестаёт пытаться, по `429` — повторяет через паузу.
+    """
+
+    code = "too_many_requests"
+    status_code = 429
+    message = "Too many requests"

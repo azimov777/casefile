@@ -11,7 +11,12 @@
 область, а механизм (недоступна база, испорчен курсор), живёт рядом с этим механизмом.
 """
 
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import (
+    ConflictError,
+    NotFoundError,
+    TooManyRequestsError,
+    ValidationError,
+)
 
 # --- Акторы ---------------------------------------------------------------------
 
@@ -974,3 +979,91 @@ class InvalidWaitTimeoutError(ValidationError):
 
     code = "invalid_wait_timeout"
     message = "Wait timeout is out of range"
+
+
+# --- Вебхуки и стрим событий -------------------------------------------------------
+
+
+class WebhookSubscriptionNotFoundError(NotFoundError):
+    """Подписки вебхука с таким идентификатором нет."""
+
+    code = "webhook_subscription_not_found"
+    message = "Webhook subscription not found"
+
+
+class WebhookSubscriptionNameTakenError(ConflictError):
+    """Имя подписки уже занято.
+
+    Имя уникально на всю установку, потому что по нему подписку адресует правило
+    автоматики (`ctx.webhook`). Два адреса под одним именем означали бы правило, которое
+    отправляет вызов туда, куда сегодня решит порядок строк в выборке.
+    """
+
+    code = "webhook_subscription_name_taken"
+    message = "Webhook subscription name is already taken"
+
+
+class InvalidWebhookSubscriptionError(ValidationError):
+    """Описание подписки нарушает правило.
+
+    Один код на все поля, как у подписки инбокса и у правила автоматики: конкретное
+    поле и причина лежат в `details` (`url`, `scope_key`, `event_types`, `secret`).
+    """
+
+    code = "invalid_webhook_subscription"
+    message = "Webhook subscription is invalid"
+
+
+class WebhookSubscriptionDisabledError(ConflictError):
+    """Подписка выключена: ставить на неё доставку нельзя.
+
+    Отказ, а не тихий пропуск: правило автоматики, адресующее выключенный вебхук, обязано
+    получить запись в журнале срабатываний, а не молчание, из которого нельзя понять,
+    ушёл вызов или нет.
+    """
+
+    code = "webhook_subscription_disabled"
+    message = "Webhook subscription is disabled"
+
+
+class WebhookDeliveryNotFoundError(NotFoundError):
+    """Записи журнала доставок с таким идентификатором нет."""
+
+    code = "webhook_delivery_not_found"
+    message = "Webhook delivery not found"
+
+
+class WebhookDeliveryNotRetryableError(ConflictError):
+    """Переотправлять нечего: доставка ещё в работе.
+
+    Повторная постановка уже ожидающей доставки удвоила бы её попытки и отправила бы
+    получателю два одинаковых вызова с разной подписью. Переотправляют то, что
+    завершилось, — доставленное или исчерпавшее попытки.
+    """
+
+    code = "webhook_delivery_not_retryable"
+    message = "Webhook delivery is still pending"
+
+
+class InvalidStreamCursorError(ValidationError):
+    """`Last-Event-ID` не разбирается или указывает на неизвестное событие.
+
+    Ошибка, а не тихий старт «с текущего момента»: клиент, переподключившийся с
+    потерянным курсором, обязан узнать о разрыве — иначе он решит, что за время обрыва
+    ничего не происходило, и разойдётся с сервером незаметно для себя.
+    """
+
+    code = "invalid_stream_cursor"
+    message = "Stream cursor is unknown or malformed"
+
+
+class StreamConnectionLimitError(TooManyRequestsError):
+    """Свободных SSE-соединений в этом процессе больше нет.
+
+    Поток живёт часами и держит соединение с базой на каждой проверке, поэтому их число
+    ограничено. Отказ приходит сразу и с кодом `429`: клиент повторит через паузу, а не
+    решит, что поток сломан навсегда.
+    """
+
+    code = "stream_connection_limit"
+    message = "Too many open event streams"

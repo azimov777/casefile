@@ -15,9 +15,10 @@ from app.api.schemas.search import (
 from app.core.errors import UnauthorizedError
 from app.db.models.actor import Actor
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
-from app.db.session import get_session
+from app.db.session import get_session, session_scope
 from app.domain.search import MAX_QUERY_LENGTH, MAX_SORT_TERMS
 from app.services.auth import authenticate_by_token
+from app.services.event_stream import SessionFactory
 
 # `scope="function"` — не украшение, а единственное, что доводит упавший коммит до
 # клиента. FastAPI держит два стека завершения зависимостей: обычный закрывается уже
@@ -56,6 +57,25 @@ async def get_current_actor(session: SessionDep, credentials: CredentialsDep) ->
 
 CurrentActorDep = Annotated[Actor, Depends(get_current_actor)]
 """Текущий актор. Зависимость кешируется на запрос, поэтому лишнего похода в БД нет."""
+
+
+def get_session_factory() -> SessionFactory:
+    """Фабрика сессий для долгоживущего потока событий.
+
+    Сессия запроса (`SessionDep`) потоку не годится: FastAPI закрывает её, когда
+    обработчик вернул ответ, — то есть **до** того, как поток отдал первый кадр. А
+    держать одну сессию всё время потока нельзя тем более: соединение из пула,
+    занятое на часы, исчерпало бы пул на десятке клиентов.
+
+    Поэтому поток получает не сессию, а способ открыть её на время одной выборки.
+    Зависимостью, а не импортом, ровно затем, что и всё остальное здесь: тест подменяет
+    её своей транзакцией и проверяет поток на данных, которых нет в общей базе.
+    """
+    return session_scope
+
+
+StreamSessionsDep = Annotated[SessionFactory, Depends(get_session_factory)]
+"""Способ открыть сессию на время одной выборки потока: сама сессия потоку не годится."""
 
 
 # Параметры пагинации объявлены здесь, а не в каждом роутере: коллекции во всём API

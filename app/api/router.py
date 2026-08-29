@@ -27,6 +27,7 @@ from app.api.routes import (
     catalogs,
     checklists,
     comments,
+    events,
     fields,
     filters,
     issues,
@@ -37,6 +38,7 @@ from app.api.routes import (
     queues,
     search,
     tags,
+    webhooks,
     workflows,
 )
 from app.api.schemas.common import ErrorResponse
@@ -91,3 +93,5 @@ api_router.include_router(filters.router)
 api_router.include_router(workflows.router)
 api_router.include_router(automation.router)
 api_router.include_router(notifications.router)
+api_router.include_router(webhooks.router)
+api_router.include_router(events.router)

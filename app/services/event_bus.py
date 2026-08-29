@@ -164,6 +164,8 @@ SUBSCRIBER_MODULES: tuple[str, ...] = (
     "app.services.event_log",
     "app.automation.subscriber",
     "app.services.notification_subscriber",
+    "app.services.webhook_subscriber",
+    "app.services.stream_subscriber",
 )
 
 

@@ -27,6 +27,7 @@ from app.db.models.project import (
 )
 from app.db.models.queue import Queue, QueueIssueType
 from app.db.models.saved_filter import SavedFilter
+from app.db.models.webhook import WebhookDelivery, WebhookSubscription
 from app.db.models.workflow import Transition, Workflow, WorkflowStatus
 
 __all__ = [
@@ -64,6 +65,8 @@ __all__ = [
     "Status",
     "Subscription",
     "Transition",
+    "WebhookDelivery",
+    "WebhookSubscription",
     "Workflow",
     "WorkflowStatus",
 ]

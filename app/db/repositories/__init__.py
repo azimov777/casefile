@@ -19,6 +19,10 @@ from app.db.repositories.projects import PortfolioRepository, ProjectRepository
 from app.db.repositories.queues import QueueRepository
 from app.db.repositories.saved_filters import SavedFilterRepository
 from app.db.repositories.search import IssueSearchRepository
+from app.db.repositories.webhooks import (
+    WebhookDeliveryRepository,
+    WebhookSubscriptionRepository,
+)
 from app.db.repositories.workflows import WorkflowRepository
 
 __all__ = [
@@ -43,5 +47,7 @@ __all__ = [
     "QueueRepository",
     "SavedFilterRepository",
     "SubscriptionRepository",
+    "WebhookDeliveryRepository",
+    "WebhookSubscriptionRepository",
     "WorkflowRepository",
 ]

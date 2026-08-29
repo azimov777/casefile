@@ -129,6 +129,81 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Вебхуки ------------------------------------------------------------------
+    # Повторы здесь свои и не дублируют повторы шины: та повторяет событие по упавшим
+    # подписчикам, а эти — доставку по конкретному адресу. Иначе одно событие ушло бы на
+    # живые адреса столько раз, сколько раз упал мёртвый.
+    webhook_timeout: float = Field(
+        default=10.0,
+        gt=0,
+        description=(
+            "Seconds one delivery attempt may take. Short on purpose: the delivery row "
+            "stays locked for the whole request, so a dead address holds a transaction"
+        ),
+    )
+    webhook_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        description="Attempts on one delivery before it is marked as failed",
+    )
+    webhook_retry_delay: float = Field(
+        default=10.0,
+        gt=0,
+        description="Base delay before the next delivery attempt; doubles with every attempt",
+    )
+    webhook_max_retry_delay: float = Field(
+        default=600.0,
+        gt=0,
+        description="Upper bound for the growing retry delay",
+    )
+    webhook_poll_interval: float = Field(
+        default=1.0,
+        gt=0,
+        description="Seconds the webhook dispatcher sleeps when the delivery queue is empty",
+    )
+    webhook_failure_threshold: int = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Consecutive failed deliveries before a subscription is switched off. A "
+            "success resets the counter; re-enabling is a manual action"
+        ),
+    )
+
+    # --- Стрим событий (SSE) --------------------------------------------------------
+    stream_heartbeat_interval: float = Field(
+        default=15.0,
+        gt=0,
+        description=(
+            "Seconds between heartbeat comments. They keep proxies from closing an idle "
+            "stream and let the server notice a client that went away"
+        ),
+    )
+    stream_max_connections: int = Field(
+        default=50,
+        ge=1,
+        description=(
+            "Open streams one process serves at once. Each holds a database connection "
+            "while it checks for new events, so the pool bounds this from above"
+        ),
+    )
+    stream_replay_limit: int = Field(
+        default=500,
+        ge=1,
+        description=(
+            "Events replayed at most when a client reconnects with Last-Event-ID. A "
+            "client that was away longer gets the newest ones, not a dump of the week"
+        ),
+    )
+    stream_poll_interval: float = Field(
+        default=5.0,
+        gt=0,
+        description=(
+            "Seconds between fallback checks for new events; the stream is woken by "
+            "PostgreSQL notifications and this is only the safety net"
+        ),
+    )
+
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
     cors_origins: Annotated[list[str], NoDecode] = Field(
