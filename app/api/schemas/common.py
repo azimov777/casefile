@@ -8,11 +8,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.core.sentinels import UNSET, UnsetType, is_set
+from app.core.sentinels import UNSET, UnsetType, is_set, unset_field
 
-# Сентинел живёт в `app/core/sentinels.py`, а не здесь: тот же признак нужен сценариям,
-# а `services` не имеет права зависеть от `api`. Реэкспорт оставлен, чтобы схемам
-# по-прежнему хватало одного импорта.
+# Сентинел и способ объявить поле с ним живут в `app/core/sentinels.py`, а не здесь:
+# тот же признак нужен сценариям и схемам аргументов MCP, а `services` и `mcp` не имеют
+# права зависеть от `api`. Реэкспорт оставлен, чтобы схемам хватало одного импорта.
 __all__ = [
     "UNSET",
     "CollectionResponse",
@@ -24,28 +24,6 @@ __all__ = [
     "is_set",
     "unset_field",
 ]
-
-
-def unset_field(**kwargs: Any) -> Any:
-    """Поле схемы `PATCH`, которое можно не передавать.
-
-    Поле объявляется своим настоящим типом (`str`, а не `str | None`), а значением по
-    умолчанию получает `UNSET`. Следствия — все три нужные сразу:
-
-    - `null` не проходит валидацию, потому что `None` не входит в тип поля;
-    - в OpenAPI поле не помечено nullable, и сгенерированный клиент не даст фронтенду
-      отправить `null` там, где он запрещён;
-    - `model_dump(exclude_unset=True)` возвращает ровно переданные поля.
-
-    Поле, у которого `null` осмысленно (очистить исполнителя, снять дедлайн),
-    объявляется как `T | None` с тем же `unset_field()`: тогда различимы все три
-    состояния — не передано, передано значение, передано `null`.
-
-    `default_factory`, а не `default`: значение по умолчанию Pydantic пытается положить
-    в JSON-схему, сентинел не сериализуется, и генерация схемы сыпет предупреждениями.
-    Фабрику Pydantic при построении схемы не вызывает, поэтому предупреждения нет.
-    """
-    return Field(default_factory=lambda: UNSET, **kwargs)
 
 
 class ErrorDetail(BaseModel):
