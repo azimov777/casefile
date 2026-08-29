@@ -1256,6 +1256,124 @@ SSE. Форма полезной нагрузки кадра при этом о�
 ошибки приходят обычным JSON-конвертом.
 
 
+## MCP-сервер для агентов
+
+Второй интерфейс трекера. Агент (Claude Code и подобные) ходит не в REST, а в MCP: те же
+сценарии, но инструментами, описания которых читает модель.
+
+```bash
+docker compose up -d mcp          # поднимается вместе с контуром
+curl http://localhost:8100/health
+```
+
+```json
+{"status": "ok", "version": "0.1.0", "database": "ok"}
+```
+
+Адрес — `http://localhost:8100/mcp`, транспорт — streamable HTTP, авторизация — тем же
+токеном актора, что и REST: `Authorization: Bearer trk_...`. Второй схемы представления
+нет намеренно — акторы и токены общие на оба интерфейса.
+
+### Подключение к Claude Code
+
+Сервер работает в контейнере, наружу опубликован порт `8100` (`TRACKER_MCP_PORT`).
+Токен агенту выпускают через REST — MCP этого не умеет и не будет уметь: выдача доступов
+остаётся за человеком.
+
+```bash
+# завести агента и выпустить ему токен (секрет виден только в этом ответе)
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"type": "agent", "key": "claude", "display_name": "Claude"}' \
+     http://localhost:8000/api/v1/actors
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"name": "claude-code"}' \
+     http://localhost:8000/api/v1/actors/claude/tokens
+
+# подключить сервер (scope local — конфигурация только этого проекта, без репозитория)
+claude mcp add --scope local --transport http tracker http://localhost:8100/mcp \
+      --header "Authorization: Bearer trk_..."
+
+claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
+```
+
+Если Claude Code работает не на той машине, где поднят контур, вместо `localhost` идёт
+адрес хоста, а порт `8100` должен быть до него доступен. Токен кладите в конфигурацию
+клиента, а не в репозиторий: `--scope local` пишет его в личный файл настроек.
+
+### Что умеет агент
+
+| Группа | Инструменты |
+|---|---|
+| Поиск и чтение | `search_issues`, `get_issue` |
+| Работа с задачей | `create_issue`, `update_issue`, `assign_issue`, `list_transitions`, `transition_issue` |
+| Обсуждение | `list_comments`, `add_comment`, чеклист (`get_checklist`, `add_checklist_item`, `check_checklist_item`, `move_checklist_item`, ...) |
+| Связи | `list_links`, `link_issues`, `unlink_issues`, `get_issue_tree` |
+| Очереди | `list_queues`, `get_queue_config` |
+| Проекты | `list_projects`, `get_project`, `add_issues_to_project`, `remove_issue_from_project`, портфели |
+| Доски | `list_boards`, `get_board`, `list_column_issues`, `move_card_to_column`, `rank_card` |
+| Автоматика | `list_automation_rules`, `configure_automation_rule`, `run_macro` |
+| Инбокс | `list_notifications`, `mark_notifications_read`, `wait_for_notifications` |
+| Настройка процесса | `create_queue`, `update_queue`, `set_queue_issue_types`, `create_status`, `create_issue_type`, `create_resolution`, `create_field`, `update_field`, `create_workflow`, `replace_workflow`, `update_workflow_transition`, `get_workflow` |
+
+Плюс ресурсы: `tracker://queues`, `tracker://statuses`, `tracker://me` и
+`tracker://inbox/{actor}`.
+
+**Отдельного инструмента «задачи проекта» нет, и это решение.** Список задач проекта —
+это `search_issues` со строкой `project: alpha`, задачи очереди — `queue: TRK`, свои
+задачи — `assignee: me()`. Второй способ отбирать задачи разошёлся бы с поиском на
+первом же краевом случае.
+
+### Экономия контекста
+
+Каждое поле ответа съедает контекст агента, поэтому умолчания скупые:
+
+- поиск и колонки досок отдают восемь полей на задачу; `fields: ["*"]` — задачу целиком,
+  `fields: ["summary", "TRK.severity"]` — только названное;
+- `get_issue` отвечает кратко, `detail: "full"` добавляет описание и значения полей,
+  `detail: "history"` — журнал изменений и обсуждение;
+- длинные тексты обрезаются до `TRACKER_MCP_TEXT_LIMIT` символов, и обрезка **видна**:
+  рядом приезжают `description_truncated` и полная длина.
+
+Ошибки инструментов устроены как в REST: стабильный код, английская фраза и
+подробности. Испорченный запрос отвечает позицией символа и причиной, незаполненное поле
+— своей ссылкой и допустимыми значениями. Это не украшение: агент исправляет вызов по
+тексту, а по «invalid query» уходит в перебор.
+
+### Уведомления: три канала, один инбокс
+
+1. **Инбокс** — основной канал: `list_notifications`, `mark_notifications_read` и
+   `wait_for_notifications`, который блокируется до появления новых записей (потолок
+   ожидания — `TRACKER_NOTIFICATION_WAIT_MAX_TIMEOUT`, пустой ответ по таймауту приходит
+   с `timed_out: true`, а не ошибкой).
+2. **MCP-нотификации** — сигнал «в инбоксе что-то появилось» по адресу
+   `tracker://inbox/{actor}`. Содержимого в нём нет: агент читает ленту теми же
+   инструментами, и отметка о прочтении одна на оба канала.
+3. **Вебхуки** — наружу, для систем за пределами трекера (раздел «Вебхуки»).
+
+**MCP-нотификации доходят не до всякого клиента.** Они идут подписками
+(`subscriptions/listen`) и требуют протокола `2026-07-28`; клиент, договорившийся на
+`2025-11-25` — а Claude Code сейчас делает именно так, — их не увидит. Для него
+работающий способ узнать о чужом изменении один: `wait_for_notifications`. Поэтому инбокс
+и есть обязательный канал, а нотификации — дополнение поверх.
+
+### Настройка процесса и предварительная проверка
+
+Агент умеет не только работать внутри готового процесса, но и собрать его: завести
+очередь, свои статусы, типы и резолюции, поля и воркфлоу. Граф процесса создаётся **одним
+вызовом** (`create_workflow`, `replace_workflow`) и проверяется целиком: достижимость
+статусов, путь в `done`, резолюция на закрывающем переходе, наличие выхода у задач,
+которые уже стоят в этих статусах.
+
+У опасных инструментов есть предварительная проверка: `dry_run: true` выполняет операцию
+по-настоящему, отдаёт отчёт (`impact`: сколько задач останется без исходящих переходов и
+в каких статусах) и откатывает транзакцию. Второй, «облегчённой» проверки в проекте нет —
+она разошлась бы с настоящей ровно там, где её и звали.
+
+Порядок сборки процесса со своими статусами не произволен: стартовый статус очереди
+обязан входить в граф каждого назначенного типа задачи. Поэтому сначала свои статусы
+въезжают в граф **вместе** со старым стартовым, потом `update_queue` переводит умолчание
+очереди на свой статус, и только после этого старый статус из графа убирается.
+
 ## Команды разработки
 
 | Что нужно | Команда |
@@ -1265,7 +1383,8 @@ SSE. Форма полезной нагрузки кадра при этом о�
 | Логи воркера событий | `docker compose logs -f worker` |
 | Логи планировщика автодействий | `docker compose logs -f scheduler` |
 | Логи доставщика вебхуков | `docker compose logs -f webhooks` |
-| Перезапустить фоновые после правки | `docker compose restart worker scheduler webhooks` |
+| Логи MCP-сервера | `docker compose logs -f mcp` |
+| Перезапустить фоновые после правки | `docker compose restart worker scheduler webhooks mcp` |
 | Применить миграции | `docker compose run --rm migrate` |
 | Завести владельца и первый токен | `docker compose run --rm init` |
 | Выпустить токен актору | `docker compose run --rm --entrypoint python api -m app.cli issue-token --actor release_bot` |
@@ -1347,7 +1466,7 @@ docker compose -f docker-compose.prod.yml run --rm migrate
 ```
 app/
   api/          HTTP-слой: роутеры, схемы, обработка ошибок
-  mcp/          MCP-сервер для агентов
+  mcp/          MCP-сервер для агентов: инструменты, ресурсы, нотификации (`python -m app.mcp`)
   domain/       доменные модели и правила
   services/     сценарии: транзакции, события
   db/           модели SQLAlchemy, репозитории, сессии, миграции
