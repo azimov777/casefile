@@ -17,6 +17,15 @@
 нельзя — процесс держал бы две несовместимые механики, и починка одной не чинила бы
 вторую.
 
+## Ждущие и наблюдатели
+
+Потребителей у канала два вида. Ждущий регистрируется на **свой** ключ и получает
+`asyncio.Event` (`waiting_for`) — так устроено ожидание уведомлений. Наблюдатель
+(`observing`) получает колбэк на каждое пробуждение со всеми ключами разом: ему заранее
+неизвестно, у кого что появится. Так работает MCP-сервер, рассылающий подписанным
+клиентам сигнал «инбокс обновился» (`app/mcp/push.py`): зарегистрировать ждущего на
+каждого актора установки он не может.
+
 ## Почему одного механизма мало
 
 Уведомление рождается в **воркере событий** — это отдельный сервис Compose, другой
@@ -48,7 +57,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 
 import asyncpg
 from sqlalchemy import String, bindparam, func, select
@@ -86,6 +95,7 @@ class WakeupHub:
     def __init__(self, channel: str = CHANNEL) -> None:
         self._channel = channel
         self._waiters: dict[str, set[asyncio.Event]] = {}
+        self._observers: dict[object, Callable[[tuple[str, ...]], None]] = {}
         self._connection: asyncpg.Connection | None = None
 
     async def start(self) -> None:
@@ -129,10 +139,43 @@ class WakeupHub:
         return self._connection is not None
 
     def wake(self, actor_keys: Iterable[str]) -> None:
-        """Будит всех, кто ждёт уведомлений для этих акторов, внутри этого процесса."""
-        for key in actor_keys:
+        """Будит всех, кто ждёт уведомлений для этих акторов, внутри этого процесса.
+
+        Кроме ждущих, оповещаются наблюдатели канала (`observing`): им ключ не
+        адресован заранее, они разбирают его сами.
+        """
+        keys = tuple(actor_keys)
+        for key in keys:
             for event in self._waiters.get(key, ()):
                 event.set()
+        for observe in list(self._observers.values()):
+            try:
+                observe(keys)
+            except Exception:
+                # Наблюдатель не должен ронять оповещение остальных: он подключён к
+                # общему каналу и об ошибке соседа знать не обязан.
+                logger.exception("Wakeup observer raised; other listeners continue")
+
+    @contextlib.contextmanager
+    def observing(self, callback: Callable[[tuple[str, ...]], None]) -> Iterator[None]:
+        """Подключает наблюдателя канала: колбэк на каждое пробуждение, с ключами.
+
+        Нужен там, где ждущего нет, но оповещение всё равно надо получить: MCP-сервер
+        рассылает подписанным клиентам сигнал «инбокс обновился» и заранее не знает, у
+        какого актора это случится, поэтому зарегистрировать `waiting_for` на каждого
+        он не может.
+
+        Заводить ради этого второй слушатель канала было бы ошибкой: процесс держал бы
+        два соединения и две несовместимые механики пробуждения, и починка одной не
+        чинила бы вторую. Колбэк синхронный и не должен бросать — он вызывается из
+        обработчика оповещения asyncpg.
+        """
+        token = object()
+        self._observers[token] = callback
+        try:
+            yield
+        finally:
+            self._observers.pop(token, None)
 
     @contextlib.asynccontextmanager
     async def waiting_for(self, actor_key: str) -> AsyncIterator[asyncio.Event]:
