@@ -14,11 +14,12 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.automation import engine
 from app.db.models.actor import Actor
-from app.db.models.automation import AutomationRule
+from app.db.models.automation import AutomationRule, AutomationRun
 from app.db.models.issue import Issue
 from app.domain.automation import RunStatus
 from app.domain.catalogs import CatalogKind, StatusCategory
@@ -101,6 +102,16 @@ async def _close(session: AsyncSession, issue: Issue, *, initiator: Actor) -> No
 async def _comments(session: AsyncSession, issue: Issue, *, initiator: Actor) -> list[str]:
     page = await comments_service.list_comments(session, issue, initiator=initiator)
     return [comment.body for comment in page.items]
+
+
+async def _runs(session: AsyncSession, rule_key: str) -> list[AutomationRun]:
+    """Журнал срабатываний правила по порядку. Он и показывает дефект целиком."""
+    statement = (
+        select(AutomationRun)
+        .where(AutomationRun.rule_key == rule_key)
+        .order_by(AutomationRun.created_at, AutomationRun.id)
+    )
+    return list((await session.scalars(statement)).unique())
 
 
 # --- Триггер: закрытие родителя ------------------------------------------------------
@@ -194,6 +205,55 @@ async def test_a_subtask_without_a_closing_transition_is_named_out_loud(
 
     assert stuck.status.category is not StatusCategory.DONE
     assert any(stuck.key in body for body in await _comments(db_session, parent, initiator=owner))
+
+
+async def test_an_accumulated_queue_of_events_fires_the_trigger_once(
+    db_session: AsyncSession,
+    owner: Actor,
+    make_issue: MakeIssue,
+    enable_rule: EnableRule,
+) -> None:
+    """Очередь, накопленная до разбора, даёт одно срабатывание, а не по одному на событие.
+
+    Это и есть проверка контракта «условие — по событию, действие — по строке». Задача
+    проходит весь путь до конечного состояния, и **только потом** очередь разбирается —
+    так ведёт себя воркер, который отстал или стартовал позже первых изменений. Условие,
+    написанное по `ctx.target`, к этому моменту истинно для **каждого** накопленного
+    события: правило отработает столько раз, сколько их накопилось, и оставит столько же
+    одинаковых комментариев.
+
+    Тест, разбирающий события по одному сразу, зелёный и на сломанном коде: там строка
+    задачи ещё совпадает со снимком в событии, и разницы между двумя источниками нет.
+    """
+    await enable_rule("close_children_with_parent")
+    parent = await make_issue(summary="Эпик")
+    child = await make_issue(summary="Подзадача")
+    await links_service.create_link(
+        db_session,
+        initiator=owner,
+        source=child,
+        link_type=LinkType.SUBTASK_OF,
+        target=parent,
+    )
+
+    # Два перехода подряд, очередь при этом не разбирается: оба события ждут воркера, и
+    # к моменту разбора родитель уже закрыт.
+    await _start(db_session, parent, initiator=owner)
+    await _close(db_session, parent, initiator=owner)
+
+    await _drain(db_session)
+
+    bodies = await _comments(db_session, parent, initiator=owner)
+    assert len(bodies) == 1
+    assert child.key in bodies[0]
+
+    # Журнал показывает механику, а не только её последствие: рассмотрены оба события,
+    # но условию отвечает ровно то, которое привело родителя в закрывающий статус.
+    runs = await _runs(db_session, "close_children_with_parent")
+    assert [(run.status, run.reason) for run in runs] == [
+        (RunStatus.SKIPPED, "parent_not_done"),
+        (RunStatus.SUCCESS, None),
+    ]
 
 
 async def test_a_status_change_inside_work_does_not_touch_subtasks(

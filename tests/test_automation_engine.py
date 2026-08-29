@@ -16,6 +16,7 @@
 """
 
 import asyncio
+import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -27,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.automation import engine
 from app.automation.context import RuleContext
+from app.automation.registry import registry as rule_registry
 from app.automation.registry import rule
 from app.core.errors import AppError
 from app.db.models.actor import Actor
@@ -44,6 +46,7 @@ from app.domain.automation import (
 from app.domain.catalogs import CatalogKind, StatusCategory
 from app.domain.events import EventType, OutboxStatus
 from app.services import automation as automation_service
+from app.services import catalogs as catalogs_service
 from app.services import events as events_service
 from app.services import issues as issues_service
 from app.services import queues as queues_service
@@ -243,6 +246,65 @@ async def _start_progress(
     )
 
 
+def _event(
+    payload: dict[str, Any],
+    *,
+    event_type: str = EventType.ISSUE_STATUS_CHANGED,
+) -> EventEnvelope:
+    """Событие с заданной нагрузкой — ровно в той форме, в какой его получает подписчик."""
+    return EventEnvelope(
+        id=uuid.uuid4(),
+        event_type=str(event_type),
+        object_type="issue",
+        object_id=uuid.uuid4(),
+        object_key="TRK-1",
+        actor_key="owner",
+        payload=payload,
+        created_at=datetime.now(UTC),
+    )
+
+
+def _status_event(before: str | None, after: str) -> EventEnvelope:
+    """Событие смены статуса. Значения — ссылки, как их кладёт в нагрузку шина."""
+    return _event(
+        {
+            "changes": [{"field": "status", "before": before, "after": after}],
+            "fields": ["status"],
+        },
+    )
+
+
+def _context(
+    session: AsyncSession,
+    *,
+    rule_row: AutomationRule,
+    actor: Actor,
+    event: EventEnvelope,
+    issue: Issue | None = None,
+) -> RuleContext:
+    """Контекст правила, собранный без движка.
+
+    Проверяется чтение, а не выполнение: вопросы к событию отвечают до всякого действия,
+    и прогонять ради них правило через шину значило бы проверять заодно защиты, журнал и
+    воркфлоу. Расхождение «строка против события» при этом задаётся прямо — через шину
+    его пришлось бы подстраивать порядком вызовов.
+    """
+    definition = rule_registry.get("t13_tagger")
+    assert definition is not None
+    return RuleContext(
+        session=session,
+        definition=definition,
+        rule=rule_row,
+        run_id=uuid.uuid4(),
+        depth=1,
+        actor=actor,
+        initiator=actor,
+        params=definition.parse_params({}),
+        issue=issue,
+        event=event,
+    )
+
+
 # --- Синхронизация реестра -----------------------------------------------------------
 
 
@@ -437,6 +499,120 @@ async def test_the_event_of_a_rule_change_carries_the_automation_trace(
     # Идентификатор срабатывания в событии равен идентификатору записи журнала: по нему
     # цепочка «срабатывание → изменение → событие» проходится в обе стороны.
     assert trace["run"] == str(runs[0].id)
+
+
+# --- Условие триггера читает событие ---------------------------------------------------
+
+
+async def test_the_condition_answers_about_the_event_not_about_the_row(
+    db_session: AsyncSession,
+    owner: Actor,
+    system_actor: Actor,
+    make_issue: MakeIssue,
+    automation_rules: dict[str, AutomationRule],
+) -> None:
+    """Задача в `open`, событие описывает переход в `closed` — отвечает событие.
+
+    Расхождение задано прямо: строка задачи никуда не двигалась, а нагрузка события
+    говорит о закрытии. Условие, читающее `ctx.target`, ответило бы «нет», и правило
+    промолчало бы на изменении, ради которого его и завели.
+    """
+    issue = await make_issue(summary="Задача осталась открытой")
+    context = _context(
+        db_session,
+        rule_row=automation_rules["t13_tagger"],
+        actor=system_actor,
+        event=_status_event("open", "closed"),
+        issue=issue,
+    )
+
+    assert issue.status.category is StatusCategory.NEW
+    assert await context.entered_category(StatusCategory.DONE) is True
+
+
+async def test_a_move_between_two_statuses_of_one_category_is_not_entering_it(
+    db_session: AsyncSession,
+    owner: Actor,
+    system_actor: Actor,
+    queue: Queue,
+    automation_rules: dict[str, AutomationRule],
+) -> None:
+    """`closed → released`, оба `done`: задача уже была закрыта, входа в категорию нет.
+
+    Иначе правило, реагирующее на закрытие, отработало бы второй раз по задаче, которую
+    закрыли один раз, — то есть вернулся бы ровно тот дубль, ради которого вопрос и
+    заведён.
+    """
+    released = await catalogs_service.create_entry(
+        db_session,
+        CatalogKind.STATUS,
+        initiator=owner,
+        key="released",
+        name="Выпущен",
+        queue=queue,
+        category=StatusCategory.DONE,
+    )
+    context = _context(
+        db_session,
+        rule_row=automation_rules["t13_tagger"],
+        actor=system_actor,
+        event=_status_event("closed", released.ref),
+    )
+
+    change = await context.status_change()
+
+    assert change is not None
+    assert change.after.category is StatusCategory.DONE
+    assert await context.entered_category(StatusCategory.DONE) is False
+
+
+async def test_an_event_without_a_status_change_never_enters_a_category(
+    db_session: AsyncSession,
+    system_actor: Actor,
+    automation_rules: dict[str, AutomationRule],
+) -> None:
+    """Смена исполнителя не переводит задачу никуда — даже если задача уже закрыта.
+
+    Это второй половина того же дефекта: `issue.assigned` по закрытой задаче проходил
+    условие «задача в `done`», хотя со статусом событие не имеет ничего общего.
+    """
+    context = _context(
+        db_session,
+        rule_row=automation_rules["t13_tagger"],
+        actor=system_actor,
+        event=_event(
+            {
+                "changes": [{"field": "assignee", "before": None, "after": "owner"}],
+                "fields": ["assignee"],
+            },
+            event_type=EventType.ISSUE_ASSIGNED,
+        ),
+    )
+
+    assert await context.status_change() is None
+    assert await context.entered_category(StatusCategory.DONE) is False
+
+
+async def test_a_status_deleted_after_the_event_does_not_break_the_condition(
+    db_session: AsyncSession,
+    system_actor: Actor,
+    automation_rules: dict[str, AutomationRule],
+) -> None:
+    """Статуса из события в справочнике больше нет: правило молчит, а не падает.
+
+    Удаление статуса законно — задачи с него сначала уводят, — а событие, которое на
+    него ссылается, к этому моменту может ещё лежать в очереди. Падение отправило бы
+    правило в журнал со статусом `failed` из-за чужой административной операции.
+    """
+    context = _context(
+        db_session,
+        rule_row=automation_rules["t13_tagger"],
+        actor=system_actor,
+        event=_status_event("open", "TRK.long_gone"),
+    )
+
+    assert await context.status_change() is None
+    assert await context.entered_category(StatusCategory.DONE) is False
 
 
 # --- Защита от циклов -----------------------------------------------------------------
