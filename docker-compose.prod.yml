@@ -138,5 +138,18 @@ services:
     restart: "no"
     profiles: ["tools"]
 
+  # Чистка растущих журналов. На продакшене она и нужна по-настоящему: очередь
+  # событий, журнал автоматики и журнал доставок пишутся на каждое изменение и сами не
+  # чистятся. Запускать вручную или включить расписание планировщику
+  # (TRACKER_RETENTION_INTERVAL_HOURS), но сначала посмотреть объём:
+  #
+  #   docker compose -f docker-compose.prod.yml run --rm cleanup \
+  #       python -m app.cli cleanup --dry-run
+  cleanup:
+    <<: *app-service
+    command: python -m app.cli cleanup
+    restart: "no"
+    profiles: ["tools"]
+
 volumes:
   pgdata:

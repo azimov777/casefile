@@ -167,6 +167,19 @@ services:
     command: python -m app.cli demo
     profiles: ["tools"]
 
+  # Чистка растущих журналов: очередь событий, журнал автоматики, журнал доставок.
+  # Сроки хранения — в переменных TRACKER_RETENTION_*, удаление идёт пачками.
+  #
+  # Первый запуск на живой установке стоит делать без удаления:
+  #   docker compose run --rm cleanup python -m app.cli cleanup --dry-run
+  #
+  # Команда доступна всегда и не зависит от того, включена ли чистка по расписанию у
+  # планировщика (TRACKER_RETENTION_INTERVAL_HOURS, по умолчанию 0 — выключена).
+  cleanup:
+    <<: *app-service
+    command: python -m app.cli cleanup
+    profiles: ["tools"]
+
   test:
     <<: *app-service
     command: pytest

@@ -2,6 +2,17 @@
 
 Запуск: `python -m app.scheduler`. Отдельный сервис Compose в обоих контурах.
 
+## Вторая обязанность: чистка журналов по расписанию
+
+Здесь же, а не четвёртым фоновым процессом: чистке нужен ровно тот же единственный
+экземпляр, что и автодействиям, и заводить ради неё отдельный сервис значило бы
+повторить всю его обвязку — сигналы, паузы, ожидание миграций.
+
+По умолчанию она **выключена** (`TRACKER_RETENTION_INTERVAL_HOURS=0`). Удаление
+данных по расписанию, включённое без просьбы, — не то поведение, которое свежая
+установка должна получить сама; команда `docker compose run --rm cleanup` доступна
+всегда и от настройки не зависит.
+
 ## Он обязан быть в единственном экземпляре
 
 Две реплики выполнят каждое автодействие дважды: два комментария, два снятых
@@ -32,13 +43,14 @@ Compose задана exec-формой, чтобы сигнал дошёл до 
 import asyncio
 import contextlib
 import signal
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.automation import engine
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, schema_is_missing, session_scope
 from app.services import automation as automation_service
+from app.services import retention as retention_service
 
 logger = get_logger("scheduler")
 
@@ -85,6 +97,14 @@ async def run(settings: Settings | None = None) -> None:
     stop = asyncio.Event()
     _install_signal_handlers(stop)
 
+    next_cleanup_at = _first_cleanup_at(settings)
+    if next_cleanup_at is not None:
+        logger.info(
+            "Journal cleanup is scheduled every %s hours, first pass at %s",
+            settings.retention_interval_hours,
+            next_cleanup_at.isoformat(timespec="seconds"),
+        )
+
     started = False
     try:
         while not stop.is_set():
@@ -101,6 +121,7 @@ async def run(settings: Settings | None = None) -> None:
                         ", ".join(created) or "none",
                     )
                 await tick()
+                next_cleanup_at = await _cleanup_if_due(settings, due_at=next_cleanup_at)
             except Exception as exc:
                 # Непромигрированная база — ожидаемое состояние первых секунд контура, а
                 # не поломка: миграции применяются отдельным шагом и позже. Одна строка
@@ -116,6 +137,36 @@ async def run(settings: Settings | None = None) -> None:
     finally:
         await dispose_engine()
     logger.info("Automation scheduler stopped")
+
+
+def _first_cleanup_at(settings: Settings) -> datetime | None:
+    """Когда планировщик впервые почистит журналы. `None` — чистка выключена.
+
+    Первый проход отложен на интервал, а не сделан при старте: планировщик
+    перезапускается при каждой выкладке и при каждом падении, и чистка «на подъёме»
+    превратилась бы в удаление данных на каждый рестарт.
+    """
+    if settings.retention_interval_hours <= 0:
+        return None
+    return datetime.now(UTC) + timedelta(hours=settings.retention_interval_hours)
+
+
+async def _cleanup_if_due(settings: Settings, *, due_at: datetime | None) -> datetime | None:
+    """Чистит журналы, если подошёл срок. Возвращает время следующего прохода.
+
+    Отчёт уходит в лог целиком: чистка удаляет данные, и единственный след того, что
+    именно она удалила, — эти строки.
+    """
+    if due_at is None:
+        return None
+    now = datetime.now(UTC)
+    if now < due_at:
+        return due_at
+    async with session_scope() as session:
+        report = await retention_service.cleanup(session)
+    for line in report.lines():
+        logger.info("Journal cleanup: %s", line)
+    return now + timedelta(hours=settings.retention_interval_hours)
 
 
 def _install_signal_handlers(stop: asyncio.Event) -> None:
