@@ -84,6 +84,25 @@ services:
     # стандартных десяти секунд, потому что попытка ждёт таймаута внешнего адреса.
     stop_grace_period: 30s
 
+  # MCP-сервер для агентов. Отдельный сервис по той же причине, что и в дев-контуре:
+  # его соединения долгие (ожидание уведомлений, поток подписок), и держать их в одной
+  # очереди с запросами фронтенда нельзя. Реплик может быть несколько — состояние
+  # сессии живёт в процессе, поэтому балансировщик обязан закреплять клиента за одной.
+  mcp:
+    <<: *app-service
+    command: python -m app.mcp
+    ports:
+      - "${TRACKER_MCP_PORT:-8100}:8100"
+    healthcheck:
+      # curl в прод-образе нет намеренно: проверка идёт средствами самого Python.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Вызов инструмента доводится до конца по сигналу остановки: он может писать в базу.
+    stop_grace_period: 30s
+
   migrate:
     <<: *app-service
     command: alembic upgrade head
