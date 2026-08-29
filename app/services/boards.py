@@ -154,6 +154,46 @@ def get_column(board: Board, column_id: uuid.UUID) -> BoardColumn:
 # --- Сборка доски ------------------------------------------------------------------
 
 
+async def list_board_issues(
+    session: AsyncSession,
+    board: Board,
+    *,
+    initiator: Actor,
+    query: str | None = None,
+    fields: Sequence[str] = (),
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> search_service.SearchOutcome:
+    """Все задачи доски в порядке её ранга, независимо от раскладки статусов по колонкам.
+
+    Нужна ровно затем, что сборка по колонкам не покрывает: задача в статусе, который не
+    разложен ни в одну колонку, через колонки не видна вовсе — и пропадает молча. Здесь
+    она есть, потому что отбор — это сам сохранённый фильтр доски, без условия колонки.
+
+    Это **не** вернувшийся бэклог (задача 14a): бэклог означал «задачи доски вне
+    спринтов», и без спринтов у него не осталось смысла. Здесь ответ на другой вопрос —
+    «что вообще попадает на эту доску», — и колонка задачи в нём не участвует.
+
+    Порядок тот же ранговый, что и в колонке, поэтому карточка, перетащенная руками,
+    стоит на одном месте в обоих ответах.
+    """
+    ensure_allowed(initiator, "board.read", target=board)
+    resolved = await _board_filter(
+        session,
+        board,
+        initiator=initiator,
+        query=query,
+        fields=fields,
+    )
+    page = await BoardIssueRepository(session).page(
+        board.id,
+        compile_filter(resolved),
+        limit=limit,
+        cursor=cursor,
+    )
+    return search_service.SearchOutcome(page=page, resolved=resolved)
+
+
 async def list_column_issues(
     session: AsyncSession,
     board: Board,

@@ -22,6 +22,7 @@ from fastapi.routing import APIRoute
 from app.api.deps import get_current_actor
 from app.api.routes import (
     actors,
+    aggregates,
     automation,
     boards,
     catalogs,
@@ -95,3 +96,7 @@ api_router.include_router(automation.router)
 api_router.include_router(notifications.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(events.router)
+# Агрегаты подключаются последними: их пути лежат внутри чужих пространств
+# (`/issues/{key}/card`, `/projects/{key}/summary`), и объявленные раньше они
+# перехватывали бы `/issues/{key}` — FastAPI разбирает маршруты в порядке объявления.
+api_router.include_router(aggregates.router)

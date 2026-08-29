@@ -301,6 +301,42 @@ async def remove_board_column(
 
 
 @router.get(
+    "/{board_id}/issues",
+    summary="List every issue of a board",
+    response_model_exclude_unset=True,
+)
+async def list_board_issues(
+    board_id: BoardIdPath,
+    session: SessionDep,
+    current_actor: CurrentActorDep,
+    query: QueryParam = None,
+    fields: FieldsParam = None,
+    limit: LimitQuery = DEFAULT_PAGE_SIZE,
+    cursor: CursorQuery = None,
+) -> CollectionResponse[IssueSearchRead]:
+    """Все карточки доски в её ранговом порядке, независимо от колонок.
+
+    Отвечает на вопрос, которого не покрывает сборка по колонкам: задача в статусе, не
+    разложенном ни в одну колонку, через колонки не видна и пропадает молча. Здесь она
+    есть — отбор задаёт сам сохранённый фильтр доски.
+
+    Порядок — ранг доски, тот же, что и в колонке. Сортировки нет по той же причине,
+    что и там: переопределить ранг значило бы обесценить перетаскивание карточки.
+    """
+    board = await service.read_board(session, board_id, initiator=current_actor)
+    outcome = await service.list_board_issues(
+        session,
+        board,
+        initiator=current_actor,
+        query=query,
+        fields=fields or (),
+        limit=limit,
+        cursor=cursor,
+    )
+    return search_page(outcome)
+
+
+@router.get(
     "/{board_id}/columns/{column_id}/issues",
     summary="List issues of a board column",
     response_model_exclude_unset=True,
