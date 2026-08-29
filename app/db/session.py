@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import get_settings
-from app.core.errors import ConflictError
+from app.core.errors import AppError, ConflictError
 
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
@@ -84,6 +84,20 @@ async def dispose_engine() -> None:
         await _engine.dispose()
     _engine = None
     _sessionmaker = None
+
+
+class DatabaseUnavailableError(AppError):
+    """База не отвечает. Отдельный код, чтобы мониторинг отличал это от прочих пятисоток.
+
+    Живёт рядом с механизмом, а не в `app/domain/errors.py`: предметной области здесь
+    нет — есть соединение с базой. По тому же правилу рядом со своим механизмом живут
+    ошибки курсора и размера страницы (`app/db/pagination.py`). Читать все коды разом
+    от этого не тяжелее: их собирает справочник `app/api/contract.py`.
+    """
+
+    code = "database_unavailable"
+    status_code = 503
+    message = "Database is unavailable"
 
 
 def integrity_conflict(exc: IntegrityError) -> ConflictError:

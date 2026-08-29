@@ -25,7 +25,10 @@ _KNOWN_STATUSES = {status.value for status in HTTPStatus}
 # Коды и сообщения для ошибок, которые приходят не из домена, а от транспорта:
 # несуществующий маршрут, неподдерживаемый метод. Домен сюда ничего не добавляет —
 # у его исключений код и сообщение свои.
-_HTTP_STATUS_CODES: dict[int, str] = {
+#
+# Имена без подчёркивания: справочник кодов (`app/api/contract.py`) читает обе
+# таблицы, чтобы транспортные коды попали в него наравне с доменными.
+HTTP_STATUS_CODES: dict[int, str] = {
     400: "bad_request",
     401: "unauthorized",
     403: "permission_denied",
@@ -36,7 +39,7 @@ _HTTP_STATUS_CODES: dict[int, str] = {
     429: "too_many_requests",
 }
 
-_HTTP_MESSAGES: dict[int, str] = {
+HTTP_MESSAGES: dict[int, str] = {
     400: "Bad request",
     401: "Authentication required",
     403: "Action is not allowed",
@@ -75,7 +78,7 @@ async def handle_request_validation_error(request: Request, exc: Exception) -> J
     return error_response(
         422,
         "validation_error",
-        _HTTP_MESSAGES[422],
+        HTTP_MESSAGES[422],
         {"errors": jsonable_encoder(exc.errors())},
     )
 
@@ -83,8 +86,8 @@ async def handle_request_validation_error(request: Request, exc: Exception) -> J
 async def handle_http_exception(request: Request, exc: Exception) -> JSONResponse:
     """`HTTPException` из FastAPI и Starlette — в том числе 404 несуществующего маршрута."""
     assert isinstance(exc, StarletteHTTPException)
-    code = _HTTP_STATUS_CODES.get(exc.status_code, "http_error")
-    fallback = _HTTP_MESSAGES.get(exc.status_code, "Request error")
+    code = HTTP_STATUS_CODES.get(exc.status_code, "http_error")
+    fallback = HTTP_MESSAGES.get(exc.status_code, "Request error")
     # Starlette подставляет стандартную фразу статуса, когда detail не задан явно.
     # Своё сообщение уважаем, стандартное — заменяем на сообщение проекта.
     known = exc.status_code in _KNOWN_STATUSES

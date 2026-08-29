@@ -13,17 +13,9 @@ from app.api.deps import SessionDep
 from app.api.schemas.common import ErrorResponse
 from app.api.schemas.health import HealthResponse
 from app.core.config import get_settings
-from app.core.errors import AppError
+from app.db.session import DatabaseUnavailableError
 
 router = APIRouter(tags=["service"])
-
-
-class DatabaseUnavailableError(AppError):
-    """База не отвечает. Отдельный код, чтобы мониторинг отличал это от прочих пятисоток."""
-
-    code = "database_unavailable"
-    status_code = 503
-    message = "Database is unavailable"
 
 
 @router.get(

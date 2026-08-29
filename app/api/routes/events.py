@@ -30,7 +30,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, Query, Response
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import (
@@ -40,7 +40,7 @@ from app.api.deps import (
     SessionDep,
     StreamSessionsDep,
 )
-from app.api.schemas.common import CollectionResponse
+from app.api.schemas.common import CollectionResponse, ErrorResponse
 from app.api.schemas.events import StreamEventRead
 from app.core.logging import get_logger
 from app.db.pagination import DEFAULT_PAGE_SIZE
@@ -98,6 +98,9 @@ class EventStreamResponse(StreamingResponse):
     `text/event-stream`, хотя ошибки приходят обычным JSON-конвертом. Поэтому тип
     содержимого потока задан вручную в `responses`, а сам класс просто возвращается из
     обработчика. Дефект поймал `tests/test_openapi.py`, а не чтение схемы глазами.
+
+    Классом ответа у маршрута объявлен базовый `Response` — см. комментарий у
+    `stream_events`.
     """
 
     media_type = "text/event-stream"
@@ -162,6 +165,16 @@ async def list_events(
 @router.get(
     "/stream",
     summary="Stream events as they happen",
+    # Базовый `Response`, а не `EventStreamResponse` и не значение по умолчанию. FastAPI
+    # берёт тип содержимого из `response_class.media_type` и подставляет его и в успешный
+    # ответ, и в ошибки. У `JSONResponse` (значение по умолчанию) это давало `200` с
+    # пустой схемой `application/json` рядом с объявленным вручную `text/event-stream` —
+    # то есть маршрут, который генератор клиента видит как возвращающий `unknown`. У
+    # `EventStreamResponse` тем же способом ломались бы ошибки (см. его строку документации).
+    # У базового `Response` тип содержимого — `None`: FastAPI не добавляет ничего к `200`,
+    # а ошибкам подставляет `application/json`. Экземпляр этого класса при этом не
+    # создаётся никогда: обработчик возвращает готовый `EventStreamResponse`.
+    response_class=Response,
     responses={
         200: {
             "description": (
@@ -173,8 +186,12 @@ async def list_events(
                 "text/event-stream": {"schema": {"$ref": "#/components/schemas/StreamEventRead"}}
             },
         },
-        422: {"description": "Unknown or too old `Last-Event-ID`"},
-        429: {"description": "Too many open streams on this server"},
+        # `model` обязателен и здесь, хотя те же коды объявлены на роутере: ответы
+        # маршрута не дополняют ответы роутера, а замещают их по коду целиком. Уточнив
+        # одно описание, легко отобрать у ответа схему тела — и фронтенд увидит `422`
+        # без формы ошибки ровно у того маршрута, где её проще всего получить.
+        422: {"model": ErrorResponse, "description": "Unknown or too old `Last-Event-ID`"},
+        429: {"model": ErrorResponse, "description": "Too many open streams on this server"},
     },
 )
 async def stream_events(
