@@ -6,7 +6,9 @@
 """
 
 import asyncio
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,8 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from mcp.server.mcpserver import MCPServer
+from mcp_types import InputRequiredResult
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -33,6 +37,8 @@ from app.db.session import get_session
 from app.domain.actors import ActorType
 from app.domain.catalogs import CatalogKind
 from app.main import create_app
+from app.mcp.runtime import Runtime, SessionFactory, use_headers
+from app.mcp.server import create_server
 from app.services import actors as actors_service
 from app.services import automation as automation_service
 from app.services import boards as boards_service
@@ -131,6 +137,74 @@ def app(db_session: AsyncSession) -> Iterator[FastAPI]:
     application.dependency_overrides[get_session] = lambda: db_session
     yield application
     application.dependency_overrides.clear()
+
+
+@pytest.fixture
+def mcp_sessions(db_session: AsyncSession) -> SessionFactory:
+    """Фабрика сессий MCP-сервера: та же граница транзакции, но на сессии теста.
+
+    Повторяет `session_scope` (коммит на выходе, откат на исключении), а не отдаёт
+    сессию как есть. Разница видна ровно там, где она важна: `dry_run` у инструментов
+    настройки процесса откатывает транзакцию, и без честного коммита предыдущих вызовов
+    он унёс бы вместе с проверкой данные, заведённые фикстурами.
+    """
+
+    @asynccontextmanager
+    async def _scope() -> AsyncIterator[AsyncSession]:
+        try:
+            yield db_session
+        except Exception:
+            await db_session.rollback()
+            raise
+        else:
+            await db_session.commit()
+
+    return _scope
+
+
+@pytest.fixture
+def mcp_server(mcp_sessions: SessionFactory) -> MCPServer:
+    """MCP-сервер, у которого сессия подменена на транзакцию теста."""
+    return create_server(runtime=Runtime(sessions=mcp_sessions))
+
+
+@pytest.fixture
+def mcp_call(
+    mcp_server: MCPServer,
+    owner_secret: str,
+) -> Callable[..., Awaitable[dict[str, Any]]]:
+    """Вызов инструмента от имени владельца: заголовок авторизации ставится сам.
+
+    Идёт через `MCPServer.call_tool`, а не в обход, — так проверяется и схема
+    аргументов, и то, что результат вообще сворачивается в структурированный ответ.
+    """
+
+    # Имя инструмента — позиционный параметр (`/`): у инструментов есть аргументы
+    # `name` и `queue`, и обычный именованный параметр столкнулся бы с ними.
+    async def _call(tool: str, /, **arguments: Any) -> dict[str, Any]:
+        async with use_headers({"authorization": f"Bearer {owner_secret}"}):
+            result = await mcp_server.call_tool(tool, arguments)
+        assert not isinstance(result, InputRequiredResult)
+        assert result.structured_content is not None
+        return result.structured_content
+
+    return _call
+
+
+@pytest.fixture
+def mcp_read(
+    mcp_server: MCPServer,
+    owner_secret: str,
+) -> Callable[[str], Awaitable[Any]]:
+    """Чтение ресурса от имени владельца."""
+
+    async def _read(uri: str) -> Any:
+        async with use_headers({"authorization": f"Bearer {owner_secret}"}):
+            contents = await mcp_server.read_resource(uri)
+        assert not isinstance(contents, InputRequiredResult)
+        return json.loads(next(iter(contents)).content)
+
+    return _read
 
 
 @pytest.fixture

@@ -204,6 +204,35 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- MCP-сервер для агентов ------------------------------------------------------
+    # Отдельный процесс и отдельный порт: инструменты агента живут не в том же сервисе,
+    # что REST фронтенда, и клиент MCP подключается прямо к нему.
+    mcp_host: str = Field(
+        default="0.0.0.0",
+        description="Address the MCP server binds to; the container needs 0.0.0.0",
+    )
+    mcp_port: int = Field(default=8100, description="Port of the MCP server")
+    mcp_path: str = Field(
+        default="/mcp",
+        description="Path of the streamable HTTP endpoint the MCP client connects to",
+    )
+    mcp_page_size: int = Field(
+        default=25,
+        ge=1,
+        description=(
+            "Default page size of MCP listings. Smaller than the REST default on "
+            "purpose: every returned row costs the agent context"
+        ),
+    )
+    mcp_text_limit: int = Field(
+        default=2000,
+        ge=200,
+        description=(
+            "Characters of a long text (description, comment) an MCP tool returns "
+            "before clipping it. The clip is always reported next to the value"
+        ),
+    )
+
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
     cors_origins: Annotated[list[str], NoDecode] = Field(
