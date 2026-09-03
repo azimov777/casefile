@@ -1,11 +1,13 @@
 # Tracker
 
-> **Переписывание под трекер для агентов.** Старый доменный слой снесён (задача 20):
-> в коде остались только фундамент и акторы с токенами. Новый домен строится задачами
-> 21–29 по `docs/CONCEPT.md`, порядок работ — в `docs/ROADMAP.md`, полная переработка
-> этого файла — задача 29. Прежняя версия целиком доступна в git по коммиту `49e2e49`.
+> **Переписывание под трекер для агентов.** Старый доменный слой снесён (задача 20),
+> фундамент нового построен (задача 21). Задачи, дело, связи, поиск и лента строятся
+> задачами 22–29 по `docs/CONCEPT.md`, порядок работ — в `docs/ROADMAP.md`, полная
+> переработка этого файла — задача 29. Прежняя версия целиком доступна в git по
+> коммиту `49e2e49`.
 >
-> Что сейчас работает: `/health`, акторы и токены, аутентификация, оболочка ответа и
+> Что сейчас работает: `/health`, участники, токены с наборами `task` / `main`, очереди
+> со счётчиком номеров, аутентификация с меткой временного агента, оболочка ответа и
 > коды ошибок, выгрузка OpenAPI, оба контура Docker. MCP-сервер поднимается и отвечает
 > на `initialize`, но инструментов пока не объявляет — их строит задача 28.
 
@@ -74,36 +76,78 @@ docker compose -f docker-compose.prod.yml run --rm --no-deps schema > openapi.js
 он для Docker и мониторинга и в контракт с фронтендом не входит.
 
 ```bash
-curl -H "Authorization: Bearer trk_..." http://localhost:8000/api/v1/actors/me
+curl -H "Authorization: Bearer trk_..." http://localhost:8000/api/v1/participants
 ```
+
+### Первичная инициализация
 
 Первый токен взять неоткуда, кроме командной строки: выпустить его через API нельзя, потому
 что API уже требует токен. Это и делает `docker compose run --rm init` — заводит
-актора-владельца и печатает его секрет. Команда идемпотентна: повторный запуск второго
-владельца не создаёт, но выпускает новый токен, и это же способ вернуть себе доступ.
+участника-человека `owner` и печатает его токен набора `main`.
+
+Команда срабатывает **только на пустой установке**: если в базе есть хотя бы один токен, она
+ничего не создаёт и говорит об этом. Так её можно держать рядом с миграциями, не боясь, что
+случайный повторный запуск наплодит действующие доступы. Потеряли секрет — выпускайте новый
+явно:
+
+```bash
+docker compose run --rm --entrypoint python api -m app.cli issue-token \
+       --participant owner --scope main
+```
 
 Токен показывается **один раз**: в базе лежит только его хеш, восстановить секрет нельзя.
 
-Дальше акторы и токены заводятся через API — одним и тем же механизмом для людей и агентов:
+### Наборы токена
+
+Прав в трекере ровно одно — набор токена. Ролей, владельцев и разрешений по роду участника
+нет: любую запись и любой переход может сделать кто угодно.
+
+| Набор | Что открывает |
+|---|---|
+| `task` | Рабочий цикл агента: задачи, дело, связи, поиск, лента, чтение реестров. |
+| `main` | То же плюс запись участников, токенов и очередей. |
+
+### Участники, токены и очереди
 
 ```bash
-# завести агента
+# завести постоянного агента (нужен набор main)
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"type": "agent", "key": "release_bot", "display_name": "Релизный бот"}' \
-     http://localhost:8000/api/v1/actors
+     -d '{"kind": "agent", "name": "release_bot", "description": "Релизный бот"}' \
+     http://localhost:8000/api/v1/participants
 
-# выпустить ему токен (секрет виден только в этом ответе)
+# выпустить ему токен рабочего цикла (секрет виден только в этом ответе)
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"name": "ci"}' \
-     http://localhost:8000/api/v1/actors/release_bot/tokens
+     -d '{"name": "ci", "scope": "task", "participant": "release_bot"}' \
+     http://localhost:8000/api/v1/tokens
+
+# завести очередь
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"key": "TRK", "title": "Трекер", "description": "Где лежит код, куда смотреть"}' \
+     http://localhost:8000/api/v1/queues
 
 # отозвать токен
-curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-     http://localhost:8000/api/v1/actors/release_bot/tokens/$TOKEN_ID
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tokens/$TOKEN_ID
 ```
 
-Системный актор (`system`) создаётся миграцией, от его имени делаются служебные записи.
-Через API он защищён: его нельзя изменить и нельзя выпустить ему токен.
+Имена участников уникальны без учёта регистра и хранятся в нижнем; ключи очередей — в
+верхнем. Переименования нет ни у тех, ни у других: имя стоит подписью в записях дела, ключ
+вшит в ключ каждой задачи очереди. Удаления тоже нет — доступ снимается отзывом токена.
+
+### Временные агенты и `X-Actor-Label`
+
+Токен, выпущенный **без** `participant`, — общий агентский. Он не называет автора сам, и
+каждый запрос с ним обязан нести метку временного агента:
+
+```bash
+curl -X POST -H "Authorization: Bearer $SHARED_TOKEN" -H "X-Actor-Label: nightly_agent" \
+     -H 'Content-Type: application/json' -d '{"key": "OPS", "title": "Эксплуатация"}' \
+     http://localhost:8000/api/v1/queues
+```
+
+Без заголовка запрос отклоняется с кодом `actor_label_required`: приписать действие некому.
+Именной токен метку игнорирует — его подпись всегда имя своего участника, и подделать её
+заголовком нельзя. Временного агента нельзя адресовать вопросом: для этого участника надо
+завести в реестре.
 
 ## MCP-сервер для агентов
 
@@ -124,8 +168,9 @@ curl http://localhost:8100/health
 ```
 
 Адрес — `http://localhost:8100/mcp`, транспорт — streamable HTTP, авторизация — тем же
-токеном актора, что и REST: `Authorization: Bearer trk_...`. Второй схемы представления
-нет намеренно — акторы и токены общие на оба интерфейса.
+токеном, что и REST: `Authorization: Bearer trk_...` плюс `X-Actor-Label`, если токен общий
+агентский. Второй схемы представления нет намеренно — участники и токены общие на оба
+интерфейса.
 
 ### Подключение к Claude Code
 
@@ -136,11 +181,11 @@ curl http://localhost:8100/health
 ```bash
 # завести агента и выпустить ему токен (секрет виден только в этом ответе)
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"type": "agent", "key": "claude", "display_name": "Claude"}' \
-     http://localhost:8000/api/v1/actors
+     -d '{"kind": "agent", "name": "claude", "description": "Claude Code"}' \
+     http://localhost:8000/api/v1/participants
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"name": "claude-code"}' \
-     http://localhost:8000/api/v1/actors/claude/tokens
+     -d '{"name": "claude-code", "scope": "task", "participant": "claude"}' \
+     http://localhost:8000/api/v1/tokens
 
 # подключить сервер (scope local — конфигурация только этого проекта, без репозитория)
 claude mcp add --scope local --transport http tracker http://localhost:8100/mcp \
@@ -162,8 +207,8 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 | Логи MCP-сервера | `docker compose logs -f mcp` |
 | Перезапустить MCP-сервер после правки | `docker compose restart mcp` |
 | Применить миграции | `docker compose run --rm migrate` |
-| Завести владельца и первый токен | `docker compose run --rm init` |
-| Выпустить токен актору | `docker compose run --rm --entrypoint python api -m app.cli issue-token --actor release_bot` |
+| Инициализировать пустую установку | `docker compose run --rm init` |
+| Выпустить токен | `docker compose run --rm --entrypoint python api -m app.cli issue-token --participant release_bot --scope task` |
 | Выгрузить схему и справочник ошибок | `docker compose run --rm schema` |
 | Создать миграцию | `docker compose run --rm migrate alembic revision --autogenerate -m "описание"` |
 | Откатить миграцию | `docker compose run --rm migrate alembic downgrade -1` |
@@ -193,10 +238,13 @@ docker compose run --rm migrate
 
 Автогенерация видит только те модели, которые импортированы в `app/db/models/__init__.py`.
 
-Цепочка ревизий начинается заново: старый доменный слой снесён задачей 20, и в
-`app/db/migrations/versions` лежит **одна** ревизия — она заводит акторы и токены. Ревизий,
-удаляющих старые таблицы, в ней нет намеренно: контур поднимается с нуля, а прежняя схема
-живёт в git по коммиту `49e2e49`.
+Цепочка ревизий начата заново задачей 20: первая ревизия завела акторы и токены, вторая
+(задача 21) заменила их участниками, токенами с наборами и очередями. Прежняя схема живёт в
+git по коммиту `49e2e49`.
+
+`alembic check` на сошедшейся схеме штатно сообщает о снятии `CHECK` у каждой колонки-
+перечисления — это ложное срабатывание, объяснённое в `docs/notes/db.md`. Если в выводе
+**только** такие строки, модели и схема совпадают.
 
 ### Тесты
 
