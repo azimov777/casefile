@@ -55,6 +55,28 @@ class Task(BaseModel, CreatedByMixin):
         # GIN по `tags`: фильтр `tags @> '["release"]'` — основной запрос поиска по
         # меткам, и без индекса он читал бы всю таблицу.
         Index("ix_tasks_tags", "tags", postgresql_using="gin"),
+        # Порядок списка задач по умолчанию — «очередь, номер». Номер вынут из ключа
+        # выражением: строковое сравнение поставило бы `TRK-10` перед `TRK-2`, а
+        # отдельной колонки под номер нет — ключ и есть его хранилище.
+        Index("ix_tasks_queue_id_number", "queue_id", text("(split_part(key, '-', 2)::bigint)")),
+        # Сортировка по времени обновления с тайбрейкером по `id`: пара, а не одна
+        # колонка, потому что курсор идёт по обеим.
+        Index("ix_tasks_updated_at_id", "updated_at", "id"),
+        # Триграммные индексы под `text: ~ ...` — вхождение подстроки в названии и
+        # описании. Работают от трёх символов: в двух триграмм нет, и план вырождается
+        # в последовательное чтение (`docs/notes/search.md`).
+        Index(
+            "ix_tasks_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_tasks_description_trgm",
+            "description",
+            postgresql_using="gin",
+            postgresql_ops={"description": "gin_trgm_ops"},
+        ),
         # Версия только растёт и начинается с единицы: ноль означал бы, что счётчик
         # правили руками, и оптимистичная блокировка перестала бы ловить гонку.
         CheckConstraint("version >= 1", name="version_positive"),
