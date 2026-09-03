@@ -2,15 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Query
+from fastapi import Depends, Header, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import UnauthorizedError
-from app.db.models.actor import Actor
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.db.session import get_session
-from app.services.auth import authenticate_by_token
+from app.domain.authors import ACTOR_LABEL_HEADER
+from app.services.auth import Actor, authenticate
 
 # `scope="function"` — не украшение, а единственное, что доводит упавший коммит до
 # клиента. FastAPI держит два стека завершения зависимостей: обычный закрывается уже
@@ -29,26 +29,51 @@ SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 # Схема заодно попадает в OpenAPI, и в /docs появляется кнопка Authorize.
 bearer_scheme = HTTPBearer(
     scheme_name="ApiToken",
-    description="API token issued for an actor: `Authorization: Bearer trk_...`",
+    description="Tracker API token: `Authorization: Bearer trk_...`",
     auto_error=False,
 )
 
 CredentialsDep = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]
 
+# Метка временного агента. Заголовок объявлен зависимостью, а не разбирается по месту:
+# так он попадает в OpenAPI **у каждого** маршрута, и клиент видит, что его можно (а с
+# общим агентским токеном — нужно) послать куда угодно.
+#
+# Шаблон в объявлении намеренно **не** задан, хотя место для него есть. Проверку делает
+# домен: тот же заголовок приезжает в MCP мимо схем FastAPI, и с `pattern` одна и та же
+# кривая метка получала бы в REST общий `validation_error`, а в MCP — предметный
+# `invalid_actor_label` с шаблоном в подробностях. Расхождение интерфейсов на одном
+# входе проект запрещает отдельным правилом.
+ActorLabelHeader = Annotated[
+    str | None,
+    Header(
+        alias=ACTOR_LABEL_HEADER,
+        examples=["nightly_agent"],
+        description=(
+            "Signature of a temporary agent, latin snake_case. Required with a shared "
+            "agent token (one issued without a participant), ignored with a participant token"
+        ),
+    ),
+]
 
-async def get_current_actor(session: SessionDep, credentials: CredentialsDep) -> Actor:
-    """Актор, от имени которого выполняется запрос.
 
-    Тонкая обёртка над сценарием `authenticate_by_token`: разбор заголовка — дело
-    HTTP-слоя, всё остальное общее с MCP и командной строкой.
+async def get_actor(
+    session: SessionDep,
+    credentials: CredentialsDep,
+    label: ActorLabelHeader = None,
+) -> Actor:
+    """Автор запроса и набор его токена.
+
+    Тонкая обёртка над сценарием `authenticate`: разбор заголовков — дело HTTP-слоя,
+    всё остальное общее с MCP и командной строкой.
     """
     if credentials is None:
         raise UnauthorizedError(details={"reason": "missing_token"})
-    return await authenticate_by_token(session, credentials.credentials)
+    return await authenticate(session, credentials.credentials, label=label)
 
 
-CurrentActorDep = Annotated[Actor, Depends(get_current_actor)]
-"""Текущий актор. Зависимость кешируется на запрос, поэтому лишнего похода в БД нет."""
+ActorDep = Annotated[Actor, Depends(get_actor)]
+"""Автор запроса. Зависимость кешируется на запрос, поэтому лишнего похода в БД нет."""
 
 
 # Параметры пагинации объявлены здесь, а не в каждом роутере: коллекции во всём API

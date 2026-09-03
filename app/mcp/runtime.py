@@ -1,4 +1,4 @@
-"""Контекст одного вызова инструмента: сессия БД и актор за токеном.
+"""Контекст одного вызова инструмента: сессия БД и автор запроса за токеном.
 
 Инструмент MCP устроен так же, как обработчик HTTP-запроса: открыть сессию, узнать, кто
 зовёт, позвать сценарий. Разница ровно одна — токен приезжает не через зависимость
@@ -42,16 +42,19 @@ from mcp.server.context import ServerRequestContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError, UnauthorizedError
-from app.db.models.actor import Actor
 from app.db.session import session_scope
+from app.domain.authors import ACTOR_LABEL_HEADER
 from app.mcp.errors import resource_error, tool_error
-from app.services.auth import authenticate_by_token
+from app.services.auth import Actor, authenticate
 
 #: Как открыть сессию с транзакцией. По умолчанию — `session_scope`; тесты дают свою.
 type SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 _AUTHORIZATION = "authorization"
 _BEARER = "bearer"
+#: Имена заголовков ищутся в нижнем регистре: Starlette отдаёт регистронезависимое
+#: отображение, а тесты и фабрики подставляют обычный словарь.
+_ACTOR_LABEL = ACTOR_LABEL_HEADER.lower()
 
 #: Заголовки обрабатываемого сейчас сообщения MCP. Заполняет `headers_middleware`.
 _headers: contextvars.ContextVar[Mapping[str, str] | None] = contextvars.ContextVar(
@@ -117,29 +120,44 @@ class Runtime:
 
     @asynccontextmanager
     async def _open(self) -> AsyncIterator[tuple[AsyncSession, Actor]]:
-        """Сессия и актор за токеном.
+        """Сессия и автор запроса за токеном.
 
         Перевод ошибки стоит **снаружи** сессии: сначала транзакция откатывается, и
         только потом ошибка превращается в текст для агента. Обратный порядок оставил бы
         часть изменений записанной.
         """
+        headers = _headers.get()
         async with self.sessions() as session:
-            actor = await authenticate_by_token(session, bearer_token(_headers.get()))
+            actor = await authenticate(
+                session,
+                bearer_token(headers),
+                label=actor_label(headers),
+            )
             yield session, actor
+
+
+def actor_label(headers: Mapping[str, str] | None) -> str | None:
+    """Метка временного агента из заголовка `X-Actor-Label`.
+
+    Тот же заголовок, что и в REST: агент с общим токеном подписывается им независимо от
+    того, каким интерфейсом пришёл. Отсутствие метки здесь не ошибка — отказывает
+    аутентификация, и только если токен действительно общий.
+    """
+    return None if headers is None else headers.get(_ACTOR_LABEL)
 
 
 def bearer_token(headers: Mapping[str, str] | None) -> str:
     """Секрет токена из заголовка `Authorization: Bearer ...`.
 
-    Схема та же, что у REST: акторы и токены одни на оба интерфейса, и второй способ
-    представиться означал бы вторую модель доступа. Отсутствие заголовка — обычный
+    Схема та же, что у REST: участники и токены одни на оба интерфейса, и второй
+    способ представиться означал бы вторую модель доступа. Отсутствие заголовка — обычный
     `unauthorized` с причиной в подробностях: по ней агент понимает, что дело в
     настройке клиента, а не в самом вызове.
     """
     value = None if headers is None else headers.get(_AUTHORIZATION)
     if not value:
         raise UnauthorizedError(
-            message="Authorization header with an actor API token is required",
+            message="Authorization header with a tracker API token is required",
             details={"reason": "missing_token", "header": "Authorization: Bearer <token>"},
         )
     scheme, _, secret = value.partition(" ")

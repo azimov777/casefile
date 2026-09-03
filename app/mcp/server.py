@@ -12,7 +12,7 @@
 быть — заглушка, изображающая работу, обошлась бы дороже честной пустоты.
 
 От сервера при этом остаётся всё, что не зависит от набора инструментов: контекст
-вызова с сессией и актором (`app/mcp/runtime.py`), разбор заголовка авторизации,
+вызова с сессией и автором запроса (`app/mcp/runtime.py`), разбор заголовков доступа,
 перевод доменных ошибок в ошибки протокола (`app/mcp/errors.py`) и проверка здоровья
 для Docker.
 
@@ -37,8 +37,8 @@ logger = get_logger("mcp")
 
 INSTRUCTIONS = """Task tracker for agents. This server is being rebuilt and exposes no \
 tools yet: `tools/list` is empty on purpose, not by failure. Authentication already \
-works the same way it does for the REST API — `Authorization: Bearer <actor API token>` \
-on every message."""
+works the same way it does for the REST API — `Authorization: Bearer <tracker API token>` \
+on every message, plus `X-Actor-Label: <name>` when the token is a shared agent one."""
 
 
 def create_server(

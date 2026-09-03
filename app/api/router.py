@@ -19,8 +19,8 @@
 from fastapi import APIRouter, Depends
 from fastapi.routing import APIRoute
 
-from app.api.deps import get_current_actor
-from app.api.routes import actors
+from app.api.deps import get_actor
+from app.api.routes import participants, queues, tokens
 from app.api.schemas.common import ErrorResponse
 
 # Формы ошибок объявлены один раз на весь версионированный API, а не повторены в каждом
@@ -40,7 +40,7 @@ def generate_operation_id(route: APIRoute) -> str:
     """Идентификатор операции для генератора клиента — имя функции-обработчика.
 
     По умолчанию FastAPI склеивает имя с путём и методом
-    (`read_actor_api_v1_actors__actor_key__get`). В сгенерированном TypeScript это
+    (`read_queue_api_v1_queues__queue_key__get`). В сгенерированном TypeScript это
     нечитаемо, а главное — меняется при любой правке пути, и фронтенд ломается на
     переезде маршрута, хотя контракт не менялся. Имя функции зависит только от кода.
 
@@ -52,8 +52,10 @@ def generate_operation_id(route: APIRoute) -> str:
 
 api_router = APIRouter(
     prefix="/api/v1",
-    dependencies=[Depends(get_current_actor)],
+    dependencies=[Depends(get_actor)],
     responses=ERROR_RESPONSES,
 )
 
-api_router.include_router(actors.router)
+api_router.include_router(participants.router)
+api_router.include_router(tokens.router)
+api_router.include_router(queues.router)

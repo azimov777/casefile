@@ -34,7 +34,8 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
-| `unauthorized` | Authentication required | Запрос не аутентифицирован: токена нет, он неизвестен, отозван или актор отключён. |
+| `actor_label_required` | Shared agent token requires the X-Actor-Label header | Общий агентский токен пришёл без метки временного агента. |
+| `unauthorized` | Authentication required | Запрос не аутентифицирован: токена нет, он неизвестен или отозван. |
 
 ## 403 — запрещено
 
@@ -46,9 +47,10 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
-| `actor_not_found` | Actor not found | Актора с таким ключом или идентификатором нет. |
-| `api_token_not_found` | API token not found | Токена с таким идентификатором у актора нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
+| `participant_not_found` | Participant not found | Участника с таким именем или идентификатором нет. |
+| `queue_not_found` | Queue not found | Очереди с таким ключом нет. |
+| `token_not_found` | Token not found | Токена с таким идентификатором нет. |
 
 ## 405 — метод не поддержан
 
@@ -60,18 +62,19 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
-| `actor_inactive` | Actor is inactive | Актор отключён: выпускать ему токены и действовать от его имени нельзя. |
-| `actor_key_taken` | Actor key is already taken | Ключ актора уже занят: ключ уникален на всю установку. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
-| `system_actor_protected` | System actor is managed by the application | Системный актор управляется приложением, а не API. |
+| `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
+| `queue_key_taken` | Queue key is already taken | Ключ очереди уже занят: ключи уникальны без учёта регистра. |
 
 ## 422 — не прошло проверку
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
-| `invalid_actor_key` | Actor key is invalid | Ключ не соответствует шаблону или зарезервирован. |
+| `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
 | `invalid_page_size` | Page size is out of range | Запрошен размер страницы вне допустимых границ. |
+| `invalid_participant_name` | Participant name is invalid | Имя участника не соответствует шаблону. |
+| `invalid_queue_key` | Queue key is invalid | Ключ очереди не соответствует шаблону. |
 | `validation_error` | Validation failed | Входные данные синтаксически корректны, но нарушают правило предметной области. |
 
 ## 429 — слишком часто
