@@ -2,13 +2,22 @@
 
 Методов правки и удаления здесь нет и не будет: записи неизменяемы
 (`CONCEPT.md`, 3.4). Ошибочная запись исправляется следующей записью.
+
+## Вопрос открыт, пока на него нет ответа
+
+Отдельной колонки «отвечено» нет: она была бы вторым местом, где живёт правда, и
+разошлась бы с делом в первый же откат транзакции. Открытость считается запросом —
+«нет записи `answer` с этим `question_no` в той же задаче», — и опирается на частичный
+GIN-индекс по нагрузке вопросов (миграция `case entry lookups`).
 """
 
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.db.models.entry import Entry
 from app.db.models.task import Task
@@ -19,7 +28,8 @@ from app.db.pagination import (
     resolve_limit,
 )
 from app.domain.authors import Author
-from app.domain.case import FIRST_ENTRY_NUMBER, EntryHeading
+from app.domain.case import FIRST_ENTRY_NUMBER, EntryHeading, EntryType, VerdictOutcome
+from app.domain.tasks import TaskStatus
 
 
 class EntryRepository:
@@ -60,25 +70,57 @@ class EntryRepository:
         await self._session.flush()
         return entry
 
+    # --- Чтение записей задачи -------------------------------------------------------
+
+    async def get_by_no(self, task_id: uuid.UUID, no: int) -> Entry | None:
+        """Одна запись по её номеру внутри задачи — адрес из ссылки `TRK-42#12`."""
+        statement = select(Entry).where(Entry.task_id == task_id, Entry.no == no)
+        return (await self._session.scalars(statement)).one_or_none()
+
+    async def existing_nos(self, task_id: uuid.UUID, nos: Sequence[int]) -> set[int]:
+        """Какие из перечисленных номеров в задаче есть. Одним запросом на весь список.
+
+        Проверка ссылок записи идёт по этому методу: список `refs` короткий, но запрос
+        на каждую ссылку превратил бы подшивку записи в десяток обращений к базе.
+        """
+        if not nos:
+            return set()
+        statement = select(Entry.no).where(Entry.task_id == task_id, Entry.no.in_(set(nos)))
+        return set(await self._session.scalars(statement))
+
     async def list_page(
         self,
         task_id: uuid.UUID,
         *,
+        nos: Sequence[int] | None = None,
+        types: Sequence[EntryType] | None = None,
+        after_no: int | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Entry]:
-        """Страница записей задачи в порядке `no`.
+        """Страница записей задачи в порядке `no`, с телами и нагрузкой.
 
         Порядок — номер в задаче, а не `(created_at, id)` общей пагинации: записи одной
         транзакции получают одно `created_at`, и только `no` даёт тот порядок, в котором
         их подшивали. Курсор — общий `encode_sort_cursor` из модуля пагинации: свой
         разбор курсора здесь запрещён правилом «одна реализация пагинации».
+
+        `after_no` и `cursor` — не дубль: первый задаёт клиент («что случилось после
+        последней сводки»), второй продолжает страницу и приезжает из `meta`. Действуют
+        оба сразу, побеждает больший.
         """
         size = resolve_limit(limit)
-        statement = select(Entry).where(Entry.task_id == task_id)
+        statement = self._filtered(
+            select(Entry).where(Entry.task_id == task_id),
+            nos=nos,
+            types=types,
+        )
+        boundary = after_no
         if cursor is not None:
-            (after_no,), _ = decode_sort_cursor(cursor, arity=1)
-            statement = statement.where(Entry.no > after_no)
+            (cursor_no,), _ = decode_sort_cursor(cursor, arity=1)
+            boundary = max(boundary, cursor_no) if boundary is not None else cursor_no
+        if boundary is not None:
+            statement = statement.where(Entry.no > boundary)
         statement = statement.order_by(Entry.no).limit(size + 1)
         rows = list(await self._session.scalars(statement))
         if len(rows) <= size:
@@ -86,6 +128,24 @@ class EntryRepository:
         page = rows[:size]
         last = page[-1]
         return Page(items=page, next_cursor=encode_sort_cursor([last.no], last.id))
+
+    @staticmethod
+    def _filtered(
+        statement: Select[Any],
+        *,
+        nos: Sequence[int] | None,
+        types: Sequence[EntryType] | None,
+    ) -> Select[Any]:
+        """Фильтры выборки записей. Пустой список — это «ничего», а не «всё».
+
+        Разница существенная: `types=[]` после отбора клиентом нулевого набора типов
+        обязан дать пустую страницу, а не всё дело. Поэтому проверяется `is None`.
+        """
+        if nos is not None:
+            statement = statement.where(Entry.no.in_(list(nos)))
+        if types is not None:
+            statement = statement.where(Entry.type.in_(list(types)))
+        return statement
 
     async def headings(self, task_id: uuid.UUID) -> list[EntryHeading]:
         """Опись дела: заголовки всех записей задачи, без тел и без нагрузки.
@@ -116,3 +176,141 @@ class EntryRepository:
             )
             for row in rows
         ]
+
+    # --- Факты для проверок перехода -------------------------------------------------
+
+    async def last_entry_into_status(self, task_id: uuid.UUID, status: TaskStatus) -> int | None:
+        """Номер последней записи о переходе **в** этот статус.
+
+        От неё считается «сводка после последнего входа в `in_progress`»: задача,
+        взятая повторно, старой справкой не закрывается.
+        """
+        statement = select(func.max(Entry.no)).where(
+            Entry.task_id == task_id,
+            Entry.type == EntryType.STATUS_CHANGED,
+            Entry.payload["to"].astext == status.value,
+        )
+        return await self._session.scalar(statement)
+
+    async def has_entry_after(
+        self,
+        task_id: uuid.UUID,
+        type: EntryType,
+        *,
+        after_no: int,
+    ) -> bool:
+        """Есть ли в задаче запись такого типа с номером больше указанного."""
+        exists = (
+            select(1)
+            .where(Entry.task_id == task_id, Entry.type == type, Entry.no > after_no)
+            .exists()
+        )
+        return bool(await self._session.scalar(select(exists)))
+
+    async def last_verdict_outcomes(self, task_id: uuid.UUID) -> dict[int, VerdictOutcome]:
+        """Исход последнего по времени вердикта по каждой проверке задачи.
+
+        `DISTINCT ON` по номеру проверки с сортировкой по убыванию `seq`: база сама
+        оставляет по одной, самой свежей строке на проверку. Считать в Python значило бы
+        вычитывать все вердикты задачи ради последних.
+        """
+        check_no = Entry.payload["check_no"].as_integer()
+        outcome = Entry.payload["outcome"].astext
+        statement = (
+            select(check_no.label("check_no"), outcome.label("outcome"))
+            .where(Entry.task_id == task_id, Entry.type == EntryType.VERDICT)
+            .distinct(check_no)
+            .order_by(check_no, Entry.seq.desc())
+        )
+        rows: list[Any] = list(await self._session.execute(statement))
+        return {row.check_no: VerdictOutcome(row.outcome) for row in rows}
+
+    # --- Пакет преемника -------------------------------------------------------------
+
+    async def last_summary(self, task_id: uuid.UUID) -> Entry | None:
+        """Последняя сводка задачи. Последняя главнее предыдущих (`CONCEPT.md`, 3.4)."""
+        statement = (
+            select(Entry)
+            .where(Entry.task_id == task_id, Entry.type == EntryType.SUMMARY)
+            .order_by(Entry.no.desc())
+            .limit(1)
+        )
+        return (await self._session.scalars(statement)).first()
+
+    async def open_questions(self, task_id: uuid.UUID) -> list[Entry]:
+        """Вопросы задачи без ответа, в порядке подшивки.
+
+        Один запрос отдаёт и список для пакета преемника, и оба счётчика признаков:
+        второй запрос ради `open_questions` считал бы то же самое ещё раз.
+        """
+        statement = _unanswered(
+            select(Entry).where(Entry.task_id == task_id, _IS_QUESTION)
+        ).order_by(Entry.no)
+        return list(await self._session.scalars(statement))
+
+    # --- Вопросы поперёк задач -------------------------------------------------------
+
+    async def questions_page(
+        self,
+        *,
+        addressee: str | None = None,
+        queue_id: uuid.UUID | None = None,
+        blocking: bool | None = None,
+        open_only: bool = True,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[tuple[Entry, str]]:
+        """Вопросы всех задач с фильтрами — «входящая» участника.
+
+        Порядок — сквозной `seq` по возрастанию: дольше всех ждёт ответа самый старый
+        вопрос, и он обязан быть первым. `seq` монотонен и уникален, поэтому страницы
+        не теряют и не задваивают записи при подшивке новых.
+
+        Отдаёт пары «запись, ключ задачи»: у записи связи с задачей нет, только
+        `task_id`, а читающему вопрос нужен адрес, по которому идти за делом.
+        """
+        size = resolve_limit(limit)
+        statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_QUESTION)
+        if addressee is not None:
+            # Проверка вхождения в массив JSONB: `payload -> 'addressees' @> '["name"]'`.
+            # Ложится на частичный GIN-индекс по нагрузке вопросов.
+            statement = statement.where(Entry.payload["addressees"].contains([addressee]))
+        if queue_id is not None:
+            statement = statement.where(Task.queue_id == queue_id)
+        if blocking is not None:
+            statement = statement.where(Entry.payload["blocking"].as_boolean() == blocking)
+        if open_only:
+            statement = _unanswered(statement)
+        if cursor is not None:
+            (after_seq,), _ = decode_sort_cursor(cursor, arity=1)
+            statement = statement.where(Entry.seq > after_seq)
+        statement = statement.order_by(Entry.seq).limit(size + 1)
+        rows = [(entry, key) for entry, key in await self._session.execute(statement)]
+        if len(rows) <= size:
+            return Page(items=rows, next_cursor=None)
+        page = rows[:size]
+        last_entry = page[-1][0]
+        return Page(items=page, next_cursor=encode_sort_cursor([last_entry.seq], last_entry.id))
+
+
+#: Признак записи-вопроса. Отдельной константой, потому что участвует и в выборке
+#: открытых вопросов задачи, и во «входящей» участника: две копии условия разъехались бы.
+_IS_QUESTION = Entry.type == EntryType.QUESTION
+
+
+def _unanswered(statement: Select[Any]) -> Select[Any]:
+    """Оставляет вопросы, на которые в той же задаче нет ни одной записи `answer`.
+
+    Ответов может быть несколько; открытым вопрос перестаёт быть после первого
+    (`CONCEPT.md`, 3.4), поэтому здесь `NOT EXISTS`, а не подсчёт.
+    """
+    answer = aliased(Entry)
+    return statement.where(
+        ~select(1)
+        .where(
+            answer.task_id == Entry.task_id,
+            answer.type == EntryType.ANSWER,
+            answer.payload["question_no"].as_integer() == Entry.no,
+        )
+        .exists()
+    )

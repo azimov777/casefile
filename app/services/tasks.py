@@ -41,6 +41,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from app.core.sentinels import UNSET, is_set
 from app.db.models.author import created_by_columns
+from app.db.models.entry import Entry
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.repositories import TaskRepository
@@ -55,6 +56,7 @@ from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
     DEFAULT_PRIORITY,
     INITIAL_STATUS,
+    TaskFeatures,
     TaskField,
     TaskPriority,
     TaskStatus,
@@ -143,14 +145,20 @@ class TaskMutation:
 
 @dataclass(frozen=True, slots=True)
 class TaskPackage:
-    """Пакет преемника в объёме задачи 22: карточка, доступные переходы, опись дела.
+    """Всё, что нужно агенту с чистым контекстом, одним вызовом (`CONCEPT.md`, 4.2).
 
-    Задача 23 добавляет сюда последнюю сводку, открытые вопросы и вычисляемые признаки,
-    задача 24 — связи и признак `blocked`. Инструмент MCP `get_task` (задача 28) отдаёт
-    эту же структуру.
+    Полно хранится, по оглавлению читается: карточка, вычисляемые признаки, последняя
+    сводка и открытые вопросы приезжают **целиком**, а остальные записи — строками
+    описи. Тела читаются точечно (`list_entries`, `read_entry`).
+
+    Задача 24 добавляет сюда связи и признак `blocked`. Инструмент MCP `get_task`
+    (задача 28) отдаёт эту же структуру.
     """
 
     task: Task
+    features: TaskFeatures
+    summary: Entry | None
+    questions: list[Entry]
     transitions: tuple[TaskStatus, ...]
     index: list[EntryHeading]
 
@@ -178,10 +186,20 @@ async def read_task(session: AsyncSession, key: str, *, actor: Actor) -> Task:
 
 
 async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) -> TaskPackage:
-    """Всё, что нужно агенту с чистым контекстом, одним вызовом (`CONCEPT.md`, 4.2)."""
+    """Собирает пакет преемника: карточка, признаки, сводка, вопросы, опись, переходы.
+
+    Признаки не хранятся, а считаются из уже прочитанного: список открытых вопросов и
+    последняя сводка нужны пакету целиком, а счётчики и `last_summary_at` — это их
+    длина и время. Отдельных запросов ради признаков здесь нет.
+    """
     task = await read_task(session, key, actor=actor)
+    summary = await case_service.last_summary(session, task, actor=actor)
+    questions = await case_service.open_questions(session, task, actor=actor)
     return TaskPackage(
         task=task,
+        features=case_service.features(questions, summary),
+        summary=summary,
+        questions=questions,
         transitions=allowed_transitions(task.status),
         index=await case_service.case_index(session, task, actor=actor),
     )
@@ -386,16 +404,26 @@ async def _transition_facts(
     to_status: TaskStatus,
     reason: str | None,
 ) -> TransitionFacts:
-    """Собирает факты для проверок перехода из состояния задачи.
+    """Собирает факты для проверок перехода из состояния задачи и дела.
 
-    Точка подключения следующих задач: факт, которому нужна база (сводка после входа в
-    `in_progress`, вердикты, блокеры, дети), считается здесь запросом и кладётся в
-    новое поле `TransitionFacts`. Считать его стоит только когда он нужен — по
-    `task.status` и `to_status`, — чтобы не платить запросом за каждый переход.
+    Точка подключения следующих задач: факт, которому нужна база (блокеры, дети),
+    считается здесь запросом и кладётся в новое поле `TransitionFacts`.
+
+    Каждый факт считается **только когда он нужен** — по `task.status` и `to_status`.
+    Иначе любой переход в `backlog` платил бы запросами за сводку и вердикты, которые
+    его проверки даже не смотрят. Незаполненный факт при этом запрещает переход, а не
+    пропускает его, — за это отвечают значения по умолчанию в `TransitionFacts`.
     """
+    from_status = task.status
+    has_summary = False
+    if from_status is TaskStatus.IN_PROGRESS:
+        has_summary = await case_service.has_summary_since(session, task, TaskStatus.IN_PROGRESS)
+    pending_checks: list[int] | None = None
+    if from_status is TaskStatus.REVIEW and to_status is TaskStatus.DONE:
+        pending_checks = await case_service.verdict_gaps(session, task)
     return TransitionFacts(
         key=task.key,
-        from_status=task.status,
+        from_status=from_status,
         to_status=to_status,
         reason=reason,
         sections=section_values(
@@ -407,6 +435,8 @@ async def _transition_facts(
             }
         ),
         checks=tuple(task.checks),
+        has_summary_since_in_progress=has_summary,
+        checks_without_passed_verdict=pending_checks,
     )
 
 

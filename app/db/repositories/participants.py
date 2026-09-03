@@ -7,6 +7,7 @@ INSERT в базу, не фиксируя транзакцию, чтобы сц�
 """
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,17 @@ class ParticipantRepository:
         """Поиск по уже канонизированному имени: канонизацию делает домен, не запрос."""
         statement = select(Participant).where(Participant.name == name)
         return (await self._session.scalars(statement)).one_or_none()
+
+    async def existing_names(self, names: Sequence[str]) -> set[str]:
+        """Какие из перечисленных канонизированных имён есть в реестре, одним запросом.
+
+        Нужен адресатам вопроса: их несколько, а ответ обязан назвать **все**
+        несуществующие сразу — иначе агент исправляет список по одному имени за круг.
+        """
+        if not names:
+            return set()
+        statement = select(Participant.name).where(Participant.name.in_(set(names)))
+        return set(await self._session.scalars(statement))
 
     async def list_page(
         self,

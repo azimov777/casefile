@@ -40,6 +40,19 @@ def _reader(task: Task) -> Actor:
     return Actor(author=task.created_by, scope=TokenScope.TASK)
 
 
+async def summary(session: AsyncSession, task: Task, actor: Actor) -> None:
+    """Сводка ради перехода: без неё из `in_progress` не выйти (задача 23)."""
+    await case_service.add_summary(
+        session,
+        task,
+        actor=actor,
+        done="Разобрался",
+        remaining="Дописать",
+        blockers="нет",
+        next_step="Дописать проверку",
+    )
+
+
 async def move(
     session: AsyncSession,
     task: Task,
@@ -47,7 +60,20 @@ async def move(
     *statuses: TaskStatus,
     reason: str | None = None,
 ) -> Task:
+    """Проводит задачу по цепочке, подшивая то, без чего переход не пройдёт.
+
+    Сводка перед выходом из `in_progress` и вердикты перед `done` — правила перехода,
+    а не предмет здешних тестов: без них до `review` и `done` не добраться вовсе. Сами
+    правила проверяются в `tests/test_case_service.py`.
+    """
     for status in statuses:
+        if task.status is TaskStatus.IN_PROGRESS:
+            await summary(session, task, actor)
+        if task.status is TaskStatus.REVIEW and status is TaskStatus.DONE:
+            for check_no in range(1, len(task.checks) + 1):
+                await case_service.add_verdict(
+                    session, task, actor=actor, check_no=check_no, outcome="passed"
+                )
         await service.transition_task(session, task, actor=actor, to=status, reason=reason)
     return task
 
@@ -167,6 +193,9 @@ async def test_a_step_back_needs_a_reason_and_records_it(
 ) -> None:
     """Обзорная проверка 4: без причины `422`, с причиной проходит и причина в деле."""
     await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
+    # Сводка — отдельным шагом: без неё выход из `in_progress` упёрся бы в неё, а
+    # проверяется здесь именно причина, и порядок проверок не должен это скрывать.
+    await summary(db_session, task, task_actor)
 
     with pytest.raises(TransitionReasonRequiredError) as error:
         await service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.OPEN)

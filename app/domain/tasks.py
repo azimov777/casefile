@@ -16,9 +16,8 @@ FastAPI, и правило, записанное только в схеме, д�
 Переход проверяется в два шага: сначала таблица (`TRANSITIONS`), потом список
 независимых проверок (`TRANSITION_CHECKS`). Каждая проверка — функция от фактов о
 переходе (`TransitionFacts`) и ничего не знает о соседях. Следующие задачи добавляют
-свои проверки сюда, **не трогая таблицу**: задача 23 — сводку перед выходом из
-`in_progress` и вердикты перед `done`, задача 24 — блокеры перед `in_progress` и детей
-перед `done`. Как именно — см. комментарий у `TRANSITION_CHECKS`.
+свои проверки сюда, **не трогая таблицу**: задача 24 — блокеры перед `in_progress` и
+детей перед `done`. Как именно — см. комментарий у `TRANSITION_CHECKS`.
 
 ## Правки полей зависят от статуса
 
@@ -30,17 +29,21 @@ FastAPI, и правило, записанное только в схеме, д�
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
 from app.domain.errors import (
+    ChecksNotPassedError,
     InvalidQueueKeyError,
     InvalidTaskKeyError,
+    SummaryRequiredError,
     TaskFieldsInvalidError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
     TransitionReasonRequiredError,
 )
+from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.queues import MAX_QUEUE_KEY_LENGTH, validate_queue_key
 
 # --- Ключ задачи ----------------------------------------------------------------
@@ -74,7 +77,7 @@ def parse_task_key(key: str) -> tuple[str, int]:
     ключ приезжает в ссылках записей дела и в строке поиска.
     """
     queue_part, separator, number_part = key.strip().partition(TASK_KEY_SEPARATOR)
-    if not separator or not _is_plain_number(number_part):
+    if not separator or not is_plain_number(number_part):
         raise InvalidTaskKeyError(
             details={
                 "key": key,
@@ -103,12 +106,16 @@ def normalize_task_key(key: str) -> str:
     return format_task_key(*parse_task_key(key))
 
 
-def _is_plain_number(part: str) -> bool:
+def is_plain_number(part: str) -> bool:
     """Номер — десятичные цифры ASCII без ведущих нулей.
 
     `isdigit()` в одиночку не годится: он пропускает индийско-арабские цифры и
     надстрочные знаки. Ведущие нули отсекаются отдельно — иначе `TRK-007` и `TRK-7`
     указывали бы на одну задачу двумя способами.
+
+    Публичная, потому что тем же правилом разбирается номер записи в ссылке
+    `TRK-42#12` (`app/domain/case.py`): два разбора номера разъехались бы на первом же
+    `TRK-42#007`.
     """
     return part.isascii() and part.isdigit() and part.lstrip("0") == part
 
@@ -274,14 +281,6 @@ MAX_TAG_LENGTH = 64
 MAX_TAGS = 50
 
 
-class _FieldProblem(Exception):
-    """Замечание к одному полю. Внутреннее: наружу уезжает списком в `details.fields`."""
-
-    def __init__(self, reason: str, **details: Any) -> None:
-        super().__init__(reason)
-        self.details = {"reason": reason, **details}
-
-
 def normalize_fields(values: Mapping[TaskField, Any]) -> dict[TaskField, Any]:
     """Проверяет переданные поля и возвращает их канонический вид.
 
@@ -296,31 +295,28 @@ def normalize_fields(values: Mapping[TaskField, Any]) -> dict[TaskField, Any]:
     первым на первом же правиле.
     """
     normalized: dict[TaskField, Any] = {}
-    problems: list[dict[str, Any]] = []
+    problems = FieldProblems()
     for field, value in values.items():
-        try:
+        with problems.field(field.value):
             normalized[field] = _NORMALIZERS[field](value)
-        except _FieldProblem as problem:
-            problems.append({"field": field.value, **problem.details})
-    if problems:
-        raise TaskFieldsInvalidError(details={"fields": problems})
+    problems.raise_as(TaskFieldsInvalidError)
     return normalized
 
 
 def _text(value: Any) -> str:
     if not isinstance(value, str):
-        raise _FieldProblem("not_a_string")
+        raise FieldProblem("not_a_string")
     return value
 
 
 def _normalize_title(value: Any) -> str:
     title = _text(value).strip()
     if not title:
-        raise _FieldProblem("required")
+        raise FieldProblem("required")
     if "\n" in title or "\r" in title:
-        raise _FieldProblem("multiline_not_allowed")
+        raise FieldProblem("multiline_not_allowed")
     if len(title) > MAX_TITLE_LENGTH:
-        raise _FieldProblem("too_long", max=MAX_TITLE_LENGTH, got=len(title))
+        raise FieldProblem("too_long", max=MAX_TITLE_LENGTH, got=len(title))
     return title
 
 
@@ -328,7 +324,7 @@ def _normalize_description(value: Any) -> str:
     """Описание обязательно: задача без него нечитаема, а придумать его за автора нечем."""
     description = _normalize_section(value)
     if not description:
-        raise _FieldProblem("required")
+        raise FieldProblem("required")
     return description
 
 
@@ -336,7 +332,7 @@ def _normalize_section(value: Any) -> str:
     """Раздел может быть пустым: в `backlog` задачу дописывают по частям."""
     section = _text(value)
     if len(section) > MAX_TEXT_LENGTH:
-        raise _FieldProblem("too_long", max=MAX_TEXT_LENGTH, got=len(section))
+        raise FieldProblem("too_long", max=MAX_TEXT_LENGTH, got=len(section))
     return section.strip()
 
 
@@ -348,19 +344,19 @@ def _normalize_checks(value: Any) -> list[str]:
     сдвинуло бы их так, что вердикт указал бы не на ту проверку.
     """
     if not isinstance(value, Sequence) or isinstance(value, str):
-        raise _FieldProblem("not_a_list")
+        raise FieldProblem("not_a_list")
     checks: list[str] = []
     for position, item in enumerate(value, start=FIRST_CHECK_NUMBER):
         if not isinstance(item, str):
-            raise _FieldProblem("not_a_string", check_no=position)
+            raise FieldProblem("not_a_string", check_no=position)
         check = item.strip()
         if not check:
-            raise _FieldProblem("empty_item", check_no=position)
+            raise FieldProblem("empty_item", check_no=position)
         if len(check) > MAX_CHECK_LENGTH:
-            raise _FieldProblem("too_long", check_no=position, max=MAX_CHECK_LENGTH, got=len(check))
+            raise FieldProblem("too_long", check_no=position, max=MAX_CHECK_LENGTH, got=len(check))
         checks.append(check)
     if len(checks) > MAX_CHECKS:
-        raise _FieldProblem("too_many", max=MAX_CHECKS, got=len(checks))
+        raise FieldProblem("too_many", max=MAX_CHECKS, got=len(checks))
     return checks
 
 
@@ -378,11 +374,11 @@ def _normalize_assignee(value: Any) -> str | None:
         return None
     assignee = _text(value).strip()
     if not assignee:
-        raise _FieldProblem("required", allowed_null=True)
+        raise FieldProblem("required", allowed_null=True)
     if "\n" in assignee or "\r" in assignee:
-        raise _FieldProblem("multiline_not_allowed")
+        raise FieldProblem("multiline_not_allowed")
     if len(assignee) > MAX_ASSIGNEE_LENGTH:
-        raise _FieldProblem("too_long", max=MAX_ASSIGNEE_LENGTH, got=len(assignee))
+        raise FieldProblem("too_long", max=MAX_ASSIGNEE_LENGTH, got=len(assignee))
     return assignee
 
 
@@ -396,26 +392,26 @@ def _normalize_tags(value: Any) -> list[str]:
     потом станет фильтром, нельзя.
     """
     if not isinstance(value, Sequence) or isinstance(value, str):
-        raise _FieldProblem("not_a_list")
+        raise FieldProblem("not_a_list")
     normalized: list[str] = []
     seen: set[str] = set()
     for item in value:
         if not isinstance(item, str):
-            raise _FieldProblem("not_a_string", tag=item)
+            raise FieldProblem("not_a_string", tag=item)
         tag = item.strip()
         if not tag:
             continue
         if "\n" in tag or "\r" in tag:
-            raise _FieldProblem("multiline_not_allowed", tag=tag)
+            raise FieldProblem("multiline_not_allowed", tag=tag)
         if len(tag) > MAX_TAG_LENGTH:
-            raise _FieldProblem("too_long", tag=tag, max=MAX_TAG_LENGTH, got=len(tag))
+            raise FieldProblem("too_long", tag=tag, max=MAX_TAG_LENGTH, got=len(tag))
         folded = tag.casefold()
         if folded in seen:
             continue
         seen.add(folded)
         normalized.append(tag)
     if len(normalized) > MAX_TAGS:
-        raise _FieldProblem("too_many", max=MAX_TAGS, got=len(normalized))
+        raise FieldProblem("too_many", max=MAX_TAGS, got=len(normalized))
     return normalized
 
 
@@ -424,7 +420,7 @@ def _normalize_priority(value: Any) -> TaskPriority:
     try:
         return TaskPriority(value)
     except ValueError:
-        raise _FieldProblem(
+        raise FieldProblem(
             "not_allowed", allowed=[priority.value for priority in TaskPriority]
         ) from None
 
@@ -458,8 +454,6 @@ class TransitionFacts:
 
     Точки подключения следующих задач (оставлены здесь намеренно, чтобы их не искать):
 
-    - задача 23: `has_summary_since_in_progress: bool` — есть ли сводка после
-      последнего входа в `in_progress`; `checks_without_passed_verdict: Sequence[int]`;
     - задача 24: `open_blockers: Sequence[str]` — ключи незакрытых блокеров;
       `unclosed_children: Sequence[str]` — ключи детей не в `done` и не в `cancelled`.
     """
@@ -471,6 +465,14 @@ class TransitionFacts:
     reason: str | None
     sections: Mapping[TaskField, str]
     checks: Sequence[str]
+    #: Есть ли в деле сводка, подшитая после последнего входа в `in_progress`. `False`
+    #: по умолчанию — незаполненный факт запрещает выход из работы, а не разрешает его.
+    has_summary_since_in_progress: bool = False
+    #: Номера проверок, у которых последний по времени вердикт не `passed`. `None` —
+    #: «факт не считали»: проверка истолкует это как «положительных вердиктов нет ни по
+    #: одной проверке» и переход запретит. Пустой кортеж означал бы обратное — что все
+    #: проверки пройдены, — поэтому значением по умолчанию он быть не может.
+    checks_without_passed_verdict: Sequence[int] | None = None
 
 
 #: Одна проверка перехода: молчит, если всё в порядке, иначе бросает доменную ошибку со
@@ -526,15 +528,68 @@ def check_sections_filled_before_open(facts: TransitionFacts) -> None:
         )
 
 
+def check_summary_before_leaving_in_progress(facts: TransitionFacts) -> None:
+    """`in_progress → *`: после последнего входа в работу в деле есть сводка.
+
+    Правило распространяется на **все** выходы, включая `cancelled` и шаг назад в
+    `open`: сводка нужна преемнику именно тогда, когда задачу бросают. Считается от
+    последнего входа в `in_progress`, а не от начала дела: задача, взятая повторно,
+    старой справкой не закрывается — обстановка с тех пор изменилась.
+
+    Харнесс, умерший от исчерпания контекста, из `in_progress` не выходит, и эта
+    проверка его не ловит. Она ловит вежливый уход (`CONCEPT.md`, 5.3).
+    """
+    if facts.from_status is not TaskStatus.IN_PROGRESS:
+        return
+    if facts.has_summary_since_in_progress:
+        return
+    raise SummaryRequiredError(
+        details={
+            "key": facts.key,
+            "from": facts.from_status.value,
+            "to": facts.to_status.value,
+            "entry_type": "summary",
+        },
+    )
+
+
+def check_verdicts_before_done(facts: TransitionFacts) -> None:
+    """`review → done`: по каждой проверке последний по времени вердикт — `passed`.
+
+    Последний, а не любой: провалившаяся и переделанная проверка закрывается новым
+    вердиктом, а не правкой старого — записи дела неизменяемы.
+    """
+    if not (facts.from_status is TaskStatus.REVIEW and facts.to_status is TaskStatus.DONE):
+        return
+    pending = facts.checks_without_passed_verdict
+    if pending is None:
+        # Факт не посчитан. Считаем, что положительного вердикта нет ни по одной
+        # проверке: незаполненный факт обязан запрещать переход, а не пропускать его.
+        pending = range(FIRST_CHECK_NUMBER, FIRST_CHECK_NUMBER + len(facts.checks))
+    pending = list(pending)
+    if not pending:
+        return
+    raise ChecksNotPassedError(
+        details={
+            "key": facts.key,
+            "from": facts.from_status.value,
+            "to": facts.to_status.value,
+            "checks": pending,
+        },
+    )
+
+
 #: Проверки перехода в порядке выполнения. Первая упавшая останавливает переход.
 #:
-#: Как подключить новую (задачи 23 и 24): добавить факт в `TransitionFacts`, заполнить
+#: Как подключить новую (задача 24): добавить факт в `TransitionFacts`, заполнить
 #: его в `app/services/tasks.py` (`_transition_facts`), написать функцию рядом с
 #: соседями и вписать её сюда. Таблицу `TRANSITIONS` при этом не трогать — она
 #: описывает, какие ходы существуют, а не при каких условиях они проходят.
 TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     check_reason_for_step_back_or_cancel,
     check_sections_filled_before_open,
+    check_summary_before_leaving_in_progress,
+    check_verdicts_before_done,
 )
 
 
@@ -587,3 +642,23 @@ def parse_status(value: Any) -> TaskStatus:
 def section_values(fields: Mapping[TaskField, Any]) -> dict[TaskField, str]:
     """Четыре текстовых раздела из набора полей — в форме, которую ждёт `TransitionFacts`."""
     return {section: str(fields.get(section) or "") for section in TEXT_SECTIONS}
+
+
+# --- Вычисляемые признаки -----------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class TaskFeatures:
+    """Признаки, которые не хранятся, а считаются из дела и связей (`CONCEPT.md`, 4.3).
+
+    Колонок под них нет намеренно: колонка — это второе место, где живёт правда, и она
+    расходится с делом ровно в тот момент, когда её забыли обновить. Цена — запрос при
+    чтении карточки; она приемлема, потому что запрос один и идёт по индексу.
+
+    `blocked` добавляет задача 24 вместе со связями: без них признак всегда `false`, и
+    поле, которое врёт до следующей задачи, хуже отсутствующего.
+    """
+
+    open_questions: int
+    open_blocking_questions: int
+    last_summary_at: datetime | None

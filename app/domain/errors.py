@@ -7,9 +7,9 @@
 Базовые семейства (`not_found`, `conflict`, `validation_error`, ...) живут в
 `app/core/errors.py`; здесь только их наследники со своим стабильным кодом.
 
-В списке фундамент (участники, токены, метка временного агента, очереди) и задача с
-переходами (задача 22). Записи агента и связи приезжают сюда со своими областями
-(задачи 23–24).
+В списке фундамент (участники, токены, метка временного агента, очереди), задача с
+переходами (задача 22) и дело: записи агента, обязательная сводка, вердикты
+(задача 23). Связи приезжают сюда своей областью (задача 24).
 
 Исключение из правила одно и оно осознанное: ошибка, описывающая не предметную
 область, а механизм (недоступна база, испорчен курсор), живёт рядом с этим механизмом.
@@ -174,3 +174,61 @@ class TaskSectionsIncompleteError(ValidationError):
 
     code = "task_sections_incomplete"
     message = "Task sections are incomplete"
+
+
+# --- Дело ---------------------------------------------------------------------------
+
+
+class EntryNotFoundError(NotFoundError):
+    """Записи с таким номером в этой задаче нет."""
+
+    code = "entry_not_found"
+    message = "Case entry not found"
+
+
+class EntryFieldsInvalidError(ValidationError):
+    """Запись не проходит проверку формы; все замечания сразу — в `details.fields`.
+
+    Один код на все замечания к записи — по той же причине, что и у полей задачи: агент
+    исправляет запрос за одну попытку, читая список, а не за пять кругов «исправил
+    одно — вылезло другое». Что именно не так, говорит `reason` каждого замечания:
+    `required`, `not_allowed`, `service_type`, `out_of_range`, `unknown_participant`,
+    `unknown_entry`, `not_a_question`.
+    """
+
+    code = "entry_fields_invalid"
+    message = "Case entry fields are invalid"
+
+
+class SummaryRequiredError(ConflictError):
+    """Выход из `in_progress` требует сводки, подшитой после последнего входа в него.
+
+    Конфликт состояния, а не ошибка формы запроса: тот же переход пройдёт, как только
+    сводка появится. Это единственная защита от вежливого ухода из работы без справки
+    для преемника (`CONCEPT.md`, 5.3).
+    """
+
+    code = "summary_required"
+    message = "Transition out of in_progress requires a summary"
+
+
+class ChecksNotPassedError(ConflictError):
+    """`review → done` требует, чтобы последний вердикт каждой проверки был `passed`.
+
+    Проверки без положительного вердикта перечислены в `details.checks`: и те, по
+    которым вердикта нет вовсе, и те, где последний исход — `failed`.
+    """
+
+    code = "checks_not_passed"
+    message = "Some review checks have no passing verdict"
+
+
+class ActorNotAddressableError(ValidationError):
+    """Временный агент спрашивает свои вопросы, а адресовать его нельзя.
+
+    Возникает только у выдачи вопросов «мне»: у токена без участника адресата нет, и
+    пустой список молча соврал бы, что вопросов не пришло.
+    """
+
+    code = "actor_not_addressable"
+    message = "A temporary agent cannot be an addressee; pass an explicit addressee"

@@ -47,6 +47,7 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
 | `participant_not_found` | Participant not found | Участника с таким именем или идентификатором нет. |
 | `queue_not_found` | Queue not found | Очереди с таким ключом нет. |
@@ -63,9 +64,11 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `checks_not_passed` | Some review checks have no passing verdict | `review → done` требует, чтобы последний вердикт каждой проверки был `passed`. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
 | `queue_key_taken` | Queue key is already taken | Ключ очереди уже занят: ключи уникальны без учёта регистра. |
+| `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля и связи закрытой задачи не меняются. |
 | `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
@@ -75,6 +78,8 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `actor_not_addressable` | A temporary agent cannot be an addressee; pass an explicit addressee | Временный агент спрашивает свои вопросы, а адресовать его нельзя. |
+| `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
 | `invalid_page_size` | Page size is out of range | Запрошен размер страницы вне допустимых границ. |

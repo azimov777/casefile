@@ -6,7 +6,9 @@
 import pytest
 
 from app.domain.errors import (
+    ChecksNotPassedError,
     InvalidTaskKeyError,
+    SummaryRequiredError,
     TaskFieldsInvalidError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
@@ -47,7 +49,16 @@ def facts(
     reason: str | None = None,
     sections: dict[TaskField, str] | None = None,
     checks: tuple[str, ...] = ("проверка",),
+    has_summary: bool = True,
+    pending_checks: tuple[int, ...] | None = (),
 ) -> TransitionFacts:
+    """Факты перехода, у которых по умолчанию сошлось всё, кроме проверяемого.
+
+    Значения по умолчанию здесь **обратны** значениям в самой структуре: там
+    незаполненный факт запрещает переход, здесь заполненный не мешает проверять
+    соседей. Что незаполненный факт запрещает переход, проверяется отдельно —
+    `test_an_unfilled_fact_forbids_the_move`.
+    """
     return TransitionFacts(
         key="TRK-1",
         from_status=from_status,
@@ -55,6 +66,8 @@ def facts(
         reason=reason,
         sections=FILLED if sections is None else sections,
         checks=checks,
+        has_summary_since_in_progress=has_summary,
+        checks_without_passed_verdict=pending_checks,
     )
 
 
@@ -192,7 +205,7 @@ def test_the_section_check_only_guards_the_move_into_open() -> None:
 
 def test_the_check_list_is_the_extension_point() -> None:
     """Следующие задачи добавляют проверки в список, а не в таблицу."""
-    assert len(TRANSITION_CHECKS) == 2
+    assert len(TRANSITION_CHECKS) == 4
     assert all(callable(check) for check in TRANSITION_CHECKS)
 
 
@@ -246,3 +259,69 @@ def test_normalisation_strips_and_keeps_order() -> None:
         TaskField.PRIORITY: TaskPriority.HIGH,
         TaskField.ASSIGNEE: None,
     }
+
+
+# --- Проверки перехода задачи 23 ------------------------------------------------------
+
+
+def test_leaving_in_progress_without_a_summary_is_a_conflict() -> None:
+    """Обзорная проверка 2 на уровне домена. Правило действует на **все** выходы."""
+    for to_status in (TaskStatus.REVIEW, TaskStatus.OPEN, TaskStatus.BACKLOG, TaskStatus.CANCELLED):
+        with pytest.raises(SummaryRequiredError) as error:
+            ensure_transition_allowed(
+                facts(
+                    TaskStatus.IN_PROGRESS,
+                    to_status,
+                    reason="есть причина",
+                    has_summary=False,
+                )
+            )
+        assert error.value.code == "summary_required"
+        assert error.value.details["to"] == to_status.value
+
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.REVIEW, has_summary=True))
+
+
+def test_closing_lists_the_checks_without_a_passing_verdict() -> None:
+    """Обзорная проверка 7 на уровне домена: в подробностях — номера проверок."""
+    with pytest.raises(ChecksNotPassedError) as error:
+        ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, pending_checks=(2, 3)))
+
+    assert error.value.code == "checks_not_passed"
+    assert error.value.details["checks"] == [2, 3]
+
+    ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, pending_checks=()))
+
+
+def test_an_unfilled_fact_forbids_the_move() -> None:
+    """Значение по умолчанию запрещает переход: забытый факт не должен выглядеть успехом.
+
+    Проверяется на **самой** структуре, а не через помощник тестов: у помощника
+    значения по умолчанию обратные, и без этой проверки правило держалось бы только на
+    комментарии.
+    """
+    unfilled = TransitionFacts(
+        key="TRK-1",
+        from_status=TaskStatus.IN_PROGRESS,
+        to_status=TaskStatus.REVIEW,
+        reason=None,
+        sections=FILLED,
+        checks=("первая", "вторая"),
+    )
+
+    with pytest.raises(SummaryRequiredError):
+        ensure_transition_allowed(unfilled)
+
+    with pytest.raises(ChecksNotPassedError) as error:
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.REVIEW,
+                to_status=TaskStatus.DONE,
+                reason=None,
+                sections=FILLED,
+                checks=("первая", "вторая"),
+            )
+        )
+
+    assert error.value.details["checks"] == [1, 2]

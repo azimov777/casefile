@@ -6,6 +6,7 @@
 """
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,17 @@ class TaskRepository:
         """Поиск по уже канонизированному ключу: канонизацию делает домен, не запрос."""
         statement = select(Task).where(Task.key == key)
         return (await self._session.scalars(statement)).unique().one_or_none()
+
+    async def get_by_keys(self, keys: Sequence[str]) -> dict[str, Task]:
+        """Задачи по набору канонизированных ключей, одним запросом.
+
+        Нужен проверке ссылок записи дела: `refs` короткий, но запрос на каждую ссылку
+        превратил бы подшивку одной записи в десяток обращений к базе.
+        """
+        if not keys:
+            return {}
+        statement = select(Task).where(Task.key.in_(set(keys)))
+        return {task.key: task for task in (await self._session.scalars(statement)).unique()}
 
     async def add(self, task: Task) -> Task:
         """Кладёт задачу в сессию и отправляет INSERT, не закрывая транзакцию."""

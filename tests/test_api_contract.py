@@ -247,6 +247,8 @@ async def sample(owner: Participant, queue: Queue, task: Task) -> dict[str, str]
         "participant_name": owner.name,
         "queue_key": queue.key,
         "task_key": task.key,
+        # У только что заведённой задачи в деле одна запись — `created` с номером 1.
+        "entry_no": "1",
         # Параметр, который встречается только у изменяющего маршрута: развёртка с
         # токеном ходит лишь по `GET`, но подстановка обязана знать их все — иначе
         # новый `GET` с таким параметром упал бы не с внятным сообщением, а с KeyError.

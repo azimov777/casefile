@@ -1,9 +1,10 @@
-"""Дело: закрытый словарь типов записей и форма ссылки на запись.
+"""Дело: словарь типов записей, форма нагрузки по каждому типу и ссылки.
 
-Дело — упорядоченный список неизменяемых записей (`CONCEPT.md`, 3.4). Здесь только то,
-что не зависит от базы: типы записей и формат ссылки `TRK-42#12`. Форма записи (`seq`,
-`no`, автор, заголовок, тело, `payload`, `refs`) описана моделью в `app/db/models/entry.py`,
-а правила по каждому типу агента (`summary`, `question`, `verdict`, ...) — задача 23.
+Дело — упорядоченный список неизменяемых записей (`CONCEPT.md`, 3.4). Здесь всё, что не
+зависит от базы: типы записей, правила нагрузки, разбор ссылки `TRK-42#12`, строка
+описи. Форма строки в базе описана моделью в `app/db/models/entry.py`, а проверки,
+которым нужна база (существует ли адресат, есть ли такая запись), живут в
+`app/services/case.py` — домен в базу не ходит.
 
 ## Словарь закрыт
 
@@ -11,13 +12,35 @@
 месту: новый тип записи — это изменение концепции, а не задачи. Тип служебной записи
 при этом выводится из сценария в `services`, а не задаётся вызывающим кодом: два
 независимых словаря имён разъехались бы, и новое действие молча осталось бы без записи.
+
+## Заголовок либо пишут, либо выводят
+
+Заголовок — единственное, что видно в описи, поэтому он обязателен у каждой записи. Но
+у трёх типов писать его руками нечего и незачем: у `summary` он равен первой строке
+`next_step`, у `answer` и `verdict` собирается из нагрузки. Поэтому заголовок у них
+**не принимается**: принять и проигнорировать значило бы дать клиенту думать, что он
+задаёт опись, а принять и использовать — развести опись с нагрузкой.
+
+## Ссылка либо тракторная, либо адрес
+
+`refs` содержит ссылки на записи (`TRK-42#12`), на задачи (`TRK-7`) и адреса. Первые
+две трекер проверяет на существование, адреса не проверяет вовсе (`CONCEPT.md`, 3.4).
+Различить их можно только по форме, поэтому правило простое: если строка разбирается
+как ключ задачи — это ссылка внутрь трекера, иначе адрес. Ловушка здесь одна и она
+закрыта: `TRK-42#абв` разбирается как ключ задачи с испорченным номером записи, и
+молча считать такую строку адресом нельзя — это опечатка в ссылке, а не URL.
 """
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from app.domain.authors import Author
+from app.domain.errors import EntryFieldsInvalidError, InvalidTaskKeyError
+from app.domain.fields import FieldProblem, FieldProblems
+from app.domain.tasks import FIRST_CHECK_NUMBER, is_plain_number, normalize_task_key
 
 
 class EntryType(StrEnum):
@@ -40,8 +63,15 @@ class EntryType(StrEnum):
     LINK_REMOVED = "link_removed"
 
 
+class VerdictOutcome(StrEnum):
+    """Исход обзорной проверки. Значений ровно два: третьего состояния у проверки нет."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+
+
 #: Записи, которые подшивает сам трекер в той же транзакции, что и изменение. Агент
-#: подшить такую запись напрямую не может: задача 23 отвергает эти типы на входе.
+#: подшить такую запись напрямую не может: `build_entry` отвергает эти типы на входе.
 SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     {
         EntryType.CREATED,
@@ -56,14 +86,56 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
 #: Записи агента и человека — всё, что не служебное.
 AGENT_ENTRY_TYPES: frozenset[EntryType] = frozenset(EntryType) - SERVICE_ENTRY_TYPES
 
+#: Типы, у которых заголовок пишет автор. У остальных он выводится из нагрузки — см.
+#: раздел «Заголовок либо пишут, либо выводят» в начале файла.
+TITLED_ENTRY_TYPES: frozenset[EntryType] = frozenset(
+    {
+        EntryType.DECISION,
+        EntryType.ATTEMPT,
+        EntryType.FINDING,
+        EntryType.ARTIFACT,
+        EntryType.QUESTION,
+        EntryType.NOTE,
+    }
+)
+
 #: Номер первой записи в задаче. Сквозной `seq` выдаёт база, а `no` считается по задаче.
 FIRST_ENTRY_NUMBER = 1
 
 #: Заголовок — одна строка: это то, что видно в описи дела.
 MAX_ENTRY_TITLE_LENGTH = 255
 
+#: Потолок тела записи. Тело читается точечно, а не в каждом пакете преемника, поэтому
+#: предел тот же, что у раздела задачи, — этого хватает на протокол попытки с выводом.
+MAX_ENTRY_BODY_LENGTH = 65_536
+
+#: Потолок одной части сводки. Заметно меньше тела: сводка целиком уезжает в **каждый**
+#: пакет преемника, и мегабайтная справка съела бы контекст агента до того, как он
+#: дошёл бы до дела.
+MAX_SUMMARY_PART_LENGTH = 16_384
+
+#: Ссылок в записи немного по смыслу: длинный список означает, что запись сшивает то,
+#: что должно быть несколькими записями.
+MAX_REFS = 50
+MAX_REF_LENGTH = 2_000
+
+#: Адресатов у вопроса немного: вопрос, разосланный двадцати участникам, не получит
+#: ответа ни от кого.
+MAX_ADDRESSEES = 20
+
+#: Части сводки в порядке чтения: сделано, осталось, что мешает, следующий шаг.
+SUMMARY_PARTS: tuple[str, ...] = ("done", "remaining", "blockers", "next_step")
+
 #: Разделитель ссылки на запись: `TRK-42#12` — двенадцатая запись задачи `TRK-42`.
 ENTRY_REF_SEPARATOR = "#"
+
+#: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку.
+ENTRY_REF_SHAPE = f"<QUEUE>-<task number>{ENTRY_REF_SEPARATOR}<entry number>"
+
+#: Чем обрезается слишком длинный выведенный заголовок. Обрезка, а не отказ: у сводки
+#: заголовок берётся из текста автора, и отклонять справку из-за длинной первой строки
+#: `next_step` значило бы терять её содержимое ради описи.
+TITLE_ELLIPSIS = "…"
 
 
 def format_entry_ref(task_key: str, no: int) -> str:
@@ -84,3 +156,406 @@ class EntryHeading:
     author: Author
     created_at: datetime
     title: str
+
+
+# --- Ссылки -------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class TaskRef:
+    """Ссылка на задачу: `TRK-7`. Ключ уже канонизирован."""
+
+    key: str
+
+
+@dataclass(frozen=True, slots=True)
+class EntryRef:
+    """Ссылка на запись: `TRK-42#12`. Ключ уже канонизирован."""
+
+    key: str
+    no: int
+
+
+def parse_ref(ref: str) -> TaskRef | EntryRef | None:
+    """Разбирает ссылку. `None` означает «это адрес» — его трекер не проверяет.
+
+    Бросает `FieldProblem`, если строка выглядит ссылкой внутрь трекера, но номер
+    записи в ней испорчен (`TRK-42#0`, `TRK-42#абв`): молча превратить такую строку в
+    непроверяемый адрес значило бы потерять опечатку ровно там, где ссылка нужна
+    надёжной.
+    """
+    head, separator, tail = ref.partition(ENTRY_REF_SEPARATOR)
+    try:
+        key = normalize_task_key(head)
+    except InvalidTaskKeyError:
+        # Голова не ключ задачи — значит, вся строка адрес. Сюда попадает и URL с
+        # якорем (`https://example.com/a#b`): его голова ключом не разбирается.
+        return None
+    if not separator:
+        return TaskRef(key=key)
+    if not is_plain_number(tail) or int(tail) < FIRST_ENTRY_NUMBER:
+        raise FieldProblem("malformed_entry_ref", ref=ref, expected=ENTRY_REF_SHAPE)
+    return EntryRef(key=key, no=int(tail))
+
+
+# --- Запись агента ------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class EntryDraft:
+    """Проверенная запись до подшивки: всё, что зависело только от формы, уже сошлось.
+
+    Проверки, которым нужна база (существует ли адресат, есть ли такая запись, тот ли
+    это вопрос), делает `app/services/case.py` — домен в базу не ходит.
+    """
+
+    type: EntryType
+    title: str
+    body: str
+    payload: dict[str, Any]
+    refs: list[str]
+    #: Ссылки внутрь трекера, уже разобранные: их существование проверяет сценарий.
+    tracker_refs: tuple[TaskRef | EntryRef, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class EntryContext:
+    """Всё о задаче, что нужно проверкам формы записи: ключ и список её проверок."""
+
+    task_key: str
+    checks: Sequence[str]
+
+
+def build_entry(
+    context: EntryContext,
+    *,
+    type: Any,
+    title: Any = None,
+    body: Any = "",
+    payload: Mapping[str, Any] | None = None,
+    refs: Any = (),
+) -> EntryDraft:
+    """Проверяет запись агента и приводит её к каноническому виду.
+
+    Замечания собираются **все сразу** и уезжают списком в `details.fields` — по тому
+    же правилу, что и у полей задачи: агент исправляет запрос за одну попытку, а не за
+    пять кругов.
+
+    Служебные типы (`created`, `status_changed`, ...) отвергаются здесь: их подшивает
+    сценарий, выводя тип из действия, и принять такой тип снаружи значило бы позволить
+    подделать историю задачи.
+    """
+    problems = FieldProblems()
+    entry_type = _entry_type(type, problems)
+    body_text = _entry_body(body, problems)
+    tracker_refs, ref_strings = _entry_refs(refs, problems)
+
+    payload_values: dict[str, Any] = {}
+    entry_title = ""
+    if entry_type is not None:
+        payload_values = _PAYLOAD_BUILDERS[entry_type](dict(payload or {}), context, problems)
+        if entry_type in TITLED_ENTRY_TYPES:
+            with problems.field("title"):
+                entry_title = _entry_title(title)
+        elif title is not None:
+            problems.add("title", "not_allowed", derived_from=_TITLE_SOURCES[entry_type])
+
+    problems.raise_as(EntryFieldsInvalidError, key=context.task_key)
+
+    assert entry_type is not None  # иначе замечание о типе уже прервало бы работу
+    if entry_type not in TITLED_ENTRY_TYPES:
+        entry_title = _derive_title(entry_type, payload_values, context)
+    return EntryDraft(
+        type=entry_type,
+        title=entry_title,
+        body=body_text,
+        payload=payload_values,
+        refs=ref_strings,
+        tracker_refs=tracker_refs,
+    )
+
+
+def summary_title(next_step: str) -> str:
+    """Заголовок сводки — первая непустая строка `next_step`.
+
+    Именно следующий шаг, а не «сделано»: в описи дела преемник читает столбец
+    заголовков сверху вниз и по нему видит, куда задача шла.
+    """
+    for line in next_step.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return _shorten(stripped)
+    # Пустых частей у сводки не бывает — их отвергает проверка, — но текст из одних
+    # переводов строки формально непуст, и заголовку нужно хоть что-то.
+    return _shorten(next_step.strip())
+
+
+# --- Внутреннее: форма полей --------------------------------------------------------
+
+
+def _entry_type(value: Any, problems: FieldProblems) -> EntryType | None:
+    """Тип записи агента. Служебные и неизвестные отвергаются с допустимым списком.
+
+    `None` означает «тип не разобрался»: замечание уже записано, и остальные проверки
+    идут без него, чтобы клиент получил все замечания разом, а не одно про тип.
+    """
+    allowed = sorted(AGENT_ENTRY_TYPES)
+    try:
+        entry_type = EntryType(value)
+    except ValueError:
+        problems.add("type", "not_allowed", allowed=allowed)
+        return None
+    if entry_type in SERVICE_ENTRY_TYPES:
+        # Служебную запись подшивает сценарий, выводя тип из действия. Принять такой
+        # тип снаружи значило бы позволить подделать историю задачи.
+        problems.add("type", "service_type", allowed=allowed, got=entry_type.value)
+        return None
+    return entry_type
+
+
+def _entry_title(value: Any) -> str:
+    title = _text(value).strip()
+    if not title:
+        raise FieldProblem("required")
+    if "\n" in title or "\r" in title:
+        raise FieldProblem("multiline_not_allowed")
+    if len(title) > MAX_ENTRY_TITLE_LENGTH:
+        raise FieldProblem("too_long", max=MAX_ENTRY_TITLE_LENGTH, got=len(title))
+    return title
+
+
+def _entry_body(value: Any, problems: FieldProblems) -> str:
+    """Тело необязательно: у записи вроде `artifact` всё содержание в заголовке и ссылках."""
+    if not isinstance(value, str):
+        problems.add("body", "not_a_string")
+        return ""
+    if len(value) > MAX_ENTRY_BODY_LENGTH:
+        problems.add("body", "too_long", max=MAX_ENTRY_BODY_LENGTH, got=len(value))
+        return ""
+    return value.strip()
+
+
+def _entry_refs(
+    value: Any,
+    problems: FieldProblems,
+) -> tuple[tuple[TaskRef | EntryRef, ...], list[str]]:
+    """Разбирает ссылки: трекерные отдельно для проверки существования, все — строками."""
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        problems.add("refs", "not_a_list")
+        return (), []
+
+    parsed: list[TaskRef | EntryRef] = []
+    strings: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        with problems.field("refs"):
+            ref = _text(item).strip()
+            if not ref:
+                raise FieldProblem("empty_item")
+            if len(ref) > MAX_REF_LENGTH:
+                raise FieldProblem("too_long", ref=ref, max=MAX_REF_LENGTH, got=len(ref))
+            target = parse_ref(ref)
+            # Ссылка внутрь трекера хранится канонической (`trk-42#7` → `TRK-42#7`):
+            # иначе одна и та же запись выглядела бы в делах по-разному.
+            canonical = _format_ref(target) if target is not None else ref
+            if canonical not in seen:
+                seen.add(canonical)
+                strings.append(canonical)
+                if target is not None:
+                    parsed.append(target)
+    if len(strings) > MAX_REFS:
+        problems.add("refs", "too_many", max=MAX_REFS, got=len(strings))
+    return tuple(parsed), strings
+
+
+def _format_ref(target: TaskRef | EntryRef) -> str:
+    if isinstance(target, EntryRef):
+        return format_entry_ref(target.key, target.no)
+    return target.key
+
+
+def _text(value: Any) -> str:
+    if not isinstance(value, str):
+        raise FieldProblem("not_a_string")
+    return value
+
+
+def _shorten(title: str) -> str:
+    if len(title) <= MAX_ENTRY_TITLE_LENGTH:
+        return title
+    return title[: MAX_ENTRY_TITLE_LENGTH - len(TITLE_ELLIPSIS)] + TITLE_ELLIPSIS
+
+
+# --- Внутреннее: нагрузка по типам --------------------------------------------------
+#
+# Одна функция на тип, все с одной сигнатурой: сырая нагрузка, контекст задачи,
+# накопитель замечаний. Поле, которого нет в нагрузке типа, отвергается — «лишнее»
+# молча выброшенное поле означало бы, что агент считает записанным то, чего в деле нет.
+
+
+type _PayloadBuilder = Callable[[dict[str, Any], EntryContext, FieldProblems], dict[str, Any]]
+
+
+def _no_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """У `decision`, `attempt`, `finding`, `artifact` и `note` нагрузки нет."""
+    _reject_extra(raw, (), problems)
+    return {}
+
+
+def _summary_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """Четыре части, все непустые: справка без «осталось» бесполезна преемнику."""
+    _reject_extra(raw, SUMMARY_PARTS, problems)
+    payload: dict[str, Any] = {}
+    for part in SUMMARY_PARTS:
+        with problems.field(part):
+            payload[part] = _summary_part(raw.get(part))
+    return payload
+
+
+def _summary_part(value: Any) -> str:
+    part = _text(value).strip()
+    if not part:
+        raise FieldProblem("required")
+    if len(part) > MAX_SUMMARY_PART_LENGTH:
+        raise FieldProblem("too_long", max=MAX_SUMMARY_PART_LENGTH, got=len(part))
+    return part
+
+
+def _question_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """Адресаты и признак `blocking`. Существование адресатов проверяет сценарий."""
+    _reject_extra(raw, ("addressees", "blocking"), problems)
+    payload: dict[str, Any] = {}
+    with problems.field("addressees"):
+        payload["addressees"] = _addressees(raw.get("addressees"))
+    with problems.field("blocking"):
+        blocking = raw.get("blocking")
+        if not isinstance(blocking, bool):
+            # Обязателен и без значения по умолчанию: «можно ли продолжать без ответа»
+            # знает только спрашивающий, а угаданное значение решает за него.
+            raise FieldProblem("required" if blocking is None else "not_a_boolean")
+        payload["blocking"] = blocking
+    return payload
+
+
+def _addressees(value: Any) -> list[str]:
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise FieldProblem("not_a_list")
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise FieldProblem("not_a_string")
+        name = item.strip().lower()
+        if not name:
+            raise FieldProblem("empty_item")
+        if name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    if not names:
+        raise FieldProblem("required")
+    if len(names) > MAX_ADDRESSEES:
+        raise FieldProblem("too_many", max=MAX_ADDRESSEES, got=len(names))
+    return names
+
+
+def _answer_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """Номер вопроса той же задачи. Что это именно вопрос, проверяет сценарий."""
+    _reject_extra(raw, ("question_no",), problems)
+    payload: dict[str, Any] = {}
+    with problems.field("question_no"):
+        payload["question_no"] = _entry_number(raw.get("question_no"))
+    return payload
+
+
+def _verdict_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """Номер обзорной проверки в пределах списка задачи и исход из двух значений."""
+    _reject_extra(raw, ("check_no", "outcome"), problems)
+    payload: dict[str, Any] = {}
+    with problems.field("check_no"):
+        payload["check_no"] = _check_number(raw.get("check_no"), context.checks)
+    with problems.field("outcome"):
+        try:
+            payload["outcome"] = VerdictOutcome(raw.get("outcome")).value
+        except ValueError:
+            raise FieldProblem(
+                "not_allowed", allowed=[outcome.value for outcome in VerdictOutcome]
+            ) from None
+    return payload
+
+
+def _entry_number(value: Any) -> int:
+    """Номер записи: целое с 1. `bool` — тоже `int`, поэтому отсеивается явно."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise FieldProblem("required" if value is None else "not_an_integer")
+    if value < FIRST_ENTRY_NUMBER:
+        raise FieldProblem("out_of_range", min=FIRST_ENTRY_NUMBER, got=value)
+    return value
+
+
+def _check_number(value: Any, checks: Sequence[str]) -> int:
+    """Номер проверки: позиция в списке `checks` задачи, нумерация с 1.
+
+    Допустимый диапазон уезжает в подробностях: агент не обязан помнить, сколько
+    проверок в задаче, а из ответа это должно быть видно без второго запроса.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise FieldProblem("required" if value is None else "not_an_integer")
+    last = FIRST_CHECK_NUMBER + len(checks) - 1
+    if not checks:
+        raise FieldProblem("no_checks", got=value)
+    if not FIRST_CHECK_NUMBER <= value <= last:
+        raise FieldProblem("out_of_range", min=FIRST_CHECK_NUMBER, max=last, got=value)
+    return value
+
+
+def _reject_extra(raw: dict[str, Any], allowed: Sequence[str], problems: FieldProblems) -> None:
+    for name in sorted(set(raw) - set(allowed)):
+        problems.add(name, "not_allowed", allowed=list(allowed))
+
+
+_PAYLOAD_BUILDERS: dict[EntryType, _PayloadBuilder] = {
+    EntryType.SUMMARY: _summary_payload,
+    EntryType.DECISION: _no_payload,
+    EntryType.ATTEMPT: _no_payload,
+    EntryType.FINDING: _no_payload,
+    EntryType.ARTIFACT: _no_payload,
+    EntryType.QUESTION: _question_payload,
+    EntryType.ANSWER: _answer_payload,
+    EntryType.VERDICT: _verdict_payload,
+    EntryType.NOTE: _no_payload,
+}
+
+#: Откуда берётся заголовок у типов, которые его не принимают. Строка уезжает в
+#: подробности отказа: клиент, приславший заголовок, должен понять, чем его заменили.
+_TITLE_SOURCES: dict[EntryType, str] = {
+    EntryType.SUMMARY: "next_step",
+    EntryType.ANSWER: "question_no",
+    EntryType.VERDICT: "check_no, outcome",
+}
+
+
+def _derive_title(entry_type: EntryType, payload: dict[str, Any], context: EntryContext) -> str:
+    """Заголовок типов, которые его не принимают.
+
+    Выведенные заголовки — служебный слой, поэтому английские, как и у записей трекера
+    (`Status changed: backlog -> open`). Исключение — сводка: её заголовок это первая
+    строка текста автора, то есть пользовательские данные.
+    """
+    if entry_type is EntryType.SUMMARY:
+        return summary_title(payload["next_step"])
+    if entry_type is EntryType.ANSWER:
+        return f"Answer to {format_entry_ref(context.task_key, payload['question_no'])}"
+    if entry_type is EntryType.VERDICT:
+        return f"Verdict on check {payload['check_no']}: {payload['outcome']}"
+    raise AssertionError(f"Entry type {entry_type.value} carries its own title")

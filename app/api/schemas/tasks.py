@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
-from app.api.schemas.entries import EntryHeadingRead
+from app.api.schemas.entries import EntryHeadingRead, QuestionEntryRead, SummaryEntryRead
 from app.domain.tasks import (
     MAX_ASSIGNEE_LENGTH,
     MAX_CHECKS,
@@ -77,14 +77,45 @@ class TaskRead(BaseModel):
     updated_at: datetime
 
 
-class TaskPackageRead(BaseModel):
-    """Пакет преемника (`CONCEPT.md`, 4.2) в объёме задачи 22.
+class TaskFeaturesRead(BaseModel):
+    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).
 
-    Карточка, переходы по таблице и опись дела. Задача 23 добавляет последнюю сводку,
-    открытые вопросы и вычисляемые признаки, задача 24 — связи и признак `blocked`.
+    Не хранятся колонками, а считаются из дела и связей: колонка была бы вторым местом,
+    где живёт правда, и разошлась бы с делом при первом же откате. Признак `blocked`
+    добавляет задача 24 вместе со связями.
+    """
+
+    open_questions: int = Field(examples=[2], description="Questions with no answer")
+    open_blocking_questions: int = Field(
+        examples=[1], description="Of those, the ones marked `blocking`"
+    )
+    last_summary_at: datetime | None = Field(
+        default=None,
+        description="When the latest summary was filed; null if the case has none",
+    )
+
+
+class TaskPackageRead(BaseModel):
+    """Пакет преемника (`CONCEPT.md`, 4.2).
+
+    Всё, что нужно агенту с чистым контекстом, одним вызовом. Полно хранится, по
+    оглавлению читается: карточка, признаки, последняя сводка и открытые вопросы
+    приходят целиком, остальные записи — строками описи, а их тела запрашиваются
+    точечно. Задача 24 добавляет сюда связи.
     """
 
     task: TaskRead
+    features: TaskFeaturesRead
+    summary: SummaryEntryRead | None = Field(
+        default=None,
+        description=(
+            "The latest summary in full: what was done, what is left, what is in the "
+            "way, what is next. Null until the case has one"
+        ),
+    )
+    questions: list[QuestionEntryRead] = Field(
+        description="Every question with no answer yet, in full"
+    )
     transitions: list[TaskStatus] = Field(
         examples=[[TaskStatus.OPEN, TaskStatus.CANCELLED]],
         description=(
