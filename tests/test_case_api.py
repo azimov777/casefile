@@ -250,6 +250,7 @@ async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_
     assert [question["title"] for question in data["questions"]] == ["Второй вопрос"]
     assert data["questions"][0]["body"] == "Подробности"
     assert data["features"] == {
+        "blocked": False,
         "open_questions": 1,
         "open_blocking_questions": 0,
         "last_summary_at": data["summary"]["created_at"],

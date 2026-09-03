@@ -9,7 +9,9 @@ from app.domain.errors import (
     ChecksNotPassedError,
     InvalidTaskKeyError,
     SummaryRequiredError,
+    TaskBlockedError,
     TaskFieldsInvalidError,
+    TaskHasUnclosedChildrenError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
     TransitionReasonRequiredError,
@@ -51,6 +53,8 @@ def facts(
     checks: tuple[str, ...] = ("проверка",),
     has_summary: bool = True,
     pending_checks: tuple[int, ...] | None = (),
+    blockers: tuple[str, ...] | None = (),
+    children: tuple[str, ...] | None = (),
 ) -> TransitionFacts:
     """Факты перехода, у которых по умолчанию сошлось всё, кроме проверяемого.
 
@@ -68,6 +72,8 @@ def facts(
         checks=checks,
         has_summary_since_in_progress=has_summary,
         checks_without_passed_verdict=pending_checks,
+        open_blockers=blockers,
+        unclosed_children=children,
     )
 
 
@@ -205,7 +211,7 @@ def test_the_section_check_only_guards_the_move_into_open() -> None:
 
 def test_the_check_list_is_the_extension_point() -> None:
     """Следующие задачи добавляют проверки в список, а не в таблицу."""
-    assert len(TRANSITION_CHECKS) == 4
+    assert len(TRANSITION_CHECKS) == 6
     assert all(callable(check) for check in TRANSITION_CHECKS)
 
 
@@ -293,6 +299,50 @@ def test_closing_lists_the_checks_without_a_passing_verdict() -> None:
     ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, pending_checks=()))
 
 
+# --- Проверки перехода задачи 24 ------------------------------------------------------
+
+
+def test_an_open_blocker_keeps_the_task_out_of_work() -> None:
+    """Обзорная проверка 1 на уровне домена: отказ называет открытые блокеры."""
+    with pytest.raises(TaskBlockedError) as error:
+        ensure_transition_allowed(
+            facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, blockers=("TRK-2", "TRK-3"))
+        )
+
+    assert error.value.code == "task_blocked"
+    assert error.value.status_code == 409
+    assert error.value.details["blockers"] == ["TRK-2", "TRK-3"]
+
+    ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, blockers=()))
+
+
+def test_blockers_are_checked_only_on_the_way_into_work() -> None:
+    """Закрытие и откат блокером не запрещены: связь мешает взять задачу, а не вести её."""
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.REVIEW, blockers=("TRK-2",)))
+    ensure_transition_allowed(
+        facts(TaskStatus.OPEN, TaskStatus.CANCELLED, reason="передумали", blockers=("TRK-2",))
+    )
+
+
+def test_unclosed_children_keep_the_parent_open() -> None:
+    """Обзорная проверка 2 на уровне домена: отказ называет незакрытых детей."""
+    with pytest.raises(TaskHasUnclosedChildrenError) as error:
+        ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, children=("TRK-4",)))
+
+    assert error.value.code == "task_has_unclosed_children"
+    assert error.value.status_code == 409
+    assert error.value.details["children"] == ["TRK-4"]
+
+    ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, children=()))
+
+
+def test_children_do_not_block_cancelling_the_parent() -> None:
+    """Правило названо для `done`: отменить родителя с живыми детьми можно."""
+    ensure_transition_allowed(
+        facts(TaskStatus.REVIEW, TaskStatus.CANCELLED, reason="отказались", children=("TRK-4",))
+    )
+
+
 def test_an_unfilled_fact_forbids_the_move() -> None:
     """Значение по умолчанию запрещает переход: забытый факт не должен выглядеть успехом.
 
@@ -325,3 +375,35 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
         )
 
     assert error.value.details["checks"] == [1, 2]
+
+    with pytest.raises(TaskBlockedError) as blocked:
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.OPEN,
+                to_status=TaskStatus.IN_PROGRESS,
+                reason=None,
+                sections=FILLED,
+                checks=("первая",),
+                has_summary_since_in_progress=True,
+            )
+        )
+
+    # Назвать блокеры нечем, поэтому отказ говорит причину прямо, а не пустым списком.
+    assert blocked.value.details["reason"] == "blockers_not_collected"
+    assert "blockers" not in blocked.value.details
+
+    with pytest.raises(TaskHasUnclosedChildrenError) as children:
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.REVIEW,
+                to_status=TaskStatus.DONE,
+                reason=None,
+                sections=FILLED,
+                checks=(),
+                checks_without_passed_verdict=(),
+            )
+        )
+
+    assert children.value.details["reason"] == "children_not_collected"
