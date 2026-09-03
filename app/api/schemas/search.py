@@ -1,0 +1,278 @@
+"""Схемы отбора задач: параметры запроса, структурный фильтр и задача в выдаче.
+
+## Почему у задачи в выдаче все поля необязательны
+
+Список умеет отдавать подмножество полей (`fields`), и это не оптимизация, а требование
+концепции: полная задача с пятью разделами съедает контекст агента, которому нужен один
+столбец ключей. Схема обязана честно это показывать — поле, которого может не быть, в
+сгенерированном клиенте должно быть необязательным. Маршрут отдаёт ответ с
+`response_model_exclude_unset`, поэтому непрошенные поля не приезжают ни как `null`, ни
+как значение по умолчанию.
+
+Без явного `fields` возвращается задача целиком — ровно в том же виде, в каком её отдаёт
+чтение: набор полей у `TaskSearchRead` и `TaskRead` совпадает, и это стережёт тест. Два
+разных представления одной задачи в одном API — то, чего проект не допускает.
+
+## Два способа задать отбор и один результат
+
+`query` — строка на языке запросов, остальные параметры — структурный фильтр. Их можно
+сочетать: условия складываются по `and`. Значения структурного фильтра разбираются теми
+же правилами, что и значения языка, поэтому `?assignee=empty()` и `assignee: empty()` —
+это буквально один путь исполнения.
+"""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import Depends, Query
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.api.schemas.authors import AuthorRead
+from app.api.schemas.common import CollectionResponse
+from app.api.schemas.tasks import TaskQueueRead
+from app.db.models.task import Task
+from app.domain.search import (
+    MAX_QUERY_LENGTH,
+    MAX_SORT_TERMS,
+    MAX_VALUES_PER_CONDITION,
+    Operator,
+    searchable_names,
+    sortable_names,
+)
+from app.domain.tasks import TaskPriority, TaskStatus
+from app.services.search import SearchOutcome, StructuredTerm
+
+_QUERY_DESCRIPTION = (
+    "Query language string, for example `queue: TRK and status: open and blocked: false "
+    "and open_blocking_questions: 0`. Fields: "
+    + ", ".join(f"`{name}`" for name in searchable_names())
+    + ". Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, "
+    "`not in`; `empty()` matches tasks with no value in the field. Combine with `and`, "
+    "`or` and parentheses. Values with spaces or a leading language word go in quotes. "
+    "A parse error answers 422 with the position of the offending character"
+)
+_SORT_DESCRIPTION = (
+    "Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. "
+    "Sortable: " + ", ".join(f"`{name}`" for name in sortable_names()) + ". `key` orders "
+    "by queue and task number, so `TRK-10` follows `TRK-2`. The result is always "
+    "tie-broken by task id, so paging stays stable while tasks are being created"
+)
+_FIELDS_DESCRIPTION = (
+    "Fields to return, to keep the answer small. Omit for the whole task. The task key "
+    "is always included"
+)
+_TAGS_DESCRIPTION = (
+    "Tags, matched exactly and case-sensitively. Pass the parameter more than once to "
+    "accept any of several tags"
+)
+
+QueryParam = Annotated[
+    str | None,
+    Query(
+        max_length=MAX_QUERY_LENGTH,
+        examples=["queue: TRK and status: open and blocked: false"],
+        description=_QUERY_DESCRIPTION,
+    ),
+]
+SortParam = Annotated[
+    list[str] | None,
+    Query(max_length=MAX_SORT_TERMS, examples=[["-updated_at"]], description=_SORT_DESCRIPTION),
+]
+FieldsParam = Annotated[
+    list[str] | None,
+    Query(examples=[["title", "status"]], description=_FIELDS_DESCRIPTION),
+]
+
+
+@dataclass(frozen=True, slots=True)
+class TaskFilters:
+    """Структурный фильтр: по параметру запроса на поле отбора.
+
+    Значения одного параметра складываются по `or`, параметры между собой — по `and`.
+    Это и есть смысл формы поиска: сузить по каждому полю, приняв любое из отмеченных
+    значений. Параметр, который не передали, не фильтрует; переданный пустым списком —
+    тоже, иначе снятая в интерфейсе галочка обнуляла бы выдачу.
+
+    Датакласс через `Depends()`, а не модель Pydantic через `Query()`: FastAPI
+    раскладывает модель на отдельные параметры, **только** если она единственный
+    параметр запроса у маршрута, а здесь рядом стоят `query`, `sort`, `fields`, `limit`
+    и `cursor`. С моделью отбор молча перестал бы работать — параметры доезжали бы
+    пустыми, и ответ выглядел бы как «ничего не отфильтровано» (`docs/notes/api.md`).
+    """
+
+    queue: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["TRK"]],
+            description="Queue keys; matching ignores case",
+        ),
+    ] = None
+    status: Annotated[
+        list[TaskStatus] | None, Query(examples=[[TaskStatus.OPEN]], description="Task statuses")
+    ] = None
+    assignee: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["release_bot"]],
+            description="Assignee names, matched exactly; `empty()` finds unassigned tasks",
+        ),
+    ] = None
+    tags: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["backend"]],
+            description=_TAGS_DESCRIPTION,
+        ),
+    ] = None
+    priority: Annotated[
+        list[TaskPriority] | None,
+        Query(examples=[[TaskPriority.HIGH]], description="Task priorities"),
+    ] = None
+    blocked: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "Whether the task has a `blocked_by` link to a task that is neither "
+                "`done` nor `cancelled`. Computed from links, not stored"
+            )
+        ),
+    ] = None
+    open_questions: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description=(
+                "Exact number of questions with no answer. Use the query language for "
+                "ranges: `open_questions: > 0`"
+            ),
+        ),
+    ] = None
+    open_blocking_questions: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description=("Of those, the ones marked `blocking`; `0` means nothing is in the way"),
+        ),
+    ] = None
+    text: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            examples=["выдача ключей"],
+            description="Substring of the title or the description, matched case-insensitively",
+        ),
+    ] = None
+
+    def to_terms(self) -> list[StructuredTerm]:
+        """Структурный фильтр → канонические условия. Одно место перевода на весь API.
+
+        Перечисления отдаются строками, а не членами: значение уезжает в тот же разбор,
+        что и значение языка, и второй способ его понять развёл бы два входа поиска.
+        """
+        terms: list[StructuredTerm] = [
+            StructuredTerm(name=name, values=values)
+            for name, values in (
+                ("queue", self.queue),
+                ("status", None if self.status is None else [item.value for item in self.status]),
+                ("assignee", self.assignee),
+                ("tags", self.tags),
+                (
+                    "priority",
+                    None if self.priority is None else [item.value for item in self.priority],
+                ),
+            )
+            if values
+        ]
+        terms.extend(
+            StructuredTerm(name=name, values=[value])
+            for name, value in (
+                ("blocked", self.blocked),
+                ("open_questions", self.open_questions),
+                ("open_blocking_questions", self.open_blocking_questions),
+            )
+            if value is not None
+        )
+        if self.text is not None:
+            terms.append(
+                StructuredTerm(name="text", values=[self.text], operator=Operator.CONTAINS)
+            )
+        return terms
+
+
+TaskFilterParams = Annotated[TaskFilters, Depends()]
+
+
+class TaskSearchRead(BaseModel):
+    """Задача в выдаче списка. Приезжают только запрошенные поля.
+
+    Ключ приходит всегда: выдача без него бесполезна — по ней нельзя ни прочитать
+    задачу, ни сослаться на неё.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str = Field(examples=["TRK-42"], description="Immutable and never reused")
+    id: uuid.UUID | None = None
+    queue: TaskQueueRead | None = None
+    title: str | None = None
+    description: str | None = None
+    goal: str | None = None
+    context: str | None = None
+    constraints: str | None = None
+    output: str | None = None
+    checks: list[str] | None = None
+    status: TaskStatus | None = None
+    assignee: str | None = None
+    tags: list[str] | None = None
+    priority: TaskPriority | None = None
+    version: int | None = None
+    created_by: AuthorRead | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @classmethod
+    def of(cls, task: Task, *, fields: tuple[str, ...] = ()) -> TaskSearchRead:
+        """Задача в выдаче. Пустой набор полей означает «всё», как при чтении задачи."""
+        payload: dict[str, object] = {
+            "id": task.id,
+            "key": task.key,
+            "queue": TaskQueueRead.model_validate(task.queue),
+            "title": task.title,
+            "description": task.description,
+            "goal": task.goal,
+            "context": task.context,
+            "constraints": task.constraints,
+            "output": task.output,
+            "checks": list(task.checks),
+            "status": task.status,
+            "assignee": task.assignee,
+            "tags": list(task.tags),
+            "priority": task.priority,
+            "version": task.version,
+            "created_by": AuthorRead.model_validate(task.created_by, from_attributes=True),
+            "created_at": task.created_at,
+            "updated_at": task.updated_at,
+        }
+        if fields:
+            payload = {name: value for name, value in payload.items() if name in fields}
+        return cls(**payload)  # type: ignore[arg-type]
+
+
+def search_page(outcome: SearchOutcome) -> CollectionResponse[TaskSearchRead]:
+    """Итог поиска в страницу ответа: выбор полей берётся из разрешённого фильтра.
+
+    Живёт здесь, а не в роутере, потому что то же преобразование понадобится любому
+    второму входу в поиск: вычислять `fields` заново значило бы завести второе
+    толкование того, что именно просил клиент.
+    """
+    return CollectionResponse[TaskSearchRead].of(
+        [TaskSearchRead.of(task, fields=outcome.resolved.fields) for task in outcome.page.items],
+        next_cursor=outcome.page.next_cursor,
+    )

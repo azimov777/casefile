@@ -20,6 +20,14 @@ from app.api.schemas.entries import (
     entry_read,
 )
 from app.api.schemas.links import TaskLinkRead
+from app.api.schemas.search import (
+    FieldsParam,
+    QueryParam,
+    SortParam,
+    TaskFilterParams,
+    TaskSearchRead,
+    search_page,
+)
 from app.api.schemas.tasks import (
     TaskCreate,
     TaskFeaturesRead,
@@ -32,6 +40,7 @@ from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.case import EntryType
 from app.services import case as case_service
 from app.services import queues as queues_service
+from app.services import search as search_service
 from app.services import tasks as service
 from app.services.tasks import TaskChanges
 
@@ -92,6 +101,50 @@ async def create_task(
         priority=payload.priority,
     )
     return DataResponse[TaskRead](data=TaskRead.model_validate(task))
+
+
+@router.get("", summary="List and search tasks", response_model_exclude_unset=True)
+async def list_tasks(
+    session: SessionDep,
+    actor: ActorDep,
+    filters: TaskFilterParams,
+    query: QueryParam = None,
+    sort: SortParam = None,
+    fields: FieldsParam = None,
+    limit: LimitQuery = DEFAULT_PAGE_SIZE,
+    cursor: CursorQuery = None,
+) -> CollectionResponse[TaskSearchRead]:
+    """Задачи по строке запроса, по структурному фильтру или по обоим сразу.
+
+    Оба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый
+    результат в одинаковом порядке: `?query=queue: TRK and status: open` и
+    `?queue=TRK&status=open` — это буквально один путь исполнения. Условия из разных
+    источников складываются по `and`.
+
+    Запрос без условий — законный: это «все задачи» по ключу, и отдельного способа
+    сказать то же самое заводить незачем. Ошибка разбора приходит `422
+    invalid_search_query` с позицией символа; незнакомое имя поля — `422
+    search_field_unknown` со списком допустимых в `details.allowed`.
+
+    Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
+    `open_blocking_questions`): колонок под них нет, они считаются из связей и дела
+    прямо в запросе. Запрос кандидатов назначателя — одна строка: `queue: TRK and
+    status: open and blocked: false and open_blocking_questions: 0`.
+
+    `fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с
+    пятью разделами съедает контекст агента, которому нужен столбец ключей.
+    """
+    outcome = await search_service.search_tasks(
+        session,
+        actor=actor,
+        query=query,
+        structured=filters.to_terms(),
+        sort=sort or (),
+        fields=fields or (),
+        limit=limit,
+        cursor=cursor,
+    )
+    return search_page(outcome)
 
 
 @router.get("/{task_key}", summary="Read a task")
