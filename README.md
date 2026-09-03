@@ -150,7 +150,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
           "checks": ["Пустое название не тратит номер"]}' \
      http://localhost:8000/api/v1/tasks
 
-# пакет преемника: карточка, доступные переходы, опись дела
+# пакет преемника: карточка, признаки, последняя сводка, открытые вопросы, опись дела
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1
 
 # поправить раздел (только в backlog) с проверкой версии
@@ -161,13 +161,77 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/js
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      -d '{"to": "open"}' http://localhost:8000/api/v1/tasks/TRK-1/transition
 
-# записи дела с телами и нагрузкой
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/entries
+# записи дела с телами и нагрузкой; фильтры nos, types, after_no
+curl -H "Authorization: Bearer $TOKEN" \
+     'http://localhost:8000/api/v1/tasks/TRK-1/entries?types=summary&after_no=3'
+
+# одна запись по её номеру в задаче — адрес из ссылки TRK-1#5
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/entries/5
 ```
 
+#### Записи агента
+
+Дело пополняется одним маршрутом `POST /tasks/{key}/entries`. Тело — размеченное по
+`type` объединение: у каждого типа своя форма `payload`, и клиент, сгенерированный из
+OpenAPI, знает её точно.
+
+```bash
+# сводка: четыре части, все непустые. Заголовок не принимается — им становится
+# первая строка next_step
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"type": "summary", "payload": {"done": "Разобрался", "remaining": "Дописать",
+          "blockers": "нет", "next_step": "Перенести вызов в конец create_task"}}' \
+     http://localhost:8000/api/v1/tasks/TRK-1/entries
+
+# вопрос участнику реестра; blocking обязателен и значения по умолчанию не имеет
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"type": "question", "title": "Какой ключ канонический?",
+          "payload": {"addressees": ["owner"], "blocking": true}}' \
+     http://localhost:8000/api/v1/tasks/TRK-1/entries
+
+# вердикт по обзорной проверке; тело записи — доказательство
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"type": "verdict", "body": "Прогон зелёный",
+          "payload": {"check_no": 1, "outcome": "passed"}}' \
+     http://localhost:8000/api/v1/tasks/TRK-1/entries
+
+# решение, попытка, находка, артефакт, заметка — без нагрузки, но с заголовком
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"type": "finding", "title": "Номер выдаётся до валидации",
+          "refs": ["TRK-1#3", "https://example.com/pr/12"]}' \
+     http://localhost:8000/api/v1/tasks/TRK-1/entries
+```
+
+Заголовок принимается только там, где его нечем вывести. У `summary` он равен первой
+строке `next_step`, у `answer` и `verdict` собирается из нагрузки. Служебные типы
+(`status_changed`, `created`, ...) подшивает сам трекер, и в запросе они не принимаются.
+`refs` со ссылками на задачи (`TRK-7`) и записи (`TRK-42#12`) проверяются на
+существование; адреса — нет.
+
+Две валидации перехода живут именно здесь: выход из `in_progress` требует сводки,
+подшитой **после последнего входа** в него (`409 summary_required`), а `review → done` —
+чтобы последний по времени вердикт каждой проверки был `passed` (`409 checks_not_passed`,
+проверки без него — в `details.checks`).
+
 Записи дела неизменяемы: маршрутов правки и удаления нет, а триггер в базе отклоняет
-`UPDATE` и `DELETE`. Записи агента (`summary`, `decision`, `question`, ...) добавляет
-задача 23.
+`UPDATE` и `DELETE`. Ошибочная запись исправляется следующей. В закрытую задачу записи
+подшивать можно — меняться нельзя полям, а не делу.
+
+#### Вопросы
+
+Вопрос — не отдельная сущность, а представление над делом: он открыт, пока в той же
+задаче нет записи `answer` с его номером.
+
+```bash
+# входящая: по умолчанию открытые вопросы участника, чьим токеном сделан запрос
+curl -H "Authorization: Bearer $TOKEN" \
+     'http://localhost:8000/api/v1/questions?blocking=true&queue=TRK'
+
+# ответить — записью в дело той задачи, где вопрос задан
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"type": "answer", "body": "Верхний регистр", "payload": {"question_no": 4}}' \
+     http://localhost:8000/api/v1/tasks/TRK-1/entries
+```
 
 ### Временные агенты и `X-Actor-Label`
 
