@@ -5,11 +5,17 @@
 Здесь же живёт единственный в проекте рекурсивный запрос. Он отвечает на один вопрос —
 достижима ли одна задача из другой по рёбрам **одного** вида, — и этого хватает и
 иерархии, и блокировкам: графа два, а обход у них один.
+
+Часть выборок объявлена функциями модуля, а не методами репозитория: `open_blockers_of`
+— единственное определение признака `blocked` в SQL, и поиску нужен тот же запрос,
+вложенный в `EXISTS` по каждой строке выдачи. Метод, привязанный к сессии, туда не
+годится, а второе написание условия развело бы поиск с карточкой (`docs/notes/search.md`).
 """
 
 import uuid
+from typing import Any
 
-from sqlalchemy import Integer, Uuid, cast, literal, or_, select
+from sqlalchemy import Integer, Select, Uuid, cast, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -72,11 +78,13 @@ class LinkRepository:
         до того, как что-либо прочитано, и тащить ради них весь список связей значило
         бы платить лишним запросом за каждый переход в `backlog`.
         """
-        return await self._related_keys(task_id, kind=LinkKind.BLOCKS, as_source=False)
+        return await self._ordered_keys(open_blockers_of(task_id))
 
     async def unclosed_child_keys(self, task_id: uuid.UUID) -> list[str]:
         """Ключи детей не в `done` и не в `cancelled`: связь `parent`, где она — источник."""
-        return await self._related_keys(task_id, kind=LinkKind.PARENT, as_source=True)
+        return await self._ordered_keys(
+            related_task_keys(task_id, kind=LinkKind.PARENT, as_source=True)
+        )
 
     async def reaches(
         self,
@@ -126,24 +134,42 @@ class LinkRepository:
         await self._session.delete(link)
         await self._session.flush()
 
-    async def _related_keys(
-        self,
-        task_id: uuid.UUID,
-        *,
-        kind: LinkKind,
-        as_source: bool,
-    ) -> list[str]:
-        """Ключи незакрытых задач на другой стороне связей этого вида.
+    async def _ordered_keys(self, statement: Select[tuple[str]]) -> list[str]:
+        """Ключи в порядке появления связи, а не по ключу задачи на другой стороне.
 
-        `as_source` — с какой стороны стоит сама задача: у детей она источник
-        (`parent`), у блокеров — цель (`blocks`).
+        Порядок дописывается здесь, а не в самом запросе: тот же запрос уходит внутрь
+        `EXISTS` у поиска, где сортировать нечего и незачем.
         """
-        own_side = Link.source_id if as_source else Link.target_id
-        other_side = Link.target_id if as_source else Link.source_id
-        statement = (
-            select(Task.key)
-            .join(Link, Task.id == other_side)
-            .where(own_side == task_id, Link.kind == kind, Task.status.not_in(CLOSED_STATUSES))
-            .order_by(Link.created_at, Link.id)
-        )
-        return list(await self._session.scalars(statement))
+        return list(await self._session.scalars(statement.order_by(Link.created_at, Link.id)))
+
+
+def open_blockers_of(task_id: Any) -> Select[tuple[str]]:
+    """Ключи незакрытых блокеров задачи — единственное определение признака `blocked`.
+
+    Признак равен «есть связь `blocks`, где эта задача — цель, а задача-источник не в
+    `done` и не в `cancelled`» (`CONCEPT.md`, 4.3). Отсюда его берут двое: проверка
+    перехода в `in_progress` — списком ключей, и поиск — обёрткой `EXISTS` по каждой
+    строке выдачи. Третьего написания этого условия быть не должно: разойдясь, поиск и
+    карточка начнут отвечать по-разному на один вопрос.
+
+    `task_id` поэтому и объявлен как `Any`: принимается и готовый идентификатор, и
+    колонка внешнего запроса (`Task.id`). Задача на другой стороне берётся псевдонимом
+    — без него запрос нельзя вложить в выборку по той же таблице.
+    """
+    return related_task_keys(task_id, kind=LinkKind.BLOCKS, as_source=False)
+
+
+def related_task_keys(task_id: Any, *, kind: LinkKind, as_source: bool) -> Select[tuple[str]]:
+    """Ключи незакрытых задач на другой стороне связей этого вида, без порядка.
+
+    `as_source` — с какой стороны стоит сама задача: у детей она источник (`parent`), у
+    блокеров — цель (`blocks`).
+    """
+    other = aliased(Task, name="related_task")
+    own_side = Link.source_id if as_source else Link.target_id
+    other_side = Link.target_id if as_source else Link.source_id
+    return (
+        select(other.key)
+        .join(Link, other.id == other_side)
+        .where(own_side == task_id, Link.kind == kind, other.status.not_in(CLOSED_STATUSES))
+    )

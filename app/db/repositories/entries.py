@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.entry import Entry
 from app.db.models.task import Task
@@ -278,7 +279,7 @@ class EntryRepository:
         if queue_id is not None:
             statement = statement.where(Task.queue_id == queue_id)
         if blocking is not None:
-            statement = statement.where(Entry.payload["blocking"].as_boolean() == blocking)
+            statement = statement.where(blocking_is(blocking))
         if open_only:
             statement = _unanswered(statement)
         if cursor is not None:
@@ -296,6 +297,43 @@ class EntryRepository:
 #: Признак записи-вопроса. Отдельной константой, потому что участвует и в выборке
 #: открытых вопросов задачи, и во «входящей» участника: две копии условия разъехались бы.
 _IS_QUESTION = Entry.type == EntryType.QUESTION
+
+
+def blocking_is(value: bool) -> ColumnElement[bool]:
+    """Помечен ли вопрос как блокирующий — то же определение, что и в карточке.
+
+    Питоновский двойник этого условия — `app/domain/case.py`, `is_blocking_question`:
+    карточка считает признак из уже прочитанных записей, поиск — запросом. Разойдясь,
+    они начнут отвечать по-разному на один вопрос, поэтому обе формы названы явно и
+    сверяются тестом на одних и тех же данных.
+
+    У записи не-вопроса ключа `blocking` в нагрузке нет, и `as_boolean()` даёт NULL:
+    сравнение с ним ложно, то есть такая запись не попадёт ни в блокирующие, ни в
+    неблокирующие. Условие поэтому всегда идёт вместе с `_IS_QUESTION`.
+    """
+    return Entry.payload["blocking"].as_boolean() == value
+
+
+def open_question_count(task_id: Any, *, blocking: bool | None = None) -> Select[tuple[int]]:
+    """Запрос «сколько у задачи вопросов без ответа», годный и как подзапрос.
+
+    Одно определение открытого вопроса на весь проект: те же `_IS_QUESTION` и
+    `_unanswered`, что и у `open_questions`, из которого карточка считает свои счётчики
+    (`app/services/case.py`, `features`). Поиску нужны те же значения массово, поэтому
+    здесь именно запрос, а не список: `task_id` принимает и готовый идентификатор, и
+    колонку внешнего запроса (`Task.id`) — тогда подзапрос считается для каждой строки
+    выдачи.
+
+    Возвращается `Select`, а не результат: скоррелировать и превратить в скалярный
+    подзапрос обязан вызывающий, потому что только он знает, во что этот счёт
+    сравнивается.
+    """
+    statement = (
+        select(func.count()).select_from(Entry).where(Entry.task_id == task_id, _IS_QUESTION)
+    )
+    if blocking is not None:
+        statement = statement.where(blocking_is(blocking))
+    return _unanswered(statement)
 
 
 def _unanswered(statement: Select[Any]) -> Select[Any]:

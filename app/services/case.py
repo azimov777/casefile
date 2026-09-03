@@ -50,6 +50,7 @@ from app.domain.case import (
     VerdictOutcome,
     build_entry,
     format_entry_ref,
+    is_blocking_question,
 )
 from app.domain.errors import (
     ActorNotAddressableError,
@@ -143,12 +144,16 @@ def features(
     `blocked` приезжает готовым и **без значения по умолчанию**: считается он из связей,
     которых дело не знает, а умолчание `False` сделало бы забытый аргумент признаком,
     который врёт. Кто его считает — `app/services/links.py`, `blocked`.
+
+    Признак «вопрос блокирующий» берётся из домена (`is_blocking_question`), а не
+    проверяется здесь по месту: тот же признак поиск считает запросом, и третьей формы
+    одного определения быть не должно.
     """
     return TaskFeatures(
         blocked=blocked,
         open_questions=len(questions),
         open_blocking_questions=sum(
-            1 for question in questions if question.payload.get("blocking") is True
+            1 for question in questions if is_blocking_question(question.payload)
         ),
         last_summary_at=summary.created_at if summary is not None else None,
     )
