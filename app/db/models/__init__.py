@@ -7,16 +7,20 @@
 
 from app.db.base import Base, BaseModel
 from app.db.models.author import CreatedByMixin, created_by_columns
+from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
+from app.db.models.task import Task
 from app.db.models.token import Token
 
 __all__ = [
     "Base",
     "BaseModel",
     "CreatedByMixin",
+    "Entry",
     "Participant",
     "Queue",
+    "Task",
     "Token",
     "created_by_columns",
 ]

@@ -7,8 +7,9 @@
 Базовые семейства (`not_found`, `conflict`, `validation_error`, ...) живут в
 `app/core/errors.py`; здесь только их наследники со своим стабильным кодом.
 
-Сейчас в списке фундамент: участники, токены, метка временного агента и очереди.
-Задача, дело и связи приезжают сюда вместе со своими областями (задачи 22–24).
+В списке фундамент (участники, токены, метка временного агента, очереди) и задача с
+переходами (задача 22). Записи агента и связи приезжают сюда со своими областями
+(задачи 23–24).
 
 Исключение из правила одно и оно осознанное: ошибка, описывающая не предметную
 область, а механизм (недоступна база, испорчен курсор), живёт рядом с этим механизмом.
@@ -95,3 +96,81 @@ class InvalidQueueKeyError(ValidationError):
 
     code = "invalid_queue_key"
     message = "Queue key is invalid"
+
+
+# --- Задачи ---------------------------------------------------------------------------
+
+
+class TaskNotFoundError(NotFoundError):
+    """Задачи с таким ключом нет."""
+
+    code = "task_not_found"
+    message = "Task not found"
+
+
+class InvalidTaskKeyError(ValidationError):
+    """Ключ задачи не разбирается как `КЛЮЧ-НОМЕР`."""
+
+    code = "invalid_task_key"
+    message = "Task key is invalid"
+
+
+class TaskFieldsInvalidError(ValidationError):
+    """Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`."""
+
+    code = "task_fields_invalid"
+    message = "Task fields are invalid"
+
+
+class TaskVersionConflictError(ConflictError):
+    """Версия задачи разошлась: её изменили между чтением и записью.
+
+    Отдельный код, а не общий `conflict`: клиент по нему понимает, что нужно перечитать
+    задачу и повторить изменение, а не что запрос был неверным. Тихая перезапись здесь
+    хуже отказа — потерянное чужое изменение обнаруживается спустя дни.
+    """
+
+    code = "version_conflict"
+    message = "Task version is outdated"
+
+
+class TaskClosedError(ConflictError):
+    """Задача в `done` или `cancelled`: поля и связи закрытой задачи не меняются."""
+
+    code = "task_closed"
+    message = "Task is closed"
+
+
+class TaskFieldLockedError(ConflictError):
+    """Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`.
+
+    Это конфликт состояния, а не ошибка формы запроса: тот же запрос пройдёт, когда
+    задача вернётся в `backlog`.
+    """
+
+    code = "task_field_locked"
+    message = "Field cannot be changed in the current status"
+
+
+class TransitionNotAllowedError(ConflictError):
+    """Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`."""
+
+    code = "transition_not_allowed"
+    message = "Transition is not allowed"
+
+
+class TransitionReasonRequiredError(ValidationError):
+    """Шаг назад по цепочке статусов и отмена требуют причины `reason`."""
+
+    code = "transition_reason_required"
+    message = "Transition requires a reason"
+
+
+class TaskSectionsIncompleteError(ValidationError):
+    """Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст.
+
+    Незаполненные разделы перечислены в `details.fields` все сразу.
+    """
+
+    code = "task_sections_incomplete"
+    message = "Task sections are incomplete"

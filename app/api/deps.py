@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Header, Query
+from fastapi import Depends, Header, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,4 +88,15 @@ ActorDep = Annotated[Actor, Depends(get_actor)]
 LimitQuery = Annotated[int, Query(ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE, description="Page size")]
 CursorQuery = Annotated[
     str | None, Query(description="Cursor from `meta.next_cursor` of a previous page")
+]
+
+
+# Ключ задачи принимают роутеры задач, дела и связей (задачи 22–24), поэтому объявлен
+# здесь, а не по месту: объявленный в каждом роутере отдельно, он приезжал бы в схему с
+# разными описаниями, и в сгенерированном клиенте один параметр выглядел бы по-разному.
+# Шаблона нет намеренно: форму проверяет домен (`parse_task_key`), одинаково для REST
+# и MCP; адресация мягкая — `trk-42` находит `TRK-42`.
+TaskKeyPath = Annotated[
+    str,
+    Path(description="Task key `QUEUE-number`; matching ignores case", examples=["TRK-42"]),
 ]

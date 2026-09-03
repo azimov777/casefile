@@ -50,6 +50,7 @@
 | `not_found` | Object not found | Запрошенного объекта не существует. |
 | `participant_not_found` | Participant not found | Участника с таким именем или идентификатором нет. |
 | `queue_not_found` | Queue not found | Очереди с таким ключом нет. |
+| `task_not_found` | Task not found | Задачи с таким ключом нет. |
 | `token_not_found` | Token not found | Токена с таким идентификатором нет. |
 
 ## 405 — метод не поддержан
@@ -65,6 +66,10 @@
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
 | `queue_key_taken` | Queue key is already taken | Ключ очереди уже занят: ключи уникальны без учёта регистра. |
+| `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля и связи закрытой задачи не меняются. |
+| `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
+| `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
+| `version_conflict` | Task version is outdated | Версия задачи разошлась: её изменили между чтением и записью. |
 
 ## 422 — не прошло проверку
 
@@ -75,6 +80,10 @@
 | `invalid_page_size` | Page size is out of range | Запрошен размер страницы вне допустимых границ. |
 | `invalid_participant_name` | Participant name is invalid | Имя участника не соответствует шаблону. |
 | `invalid_queue_key` | Queue key is invalid | Ключ очереди не соответствует шаблону. |
+| `invalid_task_key` | Task key is invalid | Ключ задачи не разбирается как `КЛЮЧ-НОМЕР`. |
+| `task_fields_invalid` | Task fields are invalid | Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`. |
+| `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
+| `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов и отмена требуют причины `reason`. |
 | `validation_error` | Validation failed | Входные данные синтаксически корректны, но нарушают правило предметной области. |
 
 ## 429 — слишком часто

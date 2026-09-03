@@ -18,6 +18,10 @@ from app.domain.errors import InvalidQueueKeyError
 QUEUE_KEY_PATTERN = r"^[A-Za-z][A-Za-z0-9]{1,15}$"
 _QUEUE_KEY_RE = re.compile(QUEUE_KEY_PATTERN)
 
+#: Верхняя граница длины ключа по шаблону: под неё заданы колонка `queues.key` и
+#: предел длины ключа задачи (`app/domain/tasks.py`).
+MAX_QUEUE_KEY_LENGTH = 16
+
 
 def normalize_queue_key(key: str) -> str:
     """Канонический вид ключа: без пробелов по краям, в верхнем регистре."""
