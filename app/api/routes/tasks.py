@@ -19,6 +19,7 @@ from app.api.schemas.entries import (
     EntryRead,
     entry_read,
 )
+from app.api.schemas.links import TaskLinkRead
 from app.api.schemas.tasks import (
     TaskCreate,
     TaskFeaturesRead,
@@ -101,16 +102,18 @@ async def read_task(
 ) -> DataResponse[TaskPackageRead]:
     """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 
-    Карточка, вычисляемые признаки, последняя сводка целиком, открытые вопросы целиком,
-    опись дела и переходы по таблице. Тела остальных записей читаются отдельно в
-    `GET /tasks/{key}/entries`. Переходы перечислены по таблице; валидации (заполненные
-    разделы, сводка, вердикты) проверяются в момент перехода, а не при чтении.
+    Карточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые
+    признаки, последняя сводка целиком, открытые вопросы целиком, опись дела и переходы
+    по таблице. Тела остальных записей читаются отдельно в `GET /tasks/{key}/entries`.
+    Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
+    блокеры, дети) проверяются в момент перехода, а не при чтении.
     """
     package = await service.read_task_package(session, task_key, actor=actor)
     key = package.task.key
     return DataResponse[TaskPackageRead](
         data=TaskPackageRead(
             task=TaskRead.model_validate(package.task),
+            links=[TaskLinkRead.model_validate(link) for link in package.links],
             features=TaskFeaturesRead.model_validate(package.features, from_attributes=True),
             # `entry_read` отдаёт вариант по типу записи, а сценарий гарантирует, что
             # сюда попали именно сводка и вопросы: сузить тип здесь нечем и незачем.
@@ -167,7 +170,10 @@ async def transition_task(
     task_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после
     последнего входа в него (`409 summary_required`); `review → done` — положительного
     последнего вердикта по каждой проверке (`409 checks_not_passed`, проверки без него
-    в `details.checks`). Переход подшивает `status_changed` с `from`, `to` и `reason`.
+    в `details.checks`). Вход в `in_progress` отклоняется при открытом блокере (`409
+    task_blocked`, их ключи в `details.blockers`), переход в `done` — при детях не в
+    `done` и не в `cancelled` (`409 task_has_unclosed_children`, ключи в
+    `details.children`). Переход подшивает `status_changed` с `from`, `to` и `reason`.
     """
     task = await service.get_task(session, task_key)
     mutation = await service.transition_task(

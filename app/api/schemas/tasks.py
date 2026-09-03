@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
 from app.api.schemas.entries import EntryHeadingRead, QuestionEntryRead, SummaryEntryRead
+from app.api.schemas.links import TaskLinkRead
 from app.domain.tasks import (
     MAX_ASSIGNEE_LENGTH,
     MAX_CHECKS,
@@ -81,10 +82,16 @@ class TaskFeaturesRead(BaseModel):
     """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).
 
     Не хранятся колонками, а считаются из дела и связей: колонка была бы вторым местом,
-    где живёт правда, и разошлась бы с делом при первом же откате. Признак `blocked`
-    добавляет задача 24 вместе со связями.
+    где живёт правда, и разошлась бы с делом при первом же откате.
     """
 
+    blocked: bool = Field(
+        examples=[False],
+        description=(
+            "Whether the task has a `blocked_by` link to a task that is neither `done` "
+            "nor `cancelled`. Entering `in_progress` is refused while it is true"
+        ),
+    )
     open_questions: int = Field(examples=[2], description="Questions with no answer")
     open_blocking_questions: int = Field(
         examples=[1], description="Of those, the ones marked `blocking`"
@@ -99,12 +106,18 @@ class TaskPackageRead(BaseModel):
     """Пакет преемника (`CONCEPT.md`, 4.2).
 
     Всё, что нужно агенту с чистым контекстом, одним вызовом. Полно хранится, по
-    оглавлению читается: карточка, признаки, последняя сводка и открытые вопросы
+    оглавлению читается: карточка, связи, признаки, последняя сводка и открытые вопросы
     приходят целиком, остальные записи — строками описи, а их тела запрашиваются
-    точечно. Задача 24 добавляет сюда связи.
+    точечно.
     """
 
     task: TaskRead
+    links: list[TaskLinkRead] = Field(
+        description=(
+            "Links on both sides, each named from this task's point of view, with the "
+            "status of the task on the other side"
+        )
+    )
     features: TaskFeaturesRead
     summary: SummaryEntryRead | None = Field(
         default=None,
