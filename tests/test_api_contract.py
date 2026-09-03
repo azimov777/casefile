@@ -42,6 +42,7 @@ from app.api.contract import (
 )
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
+from app.db.models.task import Task
 
 #: Значение-затычка для развёртки без токена: до параметров дело не доходит, потому что
 #: зависимость аутентификации отказывает раньше. UUID, а не «x», чтобы параметры типа
@@ -235,7 +236,7 @@ def _substitute(path: str, values: dict[str, str]) -> str:
 
 
 @pytest.fixture
-async def sample(owner: Participant, queue: Queue) -> dict[str, str]:
+async def sample(owner: Participant, queue: Queue, task: Task) -> dict[str, str]:
     """Настоящие значения для каждого параметра пути.
 
     Значения настоящие, а не выдуманные: развёртка с токеном обязана получать `200`, и
@@ -245,6 +246,7 @@ async def sample(owner: Participant, queue: Queue) -> dict[str, str]:
     return {
         "participant_name": owner.name,
         "queue_key": queue.key,
+        "task_key": task.key,
         # Параметр, который встречается только у изменяющего маршрута: развёртка с
         # токеном ходит лишь по `GET`, но подстановка обязана знать их все — иначе
         # новый `GET` с таким параметром упал бы не с внятным сообщением, а с KeyError.

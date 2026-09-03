@@ -17,6 +17,10 @@ from fastapi.openapi.utils import get_openapi
 # «поле с таким именем» разрешает свободную форму и там, где о ней никто не думал.
 FREEFORM_SCHEMAS = {
     "details",
+    # Нагрузка записи дела зависит от типа записи. Типизацию по каждому типу отдельной
+    # моделью и размеченное объединение делает задача 23 — вместе с ней эта строка
+    # уходит, а тест начинает требовать форму.
+    "EntryRead.payload",
 }
 
 OPERATION_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -103,16 +107,24 @@ def test_no_objects_of_unknown_shape(schema: dict) -> None:
 def test_patch_field_is_not_nullable_when_null_has_no_meaning(schema: dict) -> None:
     """Схемы `PATCH` не должны разрешать `null`: сгенерированный клиент обязан это знать.
 
-    Проверяются обе схемы частичного обновления сразу: у описания участника и у полей
-    очереди `null` смысла не имеет, и поле, объявленное как `T | None`, разрешило бы
-    фронтенду отправить то, что сервер отвергнет.
+    Проверяются все схемы частичного обновления сразу: у описания участника, у полей
+    очереди и у текстов задачи `null` смысла не имеет, и поле, объявленное как
+    `T | None`, разрешило бы фронтенду отправить то, что сервер отвергнет.
     """
     partial_updates = (
         ("ParticipantUpdate", ["description"]),
         ("QueueUpdate", ["title", "description"]),
+        ("TaskUpdate", ["title", "description", "goal", "context", "constraints", "output"]),
     )
     for model, fields in partial_updates:
         properties = schema["components"]["schemas"][model]["properties"]
         for field in fields:
             assert properties[field]["type"] == "string", f"{model}.{field}"
             assert "anyOf" not in properties[field], f"{model}.{field} is nullable"
+
+
+def test_the_assignee_is_the_one_nullable_patch_field_of_a_task(schema: dict) -> None:
+    """У исполнителя `null` осмыслен — он снимает исполнителя — и схема обязана его разрешать."""
+    assignee = schema["components"]["schemas"]["TaskUpdate"]["properties"]["assignee"]
+
+    assert {"type": "null"} in assignee["anyOf"], assignee

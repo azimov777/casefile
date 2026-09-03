@@ -23,6 +23,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import Settings, get_settings
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
+from app.db.models.task import Task
 from app.db.session import get_session
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenScope
@@ -31,6 +32,7 @@ from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
 from app.services import participants as participants_service
 from app.services import queues as queues_service
+from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
 
@@ -257,4 +259,25 @@ async def queue(db_session: AsyncSession, main_actor: Actor) -> Queue:
         key="TRK",
         title="Трекер",
         description="Бэкенд трекера",
+    )
+
+
+@pytest.fixture
+async def task(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> Task:
+    """Задача `TRK-1` в `backlog` с заполненными разделами: готова к переходу в `open`.
+
+    Заводится набором `task`, как это делает агент: автор её записей — владелец, но
+    право на создание задачи не требует `main`.
+    """
+    return await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        queue=queue,
+        title="Починить выдачу ключей задач",
+        description="Ключ выдаётся до валидации и сгорает на неудачном запросе",
+        goal="Ключи не сгорают на отклонённых запросах",
+        context="Номер выдаёт `queues.next_task_number` последним",
+        constraints="Счётчик очереди не переписывать",
+        output="Тест на несгоревший номер",
+        checks=["Создание задачи без названия не тратит номер"],
     )
