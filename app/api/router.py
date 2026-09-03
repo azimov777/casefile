@@ -20,28 +20,7 @@ from fastapi import APIRouter, Depends
 from fastapi.routing import APIRoute
 
 from app.api.deps import get_current_actor
-from app.api.routes import (
-    actors,
-    aggregates,
-    automation,
-    boards,
-    catalogs,
-    checklists,
-    comments,
-    events,
-    fields,
-    filters,
-    issues,
-    links,
-    notifications,
-    portfolios,
-    projects,
-    queues,
-    search,
-    tags,
-    webhooks,
-    workflows,
-)
+from app.api.routes import actors
 from app.api.schemas.common import ErrorResponse
 
 # Формы ошибок объявлены один раз на весь версионированный API, а не повторены в каждом
@@ -78,25 +57,3 @@ api_router = APIRouter(
 )
 
 api_router.include_router(actors.router)
-api_router.include_router(queues.router)
-api_router.include_router(catalogs.router)
-api_router.include_router(fields.router)
-api_router.include_router(issues.router)
-api_router.include_router(links.router)
-api_router.include_router(comments.router)
-api_router.include_router(checklists.router)
-api_router.include_router(projects.router)
-api_router.include_router(portfolios.router)
-api_router.include_router(boards.router)
-api_router.include_router(tags.router)
-api_router.include_router(search.router)
-api_router.include_router(filters.router)
-api_router.include_router(workflows.router)
-api_router.include_router(automation.router)
-api_router.include_router(notifications.router)
-api_router.include_router(webhooks.router)
-api_router.include_router(events.router)
-# Агрегаты подключаются последними: их пути лежат внутри чужих пространств
-# (`/issues/{key}/card`, `/projects/{key}/summary`), и объявленные раньше они
-# перехватывали бы `/issues/{key}` — FastAPI разбирает маршруты в порядке объявления.
-api_router.include_router(aggregates.router)

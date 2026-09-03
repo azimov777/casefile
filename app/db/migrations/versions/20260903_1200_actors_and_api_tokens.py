@@ -1,8 +1,13 @@
 """actors and api tokens
 
-Revision ID: a8ce71dd4ff7
-Revises: 59ef3aa95644
-Create Date: 2026-08-27 16:55:03.872698+00:00
+Revision ID: 6f1c0a3d5b27
+Revises:
+Create Date: 2026-09-03 12:00:00.000000+00:00
+
+Начало цепочки заново. Старый доменный слой снесён задачей 20 вместе со всеми своими
+ревизиями, и контур поднимается с нуля: `DROP` старых таблиц здесь нет и быть не может —
+базы, в которой они есть, не существует. Кому нужна прежняя схема, тот берёт её из git
+по коммиту `49e2e49`.
 """
 
 import uuid
@@ -11,8 +16,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "a8ce71dd4ff7"
-down_revision: str | None = "59ef3aa95644"
+revision: str = "6f1c0a3d5b27"
+down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -93,9 +98,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_api_tokens_actor_id"), "api_tokens", ["actor_id"], unique=False)
 
-    # Системный актор заводится схемой, а не командой инициализации: на него будут
-    # ссылаться журнал изменений, outbox и автоматика, и его отсутствие означало бы,
-    # что часть системы не работает на свежей базе — в том числе в тестах.
+    # Системный актор заводится схемой, а не командой инициализации: от его имени
+    # делаются служебные записи, и его отсутствие означало бы, что часть системы не
+    # работает на свежей базе — в том числе в тестах.
     op.bulk_insert(
         actors,
         [

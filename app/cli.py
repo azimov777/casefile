@@ -7,18 +7,12 @@
   запертой снаружи;
 - `issue-token` — выпустить токен существующему актору;
 - `openapi` и `errors` — выгрузить поставляемые артефакты контракта: схему для
-  генерации клиента и справочник кодов ошибок;
-- `demo` — наполнить установку осмысленными данными, чтобы фронтенд разрабатывался не
-  на пустой базе;
-- `cleanup` — удалить из растущих журналов то, что старше срока хранения. Через API
-  такого действия нет и быть не должно: это обслуживание установки, а не сценарий.
+  генерации клиента и справочник кодов ошибок.
 
 Запуск в контуре разработки:
 
     docker compose run --rm init
     docker compose run --rm schema
-    docker compose run --rm demo
-    docker compose run --rm cleanup
     docker compose run --rm --entrypoint python api -m app.cli issue-token --actor owner
 
 Команды идут через `session_scope`: транзакцию фиксирует та же граница, что и у
@@ -27,7 +21,6 @@ HTTP-запроса, отдельной логики коммита здесь �
 
 import argparse
 import asyncio
-import dataclasses
 import json
 import sys
 from collections.abc import Awaitable, Callable
@@ -38,8 +31,6 @@ from app.core.logging import configure_logging
 from app.db.session import dispose_engine, session_scope
 from app.domain.actors import ActorType
 from app.services import actors as service
-from app.services import demo as demo_service
-from app.services import retention as retention_service
 
 DEFAULT_OWNER_KEY = "owner"
 DEFAULT_OWNER_NAME = "Owner"
@@ -113,66 +104,6 @@ async def _errors(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _demo(args: argparse.Namespace) -> int:
-    """Наполняет установку демо-данными через обычные сценарии.
-
-    Прямых вставок в базу здесь нет намеренно: на данных, положенных мимо сценариев, не
-    проверить ни историю изменений, ни автоматику, ни уведомления — то есть ровно то,
-    ради чего демо-контур и нужен.
-
-    Повторный запуск отказывает вместо того, чтобы доложить недостающее: набор — это
-    связный граф задач, связей и рангов, и «долить» его нельзя, не заведя механику
-    сложнее самого набора. Отказ громкий: молча создать вторую копию половины объектов
-    было бы хуже любой ошибки.
-    """
-    async with session_scope() as session:
-        if await demo_service.demo_is_present(session):
-            print(
-                "demo data is already here: queues "
-                f"{demo_service.DEV_QUEUE_KEY} or {demo_service.OPS_QUEUE_KEY} exist.",
-                file=sys.stderr,
-            )
-            print(
-                "start over with a fresh database: docker compose down -v && "
-                "docker compose up -d && docker compose run --rm migrate",
-                file=sys.stderr,
-            )
-            return 1
-        report = await demo_service.seed_demo(session)
-    for line in report.lines():
-        print(line)
-    return 0
-
-
-async def _cleanup(args: argparse.Namespace) -> int:
-    """Удаляет из трёх растущих журналов то, что старше срока хранения.
-
-    Сроки задаются переменными окружения (`TRACKER_RETENTION_*`), размер пачки и
-    потолок прохода можно перебить флагами: пачка — часть контракта команды, а не
-    внутренняя деталь, и на разной по мощности базе она разная.
-
-    `--dry-run` считает подходящие строки и ничего не удаляет. На установке, где
-    чистка запускается впервые, начинать стоит с него: числа покажут, во что обойдётся
-    настоящий проход.
-    """
-    policy = retention_service.policy_from_settings()
-    overrides: dict[str, int] = {}
-    if args.batch_size is not None:
-        overrides["batch_size"] = args.batch_size
-    if args.max_batches is not None:
-        overrides["max_batches"] = args.max_batches
-    if overrides:
-        # `replace` проверяет значения тем же `__post_init__`, что и построение из
-        # настроек: флаг с нулём или отрицательным числом отвергается, а не выполняется.
-        policy = dataclasses.replace(policy, **overrides)
-
-    async with session_scope() as session:
-        report = await retention_service.cleanup(session, policy=policy, dry_run=args.dry_run)
-    for line in report.lines():
-        print(line)
-    return 0
-
-
 def _write(output: str | None, text: str) -> None:
     """Пишет результат в файл или в стандартный вывод, если файл не назван."""
     if output is None:
@@ -207,32 +138,6 @@ def _build_parser() -> argparse.ArgumentParser:
     errors.add_argument("--output", default=None, help="File to write; stdout when omitted")
     errors.set_defaults(handler=_errors)
 
-    demo = commands.add_parser("demo", help="Fill the installation with demo data")
-    demo.set_defaults(handler=_demo)
-
-    cleanup = commands.add_parser(
-        "cleanup",
-        help="Delete journal rows older than the configured retention",
-    )
-    cleanup.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Count what would be deleted and delete nothing",
-    )
-    cleanup.add_argument(
-        "--batch-size",
-        type=int,
-        default=None,
-        help="Rows one DELETE removes; overrides TRACKER_RETENTION_BATCH_SIZE",
-    )
-    cleanup.add_argument(
-        "--max-batches",
-        type=int,
-        default=None,
-        help="Batches per target in this pass; overrides TRACKER_RETENTION_MAX_BATCHES",
-    )
-    cleanup.set_defaults(handler=_cleanup)
-
     return parser
 
 
@@ -242,11 +147,6 @@ async def _run(
     """Выполняет команду и гарантированно закрывает пул соединений."""
     try:
         return await handler(args)
-    except ValueError as error:
-        # Негодная политика чистки приходит сюда: `RetentionPolicy` проверяет свои
-        # значения сама, и флаг команды проходит ту же проверку, что и настройка.
-        print(f"invalid_argument: {error}", file=sys.stderr)
-        return 1
     except AppError as error:
         # Доменная ошибка в командной строке — это понятное сообщение и код возврата,
         # а не стек вызовов: команду запускают в чужом окружении и читают её вывод.

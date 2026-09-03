@@ -1,8 +1,8 @@
 """Граница транзакции: успешное завершение коммитит, исключение откатывает.
 
 Проверяются оба входа — HTTP-запрос через `get_session` и прямой `session_scope`, которым
-пользуются воркеры. Тесты идут мимо фикстуры `app`: она подменяет `get_session` сессией
-теста, а проверить надо именно настоящую зависимость.
+пользуются MCP-сервер и командная строка. Тесты идут мимо фикстуры `app`: она подменяет
+`get_session` сессией теста, а проверить надо именно настоящую зависимость.
 
 Отдельная история — падение самого коммита. Оно возможно у отложенных ограничений
 (`DEFERRABLE INITIALLY DEFERRED`): вставка проходит, а `COMMIT` отказывает. Такой отказ
@@ -11,10 +11,6 @@
 Меры две, и обе проверяются здесь: `SessionDep` объявлен с областью `function`
 (`app/api/deps.py`), а нарушение целостности переводится в `conflict`
 (`app/db/session.py`).
-
-Там же, в `app/db/session.py`, живёт разбор ошибок драйвера на «ожидаемое состояние
-старта» и «поломку» — `schema_is_missing`. Его проверки в конце файла: ошибаться он может
-только в одну из двух сторон, и обе дорого стоят, поэтому проверяются обе.
 """
 
 from collections.abc import AsyncIterator
@@ -23,7 +19,6 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import SessionDep
@@ -103,20 +98,20 @@ async def probe_client(app_sessionmaker: None) -> AsyncIterator[AsyncClient]:
             )
         return {"value": value}
 
-    @application.post("/probe-duplicate-issue-key")
-    async def _probe_duplicate_issue_key(session: SessionDep) -> dict[str, str]:
-        """Дубликат ключа задачи, обнаруженный сразу на вставке, а не на коммите."""
+    @application.post("/probe-duplicate-actor-key")
+    async def _probe_duplicate_actor_key(session: SessionDep) -> dict[str, str]:
+        """Дубликат ключа актора, обнаруженный сразу на вставке, а не на коммите.
+
+        Настоящая таблица, а не проба: проверяется перевод ошибки драйвера в ответ, и
+        на самодельном ограничении он выглядел бы правдоподобно, ничего не доказывая
+        про схему, которая едет на продакшен.
+        """
         await session.execute(
-            text(
-                "INSERT INTO issues (key, queue_id, issue_type_id, status_id, "
-                "summary, author_id) "
-                "SELECT :key, q.id, q.default_issue_type_id, q.default_status_id, "
-                ":summary, q.owner_id FROM queues q WHERE q.key = :queue"
-            ),
-            {"key": "DUP-1", "summary": "Проба", "queue": "DUP"},
+            text("INSERT INTO actors (type, key, display_name) VALUES (:type, :key, :name)"),
+            {"type": "human", "key": "system", "name": "Двойник"},
         )
         await session.flush()
-        return {"key": "DUP-1"}
+        return {"key": "system"}
 
     transport = ASGITransport(app=application)
     async with AsyncClient(transport=transport, base_url="http://tracker.test") as client:
@@ -157,7 +152,7 @@ async def test_session_scope_commits_on_success(
     app_sessionmaker: None,
     engine: AsyncEngine,
 ) -> None:
-    """Воркер получает ту же границу транзакции, что и HTTP-запрос."""
+    """MCP-сервер и командная строка получают ту же границу, что и HTTP-запрос."""
     async with session_module.session_scope() as session:
         await _insert(session, 10)
 
@@ -199,81 +194,16 @@ async def test_failing_commit_reaches_the_client_as_a_conflict(
     assert list(stored.scalars()) == []
 
 
-async def test_duplicate_issue_key_is_a_conflict_not_a_five_hundred(
+async def test_duplicate_key_is_a_conflict_not_a_five_hundred(
     probe_client: AsyncClient,
-    engine: AsyncEngine,
 ) -> None:
     """Тот же ответ, когда база отказывает не на коммите, а сразу на вставке.
 
     Клиент не должен различать эти два случая: и там, и там это конфликт состояния.
-    Очередь заводится и убирается прямо здесь — тест идёт мимо фикстур с откатом,
-    потому что проверяет настоящую границу транзакции.
     """
-    async with engine.begin() as connection:
-        await connection.execute(
-            text(
-                "INSERT INTO queues (key, name, owner_id, default_issue_type_id, "
-                "default_status_id) "
-                "SELECT 'DUP', 'Проба', a.id, t.id, s.id FROM actors a, issue_types t, statuses s "
-                "WHERE a.key = 'system' AND t.key = 'task' AND t.queue_id IS NULL "
-                "AND s.key = 'open' AND s.queue_id IS NULL"
-            )
-        )
-    try:
-        first = await probe_client.post("/probe-duplicate-issue-key")
-        assert first.status_code == 200
+    response = await probe_client.post("/probe-duplicate-actor-key")
 
-        second = await probe_client.post("/probe-duplicate-issue-key")
-
-        assert second.status_code == 409
-        error = second.json()["error"]
-        assert error["code"] == "conflict"
-        assert error["details"]["constraint"] == "uq_issues_key"
-    finally:
-        async with engine.begin() as connection:
-            await connection.execute(text("DELETE FROM issues WHERE key = 'DUP-1'"))
-            await connection.execute(text("DELETE FROM queues WHERE key = 'DUP'"))
-
-
-# --- Непромигрированная база отличается от поломки -----------------------------------
-
-
-async def test_missing_table_reads_as_an_unmigrated_schema(engine: AsyncEngine) -> None:
-    """Первые секунды контура таблиц нет, и это состояние обязано отличаться от сбоя.
-
-    Иначе воркер и планировщик пишут полноэкранную трассировку каждые пять секунд, пока
-    человек не применит миграции, — и настоящую ошибку старта в этой простыне не найти.
-    """
-    with pytest.raises(ProgrammingError) as failure:
-        async with engine.connect() as connection:
-            await connection.execute(text("SELECT 1 FROM there_is_no_such_table"))
-
-    assert session_module.schema_is_missing(failure.value) is True
-
-
-async def test_missing_column_does_not_read_as_an_unmigrated_schema(
-    probe_table: None,
-    engine: AsyncEngine,
-) -> None:
-    """Таблица есть, а колонки нет — это миграции, применённые не до конца, то есть поломка.
-
-    Граница проверки проходит здесь намеренно: расширить её до «любой ошибки схемы»
-    значило бы превратить настоящий дефект выкладки в строку предупреждения.
-    """
-    with pytest.raises(ProgrammingError) as failure:
-        async with engine.connect() as connection:
-            await connection.execute(text(f"SELECT no_such_column FROM {PROBE_TABLE}"))
-
-    assert session_module.schema_is_missing(failure.value) is False
-
-
-async def test_integrity_violation_does_not_read_as_an_unmigrated_schema(
-    probe_table: None,
-    engine: AsyncEngine,
-) -> None:
-    """Нарушение целостности — сбой, и трассировку у него отбирать нельзя."""
-    with pytest.raises(IntegrityError) as failure:
-        async with engine.begin() as connection:
-            await connection.execute(text(f"INSERT INTO {PROBE_TABLE} VALUES (1), (1)"))
-
-    assert session_module.schema_is_missing(failure.value) is False
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "conflict"
+    assert error["details"]["constraint"] == "uq_actors_key"

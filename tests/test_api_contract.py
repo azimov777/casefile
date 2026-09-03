@@ -32,7 +32,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.contract import (
     BODYLESS_STATUS_CODES,
@@ -42,10 +41,6 @@ from app.api.contract import (
     render_error_catalog,
 )
 from app.db.models.actor import Actor
-from app.services import demo as demo_service
-from app.services import queues as queues_service
-from app.services import saved_filters as saved_filters_service
-from app.services import webhooks as webhooks_service
 
 #: Значение-затычка для развёртки без токена: до параметров дело не доходит, потому что
 #: зависимость аутентификации отказывает раньше. UUID, а не «x», чтобы параметры типа
@@ -54,20 +49,13 @@ from app.services import webhooks as webhooks_service
 PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
 
 #: Маршруты, которые нельзя дёрнуть обычным запросом в развёртке с токеном.
-#: Каждый — с причиной; молча пропускать здесь нечего.
-UNCALLABLE: dict[tuple[str, str], str] = {
-    ("GET", "/api/v1/events/stream"): (
-        "An endless stream. ASGITransport assembles the response only after the "
-        "application is done, so this request would hang until the run times out "
-        "(docs/notes/testing.md). Its error shape is covered by the tokenless sweep, "
-        "and its frame shape by tests/test_events_stream.py"
-    ),
-}
+#: Каждый — с причиной; молча пропускать здесь нечего. Пусто, пока такого маршрута нет:
+#: поток ленты (задача 26) попадёт сюда вместе со своей причиной.
+UNCALLABLE: dict[tuple[str, str], str] = {}
 
-#: Параметры ожидания, чтобы длинный опрос не держал прогон.
-QUERY_OVERRIDES: dict[str, dict[str, Any]] = {
-    "/api/v1/notifications/wait": {"timeout": 0.05},
-}
+#: Параметры запроса, которые развёртка обязана подставить, чтобы не держать прогон
+#: (например, нулевой таймаут ожидания). Пусто, пока ждущих маршрутов нет.
+QUERY_OVERRIDES: dict[str, dict[str, Any]] = {}
 
 
 @pytest.fixture
@@ -185,7 +173,9 @@ async def test_every_route_answers_with_the_error_envelope_without_a_token(
         assert payload["error"]["message"].isascii(), f"{method} {path}: message is not English"
         checked += 1
 
-    assert checked > 100, f"the sweep covered only {checked} operations"
+    # Порог, а не точное число: развёртка обязана падать, когда роутеры перестали
+    # подключаться вовсе, и не обязана — когда добавился очередной маршрут.
+    assert checked >= _api_operations(schema), f"the sweep covered only {checked} operations"
 
 
 async def test_every_readable_route_answers_with_the_data_envelope(
@@ -222,7 +212,7 @@ async def test_every_readable_route_answers_with_the_data_envelope(
             assert sorted(payload["meta"]) == ["has_more", "next_cursor"], f"GET {path}"
         checked += 1
 
-    assert checked > 40, f"the sweep covered only {checked} readable routes"
+    assert checked >= 3, f"the sweep covered only {checked} readable routes"
 
 
 def _path_params(path: str) -> list[str]:
@@ -244,57 +234,25 @@ def _substitute(path: str, values: dict[str, str]) -> str:
 
 
 @pytest.fixture
-async def sample(db_session: AsyncSession, owner: Actor) -> dict[str, str]:
-    """Настоящие значения для каждого параметра пути, взятые из демо-набора.
+async def sample(owner: Actor) -> dict[str, str]:
+    """Настоящие значения для каждого параметра пути.
 
-    Демо-набор, а не свои фикстуры: он и так обязан быть связным и разнообразным, и
-    вторая копия такого же набора разошлась бы с ним на первой правке.
+    Значения настоящие, а не выдуманные: развёртка с токеном обязана получать `200`, и
+    подставленный от балды ключ дал бы `404`, то есть проверял бы обработку ошибки
+    вместо формы успешного ответа.
     """
-    await demo_service.seed_demo(db_session, owner=owner)
-    dev = await queues_service.get_queue_by_key(db_session, demo_service.DEV_QUEUE_KEY)
-    config = await queues_service.get_queue_config(db_session, dev, initiator=owner)
-    filters = await saved_filters_service.list_saved_filters(db_session, initiator=owner)
-    board = await _board(db_session, owner=owner)
-    subscription = await webhooks_service.create_subscription(
-        db_session,
-        initiator=owner,
-        name="Демо-подписка",
-        url="https://example.test/hook",
-    )
     return {
         "actor_key": owner.key,
-        "queue_key": dev.key,
-        "status_ref": "open",
-        "issue_type_ref": "task",
-        "resolution_ref": "done",
-        "field_ref": "component",
-        "issue_key": f"{dev.key}-2",
-        "project_key": "alpha",
-        "portfolio_key": "platform",
-        "board_id": str(board.id),
-        "column_id": str(board.columns[0].id),
-        "filter_id": str(filters.items[0].id),
-        "workflow_id": str(config.workflows[0].workflow.id),
-        "rule_key": demo_service.DEMO_RULE_KEY,
-        "subscription_id": str(subscription.id),
-        # Параметры, которые встречаются только у изменяющих маршрутов: развёртка с
+        # Параметр, который встречается только у изменяющего маршрута: развёртка с
         # токеном ходит лишь по `GET`, но подстановка обязана знать их все — иначе
         # новый `GET` с таким параметром упал бы не с внятным сообщением, а с KeyError.
         "token_id": str(uuid.uuid4()),
-        "comment_id": str(uuid.uuid4()),
-        "item_id": str(uuid.uuid4()),
-        "link_id": str(uuid.uuid4()),
-        "transition_id": str(uuid.uuid4()),
-        "delivery_id": str(uuid.uuid4()),
-        "tag": "контракт",
     }
 
 
-async def _board(db_session: AsyncSession, *, owner: Actor) -> Any:
-    from app.services import boards as boards_service
-
-    page = await boards_service.list_boards(db_session, initiator=owner)
-    return page.items[0]
+def _api_operations(schema: dict[str, Any]) -> int:
+    """Сколько операций объявлено под `/api/v1` — ожидаемый охват развёртки без токена."""
+    return sum(1 for _, path, _ in operations(schema) if path.startswith("/api/v1"))
 
 
 # --- Справочник кодов ошибок -------------------------------------------------------
@@ -372,77 +330,3 @@ def test_every_path_parameter_is_described(schema: dict[str, Any]) -> None:
     ]
 
     assert not undescribed, f"path parameters without a description: {undescribed}"
-
-
-# --- Совпадение имён у REST и MCP --------------------------------------------------
-
-#: Поля, которых у одного из слоёв нет намеренно. Ключ — имя поля, значение — причина.
-#: Список закрытый: любое другое расхождение означает, что интерфейсы разъехались.
-KNOWN_LAYER_DIFFERENCES: dict[str, str] = {
-    "id": (
-        "REST only. An agent addresses an issue by key and by key alone, so the "
-        "identifier would be wasted context on every row of every listing"
-    ),
-    "status_category": (
-        "MCP only. An agent decides by the status category, not by its name, and "
-        "without it every decision would cost a second call into the catalog"
-    ),
-    "description_truncated": (
-        "MCP only. Tools cap the size of text they return, and the agent has to know "
-        "it read only part of the description"
-    ),
-    "description_length": "MCP only. Full length of a truncated description, next to the flag",
-}
-
-
-async def test_mcp_and_rest_name_the_fields_of_an_issue_the_same(
-    db_session: AsyncSession,
-    owner: Actor,
-) -> None:
-    """Представления задачи в REST и в MCP повторяют имена полей — без общего кода.
-
-    `api` и `mcp` друг от друга не зависят намеренно, поэтому переименование поля в
-    схеме REST **не** долетает до MCP автоматически: агент продолжает получать старое
-    имя, и заметить это можно только по несделанной работе. Отсюда и тест — он
-    единственное место, где два слоя сверяются (выявлено в задаче 16).
-    """
-    from app.api.schemas.issues import IssueRead
-    from app.mcp import views
-    from app.services import issues as issues_service
-
-    await demo_service.seed_demo(db_session, owner=owner)
-    issue = await issues_service.get_issue_by_key(db_session, f"{demo_service.DEV_QUEUE_KEY}-2")
-
-    rest = set(IssueRead.of(issue).model_dump())
-    mcp = set(views.issue(issue, text_limit=10_000))
-
-    unexplained = (rest ^ mcp) - set(KNOWN_LAYER_DIFFERENCES)
-    assert not unexplained, (
-        f"REST and MCP disagree on issue field names: {sorted(unexplained)}. "
-        "Rename it in both layers, or document the difference in KNOWN_LAYER_DIFFERENCES"
-    )
-
-
-async def test_mcp_and_rest_name_the_fields_of_a_changelog_entry_the_same(
-    db_session: AsyncSession,
-    owner: Actor,
-) -> None:
-    """То же для истории изменений: тип события зовётся `event_type` в обоих слоях."""
-    from app.api.schemas.events import ChangelogEntryRead
-    from app.mcp import views
-    from app.services import events as events_service
-    from app.services import issues as issues_service
-
-    await demo_service.seed_demo(db_session, owner=owner)
-    issue = await issues_service.get_issue_by_key(db_session, f"{demo_service.DEV_QUEUE_KEY}-2")
-    page = await events_service.list_changelog(db_session, issue, initiator=owner, limit=1)
-    entry = page.items[0]
-
-    rest = set(ChangelogEntryRead.of(entry, issue_key=issue.key).model_dump())
-    mcp = set(views.changelog_entry(entry))
-
-    # У записи MCP нет ни `id`, ни ключа задачи: страница истории всегда про одну
-    # задачу, и агент запрашивает её сам — повторять ключ в каждой строке значит
-    # тратить контекст на известное.
-    assert mcp <= rest, sorted(mcp - rest)
-    assert rest - mcp == {"id", "issue"}, sorted(rest - mcp)
