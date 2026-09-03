@@ -8,8 +8,8 @@
 `app/core/errors.py`; здесь только их наследники со своим стабильным кодом.
 
 В списке фундамент (участники, токены, метка временного агента, очереди), задача с
-переходами (задача 22) и дело: записи агента, обязательная сводка, вердикты
-(задача 23). Связи приезжают сюда своей областью (задача 24).
+переходами (задача 22), дело — записи агента, обязательная сводка, вердикты
+(задача 23) — и связи между задачами (задача 24).
 
 Исключение из правила одно и оно осознанное: ошибка, описывающая не предметную
 область, а механизм (недоступна база, испорчен курсор), живёт рядом с этим механизмом.
@@ -232,3 +232,78 @@ class ActorNotAddressableError(ValidationError):
 
     code = "actor_not_addressable"
     message = "A temporary agent cannot be an addressee; pass an explicit addressee"
+
+
+# --- Связи ----------------------------------------------------------------------------
+
+
+class InvalidLinkKindError(ValidationError):
+    """Такого вида связи нет; допустимые перечислены в `details.allowed`."""
+
+    code = "invalid_link_kind"
+    message = "Link kind is invalid"
+
+
+class LinkSelfError(ValidationError):
+    """Связь задачи с самой собой запрещена — любого вида, включая `relates`."""
+
+    code = "link_self_not_allowed"
+    message = "A task cannot be linked to itself"
+
+
+class LinkExistsError(ConflictError):
+    """Такая связь между этими задачами уже есть.
+
+    Конфликт состояния, а не ошибка формы: запрос правильный, просто его результат уже
+    достигнут. Повтор ловится ещё и уникальным ограничением в базе — но только потому,
+    что направление приведено к каноническому виду до вставки.
+    """
+
+    code = "link_exists"
+    message = "Link already exists"
+
+
+class LinkNotFoundError(NotFoundError):
+    """Связи такого вида между этими задачами нет.
+
+    Отдельный код, а не `task_not_found`: обе задачи существуют, нет именно связи, и
+    клиенту это разные действия — перечитать карточку, а не проверять ключ.
+    """
+
+    code = "link_not_found"
+    message = "Link not found"
+
+
+class LinkCycleError(ConflictError):
+    """Связь замкнула бы кольцо в иерархии или в блокировках.
+
+    Проверяется по рёбрам **одного** вида: иерархия и блокировки — два независимых
+    графа, и родитель, заблокированный своими детьми, кольцом не является
+    (`CONCEPT.md`, 3.5). Обе стороны отказанной связи лежат в `details`.
+    """
+
+    code = "link_cycle_detected"
+    message = "Link would create a cycle"
+
+
+class TaskBlockedError(ConflictError):
+    """Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`.
+
+    Конфликт состояния, а не ошибка формы запроса: тот же переход пройдёт, как только
+    блокеры закроются. Задача при этом не «ждёт» — статуса ожидания в трекере нет
+    (`CONCEPT.md`, 4.6), ждёт назначатель, читающий ленту.
+    """
+
+    code = "task_blocked"
+    message = "Task has an open blocker"
+
+
+class TaskHasUnclosedChildrenError(ConflictError):
+    """Переход в `done` при детях не в `done` и не в `cancelled`.
+
+    Незакрытые дети перечислены в `details.children`. Статусы по связям не
+    распространяются: трекер не закрывает детей сам, он только не даёт закрыть родителя.
+    """
+
+    code = "task_has_unclosed_children"
+    message = "Task has children that are not closed"
