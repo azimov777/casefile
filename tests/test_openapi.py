@@ -101,14 +101,18 @@ def test_no_objects_of_unknown_shape(schema: dict) -> None:
 
 
 def test_patch_field_is_not_nullable_when_null_has_no_meaning(schema: dict) -> None:
-    """`ActorUpdate` не должен разрешать `null`: сгенерированный клиент обязан это знать."""
-    properties = schema["components"]["schemas"]["ActorUpdate"]["properties"]
+    """Схемы `PATCH` не должны разрешать `null`: сгенерированный клиент обязан это знать.
 
-    assert properties["display_name"] == {
-        "type": "string",
-        "maxLength": 255,
-        "minLength": 1,
-        "title": "Display Name",
-        "examples": ["Релизный бот"],
-    }
-    assert properties["is_active"]["type"] == "boolean"
+    Проверяются обе схемы частичного обновления сразу: у описания участника и у полей
+    очереди `null` смысла не имеет, и поле, объявленное как `T | None`, разрешило бы
+    фронтенду отправить то, что сервер отвергнет.
+    """
+    partial_updates = (
+        ("ParticipantUpdate", ["description"]),
+        ("QueueUpdate", ["title", "description"]),
+    )
+    for model, fields in partial_updates:
+        properties = schema["components"]["schemas"][model]["properties"]
+        for field in fields:
+            assert properties[field]["type"] == "string", f"{model}.{field}"
+            assert "anyOf" not in properties[field], f"{model}.{field} is nullable"

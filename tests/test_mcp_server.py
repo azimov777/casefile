@@ -14,7 +14,9 @@ from mcp.server.mcpserver import MCPServer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import UnauthorizedError
-from app.db.models.actor import Actor
+from app.db.models.participant import Participant
+from app.domain.authors import AuthorKind
+from app.domain.tokens import TokenScope
 from app.mcp.runtime import Runtime, SessionFactory, bearer_token, use_headers
 from app.mcp.server import INSTRUCTIONS
 
@@ -99,20 +101,50 @@ async def test_the_token_is_read_from_the_authorization_header() -> None:
     assert scheme.value.details["reason"] == "invalid_scheme"
 
 
-async def test_a_call_resolves_the_actor_behind_the_token(
+async def test_a_call_resolves_the_author_behind_the_token(
     mcp_sessions: SessionFactory,
-    owner: Actor,
-    owner_secret: str,
+    owner: Participant,
+    main_secret: str,
 ) -> None:
-    """Контекст вызова отдаёт сессию и актора: на этом стоят все будущие инструменты."""
+    """Контекст вызова отдаёт сессию и автора: на этом стоят все будущие инструменты."""
     runtime = Runtime(sessions=mcp_sessions)
 
     async with (
-        use_headers({"authorization": f"Bearer {owner_secret}"}),
+        use_headers({"authorization": f"Bearer {main_secret}"}),
         runtime.call() as (session, actor),
     ):
         assert isinstance(session, AsyncSession)
-        assert actor.id == owner.id
+        assert actor.author.signature == owner.name
+        assert actor.scope is TokenScope.MAIN
+
+
+async def test_a_shared_token_takes_its_signature_from_the_message_header(
+    mcp_sessions: SessionFactory,
+    shared_secret: str,
+) -> None:
+    """Тот же заголовок, что и в REST: вторая схема представления проектом запрещена."""
+    runtime = Runtime(sessions=mcp_sessions)
+
+    async with (
+        use_headers({"authorization": f"Bearer {shared_secret}", "x-actor-label": "Nightly_Agent"}),
+        runtime.call() as (_, actor),
+    ):
+        assert actor.author.kind is AuthorKind.AGENT
+        assert actor.author.signature == "nightly_agent"
+
+
+async def test_a_shared_token_without_a_label_refuses_the_call(
+    mcp_sessions: SessionFactory,
+    shared_secret: str,
+) -> None:
+    """Отказ приезжает агенту текстом с кодом — тем же, что и в REST."""
+    runtime = Runtime(sessions=mcp_sessions)
+
+    with pytest.raises(Exception) as failure:
+        async with use_headers({"authorization": f"Bearer {shared_secret}"}), runtime.call():
+            pass
+
+    assert "actor_label_required" in str(failure.value)
 
 
 async def test_a_call_without_a_token_refuses_with_the_reason(

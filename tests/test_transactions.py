@@ -98,20 +98,26 @@ async def probe_client(app_sessionmaker: None) -> AsyncIterator[AsyncClient]:
             )
         return {"value": value}
 
-    @application.post("/probe-duplicate-actor-key")
-    async def _probe_duplicate_actor_key(session: SessionDep) -> dict[str, str]:
-        """Дубликат ключа актора, обнаруженный сразу на вставке, а не на коммите.
+    @application.post("/probe-duplicate-participant-name")
+    async def _probe_duplicate_participant_name(session: SessionDep) -> dict[str, str]:
+        """Дубликат имени участника, обнаруженный сразу на вставке, а не на коммите.
 
         Настоящая таблица, а не проба: проверяется перевод ошибки драйвера в ответ, и
         на самодельном ограничении он выглядел бы правдоподобно, ничего не доказывая
-        про схему, которая едет на продакшен.
+        про схему, которая едет на продакшен. Обе вставки идут внутри запроса — строк,
+        закоммиченных фикстурами, здесь не видно: маршрут работает на настоящей
+        зависимости, мимо транзакции теста.
         """
-        await session.execute(
-            text("INSERT INTO actors (type, key, display_name) VALUES (:type, :key, :name)"),
-            {"type": "human", "key": "system", "name": "Двойник"},
-        )
-        await session.flush()
-        return {"key": "system"}
+        for _ in range(2):
+            await session.execute(
+                text(
+                    "INSERT INTO participants (kind, name, description, created_by_kind) "
+                    "VALUES (:kind, :name, :description, :author)"
+                ),
+                {"kind": "human", "name": "twin", "description": "", "author": "tracker"},
+            )
+            await session.flush()
+        return {"name": "twin"}
 
     transport = ASGITransport(app=application)
     async with AsyncClient(transport=transport, base_url="http://tracker.test") as client:
@@ -201,9 +207,9 @@ async def test_duplicate_key_is_a_conflict_not_a_five_hundred(
 
     Клиент не должен различать эти два случая: и там, и там это конфликт состояния.
     """
-    response = await probe_client.post("/probe-duplicate-actor-key")
+    response = await probe_client.post("/probe-duplicate-participant-name")
 
     assert response.status_code == 409
     error = response.json()["error"]
     assert error["code"] == "conflict"
-    assert error["details"]["constraint"] == "uq_actors_key"
+    assert error["details"]["constraint"] == "uq_participants_name"

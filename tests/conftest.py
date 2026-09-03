@@ -21,13 +21,18 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, c
 from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
-from app.db.models.actor import Actor
+from app.db.models.participant import Participant
+from app.db.models.queue import Queue
 from app.db.session import get_session
-from app.domain.actors import ActorType
+from app.domain.participants import ParticipantKind
+from app.domain.tokens import TokenScope
 from app.main import create_app
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
-from app.services import actors as actors_service
+from app.services import participants as participants_service
+from app.services import queues as queues_service
+from app.services import tokens as tokens_service
+from app.services.auth import TRACKER_ACTOR, Actor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -158,34 +163,98 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.fixture
-async def system_actor(db_session: AsyncSession) -> Actor:
-    """Системный актор. Создаётся миграцией, поэтому здесь только читается."""
-    return await actors_service.get_system_actor(db_session)
+async def owner(db_session: AsyncSession) -> Participant:
+    """Владелец-человек: от его имени идут запросы в тестах API.
 
-
-@pytest.fixture
-async def owner(db_session: AsyncSession) -> Actor:
-    """Владелец-человек: инициатор запросов в тестах API."""
-    actor, _ = await actors_service.ensure_actor(
+    Заводится от имени трекера — ровно как это делает первичная инициализация: другого
+    автора на пустой установке не существует.
+    """
+    return await participants_service.register_participant(
         db_session,
-        actor_type=ActorType.HUMAN,
-        key="owner",
-        display_name="Owner",
+        actor=TRACKER_ACTOR,
+        kind=ParticipantKind.HUMAN,
+        name="owner",
+        description="Владелец установки",
     )
-    return actor
 
 
 @pytest.fixture
-async def owner_secret(db_session: AsyncSession, system_actor: Actor, owner: Actor) -> str:
-    """Секрет рабочего токена владельца."""
-    issued = await actors_service.issue_token(
-        db_session, owner, initiator=system_actor, name="tests"
+async def main_secret(db_session: AsyncSession, owner: Participant) -> str:
+    """Секрет токена владельца с набором `main`: им можно всё."""
+    issued = await tokens_service.issue_token(
+        db_session,
+        actor=TRACKER_ACTOR,
+        participant=owner,
+        scope=TokenScope.MAIN,
+        name="tests",
     )
     return issued.secret
 
 
 @pytest.fixture
-async def auth_client(client: AsyncClient, owner_secret: str) -> AsyncClient:
-    """Клиент с заголовком авторизации: всё под `/api/v1` требует токена."""
-    client.headers["Authorization"] = f"Bearer {owner_secret}"
+async def task_secret(db_session: AsyncSession, owner: Participant) -> str:
+    """Секрет именного токена с набором `task`: рабочий цикл без управления установкой."""
+    issued = await tokens_service.issue_token(
+        db_session,
+        actor=TRACKER_ACTOR,
+        participant=owner,
+        scope=TokenScope.TASK,
+        name="tests task scope",
+    )
+    return issued.secret
+
+
+@pytest.fixture
+async def shared_secret(db_session: AsyncSession) -> str:
+    """Секрет общего агентского токена: без участника, подпись приезжает заголовком."""
+    issued = await tokens_service.issue_token(
+        db_session,
+        actor=TRACKER_ACTOR,
+        scope=TokenScope.TASK,
+        name="tests shared",
+    )
+    return issued.secret
+
+
+@pytest.fixture
+def main_actor(owner: Participant) -> Actor:
+    """Структура автора для прямых вызовов сценариев: владелец с набором `main`."""
+    return Actor(
+        author=owner.author,
+        scope=TokenScope.MAIN,
+        participant=owner,
+    )
+
+
+@pytest.fixture
+def task_actor(owner: Participant) -> Actor:
+    """То же, но с набором `task`: им проверяются отказы единой точки прав."""
+    return Actor(
+        author=owner.author,
+        scope=TokenScope.TASK,
+        participant=owner,
+    )
+
+
+@pytest.fixture
+async def auth_client(client: AsyncClient, main_secret: str) -> AsyncClient:
+    """Клиент с заголовком авторизации: всё под `/api/v1` требует токена.
+
+    Возвращает **тот же** объект, что и `client`: заголовок проставляется существующему
+    клиенту. Тест, взявший обе фикстуры ради «двух разных токенов», на самом деле ходит
+    одним — менять токен надо по ходу теста, а не двумя клиентами.
+    """
+    client.headers["Authorization"] = f"Bearer {main_secret}"
     return client
+
+
+@pytest.fixture
+async def queue(db_session: AsyncSession, main_actor: Actor) -> Queue:
+    """Очередь `TRK`: на ней проверяется всё, что требует существующей очереди."""
+    return await queues_service.create_queue(
+        db_session,
+        actor=main_actor,
+        key="TRK",
+        title="Трекер",
+        description="Бэкенд трекера",
+    )
