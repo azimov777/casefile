@@ -16,8 +16,8 @@ FastAPI, и правило, записанное только в схеме, д�
 Переход проверяется в два шага: сначала таблица (`TRANSITIONS`), потом список
 независимых проверок (`TRANSITION_CHECKS`). Каждая проверка — функция от фактов о
 переходе (`TransitionFacts`) и ничего не знает о соседях. Следующие задачи добавляют
-свои проверки сюда, **не трогая таблицу**: задача 24 — блокеры перед `in_progress` и
-детей перед `done`. Как именно — см. комментарий у `TRANSITION_CHECKS`.
+свои проверки сюда, **не трогая таблицу**. Как именно — см. комментарий у
+`TRANSITION_CHECKS`.
 
 ## Правки полей зависят от статуса
 
@@ -38,7 +38,9 @@ from app.domain.errors import (
     InvalidQueueKeyError,
     InvalidTaskKeyError,
     SummaryRequiredError,
+    TaskBlockedError,
     TaskFieldsInvalidError,
+    TaskHasUnclosedChildrenError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
     TransitionReasonRequiredError,
@@ -452,10 +454,8 @@ class TransitionFacts:
     его заполняет; значение по умолчанию выбирается так, чтобы **непереданный факт не
     пропускал переход молча** — иначе забытое заполнение выглядело бы как успех.
 
-    Точки подключения следующих задач (оставлены здесь намеренно, чтобы их не искать):
-
-    - задача 24: `open_blockers: Sequence[str]` — ключи незакрытых блокеров;
-      `unclosed_children: Sequence[str]` — ключи детей не в `done` и не в `cancelled`.
+    Факт, которому нужна база (сводка, вердикты, блокеры, дети), считается сценарием и
+    только для тех пар статусов, где его смотрит хоть одна проверка.
     """
 
     key: str
@@ -473,6 +473,13 @@ class TransitionFacts:
     #: одной проверке» и переход запретит. Пустой кортеж означал бы обратное — что все
     #: проверки пройдены, — поэтому значением по умолчанию он быть не может.
     checks_without_passed_verdict: Sequence[int] | None = None
+    #: Ключи блокеров задачи не в `done` и не в `cancelled`. `None` — «факт не считали»,
+    #: и переход в `in_progress` запрещается: назвать блокеры при этом нечем, поэтому
+    #: отказ приходит с `details.reason`, а не с пустым списком, который соврал бы.
+    open_blockers: Sequence[str] | None = None
+    #: Ключи детей не в `done` и не в `cancelled`. `None` читается так же, как у
+    #: блокеров, и по той же причине.
+    unclosed_children: Sequence[str] | None = None
 
 
 #: Одна проверка перехода: молчит, если всё в порядке, иначе бросает доменную ошибку со
@@ -579,17 +586,87 @@ def check_verdicts_before_done(facts: TransitionFacts) -> None:
     )
 
 
+def check_no_open_blockers(facts: TransitionFacts) -> None:
+    """`* → in_progress`: ни одной связи `blocked_by` на незакрытую задачу.
+
+    Единственная валидация, которая читает связи. Она не «ждёт» и ничего не назначает:
+    статуса ожидания в трекере нет, а блокировка — это просто отказ взять задачу в
+    работу, пока блокер открыт (`CONCEPT.md`, 4.6).
+    """
+    if facts.to_status is not TaskStatus.IN_PROGRESS:
+        return
+    blockers = facts.open_blockers
+    if blockers is None:
+        # Факт не посчитан. Пропустить переход нельзя — незаполненный факт обязан
+        # запрещать ход, а не выглядеть успехом; но и назвать блокеры нечем, а пустой
+        # список в `details.blockers` соврал бы, что их нет. Поэтому отдельная причина.
+        raise TaskBlockedError(
+            details={
+                "key": facts.key,
+                "from": facts.from_status.value,
+                "to": facts.to_status.value,
+                "reason": "blockers_not_collected",
+            },
+        )
+    if not blockers:
+        return
+    raise TaskBlockedError(
+        details={
+            "key": facts.key,
+            "from": facts.from_status.value,
+            "to": facts.to_status.value,
+            "blockers": list(blockers),
+        },
+    )
+
+
+def check_children_closed_before_done(facts: TransitionFacts) -> None:
+    """`* → done`: все дети в `done` или в `cancelled`.
+
+    `cancelled` закрывает ребёнка наравне с `done`: декомпозиция, от которой отказались,
+    родителя держать не должна. Отменять детей сам трекер при этом не станет — статусы
+    по связям не распространяются.
+    """
+    if facts.to_status is not TaskStatus.DONE:
+        return
+    children = facts.unclosed_children
+    if children is None:
+        # То же, что у блокеров: незаполненный факт запрещает ход и говорит об этом
+        # прямо, а не пустым списком детей.
+        raise TaskHasUnclosedChildrenError(
+            details={
+                "key": facts.key,
+                "from": facts.from_status.value,
+                "to": facts.to_status.value,
+                "reason": "children_not_collected",
+            },
+        )
+    if not children:
+        return
+    raise TaskHasUnclosedChildrenError(
+        details={
+            "key": facts.key,
+            "from": facts.from_status.value,
+            "to": facts.to_status.value,
+            "children": list(children),
+        },
+    )
+
+
 #: Проверки перехода в порядке выполнения. Первая упавшая останавливает переход.
 #:
-#: Как подключить новую (задача 24): добавить факт в `TransitionFacts`, заполнить
-#: его в `app/services/tasks.py` (`_transition_facts`), написать функцию рядом с
-#: соседями и вписать её сюда. Таблицу `TRANSITIONS` при этом не трогать — она
-#: описывает, какие ходы существуют, а не при каких условиях они проходят.
+#: Как подключить новую: добавить факт в `TransitionFacts` со значением по умолчанию,
+#: которое **запрещает** переход, заполнить его в `app/services/tasks.py`
+#: (`_transition_facts`), написать функцию рядом с соседями и вписать её сюда. Таблицу
+#: `TRANSITIONS` при этом не трогать — она описывает, какие ходы существуют, а не при
+#: каких условиях они проходят.
 TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     check_reason_for_step_back_or_cancel,
     check_sections_filled_before_open,
     check_summary_before_leaving_in_progress,
     check_verdicts_before_done,
+    check_no_open_blockers,
+    check_children_closed_before_done,
 )
 
 
@@ -655,10 +732,12 @@ class TaskFeatures:
     расходится с делом ровно в тот момент, когда её забыли обновить. Цена — запрос при
     чтении карточки; она приемлема, потому что запрос один и идёт по индексу.
 
-    `blocked` добавляет задача 24 вместе со связями: без них признак всегда `false`, и
-    поле, которое врёт до следующей задачи, хуже отсутствующего.
+    Все четыре считаются из того, что пакет преемника читает и так: `blocked` — из
+    связей, остальные — из открытых вопросов и последней сводки. Отдельного запроса
+    ради признака в проекте нет ни одного, и заводить его не нужно.
     """
 
+    blocked: bool
     open_questions: int
     open_blocking_questions: int
     last_summary_at: datetime | None

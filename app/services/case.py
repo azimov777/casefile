@@ -57,6 +57,7 @@ from app.domain.errors import (
     EntryNotFoundError,
 )
 from app.domain.fields import FieldProblems
+from app.domain.links import LinkKind
 from app.domain.tasks import TaskFeatures, TaskField, TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import participants as participants_service
@@ -128,13 +129,23 @@ async def open_questions(session: AsyncSession, task: Task, *, actor: Actor) -> 
     return await EntryRepository(session).open_questions(task.id)
 
 
-def features(questions: Sequence[Entry], summary: Entry | None) -> TaskFeatures:
-    """Вычисляемые признаки из уже прочитанного дела, без новых запросов.
+def features(
+    questions: Sequence[Entry],
+    summary: Entry | None,
+    *,
+    blocked: bool,
+) -> TaskFeatures:
+    """Вычисляемые признаки из уже прочитанного, без новых запросов.
 
     Чистая функция, а не ещё один поход в базу: и список открытых вопросов, и последняя
     сводка уже прочитаны для пакета преемника, а счётчики — это их длина и время.
+
+    `blocked` приезжает готовым и **без значения по умолчанию**: считается он из связей,
+    которых дело не знает, а умолчание `False` сделало бы забытый аргумент признаком,
+    который врёт. Кто его считает — `app/services/links.py`, `blocked`.
     """
     return TaskFeatures(
+        blocked=blocked,
         open_questions=len(questions),
         open_blocking_questions=sum(
             1 for question in questions if question.payload.get("blocking") is True
@@ -418,6 +429,37 @@ async def record_assignee_changed(
         type=EntryType.ASSIGNEE_CHANGED,
         title=f"Assignee changed: {before or 'nobody'} -> {after or 'nobody'}",
         payload={"before": before, "after": after},
+    )
+
+
+async def record_link_change(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    added: bool,
+    kind: LinkKind,
+    other_key: str,
+) -> Entry:
+    """Появление или снятие связи — в дело **этой** стороны, её собственным видом связи.
+
+    Один сценарий подшивает две такие записи, по одной в каждую задачу: связь — событие
+    обеих, и дыра в деле одной из них означала бы, что преемник не узнает, откуда взялся
+    его блокер. Вид связи у записей поэтому разный: у `A` — `blocks`, у `B` —
+    `blocked_by`; ключ в `other` — всегда ключ **другой** стороны.
+
+    Порядок двух вызовов важен и задаётся вызывающим: `allocate_no` держит строку задачи
+    до конца транзакции, и две подшивки в разном порядке взаимно заблокировались бы
+    (`docs/notes/links.md`).
+    """
+    action = "added" if added else "removed"
+    return await _append(
+        session,
+        task,
+        actor=actor,
+        type=EntryType.LINK_ADDED if added else EntryType.LINK_REMOVED,
+        title=f"Link {action}: {kind.value} {other_key}",
+        payload={"kind": kind.value, "other": other_key},
     )
 
 
