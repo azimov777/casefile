@@ -170,6 +170,50 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/entries/5
 ```
 
+#### Список и поиск задач
+
+`GET /api/v1/tasks` — единственный способ отобрать задачи, и он принимает два входа
+сразу: строку на языке запросов (`query`) и структурные параметры по каждому полю. На
+одинаковых условиях они дают одинаковый результат — это один и тот же код, а не две
+похожие реализации. Условия из обоих источников складываются по `and`.
+
+Поля отбора: `queue`, `status`, `assignee`, `tags`, `priority`, `text` (подстрока в
+названии и описании) и три вычисляемых признака — `blocked`, `open_questions`,
+`open_blocking_questions`. Признаки не хранятся колонками, а считаются из связей и дела
+прямо в запросе, поэтому они всегда согласованы с карточкой.
+
+```bash
+# кандидаты назначателя одной строкой: что можно брать в работу прямо сейчас
+curl -H "Authorization: Bearer $TOKEN" --get --data-urlencode \
+     'query=queue: TRK and status: open and blocked: false and open_blocking_questions: 0' \
+     http://localhost:8000/api/v1/tasks
+
+# то же самое структурными параметрами — тот же список в том же порядке
+curl -H "Authorization: Bearer $TOKEN" \
+     'http://localhost:8000/api/v1/tasks?queue=TRK&status=open&blocked=false&open_blocking_questions=0'
+
+# только нужные поля: полная задача с пятью разделами съедает контекст агента
+curl -H "Authorization: Bearer $TOKEN" \
+     'http://localhost:8000/api/v1/tasks?fields=title,status,assignee&limit=100'
+
+# порядок и страницы: sort принимает key, updated_at и priority, минус — по убыванию
+curl -H "Authorization: Bearer $TOKEN" \
+     'http://localhost:8000/api/v1/tasks?sort=-updated_at&limit=20'
+```
+
+Операторы языка: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (вхождение подстроки), `!~`, `in`,
+`not in`; значения перечисляются через запятую (`status: open, in_progress`), условия
+связываются `and`, `or` и скобками. `empty()` находит задачи без значения:
+`assignee: empty()`. Значение с пробелом или похожее на вызов функции пишется в кавычках.
+
+Функций дат, `me()` и сохранённых фильтров нет намеренно. Ошибка разбора приходит с
+позицией символа и причиной (`invalid_search_query`), незнакомое имя поля — со списком
+допустимых (`search_field_unknown`): запрос чинится за одну попытку, а не подбором.
+
+Курсор устойчив к вставкам: граница страницы задана значением ключа сортировки, а не
+смещением, поэтому задача, заведённая между запросами, не сдвигает выдачу и не вытесняет
+из неё соседа. Порядок по умолчанию — по ключу задачи: `TRK-10` идёт после `TRK-2`.
+
 #### Записи агента
 
 Дело пополняется одним маршрутом `POST /tasks/{key}/entries`. Тело — размеченное по

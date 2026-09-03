@@ -91,8 +91,12 @@
 | `invalid_page_size` | Page size is out of range | Запрошен размер страницы вне допустимых границ. |
 | `invalid_participant_name` | Participant name is invalid | Имя участника не соответствует шаблону. |
 | `invalid_queue_key` | Queue key is invalid | Ключ очереди не соответствует шаблону. |
+| `invalid_search_query` | Search query cannot be parsed | Строка на языке запросов не разбирается. |
 | `invalid_task_key` | Task key is invalid | Ключ задачи не разбирается как `КЛЮЧ-НОМЕР`. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
+| `search_field_unknown` | Search field is unknown | Имени поля отбора или ключа сортировки нет: допустимые перечислены в `details.allowed`. |
+| `search_operator_not_supported` | Operator is not supported for this field | Оператор к этому полю неприменим: допустимые перечислены в `details.allowed`. |
+| `search_value_invalid` | Search value is invalid | Значение условия не разрешается: нет такой очереди, статуса, не число. |
 | `task_fields_invalid` | Task fields are invalid | Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`. |
 | `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
 | `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов и отмена требуют причины `reason`. |
