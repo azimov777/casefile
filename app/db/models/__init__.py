@@ -6,12 +6,17 @@
 """
 
 from app.db.base import Base, BaseModel
-from app.db.models.actor import Actor
-from app.db.models.api_token import ApiToken
+from app.db.models.author import CreatedByMixin, created_by_columns
+from app.db.models.participant import Participant
+from app.db.models.queue import Queue
+from app.db.models.token import Token
 
 __all__ = [
-    "Actor",
-    "ApiToken",
     "Base",
     "BaseModel",
+    "CreatedByMixin",
+    "Participant",
+    "Queue",
+    "Token",
+    "created_by_columns",
 ]

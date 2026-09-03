@@ -7,63 +7,91 @@
 Базовые семейства (`not_found`, `conflict`, `validation_error`, ...) живут в
 `app/core/errors.py`; здесь только их наследники со своим стабильным кодом.
 
-Сейчас в списке одни акторы и токены: остальной домен переписывается заново задачами
-21-29, и коды вернутся сюда вместе со своими областями.
+Сейчас в списке фундамент: участники, токены, метка временного агента и очереди.
+Задача, дело и связи приезжают сюда вместе со своими областями (задачи 22–24).
 
 Исключение из правила одно и оно осознанное: ошибка, описывающая не предметную
 область, а механизм (недоступна база, испорчен курсор), живёт рядом с этим механизмом.
 """
 
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import ConflictError, NotFoundError, UnauthorizedError, ValidationError
 
-# --- Акторы ---------------------------------------------------------------------
-
-
-class ActorNotFoundError(NotFoundError):
-    """Актора с таким ключом или идентификатором нет."""
-
-    code = "actor_not_found"
-    message = "Actor not found"
+# --- Участники ------------------------------------------------------------------
 
 
-class ActorKeyTakenError(ConflictError):
-    """Ключ актора уже занят: ключ уникален на всю установку."""
+class ParticipantNotFoundError(NotFoundError):
+    """Участника с таким именем или идентификатором нет."""
 
-    code = "actor_key_taken"
-    message = "Actor key is already taken"
-
-
-class InvalidActorKeyError(ValidationError):
-    """Ключ не соответствует шаблону или зарезервирован."""
-
-    code = "invalid_actor_key"
-    message = "Actor key is invalid"
+    code = "participant_not_found"
+    message = "Participant not found"
 
 
-class ActorInactiveError(ConflictError):
-    """Актор отключён: выпускать ему токены и действовать от его имени нельзя."""
+class ParticipantNameTakenError(ConflictError):
+    """Имя участника уже занято: имена уникальны без учёта регистра."""
 
-    code = "actor_inactive"
-    message = "Actor is inactive"
+    code = "participant_name_taken"
+    message = "Participant name is already taken"
 
 
-class SystemActorProtectedError(ConflictError):
-    """Системный актор управляется приложением, а не API.
+class InvalidParticipantNameError(ValidationError):
+    """Имя участника не соответствует шаблону."""
 
-    Его нельзя ни создать, ни отключить, ни выпустить ему токен: служебные записи
-    делаются от его имени внутри процесса, и внешний токен на него означал бы
-    возможность выдать себя за сам трекер.
+    code = "invalid_participant_name"
+    message = "Participant name is invalid"
+
+
+# --- Автор действия -------------------------------------------------------------
+
+
+class ActorLabelRequiredError(UnauthorizedError):
+    """Общий агентский токен пришёл без метки временного агента.
+
+    Токен без участника не называет автора сам: подписью становится заголовок
+    `X-Actor-Label`. Без него запрос нельзя приписать никому, поэтому это отказ в
+    аутентификации, а не ошибка формы запроса — самого действия трекер даже не
+    рассматривает.
     """
 
-    code = "system_actor_protected"
-    message = "System actor is managed by the application"
+    code = "actor_label_required"
+    message = "Shared agent token requires the X-Actor-Label header"
+
+
+class InvalidActorLabelError(ValidationError):
+    """Метка временного агента не соответствует шаблону."""
+
+    code = "invalid_actor_label"
+    message = "Actor label is invalid"
 
 
 # --- Токены доступа -------------------------------------------------------------
 
 
-class ApiTokenNotFoundError(NotFoundError):
-    """Токена с таким идентификатором у актора нет."""
+class TokenNotFoundError(NotFoundError):
+    """Токена с таким идентификатором нет."""
 
-    code = "api_token_not_found"
-    message = "API token not found"
+    code = "token_not_found"
+    message = "Token not found"
+
+
+# --- Очереди --------------------------------------------------------------------
+
+
+class QueueNotFoundError(NotFoundError):
+    """Очереди с таким ключом нет."""
+
+    code = "queue_not_found"
+    message = "Queue not found"
+
+
+class QueueKeyTakenError(ConflictError):
+    """Ключ очереди уже занят: ключи уникальны без учёта регистра."""
+
+    code = "queue_key_taken"
+    message = "Queue key is already taken"
+
+
+class InvalidQueueKeyError(ValidationError):
+    """Ключ очереди не соответствует шаблону."""
+
+    code = "invalid_queue_key"
+    message = "Queue key is invalid"
