@@ -43,6 +43,7 @@ from app.api.contract import (
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
+from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
 
 #: Значение-затычка для развёртки без токена: до параметров дело не доходит, потому что
 #: зависимость аутентификации отказывает раньше. UUID, а не «x», чтобы параметры типа
@@ -266,6 +267,42 @@ async def sample(owner: Participant, queue: Queue, task: Task) -> dict[str, str]
 def _api_operations(schema: dict[str, Any]) -> int:
     """Сколько операций объявлено под `/api/v1` — ожидаемый охват развёртки без токена."""
     return sum(1 for _, path, _ in operations(schema) if path.startswith("/api/v1"))
+
+
+# --- Идемпотентность ---------------------------------------------------------------
+
+
+def test_every_creating_route_accepts_an_idempotency_key(schema: dict[str, Any]) -> None:
+    """Создающий маршрут без ключа идемпотентности — это маршрут, который нельзя повторить.
+
+    Проверка сплошная и по схеме, потому что заводится новый создающий маршрут раз в
+    несколько задач, а забывается зависимость `OnceDep` мгновенно: отсутствие заголовка
+    ничего не ломает и не видно ни в одном тесте самого маршрута. Признак «создающий» —
+    объявленный ответ `201`: другого признака у схемы нет, и другого у проекта тоже
+    (`CONVENTIONS.md`: создание отвечает `201`).
+    """
+    without_key = [
+        f"{method} {path}"
+        for method, path, operation in operations(schema)
+        if "201" in operation.get("responses", {})
+        and not any(
+            parameter["in"] == "header" and parameter["name"] == IDEMPOTENCY_KEY_HEADER
+            for parameter in operation.get("parameters", [])
+        )
+    ]
+
+    assert not without_key, f"creating routes without {IDEMPOTENCY_KEY_HEADER}: {without_key}"
+
+
+def test_the_sweep_sees_the_creating_routes(schema: dict[str, Any]) -> None:
+    """Порог охвата: развёртка выше обязана падать, когда проверять стало нечего."""
+    creating = [
+        f"{method} {path}"
+        for method, path, operation in operations(schema)
+        if "201" in operation.get("responses", {})
+    ]
+
+    assert len(creating) >= 6, creating
 
 
 # --- Справочник кодов ошибок -------------------------------------------------------
