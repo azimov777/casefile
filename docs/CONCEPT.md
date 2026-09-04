@@ -317,12 +317,12 @@ open_blocking_questions: 0`.
 | `get_task(key)` | Пакет преемника. | |
 | `read_entries(key, nos, types, after_no, limit)` | Тела записей. | |
 | `search_tasks(query, fields, cursor, limit)` | Поиск языком запросов. | |
-| `create_task(queue, title, description, sections, parent, tags, priority)` | Новая задача в `backlog`. | Название и описание непустые. |
+| `create_task(queue, title, description, sections, parent, assignee, tags, priority)` | Новая задача в `backlog`. | Название и описание непустые. |
 | `update_task(key, changes, version)` | Правка полей. | Разделы только в `backlog`. |
 | `transition(key, to, reason)` | Перевод статуса. | Таблица и валидации из 3.3. |
 | `add_summary(key, done, remaining, blockers, next_step)` | Сводка. | Четыре части непустые. |
 | `add_entry(key, type, title, body, refs)` | `decision`, `attempt`, `finding`, `artifact`, `note`. | Тип из списка, заголовок непустой, ссылки существуют. |
-| `ask(key, addressees, title, body, blocking)` | Вопрос. | Адресаты из реестра. |
+| `ask(key, addressees, title, blocking, body)` | Вопрос. | Адресаты из реестра. |
 | `answer(key, question_no, body)` | Ответ. | Вопрос существует в этой задаче. |
 | `add_verdict(key, check_no, outcome, evidence)` | Вердикт проверки. | Номер существует, исход из двух. |
 | `link(key, kind, other)`, `unlink(key, kind, other)` | Связи. | Виды из 3.5, без циклов. |
