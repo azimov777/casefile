@@ -7,11 +7,16 @@ from httpx import ASGITransport, AsyncClient
 from app.core.errors import AppError, ConflictError, NotFoundError
 
 
-class IssueNotFound(NotFoundError):
-    """Наследник из будущей предметной области: проверяем, что схема работает для них."""
+class SampleNotFound(NotFoundError):
+    """Наследник из предметной области: проверяем, что схема работает для них.
 
-    code = "issue_not_found"
-    message = "Issue TRK-123 not found"
+    Класс намеренно свой, а не взятый из `app/domain/errors.py`: проверяется механика
+    оболочки — код, статус и подробности доходят до клиента, — а не конкретная ошибка
+    трекера. Доменные ошибки сверяются со справочником в `test_api_contract.py`.
+    """
+
+    code = "sample_not_found"
+    message = "Sample TRK-123 not found"
 
 
 @pytest.fixture
@@ -20,11 +25,11 @@ def error_app(app: FastAPI) -> FastAPI:
 
     @app.get("/boom/domain")
     async def _domain() -> None:
-        raise IssueNotFound(details={"key": "TRK-123"})
+        raise SampleNotFound(details={"key": "TRK-123"})
 
     @app.get("/boom/conflict")
     async def _conflict() -> None:
-        raise ConflictError("Issue version is outdated")
+        raise ConflictError("Sample version is outdated")
 
     @app.get("/boom/custom")
     async def _custom() -> None:
@@ -50,8 +55,8 @@ async def test_domain_error_keeps_code_and_details(error_client: AsyncClient) ->
     assert response.status_code == 404
     assert response.json() == {
         "error": {
-            "code": "issue_not_found",
-            "message": "Issue TRK-123 not found",
+            "code": "sample_not_found",
+            "message": "Sample TRK-123 not found",
             "details": {"key": "TRK-123"},
         }
     }
@@ -62,7 +67,7 @@ async def test_conflict_error_uses_base_code(error_client: AsyncClient) -> None:
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "conflict"
-    assert response.json()["error"]["message"] == "Issue version is outdated"
+    assert response.json()["error"]["message"] == "Sample version is outdated"
 
 
 async def test_error_fields_can_be_overridden_per_instance(error_client: AsyncClient) -> None:

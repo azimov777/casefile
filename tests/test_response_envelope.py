@@ -9,18 +9,20 @@ from pydantic import BaseModel
 from app.api.schemas.common import CollectionResponse, DataResponse
 
 
-class Issue(BaseModel):
+class Sample(BaseModel):
+    """Модель на один тест: оболочка проверяется на форме, а не на домене."""
+
     key: str
 
 
 def test_single_resource_is_wrapped_into_data() -> None:
-    response = DataResponse[Issue](data=Issue(key="TRK-1"))
+    response = DataResponse[Sample](data=Sample(key="TRK-1"))
 
     assert response.model_dump() == {"data": {"key": "TRK-1"}}
 
 
 def test_collection_puts_pagination_into_meta() -> None:
-    response = CollectionResponse[Issue].of([Issue(key="TRK-1")], next_cursor="eyJpZCI6...")
+    response = CollectionResponse[Sample].of([Sample(key="TRK-1")], next_cursor="eyJpZCI6...")
 
     assert response.model_dump() == {
         "data": [{"key": "TRK-1"}],
@@ -29,6 +31,6 @@ def test_collection_puts_pagination_into_meta() -> None:
 
 
 def test_empty_collection_is_an_empty_list_not_an_empty_body() -> None:
-    response = CollectionResponse[Issue].of([])
+    response = CollectionResponse[Sample].of([])
 
     assert response.model_dump() == {"data": [], "meta": {"next_cursor": None, "has_more": False}}

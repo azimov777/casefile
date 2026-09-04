@@ -369,7 +369,7 @@ def test_every_operation_carries_a_summary_and_a_description(schema: dict[str, A
 def test_every_path_parameter_is_described(schema: dict[str, Any]) -> None:
     """Параметр пути без описания приезжает в сгенерированный клиент безымянной строкой.
 
-    Ловится только так: в коде маршрут с `issue_key: str` выглядит совершенно нормально,
+    Ловится только так: в коде маршрут с `task_key: str` выглядит совершенно нормально,
     и отличить его от маршрута с общим псевдонимом типа можно лишь по схеме.
     """
     undescribed = [
