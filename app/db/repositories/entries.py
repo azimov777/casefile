@@ -186,8 +186,10 @@ class EntryRepository:
     async def last_entry_into_status(self, task_id: uuid.UUID, status: TaskStatus) -> int | None:
         """Номер последней записи о переходе **в** этот статус.
 
-        От неё считается «сводка после последнего входа в `in_progress`»: задача,
-        взятая повторно, старой справкой не закрывается.
+        От неё считаются оба правила с нижней границей: «сводка после последнего входа
+        в `in_progress`» и «вердикты после последнего входа в `review`». Задача, взятая
+        или отданная на обзор повторно, старой справкой и старыми вердиктами не
+        закрывается.
         """
         statement = select(func.max(Entry.no)).where(
             Entry.task_id == task_id,
@@ -211,20 +213,37 @@ class EntryRepository:
         )
         return bool(await self._session.scalar(select(exists)))
 
-    async def last_verdict_outcomes(self, task_id: uuid.UUID) -> dict[int, VerdictOutcome]:
-        """Исход последнего по времени вердикта по каждой проверке задачи.
+    async def last_verdict_outcomes(
+        self,
+        task_id: uuid.UUID,
+        *,
+        after_no: int,
+    ) -> dict[int, VerdictOutcome]:
+        """Исход последнего вердикта по каждой проверке — среди подшитых после `after_no`.
 
-        `DISTINCT ON` по номеру проверки с сортировкой по убыванию `seq`: база сама
+        Нижняя граница обязательна и не имеет значения по умолчанию: вердикт
+        засчитывается только в том обзоре, в котором подшит (`CONCEPT.md`, 3.3).
+        Граница со значением по умолчанию однажды осталась бы непереданной, и метод
+        молча вернул бы вердикты за всю жизнь задачи — ровно то поведение, от которого
+        правило уходит.
+
+        `DISTINCT ON` по номеру проверки с сортировкой по убыванию `no`: база сама
         оставляет по одной, самой свежей строке на проверку. Считать в Python значило бы
-        вычитывать все вердикты задачи ради последних.
+        вычитывать все вердикты задачи ради последних. Порядок — тот же `no`, что и у
+        границы: внутри задачи он и есть порядок подшивки (номера выдаются под
+        блокировкой строки задачи), и вторая мера времени здесь только сбивала бы.
         """
         check_no = Entry.payload["check_no"].as_integer()
         outcome = Entry.payload["outcome"].astext
         statement = (
             select(check_no.label("check_no"), outcome.label("outcome"))
-            .where(Entry.task_id == task_id, Entry.type == EntryType.VERDICT)
+            .where(
+                Entry.task_id == task_id,
+                Entry.type == EntryType.VERDICT,
+                Entry.no > after_no,
+            )
             .distinct(check_no)
-            .order_by(check_no, Entry.seq.desc())
+            .order_by(check_no, Entry.no.desc())
         )
         rows: list[Any] = list(await self._session.execute(statement))
         return {row.check_no: VerdictOutcome(row.outcome) for row in rows}

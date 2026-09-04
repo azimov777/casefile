@@ -239,11 +239,12 @@ async def transition_task(
     transition_reason_required`); `backlog → open` требует заполненных разделов (`422
     task_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после
     последнего входа в него (`409 summary_required`); `review → done` — положительного
-    последнего вердикта по каждой проверке (`409 checks_not_passed`, проверки без него
-    в `details.checks`). Вход в `in_progress` отклоняется при открытом блокере (`409
-    task_blocked`, их ключи в `details.blockers`), переход в `done` — при детях не в
-    `done` и не в `cancelled` (`409 task_has_unclosed_children`, ключи в
-    `details.children`). Переход подшивает `status_changed` с `from`, `to` и `reason`.
+    последнего вердикта по каждой проверке, подшитого после последнего входа в `review`
+    (`409 checks_not_passed`, проверки без него в `details.checks`). Вход в
+    `in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в
+    `details.blockers`), переход в `done` — при детях не в `done` и не в `cancelled`
+    (`409 task_has_unclosed_children`, ключи в `details.children`). Переход подшивает
+    `status_changed` с `from`, `to` и `reason`.
     """
     task = await service.get_task(session, task_key)
     mutation = await service.transition_task(

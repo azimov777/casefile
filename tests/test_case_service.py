@@ -1,7 +1,8 @@
 """Сценарии дела: подшивка записей агента, проверки по базе, пакет преемника, вопросы.
 
 Здесь то, чего нельзя проверить без базы: существование адресата и записи, на которую
-ссылаются, открытость вопроса, отсчёт сводки от последнего входа в `in_progress`.
+ссылаются, открытость вопроса, отсчёт сводки от последнего входа в `in_progress` и
+вердиктов — от последнего входа в `review`.
 Форма записи проверяется без базы — `tests/test_domain_case.py`.
 """
 
@@ -54,6 +55,38 @@ async def take(session: AsyncSession, task: Task, actor: Actor) -> None:
     """Заводит задачу в работу: `backlog → open → in_progress`."""
     for status in (TaskStatus.OPEN, TaskStatus.IN_PROGRESS):
         await tasks_service.transition_task(session, task, actor=actor, to=status)
+
+
+async def reviewing(
+    session: AsyncSession, actor: Actor, queue: Queue, *, checks: list[str]
+) -> Task:
+    """Новая задача с этими проверками, доведённая до `review`.
+
+    Сводка и три перехода — не предмет здешних тестов, но без них до `review` не
+    добраться: правила выхода из `in_progress` проверяются выше своим тестом.
+    """
+    task = await tasks_service.create_task(
+        session,
+        actor=actor,
+        queue=queue,
+        title="Задача на обзоре",
+        description="Есть",
+        goal="Цель",
+        context="Контекст",
+        constraints="Ограничения",
+        output="Выход",
+        checks=checks,
+    )
+    await take(session, task, actor)
+    await service.add_summary(session, task, actor=actor, **SUMMARY)
+    await tasks_service.transition_task(session, task, actor=actor, to=TaskStatus.REVIEW)
+    return task
+
+
+async def pass_all(session: AsyncSession, task: Task, actor: Actor) -> None:
+    """Положительный вердикт по каждой проверке задачи."""
+    for check_no in range(1, len(task.checks) + 1):
+        await service.add_verdict(session, task, actor=actor, check_no=check_no, outcome="passed")
 
 
 # --- Подшивка -------------------------------------------------------------------------
@@ -238,26 +271,9 @@ async def test_closing_needs_the_last_verdict_of_every_check_to_be_passed(
     db_session: AsyncSession, task_actor: Actor, queue: Queue
 ) -> None:
     """Обзорная проверка 7: провал закрывается новым вердиктом, а не правкой старого."""
-    task = await tasks_service.create_task(
-        db_session,
-        actor=task_actor,
-        queue=queue,
-        title="Три проверки",
-        description="Есть",
-        goal="Цель",
-        context="Контекст",
-        constraints="Ограничения",
-        output="Выход",
-        checks=["первая", "вторая", "третья"],
-    )
-    await take(db_session, task, task_actor)
-    await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
-    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.REVIEW)
+    task = await reviewing(db_session, task_actor, queue, checks=["первая", "вторая", "третья"])
 
-    for check_no in (1, 2, 3):
-        await service.add_verdict(
-            db_session, task, actor=task_actor, check_no=check_no, outcome="passed"
-        )
+    await pass_all(db_session, task, task_actor)
     await service.add_verdict(db_session, task, actor=task_actor, check_no=2, outcome="failed")
 
     with pytest.raises(ChecksNotPassedError) as error:
@@ -269,6 +285,68 @@ async def test_closing_needs_the_last_verdict_of_every_check_to_be_passed(
     )
     await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
     assert task.status is TaskStatus.DONE
+
+
+async def test_verdicts_of_the_previous_review_do_not_close_the_new_one(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Задача 31, обзорная проверка 1: возврат в `open` обнуляет зачёт вердиктов.
+
+    Проверяется именно поведение границы: вердикты никуда не деваются из дела —
+    перестаёт засчитываться то, что подшито до последнего входа в `review`.
+    """
+    task = await reviewing(db_session, task_actor, queue, checks=["первая", "вторая"])
+    await pass_all(db_session, task, task_actor)
+
+    await tasks_service.transition_task(
+        db_session, task, actor=task_actor, to=TaskStatus.OPEN, reason="выход переделать"
+    )
+    await tasks_service.transition_task(
+        db_session, task, actor=task_actor, to=TaskStatus.IN_PROGRESS
+    )
+    await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
+    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.REVIEW)
+
+    with pytest.raises(ChecksNotPassedError) as error:
+        await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+    assert error.value.details["checks"] == [1, 2]
+    assert len(await entries(db_session, task, types=[EntryType.VERDICT])) == 2, "история цела"
+
+    await pass_all(db_session, task, task_actor)
+    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+    assert task.status is TaskStatus.DONE
+
+
+async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Задача 31, обзорная проверка 2: правка `checks` не оставляет старых `passed`.
+
+    Номера проверок те же самые, а проверяют они другое: без границы вердикт по первой
+    проверке молча закрыл бы переписанную первую проверку.
+    """
+    task = await reviewing(db_session, task_actor, queue, checks=["первая", "вторая"])
+    await pass_all(db_session, task, task_actor)
+
+    # Пять разделов правятся только в `backlog`, и попасть туда можно лишь через `open`
+    # (`CONCEPT.md`, 3.3): `review → backlog` в таблице переходов нет.
+    for status in (TaskStatus.OPEN, TaskStatus.BACKLOG):
+        await tasks_service.transition_task(
+            db_session, task, actor=task_actor, to=status, reason="проверки сформулированы неверно"
+        )
+    await tasks_service.update_task(
+        db_session,
+        task,
+        actor=task_actor,
+        changes=tasks_service.TaskChanges(checks=["другая первая", "другая вторая"]),
+    )
+    await take(db_session, task, task_actor)
+    await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
+    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.REVIEW)
+
+    with pytest.raises(ChecksNotPassedError) as error:
+        await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+    assert error.value.details["checks"] == [1, 2]
 
 
 # --- Пакет преемника ------------------------------------------------------------------

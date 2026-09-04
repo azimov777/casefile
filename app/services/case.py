@@ -62,7 +62,7 @@ from app.domain.errors import (
 )
 from app.domain.fields import FieldProblems
 from app.domain.links import LinkKind
-from app.domain.tasks import TaskFeatures, TaskField, TaskStatus
+from app.domain.tasks import FIRST_CHECK_NUMBER, TaskFeatures, TaskField, TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import participants as participants_service
 from app.services.auth import Actor
@@ -394,9 +394,10 @@ async def record_status_changed(
 ) -> Entry:
     """Переход статуса с причиной, если она была: по ней преемник понимает откат.
 
-    Нагрузка этой записи — не только история: по `payload.to` считается последний вход
-    в `in_progress`, от которого проверка перехода ищет сводку. Менять её имена нельзя,
-    не поправив `EntryRepository.last_entry_into_status`.
+    Нагрузка этой записи — не только история: по `payload.to` считаются последние входы
+    в `in_progress` и в `review` — границы, от которых проверки перехода ищут сводку и
+    вердикты текущего обзора. Менять её имена нельзя, не поправив
+    `EntryRepository.last_entry_into_status`.
     """
     return await _append(
         session,
@@ -622,18 +623,30 @@ async def _append(
 
 
 async def verdict_gaps(session: AsyncSession, task: Task) -> list[int]:
-    """Номера проверок, у которых последний по времени вердикт не `passed`.
+    """Номера проверок, у которых в **текущем** обзоре нет положительного вердикта.
+
+    Текущий обзор — всё, что подшито после последнего входа задачи в `review`
+    (`CONCEPT.md`, 3.3). Вердикты прошлых обзоров остаются в деле как история, но в
+    валидации не участвуют: после возврата `review → open` переделывается выход, а
+    после возврата в `backlog` могут быть переписаны и сами `checks`, и старое `passed`
+    относилось бы к другой работе или к другой проверке.
+
+    Записи о входе в `review` нет — значит, и вердиктов текущего обзора нет, и
+    непройденными числятся все проверки. Такое дело испорчено (вход в `review` всегда
+    подшивает `status_changed`), и молча считать его успехом нельзя — то же правило,
+    что у `has_summary_since`.
 
     Считается для проверки перехода `review → done` (`app/domain/tasks.py`), поэтому
     живёт здесь, рядом с делом, а не в сценарии задачи: домен в базу не ходит, а знание
     о том, что вердикт — это запись дела, за пределы этого модуля не уезжает.
     """
-    outcomes = await EntryRepository(session).last_verdict_outcomes(task.id)
-    return [
-        check_no
-        for check_no in range(1, len(task.checks) + 1)
-        if outcomes.get(check_no) is not VerdictOutcome.PASSED
-    ]
+    repository = EntryRepository(session)
+    checks = range(FIRST_CHECK_NUMBER, FIRST_CHECK_NUMBER + len(task.checks))
+    entered = await repository.last_entry_into_status(task.id, TaskStatus.REVIEW)
+    if entered is None:
+        return list(checks)
+    outcomes = await repository.last_verdict_outcomes(task.id, after_no=entered)
+    return [check_no for check_no in checks if outcomes.get(check_no) is not VerdictOutcome.PASSED]
 
 
 async def has_summary_since(session: AsyncSession, task: Task, status: TaskStatus) -> bool:
