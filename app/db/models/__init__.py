@@ -8,6 +8,7 @@
 from app.db.base import Base, BaseModel
 from app.db.models.author import CreatedByMixin, created_by_columns
 from app.db.models.entry import Entry
+from app.db.models.idempotency import IdempotencyKey
 from app.db.models.link import Link
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
@@ -19,6 +20,7 @@ __all__ = [
     "BaseModel",
     "CreatedByMixin",
     "Entry",
+    "IdempotencyKey",
     "Link",
     "Participant",
     "Queue",

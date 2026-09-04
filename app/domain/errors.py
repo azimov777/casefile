@@ -400,3 +400,30 @@ class JournalStreamLimitError(TooManyRequestsError):
 
     code = "journal_stream_limit"
     message = "Too many open journal streams"
+
+
+# --- Идемпотентность ------------------------------------------------------------------
+
+
+class InvalidIdempotencyKeyError(ValidationError):
+    """Ключ идемпотентности пуст или длиннее допустимого.
+
+    Отказ, а не молчаливый пропуск ключа: клиент, чей ключ выбросили, считает вызов
+    защищённым от повтора, не будучи защищённым, — и узнаёт об этом вторым объектом.
+    """
+
+    code = "invalid_idempotency_key"
+    message = "Idempotency key is invalid"
+
+
+class IdempotencyKeyReusedError(ConflictError):
+    """Ключ идемпотентности уже использован другим запросом.
+
+    Ключ обещает «это тот же самый вызов», и обещание проверяется отпечатком: тот же
+    ключ с другим телом или на другой операции означает, что клиент переиспользовал
+    ключ. В `details` — операция, за которой ключ закреплён, и срок его жизни: этого
+    хватает, чтобы понять, повторять с новым ключом или чинить генератор ключей.
+    """
+
+    code = "idempotency_key_reused"
+    message = "Idempotency key was used for a different request"

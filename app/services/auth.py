@@ -15,6 +15,7 @@
 на каждого вызывающего.
 """
 
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -45,11 +46,18 @@ class Actor:
     только там, где нужна именно строка реестра (адресовать вопрос можно лишь
     участнику); для подписи есть `author.signature`, и он заполнен всегда, кроме
     служебных действий трекера.
+
+    `token_id` пуст только у самого трекера: любой запрос снаружи приходит с токеном.
+    Нужен он одному механизму — ключам идемпотентности, которые живут в паре с токеном
+    (`CONCEPT.md`, 4.5), поэтому здесь лежит идентификатор, а не сама строка токена:
+    больше о токене сценариям знать нечего, а лишняя ссылка на ORM-объект пережила бы
+    свою сессию.
     """
 
     author: Author
     scope: TokenScope
     participant: Participant | None = None
+    token_id: uuid.UUID | None = None
 
 
 #: Автор служебных действий: команда первичной инициализации и служебные записи дела.
@@ -90,7 +98,12 @@ async def authenticate(
             details={"reason": "token_revoked"},
         )
 
-    actor = Actor(author=_author(token, label), scope=token.scope, participant=token.participant)
+    actor = Actor(
+        author=_author(token, label),
+        scope=token.scope,
+        participant=token.participant,
+        token_id=token.id,
+    )
     _touch(token, moment)
     return actor
 
