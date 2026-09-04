@@ -16,21 +16,29 @@ from app.api.routes import health
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine
+from app.db.wakeup import journal_wakeup
 
 logger = get_logger("main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Жизненный цикл процесса: движок БД создаётся лениво, закрывается явно.
+    """Жизненный цикл процесса: слушатель журнала поднимается, движок БД закрывается.
 
-    В базу при старте процесс не ходит вовсе: миграции — отдельный шаг Compose, и
-    контур поднимается раньше, чем схема появляется. Запрос к непромигрированной базе
-    здесь означал бы падение старта на ровном месте.
+    Запросов к схеме при старте нет вовсе: миграции — отдельный шаг Compose, и контур
+    поднимается раньше, чем схема появляется. Запрос к непромигрированной базе здесь
+    означал бы падение старта на ровном месте.
+
+    Слушатель оповещений журнала (`LISTEN/NOTIFY`) схемы не требует и потому поднимается
+    здесь, а не при первом ожидании: ленивый подъём оставлял бы за собой соединение,
+    которое некому закрыть в разовом скрипте. Не подключился — в логе строка, ожидание
+    переходит на контрольный опрос; ронять из-за этого API нельзя.
     """
     settings: Settings = app.state.settings
     logger.info("Starting tracker %s in %s environment", __version__, settings.environment)
+    await journal_wakeup.start()
     yield
+    await journal_wakeup.close()
     await dispose_engine()
     logger.info("Stopping tracker")
 

@@ -16,7 +16,13 @@
 область, а механизм (недоступна база, испорчен курсор), живёт рядом с этим механизмом.
 """
 
-from app.core.errors import ConflictError, NotFoundError, UnauthorizedError, ValidationError
+from app.core.errors import (
+    ConflictError,
+    NotFoundError,
+    TooManyRequestsError,
+    UnauthorizedError,
+    ValidationError,
+)
 
 # --- Участники ------------------------------------------------------------------
 
@@ -356,3 +362,41 @@ class SearchValueInvalidError(ValidationError):
 
     code = "search_value_invalid"
     message = "Search value is invalid"
+
+
+# --- Лента журнала ------------------------------------------------------------------
+
+
+class JournalWaitTooLongError(ValidationError):
+    """Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`.
+
+    Не срезание до потолка молча: ждущий, попросивший десять минут и получивший минуту,
+    решил бы по пустому ответу, что за десять минут ничего не случилось. Отказ с числом
+    в подробностях позволяет ему сразу построить свой цикл из нескольких ожиданий.
+    """
+
+    code = "journal_wait_too_long"
+    message = "Requested wait exceeds the ceiling"
+
+
+class InvalidJournalCursorError(ValidationError):
+    """`Last-Event-ID` потока не разбирается как сквозной номер записи.
+
+    Молчаливый старт «с текущего момента» был бы хуже отказа: клиент считал бы себя
+    догнавшим, не будучи им, и разошёлся бы с сервером незаметно. Несуществующий номер
+    при этом законен — записи постоянны, и продолжить можно с любого номера.
+    """
+
+    code = "invalid_journal_cursor"
+    message = "Last-Event-ID is not a journal sequence number"
+
+
+class JournalStreamLimitError(TooManyRequestsError):
+    """Открытых потоков журнала на этом процессе столько, сколько разрешено настройкой.
+
+    В `details` — сколько открыто и сколько можно. Отказ приходит **до** первого кадра:
+    после `200` сказать «нельзя» уже нечем, и клиент увидел бы обрыв без объяснения.
+    """
+
+    code = "journal_stream_limit"
+    message = "Too many open journal streams"

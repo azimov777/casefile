@@ -87,12 +87,14 @@
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
+| `invalid_journal_cursor` | Last-Event-ID is not a journal sequence number | `Last-Event-ID` потока не разбирается как сквозной номер записи. |
 | `invalid_link_kind` | Link kind is invalid | Такого вида связи нет; допустимые перечислены в `details.allowed`. |
 | `invalid_page_size` | Page size is out of range | Запрошен размер страницы вне допустимых границ. |
 | `invalid_participant_name` | Participant name is invalid | Имя участника не соответствует шаблону. |
 | `invalid_queue_key` | Queue key is invalid | Ключ очереди не соответствует шаблону. |
 | `invalid_search_query` | Search query cannot be parsed | Строка на языке запросов не разбирается. |
 | `invalid_task_key` | Task key is invalid | Ключ задачи не разбирается как `КЛЮЧ-НОМЕР`. |
+| `journal_wait_too_long` | Requested wait exceeds the ceiling | Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
 | `search_field_unknown` | Search field is unknown | Имени поля отбора или ключа сортировки нет: допустимые перечислены в `details.allowed`. |
 | `search_operator_not_supported` | Operator is not supported for this field | Оператор к этому полю неприменим: допустимые перечислены в `details.allowed`. |
@@ -106,6 +108,7 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `journal_stream_limit` | Too many open journal streams | Открытых потоков журнала на этом процессе столько, сколько разрешено настройкой. |
 | `too_many_requests` | Too many requests | Ресурс исчерпан и просьба повторить позже, а не отказ навсегда. |
 
 ## 500 — внутренняя ошибка

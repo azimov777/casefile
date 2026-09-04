@@ -39,6 +39,37 @@ class Settings(BaseSettings):
     database_pool_size: int = 5
     database_max_overflow: int = 10
 
+    # --- Лента журнала ----------------------------------------------------------------
+    # Потолок самого ожидания живёт не здесь, а в домене (`app/domain/journal.py`,
+    # `MAX_WAIT_SECONDS`): он часть контракта — уезжает в схему параметра и в `details`
+    # отказа, — а не настройка установки. Здесь только то, что владелец вправе крутить
+    # под своё железо и своих клиентов.
+    journal_wait_poll_interval: float = Field(
+        default=5.0,
+        gt=0,
+        description=(
+            "Seconds between the fallback journal checks made while waiting; waits are "
+            "woken by PostgreSQL notifications and this is only the safety net for a "
+            "listener whose connection died"
+        ),
+    )
+    journal_stream_heartbeat_interval: float = Field(
+        default=15.0,
+        gt=0,
+        description=(
+            "Seconds between heartbeat comments in a journal stream. They keep proxies "
+            "from closing an idle stream and let the server notice a client that went away"
+        ),
+    )
+    journal_stream_max_connections: int = Field(
+        default=50,
+        ge=1,
+        description=(
+            "Open journal streams one process serves at once. Each takes a database "
+            "connection while it reads the tail, so the pool bounds this from above"
+        ),
+    )
+
     # --- MCP-сервер для агентов ------------------------------------------------------
     # Отдельный процесс и отдельный порт: инструменты агента живут не в том же сервисе,
     # что REST фронтенда, и клиент MCP подключается прямо к нему.

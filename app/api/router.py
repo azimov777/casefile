@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends
 from fastapi.routing import APIRoute
 
 from app.api.deps import get_actor
-from app.api.routes import links, participants, questions, queues, tasks, tokens
+from app.api.routes import journal, links, participants, questions, queues, tasks, tokens
 from app.api.schemas.common import ErrorResponse
 
 # Формы ошибок объявлены один раз на весь версионированный API, а не повторены в каждом
@@ -62,3 +62,4 @@ api_router.include_router(queues.router)
 api_router.include_router(tasks.router)
 api_router.include_router(links.router)
 api_router.include_router(questions.router)
+api_router.include_router(journal.router)

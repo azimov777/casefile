@@ -43,13 +43,19 @@ BODYLESS_STATUS_CODES = frozenset({"204"})
 #: причина. Список закрытый: соглашения называют ровно эти исключения, и добавление
 #: нового сюда обязано сопровождаться правкой `docs/CONVENTIONS.md`.
 #:
-#: Второе исключение соглашений — поток ленты `text/event-stream` — появится здесь
-#: вместе с самим маршрутом (задача 26). Держать разрешение на маршрут, которого нет,
-#: нельзя: оно выдано неизвестно кому, и это стережёт отдельный тест.
+#: Исключений ровно два, и каждое заведено вместе со своим маршрутом: разрешение,
+#: выданное несуществующему пути, достанется первому, кто этот путь заведёт, и это
+#: стережёт отдельный тест.
 ENVELOPE_EXEMPT: dict[tuple[str, str], str] = {
     ("GET", "/health"): (
         "Health check for Docker and monitoring. It lives outside /api/v1 and is not "
         "part of the frontend contract, so it answers with a flat body"
+    ),
+    ("GET", "/api/v1/journal/stream"): (
+        "Server-sent events: a frame is the lines id:, event: and data:, and wrapping it "
+        'into {"data": ...} would stop it being SSE. The contract holds anyway — the '
+        "frame payload is the same EntryRead union as an item of GET /api/v1/journal, "
+        "where the envelope is the usual one"
     ),
 }
 

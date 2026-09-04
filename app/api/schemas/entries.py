@@ -27,9 +27,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from app.api.schemas.authors import AuthorRead
 from app.db.models.entry import Entry
@@ -303,6 +303,24 @@ type EntryRead = Annotated[
     Field(discriminator="type"),
 ]
 """Запись дела целиком: размеченное по `type` объединение всех форм нагрузки."""
+
+
+def entry_read_schema() -> dict[str, Any]:
+    """Схема записи для ответа, который FastAPI описать за нас не может.
+
+    Нужна ровно одному месту — кадру потока `GET /api/v1/journal/stream`. Тип
+    содержимого там `text/event-stream`, поэтому ответ объявлен вручную, а модели в
+    таком объявлении FastAPI не разбирает: `$ref` пришлось бы писать строкой и он
+    разошёлся бы с объединением при первом новом типе записи.
+
+    Схема поэтому собирается из самого объединения, а определения вариантов
+    (`$defs`) отбрасываются: те же модели уже лежат в компонентах схемы — их приносит
+    туда лента `GET /api/v1/journal`, у которой ответ обычный. Кадр и страница ленты
+    от этого описаны буквально одним типом, а не двумя похожими.
+    """
+    schema = TypeAdapter(EntryRead).json_schema(ref_template="#/components/schemas/{model}")
+    schema.pop("$defs", None)
+    return schema
 
 
 _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
