@@ -19,7 +19,7 @@ Docker и Docker Compose. Больше ничего: Python, зависимос�
 
 ```bash
 cp .env.example .env          # необязательно: у дев-контура есть значения по умолчанию
-docker compose up -d          # поднимает PostgreSQL, HTTP-сервер и MCP-сервер
+docker compose up -d          # поднимает постоянные сервисы (какие — раздел «Структура»)
 docker compose run --rm migrate   # применяет миграции
 docker compose run --rm init      # заводит владельца и печатает его первый токен
 docker compose run --rm demo      # наполняет установку демонстрационными данными
@@ -32,17 +32,7 @@ curl http://localhost:8000/health
 {"status": "ok", "version": "0.1.0", "environment": "local", "database": "ok"}
 ```
 
-Дальше — первый экран с токеном, который напечатал `init`:
-
-```bash
-curl -H "Authorization: Bearer trk_..." http://localhost:8000/api/v1/bootstrap
-```
-
-```json
-{"data": {"participant": {"name": "owner", "kind": "human", ...},
-          "queues": [{"key": "DEMO", "title": "Демонстрация", ...}],
-          "open_questions": 1}}
-```
+Дальше — первый экран с токеном, который напечатал `init`: раздел «Первый экран».
 
 Документация API — http://localhost:8000/docs, схема — http://localhost:8000/openapi.json
 и в корне репозитория.
@@ -537,11 +527,12 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 ### Ожидание ответа без опроса
 
 `wait_journal(after, task, types, timeout)` возвращается, как только появилась первая
-подходящая запись, и не позже, чем через `timeout` секунд (потолок — 60). Ожидание
-разбудит `LISTEN/NOTIFY` PostgreSQL, а не опрос базы: слушателя поднимает сам процесс MCP,
-и в логе это видно строкой `Journal listener connected to channel tracker_journal`. Если
-её нет, ожидание работает контрольным опросом и отвечает с задержкой до
-`TRACKER_JOURNAL_WAIT_POLL_INTERVAL` секунд.
+подходящая запись, и не позже, чем через `timeout` секунд (потолок — 60). Механика та же,
+что у `GET /api/v1/journal?wait=` (раздел «Лента журнала»), с одной оговоркой процесса:
+слушателя оповещений поднимает сам процесс MCP, и в логе это видно строкой
+`Journal listener connected to channel tracker_journal`. Если её нет, ожидание работает
+контрольным опросом и отвечает с задержкой до `TRACKER_JOURNAL_WAIT_POLL_INTERVAL`
+секунд.
 
 ### Экономия контекста агента
 
