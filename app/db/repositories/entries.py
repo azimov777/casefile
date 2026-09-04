@@ -15,7 +15,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Select, func, select, text
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -32,47 +32,12 @@ from app.domain.authors import Author
 from app.domain.case import FIRST_ENTRY_NUMBER, EntryHeading, EntryType, VerdictOutcome
 from app.domain.tasks import TaskStatus
 
-#: Ключ консультативной блокировки, под которой подшиваются записи. Число — ASCII слова
-#: `journal`, чтобы в `pg_locks` было видно, чья это блокировка, и чтобы оно заведомо
-#: не совпало с чужим ключом в той же базе.
-JOURNAL_APPEND_LOCK = 0x6A6F75726E616C
-
 
 class EntryRepository:
     """Доступ к таблице `entries`: добавить и прочитать."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-
-    async def lock_journal(self) -> None:
-        """Занимает очередь на подшивку записи. Держится до конца транзакции.
-
-        Нужна ради ленты, а не ради самой записи. `seq` выдаёт `IDENTITY` в момент
-        `INSERT`, а видимой строка становится в момент `COMMIT`, и без этой блокировки
-        два порядка расходятся: транзакции в **разные** задачи (блокировка строки задачи
-        их не сериализует) могут получить номера 10 и 11 и закоммититься наоборот.
-        Читатель ленты, дошедший до 11, запись 10 не увидит уже никогда — курсор
-        двигается только вперёд. Молча потерянная запись означает назначателя, который
-        не узнал о закрытии задачи, и разобрать это по логам нечем.
-
-        Блокировка отпускается коммитом, поэтому следующий пишущий получает свой `seq`
-        уже после того, как предыдущая запись стала видимой: порядок `seq` совпадает с
-        порядком фиксации, и хвост ленты не теряет строк. Цена — подшивка записей
-        сериализуется по всей установке до конца транзакции; для трекера, где пишут
-        единицы агентов, это дешевле потерянной записи.
-
-        Берётся **до** блокировки строки задачи в `allocate_no` и только там, где
-        подшивается запись (`app/services/case.py`, `_append`). Обратный порядок дал бы
-        взаимную блокировку: один держал бы строку задачи и ждал очереди, другой держал
-        бы очередь и ждал строки.
-
-        Дыры в `seq` остаются: откатившаяся транзакция сжигает выданный номер. Курсору
-        `seq > N` они безразличны — он требует не сплошного ряда, а того, чтобы позади
-        него ничего больше не появилось.
-        """
-        await self._session.execute(
-            text("SELECT pg_advisory_xact_lock(:key)"), {"key": JOURNAL_APPEND_LOCK}
-        )
 
     async def allocate_no(self, task_id: uuid.UUID) -> int:
         """Следующий номер записи в задаче — без дыр и без гонок.
@@ -85,6 +50,9 @@ class EntryRepository:
 
         Цена — сериализация записей **в одну задачу** до конца транзакции. Для дела это
         и есть нужное свойство: страницы подшиваются по одной.
+
+        Берётся **после** очереди изменений (`app/db/locks.py`, `lock_changes`), а не
+        до неё: обратный порядок двух блокировок даёт взаимную блокировку.
         """
         lock = select(Task.id).where(Task.id == task_id).with_for_update()
         if await self._session.scalar(lock) is None:

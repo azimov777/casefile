@@ -21,6 +21,14 @@
 задаётся ключом задачи, а не порядком аргументов: `allocate_no` держит строку задачи до
 конца транзакции, и два одновременных запроса, ставящих связь между теми же задачами с
 разных сторон, взаимно заблокировали бы друг друга (`docs/notes/links.md`).
+
+## Статусы обеих сторон читаются под очередью изменений
+
+Задачи приезжают сюда объектами, прочитанными до вызова, то есть снимком, который мог
+устареть, пока сценарий стоял в очереди. Поэтому изменение связи начинается с
+`lock_changes` по обеим задачам (`app/db/locks.py`): без перечитывания связь могла бы
+появиться у задачи, закрытой соседней транзакцией минуту назад, — а связи закрытой
+задачи не меняются (`CONCEPT.md`, 3.5).
 """
 
 from collections.abc import Sequence
@@ -30,6 +38,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.locks import lock_changes
 from app.db.models.author import created_by_columns
 from app.db.models.link import Link
 from app.db.models.task import Task
@@ -125,10 +134,14 @@ async def add_link(
     самой собой, закрытые задачи, дубликат, кольцо. Кольцо последним не случайно: это
     единственная проверка с обходом графа, и платить за неё на заведомо неверном
     запросе незачем.
+
+    Очередь изменений занимается после проверок формы и до первой проверки состояния:
+    форма не зависит от того, что делают соседи, а всё остальное — зависит.
     """
     ensure_scope(actor, TokenScope.TASK, action="link.add")
     requested = parse_link_kind(kind)
     ensure_not_self(task.key, other.key)
+    await lock_changes(session, task, other)
     _ensure_open(task, other, kind=requested)
 
     source, target, stored_kind = _canonical_pair(task, other, requested)
@@ -173,6 +186,7 @@ async def remove_link(
     ensure_scope(actor, TokenScope.TASK, action="link.remove")
     requested = parse_link_kind(kind)
     ensure_not_self(task.key, other.key)
+    await lock_changes(session, task, other)
     _ensure_open(task, other, kind=requested)
 
     source, target, stored_kind = _canonical_pair(task, other, requested)

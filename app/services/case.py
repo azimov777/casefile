@@ -34,6 +34,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.locks import lock_changes
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
@@ -592,15 +593,18 @@ async def _append(
     Здесь же, и только здесь, журнал получает две вещи, без которых лента (задача 26)
     неверна. Порядок обязателен и объяснён в самих методах:
 
-    1. `lock_journal` — очередь на подшивку, из-за которой порядок `seq` совпадает с
+    1. `lock_changes` — очередь изменений, из-за которой порядок `seq` совпадает с
        порядком фиксации. Берётся **до** блокировки строки задачи: обратный порядок
-       даёт взаимную блокировку.
+       даёт взаимную блокировку. Мутирующий сценарий занял её ещё до чтения фактов, но
+       повторный захват в той же транзакции законен и ничего не стоит, — а подшивка,
+       которая полагалась бы на чужой захват, однажды пришла бы из сценария, где его
+       забыли сделать.
     2. `announce` — оповещение ждущих ленту. После `add`, потому что номер выдаёт база;
        внутри транзакции, потому что доставить его PostgreSQL обязан при фиксации, а не
        раньше строки.
     """
     repository = EntryRepository(session)
-    await repository.lock_journal()
+    await lock_changes(session)
     no = await repository.allocate_no(task.id)
     entry = Entry(
         task_id=task.id,
