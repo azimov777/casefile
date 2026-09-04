@@ -67,6 +67,7 @@
 |---|---|---|
 | `checks_not_passed` | Some review checks have no passing verdict | `review → done` требует, чтобы последний вердикт каждой проверки был `passed`. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
+| `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `link_cycle_detected` | Link would create a cycle | Связь замкнула бы кольцо в иерархии или в блокировках. |
 | `link_exists` | Link already exists | Такая связь между этими задачами уже есть. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
@@ -87,6 +88,7 @@
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
+| `invalid_idempotency_key` | Idempotency key is invalid | Ключ идемпотентности пуст или длиннее допустимого. |
 | `invalid_journal_cursor` | Last-Event-ID is not a journal sequence number | `Last-Event-ID` потока не разбирается как сквозной номер записи. |
 | `invalid_link_kind` | Link kind is invalid | Такого вида связи нет; допустимые перечислены в `details.allowed`. |
 | `invalid_page_size` | Page size is out of range | Запрошен размер страницы вне допустимых границ. |

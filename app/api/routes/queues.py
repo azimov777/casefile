@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, status
 
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep
+from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.queues import QueueCreate, QueueRead, QueueUpdate
 from app.db.pagination import DEFAULT_PAGE_SIZE
@@ -38,20 +39,26 @@ async def create_queue(
     payload: QueueCreate,
     session: SessionDep,
     actor: ActorDep,
+    once: OnceDep,
 ) -> DataResponse[QueueRead]:
     """Заводит очередь. Требует набора `main`.
 
     Ключ уникален без учёта регистра, хранится в верхнем и дальше неизменяем: он идёт
-    в ключ каждой задачи очереди.
+    в ключ каждой задачи очереди. Повтор с тем же `Idempotency-Key` отвечает первой
+    очередью, а не `409 queue_key_taken`.
     """
-    queue = await service.create_queue(
-        session,
-        actor=actor,
-        key=payload.key,
-        title=payload.title,
-        description=payload.description,
-    )
-    return DataResponse[QueueRead](data=QueueRead.model_validate(queue))
+
+    async def create() -> DataResponse[QueueRead]:
+        queue = await service.create_queue(
+            session,
+            actor=actor,
+            key=payload.key,
+            title=payload.title,
+            description=payload.description,
+        )
+        return DataResponse[QueueRead](data=QueueRead.model_validate(queue))
+
+    return await once.run(DataResponse[QueueRead], request=payload, build=create)
 
 
 @router.get("/{queue_key}", summary="Read a queue")

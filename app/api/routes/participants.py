@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, status
 
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep
+from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.participants import ParticipantCreate, ParticipantRead, ParticipantUpdate
 from app.db.pagination import DEFAULT_PAGE_SIZE
@@ -50,20 +51,27 @@ async def register_participant(
     payload: ParticipantCreate,
     session: SessionDep,
     actor: ActorDep,
+    once: OnceDep,
 ) -> DataResponse[ParticipantRead]:
     """Заводит человека или постоянного агента. Токен ему выпускается отдельным запросом.
 
     Требует набора `main`. Имя уникально без учёта регистра и дальше неизменяемо: оно
     стоит подписью в записях дела, и переименование порвало бы эти подписи задним числом.
+    Повтор с тем же `Idempotency-Key` отвечает первым участником, а не `409
+    participant_name_taken`.
     """
-    participant = await service.register_participant(
-        session,
-        actor=actor,
-        kind=payload.kind,
-        name=payload.name,
-        description=payload.description,
-    )
-    return DataResponse[ParticipantRead](data=ParticipantRead.model_validate(participant))
+
+    async def register() -> DataResponse[ParticipantRead]:
+        participant = await service.register_participant(
+            session,
+            actor=actor,
+            kind=payload.kind,
+            name=payload.name,
+            description=payload.description,
+        )
+        return DataResponse[ParticipantRead](data=ParticipantRead.model_validate(participant))
+
+    return await once.run(DataResponse[ParticipantRead], request=payload, build=register)
 
 
 @router.get("/{participant_name}", summary="Read a participant")

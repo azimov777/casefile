@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Response, status
 
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep
+from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.tokens import TokenCreate, TokenIssued, TokenRead
 from app.db.pagination import DEFAULT_PAGE_SIZE
@@ -44,29 +45,47 @@ async def issue_token(
     payload: TokenCreate,
     session: SessionDep,
     actor: ActorDep,
+    once: OnceDep,
 ) -> DataResponse[TokenIssued]:
-    """Единственный ответ, содержащий секрет токена. Повторно его получить нельзя.
+    """Единственный ответ, содержащий секрет токена: второго способа узнать его нет.
 
     Требует набора `main`. Без `participant` выпускается общий агентский токен: запрос с
     ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.
+
+    Единственное исключение — повтор с тем же `Idempotency-Key`: он отвечает **тем же**
+    секретом, потому что ответ первого выпуска сохранён целиком. Иначе повтор запроса,
+    оборвавшегося по сети, оставлял бы действующий токен, которого никто не видел.
+    Сутки спустя ключ забыт вместе с ответом, и секрета не остаётся нигде.
     """
     participant = (
         None
         if payload.participant is None
         else await participants_service.get_participant(session, payload.participant)
     )
-    issued = await service.issue_token(
-        session,
-        actor=actor,
-        participant=participant,
-        scope=payload.scope,
-        name=payload.name,
+
+    async def issue() -> DataResponse[TokenIssued]:
+        issued = await service.issue_token(
+            session,
+            actor=actor,
+            participant=participant,
+            scope=payload.scope,
+            name=payload.name,
+        )
+        body = TokenIssued(
+            **TokenRead.model_validate(issued.token).model_dump(),
+            secret=issued.secret,
+        )
+        return DataResponse[TokenIssued](data=body)
+
+    return await once.run(
+        DataResponse[TokenIssued],
+        request={
+            "participant": None if participant is None else participant.name,
+            "scope": payload.scope,
+            "name": payload.name,
+        },
+        build=issue,
     )
-    body = TokenIssued(
-        **TokenRead.model_validate(issued.token).model_dump(),
-        secret=issued.secret,
-    )
-    return DataResponse[TokenIssued](data=body)
 
 
 @router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Revoke a token")

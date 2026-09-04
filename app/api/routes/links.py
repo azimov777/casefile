@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, status
 
 from app.api.deps import ActorDep, SessionDep, TaskKeyPath
+from app.api.idempotency import OnceDep
 from app.api.schemas.common import DataResponse
 from app.api.schemas.links import LinkCreate, TaskLinkRead
 from app.domain.links import LinkKind
@@ -47,6 +48,7 @@ async def create_task_link(
     payload: LinkCreate,
     session: SessionDep,
     actor: ActorDep,
+    once: OnceDep,
 ) -> DataResponse[TaskLinkRead]:
     """Ставит связь между задачами и подшивает `link_added` в дела обеих.
 
@@ -58,12 +60,21 @@ async def create_task_link(
     Отказы: связь с самой собой — `422 link_self_not_allowed`; кольцо в иерархии или в
     блокировках — `409 link_cycle_detected` (виды не смешиваются: родитель, у которого
     `blocked_by` на своих детей, кольцом не считается); задача в `done` или
-    `cancelled` с любой стороны — `409 task_closed`.
+    `cancelled` с любой стороны — `409 task_closed`. Повтор с тем же `Idempotency-Key`
+    отвечает первой связью, а не `409 link_exists`.
     """
     task = await tasks_service.get_task(session, task_key)
     other = await tasks_service.get_task(session, payload.other)
-    link = await service.add_link(session, task, other, actor=actor, kind=payload.kind)
-    return DataResponse[TaskLinkRead](data=TaskLinkRead.model_validate(link))
+
+    async def link() -> DataResponse[TaskLinkRead]:
+        created = await service.add_link(session, task, other, actor=actor, kind=payload.kind)
+        return DataResponse[TaskLinkRead](data=TaskLinkRead.model_validate(created))
+
+    return await once.run(
+        DataResponse[TaskLinkRead],
+        request={"task": task.key, "other": other.key, "kind": payload.kind},
+        build=link,
+    )
 
 
 @router.delete(

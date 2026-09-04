@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Query, status
 
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep, TaskKeyPath
+from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.entries import (
     EntryCreate,
@@ -77,30 +78,46 @@ async def create_task(
     payload: TaskCreate,
     session: SessionDep,
     actor: ActorDep,
+    once: OnceDep,
 ) -> DataResponse[TaskRead]:
     """Заводит задачу в `backlog`. Ключ выдаёт счётчик очереди, статус не принимается.
 
     В деле сразу появляется запись `created` с автором из токена. Разделы можно
     оставить пустыми и дописать в `backlog`; перед переходом в `open` четыре раздела
     должны быть заполнены, а `checks` — содержать хотя бы одну проверку.
+
+    Повтор с тем же `Idempotency-Key` и тем же телом отвечает первой задачей, а не
+    заводит вторую: номер очереди на этом не тратится.
     """
+
+    # Очередь разрешается **до** занятия ключа: запрос, отклонённый до работы, не должен
+    # тратить ключ. Он же уезжает в отпечаток разрешённым (`TRK`, а не `trk`) — адресация
+    # в проекте мягкая, и иначе повтор тем же ключом отвечал бы конфликтом.
     queue = await queues_service.get_queue(session, payload.queue)
-    task = await service.create_task(
-        session,
-        actor=actor,
-        queue=queue,
-        title=payload.title,
-        description=payload.description,
-        goal=payload.goal,
-        context=payload.context,
-        constraints=payload.constraints,
-        output=payload.output,
-        checks=payload.checks,
-        assignee=payload.assignee,
-        tags=payload.tags,
-        priority=payload.priority,
+
+    async def create() -> DataResponse[TaskRead]:
+        task = await service.create_task(
+            session,
+            actor=actor,
+            queue=queue,
+            title=payload.title,
+            description=payload.description,
+            goal=payload.goal,
+            context=payload.context,
+            constraints=payload.constraints,
+            output=payload.output,
+            checks=payload.checks,
+            assignee=payload.assignee,
+            tags=payload.tags,
+            priority=payload.priority,
+        )
+        return DataResponse[TaskRead](data=TaskRead.model_validate(task))
+
+    return await once.run(
+        DataResponse[TaskRead],
+        request={"queue": queue.key, "task": payload.model_dump(mode="json", exclude={"queue"})},
+        build=create,
     )
-    return DataResponse[TaskRead](data=TaskRead.model_validate(task))
 
 
 @router.get("", summary="List and search tasks", response_model_exclude_unset=True)
@@ -250,6 +267,7 @@ async def create_task_entry(
     entry: EntryCreate,
     session: SessionDep,
     actor: ActorDep,
+    once: OnceDep,
 ) -> DataResponse[EntryRead]:
     """Подшивает запись агента: сводку, решение, попытку, находку, артефакт, вопрос,
     ответ, вердикт или заметку.
@@ -260,23 +278,34 @@ async def create_task_entry(
     Служебные типы (`status_changed`, `created`, ...) подшивает сам трекер, и в запросе
     они не принимаются. Замечания к форме приходят разом в `422 entry_fields_invalid`,
     списком `details.fields`. Записи неизменяемы, а в закрытую задачу подшиваются.
+
+    Повтор с тем же `Idempotency-Key` отвечает первой записью: агент, упавший до ответа,
+    не подшивает вторую копию своей сводки.
     """
     task = await service.get_task(session, task_key)
     # Все поля уезжают в сценарий как есть: разбирать объединение по ветвям здесь
     # значило бы держать в роутере знание о том, у какого типа какая нагрузка, — а оно
     # уже выражено доменом и схемой.
     given = entry.model_dump(mode="json")
-    appended = await case_service.append_entry(
-        session,
-        task,
-        actor=actor,
-        type=given["type"],
-        title=given.get("title"),
-        body=given.get("body", ""),
-        payload=given.get("payload"),
-        refs=given.get("refs", []),
+
+    async def append() -> DataResponse[EntryRead]:
+        appended = await case_service.append_entry(
+            session,
+            task,
+            actor=actor,
+            type=given["type"],
+            title=given.get("title"),
+            body=given.get("body", ""),
+            payload=given.get("payload"),
+            refs=given.get("refs", []),
+        )
+        return DataResponse[EntryRead](data=entry_read(appended, task_key=task.key))
+
+    return await once.run(
+        DataResponse[EntryRead],
+        request={"task": task.key, "entry": given},
+        build=append,
     )
-    return DataResponse[EntryRead](data=entry_read(appended, task_key=task.key))
 
 
 @router.get("/{task_key}/entries", summary="Read case entries")
