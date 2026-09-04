@@ -7,12 +7,16 @@
   свежая установка оставалась бы запертой снаружи;
 - `issue-token` — выпустить токен напрямую. Это способ вернуть себе доступ, потеряв
   секрет: `init` на уже работающей установке ничего не создаёт;
+- `demo` — наполнить установку демонстрационными данными: очередь `DEMO`, задачи во всех
+  статусах и дела со всеми типами записей. Через API это были бы десятки запросов
+  в нужном порядке;
 - `openapi` и `errors` — выгрузить поставляемые артефакты контракта: схему для
   генерации клиента и справочник кодов ошибок.
 
 Запуск в контуре разработки:
 
     docker compose run --rm init
+    docker compose run --rm demo
     docker compose run --rm schema
     docker compose run --rm --entrypoint python api -m app.cli issue-token --scope main
 
@@ -106,6 +110,34 @@ async def _issue_token(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _demo(args: argparse.Namespace) -> int:
+    """Наполняет установку демонстрационными данными.
+
+    Идемпотентна так же, как `init`, и по той же причине: команда стоит в Compose рядом
+    с миграциями, и её повторный запуск не должен плодить вторую копию очереди `DEMO`.
+    Признак «уже наполнено» — существование самой очереди.
+    """
+    from app.services.demo import DEMO_QUEUE_KEY, seed_demo
+
+    async with session_scope() as session:
+        data = await seed_demo(session)
+        if not data.created:
+            print(f"Demo data is already there: queue {DEMO_QUEUE_KEY} exists.")
+            print("Nothing was created. To start over, drop the database volume:")
+            print("  docker compose down -v")
+            return 0
+
+        assert data.queue is not None  # `created` — это и есть «очередь заведена»
+        print(f"queue: {data.queue.key} ({data.queue.title})")
+        for task in data.tasks:
+            print(f"  {task.key}  {task.status.value:<12} {task.title}")
+        print()
+        print("Open the first screen with the token from `init`:")
+        print('  curl -H "Authorization: Bearer trk_..." \\')
+        print("       http://localhost:8000/api/v1/bootstrap")
+    return 0
+
+
 async def _openapi(args: argparse.Namespace) -> int:
     """Выгружает схему OpenAPI — поставляемый артефакт, из которого фронтенд берёт типы.
 
@@ -170,6 +202,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     issue.add_argument("--name", default="cli", help="Name for the issued token")
     issue.set_defaults(handler=_issue_token)
+
+    demo = commands.add_parser(
+        "demo",
+        help="Fill the installation with demo data: queue DEMO, tasks in every status",
+    )
+    demo.set_defaults(handler=_demo)
 
     schema = commands.add_parser("openapi", help="Dump the OpenAPI schema")
     schema.add_argument("--output", default=None, help="File to write; stdout when omitted")
