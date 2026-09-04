@@ -24,8 +24,11 @@ class Settings(BaseSettings):
     environment: Literal["local", "test", "production"] = "local"
     debug: bool = False
 
-    host: str = "127.0.0.1"
-    port: int = 8000
+    # Адреса и порта HTTP-сервера здесь нет: uvicorn запускается командой сервиса Compose
+    # (`--host 0.0.0.0 --port 8000`), а наружу порт публикуется переменной `TRACKER_PORT`
+    # в самом `docker-compose.yml`. Поле в настройках было бы третьим местом, где написан
+    # порт, и первым, которое разойдётся с остальными. У MCP-сервера иначе: там процесс
+    # поднимает сервер сам и адрес с портом читает отсюда.
 
     database_url: PostgresDsn = Field(
         default="postgresql+asyncpg://tracker:tracker@localhost:5432/tracker",

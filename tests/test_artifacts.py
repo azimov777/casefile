@@ -1,9 +1,10 @@
-"""Поставляемые артефакты контракта: схема, справочник ошибок и документ фронтенду.
+"""Поставляемые артефакты: схема, документ фронтенду и пример окружения.
 
 Артефакт, который отстал от кода, хуже отсутствующего: по нему генерируют клиент и
-принимают решения, не перепроверяя. Свежесть `docs/ERRORS.md` стережёт
-`tests/test_api_contract.py`; здесь — свежесть `openapi.json` и то, что документ
-фронтенду не обещает маршрутов, которых нет.
+поднимают установку, не перепроверяя. Свежесть `docs/ERRORS.md` стережёт
+`tests/test_api_contract.py`; здесь — свежесть `openapi.json`, то, что документ
+фронтенду не обещает маршрутов, которых нет, и то, что `.env.example` описывает ровно
+те переменные, которые кто-то читает.
 
 Почему схема вообще лежит в репозитории. До задачи 29 её намеренно не хранили: вторая
 копия отстаёт от первой. Отставание сняли тестом ниже, а взамен фронтенд — отдельный
@@ -20,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
 from app.api.contract import declared_error_classes, error_catalog
+from app.core.config import Settings
 from app.domain.errors import TaskNotFoundError
 from app.mcp.errors import describe
 from conftest import Connect, refuse
@@ -27,6 +29,11 @@ from conftest import Connect, refuse
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OPENAPI_FILE = PROJECT_ROOT / "openapi.json"
 FRONTEND_DOC = PROJECT_ROOT / "docs" / "FRONTEND.md"
+ENV_EXAMPLE = PROJECT_ROOT / ".env.example"
+COMPOSE_FILES = (
+    PROJECT_ROOT / "docker-compose.yml",
+    PROJECT_ROOT / "docker-compose.prod.yml",
+)
 
 #: Как схема выгружается командой `python -m app.cli openapi`. Форматирование —
 #: часть сравнения: файл, отличающийся только отступами, всё равно расходится с
@@ -173,3 +180,75 @@ def test_every_error_code_the_frontend_doc_names_exists() -> None:
 
     assert named, "таблица кодов не разобрана — проверка ничего не стережёт"
     assert named <= known, sorted(named - known)
+
+
+# --- Пример окружения ---------------------------------------------------------------
+
+#: Присваивание в файле окружения: имя в самом начале строки. Закомментированные строки
+#: не подходят под шаблон, и это нужно — переменная «под комментарием» не описана, а
+#: спрятана, и подставлена compose тоже не будет.
+ENV_ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]*)=", re.MULTILINE)
+
+#: Подстановка переменной в compose во всех трёх видах: `${NAME}`, `${NAME:-умолчание}`,
+#: `${NAME:?ругательство}`.
+COMPOSE_SUBSTITUTION = re.compile(r"\$\{([A-Z][A-Z0-9_]*)")
+
+
+def _variables_named_in_the_env_example() -> set[str]:
+    """Имена переменных, которым `.env.example` даёт значение."""
+    return set(ENV_ASSIGNMENT.findall(ENV_EXAMPLE.read_text(encoding="utf-8")))
+
+
+def _variables_compose_substitutes() -> set[str]:
+    """Имена, которые compose подставляет из окружения в оба контура."""
+    return {
+        name
+        for path in COMPOSE_FILES
+        for name in COMPOSE_SUBSTITUTION.findall(path.read_text(encoding="utf-8"))
+    }
+
+
+def _variables_settings_read() -> set[str]:
+    """Имена переменных, которые читает `Settings`: префикс плюс имя поля."""
+    prefix = Settings.model_config["env_prefix"]
+    return {f"{prefix}{name}".upper() for name in Settings.model_fields}
+
+
+def test_every_setting_is_described_in_the_env_example() -> None:
+    """У каждого поля `Settings` есть строка в `.env.example`.
+
+    Поле, которого нет в примере, существует только для того, кто читал `config.py`.
+    Остальные узнают о нём, когда значение по умолчанию окажется неподходящим, — и
+    искать будут не настройку, а ошибку в коде.
+    """
+    described = _variables_named_in_the_env_example()
+    required = _variables_settings_read()
+
+    assert required <= described, sorted(required - described)
+
+
+def test_the_env_example_promises_nothing_nobody_reads() -> None:
+    """Переменная из примера читается либо приложением, либо compose. Третьего нет.
+
+    Обратная сторона той же сверки, и ловит она дороже: `extra="ignore"` в `Settings`
+    молчит на любой лишней `TRACKER_*`, поэтому переменная, оставшаяся от удалённого
+    поля, выглядит рабочей. Владелец установки правит её, ничего не меняется, и
+    подозрение падает на что угодно, кроме файла с примером.
+    """
+    described = _variables_named_in_the_env_example()
+    read_by_someone = _variables_settings_read() | _variables_compose_substitutes()
+
+    assert described <= read_by_someone, sorted(described - read_by_someone)
+
+
+def test_every_variable_compose_substitutes_is_in_the_env_example() -> None:
+    """Подстановка в compose без строки в примере — умолчание, о котором никто не знает.
+
+    `${TRACKER_PORT:-8000}` поднимется и без `.env`, поэтому забытую строку не заметит
+    ни один запуск: она обнаружится, когда порт понадобится сменить.
+    """
+    substituted = _variables_compose_substitutes()
+    described = _variables_named_in_the_env_example()
+
+    assert substituted, "подстановки в compose не разобраны — проверка ничего не стережёт"
+    assert substituted <= described, sorted(substituted - described)
