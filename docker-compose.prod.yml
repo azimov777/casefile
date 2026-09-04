@@ -6,6 +6,9 @@
 
 name: tracker-prod
 
+# Что контур задаёт сам. Эти переменные приезжают в контейнер настоящим окружением и
+# побеждают `.env`: адрес базы собирается из обязательных реквизитов сервиса `db`, и
+# строка из файла подменять его не должна. Всё остальное приложение берёт из `.env`.
 x-app-environment: &app-environment
   TRACKER_ENVIRONMENT: production
   TRACKER_DEBUG: "false"
@@ -17,6 +20,14 @@ x-app-service: &app-service
     context: .
     dockerfile: docker/Dockerfile.prod
   image: tracker-prod:latest
+  # Настройки установки правятся в `.env` рядом с этим файлом — тем же способом, что и
+  # в дев-контуре, и тем же набором переменных. Файл читает compose на хосте: внутрь
+  # образа он не копируется (`.dockerignore`), поэтому секреты остаются снаружи.
+  # `required: false` — отсутствие файла не роняет запуск: недостающее берётся из
+  # значений по умолчанию, а обязательные реквизиты базы стережёт подстановка `:?` выше.
+  env_file:
+    - path: .env
+      required: false
   environment: *app-environment
   restart: unless-stopped
   depends_on:
@@ -59,11 +70,14 @@ services:
   mcp:
     <<: *app-service
     command: python -m app.mcp
+    # Порт с обеих сторон один: процесс MCP поднимает сервер сам и слушает
+    # `TRACKER_MCP_PORT` из настроек. Правая половина проброса обязана двигаться вместе
+    # с левой, иначе наружу публикуется порт, на котором внутри никто не слушает.
     ports:
-      - "${TRACKER_MCP_PORT:-8100}:8100"
+      - "${TRACKER_MCP_PORT:-8100}:${TRACKER_MCP_PORT:-8100}"
     healthcheck:
       # curl в прод-образе нет намеренно: проверка идёт средствами самого Python.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${TRACKER_MCP_PORT:-8100}/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
