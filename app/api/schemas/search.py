@@ -10,8 +10,10 @@
 как значение по умолчанию.
 
 Без явного `fields` возвращается задача целиком — ровно в том же виде, в каком её отдаёт
-чтение: набор полей у `TaskSearchRead` и `TaskRead` совпадает, и это стережёт тест. Два
-разных представления одной задачи в одном API — то, чего проект не допускает.
+чтение, плюс вычисляемые признаки: набор полей у `TaskSearchRead` — это поля `TaskRead` и
+`features`, и это стережёт тест. Два разных представления одной задачи в одном API — то,
+чего проект не допускает, поэтому признаки приезжают тем же объектом `TaskFeaturesRead`,
+что и в пакете преемника, а не плоскими полями рядом с колонками задачи.
 
 ## Два способа задать отбор и один результат
 
@@ -33,9 +35,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse
-from app.api.schemas.tasks import TaskQueueRead
-from app.db.models.task import Task
+from app.api.schemas.tasks import TaskFeaturesRead, TaskQueueRead
 from app.domain.search import (
+    FEATURES_FIELD,
     MAX_QUERY_LENGTH,
     MAX_SORT_TERMS,
     MAX_VALUES_PER_CONDITION,
@@ -44,7 +46,7 @@ from app.domain.search import (
     sortable_names,
 )
 from app.domain.tasks import TaskPriority, TaskStatus
-from app.services.search import SearchOutcome, StructuredTerm
+from app.services.search import FoundTask, SearchOutcome, StructuredTerm
 
 _QUERY_DESCRIPTION = (
     "Query language string, for example `queue: TRK and status: open and blocked: false "
@@ -62,8 +64,11 @@ _SORT_DESCRIPTION = (
     "tie-broken by task id, so paging stays stable while tasks are being created"
 )
 _FIELDS_DESCRIPTION = (
-    "Fields to return, to keep the answer small. Omit for the whole task. The task key "
-    "is always included"
+    "Fields to return, to keep the answer small. Omit for the whole task, computed "
+    "features included. The task key is always included. `features` is picked as a "
+    "whole and brings `blocked`, `open_questions`, `open_blocking_questions` and "
+    "`last_summary_at`; a single feature is not a field of the answer, and asking for "
+    "one answers 422 `search_field_unknown` with the selectable names"
 )
 _TAGS_DESCRIPTION = (
     "Tags, matched exactly and case-sensitively. Pass the parameter more than once to "
@@ -236,10 +241,23 @@ class TaskSearchRead(BaseModel):
     created_by: AuthorRead | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    features: TaskFeaturesRead | None = Field(
+        default=None,
+        description=(
+            "Computed features of the task, the same object the successor package "
+            "carries. Included unless `fields` asks for a narrower set without `features`"
+        ),
+    )
 
     @classmethod
-    def of(cls, task: Task, *, fields: tuple[str, ...] = ()) -> TaskSearchRead:
-        """Задача в выдаче. Пустой набор полей означает «всё», как при чтении задачи."""
+    def of(cls, found: FoundTask, *, fields: tuple[str, ...] = ()) -> TaskSearchRead:
+        """Строка выдачи. Пустой набор полей означает «всё», как при чтении задачи.
+
+        Признаков в словаре нет, если их не считали: `fields` без `features` — прямая
+        просьба не платить за подзапросы, и показать в таком ответе `null` значило бы
+        соврать про задачу, у которой признаки есть всегда.
+        """
+        task = found.task
         payload: dict[str, object] = {
             "id": task.id,
             "key": task.key,
@@ -260,6 +278,10 @@ class TaskSearchRead(BaseModel):
             "created_at": task.created_at,
             "updated_at": task.updated_at,
         }
+        if found.features is not None:
+            payload[FEATURES_FIELD] = TaskFeaturesRead.model_validate(
+                found.features, from_attributes=True
+            )
         if fields:
             payload = {name: value for name, value in payload.items() if name in fields}
         return cls(**payload)  # type: ignore[arg-type]
@@ -273,6 +295,6 @@ def search_page(outcome: SearchOutcome) -> CollectionResponse[TaskSearchRead]:
     толкование того, что именно просил клиент.
     """
     return CollectionResponse[TaskSearchRead].of(
-        [TaskSearchRead.of(task, fields=outcome.resolved.fields) for task in outcome.page.items],
+        [TaskSearchRead.of(found, fields=outcome.resolved.fields) for found in outcome.page.items],
         next_cursor=outcome.page.next_cursor,
     )

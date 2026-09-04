@@ -23,6 +23,7 @@ from app.services import demo as demo_service
 from app.services import links as links_service
 from app.services import participants as participants_service
 from app.services import search as search_service
+from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.demo import DEMO_LABEL, DEMO_QUEUE_KEY, seed_demo
 from app.services.setup import DEFAULT_OWNER_NAME
@@ -109,6 +110,33 @@ async def test_demo_registers_a_human_and_an_agent_and_signs_with_a_label(
     assert any(kind is AuthorKind.HUMAN for kind, _ in signatures), "нет записи человека"
 
 
+async def test_every_demo_row_carries_the_features_of_its_own_card(
+    db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
+) -> None:
+    """Признаки строки списка и признаки карточки сходятся на каждой задаче демо.
+
+    Демо покрывает все статусы, все типы записей и все виды связей, поэтому здесь
+    признаки встречаются во всех сочетаниях сразу: заблокированная задача, открытый
+    блокирующий вопрос, задача со сводкой и задача без неё. Считаны они разными путями —
+    подзапросом по каждой строке выдачи и чистой функцией над прочитанным делом, — и
+    расхождение означало бы, что список и карточка отвечают по-разному на один вопрос.
+    """
+    outcome = await search_service.search_tasks(
+        db_session, actor=reader, query=f"queue: {DEMO_QUEUE_KEY}", limit=200
+    )
+    rows = {found.task.key: found.features for found in outcome.page.items}
+
+    assert set(rows) == {task.key for task in seeded.tasks}
+    for task in seeded.tasks:
+        package = await tasks_service.read_task_package(db_session, task.key, actor=reader)
+        assert rows[task.key] == package.features, task.key
+
+    # Признак, всегда отвечающий одно и то же, совпал бы с карточкой и ничего не значил.
+    assert any(features is not None and features.blocked for features in rows.values())
+    assert any(features is not None and features.open_questions for features in rows.values())
+    assert any(features is not None and features.last_summary_at for features in rows.values())
+
+
 async def test_demo_leaves_exactly_one_open_blocking_question(
     db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
 ) -> None:
@@ -133,7 +161,7 @@ async def test_demo_leaves_exactly_one_open_blocking_question(
             "and open_blocking_questions: 0"
         ),
     )
-    candidates = [task.key for task in outcome.page.items]
+    candidates = [found.task.key for found in outcome.page.items]
 
     assert len(candidates) == 1, candidates
     assert candidates[0] not in blocking

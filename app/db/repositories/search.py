@@ -19,9 +19,12 @@
 
 **Вычисляемый признак не переписывается.** `blocked` — это `EXISTS` над запросом
 `open_blockers_of` из `app/db/repositories/links.py`, счётчики вопросов — скалярный
-подзапрос `open_question_count` из `app/db/repositories/entries.py`. Оба запроса
-написаны один раз и там же, где ими пользуется карточка: второе написание того же
-условия развело бы поиск с карточкой молча (`CONCEPT.md`, 4.3).
+подзапрос `open_question_count`, время последней сводки — `latest_summary`, оба из
+`app/db/repositories/entries.py`. Все запросы написаны один раз и там же, где ими
+пользуется карточка: второе написание того же условия развело бы поиск с карточкой
+молча (`CONCEPT.md`, 4.3). Отсюда же собираются признаки **в строках выдачи**
+(`feature_columns`): условие отбора и колонка ответа — один и тот же запрос, поэтому
+`blocked: false` и `features.blocked` не могут разойтись.
 
 **Порядок по ключу — это не порядок строки.** `TRK-10` обязан идти после `TRK-2`, а по
 алфавиту он идёт раньше. Поэтому ключ раскладывается на пару «ключ очереди, номер», и
@@ -45,10 +48,11 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.pagination import Page, decode_sort_cursor, encode_sort_cursor, resolve_limit
-from app.db.repositories.entries import open_question_count
+from app.db.repositories.entries import last_summary_at, open_question_count
 from app.db.repositories.links import open_blockers_of
 from app.db.sql import ilike_contains
 from app.domain.search import (
+    FEATURES_FIELD,
     NEGATIVE_OPERATORS,
     ORDER_OPERATORS,
     Junction,
@@ -61,8 +65,9 @@ from app.domain.search import (
     SortKey,
     Term,
     TermGroup,
+    field_requested,
 )
-from app.domain.tasks import TASK_KEY_SEPARATOR, TaskPriority
+from app.domain.tasks import TASK_KEY_SEPARATOR, TaskFeatures, TaskPriority
 
 #: Ранг приоритета: порядок членов `TaskPriority` — от низшего к высшему. Сравнение
 #: `priority: >= high` и сортировка опираются на него, а не на алфавит, в котором
@@ -78,6 +83,12 @@ PRIORITY_RANK: dict[TaskPriority, int] = {
 TASK_NUMBER = cast(func.split_part(Task.key, TASK_KEY_SEPARATOR, 2), BigInteger)
 
 
+#: Строка выдачи: задача и её вычисляемые признаки. `None` в признаках означает «их не
+#: просили», а не «признаков нет»: считать четыре подзапроса ради ответа, в котором их не
+#: будет, — работа в никуда. Сценарий заворачивает пару в `FoundTask`.
+TaskRow = tuple[Task, TaskFeatures | None]
+
+
 class TaskSearchRepository:
     """Выборка задач по разрешённому фильтру."""
 
@@ -90,8 +101,8 @@ class TaskSearchRepository:
         *,
         limit: int | None = None,
         cursor: str | None = None,
-    ) -> Page[Task]:
-        """Страница задач по фильтру, в заданном порядке.
+    ) -> Page[TaskRow]:
+        """Страница задач по фильтру, в заданном порядке, с признаками каждой строки.
 
         Очередь присоединяется явно и загружается через `contains_eager`, а не ленивой
         стратегией `joined` из модели: та добавила бы **второе** соединение с той же
@@ -102,14 +113,24 @@ class TaskSearchRepository:
         следующей страницы. Значения ключей сортировки выбираются вместе с задачей:
         собрать из них курсор иначе было бы нечем, а второй запрос за теми же
         значениями означал бы удвоение работы на каждую страницу.
+
+        Признаки — четыре подзапроса на строку, и добавляются они только когда их
+        просили (`fields`): выдача из одного столбца ключей не должна платить за то,
+        чего в ней нет. Стоимость измерена и записана в `docs/notes/search.md`.
         """
         size = resolve_limit(limit)
         keys = sort_keys(resolved.sort)
+        wanted = field_requested(FEATURES_FIELD, resolved.fields)
         statement: Select[Any] = select(Task).join(Task.queue).options(contains_eager(Task.queue))
         condition = compile_filter(resolved)
         if condition is not None:
             statement = statement.where(condition)
+        # Порядок колонок в строке: задача, значения ключей сортировки, признаки. Курсор
+        # берёт только середину — отсюда явные границы среза ниже: признаки в него
+        # попасть не должны, а их число зависит от `fields`.
         statement = statement.add_columns(*(expression for expression, _ in keys))
+        if wanted:
+            statement = statement.add_columns(*feature_columns())
 
         if cursor is not None:
             values, item_id = decode_sort_cursor(cursor, arity=len(keys))
@@ -118,14 +139,48 @@ class TaskSearchRepository:
         statement = statement.order_by(*_order_by(keys)).limit(size + 1)
         rows = list(await self._session.execute(statement))
 
-        if len(rows) <= size:
-            return Page(items=[row[0] for row in rows], next_cursor=None)
         page = rows[:size]
+        items: list[TaskRow] = [(row[0], _features_of(row) if wanted else None) for row in page]
+        if len(rows) <= size:
+            return Page(items=items, next_cursor=None)
         last = page[-1]
         return Page(
-            items=[row[0] for row in page],
-            next_cursor=encode_sort_cursor(list(last[1:]), last[0].id),
+            items=items,
+            next_cursor=encode_sort_cursor(list(last[1 : 1 + len(keys)]), last[0].id),
         )
+
+
+def feature_columns() -> tuple[ColumnElement[Any], ...]:
+    """Вычисляемые признаки колонками выдачи — теми же запросами, что и отбор по ним.
+
+    Ни одного нового условия: `blocked` — тот же `open_blockers_of`, что у проверки
+    перехода и у фильтра, счётчики — тот же `open_question_count`, время сводки — тот же
+    `latest_summary`, которым карточка читает саму запись. Третье написание любого из них
+    развело бы список с карточкой молча (`CONCEPT.md`, 4.3).
+
+    Метки обязательны: строка читается по именам (`_features_of`), а не по номерам
+    колонок, — иначе перестановка двух счётчиков местами поменяла бы смысл ответа, ничего
+    не сломав ни в одном тесте, кроме тех, где счётчики различаются.
+    """
+    return (
+        open_blockers_of(Task.id).correlate(Task).exists().label("blocked"),
+        open_question_count(Task.id).correlate(Task).scalar_subquery().label("open_questions"),
+        open_question_count(Task.id, blocking=True)
+        .correlate(Task)
+        .scalar_subquery()
+        .label("open_blocking_questions"),
+        last_summary_at(Task.id).correlate(Task).scalar_subquery().label("last_summary_at"),
+    )
+
+
+def _features_of(row: Any) -> TaskFeatures:
+    """Признаки из строки выдачи. Тот же тип, что у карточки: представление одно."""
+    return TaskFeatures(
+        blocked=row.blocked,
+        open_questions=row.open_questions,
+        open_blocking_questions=row.open_blocking_questions,
+        last_summary_at=row.last_summary_at,
+    )
 
 
 def compile_filter(resolved: ResolvedFilter) -> ColumnElement[bool] | None:

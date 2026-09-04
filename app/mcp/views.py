@@ -40,9 +40,10 @@ from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.authors import Author
 from app.domain.case import EntryHeading
-from app.domain.search import MANDATORY_FIELD
+from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD
 from app.domain.tasks import TaskFeatures
 from app.services.links import TaskLink
+from app.services.search import FoundTask
 from app.services.tasks import TaskPackage
 
 #: Поля задачи, которые бывают длинными: описание и пять разделов. Обрезаются только они
@@ -86,14 +87,20 @@ def task(item: Task) -> dict[str, Any]:
     }
 
 
-def found_task(item: Task, *, fields: Sequence[str], text_limit: int) -> dict[str, Any]:
-    """Задача в выдаче поиска: только запрошенные поля, длинные тексты с потолком.
+def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> dict[str, Any]:
+    """Строка выдачи поиска: только запрошенные поля, длинные тексты с потолком.
 
     Пустой набор полей означает «вся задача» — то же правило, что в REST. Ключ остаётся
     всегда: выдача без него бесполезна, по ней нельзя ни прочитать задачу, ни сослаться
     на неё.
+
+    Признаки идут вложенным объектом, тем же, что в пакете преемника: агент, выбирающий
+    задачу из списка, видит `blocked` и открытые вопросы сразу, а не вызывает `get_task`
+    на каждую строку. Их нет в ответе, если их не просили (`fields` без `features`).
     """
-    payload = task(item)
+    payload = task(found.task)
+    if found.features is not None:
+        payload[FEATURES_FIELD] = features(found.features)
     if fields:
         selected = {*fields, MANDATORY_FIELD}
         payload = {name: value for name, value in payload.items() if name in selected}

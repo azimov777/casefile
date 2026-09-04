@@ -17,7 +17,7 @@ from app.domain.errors import (
     SearchValueInvalidError,
 )
 from app.domain.links import LinkKind
-from app.domain.tasks import TaskPriority, TaskStatus
+from app.domain.tasks import TaskFeatures, TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import queues as queues_service
@@ -69,7 +69,15 @@ async def keys(
 ) -> list[str]:
     """Ключи найденных задач в порядке выдачи — то, что сравнивают почти все проверки."""
     outcome = await service.search_tasks(session, actor=actor, **call)  # type: ignore[arg-type]
-    return [task.key for task in outcome.page.items]
+    return [found.task.key for found in outcome.page.items]
+
+
+async def found_features(session: AsyncSession, actor: Actor, key: str) -> TaskFeatures | None:
+    """Признаки задачи так, как их видит строка списка: подзапросами прямо при выборке."""
+    outcome = await service.search_tasks(session, actor=actor)
+    found = [item for item in outcome.page.items if item.task.key == key]
+    assert len(found) == 1, key
+    return found[0].features
 
 
 @pytest.fixture
@@ -172,6 +180,7 @@ async def test_the_search_and_the_card_agree_on_every_computed_feature(
         package = await tasks_service.read_task_package(db_session, task.key, actor=task_actor)
         features = package.features
 
+        assert await found_features(db_session, task_actor, task.key) == features
         assert task.key in await keys(
             db_session, task_actor, query=f"blocked: {str(features.blocked).lower()}"
         )
@@ -363,9 +372,42 @@ async def test_an_insertion_between_pages_neither_duplicates_nor_loses_tasks(
         db_session, actor=task_actor, limit=3, cursor=first.page.next_cursor
     )
 
-    seen = [task.key for task in first.page.items] + [task.key for task in second.page.items]
+    seen = [found.task.key for found in first.page.items + second.page.items]
     assert seen == [task.key for task in before]
     assert len(seen) == len(set(seen))
+
+
+async def test_paging_holds_whether_or_not_the_features_were_asked_for(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Курсор берёт из строки только значения ключей порядка, а признаки в него не попадают.
+
+    Признаки — такие же колонки выдачи, как значения сортировки, и стоят в строке рядом с
+    ними, но число их зависит от `fields`. Курсор, собранный «от первой колонки до конца
+    строки», на выдаче с признаками молча уехал бы не туда: в него попали бы `blocked` и
+    счётчики, а страница продолжилась бы с чужого места. Поэтому обход проверяется обоими
+    наборами полей и обязан дать один и тот же список.
+    """
+    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(5)]
+
+    async def walk(fields: tuple[str, ...]) -> list[str]:
+        """Полный обход по страницам в две задачи, от курсора к курсору."""
+        seen: list[str] = []
+        cursor: str | None = None
+        while True:
+            outcome = await service.search_tasks(
+                db_session, actor=task_actor, fields=fields, limit=2, cursor=cursor
+            )
+            seen.extend(found.task.key for found in outcome.page.items)
+            cursor = outcome.page.next_cursor
+            if cursor is None:
+                return seen
+
+    with_features = await walk(())
+    without_features = await walk(("title",))
+
+    assert with_features == [task.key for task in made]
+    assert without_features == with_features
 
 
 async def test_sorting_by_update_time_descending_puts_the_latest_first(

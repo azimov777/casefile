@@ -78,7 +78,7 @@ from app.domain.search import (
     sortable_names,
     split_names,
 )
-from app.domain.tasks import TaskPriority, TaskStatus
+from app.domain.tasks import TaskFeatures, TaskPriority, TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import queues as queues_service
 from app.services.auth import Actor
@@ -101,15 +101,33 @@ class StructuredTerm:
 
 
 @dataclass(frozen=True, slots=True)
+class FoundTask:
+    """Строка выдачи: задача и её вычисляемые признаки (`CONCEPT.md`, 4.3).
+
+    Признаки едут вместе со строкой, а не запрашиваются по одной задаче: назначатель
+    отбирает кандидатов одним запросом и обязан видеть в ответе то же, по чему отбирал.
+    Второй вызов на каждую строку означал бы и N+1, и окно, в котором признак успел
+    измениться между двумя запросами.
+
+    `features is None` означает «их не просили» (`fields` без `features`), а не «признаков
+    нет»: у задачи они есть всегда, и `blocked=False` здесь соврал бы. Сериализатор в
+    таком ответе поля `features` не показывает вовсе.
+    """
+
+    task: Task
+    features: TaskFeatures | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SearchOutcome:
-    """Результат поиска: страница задач и то, чем её просили ограничить.
+    """Результат поиска: страница строк и то, чем её просили ограничить.
 
     Разрешённый фильтр возвращается вместе со страницей, потому что выбор возвращаемых
     полей — часть ответа: сериализатору нужно знать, что именно просили, и вычислять
     это второй раз в HTTP-слое значило бы завести второе толкование `fields`.
     """
 
-    page: Page[Task]
+    page: Page[FoundTask]
     resolved: ResolvedFilter
 
 
@@ -139,7 +157,13 @@ async def search_tasks(
         fields=fields,
     )
     page = await TaskSearchRepository(session).search_page(resolved, limit=limit, cursor=cursor)
-    return SearchOutcome(page=page, resolved=resolved)
+    return SearchOutcome(
+        page=Page(
+            items=[FoundTask(task=task, features=features) for task, features in page.items],
+            next_cursor=page.next_cursor,
+        ),
+        resolved=resolved,
+    )
 
 
 async def resolve_task_filter(

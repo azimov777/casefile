@@ -236,6 +236,34 @@ async def test_search_tasks_understands_the_query_language_and_the_arguments_ali
     assert open_task.key in [item["key"] for item in empty_assignee["items"]]
 
 
+async def test_search_tasks_returns_the_same_rows_as_rest(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    task_secret: str,
+    open_task: Task,
+) -> None:
+    """Проверка 3 задачи 32: строка выдачи MCP совпадает с REST поле в поле.
+
+    Признаки в строке — самое лёгкое место разойтись: их сериализуют два разных слоя
+    (`app/mcp/views.py` и `app/api/schemas/search.py`), а считает один запрос. Пока
+    сравнение зелёное, агент и человек выбирают задачу по одним и тем же числам.
+    """
+    fields = ["title", "status", "features"]
+    async with mcp_session(task_secret) as session:
+        from_mcp = await call(session, "search_tasks", queue=["TRK"], fields=fields)
+
+    response = await auth_client.get("/api/v1/tasks", params={"queue": "TRK", "fields": fields})
+    assert response.status_code == 200, response.text
+
+    assert from_mcp["items"] == response.json()["data"]
+    assert from_mcp["items"][0]["features"] == {
+        "blocked": False,
+        "open_questions": 0,
+        "open_blocking_questions": 0,
+        "last_summary_at": None,
+    }
+
+
 async def test_search_tasks_clips_a_long_text_and_says_so(
     mcp_session: Connect,
     db_session: AsyncSession,

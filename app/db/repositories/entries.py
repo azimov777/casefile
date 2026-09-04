@@ -13,6 +13,7 @@ GIN-индекс по нагрузке вопросов (миграция `case 
 
 import uuid
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Select, func, select
@@ -252,13 +253,7 @@ class EntryRepository:
 
     async def last_summary(self, task_id: uuid.UUID) -> Entry | None:
         """Последняя сводка задачи. Последняя главнее предыдущих (`CONCEPT.md`, 3.4)."""
-        statement = (
-            select(Entry)
-            .where(Entry.task_id == task_id, Entry.type == EntryType.SUMMARY)
-            .order_by(Entry.no.desc())
-            .limit(1)
-        )
-        return (await self._session.scalars(statement)).first()
+        return (await self._session.scalars(latest_summary(task_id, Entry))).first()
 
     async def open_questions(self, task_id: uuid.UUID) -> list[Entry]:
         """Вопросы задачи без ответа, в порядке подшивки.
@@ -417,6 +412,36 @@ def blocking_is(value: bool) -> ColumnElement[bool]:
     неблокирующие. Условие поэтому всегда идёт вместе с `_IS_QUESTION`.
     """
     return Entry.payload["blocking"].as_boolean() == value
+
+
+def latest_summary(task_id: Any, *entities: Any) -> Select[Any]:
+    """Последняя сводка задачи одной строкой — одно определение на карточку и на список.
+
+    Последняя главнее предыдущих (`CONCEPT.md`, 3.4), и «последняя» здесь означает
+    старшую по номеру внутри задачи, а не по времени: номера выдаются под блокировкой
+    строки задачи и внутри дела и есть порядок подшивки. `max(created_at)` был бы вторым
+    определением того же признака и разошёлся бы с карточкой на записях одной секунды.
+
+    `task_id` объявлен как `Any` по той же причине, что у `open_blockers_of`: принимается
+    и готовый идентификатор (карточка читает саму запись), и колонка внешнего запроса
+    (`Task.id`) — тогда это подзапрос по каждой строке выдачи списка.
+    """
+    return (
+        select(*entities)
+        .where(Entry.task_id == task_id, Entry.type == EntryType.SUMMARY)
+        .order_by(Entry.no.desc())
+        .limit(1)
+    )
+
+
+def last_summary_at(task_id: Any) -> Select[tuple[datetime]]:
+    """Время последней сводки — признак `last_summary_at` (`CONCEPT.md`, 4.3) в SQL.
+
+    Питоновский двойник — `app/services/case.py`, `features`: карточка берёт время у уже
+    прочитанной записи, список считает его подзапросом. Обе формы построены на одном
+    запросе `latest_summary`, и это единственное, что удерживает их от расхождения.
+    """
+    return latest_summary(task_id, Entry.created_at)
 
 
 def open_question_count(task_id: Any, *, blocking: bool | None = None) -> Select[tuple[int]]:

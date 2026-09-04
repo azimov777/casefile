@@ -1835,7 +1835,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small. Omit for the whole task. The task key is always included",
+              "description": "Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names",
               "examples": [
                 [
                   "title",
@@ -1844,7 +1844,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small. Omit for the whole task. The task key is always included"
+            "description": "Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names"
           },
           {
             "name": "limit",
@@ -6869,6 +6869,17 @@
               }
             ],
             "title": "Updated At"
+          },
+          "features": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskFeaturesRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Computed features of the task, the same object the successor package carries. Included unless `fields` asks for a narrower set without `features`"
           }
         },
         "type": "object",

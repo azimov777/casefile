@@ -12,10 +12,11 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas.search import TaskSearchRead
-from app.api.schemas.tasks import TaskRead
+from app.api.schemas.tasks import TaskFeaturesRead, TaskRead
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.links import LinkKind
+from app.domain.search import FEATURES_FIELD, SELECTABLE_FIELDS
 from app.domain.tasks import TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
@@ -250,5 +251,90 @@ async def test_the_search_answer_carries_the_same_fields_as_the_task_card() -> N
 
     Поле, добавленное в карточку и забытое здесь, приезжало бы из списка и из чтения
     по-разному, и фронтенд узнал бы об этом на своей стороне.
+
+    Строка списка шире карточки ровно на `features`: в чтении признаки лежат рядом с
+    карточкой, в пакете преемника (`TaskPackageRead.features`), и объект у них один и тот
+    же — `TaskFeaturesRead`. Второго представления признаков от этого не появляется.
     """
-    assert set(TaskSearchRead.model_fields) == set(TaskRead.model_fields)
+    assert set(TaskSearchRead.model_fields) == set(TaskRead.model_fields) | {FEATURES_FIELD}
+    assert TaskSearchRead.model_fields[FEATURES_FIELD].annotation == TaskFeaturesRead | None
+
+
+async def test_every_row_carries_the_features_of_its_own_card(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Проверка 1 задачи 32: признаки строки списка равны признакам карточки.
+
+    Считаны они разными путями — подзапросом по каждой строке и чистой функцией над
+    прочитанным делом, — и сойтись обязаны на каждой задаче. Пока проверка зелёная, две
+    формы одного определения не разъехались.
+    """
+    rows = {item["key"]: item["features"] for item in await listed(auth_client, query="queue: TRK")}
+
+    assert set(rows) == {task.key for task in board.values()}
+    for key, features in rows.items():
+        assert set(features) == {
+            "blocked",
+            "open_questions",
+            "open_blocking_questions",
+            "last_summary_at",
+        }
+        card = await auth_client.get(f"/api/v1/tasks/{key}")
+        assert card.status_code == 200, card.text
+        assert features == card.json()["data"]["features"]
+
+    # Признак, всегда отвечающий одно и то же, совпал бы с карточкой и ничего не значил:
+    # в расстановке есть и заблокированная задача, и задача с блокирующим вопросом.
+    assert rows[board["blocked"].key]["blocked"] is True
+    assert rows[board["plain"].key]["blocked"] is False
+    assert rows[board["asking"].key]["open_blocking_questions"] == 1
+
+
+async def test_the_features_are_picked_as_a_whole_and_a_single_one_is_refused(
+    auth_client: AsyncClient, task: Task
+) -> None:
+    """Проверка 2 задачи 32: `features` выбирается именем, а `blocked` в `fields` — нет.
+
+    `blocked` остаётся именем **условия отбора**: разреши его ещё и в `fields`, и одно
+    слово значило бы в запросе два разных, а список допустимых значений в отказе перестал
+    бы отвечать на вопрос «что писать».
+    """
+    items = await listed(auth_client, fields="title,features")
+
+    assert items == [
+        {
+            "key": task.key,
+            "title": task.title,
+            "features": {
+                "blocked": False,
+                "open_questions": 0,
+                "open_blocking_questions": 0,
+                "last_summary_at": None,
+            },
+        }
+    ]
+
+    response = await auth_client.get("/api/v1/tasks", params={"fields": "blocked"})
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "search_field_unknown"
+    assert error["details"] == {
+        "field": "blocked",
+        "reason": "not_selectable",
+        "allowed": sorted(SELECTABLE_FIELDS),
+    }
+
+
+async def test_a_narrow_field_set_leaves_the_features_out_entirely(
+    auth_client: AsyncClient, task: Task
+) -> None:
+    """Признаков нет в ответе, если их не просили: `null` соврал бы, а подзапросы стоят.
+
+    У задачи признаки есть всегда, поэтому `"features": null` в строке читалось бы как
+    «признаков нет», а не «их не считали». Ответ вместо этого поля не содержит вовсе — и
+    четыре подзапроса на строку в базе не выполняются.
+    """
+    items = await listed(auth_client, fields="title")
+
+    assert items == [{"key": task.key, "title": task.title}]

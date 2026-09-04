@@ -33,7 +33,7 @@ from app.domain.idempotency import KEY_TTL
 from app.domain.journal import JOURNAL_START, MAX_WAIT_SECONDS
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
-from app.domain.search import searchable_names, sortable_names
+from app.domain.search import FEATURES_FIELD, searchable_names, sortable_names
 from app.domain.tasks import TaskPriority, TaskStatus
 
 # --- Адресация ------------------------------------------------------------------------
@@ -379,7 +379,18 @@ class TaskChanges(BaseModel):
 #: Что `search_tasks` просит по умолчанию. Узкий набор не оптимизация, а требование:
 #: полная задача с пятью разделами на страницу в двадцать пять строк съедает контекст
 #: ровно там, где агент выбирает, что брать.
-DEFAULT_SEARCH_FIELDS: tuple[str, ...] = ("key", "title", "status", "assignee", "priority")
+#:
+#: Признаки в набор входят: они короткие, а решение «брать ли задачу» без них не
+#: принимается — иначе агент звал бы `get_task` на каждую строку выдачи, чтобы узнать,
+#: не заблокирована ли она.
+DEFAULT_SEARCH_FIELDS: tuple[str, ...] = (
+    "key",
+    "title",
+    "status",
+    "assignee",
+    "priority",
+    FEATURES_FIELD,
+)
 
 QueryArg = Annotated[
     str | None,
@@ -409,8 +420,10 @@ FieldsArg = Annotated[
     list[str],
     Field(
         description=(
-            "Какие поля вернуть. Ключ приходит всегда. Пустой список означает «задачу "
-            "целиком» — проси его, только когда действительно нужны разделы: они длинные"
+            "Какие поля вернуть. Ключ приходит всегда. `features` отдаёт вычисляемые "
+            "признаки строки: `blocked`, `open_questions`, `open_blocking_questions`, "
+            "`last_summary_at`. Пустой список означает «задачу целиком» — проси его, "
+            "только когда действительно нужны разделы: они длинные"
         )
     ),
 ]
