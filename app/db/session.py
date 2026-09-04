@@ -43,6 +43,21 @@ def create_engine(url: str | None = None) -> AsyncEngine:
     )
 
 
+def asyncpg_dsn(url: str | None = None) -> str:
+    """Адрес БД в виде, который понимает сам драйвер, без диалекта SQLAlchemy.
+
+    Нужен там, где соединение открывается мимо движка: слушателю оповещений журнала
+    (`app/db/wakeup.py`) и тестовой фикстуре, создающей базу. Замена префикса живёт
+    здесь, а не по месту, по тому же правилу, что и всё остальное в этом файле: две
+    копии разъехались бы, и одна из них однажды перестала бы понимать адрес с
+    параметрами.
+    """
+    return (url or str(get_settings().database_url)).replace(
+        "postgresql+asyncpg://",
+        "postgresql://",
+    )
+
+
 def get_engine() -> AsyncEngine:
     """Движок приложения, единый на процесс."""
     global _engine

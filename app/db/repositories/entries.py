@@ -15,7 +15,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -32,12 +32,47 @@ from app.domain.authors import Author
 from app.domain.case import FIRST_ENTRY_NUMBER, EntryHeading, EntryType, VerdictOutcome
 from app.domain.tasks import TaskStatus
 
+#: Ключ консультативной блокировки, под которой подшиваются записи. Число — ASCII слова
+#: `journal`, чтобы в `pg_locks` было видно, чья это блокировка, и чтобы оно заведомо
+#: не совпало с чужим ключом в той же базе.
+JOURNAL_APPEND_LOCK = 0x6A6F75726E616C
+
 
 class EntryRepository:
     """Доступ к таблице `entries`: добавить и прочитать."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def lock_journal(self) -> None:
+        """Занимает очередь на подшивку записи. Держится до конца транзакции.
+
+        Нужна ради ленты, а не ради самой записи. `seq` выдаёт `IDENTITY` в момент
+        `INSERT`, а видимой строка становится в момент `COMMIT`, и без этой блокировки
+        два порядка расходятся: транзакции в **разные** задачи (блокировка строки задачи
+        их не сериализует) могут получить номера 10 и 11 и закоммититься наоборот.
+        Читатель ленты, дошедший до 11, запись 10 не увидит уже никогда — курсор
+        двигается только вперёд. Молча потерянная запись означает назначателя, который
+        не узнал о закрытии задачи, и разобрать это по логам нечем.
+
+        Блокировка отпускается коммитом, поэтому следующий пишущий получает свой `seq`
+        уже после того, как предыдущая запись стала видимой: порядок `seq` совпадает с
+        порядком фиксации, и хвост ленты не теряет строк. Цена — подшивка записей
+        сериализуется по всей установке до конца транзакции; для трекера, где пишут
+        единицы агентов, это дешевле потерянной записи.
+
+        Берётся **до** блокировки строки задачи в `allocate_no` и только там, где
+        подшивается запись (`app/services/case.py`, `_append`). Обратный порядок дал бы
+        взаимную блокировку: один держал бы строку задачи и ждал очереди, другой держал
+        бы очередь и ждал строки.
+
+        Дыры в `seq` остаются: откатившаяся транзакция сжигает выданный номер. Курсору
+        `seq > N` они безразличны — он требует не сплошного ряда, а того, чтобы позади
+        него ничего больше не появилось.
+        """
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": JOURNAL_APPEND_LOCK}
+        )
 
     async def allocate_no(self, task_id: uuid.UUID) -> int:
         """Следующий номер записи в задаче — без дыр и без гонок.
@@ -292,6 +327,58 @@ class EntryRepository:
         page = rows[:size]
         last_entry = page[-1][0]
         return Page(items=page, next_cursor=encode_sort_cursor([last_entry.seq], last_entry.id))
+
+    # --- Лента журнала ---------------------------------------------------------------
+
+    async def journal_page(
+        self,
+        *,
+        after: int,
+        task_id: uuid.UUID | None = None,
+        queue_id: uuid.UUID | None = None,
+        types: Sequence[EntryType] | None = None,
+        limit: int | None = None,
+    ) -> Page[tuple[Entry, str]]:
+        """Хвост журнала: записи со сквозным номером больше `after`, по возрастанию.
+
+        Отдельной таблицы событий нет — лента это та же таблица записей
+        (`CONCEPT.md`, 4.1), поэтому и метод живёт здесь, а не в своём репозитории.
+
+        Отдаёт пары «запись, ключ задачи»: у записи связи с задачей нет, только
+        `task_id`, а кадром ленты нечего адресовать без ключа. Соединение с задачами
+        нужно и для фильтра по очереди — у записи её нет.
+
+        Ложится на уникальный индекс по `seq`: чтение всегда идёт с конца, а фильтры
+        сужают уже прочитанный хвост.
+        """
+        size = resolve_limit(limit)
+        statement = (
+            select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(Entry.seq > after)
+        )
+        if task_id is not None:
+            statement = statement.where(Entry.task_id == task_id)
+        if queue_id is not None:
+            statement = statement.where(Task.queue_id == queue_id)
+        if types is not None:
+            # Пустой список — это «ничего», а не «всё»: клиент, отобравший нулевой набор
+            # типов, обязан получить пустую ленту, а не всю. Поэтому `is None`.
+            statement = statement.where(Entry.type.in_(list(types)))
+        statement = statement.order_by(Entry.seq).limit(size + 1)
+        rows = [(entry, key) for entry, key in await self._session.execute(statement)]
+        if len(rows) <= size:
+            return Page(items=rows, next_cursor=None)
+        page = rows[:size]
+        last_entry = page[-1][0]
+        return Page(items=page, next_cursor=encode_sort_cursor([last_entry.seq], last_entry.id))
+
+    async def latest_seq(self) -> int:
+        """Номер последней подшитой записи; `0` на пустой установке.
+
+        С него начинает поток, открытый без `Last-Event-ID`: клиент просит «что будет
+        дальше», а не историю установки. Ноль как «журнал пуст» безопасен — `seq`
+        выдаётся с единицы.
+        """
+        return int(await self._session.scalar(select(func.coalesce(func.max(Entry.seq), 0))) or 0)
 
 
 #: Признак записи-вопроса. Отдельной константой, потому что участвует и в выборке

@@ -40,6 +40,7 @@ from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.pagination import Page
 from app.db.repositories import EntryRepository, ParticipantRepository, TaskRepository
+from app.db.wakeup import journal_wakeup
 from app.domain.case import (
     EntryContext,
     EntryDraft,
@@ -575,8 +576,19 @@ async def _append(
 
     Автор раскладывается по колонкам общей функцией `created_by_columns` и берётся
     только из структуры автора действия — второй раскладки в проекте нет.
+
+    Здесь же, и только здесь, журнал получает две вещи, без которых лента (задача 26)
+    неверна. Порядок обязателен и объяснён в самих методах:
+
+    1. `lock_journal` — очередь на подшивку, из-за которой порядок `seq` совпадает с
+       порядком фиксации. Берётся **до** блокировки строки задачи: обратный порядок
+       даёт взаимную блокировку.
+    2. `announce` — оповещение ждущих ленту. После `add`, потому что номер выдаёт база;
+       внутри транзакции, потому что доставить его PostgreSQL обязан при фиксации, а не
+       раньше строки.
     """
     repository = EntryRepository(session)
+    await repository.lock_journal()
     no = await repository.allocate_no(task.id)
     entry = Entry(
         task_id=task.id,
@@ -588,7 +600,9 @@ async def _append(
         refs=list(refs),
         **created_by_columns(actor.author),
     )
-    return await repository.add(entry)
+    await repository.add(entry)
+    await journal_wakeup.announce(session, entry.seq)
+    return entry
 
 
 async def verdict_gaps(session: AsyncSession, task: Task) -> list[int]:
