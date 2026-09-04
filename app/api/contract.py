@@ -210,9 +210,9 @@ _ERRORS_HEADER = """# Справочник кодов ошибок
 Любая ошибка приходит одной оболочкой, независимо от эндпоинта:
 
 ```json
-{"error": {"code": "issue_not_found",
-           "message": "Issue TRK-123 not found",
-           "details": {}}}
+{"error": {"code": "task_not_found",
+           "message": "Task not found",
+           "details": {"key": "TRK-123"}}}
 ```
 
 Решения клиент принимает по `code`: он стабилен и меняется только вместе с версией API.

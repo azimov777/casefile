@@ -29,8 +29,8 @@ __all__ = [
 class ErrorDetail(BaseModel):
     """Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд."""
 
-    code: str = Field(examples=["issue_not_found"])
-    message: str = Field(examples=["Issue TRK-123 not found"])
+    code: str = Field(examples=["task_not_found"])
+    message: str = Field(examples=["Task not found"])
     details: dict[str, Any] = Field(default_factory=dict)
 
 
