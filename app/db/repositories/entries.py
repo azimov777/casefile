@@ -308,9 +308,7 @@ class EntryRepository:
         size = resolve_limit(limit)
         statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_QUESTION)
         if addressee is not None:
-            # Проверка вхождения в массив JSONB: `payload -> 'addressees' @> '["name"]'`.
-            # Ложится на частичный GIN-индекс по нагрузке вопросов.
-            statement = statement.where(Entry.payload["addressees"].contains([addressee]))
+            statement = statement.where(addressed_to(addressee))
         if queue_id is not None:
             statement = statement.where(Task.queue_id == queue_id)
         if blocking is not None:
@@ -327,6 +325,29 @@ class EntryRepository:
         page = rows[:size]
         last_entry = page[-1][0]
         return Page(items=page, next_cursor=encode_sort_cursor([last_entry.seq], last_entry.id))
+
+    async def count_questions(
+        self,
+        *,
+        addressee: str,
+        blocking: bool | None = None,
+        open_only: bool = True,
+    ) -> int:
+        """Сколько вопросов адресовано участнику — число без самих записей.
+
+        Отдельно от `questions_page`, а не «посчитать длину страницы»: страница
+        ограничена размером, и первый экран показывал бы не число вопросов, а размер
+        страницы. Условия те же самые и берутся из тех же функций — иначе «входящая» и
+        счётчик на первом экране однажды разошлись бы на одних и тех же данных.
+        """
+        statement = (
+            select(func.count()).select_from(Entry).where(_IS_QUESTION, addressed_to(addressee))
+        )
+        if blocking is not None:
+            statement = statement.where(blocking_is(blocking))
+        if open_only:
+            statement = _unanswered(statement)
+        return await self._session.scalar(statement) or 0
 
     # --- Лента журнала ---------------------------------------------------------------
 
@@ -384,6 +405,16 @@ class EntryRepository:
 #: Признак записи-вопроса. Отдельной константой, потому что участвует и в выборке
 #: открытых вопросов задачи, и во «входящей» участника: две копии условия разъехались бы.
 _IS_QUESTION = Entry.type == EntryType.QUESTION
+
+
+def addressed_to(value: str) -> ColumnElement[bool]:
+    """Вопрос адресован названному участнику.
+
+    Проверка вхождения в массив JSONB: `payload -> 'addressees' @> '["name"]'`. Ложится
+    на частичный GIN-индекс по нагрузке вопросов, поэтому и «входящая», и счётчик
+    первого экрана читают один индекс, а не два разных условия.
+    """
+    return Entry.payload["addressees"].contains([value])
 
 
 def blocking_is(value: bool) -> ColumnElement[bool]:

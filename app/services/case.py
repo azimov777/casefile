@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
+from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.pagination import Page
@@ -199,6 +200,17 @@ async def list_questions(
         items=[TaskEntry(entry=entry, task_key=key) for entry, key in page.items],
         next_cursor=page.next_cursor,
     )
+
+
+async def count_open_questions(session: AsyncSession, *, participant: Participant) -> int:
+    """Сколько открытых вопросов адресовано участнику.
+
+    Прав не проверяет и адресата не разрешает: принимает уже прочитанного участника,
+    потому что зовут её оттуда, где он уже на руках, — с первого экрана
+    (`app/services/bootstrap.py`). Отдельный сценарий с собственной проверкой набора
+    завёл бы вторую точку входа к тому же числу.
+    """
+    return await EntryRepository(session).count_questions(addressee=participant.name)
 
 
 # --- Записи агента --------------------------------------------------------------------
