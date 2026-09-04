@@ -225,6 +225,12 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/
 `open_blocking_questions`. Признаки не хранятся колонками, а считаются из связей и дела
 прямо в запросе, поэтому они всегда согласованы с карточкой.
 
+Они же приезжают **в каждой строке выдачи** объектом `features` — тем самым, что лежит в
+пакете преемника: `blocked`, `open_questions`, `open_blocking_questions`,
+`last_summary_at`. Назначателю не нужен второй запрос на задачу, чтобы понять, можно ли
+её брать. Стоят они дёшево: подзапросы считаются только для строк страницы, замеры на
+40 000 задач — в `docs/notes/search.md`.
+
 ```bash
 # кандидаты назначателя одной строкой: что можно брать в работу прямо сейчас
 curl -H "Authorization: Bearer $TOKEN" --get --data-urlencode \
@@ -238,6 +244,10 @@ curl -H "Authorization: Bearer $TOKEN" \
 # только нужные поля: полная задача с пятью разделами съедает контекст агента
 curl -H "Authorization: Bearer $TOKEN" \
      'http://localhost:8000/api/v1/tasks?fields=title,status,assignee&limit=100'
+
+# признаки выбираются целиком именем features; отдельный признак в fields не поле ответа
+curl -H "Authorization: Bearer $TOKEN" \
+     'http://localhost:8000/api/v1/tasks?fields=title,features&limit=100'
 
 # порядок и страницы: sort принимает key, updated_at и priority, минус — по убыванию
 curl -H "Authorization: Bearer $TOKEN" \
@@ -543,8 +553,10 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 | `TRACKER_MCP_TEXT_LIMIT` | потолок длинного текста в выдаче `search_tasks`; обрезка объявлена полями `<поле>_truncated` и `<поле>_length`, а задача целиком — один `get_task` |
 
 `search_tasks` по умолчанию просит узкий набор полей (`key`, `title`, `status`,
-`assignee`, `priority`): полная задача с пятью разделами съедает контекст ровно там, где
-агент выбирает, что брать. Пустой список `fields` возвращает задачу целиком.
+`assignee`, `priority`, `features`): полная задача с пятью разделами съедает контекст
+ровно там, где агент выбирает, что брать. Признаки в набор входят — по ним решают, можно
+ли брать задачу, и без них пришлось бы звать `get_task` на каждую строку. Пустой список
+`fields` возвращает задачу целиком.
 
 ## Команды разработки
 
