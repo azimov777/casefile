@@ -33,7 +33,7 @@ from app.core.config import Settings, get_settings
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
-from app.db.session import get_session
+from app.db.session import get_session, transaction
 from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenScope
@@ -157,18 +157,18 @@ def mcp_sessions(db_session: AsyncSession) -> SessionFactory:
     него, устарели (откат снимает с них значения), и обращение к их полям уходит за
     данными в базу вне async-контекста — `MissingGreenlet` на ровном месте. Ключи задач
     поэтому запоминают строкой **до** вызова, а не читают из объекта после.
+
+    Сама граница берётся боевая (`app/db/session.py`, `transaction`), а не пишется здесь
+    заново: она переводит нарушение целостности в доменный конфликт, и фикстура с
+    собственной копией отдавала бы инструменту сырой `IntegrityError` — то есть была бы
+    зелёной ровно там, где боевой код сломан.
     """
 
     @asynccontextmanager
     async def _scope() -> AsyncIterator[AsyncSession]:
         await db_session.commit()
-        try:
+        async with transaction(db_session):
             yield db_session
-        except Exception:
-            await db_session.rollback()
-            raise
-        else:
-            await db_session.commit()
 
     return _scope
 

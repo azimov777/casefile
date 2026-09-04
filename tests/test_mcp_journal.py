@@ -32,7 +32,7 @@ from app.db.models.author import created_by_columns
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository
-from app.db.session import asyncpg_dsn
+from app.db.session import asyncpg_dsn, transaction
 from app.db.wakeup import journal_wakeup
 from app.domain.authors import TRACKER
 from app.domain.participants import ParticipantKind
@@ -192,14 +192,10 @@ def committing_server(committing_sessions: async_sessionmaker[AsyncSession]) -> 
 
     @asynccontextmanager
     async def scope() -> AsyncIterator[AsyncSession]:
-        async with committing_sessions() as session:
-            try:
-                yield session
-            except Exception:
-                await session.rollback()
-                raise
-            else:
-                await session.commit()
+        # Граница берётся боевая: своя копия разошлась бы с ней молча — например, не
+        # переводила бы нарушение целостности в доменный отказ.
+        async with committing_sessions() as session, transaction(session):
+            yield session
 
     return create_server(runtime=Runtime(sessions=scope))
 
