@@ -19,6 +19,14 @@
 бы пул целиком, и остальной API встал бы. Терять при этом нечего — сценарий только
 читает. Ждущий, который что-то пишет, так делать не может, и такого здесь нет.
 
+## Ушедший клиент прекращает ожидание
+
+Ждать ради того, кто уже отключился, незачем: соединение из пула и место в пуле задач
+заняты, а ответ отдавать некому. Поэтому вызывающий передаёт способ узнать, что клиент
+ушёл, и цикл проверяет его после каждой паузы — то есть бросает ожидание не позже, чем
+через один контрольный опрос. Проверка приходит параметром, а не берётся из запроса:
+сценарий один на REST и MCP, и про `Request` он знать не должен.
+
 ## Поток читает ту же ленту, что и запрос
 
 Соединение SSE не получает записи откуда-то ещё: оно читает тот же хвост тем же
@@ -30,7 +38,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 
@@ -72,6 +80,10 @@ RECONNECT_DELAY_MS = 3000
 #: получает её параметром, а не берёт импортом, чтобы было видно — сессия здесь живёт
 #: короче самого потока, и чтобы тест мог подсунуть свою.
 type SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+#: Способ спросить, ушёл ли клиент. У HTTP это `Request.is_disconnected` — проверка без
+#: ожидания: она смотрит, не пришло ли в канал `http.disconnect`, и не блокирует цикл.
+type ClientGone = Callable[[], Awaitable[bool]]
 
 
 # --- Фильтр ---------------------------------------------------------------------------
@@ -145,6 +157,7 @@ async def wait_journal(
     cursor: str | None = None,
     limit: int | None = None,
     wait: float | None = None,
+    client_gone: ClientGone | None = None,
 ) -> Page[TaskEntry]:
     """Тот же хвост, но с ожиданием: возвращается, как только появилась первая запись.
 
@@ -161,6 +174,10 @@ async def wait_journal(
     Пустой ответ по истечении ожидания — не ошибка и не отдельный код: «ничего не
     случилось» и есть пустая коллекция. Отличать её от сбоя незачем — сбой приходит
     ошибкой.
+
+    `client_gone` прекращает ожидание досрочно, когда звавший отключился. Тем же пустым
+    ответом, а не исключением: отдавать его уже некому, а исключение в этом месте
+    означало бы ошибку в логах на каждый закрытый браузер.
     """
     ensure_scope(actor, TokenScope.TASK, action="journal.read")
     seconds = resolve_wait(wait)
@@ -207,6 +224,11 @@ async def wait_journal(
             # чего-то, чего не было.
             await session.commit()
             await _sleep_until_woken(woken, min(remaining, settings.journal_wait_poll_interval))
+            # После паузы, а не до: пока цикл спал, клиент мог уйти, и следующий круг
+            # начинался бы с выборки ради ответа, который никто не прочитает.
+            if client_gone is not None and await client_gone():
+                logger.debug("Journal wait stopped: the client is gone")
+                return Page(items=[], next_cursor=None)
 
 
 # --- Поток ----------------------------------------------------------------------------
@@ -361,6 +383,7 @@ async def _sleep_until_woken(woken: asyncio.Event, seconds: float) -> None:
 __all__ = [
     "JOURNAL_START",
     "RECONNECT_DELAY_MS",
+    "ClientGone",
     "JournalMessage",
     "SessionFactory",
     "connection_limit",

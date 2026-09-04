@@ -30,7 +30,7 @@ SSE. Контракт от этого не теряется: полезная н
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Query, Response
+from fastapi import APIRouter, Header, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep, StreamSessionsDep
@@ -146,6 +146,7 @@ def render(message: JournalMessage) -> str:
 
 @router.get("", summary="Read the journal tail")
 async def read_journal(
+    request: Request,
     session: SessionDep,
     actor: ActorDep,
     after: AfterQuery = JOURNAL_START,
@@ -170,6 +171,8 @@ async def read_journal(
     первая подходящая запись, и не позже, чем через указанное число секунд. Ожидание
     построено на оповещениях PostgreSQL, а не на опросе, и не держит соединение с базой.
     Пустой список по истечении ожидания означает «ничего не случилось» — это не ошибка.
+    Ушедший клиент ожидание прекращает: сценарию передаётся `Request.is_disconnected`,
+    и брошенный запрос отпускает соединение, не досиживая до конца `wait`.
 
     Фильтры складываются по «и» и совпадают с фильтрами потока. `after` и `cursor` — не
     дубль: первый задаёт клиент, второй продолжает страницу; действуют оба, побеждает
@@ -183,6 +186,7 @@ async def read_journal(
         cursor=cursor,
         limit=limit,
         wait=wait,
+        client_gone=request.is_disconnected,
     )
     return CollectionResponse[EntryRead].of(
         [entry_read(item.entry, task_key=item.task_key) for item in page.items],
