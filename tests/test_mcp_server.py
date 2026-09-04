@@ -1,11 +1,9 @@
-"""Каркас MCP-сервера: подключение, пустой набор инструментов, доступ и здоровье.
+"""Каркас MCP-сервера: подключение, разбор токена, здоровье.
 
-Инструментов у сервера сейчас нет: старый набор снесён задачей 20, новый строится
-задачей 28. Поэтому тесты здесь проверяют не действия, а то, что каркас жив, — иначе
-поломку заметят только в задаче 28, когда чинить придётся сразу и каркас, и инструменты.
-
-Пустой `tools/list` проверяется прямо, а не «между делом»: пустота обязана быть
-состоянием, а не последствием того, что регистрация тихо упала.
+Здесь проверяется не то, что делают инструменты (это `tests/test_mcp_tools.py`), а то,
+на чём они стоят: рукопожатие протокола, разбор заголовка с токеном, контекст вызова и
+проверка здоровья для Docker. Сломать любое из этого можно сборкой сервера, не трогая ни
+одного инструмента.
 """
 
 import pytest
@@ -18,18 +16,6 @@ from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
 from app.domain.tokens import TokenScope
 from app.mcp.runtime import Runtime, SessionFactory, bearer_token, use_headers
-from app.mcp.server import INSTRUCTIONS
-
-
-async def test_the_server_exposes_no_tools_yet(mcp_server: MCPServer) -> None:
-    """Пустой список — объявленное состояние, а не молча упавшая регистрация."""
-    assert await mcp_server.list_tools() == []
-
-
-async def test_the_instructions_say_the_server_has_no_tools() -> None:
-    """Инструкция читается моделью раньше любого вызова и не должна обещать лишнего."""
-    assert "no tools" in INSTRUCTIONS
-    assert "Authorization: Bearer" in INSTRUCTIONS
 
 
 async def test_a_client_can_initialize_a_session(mcp_server: MCPServer) -> None:

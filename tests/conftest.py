@@ -6,17 +6,26 @@
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import asyncpg
+
+# `httpx2` — зависимость самого SDK MCP, а не проекта: клиент `streamable_http_client`
+# принимает именно его `AsyncClient`. Проектной зависимостью объявлять его нельзя —
+# приложение им не пользуется, — а подсунуть вместо него `httpx` 0.28 не выйдет: типы
+# транспорта у них разные (`docs/notes/mcp.md`).
+import httpx2
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver import MCPServer
+from mcp_types import CallToolResult, TextContent
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -25,6 +34,7 @@ from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.session import get_session
+from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenScope
 from app.main import create_app
@@ -35,6 +45,7 @@ from app.services import queues as queues_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
+from mcp import ClientSession
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -135,10 +146,22 @@ def mcp_sessions(db_session: AsyncSession) -> SessionFactory:
     Повторяет `session_scope` (коммит на выходе, откат на исключении), а не отдаёт
     сессию как есть: инструмент, который откатывает свою транзакцию, не должен уносить
     с собой данные, заведённые фикстурами до него.
+
+    Ради этого же — коммит **на входе**. Сессия теста живёт в режиме
+    `create_savepoint`, и всё, что фикстуры записали без коммита, лежит внутри текущей
+    точки сохранения: откат отклонённого вызова унёс бы вместе со своей работой и
+    очередь, и токен, а следующий вызов ответил бы `unauthorized` — далеко от места
+    ошибки. Коммит закрывает точку сохранения фикстур и открывает вызову свою.
+
+    Следствие для тестов: после **отклонённого** вызова объекты ORM, прочитанные до
+    него, устарели (откат снимает с них значения), и обращение к их полям уходит за
+    данными в базу вне async-контекста — `MissingGreenlet` на ровном месте. Ключи задач
+    поэтому запоминают строкой **до** вызова, а не читают из объекта после.
     """
 
     @asynccontextmanager
     async def _scope() -> AsyncIterator[AsyncSession]:
+        await db_session.commit()
         try:
             yield db_session
         except Exception:
@@ -154,6 +177,90 @@ def mcp_sessions(db_session: AsyncSession) -> SessionFactory:
 def mcp_server(mcp_sessions: SessionFactory) -> MCPServer:
     """MCP-сервер, у которого сессия подменена на транзакцию теста."""
     return create_server(runtime=Runtime(sessions=mcp_sessions))
+
+
+#: Базовый адрес клиента MCP в тестах. Порт обязателен: у эндпоинта стоит защита от DNS
+#: rebinding, и её список разрешённых значений `Host` — это `localhost:*` и `127.0.0.1:*`.
+#: Голый `localhost` под шаблон не подходит и отвергается `421` ещё до обработчика
+#: (`docs/notes/mcp.md`).
+MCP_BASE_URL = "http://localhost:8100"
+
+#: Как тест подключается к серверу: контекстный менеджер, отдающий готовую сессию клиента.
+type Connect = Callable[..., AbstractAsyncContextManager[ClientSession]]
+
+
+@asynccontextmanager
+async def connect_mcp(
+    server: MCPServer,
+    secret: str,
+    *,
+    label: str | None = None,
+) -> AsyncIterator[ClientSession]:
+    """Сессия настоящего клиента SDK поверх ASGI: без сети и без занятого порта.
+
+    Инструменты проверяются именно через клиент, а не вызовом функции: половина того, что
+    может сломаться, живёт не в теле инструмента — это разбор аргументов по схеме, разбор
+    заголовка с токеном, промежуточные слои и свёртка результата.
+
+    Жизненный цикл приложения открывается руками: `ASGITransport` его не запускает, а
+    менеджер сессий streamable HTTP заводит свою группу задач именно там и без неё
+    отвечает `Task group is not initialized`.
+    """
+    application = server.streamable_http_app()
+    headers = {"Authorization": f"Bearer {secret}"}
+    if label is not None:
+        headers[ACTOR_LABEL_HEADER] = label
+    async with application.router.lifespan_context(application):
+        http_client = httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(application),
+            base_url=MCP_BASE_URL,
+            headers=headers,
+            timeout=60,
+        )
+        async with (
+            http_client,
+            streamable_http_client(f"{MCP_BASE_URL}/mcp", http_client=http_client) as streams,
+        ):
+            read, write = streams
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session
+
+
+@pytest.fixture
+def mcp_session(mcp_server: MCPServer) -> Connect:
+    """Подключение к серверу теста: `async with mcp_session(secret) as session`."""
+
+    def connect(
+        secret: str, *, label: str | None = None
+    ) -> AbstractAsyncContextManager[ClientSession]:
+        return connect_mcp(mcp_server, secret, label=label)
+
+    return connect
+
+
+def tool_text(result: CallToolResult) -> str:
+    """Текст результата инструмента: по нему агент читает и данные, и причину отказа."""
+    return "\n".join(block.text for block in result.content if isinstance(block, TextContent))
+
+
+async def call(session: ClientSession, tool: str, /, **arguments: Any) -> dict[str, Any]:
+    """Успешный вызов инструмента. Возвращает структурированный результат.
+
+    Параметры до `/` — только позиционные: у инструментов есть аргументы `name` и
+    `session`, и с обычными параметрами такой вызов падал бы `TypeError`.
+    """
+    result = await session.call_tool(tool, arguments)
+    assert not result.is_error, tool_text(result)
+    assert result.structured_content is not None
+    return result.structured_content
+
+
+async def refuse(session: ClientSession, tool: str, /, **arguments: Any) -> str:
+    """Вызов, который обязан отказать. Возвращает текст отказа с кодом и подробностями."""
+    result = await session.call_tool(tool, arguments)
+    assert result.is_error, f"вызов {tool} прошёл, хотя должен был отказать: {tool_text(result)}"
+    return tool_text(result)
 
 
 @pytest.fixture
