@@ -37,6 +37,10 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=tracker:tracker alembic.ini ./
 COPY --chown=tracker:tracker app ./app
+# Скил — не документация, а часть рантайма: MCP-сервер раздаёт его текст промптом
+# `tracker-discipline` и берёт из него `instructions`. Без этой строки процесс MCP падает
+# на старте, а не молча отдаёт пустую дисциплину (`app/mcp/skill.py`).
+COPY --chown=tracker:tracker skill ./skill
 
 USER tracker
 

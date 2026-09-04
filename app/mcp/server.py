@@ -1,26 +1,29 @@
-"""Сборка MCP-сервера: пока только каркас и проверка здоровья.
+"""Сборка MCP-сервера: инструменты, промпт дисциплины, инструкции и проверка здоровья.
 
 Сервер собирается фабрикой, а не заводится глобальным объектом: тесты поднимают свой
 экземпляр с сессией, привязанной к откатываемой транзакции, — ровно как это делает
 `create_app` для REST.
 
-## Инструментов сейчас нет, и это состояние, а не поломка
+## Три вещи, которые сервер отдаёт агенту
 
-Старый набор инструментов снесён вместе со старым доменом (задача 20), новый строится
-задачей 28. До неё сервер отвечает на `initialize` и отдаёт пустой `tools/list`:
-клиент подключается, видит сервер живым и не получает ни одного действия. Так и должно
-быть — заглушка, изображающая работу, обошлась бы дороже честной пустоты.
+1. **Инструменты** рабочего цикла (`app/mcp/tools/`). Состав `tools/list` зависит от
+   набора токена; отказ на вызове недоступного инструмента приходит из той же единой
+   точки прав, что и в REST (`app/mcp/toolset.py`).
+2. **Промпт `tracker-discipline`** — текст скила целиком. Показывать ли его модели,
+   решает клиент; надёжный путь — скил, установленный в харнесс (`CONCEPT.md`, 5.3).
+3. **`instructions`** — раздел «Кратко» из того же скила. Он уезжает клиенту при
+   подключении и читается моделью раньше любого вызова, поэтому там дисциплина, а не
+   «добро пожаловать».
 
-От сервера при этом остаётся всё, что не зависит от набора инструментов: контекст
-вызова с сессией и автором запроса (`app/mcp/runtime.py`), разбор заголовков доступа,
-перевод доменных ошибок в ошибки протокола (`app/mcp/errors.py`) и проверка здоровья
-для Docker.
+Второго исходного текста дисциплины в коде нет: и промпт, и инструкции читают
+`skill/tracker-agent/SKILL.md` (`app/mcp/skill.py`).
 
-## Инструкция сервера — это тоже промпт
+## Чего сервер не делает
 
-`instructions` уезжает клиенту при подключении и читается моделью раньше любого вызова.
-Поэтому там не «добро пожаловать», а то, чего не видно из описаний отдельных
-инструментов. Пока инструментов нет, там сказано ровно это.
+Не поднимает слушателя оповещений журнала: это дело процесса, а не сборки
+(`app/mcp/__main__.py`). Разница существенна — тест поднимает сервер десятками, и подъём
+слушателя в сборке дал бы десятки соединений к базе и, хуже, занятого слушателя не на той
+базе, из-за которого ожидание ленты молча перешло бы на контрольный опрос.
 """
 
 from mcp.server.mcpserver import MCPServer
@@ -32,13 +35,13 @@ from app import __version__
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.mcp.runtime import Runtime, headers_middleware
+from app.mcp.skill import INSTRUCTIONS, PROMPT_NAME, SKILL_TEXT
+from app.mcp.tools import register_tools
+from app.mcp.toolset import Toolset
 
 logger = get_logger("mcp")
 
-INSTRUCTIONS = """Task tracker for agents. This server is being rebuilt and exposes no \
-tools yet: `tools/list` is empty on purpose, not by failure. Authentication already \
-works the same way it does for the REST API — `Authorization: Bearer <tracker API token>` \
-on every message, plus `X-Actor-Label: <name>` when the token is a shared agent one."""
+__all__ = ["INSTRUCTIONS", "create_server"]
 
 
 def create_server(
@@ -53,8 +56,20 @@ def create_server(
     """
     settings = settings or get_settings()
     runtime = runtime or Runtime()
+    tools = Toolset(server=_bare_server(settings), runtime=runtime, settings=settings)
 
-    server = MCPServer(
+    register_tools(tools)
+    _register_prompt(tools.server)
+    _register_health(tools.server, runtime)
+    # Промежуточный слой ставится после регистрации: он спрашивает у набора состав
+    # инструментов, и пустой набор оставил бы `tools/list` пустым навсегда.
+    tools.server.middleware.append(tools.middleware())
+    return tools.server
+
+
+def _bare_server(settings: Settings) -> MCPServer:
+    """Сервер без инструментов: имя, версия, инструкция и разбор заголовков."""
+    return MCPServer(
         name="tracker",
         title="Tracker",
         version=__version__,
@@ -63,12 +78,31 @@ def create_server(
         # Заголовки входящего сообщения попадают в контекстную переменную и оттуда — в
         # аутентификацию. Через промежуточный слой, а не через объект контекста, потому
         # что статическому ресурсу контекст не выдаётся вовсе (`app/mcp/runtime.py`).
+        # Этот слой стоит **первым**: фильтр `tools/list` разбирает токен и без
+        # заголовков не увидел бы его вовсе.
         middleware=[headers_middleware],
         debug=settings.debug,
     )
 
-    _register_health(server, runtime)
-    return server
+
+def _register_prompt(server: MCPServer) -> None:
+    """Промпт дисциплины: текст скила целиком, без аргументов.
+
+    Аргументов у промпта нет намеренно. Дисциплина одна на всех агентов и не зависит ни
+    от задачи, ни от очереди: параметр здесь означал бы, что бывают задачи, где сводку
+    можно не писать.
+    """
+
+    @server.prompt(
+        name=PROMPT_NAME,
+        title="Дисциплина работы над задачей",
+        description=(
+            "Как вести дело по задаче, чтобы преемник продолжил работу без твоего "
+            "контекста. Полный текст скила `tracker-agent`"
+        ),
+    )
+    async def tracker_discipline() -> str:
+        return SKILL_TEXT
 
 
 def _register_health(server: MCPServer, runtime: Runtime) -> None:
