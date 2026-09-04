@@ -82,6 +82,26 @@ class Settings(BaseSettings):
         default="/mcp",
         description="Path of the streamable HTTP endpoint the MCP client connects to",
     )
+    mcp_page_size: int = Field(
+        default=25,
+        ge=1,
+        description=(
+            "Default page size of the MCP listings that return one. Smaller than the "
+            "REST default on purpose: a page of the human interface is scrolled, a page "
+            "of a tool call is read into the agent context and paid for in tokens"
+        ),
+    )
+    mcp_text_limit: int = Field(
+        default=2000,
+        ge=200,
+        description=(
+            "Characters of a long text (the task description, one of its five sections) "
+            "that `search_tasks` returns before clipping it. The clip is always reported "
+            "next to the value, and the whole task is one `get_task` away. Nothing else "
+            "is clipped: an entry body is asked for by number and has nowhere else to be "
+            "read from"
+        ),
+    )
 
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.

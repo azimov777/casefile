@@ -1,0 +1,217 @@
+"""Данные, которые инструмент отдаёт агенту.
+
+Инструмент возвращает обычный словарь, а SDK сворачивает его в результат вызова тем же
+сериализатором pydantic, каким FastAPI сворачивает ответ REST. Отсюда важное следствие,
+на котором стоит проверка 3 задачи: `datetime` не приводится к строке **здесь**, иначе
+формат разошёлся бы с REST (`2026-09-04T10:00:00Z` против `...+00:00`), и «поле в поле»
+перестало бы выполняться. Перечисления, наоборот, разворачиваются в значение явно: у
+`StrEnum` сериализация случайно совпадает со значением, и полагаться на совпадение
+нельзя.
+
+## Почему это не переиспользование схем REST
+
+`mcp` не имеет права зависеть от `api` (`docs/CONVENTIONS.md`): расхождение интерфейсов
+проект ловит тем, что оба зовут одни сценарии, а не тем, что делят схемы ответов. Поэтому
+имена и смысл полей здесь повторяют `app/api/schemas/`, а удерживает их вместе тест
+`tests/test_mcp_tools.py`, сравнивающий пакет преемника из MCP с ответом REST.
+
+## Что совпадает с REST, а что нарочно короче
+
+Пакет преемника (`task_package`) совпадает **целиком**: это вход агента в задачу, и
+терять в нём поля нельзя. Справочные представления — очередь и участник — короче: агенту
+нужен контекст, а не строка реестра, и `id`, времена правки и подпись заводившего съели
+бы контекст, ничего не добавив к решению.
+
+## Обрезка длинного текста
+
+Единственное место обрезки — выдача `search_tasks` (`TRACKER_MCP_TEXT_LIMIT`): только там
+в одном ответе может оказаться два десятка описаний и разделов. Обрезка объявлена рядом
+со значением (`<поле>_truncated`, `<поле>_length`), а полный текст — один вызов
+`get_task`. Тела записей дела не обрезаются нигде: их запрашивают по номеру, и взять
+полный текст было бы больше неоткуда.
+"""
+
+from collections.abc import Iterable, Sequence
+from typing import Any
+
+from app.db.models.entry import Entry
+from app.db.models.participant import Participant
+from app.db.models.queue import Queue
+from app.db.models.task import Task
+from app.domain.authors import Author
+from app.domain.case import EntryHeading
+from app.domain.search import MANDATORY_FIELD
+from app.domain.tasks import TaskFeatures
+from app.services.links import TaskLink
+from app.services.tasks import TaskPackage
+
+#: Поля задачи, которые бывают длинными: описание и пять разделов. Обрезаются только они
+#: и только в выдаче поиска.
+LONG_TEXT_FIELDS: frozenset[str] = frozenset(
+    {"description", "goal", "context", "constraints", "output"}
+)
+
+
+def author(value: Author) -> dict[str, Any]:
+    """Кто сделал действие: род и подпись. У самого трекера подписи нет."""
+    return {"kind": value.kind.value, "signature": value.signature}
+
+
+def queue_ref(queue: Queue) -> dict[str, Any]:
+    """Очередь в карточке задачи: ключ и название. Описание запрашивают `get_queue`."""
+    return {"key": queue.key, "title": queue.title}
+
+
+def task(item: Task) -> dict[str, Any]:
+    """Карточка задачи — тот же набор полей, что у `TaskRead` в REST."""
+    return {
+        "id": str(item.id),
+        "key": item.key,
+        "queue": queue_ref(item.queue),
+        "title": item.title,
+        "description": item.description,
+        "goal": item.goal,
+        "context": item.context,
+        "constraints": item.constraints,
+        "output": item.output,
+        "checks": list(item.checks),
+        "status": item.status.value,
+        "assignee": item.assignee,
+        "tags": list(item.tags),
+        "priority": item.priority.value,
+        "version": item.version,
+        "created_by": author(item.created_by),
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def found_task(item: Task, *, fields: Sequence[str], text_limit: int) -> dict[str, Any]:
+    """Задача в выдаче поиска: только запрошенные поля, длинные тексты с потолком.
+
+    Пустой набор полей означает «вся задача» — то же правило, что в REST. Ключ остаётся
+    всегда: выдача без него бесполезна, по ней нельзя ни прочитать задачу, ни сослаться
+    на неё.
+    """
+    payload = task(item)
+    if fields:
+        selected = {*fields, MANDATORY_FIELD}
+        payload = {name: value for name, value in payload.items() if name in selected}
+    for name in LONG_TEXT_FIELDS & payload.keys():
+        _clip_into(payload, name, text_limit)
+    return payload
+
+
+def features(value: TaskFeatures) -> dict[str, Any]:
+    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
+    return {
+        "blocked": value.blocked,
+        "open_questions": value.open_questions,
+        "open_blocking_questions": value.open_blocking_questions,
+        "last_summary_at": value.last_summary_at,
+    }
+
+
+def link(value: TaskLink) -> dict[str, Any]:
+    """Связь со стороны своей задачи: вид назван ролью **этой** задачи.
+
+    В `other` лежит задача на **другом** конце — сторону вычислил сценарий, и определять
+    её здесь во второй раз не нужно и неверно: канонизация могла записать связь в
+    обратном порядке (`docs/notes/mcp.md`).
+    """
+    return {
+        "kind": value.kind.value,
+        "other": {
+            "key": value.other.key,
+            "title": value.other.title,
+            "status": value.other.status.value,
+        },
+        "author": author(value.author),
+        "created_at": value.created_at,
+    }
+
+
+def heading(value: EntryHeading) -> dict[str, Any]:
+    """Строка описи дела: то, что видно о записи, не читая её тела."""
+    return {
+        "no": value.no,
+        "type": value.type.value,
+        "author": author(value.author),
+        "created_at": value.created_at,
+        "title": value.title,
+    }
+
+
+def entry(value: Entry, *, task_key: str) -> dict[str, Any]:
+    """Запись дела целиком. Ключ задачи приходит извне: у записи только `task_id`."""
+    return {
+        "id": str(value.id),
+        "seq": value.seq,
+        "no": value.no,
+        "task_key": task_key,
+        "type": value.type.value,
+        "author": author(value.author),
+        "title": value.title,
+        "body": value.body,
+        "payload": dict(value.payload),
+        "refs": list(value.refs),
+        "created_at": value.created_at,
+    }
+
+
+def task_package(package: TaskPackage) -> dict[str, Any]:
+    """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
+
+    Совпадает с `GET /api/v1/tasks/{key}` поле в поле, и это проверяется тестом. Не
+    ради красоты: агент и человек обязаны видеть одну и ту же задачу, иначе разбор
+    «почему агент решил иначе, чем показывал интерфейс» упирается в два разных ответа.
+    """
+    key = package.task.key
+    return {
+        "task": task(package.task),
+        "links": [link(item) for item in package.links],
+        "features": features(package.features),
+        "summary": None if package.summary is None else entry(package.summary, task_key=key),
+        "questions": [entry(question, task_key=key) for question in package.questions],
+        "transitions": [status.value for status in package.transitions],
+        "index": [heading(item) for item in package.index],
+    }
+
+
+def queue(item: Queue) -> dict[str, Any]:
+    """Очередь с описанием — общим контекстом всех её задач.
+
+    Короче ответа REST: `id`, счётчик номеров и времена правки интерфейсу нужны, а
+    агенту — нет, и каждое лишнее поле здесь оплачено его контекстом.
+    """
+    return {"key": item.key, "title": item.title, "description": item.description}
+
+
+def participant(item: Participant) -> dict[str, Any]:
+    """Участник реестра: кому можно адресовать вопрос и что о нём известно."""
+    return {"kind": item.kind.value, "name": item.name, "description": item.description}
+
+
+def page(items: Iterable[dict[str, Any]], *, next_cursor: str | None) -> dict[str, Any]:
+    """Страница выдачи. Форма одна у всех инструментов, которые её отдают.
+
+    `next_cursor` пуст — дальше ничего нет. Отдельного признака «есть ещё» здесь нет
+    намеренно: два поля об одном и том же однажды разойдутся, а у REST он существует
+    ради интерфейса, который рисует кнопку.
+    """
+    return {"items": list(items), "next_cursor": next_cursor}
+
+
+def _clip_into(payload: dict[str, Any], name: str, limit: int) -> None:
+    """Обрезает поле и объявляет обрезку рядом с ним.
+
+    Признак отдельным полем, а не многоточием в тексте: агент, сравнивающий строки, не
+    должен принимать метку за часть значения. Полная длина сообщается тем же ответом —
+    по ней видно, сколько осталось за краем.
+    """
+    text = payload[name]
+    if not isinstance(text, str) or len(text) <= limit:
+        return
+    payload[name] = text[:limit]
+    payload[f"{name}_truncated"] = True
+    payload[f"{name}_length"] = len(text)

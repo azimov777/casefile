@@ -99,7 +99,7 @@ class Runtime:
         текстом, а не как сбой протокола, и по ней агент исправляет вызов.
         """
         try:
-            async with self._open() as pair:
+            async with self.session() as pair:
                 yield pair
         except AppError as exc:
             raise tool_error(exc) from exc
@@ -113,18 +113,22 @@ class Runtime:
         безличное — то есть отбирает у агента причину отказа.
         """
         try:
-            async with self._open() as pair:
+            async with self.session() as pair:
                 yield pair
         except AppError as exc:
             raise resource_error(exc) from exc
 
     @asynccontextmanager
-    async def _open(self) -> AsyncIterator[tuple[AsyncSession, Actor]]:
-        """Сессия и автор запроса за токеном.
+    async def session(self) -> AsyncIterator[tuple[AsyncSession, Actor]]:
+        """Сессия и автор запроса за токеном, **без** перевода ошибки.
 
-        Перевод ошибки стоит **снаружи** сессии: сначала транзакция откатывается, и
-        только потом ошибка превращается в текст для агента. Обратный порядок оставил бы
-        часть изменений записанной.
+        Открыт для того, кто отвечает не инструментом и не ресурсом: фильтр `tools/list`
+        разбирает токен так же, как они, но его отказ — ошибка протокола, а не результат
+        вызова (`app/mcp/toolset.py`).
+
+        Перевод ошибки поэтому стоит **снаружи** сессии, у каждого вызывающего: сначала
+        транзакция откатывается, и только потом ошибка превращается в текст. Обратный
+        порядок оставил бы часть изменений записанной.
         """
         headers = _headers.get()
         async with self.sessions() as session:
