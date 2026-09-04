@@ -107,7 +107,7 @@ MCP-сервер отдаёт в `tools/list` только инструмент�
 Пять разделов (`goal`, `context`, `constraints`, `output`, `checks`) вместе с названием
 и описанием **редактируются только в `backlog`**. От `open` и дальше они неизменяемы:
 чтобы поправить, задача возвращается в `backlog` с причиной. Исполнитель, теги и приоритет
-меняются в любом статусе. Смена исполнителя подшивается в дело.
+меняются в любом незакрытом статусе. Смена исполнителя подшивается в дело.
 
 Проверка в `checks` пишется так, чтобы её можно было провалить: что запустить и что
 должно получиться. Проверка, которую нельзя провалить, не проверка.
@@ -261,7 +261,7 @@ MCP-сервер отдаёт в `tools/list` только инструмент�
 | `blocked` | Есть `blocked_by` на задачу не в `done` и не в `cancelled`. |
 | `open_questions` | Число вопросов без ответа. |
 | `open_blocking_questions` | То же среди вопросов с `blocking = true`. |
-| `last_summary_at` | Время последней сводки. |
+| `last_summary_at` | Время последней сводки. Только в выдаче: по нему не фильтруют и не сортируют. |
 
 Назначатель выбирает кандидатов одним запросом: `status: open and blocked: false and
 open_blocking_questions: 0`.
@@ -276,7 +276,7 @@ open_blocking_questions: 0`.
 ### 4.5 Идемпотентность
 
 Агент падает и повторяет запрос, не зная, прошёл ли предыдущий. Все создающие вызовы
-(задача, запись дела, очередь, участник) принимают ключ идемпотентности: заголовок
+(задача, запись дела, связь, очередь, участник, токен) принимают ключ идемпотентности: заголовок
 `Idempotency-Key` в REST, аргумент `idempotency_key` в MCP. Повтор с тем же ключом
 и тем же телом возвращает первый результат; тот же ключ с другим телом отклоняется.
 Ключ живёт в паре с токеном.
@@ -315,8 +315,8 @@ open_blocking_questions: 0`.
 | Инструмент | Что делает | Что проверяет трекер |
 |---|---|---|
 | `get_task(key)` | Пакет преемника. | |
-| `read_entries(key, nos, types, after_no, limit)` | Тела записей. | |
-| `search_tasks(query, fields, cursor, limit)` | Поиск языком запросов. | |
+| `read_entries(key, nos, types, after_no, limit, cursor)` | Тела записей. | |
+| `search_tasks(query, queue, status, assignee, tags, priority, blocked, open_questions, open_blocking_questions, text, sort, fields, limit, cursor)` | Поиск языком запросов или структурными условиями. | |
 | `create_task(queue, title, description, sections, parent, assignee, tags, priority)` | Новая задача в `backlog`. | Название и описание непустые. |
 | `update_task(key, changes, version)` | Правка полей. | Разделы только в `backlog`. |
 | `transition(key, to, reason)` | Перевод статуса. | Таблица и валидации из 3.3. |
@@ -327,8 +327,8 @@ open_blocking_questions: 0`.
 | `add_verdict(key, check_no, outcome, evidence)` | Вердикт проверки. | Номер существует, исход из двух. |
 | `link(key, kind, other)`, `unlink(key, kind, other)` | Связи. | Виды из 3.5, без циклов. |
 | `get_queue(key)` | Описание очереди. | |
-| `list_participants()` | Кому можно адресовать вопрос. | |
-| `wait_journal(after, task, queue, types, timeout)` | Хвост ленты с ожиданием. | |
+| `list_participants(limit, cursor)` | Кому можно адресовать вопрос. | |
+| `wait_journal(after, task, queue, types, timeout, limit, cursor)` | Хвост ленты с ожиданием. | |
 
 Набор `main` добавляет `create_queue`, `update_queue`, `register_participant`,
 `update_participant`. Токены выпускаются только через REST.
