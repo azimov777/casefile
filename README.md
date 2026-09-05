@@ -471,7 +471,7 @@ curl http://localhost:8100/health
 
 | Набор | Инструменты |
 |---|---|
-| `task` | `get_task`, `read_entries`, `search_tasks`, `create_task`, `update_task`, `transition`, `add_summary`, `add_entry`, `ask`, `answer`, `add_verdict`, `link`, `unlink`, `get_queue`, `list_participants`, `wait_journal` |
+| `task` | `get_task`, `read_entries`, `search_tasks`, `create_task`, `update_task`, `transition`, `add_summary`, `add_entry`, `ask`, `answer`, `add_verdict`, `link`, `unlink`, `get_queue`, `list_queues`, `list_participants`, `wait_journal` |
 | `main` | то же плюс `create_queue`, `update_queue`, `register_participant`, `update_participant` |
 
 Выпуска токенов через MCP нет и не будет: выдача доступов остаётся за человеком.
@@ -517,7 +517,7 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 
 Дальше агент работает инструментами: `get_task("TRK-1")` отдаёт пакет преемника,
 `transition("TRK-1", "in_progress")` берёт задачу в работу. Токен набора `task` при этом
-видит шестнадцать инструментов; `create_queue` таким токеном отвечает
+видит семнадцать инструментов; `create_queue` таким токеном отвечает
 `permission_denied` с нужным набором в подробностях.
 
 Если Claude Code работает не на той машине, где поднят контур, вместо `localhost` идёт
@@ -540,7 +540,7 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 
 | Переменная | Что делает |
 |---|---|
-| `TRACKER_MCP_PAGE_SIZE` | размер страницы у `read_entries`, `search_tasks`, `wait_journal`, `list_participants`; по умолчанию 25 — меньше, чем у REST |
+| `TRACKER_MCP_PAGE_SIZE` | размер страницы у `read_entries`, `search_tasks`, `wait_journal`, `list_queues`, `list_participants`; по умолчанию 25 — меньше, чем у REST |
 | `TRACKER_MCP_TEXT_LIMIT` | потолок длинного текста в выдаче `search_tasks`; обрезка объявлена полями `<поле>_truncated` и `<поле>_length`, а задача целиком — один `get_task` |
 
 `search_tasks` по умолчанию просит узкий набор полей (`key`, `title`, `status`,

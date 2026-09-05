@@ -327,6 +327,7 @@ open_blocking_questions: 0`.
 | `add_verdict(key, check_no, outcome, evidence)` | Вердикт проверки. | Номер существует, исход из двух. |
 | `link(key, kind, other)`, `unlink(key, kind, other)` | Связи. | Виды из 3.5, без циклов. |
 | `get_queue(key)` | Описание очереди. | |
+| `list_queues(limit, cursor)` | Ключи и названия очередей: вход, когда ключ неизвестен. | |
 | `list_participants(limit, cursor)` | Кому можно адресовать вопрос. | |
 | `wait_journal(after, task, queue, types, timeout, limit, cursor)` | Хвост ленты с ожиданием. | |
 

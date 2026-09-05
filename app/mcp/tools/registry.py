@@ -1,7 +1,8 @@
 """Инструменты по реестрам: очереди и участники.
 
-Чтение открыто набору `task` — оно часть рабочего цикла: без описания очереди агент не
-знает общего контекста её задач, без реестра участников ему некому адресовать вопрос.
+Чтение открыто набору `task` — оно часть рабочего цикла: без списка очередей агент с
+чистым контекстом не найдёт, где вообще лежат задачи, без описания очереди не знает
+общего контекста её задач, без реестра участников ему некому адресовать вопрос.
 Запись требует набора `main`: заводить очереди и регистрировать участников — управление
 установкой, а не работа над задачей.
 
@@ -46,6 +47,25 @@ def register(tools: Toolset) -> None:
         """
         async with runtime.call() as (session, actor):
             return views.queue(await queues_service.read_queue(session, key, actor=actor))
+
+    @tools.tool()
+    async def list_queues(
+        limit: LimitArg = None,
+        cursor: CursorArg = None,
+    ) -> dict[str, Any]:
+        """Все очереди установки: ключ и название. Отсюда начинают, не зная ключа.
+
+        Описания здесь нет: у выбранной очереди его читают `get_queue`, а в списке оно
+        стоило бы контекста больше, чем сам выбор.
+        """
+        async with runtime.call() as (session, actor):
+            page = await queues_service.list_queues(
+                session, actor=actor, limit=limit or settings.mcp_page_size, cursor=cursor
+            )
+            return views.page(
+                (views.queue_ref(item) for item in page.items),
+                next_cursor=page.next_cursor,
+            )
 
     @tools.tool()
     async def list_participants(

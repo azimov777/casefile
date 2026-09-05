@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.mcp.arguments import DEFAULT_SEARCH_FIELDS
+from app.services import queues as queues_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from conftest import Connect, call, refuse, tool_text
@@ -47,6 +48,7 @@ TASK_TOOLS = {
     "link",
     "unlink",
     "get_queue",
+    "list_queues",
     "list_participants",
     "wait_journal",
 }
@@ -82,7 +84,7 @@ async def open_task(db_session: AsyncSession, task_actor: Actor, task: Task) -> 
 async def test_a_task_token_sees_exactly_the_working_cycle(
     mcp_session: Connect, task_secret: str
 ) -> None:
-    """Обзорная проверка 1: шестнадцать инструментов рабочего цикла и ни одного лишнего."""
+    """Обзорная проверка 1: семнадцать инструментов рабочего цикла и ни одного лишнего."""
     async with mcp_session(task_secret) as session:
         listed = {tool.name for tool in (await session.list_tools()).tools}
 
@@ -621,6 +623,39 @@ async def test_get_queue_carries_the_context_shared_by_its_tasks(
         read = await call(session, "get_queue", key="trk")
 
     assert read == {"key": queue.key, "title": queue.title, "description": queue.description}
+
+
+async def test_list_queues_is_the_entry_point_when_no_key_is_known(
+    mcp_session: Connect,
+    task_secret: str,
+    db_session: AsyncSession,
+    main_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Агент без контекста репозитория находит очереди сам, а описание берёт у выбранной.
+
+    Строка списка — ровно ключ и название: описание очереди бывает длинным, и в выдаче,
+    где очередей много, оно стоило бы контекста больше, чем сам выбор.
+    """
+    del queue
+    await queues_service.create_queue(
+        db_session, actor=main_actor, key="UI", title="Интерфейс", description="Фронтенд"
+    )
+
+    async with mcp_session(task_secret) as session:
+        listed = await call(session, "list_queues")
+        first = await call(session, "list_queues", limit=1)
+        second = await call(session, "list_queues", limit=1, cursor=first["next_cursor"])
+        chosen = await call(session, "get_queue", key=listed["items"][1]["key"])
+
+    assert listed == {
+        "items": [{"key": "TRK", "title": "Трекер"}, {"key": "UI", "title": "Интерфейс"}],
+        "next_cursor": None,
+    }
+    assert first["items"] == [{"key": "TRK", "title": "Трекер"}]
+    assert first["next_cursor"] is not None
+    assert second["items"] == [{"key": "UI", "title": "Интерфейс"}], "курсор повторил страницу"
+    assert chosen["description"] == "Фронтенд"
 
 
 async def test_the_main_scope_runs_the_registries(
