@@ -33,7 +33,8 @@
 - `tsconfig.node.json` — типы оснастки: конфигурации сборки и сквозные тесты
 - `eslint.config.js`, `.prettierrc.json`, `.prettierignore` — линт и формат
 - `steiger.config.ts` — правила границ слоёв Feature-Sliced Design
-- `playwright.config.ts` — сквозные тесты в светлой и тёмной теме
+- `playwright.config.ts` — сквозные тесты в светлой и тёмной теме; пишущие сценарии отдельным проектом после читающих
 - `docker-compose.yml` — контур сборки и сквозных тестов: интерфейс и бэкенд из `../tracker`
+- `docker-compose.prod.yml` — интерфейс рядом с прод-контуром бэкенда: адрес задаётся переменной
 - `.nvmrc` — версия Node
 - `.gitignore` — что не попадает в репозиторий

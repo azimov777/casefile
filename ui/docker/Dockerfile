@@ -22,7 +22,17 @@ RUN pnpm exec vite build
 
 FROM nginx:1.27-alpine AS serve
 
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Шаблон, а не готовый конфиг: образ nginx разворачивает `/etc/nginx/templates/*.template`
+# в `/etc/nginx/conf.d/` при старте, подставляя окружение. Так адрес бэкенда задаётся
+# при запуске и один образ годится любому контуру.
+COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
+
+# Куда проксировать `/api`. Умолчание — сервис `api` контура сквозных тестов.
+ENV TRACKER_API_URL=http://api:8000
+
+# Подставляются только наши переменные: без фильтра `envsubst` съел бы `$uri`, `$host`
+# и прочие переменные самого nginx, и конфигурация развалилась бы на старте.
+ENV NGINX_ENVSUBST_FILTER=TRACKER_
 
 EXPOSE 80

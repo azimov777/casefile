@@ -1,0 +1,42 @@
+# Продакшен-запуск интерфейса рядом с прод-контуром бэкенда (`../tracker/docker-compose.prod.yml`).
+#
+# Запуск: docker compose -f docker-compose.prod.yml up -d --build
+#
+# Наружу смотрит только интерфейс: `/api` проксирует nginx внутрь, поэтому токен едет
+# заголовком на свой же источник, браузеру не нужен CORS, а адрес бэкенда не попадает
+# в собранную статику. Тот же приём, что и в контуре сквозных тестов, — разница лишь
+# в том, куда указывает `TRACKER_API_URL`.
+
+name: tracker-ui-prod
+
+services:
+  ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: tracker-ui:latest
+    environment:
+      # Куда проксировать `/api`. Умолчание — сервис `api` прод-контура бэкенда, если
+      # интерфейс подключён к его сети (см. `networks` ниже). Свой бэкенд задаётся
+      # переменной окружения при запуске, без пересборки образа.
+      TRACKER_API_URL: ${TRACKER_API_URL:-http://api:8000}
+    ports:
+      - '${UI_PORT:-8080}:80'
+    healthcheck:
+      # Именно 127.0.0.1: nginx слушает только IPv4, а `localhost` в контейнере
+      # разрешается сначала в ::1 и проверка получала бы отказ соединения.
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1/']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - backend
+
+# Сеть прод-контура бэкенда, поднятого соседним репозиторием: интерфейс приходит
+# в неё гостем, а не поднимает свою копию бэкенда. Имя сети складывается из имени
+# того контура (`tracker-prod`) и имени сети по умолчанию (`default`).
+networks:
+  backend:
+    external: true
+    name: ${TRACKER_NETWORK:-tracker-prod_default}

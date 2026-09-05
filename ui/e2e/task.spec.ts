@@ -131,6 +131,21 @@ test('ключ в списке ведёт на карточку, несущес�
   await expect(page).toHaveURL(/\/tasks$/);
 });
 
+test('доступность ленты дела', async ({ page }) => {
+  await page.goto('/tasks/DEMO-1/case');
+  await expect(page.getByRole('article').first()).toBeVisible();
+
+  const closed = await new AxeBuilder({ page }).analyze();
+  expect(serious(closed.violations)).toEqual([]);
+
+  // И с раскрытым отбором по типам: у флажков свои подписи и своя группа.
+  await page.getByRole('button', { name: 'Записи агента' }).click();
+  await expect(page.getByRole('article').first()).toBeVisible();
+
+  const filtered = await new AxeBuilder({ page }).analyze();
+  expect(serious(filtered.violations)).toEqual([]);
+});
+
 test('доступность карточки задачи', async ({ page }) => {
   await page.goto('/tasks/DEMO-6');
   await expect(page.getByText('Записей в деле: 7')).toBeVisible();
