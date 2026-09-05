@@ -18,12 +18,12 @@ function filters(overrides: Partial<TaskFilters> = {}): TaskFilters {
 describe('чтение отбора из адреса', () => {
   it('разбирает повторяющиеся параметры и флажки', () => {
     const params = new URLSearchParams(
-      'queue=DEMO&status=open&status=review&priority=high&tags=backend&tags=search&blocked=true&questions=true&text=поиск&assignee=owner&sort=key&cursor=abc',
+      'queue=DEMO&status=open&status=in_progress&priority=high&tags=backend&tags=search&blocked=true&questions=true&text=поиск&assignee=owner&sort=key&cursor=abc',
     );
 
     expect(readFilters(params)).toEqual({
       queue: 'DEMO',
-      status: ['open', 'review'],
+      status: ['open', 'in_progress'],
       priority: ['high'],
       assignee: 'owner',
       tags: ['backend', 'search'],

@@ -332,9 +332,10 @@ export interface paths {
          *     `details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422
          *     transition_reason_required`); `backlog → open` требует заполненных разделов (`422
          *     task_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после
-         *     последнего входа в него (`409 summary_required`); `review → done` — положительного
-         *     последнего вердикта по каждой проверке, подшитого после последнего входа в `review`
-         *     (`409 checks_not_passed`, проверки без него в `details.checks`). Вход в
+         *     последнего входа в него (`409 summary_required`); `in_progress → done` —
+         *     положительного последнего вердикта по каждой проверке, подшитого после последнего
+         *     входа в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в
+         *     `details.checks` парами `check_no` и `reason`). Вход в
          *     `in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в
          *     `details.blockers`), переход в `done` — при детях не в `done` и не в `cancelled`
          *     (`409 task_has_unclosed_children`, ключи в `details.children`). Переход подшивает
@@ -1796,7 +1797,7 @@ export interface components {
             output: string;
             /**
              * Checks
-             * @description Ordered list of review checks, numbered from 1 by position; each one must be written so that it can fail. Editable only in `backlog`
+             * @description Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`
              * @example [
              *       "docker compose run --rm test: the whole suite is green"
              *     ]
@@ -1979,7 +1980,7 @@ export interface components {
             output: string;
             /**
              * Checks
-             * @description Ordered list of review checks, numbered from 1 by position; each one must be written so that it can fail. Editable only in `backlog`
+             * @description Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`
              * @example [
              *       "docker compose run --rm test: the whole suite is green"
              *     ]
@@ -2073,7 +2074,7 @@ export interface components {
          * @description Зашитый список статусов (`CONCEPT.md`, 3.3).
          * @enum {string}
          */
-        TaskStatus: "backlog" | "open" | "in_progress" | "review" | "done" | "cancelled";
+        TaskStatus: "backlog" | "open" | "in_progress" | "done" | "cancelled";
         /**
          * TaskTransition
          * @description Перевод статуса по таблице переходов.
@@ -2139,7 +2140,7 @@ export interface components {
             output?: string;
             /**
              * Checks
-             * @description Ordered list of review checks, numbered from 1 by position; each one must be written so that it can fail. Editable only in `backlog`. Replaces the whole list
+             * @description Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`. Replaces the whole list
              * @example [
              *       "docker compose run --rm test: the whole suite is green"
              *     ]

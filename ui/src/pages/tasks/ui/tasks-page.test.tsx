@@ -51,7 +51,7 @@ describe('список задач', () => {
             },
           }),
           task('DEMO-6', {
-            status: 'review',
+            status: 'in_progress',
             priority: 'high',
             features: {
               blocked: true,
@@ -83,12 +83,12 @@ describe('список задач', () => {
   it('отправляет условия из адреса структурными параметрами', async () => {
     server.use(listing(() => collection([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&status=review&priority=high&tags=docs&blocked=true');
+    open('/tasks?queue=DEMO&status=open&status=in_progress&priority=high&tags=docs&blocked=true');
     await screen.findByText('DEMO-3');
 
     const request = lastRequest();
     expect(request.searchParams.getAll('queue')).toEqual(['DEMO']);
-    expect(request.searchParams.getAll('status')).toEqual(['open', 'review']);
+    expect(request.searchParams.getAll('status')).toEqual(['open', 'in_progress']);
     expect(request.searchParams.getAll('priority')).toEqual(['high']);
     expect(request.searchParams.getAll('tags')).toEqual(['docs']);
     expect(request.searchParams.get('blocked')).toBe('true');
@@ -103,7 +103,7 @@ describe('список задач', () => {
 
     expect(screen.getByLabelText('Очередь')).toHaveValue('DEMO');
     expect(screen.getByRole('checkbox', { name: 'open' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'review' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'in_progress' })).not.toBeChecked();
     expect(screen.getByLabelText('Исполнитель')).toHaveValue('owner');
   });
 
