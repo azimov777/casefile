@@ -14,6 +14,11 @@ x-app-environment: &app-environment
   TRACKER_DEBUG: "false"
   TRACKER_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER обязателен}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}@db:5432/${POSTGRES_DB:?POSTGRES_DB обязателен}
   TRACKER_CORS_ORIGINS: ${TRACKER_CORS_ORIGINS:?TRACKER_CORS_ORIGINS обязателен}
+  # Единственная настройка, которую читают обе стороны: compose подставляет её в проброс
+  # портов, а процесс MCP слушает то, что пришло в контейнер. Оставленная только в `.env`,
+  # она двигала бы публикацию и не двигала бы сервер, и наружу смотрел бы порт, на котором
+  # внутри никто не слушает. Обязательной её не делаем: у порта есть разумное умолчание.
+  TRACKER_MCP_PORT: ${TRACKER_MCP_PORT:-8100}
 
 x-app-service: &app-service
   build:
@@ -72,7 +77,10 @@ services:
     command: python -m app.mcp
     # Порт с обеих сторон один: процесс MCP поднимает сервер сам и слушает
     # `TRACKER_MCP_PORT` из настроек. Правая половина проброса обязана двигаться вместе
-    # с левой, иначе наружу публикуется порт, на котором внутри никто не слушает.
+    # с левой, иначе наружу публикуется порт, на котором внутри никто не слушает. Внутрь
+    # контейнера то же значение приезжает окружением из `x-app-environment` — одной и той
+    # же подстановкой, чтобы три места (проброс, процесс, проверка здоровья) двигались
+    # разом.
     ports:
       - "${TRACKER_MCP_PORT:-8100}:${TRACKER_MCP_PORT:-8100}"
     healthcheck:

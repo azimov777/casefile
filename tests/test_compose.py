@@ -37,6 +37,13 @@ APP_ENVIRONMENT = "x-app-environment:"
 #: Имя переменной окружения в блоке: `NAME: значение`.
 ENV_NAME = re.compile(r"^\s*([A-Z][A-Z0-9_]*):", re.MULTILINE)
 
+#: Сервис MCP: единственный, чей порт двигается снаружи целиком — и публикация, и то,
+#: что слушает процесс внутри.
+MCP_SERVICE = "mcp"
+
+#: Подстановка порта MCP. Одно выражение на все места, где порт называется.
+MCP_PORT = "${TRACKER_MCP_PORT:-8100}"
+
 
 def _indent(line: str) -> int:
     return len(line) - len(line.lstrip())
@@ -150,3 +157,31 @@ def test_every_application_service_takes_the_shared_environment() -> None:
                     strayed.append(f"{contour}, сервис {name}: объявляет свой `{own}`")
 
     assert not strayed, strayed
+
+
+def test_the_mcp_port_reaches_the_process_and_not_only_the_publication() -> None:
+    """Порт MCP объявлен окружением контура, а не оставлен одному `.env`.
+
+    Проброс compose разворачивает из окружения команды, а внутрь контейнера попадает
+    только перечисленное в `environment` и в `env_file`. Переменная, оставленная одному
+    файлу, двигает публикацию и не двигает сервер: `TRACKER_MCP_PORT=8101 docker compose
+    -p tracker-check up -d mcp` публикует 8101, слушает 8100 и висит `unhealthy` — так
+    это и нашлось (TRK-3#13, TRK-5).
+
+    Проверяется не значение, а то, что все три места названы одной подстановкой:
+    публикация, окружение процесса и проверка здоровья двигаются вместе или не двигаются
+    вовсе.
+    """
+    for contour, path in COMPOSE_FILES.items():
+        text = path.read_text(encoding="utf-8")
+        declared = [line.strip() for line in _block(text, APP_ENVIRONMENT)]
+        service = _services(text)[MCP_SERVICE]
+        health = [line for line in service if "/health" in line]
+
+        assert f"TRACKER_MCP_PORT: {MCP_PORT}" in declared, (
+            f"{contour}: порт MCP объявлен только файлом окружения — публикация сдвинется, "
+            f"процесс останется прежним"
+        )
+        assert f'"{MCP_PORT}:{MCP_PORT}"' in "\n".join(service), f"{contour}: {service}"
+        assert health, f"{contour}: проверка здоровья {MCP_SERVICE} не разобрана"
+        assert all(MCP_PORT in line for line in health), health
