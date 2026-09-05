@@ -1,3 +1,4 @@
+.idea/
 node_modules/
 dist/
 coverage/
@@ -7,3 +8,6 @@ test-results/
 .env.*.local
 *.log
 .DS_Store
+
+# Токен, выпущенный контуром сквозных тестов
+.e2e-token

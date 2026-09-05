@@ -1,0 +1,58 @@
+import { ApiError } from './error';
+import type { components } from './openapi';
+
+export type PageMeta = components['schemas']['PageMeta'];
+
+/** Страница коллекции: то, что показывают, и то, чем листают. */
+export interface Page<T> {
+  items: T[];
+  meta: PageMeta | null;
+}
+
+/**
+ * Что возвращает `openapi-fetch`: разобранное тело удачного ответа, тело ошибки
+ * и сам ответ. Тип описан здесь, а не берётся из библиотеки, потому что нужна
+ * только эта часть её формы.
+ */
+interface FetchResult<TData> {
+  data?: TData;
+  error?: unknown;
+  response: Response;
+}
+
+/**
+ * Снимает оболочку `{ data }` с ответа-ресурса.
+ *
+ * Принимает обещание, а не результат, намеренно: несостоявшийся запрос (сеть, упавший
+ * сервер) обязан прийти на страницу тем же `ApiError`, что и отказ бэкенда. Иначе
+ * каждому вызову пришлось бы ловить два разных вида беды.
+ */
+export async function unwrap<T>(call: Promise<FetchResult<{ data: T }>>): Promise<T> {
+  const envelope = await settle(call);
+  return envelope.data;
+}
+
+/** То же для коллекции: `{ data: [...], meta }` разворачивается в страницу. */
+export async function unwrapPage<T>(
+  call: Promise<FetchResult<{ data: T[]; meta?: PageMeta }>>,
+): Promise<Page<T>> {
+  const envelope = await settle(call);
+  return { items: envelope.data, meta: envelope.meta ?? null };
+}
+
+async function settle<TData>(call: Promise<FetchResult<TData>>): Promise<TData> {
+  let result: FetchResult<TData>;
+  try {
+    result = await call;
+  } catch (cause) {
+    throw ApiError.network(cause);
+  }
+
+  if (result.error !== undefined) {
+    throw ApiError.fromBody(result.error, result.response.status);
+  }
+  if (result.data === undefined) {
+    throw ApiError.fromBody(null, result.response.status);
+  }
+  return result.data;
+}

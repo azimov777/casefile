@@ -5,3 +5,6 @@
 в `docs/CONVENTIONS.md`, раздел «Заметки».
 
 ## Файлы
+
+- `tooling.md` — pnpm, версии Node, контур Docker, откуда берётся токен для сквозных тестов
+- `testing.md` — грабли jsdom, MSW и react-router; из чего собрана обвязка тестов

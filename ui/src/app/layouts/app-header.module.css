@@ -1,0 +1,61 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: var(--header-height);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.link {
+  color: var(--color-text);
+  text-decoration: none;
+  padding: var(--space-1) 0;
+  border-bottom: 2px solid transparent;
+}
+
+.link:hover {
+  border-bottom-color: var(--color-border-strong);
+}
+
+.link[aria-current='page'] {
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.soon {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-left: auto;
+  font-size: var(--text-sm);
+}
+
+.participant {
+  font-family: var(--font-mono);
+}
+
+.questions {
+  color: var(--color-text-muted);
+}
+
+.problem {
+  color: var(--color-danger);
+}
