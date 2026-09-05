@@ -32,6 +32,18 @@ def skill_text() -> str:
     return SKILL_PATH.read_text(encoding="utf-8")
 
 
+def section(text: str, heading: str) -> str:
+    """Раздел скила по заголовку второго уровня, до следующего такого заголовка.
+
+    Разбор тот же, что у `instructions` в приложении, и такой же простой: формат файла
+    задаём мы сами. Отсутствие раздела — провал теста, а не пустая строка: правило,
+    которое некуда положить, из скила исчезло вместе с разделом.
+    """
+    _, separator, rest = text.partition(f"## {heading}\n")
+    assert separator, f"в скиле не стало раздела «{heading}»"
+    return rest.split("\n## ", 1)[0]
+
+
 async def test_the_prompt_returns_the_whole_skill(
     mcp_session: Connect, task_secret: str, skill_text: str
 ) -> None:
@@ -66,6 +78,7 @@ async def test_the_instructions_are_the_summary_section(
 
     assert result.instructions == expected
     assert "add_summary" in expected, "выжимка перестала называть главное правило"
+    assert "after_no" in expected, "выжимка перестала звать читать записи после сводки"
 
 
 async def test_every_tool_named_in_the_skill_exists(mcp_server: MCPServer, skill_text: str) -> None:
@@ -91,3 +104,34 @@ async def test_every_working_cycle_tool_is_mentioned_in_the_skill(
     missing = sorted(name for name in working_cycle if f"`{name}" not in skill_text)
 
     assert not missing, f"скил не упоминает: {missing}"
+
+
+def test_entering_a_task_reads_what_was_filed_after_the_summary(skill_text: str) -> None:
+    """Дисциплина TRK-3: сводка отстаёт от дела, и вход это учитывает.
+
+    Пакет преемника отдаёт последнюю сводку и опись, но не говорит, что между ними
+    разрыв: записи с номером больше номера сводки она не видела. Правило живёт только в
+    тексте скила — валидации на это нет, — поэтому его и держит тест.
+    """
+    entering = section(skill_text, "Вход в задачу")
+
+    assert "after_no" in entering, "вход перестал звать `read_entries(key, after_no=...)`"
+    assert "сводк" in entering.lower()
+
+
+def test_closing_puts_the_final_summary_after_the_verdicts(skill_text: str) -> None:
+    """Дисциплина TRK-3: финальная сводка — последнее действие перед `done`.
+
+    Трекер требует на `in_progress → done` сводку этого захода и положительный последний
+    вердикт по каждой проверке, но не их очерёдность (`CONCEPT.md`, 5.3). Порядок
+    «сводка, потом вердикты» валидацию проходит и оставляет преемнику план вместо исхода
+    проверок — ровно случай UI-1. Единственное место, где порядок закреплён, — этот
+    раздел, и переставленные пункты иначе никто не заметит.
+    """
+    closing = section(skill_text, "Завершение")
+    verdicts = closing.rindex("add_verdict")
+    summary = closing.index("add_summary")
+    done = closing.index('transition(key, "done")')
+
+    assert verdicts < summary < done, "порядок закрытия в разделе «Завершение» разъехался"
+    assert "next_step" in closing, "не сказано, что писать в `next_step` закрываемой задачи"
