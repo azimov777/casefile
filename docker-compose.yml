@@ -27,6 +27,12 @@ x-app-service: &app-service
     - path: .env
       required: false
   environment: *app-environment
+  # Контур разработки и есть работающая установка трекера: агенты ходят в MCP из любой
+  # папки, а не только когда открыт этот репозиторий. Поэтому службы поднимаются вместе
+  # с Docker и переживают перезагрузку машины. `unless-stopped`, а не `always`:
+  # остановленное вручную (`docker compose stop`) остаётся остановленным.
+  # Разовые сервисы профиля `tools` ниже перебивают это на `restart: "no"`.
+  restart: unless-stopped
   volumes:
     # Исходники монтируются целиком: правка файла видна контейнеру сразу.
     - ./:/app
@@ -53,6 +59,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   api:
     <<: *app-service
@@ -98,6 +105,7 @@ services:
   migrate:
     <<: *app-service
     command: alembic upgrade head
+    restart: "no"
     profiles: ["tools"]
 
   # Первичная настройка установки: участник-владелец и его первый токен набора `main`.
@@ -107,6 +115,7 @@ services:
   init:
     <<: *app-service
     command: python -m app.cli init
+    restart: "no"
     profiles: ["tools"]
 
   # Демонстрационные данные: очередь DEMO, задачи во всех шести статусах, дела с
@@ -117,6 +126,7 @@ services:
   demo:
     <<: *app-service
     command: python -m app.cli demo
+    restart: "no"
     profiles: ["tools"]
 
   # Поставляемые артефакты контракта: схема OpenAPI и справочник кодов ошибок.
@@ -128,6 +138,7 @@ services:
       sh -c "python -m app.cli openapi --output openapi.json
       && python -m app.cli errors --output docs/ERRORS.md"
     depends_on: []
+    restart: "no"
     profiles: ["tools"]
 
   # Адрес тестовой базы отдельной переменной не задаётся: по умолчанию это основная
@@ -136,11 +147,13 @@ services:
   test:
     <<: *app-service
     command: pytest
+    restart: "no"
     profiles: ["tools"]
 
   lint:
     <<: *app-service
     command: sh -c "ruff check . && ruff format --check ."
+    restart: "no"
     profiles: ["tools"]
 
 volumes:
