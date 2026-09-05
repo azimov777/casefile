@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import type { Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -18,4 +19,16 @@ export function readE2eToken(): string {
 
 export function writeE2eToken(token: string): void {
   writeFileSync(TOKEN_FILE, token, 'utf8');
+}
+
+/**
+ * Глушит живой поток на этой странице: соединение открывается и молчит навсегда.
+ *
+ * Нужно там, где сценарий считает запросы. Живой поток перечитывает показанное по
+ * кадрам журнала, и в такой проверке он превращается в источник случайных чисел —
+ * а проверяется в ней не он, а то, что экран рисуется одним запросом. Сам поток
+ * проверяет `live.spec.ts`.
+ */
+export async function silenceJournal(page: Page): Promise<void> {
+  await page.route('**/api/v1/journal/stream*', () => new Promise(() => {}));
 }

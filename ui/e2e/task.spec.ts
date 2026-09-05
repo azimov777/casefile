@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken } from './contour';
+import { readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -24,6 +24,7 @@ function serious(violations: { impact?: string | null; id: string }[]) {
 test('карточка DEMO-6 рисуется одним запросом пакета и объясняет, что задачу держит', async ({
   page,
 }) => {
+  await silenceJournal(page);
   const calls: string[] = [];
   page.on('request', (request) => {
     if (request.url().includes('/api/v1/tasks/')) calls.push(request.url());
@@ -59,6 +60,7 @@ test('карточка DEMO-6 рисуется одним запросом па�
 test('клик по вердикту читает ровно эту запись и показывает проверку, исход и доказательство', async ({
   page,
 }) => {
+  await silenceJournal(page);
   const entryCalls: string[] = [];
   page.on('request', (request) => {
     if (request.url().includes('/entries')) entryCalls.push(request.url());
@@ -81,6 +83,7 @@ test('клик по вердикту читает ровно эту запись
 });
 
 test('DEMO-4 показывает открытый блокирующий вопрос целиком, без клика', async ({ page }) => {
+  await silenceJournal(page);
   const entryCalls: string[] = [];
   page.on('request', (request) => {
     if (request.url().includes('/entries')) entryCalls.push(request.url());
@@ -143,6 +146,7 @@ test('доступность карточки задачи', async ({ page }) =>
 });
 
 test('лента дела: все типы записей, отбор и ответ под вопросом', async ({ page }) => {
+  await silenceJournal(page);
   const calls: string[] = [];
   page.on('request', (request) => {
     if (request.url().includes('/entries')) calls.push(request.url());

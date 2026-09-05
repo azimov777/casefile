@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { resetSessionExpiry } from '@/entities/session';
 import { clearToken } from '@/shared/api';
+import { liveJournal } from './live-journal';
 import { server } from './msw/server';
 
 // Подмена API поднимается на весь прогон: тест, который сходил в сеть мимо обработчика,
@@ -21,6 +22,7 @@ afterEach(() => {
   // в поле, и падает он не там, где ошибка.
   window.sessionStorage.clear();
   window.localStorage.clear();
+  liveJournal.reset();
 });
 
 afterAll(() => {

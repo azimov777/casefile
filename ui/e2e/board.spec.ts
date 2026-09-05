@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { readE2eToken } from './contour';
+import { readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -46,6 +46,7 @@ test('доска показывает по столбцу на каждый ст
   page,
   request,
 }) => {
+  await silenceJournal(page);
   const calls: string[] = [];
   page.on('request', (call) => {
     if (call.url().includes('/api/v1/tasks?')) calls.push(call.url());

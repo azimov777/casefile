@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken } from './contour';
+import { readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -40,6 +40,7 @@ test('отбор по статусу open даёт ровно открытые �
 });
 
 test('признаки строки берутся из выдачи списка, без запроса на задачу', async ({ page }) => {
+  await silenceJournal(page);
   const calls: string[] = [];
   page.on('request', (request) => {
     if (request.url().includes('/api/v1/tasks')) calls.push(request.url());

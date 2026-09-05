@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { useLogout } from '@/features/auth';
+import { LiveStatus, type LiveJournal } from '@/features/live-journal';
 import { Button, QueryState } from '@/shared/ui';
 import styles from './app-header.module.css';
 
-export function AppHeader() {
+export function AppHeader({ live }: { live: LiveJournal }) {
   const bootstrap = useQuery(bootstrapQueryOptions());
   const logout = useLogout();
 
@@ -42,6 +43,8 @@ export function AppHeader() {
       </nav>
 
       <div className={styles.session}>
+        <LiveStatus {...live} />
+
         {/* Отказ показывается с повтором: чинить бэкенд и перезагружать вкладку —
             разные действия, и второе не должно быть единственным доступным. */}
         <QueryState query={bootstrap} loading="Загружаем участника…" compact />

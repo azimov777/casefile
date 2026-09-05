@@ -37,7 +37,8 @@ test('ответ на вопрос из входящей закрывает ег
 
   await page.goto('/questions');
 
-  // Счётчик в шапке — то же число, что показывает bootstrap.
+  // Счётчик в шапке — то же число, что показывает `bootstrap`. Пишущие сценарии идут
+  // по одному и убирают за собой, поэтому здесь открыт ровно вопрос демо.
   const header = page.getByRole('banner');
   await expect(header.getByText('Открытых вопросов: 1')).toBeVisible();
 
@@ -51,7 +52,7 @@ test('ответ на вопрос из входящей закрывает ег
   await page.getByRole('button', { name: 'Ответить' }).click();
 
   // Вопрос ушёл из входящей, счётчик перечитан у бэкенда.
-  await expect(page.getByText(/Вопросов без ответа нет/)).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toHaveCount(0);
   await expect(header.getByText('Открытых вопросов: 0')).toBeVisible();
 
   // Запрос ушёл с ключом повтора, и ответ в деле ровно один.

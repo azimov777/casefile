@@ -7,8 +7,15 @@ import { clearToken, getToken } from './token';
  * `/api` на бэкенд, поэтому запрос всегда идёт на свой источник. Так токен не уезжает
  * в чужой источник и не нужен CORS.
  */
+/**
+ * Источник API. Пуст в браузере — и dev-сервер Vite, и nginx проксируют `/api`
+ * на бэкенд. Назван отдельно, потому что живой поток открывается не этим клиентом:
+ * SSE с заголовком авторизации требует своего `fetch` (`features/live-journal`).
+ */
+export const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? '';
+
 export const apiClient = createClient<paths>({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '',
+  baseUrl: apiBaseUrl,
   // Позднее связывание с `globalThis.fetch`: по умолчанию библиотека запоминает ссылку
   // на функцию в момент создания клиента, и подмена сети в тестах (MSW ставит свой
   // `fetch` позже) проходила бы мимо клиента.

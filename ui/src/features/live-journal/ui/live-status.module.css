@@ -1,0 +1,35 @@
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.question {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.connected,
+.lost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+}
+
+.connected {
+  color: var(--color-text-muted);
+}
+
+.lost {
+  color: var(--color-danger);
+}
+
+.connected::before,
+.lost::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}

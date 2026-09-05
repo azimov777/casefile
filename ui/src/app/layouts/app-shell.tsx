@@ -1,14 +1,18 @@
 import { Outlet, useLocation } from 'react-router';
+import { useLiveJournal } from '@/features/live-journal';
 import { ErrorBoundary } from '../providers/error-boundary';
 import { AppHeader } from './app-header';
 import styles from './app-shell.module.css';
 
 export function AppShell() {
   const location = useLocation();
+  // Один поток на вкладку: он поднимается здесь, а не на страницах, — переход между
+  // экранами не должен стоить переподключения.
+  const live = useLiveJournal();
 
   return (
     <div className={styles.shell}>
-      <AppHeader />
+      <AppHeader live={live} />
       <div className={styles.content}>
         {/*
          * Вторая граница, внутри оболочки: упавшая страница не уносит шапку, и человек
