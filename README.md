@@ -459,6 +459,18 @@ curl http://localhost:8100/health
 {"status": "ok", "version": "0.1.0", "database": "ok"}
 ```
 
+Второй контур рядом с рабочим — так прогоняют живые проверки, не трогая установку с
+открытыми соединениями агентов, — поднимается своим именем проекта и своими портами:
+
+```bash
+POSTGRES_PORT=5433 TRACKER_PORT=8001 TRACKER_MCP_PORT=8101 \
+    docker compose -p tracker-check up -d db api mcp
+docker compose -p tracker-check down -v   # погасить вместе с томом
+```
+
+`TRACKER_MCP_PORT` compose подставляет и в проброс, и в окружение контейнера, поэтому
+процесс слушает ровно тот порт, который опубликован.
+
 Адрес — `http://localhost:8100/mcp`, транспорт — streamable HTTP, авторизация — тем же
 токеном, что и REST: `Authorization: Bearer trk_...` плюс `X-Actor-Label`, если токен общий
 агентский. Второй схемы представления нет намеренно — участники и токены общие на оба
