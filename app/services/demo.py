@@ -9,8 +9,9 @@
 Что наполняется (`docs/tasks`, задача 29):
 
 - очередь `DEMO` с описанием — общим контекстом всех её задач;
-- семь задач: все шесть статусов, `open` — двумя разными, потому что интересны обе,
-  свободный кандидат и задача, которую назначатель брать не должен;
+- семь задач: все пять статусов, `open` — двумя разными, потому что интересны обе,
+  свободный кандидат и задача, которую назначатель брать не должен, и `in_progress` —
+  тоже двумя: с живой сводкой и с провальным вердиктом;
 - записи **всех** типов, включая служебные `section_changed`, `assignee_changed`,
   `link_added` и `link_removed`: экран дела иначе показывал бы половину словаря;
 - открытый блокирующий вопрос, адресованный человеку, — «входящая» и первый экран
@@ -117,7 +118,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     candidate = await _candidate_task(session, queue, agent=agent)
     waiting = await _waiting_task(session, queue, agent=agent, human=human)
     child = await _child_task(session, queue, agent=agent, parent=in_progress)
-    review = await _review_task(session, queue, agent=agent, blocker=in_progress)
+    checking = await _checking_task(session, queue, agent=agent, blocker=in_progress)
     cancelled = await _cancelled_task(session, queue, agent=agent)
 
     # Связь, которую поставили и сняли: без неё в деле не появится `link_removed`, а он
@@ -132,7 +133,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
 
     return DemoData(
         queue=queue,
-        tasks=[done, in_progress, candidate, waiting, child, review, cancelled],
+        tasks=[done, in_progress, candidate, waiting, child, checking, cancelled],
     )
 
 
@@ -281,11 +282,10 @@ async def _done_task(
         task,
         actor=agent,
         done="Причина найдена, вызов перенесён в конец сценария, тест на несгоревший номер написан",
-        remaining="Ничего: обе проверки закрыты вердиктами",
+        remaining="Прогнать обе обзорные проверки и закрыть задачу",
         blockers="Нет",
-        next_step="Перевести в `done`",
+        next_step="Подшить вердикты по обеим проверкам и перевести в `done`",
     )
-    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.REVIEW)
     await case_service.add_verdict(
         session,
         task,
@@ -463,11 +463,17 @@ async def _child_task(session: AsyncSession, queue: Queue, *, agent: Actor, pare
     return task
 
 
-async def _review_task(session: AsyncSession, queue: Queue, *, agent: Actor, blocker: Task) -> Task:
-    """Задача на обзорных проверках: одна проверка закрыта, вторая ещё нет.
+async def _checking_task(
+    session: AsyncSession, queue: Queue, *, agent: Actor, blocker: Task
+) -> Task:
+    """Задача в работе на обзорных проверках: одна пройдена, вторая провалена.
 
-    Она же заблокирована другой задачей: связь ставится **после** входа в `review`,
-    потому что блокер запрещает вход в `in_progress`, а не выход из него.
+    Провальный вердикт — половина словаря `VerdictOutcome` и единственное состояние, в
+    котором видно, что `in_progress → done` держит именно он: экран дела без такого
+    примера показывал бы только успешные заключения.
+
+    Она же заблокирована другой задачей: связь ставится **после** входа в
+    `in_progress`, потому что блокер запрещает вход в работу, а не пребывание в ней.
     """
     task = await tasks_service.create_task(
         session,
@@ -488,16 +494,6 @@ async def _review_task(session: AsyncSession, queue: Queue, *, agent: Actor, blo
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
-    await case_service.add_summary(
-        session,
-        task,
-        actor=agent,
-        done="Оба отказа теперь несут `details.allowed`, тесты на них написаны",
-        remaining="Прогнать вторую обзорную проверку",
-        blockers="Нет",
-        next_step="Подшить вердикты по обеим проверкам",
-    )
-    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.REVIEW)
     await case_service.add_verdict(
         session,
         task,
@@ -507,6 +503,26 @@ async def _review_task(session: AsyncSession, queue: Queue, *, agent: Actor, blo
         evidence=(
             "`query=stauts: open` отвечает `search_field_unknown`, в `details.allowed` десять имён"
         ),
+    )
+    await case_service.add_verdict(
+        session,
+        task,
+        actor=agent,
+        check_no=2,
+        outcome=VerdictOutcome.FAILED,
+        evidence=(
+            "`query=priority > high` отвечает `search_operator_not_supported`, но "
+            "`details.allowed` пуст: список операторов собирается только для текстовых полей"
+        ),
+    )
+    await case_service.add_summary(
+        session,
+        task,
+        actor=agent,
+        done="Первая проверка пройдена, вторая провалена: список операторов приходит пустым",
+        remaining="Собрать список операторов для сравнимых полей и перепроверить проверку 2",
+        blockers="Задача блокера ещё не закрыта",
+        next_step="Дособрать `details.allowed` в подборе операторов и подшить новый вердикт",
     )
     await links_service.add_link(session, task, blocker, actor=agent, kind=LinkKind.BLOCKED_BY)
     return task
