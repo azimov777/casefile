@@ -12,5 +12,14 @@ export {
   type TaskPriority,
   type TaskStatus,
 } from './api/tasks';
+export {
+  taskPackageKeys,
+  taskPackageQueryOptions,
+  type LinkKind,
+  type TaskDetails,
+  type TaskLink,
+  type TaskPackage,
+} from './api/task-package';
 export { TASK_COLUMNS } from './ui/columns';
+export { TaskFeatureBadges } from './ui/task-features';
 export { TaskRow } from './ui/task-row';

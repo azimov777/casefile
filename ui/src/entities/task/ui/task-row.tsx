@@ -1,5 +1,7 @@
+import { Link } from 'react-router';
 import { Badge, RelativeTime } from '@/shared/ui';
 import type { Task } from '../api/tasks';
+import { TaskFeatureBadges } from './task-features';
 import styles from './task-row.module.css';
 
 /**
@@ -13,7 +15,7 @@ export function TaskRow({ task }: { task: Task }) {
   return (
     <tr>
       <th scope="row" className={styles.key}>
-        {task.key}
+        <Link to={`/tasks/${task.key}`}>{task.key}</Link>
       </th>
       <td className={styles.title}>{task.title ?? ''}</td>
       <td>
@@ -47,35 +49,5 @@ export function TaskRow({ task }: { task: Task }) {
         <RelativeTime value={task.updated_at} />
       </td>
     </tr>
-  );
-}
-
-function TaskFeatureBadges({ features }: { features: NonNullable<Task['features']> }) {
-  return (
-    <>
-      {features.blocked ? (
-        <Badge tone="danger" title="Есть связь blocked_by на незакрытую задачу">
-          заблокирована
-        </Badge>
-      ) : null}
-
-      {features.open_questions > 0 ? (
-        <Badge title="Вопросы без ответа">вопросов {features.open_questions}</Badge>
-      ) : null}
-
-      {features.open_blocking_questions > 0 ? (
-        <Badge tone="danger" title="Из них помечены blocking">
-          блокирующих {features.open_blocking_questions}
-        </Badge>
-      ) : null}
-
-      {features.last_summary_at === null || features.last_summary_at === undefined ? (
-        <span className={styles.empty}>сводки нет</span>
-      ) : (
-        <span className={styles.summary}>
-          сводка <RelativeTime value={features.last_summary_at} />
-        </span>
-      )}
-    </>
   );
 }

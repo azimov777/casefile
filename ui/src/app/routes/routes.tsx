@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router';
 import { LoginPage } from '@/pages/login';
+import { TaskPage } from '@/pages/task';
 import { TasksPage } from '@/pages/tasks';
 import { AppShell } from '../layouts/app-shell';
 import { NotFound } from './not-found';
@@ -19,6 +20,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/tasks" replace /> },
           { path: 'tasks', element: <TasksPage /> },
+          { path: 'tasks/:key', element: <TaskPage /> },
           { path: '*', element: <NotFound /> },
         ],
       },
