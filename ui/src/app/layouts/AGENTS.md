@@ -9,3 +9,4 @@
 - `app-shell.module.css` — стили рамки
 - `app-header.tsx` — участник, счётчик открытых вопросов, разделы, выход
 - `app-header.module.css` — стили шапки
+- `app-header.test.tsx` — проверка, что отказ `bootstrap` объясняется и чинится повтором

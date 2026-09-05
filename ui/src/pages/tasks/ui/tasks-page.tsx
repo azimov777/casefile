@@ -8,9 +8,8 @@ import {
   readQueryProblem,
   useTaskFilters,
 } from '@/features/task-filters';
-import { ApiError, type Page } from '@/shared/api';
-import { errorText } from '@/shared/errors';
-import { Button, Callout } from '@/shared/ui';
+import { type Page } from '@/shared/api';
+import { Button, Callout, QueryState } from '@/shared/ui';
 import { TasksTable } from './tasks-table';
 import styles from './tasks-page.module.css';
 
@@ -38,7 +37,6 @@ export function TasksPage() {
   // Отказ разбора относится к полю запроса только тогда, когда запрос отправляли мы
   // из этого поля; негодное значение в адресе — беда всей страницы, а не поля.
   const problem = filters.query.trim() === '' ? null : readQueryProblem(list.error, filters.query);
-  const failure = list.error !== null && problem === null ? describe(list.error) : null;
 
   const cursor = page?.meta?.next_cursor ?? null;
   const hasMore = page?.meta?.has_more === true && cursor !== null;
@@ -49,17 +47,17 @@ export function TasksPage() {
 
       <TaskFiltersForm filters={filters} onApply={apply} onReset={reset} problem={problem} />
 
-      {failure === null ? null : <Callout tone="danger">{failure}</Callout>}
+      {/*
+       * Отказ разбора запроса объясняет форма, у самого поля: там же и подсказка,
+       * как его починить. Всё остальное — общее состояние запроса с повтором.
+       */}
+      {problem === null ? <QueryState query={list} loading="Загружаем задачи…" /> : null}
 
       {problem === null || page === null ? null : (
         <Callout>Показаны строки предыдущего отбора: последний запрос отклонён.</Callout>
       )}
 
-      {page === null ? (
-        list.isPending ? (
-          <Callout>Загружаем задачи…</Callout>
-        ) : null
-      ) : page.items.length === 0 ? (
+      {page === null ? null : page.items.length === 0 ? (
         <div className={styles.empty}>
           <Callout>Задач по этим условиям нет</Callout>
           <Button tone="quiet" onClick={reset} disabled={!hasConditions(filters)}>
@@ -83,9 +81,4 @@ export function TasksPage() {
       )}
     </main>
   );
-}
-
-function describe(error: unknown): string {
-  if (error instanceof ApiError) return errorText(error.code, error.message);
-  return error instanceof Error ? error.message : 'Неизвестная ошибка.';
 }

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ApiError } from '../api';
 import { errorDictionary } from './dictionary';
-import { errorText } from './text';
+import { errorMessage, errorText } from './text';
 
 /**
  * Справочник кодов бэкенда собирается из его кода командой, значит его можно сверять,
@@ -46,5 +47,27 @@ describe('errorText', () => {
 
   it('неизвестный код без фразы бэкенда всё равно называет код', () => {
     expect(errorText('brand_new_code')).toBe('Неизвестная ошибка (brand_new_code).');
+  });
+});
+
+describe('errorMessage', () => {
+  it('отказ бэкенда переводит по коду', () => {
+    const failure = new ApiError('task_not_found', 'Task not found', 404, {});
+
+    expect(errorMessage(failure)).toBe('Задачи с таким ключом нет.');
+  });
+
+  it('обрыв связи объясняет тем же словарём: код придуман клиентом', () => {
+    expect(errorMessage(ApiError.network(new Error('fetch failed')))).toBe(
+      'Сервер недоступен: проверьте, что бэкенд поднят.',
+    );
+  });
+
+  it('исключение не из API показывает своё сообщение', () => {
+    expect(errorMessage(new Error('Внезапно'))).toBe('Внезапно');
+  });
+
+  it('брошенное не-исключение не выдаётся за ошибку контракта', () => {
+    expect(errorMessage('строка')).toBe('Неизвестная ошибка.');
   });
 });

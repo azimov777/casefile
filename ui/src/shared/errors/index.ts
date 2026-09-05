@@ -1,2 +1,2 @@
 export { errorDictionary } from './dictionary';
-export { errorText } from './text';
+export { errorMessage, errorText } from './text';

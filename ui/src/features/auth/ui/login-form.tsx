@@ -1,6 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
-import { ApiError } from '@/shared/api';
-import { errorText } from '@/shared/errors';
+import { errorMessage } from '@/shared/errors';
 import { Button, Callout } from '@/shared/ui';
 import { useLogin } from '../model/use-login';
 import styles from './login-form.module.css';
@@ -48,18 +47,19 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         </span>
       </div>
 
-      {failed ? <Callout tone="danger">{describe(login.error)}</Callout> : null}
-
       <div>
         <Button type="submit" disabled={login.isPending || token.trim() === ''}>
           {login.isPending ? 'Проверяем…' : 'Войти'}
         </Button>
       </div>
+
+      {/*
+       * Сообщение об отказе стоит после кнопки, а не перед ней: между подсказкой
+       * и кнопкой оно сдвигало кнопку вниз ровно в тот момент, когда человек в неё
+       * целился, — и второй клик попадал мимо (выявлено при обзоре задачи 01).
+       * Программе чтения с экрана порядок не мешает: `Callout` объявляет отказ сам.
+       */}
+      {failed ? <Callout tone="danger">{errorMessage(login.error)}</Callout> : null}
     </form>
   );
-}
-
-function describe(error: unknown): string {
-  if (error instanceof ApiError) return errorText(error.code, error.message);
-  return error instanceof Error ? error.message : 'Неизвестная ошибка.';
 }

@@ -2,9 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { NavLink } from 'react-router';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { useLogout } from '@/features/auth';
-import { ApiError } from '@/shared/api';
-import { errorText } from '@/shared/errors';
-import { Button } from '@/shared/ui';
+import { Button, QueryState } from '@/shared/ui';
 import styles from './app-header.module.css';
 
 /** Разделы, которых ещё нет: пункт видно, но он никуда не ведёт. */
@@ -38,15 +36,9 @@ export function AppHeader() {
       </nav>
 
       <div className={styles.session}>
-        {bootstrap.isPending ? (
-          <span className={styles.questions}>Загружаем участника…</span>
-        ) : null}
-
-        {bootstrap.isError ? (
-          <span className={styles.problem} role="alert">
-            {describe(bootstrap.error)}
-          </span>
-        ) : null}
+        {/* Отказ показывается с повтором: чинить бэкенд и перезагружать вкладку —
+            разные действия, и второе не должно быть единственным доступным. */}
+        <QueryState query={bootstrap} loading="Загружаем участника…" compact />
 
         {bootstrap.data === undefined ? null : (
           <>
@@ -65,9 +57,4 @@ export function AppHeader() {
       </div>
     </header>
   );
-}
-
-function describe(error: unknown): string {
-  if (error instanceof ApiError) return errorText(error.code, error.message);
-  return error instanceof Error ? error.message : 'Неизвестная ошибка.';
 }

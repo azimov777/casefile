@@ -55,7 +55,3 @@
 .questions {
   color: var(--color-text-muted);
 }
-
-.problem {
-  color: var(--color-danger);
-}
