@@ -1,28 +1,32 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router';
+import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { Button, QueryState } from '@/shared/ui';
 import styles from './app-header.module.css';
-
-/** Разделы, которых ещё нет: пункт видно, но он никуда не ведёт. */
-const SOON = [{ title: 'Вопросы', task: '06' }];
 
 export function AppHeader() {
   const bootstrap = useQuery(bootstrapQueryOptions());
   const logout = useLogout();
 
   // Список и доска — один и тот же путь и разный `view`, поэтому активный пункт
-  // считается по параметру: `NavLink` сравнивает только путь и подсветил бы оба.
+  // считается по пути вместе с параметром: `NavLink` сравнивает только путь
+  // и подсветил бы оба пункта сразу.
   const [searchParams] = useSearchParams();
-  const board = searchParams.get('view') === 'board';
+  const { pathname } = useLocation();
+  const onTasks = pathname.startsWith('/tasks');
+  const board = onTasks && searchParams.get('view') === 'board';
 
   return (
     <header className={styles.header}>
       <span className={styles.brand}>Трекер</span>
 
       <nav className={styles.nav} aria-label="Разделы">
-        <Link className={styles.link} to="/tasks" aria-current={board ? undefined : 'page'}>
+        <Link
+          className={styles.link}
+          to="/tasks"
+          aria-current={onTasks && !board ? 'page' : undefined}
+        >
           Задачи
         </Link>
         <Link
@@ -32,16 +36,9 @@ export function AppHeader() {
         >
           Доска
         </Link>
-        {SOON.map((item) => (
-          <span
-            key={item.title}
-            className={`${styles.link} ${styles.soon}`}
-            aria-disabled="true"
-            title={`Появится в задаче ${item.task}`}
-          >
-            {item.title}
-          </span>
-        ))}
+        <NavLink className={styles.link} to="/questions">
+          Вопросы
+        </NavLink>
       </nav>
 
       <div className={styles.session}>

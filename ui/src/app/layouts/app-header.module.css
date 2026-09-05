@@ -35,11 +35,6 @@
   font-weight: 600;
 }
 
-.soon {
-  color: var(--color-text-muted);
-  cursor: default;
-}
-
 .session {
   display: flex;
   align-items: center;

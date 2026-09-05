@@ -26,14 +26,27 @@ export default defineConfig({
 
   // Тема следует системе и переключателя не имеет, поэтому обе проверяются
   // отдельными прогонами одного и того же сценария.
+  //
+  // Сценарий ответа на вопрос вынесен в отдельный проект: он единственный, кто пишет
+  // в демо-установку, и после него вопрос закрыт. Зависимость от читающих проектов
+  // даёт ему право идти последним — иначе те увидели бы уже отвеченный вопрос,
+  // а прогон падал бы в зависимости от того, кто успел первым.
   projects: [
     {
       name: 'светлая',
+      testIgnore: /answer\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
+      testIgnore: /answer\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
+    },
+    {
+      name: 'ответ',
+      testMatch: /answer\.spec\.ts/,
+      dependencies: ['светлая', 'тёмная'],
+      use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
   ],
 });

@@ -11,6 +11,13 @@ export {
   type EntryListParams,
   type EntryType,
 } from './api/entries';
+export {
+  QUESTION_PAGE_SIZE,
+  questionKeys,
+  questionsQueryOptions,
+  type Question,
+  type QuestionListParams,
+} from './api/questions';
 export { AuthorName } from './ui/author-name';
 export { EntryBody } from './ui/entry-body';
 export { EntryCard } from './ui/entry-card';

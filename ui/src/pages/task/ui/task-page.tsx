@@ -2,6 +2,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EntryBody } from '@/entities/entry';
 import { taskPackageQueryOptions } from '@/entities/task';
+import { AnswerForm } from '@/features/answer-question';
 import { ApiError } from '@/shared/api';
 import { Callout, QueryState } from '@/shared/ui';
 import { TaskHeader } from './task-header';
@@ -76,6 +77,7 @@ export function TaskPage() {
                   {task.key}#{question.no} · {question.title}
                 </p>
                 <EntryBody entry={question} />
+                <AnswerForm taskKey={task.key} questionNo={question.no} />
               </li>
             ))}
           </ul>
