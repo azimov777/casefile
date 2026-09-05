@@ -43,12 +43,11 @@ FULL_CYCLE_INDEX = [
     EntryType.DECISION,
     EntryType.ATTEMPT,
     EntryType.SUMMARY,
-    EntryType.STATUS_CHANGED,  # in_progress → review
     EntryType.VERDICT,
-    EntryType.STATUS_CHANGED,  # review → done
+    EntryType.STATUS_CHANGED,  # in_progress → done
 ]
 
-#: Разделы задачи цикла. Одна проверка — один вердикт: `review → done` требует
+#: Разделы задачи цикла. Одна проверка — один вердикт: `in_progress → done` требует
 #: положительного последнего вердикта по **каждой** проверке.
 SECTIONS: dict[str, Any] = {
     "goal": "Ключи не сгорают на отклонённых запросах",
@@ -110,9 +109,6 @@ async def test_a_task_goes_the_whole_way_through_rest(
     # Заголовок сводки не принимается, а выводится из `next_step`: это и есть то, что
     # преемник видит в описи, не читая тела.
     assert summarized.json()["data"]["title"] == SUMMARY["next_step"]
-
-    review = await auth_client.post(f"/api/v1/tasks/{key}/transition", json={"to": "review"})
-    assert review.status_code == 200, review.text
 
     # Закрыть без вердикта нельзя — проверка стоит здесь, а не в тесте на переходы,
     # потому что в цикле её легко обойти порядком вызовов и не заметить.
@@ -195,7 +191,6 @@ async def test_a_task_goes_the_whole_way_through_mcp(
         summarized = await call(session, "add_summary", key=key, **SUMMARY)
         assert summarized["title"] == SUMMARY["next_step"]
 
-        await call(session, "transition", key=key, to="review")
         await call(
             session,
             "add_verdict",

@@ -44,7 +44,6 @@ async def close(client: AsyncClient, key: str) -> None:
     assert (await move(client, key, "open")).status_code == 200
     assert (await move(client, key, "in_progress")).status_code == 200
     await client.post(f"/api/v1/tasks/{key}/entries", json={"type": "summary", "payload": SUMMARY})
-    assert (await move(client, key, "review")).status_code == 200
     for check_no in range(1, len(READY["checks"]) + 1):
         await client.post(
             f"/api/v1/tasks/{key}/entries",
@@ -223,7 +222,6 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
     await auth_client.post(
         f"/api/v1/tasks/{parent}/entries", json={"type": "summary", "payload": SUMMARY}
     )
-    assert (await move(auth_client, parent, "review")).status_code == 200
     await auth_client.post(
         f"/api/v1/tasks/{parent}/entries",
         json={"type": "verdict", "payload": {"check_no": 1, "outcome": "passed"}},

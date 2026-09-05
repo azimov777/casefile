@@ -50,22 +50,27 @@ async def move(
     """Проводит задачу по цепочке, подшивая то, без чего переход не пройдёт."""
     for status in statuses:
         if task.status is TaskStatus.IN_PROGRESS:
-            await case_service.add_summary(
-                session,
-                task,
-                actor=actor,
-                done="сделано",
-                remaining="осталось",
-                blockers="нет",
-                next_step="дальше",
-            )
-        if task.status is TaskStatus.REVIEW and status is TaskStatus.DONE:
+            await summary(session, task, actor)
+        if task.status is TaskStatus.IN_PROGRESS and status is TaskStatus.DONE:
             for check_no in range(1, len(task.checks) + 1):
                 await case_service.add_verdict(
                     session, task, actor=actor, check_no=check_no, outcome="passed"
                 )
         await tasks_service.transition_task(session, task, actor=actor, to=status, reason=reason)
     return task
+
+
+async def summary(session: AsyncSession, task: Task, actor: Actor) -> None:
+    """Сводка ради перехода: без неё из `in_progress` не выйти (задача 23)."""
+    await case_service.add_summary(
+        session,
+        task,
+        actor=actor,
+        done="сделано",
+        remaining="осталось",
+        blockers="нет",
+        next_step="дальше",
+    )
 
 
 async def entries(session: AsyncSession, task: Task, actor: Actor) -> list[Entry]:
@@ -391,7 +396,6 @@ async def test_blocked_is_true_exactly_while_a_blocker_is_open(
         task_actor,
         TaskStatus.OPEN,
         TaskStatus.IN_PROGRESS,
-        TaskStatus.REVIEW,
         TaskStatus.DONE,
     )
 
@@ -425,7 +429,6 @@ async def test_a_blocked_task_is_not_taken_into_work_until_the_blocker_closes(
         task_actor,
         TaskStatus.OPEN,
         TaskStatus.IN_PROGRESS,
-        TaskStatus.REVIEW,
         TaskStatus.DONE,
     )
     await tasks_service.transition_task(
@@ -451,8 +454,8 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
         task_actor,
         TaskStatus.OPEN,
         TaskStatus.IN_PROGRESS,
-        TaskStatus.REVIEW,
     )
+    await summary(db_session, parent, task_actor)
     for check_no in range(1, len(parent.checks) + 1):
         await case_service.add_verdict(
             db_session, parent, actor=task_actor, check_no=check_no, outcome="passed"

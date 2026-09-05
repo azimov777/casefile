@@ -77,8 +77,10 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
     """Закоммиченные задачи и уборка за собой.
 
     Задачи собираются прямо моделями, а не полным циклом через сценарии: переводимая
-    нужна в `review` и без проверок (тогда `review → done` не упирается в вердикты), а
-    проверяется здесь не таблица переходов, а гонка. Уборка записей идёт с выключенным
+    нужна в `in_progress` и без проверок (тогда `in_progress → done` не упирается в
+    вердикты), а проверяется здесь не таблица переходов, а гонка. Две записи ей всё же
+    подшиваются руками: без записи о входе в работу и сводки после неё переход в `done`
+    отказал бы раньше, чем дошёл до фактов гонки. Уборка записей идёт с выключенным
     триггером неизменяемости — единственное законное место, где его выключают
     (`docs/notes/db.md`).
     """
@@ -91,7 +93,7 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
             queue=queue,
             title="Переводимая задача",
             description="Её и переводят в гонке",
-            status=TaskStatus.REVIEW,
+            status=TaskStatus.IN_PROGRESS,
             **created_by_columns(TRACKER),
         )
         child = Task(
@@ -111,6 +113,32 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
             **created_by_columns(TRACKER),
         )
         session.add_all([subject, child, blocker])
+        await session.flush()
+        session.add_all(
+            [
+                Entry(
+                    task_id=subject.id,
+                    no=1,
+                    type=EntryType.STATUS_CHANGED,
+                    title="Status changed: open -> in_progress",
+                    payload={"from": "open", "to": "in_progress", "reason": None},
+                    **created_by_columns(TRACKER),
+                ),
+                Entry(
+                    task_id=subject.id,
+                    no=2,
+                    type=EntryType.SUMMARY,
+                    title="Закрыть задачу",
+                    payload={
+                        "done": "Выход готов",
+                        "remaining": "Ничего",
+                        "blockers": "Нет",
+                        "next_step": "Закрыть задачу",
+                    },
+                    **created_by_columns(TRACKER),
+                ),
+            ]
+        )
         await session.commit()
         ids = Trio(subject=subject.id, child=child.id, blocker=blocker.id)
         queue_id = queue.id

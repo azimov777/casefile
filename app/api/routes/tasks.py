@@ -244,9 +244,10 @@ async def transition_task(
     `details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422
     transition_reason_required`); `backlog → open` требует заполненных разделов (`422
     task_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после
-    последнего входа в него (`409 summary_required`); `review → done` — положительного
-    последнего вердикта по каждой проверке, подшитого после последнего входа в `review`
-    (`409 checks_not_passed`, проверки без него в `details.checks`). Вход в
+    последнего входа в него (`409 summary_required`); `in_progress → done` —
+    положительного последнего вердикта по каждой проверке, подшитого после последнего
+    входа в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в
+    `details.checks` парами `check_no` и `reason`). Вход в
     `in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в
     `details.blockers`), переход в `done` — при детях не в `done` и не в `cancelled`
     (`409 task_has_unclosed_children`, ключи в `details.children`). Переход подшивает

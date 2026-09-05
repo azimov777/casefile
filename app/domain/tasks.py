@@ -131,7 +131,6 @@ class TaskStatus(StrEnum):
     BACKLOG = "backlog"
     OPEN = "open"
     IN_PROGRESS = "in_progress"
-    REVIEW = "review"
     DONE = "done"
     CANCELLED = "cancelled"
 
@@ -139,13 +138,12 @@ class TaskStatus(StrEnum):
 #: Новая задача рождается только здесь; статус при создании не принимается.
 INITIAL_STATUS = TaskStatus.BACKLOG
 
-#: Порядок цепочки: `backlog` < `open` < `in_progress` < `review` < `done`. Переход к
-#: меньшему статусу — шаг назад. `cancelled` в цепочке не стоит: это выход из неё.
+#: Порядок цепочки: `backlog` < `open` < `in_progress` < `done`. Переход к меньшему
+#: статусу — шаг назад. `cancelled` в цепочке не стоит: это выход из неё.
 STATUS_CHAIN: tuple[TaskStatus, ...] = (
     TaskStatus.BACKLOG,
     TaskStatus.OPEN,
     TaskStatus.IN_PROGRESS,
-    TaskStatus.REVIEW,
     TaskStatus.DONE,
 )
 _CHAIN_RANK = {status: rank for rank, status in enumerate(STATUS_CHAIN)}
@@ -160,12 +158,11 @@ TRANSITIONS: Mapping[TaskStatus, tuple[TaskStatus, ...]] = {
     TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
     TaskStatus.OPEN: (TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG, TaskStatus.CANCELLED),
     TaskStatus.IN_PROGRESS: (
-        TaskStatus.REVIEW,
+        TaskStatus.DONE,
         TaskStatus.OPEN,
         TaskStatus.BACKLOG,
         TaskStatus.CANCELLED,
     ),
-    TaskStatus.REVIEW: (TaskStatus.DONE, TaskStatus.OPEN, TaskStatus.CANCELLED),
     TaskStatus.DONE: (),
     TaskStatus.CANCELLED: (),
 }
@@ -444,6 +441,48 @@ _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
 # --- Переход ------------------------------------------------------------------------
 
 
+class CheckGapReason(StrEnum):
+    """Почему проверка не засчитана перед `done`.
+
+    Стабильные строки: они уезжают в `details.checks` отказа `checks_not_passed`, и по
+    ним читающий отличает «вердикта в этом заходе нет» от «последний вердикт провальный»
+    — состояния разные, и делают по ним разное.
+    """
+
+    NO_VERDICT = "no_verdict"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class CheckGap:
+    """Незасчитанная проверка: её номер и причина.
+
+    Пара, а не голый номер: отказ обязан объяснять, почему переход не прошёл, и по
+    одному номеру этого не видно (`CONVENTIONS.md`, «Ошибки — только на английском»).
+    """
+
+    check_no: int
+    reason: CheckGapReason
+
+    def as_details(self) -> dict[str, Any]:
+        """Вид, в котором пара уезжает в `details` ошибки."""
+        return {"check_no": self.check_no, "reason": self.reason.value}
+
+
+def checks_without_verdict(checks: Sequence[str]) -> list[CheckGap]:
+    """Все проверки задачи как незасчитанные с причиной `no_verdict`.
+
+    Общая для домена и сценария: так «вердиктов в этом заходе нет вообще» выглядит
+    одинаково и когда факт не посчитан (проверка перехода), и когда в деле нет входа в
+    `in_progress` (`app/services/case.py`, `verdict_gaps`). Две сборки одного и того же
+    списка разъехались бы на первой же правке причины.
+    """
+    return [
+        CheckGap(check_no=check_no, reason=CheckGapReason.NO_VERDICT)
+        for check_no in range(FIRST_CHECK_NUMBER, FIRST_CHECK_NUMBER + len(checks))
+    ]
+
+
 @dataclass(frozen=True, slots=True)
 class TransitionFacts:
     """Всё, что нужно проверкам перехода, собранное сценарием до вызова домена.
@@ -468,12 +507,12 @@ class TransitionFacts:
     #: Есть ли в деле сводка, подшитая после последнего входа в `in_progress`. `False`
     #: по умолчанию — незаполненный факт запрещает выход из работы, а не разрешает его.
     has_summary_since_in_progress: bool = False
-    #: Номера проверок, у которых нет положительного вердикта **в текущем обзоре** —
-    #: среди подшитых после последнего входа в `review`. `None` — «факт не считали»:
+    #: Проверки без положительного вердикта **в этом заходе** — среди подшитых после
+    #: последнего входа в `in_progress`, каждая с причиной. `None` — «факт не считали»:
     #: проверка истолкует это как «положительных вердиктов нет ни по одной проверке» и
     #: переход запретит. Пустой кортеж означал бы обратное — что все проверки
     #: пройдены, — поэтому значением по умолчанию он быть не может.
-    checks_without_passed_verdict: Sequence[int] | None = None
+    checks_without_passed_verdict: Sequence[CheckGap] | None = None
     #: Ключи блокеров задачи не в `done` и не в `cancelled`. `None` — «факт не считали»,
     #: и переход в `in_progress` запрещается: назвать блокеры при этом нечем, поэтому
     #: отказ приходит с `details.reason`, а не с пустым списком, который соврал бы.
@@ -562,22 +601,27 @@ def check_summary_before_leaving_in_progress(facts: TransitionFacts) -> None:
 
 
 def check_verdicts_before_done(facts: TransitionFacts) -> None:
-    """`review → done`: по каждой проверке последний вердикт текущего обзора — `passed`.
+    """`in_progress → done`: по каждой проверке последний вердикт этого захода — `passed`.
+
+    Обзорные проверки прогоняет исполнитель и подшивает вердикты, не выходя из работы
+    (`CONCEPT.md`, 3.3): отдельного статуса под чужой обзор нет, а требование вердикта
+    по каждой проверке осталось в полном объёме.
 
     Последний, а не любой: провалившаяся и переделанная проверка закрывается новым
     вердиктом, а не правкой старого — записи дела неизменяемы.
 
-    Текущего обзора, а не всего дела: вердикты, подшитые до последнего входа в
-    `review`, относились к прошлому выходу и не засчитываются. Границу считает сценарий
-    (`app/services/case.py`, `verdict_gaps`) — домен получает уже готовый список.
+    Этого захода, а не всего дела: вердикты, подшитые до последнего входа в
+    `in_progress`, относились к прошлой работе и не засчитываются. Границу считает
+    сценарий (`app/services/case.py`, `verdict_gaps`) — домен получает готовый список
+    пар «проверка и причина».
     """
-    if not (facts.from_status is TaskStatus.REVIEW and facts.to_status is TaskStatus.DONE):
+    if not (facts.from_status is TaskStatus.IN_PROGRESS and facts.to_status is TaskStatus.DONE):
         return
     pending = facts.checks_without_passed_verdict
     if pending is None:
         # Факт не посчитан. Считаем, что положительного вердикта нет ни по одной
         # проверке: незаполненный факт обязан запрещать переход, а не пропускать его.
-        pending = range(FIRST_CHECK_NUMBER, FIRST_CHECK_NUMBER + len(facts.checks))
+        pending = checks_without_verdict(facts.checks)
     pending = list(pending)
     if not pending:
         return
@@ -586,7 +630,7 @@ def check_verdicts_before_done(facts: TransitionFacts) -> None:
             "key": facts.key,
             "from": facts.from_status.value,
             "to": facts.to_status.value,
-            "checks": pending,
+            "checks": [gap.as_details() for gap in pending],
         },
     )
 

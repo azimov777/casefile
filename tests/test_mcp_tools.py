@@ -371,7 +371,7 @@ async def test_transition_walks_the_table_and_explains_a_refusal(
     key = open_task.key
     async with mcp_session(task_secret) as session:
         taken = await call(session, "transition", key=key, to="in_progress")
-        failure = await refuse(session, "transition", key=key, to="review", reason="Готово")
+        failure = await refuse(session, "transition", key=key, to="open", reason="Нужны уточнения")
         await call(
             session,
             "add_summary",
@@ -381,11 +381,18 @@ async def test_transition_walks_the_table_and_explains_a_refusal(
             blockers="Ничего",
             next_step="Проверить",
         )
-        moved = await call(session, "transition", key=key, to="review")
+        moved = await call(session, "transition", key=key, to="open", reason="Нужны уточнения")
+        forbidden = await refuse(session, "transition", key=key, to="review")
 
     assert taken["status"] == "in_progress"
     assert "summary_required" in failure
-    assert moved["status"] == "review"
+    assert moved["status"] == "open"
+    # Статуса `review` нет вовсе: аргумент не проходит разбор, и отказ перечисляет
+    # допустимые значения — по ним видно, какой ход вообще существует.
+    assert all(
+        f"'{status}'" in forbidden
+        for status in ("backlog", "open", "in_progress", "done", "cancelled")
+    )
 
 
 async def test_a_step_back_without_a_reason_is_refused(
@@ -567,23 +574,41 @@ async def test_asking_an_unknown_participant_is_refused(
 
 
 async def test_a_verdict_gates_the_move_to_done(
-    mcp_session: Connect, task_secret: str, open_task: Task
+    mcp_session: Connect, task_secret: str, queue: Queue
 ) -> None:
-    """`review → done` требует, чтобы последний вердикт по каждой проверке был `passed`."""
-    key = open_task.key
+    """`in_progress → done` требует по каждой проверке последний вердикт `passed`.
+
+    Отказ обязан объяснять, **почему** проверка не засчитана: пройденная в нём не
+    упоминается вовсе, непройденная приходит с причиной — `no_verdict` или `failed`.
+    """
+    del queue
     async with mcp_session(task_secret) as session:
+        task = await call(
+            session,
+            "create_task",
+            queue="TRK",
+            title="Задача из двух проверок",
+            description="Проверки закрываются вердиктами",
+            sections={
+                "goal": "Цель",
+                "context": "Контекст",
+                "constraints": "Ограничения",
+                "output": "Выход",
+                "checks": ["первая", "вторая"],
+            },
+        )
+        key = task["key"]
+        await call(session, "transition", key=key, to="open")
         await call(session, "transition", key=key, to="in_progress")
         await call(
             session,
             "add_summary",
             key=key,
             done="Сделал",
-            remaining="Ничего",
+            remaining="Прогнать проверки",
             blockers="Ничего",
-            next_step="Проверить",
+            next_step="Подшить вердикты",
         )
-        await call(session, "transition", key=key, to="review")
-        failure = await refuse(session, "transition", key=key, to="done")
         await call(
             session,
             "add_verdict",
@@ -592,9 +617,30 @@ async def test_a_verdict_gates_the_move_to_done(
             outcome="passed",
             evidence="Прогон зелёный",
         )
+        without_verdict = await refuse(session, "transition", key=key, to="done")
+        await call(
+            session,
+            "add_verdict",
+            key=key,
+            check_no=2,
+            outcome="failed",
+            evidence="Прогон красный",
+        )
+        failed = await refuse(session, "transition", key=key, to="done")
+        await call(
+            session,
+            "add_verdict",
+            key=key,
+            check_no=2,
+            outcome="passed",
+            evidence="Прогон зелёный",
+        )
         closed = await call(session, "transition", key=key, to="done")
 
-    assert "checks_not_passed" in failure
+    assert "checks_not_passed" in without_verdict
+    assert '"checks": [{"check_no": 2, "reason": "no_verdict"}]' in without_verdict
+    assert '"check_no": 1' not in without_verdict
+    assert '"checks": [{"check_no": 2, "reason": "failed"}]' in failed
     assert closed["status"] == "done"
 
 

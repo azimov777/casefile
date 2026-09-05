@@ -21,6 +21,8 @@ from app.domain.tasks import (
     OPEN_FIELDS,
     TRANSITION_CHECKS,
     TRANSITIONS,
+    CheckGap,
+    CheckGapReason,
     TaskField,
     TaskPriority,
     TaskStatus,
@@ -52,7 +54,7 @@ def facts(
     sections: dict[TaskField, str] | None = None,
     checks: tuple[str, ...] = ("проверка",),
     has_summary: bool = True,
-    pending_checks: tuple[int, ...] | None = (),
+    pending_checks: tuple[CheckGap, ...] | None = (),
     blockers: tuple[str, ...] | None = (),
     children: tuple[str, ...] | None = (),
 ) -> TransitionFacts:
@@ -109,12 +111,11 @@ def test_the_transition_table_matches_the_concept() -> None:
         TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
         TaskStatus.OPEN: (TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG, TaskStatus.CANCELLED),
         TaskStatus.IN_PROGRESS: (
-            TaskStatus.REVIEW,
+            TaskStatus.DONE,
             TaskStatus.OPEN,
             TaskStatus.BACKLOG,
             TaskStatus.CANCELLED,
         ),
-        TaskStatus.REVIEW: (TaskStatus.DONE, TaskStatus.OPEN, TaskStatus.CANCELLED),
         TaskStatus.DONE: (),
         TaskStatus.CANCELLED: (),
     }
@@ -126,10 +127,10 @@ def test_the_transition_table_matches_the_concept() -> None:
     [
         (TaskStatus.IN_PROGRESS, TaskStatus.OPEN, True),
         (TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG, True),
-        (TaskStatus.REVIEW, TaskStatus.OPEN, True),
+        (TaskStatus.DONE, TaskStatus.OPEN, True),
         (TaskStatus.OPEN, TaskStatus.BACKLOG, True),
         (TaskStatus.OPEN, TaskStatus.IN_PROGRESS, False),
-        (TaskStatus.REVIEW, TaskStatus.CANCELLED, False),
+        (TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, False),
     ],
 )
 def test_a_step_back_is_a_move_to_a_lower_status_of_the_chain(
@@ -156,7 +157,7 @@ def test_a_transition_outside_the_table_lists_the_allowed_ones() -> None:
         (TaskStatus.IN_PROGRESS, TaskStatus.OPEN, "step_back"),
         (TaskStatus.OPEN, TaskStatus.BACKLOG, "step_back"),
         (TaskStatus.BACKLOG, TaskStatus.CANCELLED, "cancel"),
-        (TaskStatus.REVIEW, TaskStatus.CANCELLED, "cancel"),
+        (TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, "cancel"),
     ],
 )
 def test_a_step_back_and_a_cancellation_require_a_reason(
@@ -174,12 +175,12 @@ def test_a_blank_reason_counts_as_no_reason() -> None:
     assert normalize_reason(" потому ") == "потому"
 
     with pytest.raises(TransitionReasonRequiredError):
-        ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.OPEN, reason=None))
+        ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.OPEN, reason=None))
 
 
 def test_a_forward_move_does_not_need_a_reason() -> None:
     ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS))
-    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.REVIEW))
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE))
 
 
 def test_opening_lists_every_unfilled_section_at_once() -> None:
@@ -221,7 +222,7 @@ def test_the_check_list_is_the_extension_point() -> None:
 def test_everything_is_editable_in_backlog_and_nothing_when_closed() -> None:
     assert editable_fields(TaskStatus.BACKLOG) == BACKLOG_ONLY_FIELDS | OPEN_FIELDS
     assert editable_fields(TaskStatus.OPEN) == OPEN_FIELDS
-    assert editable_fields(TaskStatus.REVIEW) == OPEN_FIELDS
+    assert editable_fields(TaskStatus.IN_PROGRESS) == OPEN_FIELDS
     assert editable_fields(TaskStatus.DONE) == frozenset()
     assert editable_fields(TaskStatus.CANCELLED) == frozenset()
     assert TaskField.STATUS not in editable_fields(TaskStatus.BACKLOG)
@@ -272,7 +273,7 @@ def test_normalisation_strips_and_keeps_order() -> None:
 
 def test_leaving_in_progress_without_a_summary_is_a_conflict() -> None:
     """Обзорная проверка 2 на уровне домена. Правило действует на **все** выходы."""
-    for to_status in (TaskStatus.REVIEW, TaskStatus.OPEN, TaskStatus.BACKLOG, TaskStatus.CANCELLED):
+    for to_status in (TaskStatus.DONE, TaskStatus.OPEN, TaskStatus.BACKLOG, TaskStatus.CANCELLED):
         with pytest.raises(SummaryRequiredError) as error:
             ensure_transition_allowed(
                 facts(
@@ -285,18 +286,46 @@ def test_leaving_in_progress_without_a_summary_is_a_conflict() -> None:
         assert error.value.code == "summary_required"
         assert error.value.details["to"] == to_status.value
 
-    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.REVIEW, has_summary=True))
+    ensure_transition_allowed(
+        facts(TaskStatus.IN_PROGRESS, TaskStatus.OPEN, reason="есть причина", has_summary=True)
+    )
 
 
 def test_closing_lists_the_checks_without_a_passing_verdict() -> None:
-    """Обзорная проверка 7 на уровне домена: в подробностях — номера проверок."""
+    """В подробностях — номер каждой незасчитанной проверки и причина.
+
+    Причина обязательна: «вердикта в этом заходе нет» и «последний вердикт провальный» —
+    разные состояния, и по одному номеру их не различить.
+    """
     with pytest.raises(ChecksNotPassedError) as error:
-        ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, pending_checks=(2, 3)))
+        ensure_transition_allowed(
+            facts(
+                TaskStatus.IN_PROGRESS,
+                TaskStatus.DONE,
+                pending_checks=(
+                    CheckGap(check_no=2, reason=CheckGapReason.NO_VERDICT),
+                    CheckGap(check_no=3, reason=CheckGapReason.FAILED),
+                ),
+            )
+        )
 
     assert error.value.code == "checks_not_passed"
-    assert error.value.details["checks"] == [2, 3]
+    assert error.value.details["checks"] == [
+        {"check_no": 2, "reason": "no_verdict"},
+        {"check_no": 3, "reason": "failed"},
+    ]
 
-    ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, pending_checks=()))
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, pending_checks=()))
+
+
+def test_the_verdict_check_only_guards_the_way_into_done() -> None:
+    """Шаг назад и отмена вердиктов не требуют: правило привязано к паре статусов."""
+    ensure_transition_allowed(
+        facts(TaskStatus.IN_PROGRESS, TaskStatus.OPEN, reason="нужен второй взгляд")
+    )
+    ensure_transition_allowed(
+        facts(TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, reason="не нужна")
+    )
 
 
 # --- Проверки перехода задачи 24 ------------------------------------------------------
@@ -318,7 +347,7 @@ def test_an_open_blocker_keeps_the_task_out_of_work() -> None:
 
 def test_blockers_are_checked_only_on_the_way_into_work() -> None:
     """Закрытие и откат блокером не запрещены: связь мешает взять задачу, а не вести её."""
-    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.REVIEW, blockers=("TRK-2",)))
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, blockers=("TRK-2",)))
     ensure_transition_allowed(
         facts(TaskStatus.OPEN, TaskStatus.CANCELLED, reason="передумали", blockers=("TRK-2",))
     )
@@ -327,19 +356,26 @@ def test_blockers_are_checked_only_on_the_way_into_work() -> None:
 def test_unclosed_children_keep_the_parent_open() -> None:
     """Обзорная проверка 2 на уровне домена: отказ называет незакрытых детей."""
     with pytest.raises(TaskHasUnclosedChildrenError) as error:
-        ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, children=("TRK-4",)))
+        ensure_transition_allowed(
+            facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, children=("TRK-4",))
+        )
 
     assert error.value.code == "task_has_unclosed_children"
     assert error.value.status_code == 409
     assert error.value.details["children"] == ["TRK-4"]
 
-    ensure_transition_allowed(facts(TaskStatus.REVIEW, TaskStatus.DONE, children=()))
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, children=()))
 
 
 def test_children_do_not_block_cancelling_the_parent() -> None:
     """Правило названо для `done`: отменить родителя с живыми детьми можно."""
     ensure_transition_allowed(
-        facts(TaskStatus.REVIEW, TaskStatus.CANCELLED, reason="отказались", children=("TRK-4",))
+        facts(
+            TaskStatus.IN_PROGRESS,
+            TaskStatus.CANCELLED,
+            reason="отказались",
+            children=("TRK-4",),
+        )
     )
 
 
@@ -353,7 +389,7 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
     unfilled = TransitionFacts(
         key="TRK-1",
         from_status=TaskStatus.IN_PROGRESS,
-        to_status=TaskStatus.REVIEW,
+        to_status=TaskStatus.DONE,
         reason=None,
         sections=FILLED,
         checks=("первая", "вторая"),
@@ -366,15 +402,19 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
         ensure_transition_allowed(
             TransitionFacts(
                 key="TRK-1",
-                from_status=TaskStatus.REVIEW,
+                from_status=TaskStatus.IN_PROGRESS,
                 to_status=TaskStatus.DONE,
                 reason=None,
                 sections=FILLED,
                 checks=("первая", "вторая"),
+                has_summary_since_in_progress=True,
             )
         )
 
-    assert error.value.details["checks"] == [1, 2]
+    assert error.value.details["checks"] == [
+        {"check_no": 1, "reason": "no_verdict"},
+        {"check_no": 2, "reason": "no_verdict"},
+    ]
 
     with pytest.raises(TaskBlockedError) as blocked:
         ensure_transition_allowed(
@@ -397,11 +437,12 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
         ensure_transition_allowed(
             TransitionFacts(
                 key="TRK-1",
-                from_status=TaskStatus.REVIEW,
+                from_status=TaskStatus.IN_PROGRESS,
                 to_status=TaskStatus.DONE,
                 reason=None,
                 sections=FILLED,
                 checks=(),
+                has_summary_since_in_progress=True,
                 checks_without_passed_verdict=(),
             )
         )

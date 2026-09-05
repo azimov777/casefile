@@ -220,18 +220,21 @@ class SummaryRequiredError(ConflictError):
 
 
 class ChecksNotPassedError(ConflictError):
-    """`review → done` требует по каждой проверке положительного вердикта текущего обзора.
+    """`in_progress → done` требует по каждой проверке положительного вердикта,
+    подшитого после последнего входа в `in_progress`.
 
-    Текущий обзор — то, что подшито после последнего входа в `review`: вердикты
-    прошлых обзоров остаются в деле, но не засчитываются, потому что относились к
-    другому выходу или к другой формулировке проверки.
+    Этот заход, а не всё дело: вердикты, подшитые раньше последнего входа в
+    `in_progress`, остаются в деле, но не засчитываются, потому что относились к другой
+    работе или к другой формулировке проверки.
 
-    Проверки без положительного вердикта перечислены в `details.checks`: и те, по
-    которым вердикта в этом обзоре нет вовсе, и те, где последний исход — `failed`.
+    Незасчитанные проверки перечислены в `details.checks` парами `check_no` и `reason`:
+    `no_verdict` — вердикта в этом заходе нет вовсе, `failed` — последний исход
+    провальный. Что делать дальше, ошибка не говорит: это решение исполнителя, а не
+    трекера.
     """
 
     code = "checks_not_passed"
-    message = "Some review checks have no passing verdict"
+    message = "Some checks have no passing verdict recorded since the last entry into in_progress"
 
 
 class ActorNotAddressableError(ValidationError):

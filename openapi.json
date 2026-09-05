@@ -2447,7 +2447,7 @@
           "tasks"
         ],
         "summary": "Move a task to another status",
-        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `review → done` — положительного\nпоследнего вердикта по каждой проверке, подшитого после последнего входа в `review`\n(`409 checks_not_passed`, проверки без него в `details.checks`). Вход в\n`in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), переход в `done` — при детях не в `done` и не в `cancelled`\n(`409 task_has_unclosed_children`, ключи в `details.children`). Переход подшивает\n`status_changed` с `from`, `to` и `reason`.",
+        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nположительного последнего вердикта по каждой проверке, подшитого после последнего\nвхода в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в\n`in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), переход в `done` — при детях не в `done` и не в `cancelled`\n(`409 task_has_unclosed_children`, ключи в `details.children`). Переход подшивает\n`status_changed` с `from`, `to` и `reason`.",
         "operationId": "transition_task",
         "security": [
           {
@@ -6271,7 +6271,7 @@
             "type": "array",
             "maxItems": 100,
             "title": "Checks",
-            "description": "Ordered list of review checks, numbered from 1 by position; each one must be written so that it can fail. Editable only in `backlog`",
+            "description": "Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`",
             "examples": [
               [
                 "docker compose run --rm test: the whole suite is green"
@@ -6575,7 +6575,7 @@
             },
             "type": "array",
             "title": "Checks",
-            "description": "Ordered list of review checks, numbered from 1 by position; each one must be written so that it can fail. Editable only in `backlog`",
+            "description": "Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`",
             "examples": [
               [
                 "docker compose run --rm test: the whole suite is green"
@@ -6895,7 +6895,6 @@
           "backlog",
           "open",
           "in_progress",
-          "review",
           "done",
           "cancelled"
         ],
@@ -7003,7 +7002,7 @@
             "type": "array",
             "maxItems": 100,
             "title": "Checks",
-            "description": "Ordered list of review checks, numbered from 1 by position; each one must be written so that it can fail. Editable only in `backlog`. Replaces the whole list",
+            "description": "Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`. Replaces the whole list",
             "examples": [
               [
                 "docker compose run --rm test: the whole suite is green"

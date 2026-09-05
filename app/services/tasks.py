@@ -64,6 +64,7 @@ from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
     DEFAULT_PRIORITY,
     INITIAL_STATUS,
+    CheckGap,
     TaskFeatures,
     TaskField,
     TaskPriority,
@@ -445,8 +446,8 @@ async def _transition_facts(
     has_summary = False
     if from_status is TaskStatus.IN_PROGRESS:
         has_summary = await case_service.has_summary_since(session, task, TaskStatus.IN_PROGRESS)
-    pending_checks: list[int] | None = None
-    if from_status is TaskStatus.REVIEW and to_status is TaskStatus.DONE:
+    pending_checks: list[CheckGap] | None = None
+    if from_status is TaskStatus.IN_PROGRESS and to_status is TaskStatus.DONE:
         pending_checks = await case_service.verdict_gaps(session, task)
     blockers: list[str] | None = None
     if to_status is TaskStatus.IN_PROGRESS:

@@ -30,8 +30,9 @@ _TITLE_EXAMPLE = "Починить выдачу ключей задач"
 _DESCRIPTION_EXAMPLE = "Ключ выдаётся до валидации и сгорает на неудачном запросе"
 _SECTION_DESCRIPTION = "Markdown section; editable only in `backlog`"
 _CHECKS_DESCRIPTION = (
-    "Ordered list of review checks, numbered from 1 by position; each one must be "
-    "written so that it can fail. Editable only in `backlog`"
+    "Ordered list of checks, numbered from 1 by position; each one must be written so "
+    "that it can fail. The assignee runs them and records a verdict per check before "
+    "`done`. Editable only in `backlog`"
 )
 _ASSIGNEE_DESCRIPTION = (
     "Participant name or temporary agent label; free text the tracker never validates "

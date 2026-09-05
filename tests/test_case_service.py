@@ -1,8 +1,8 @@
 """Сценарии дела: подшивка записей агента, проверки по базе, пакет преемника, вопросы.
 
 Здесь то, чего нельзя проверить без базы: существование адресата и записи, на которую
-ссылаются, открытость вопроса, отсчёт сводки от последнего входа в `in_progress` и
-вердиктов — от последнего входа в `review`.
+ссылаются, открытость вопроса, отсчёт сводки и вердиктов от последнего входа в
+`in_progress`.
 Форма записи проверяется без базы — `tests/test_domain_case.py`.
 """
 
@@ -57,19 +57,17 @@ async def take(session: AsyncSession, task: Task, actor: Actor) -> None:
         await tasks_service.transition_task(session, task, actor=actor, to=status)
 
 
-async def reviewing(
-    session: AsyncSession, actor: Actor, queue: Queue, *, checks: list[str]
-) -> Task:
-    """Новая задача с этими проверками, доведённая до `review`.
+async def ready(session: AsyncSession, actor: Actor, queue: Queue, *, checks: list[str]) -> Task:
+    """Новая задача с этими проверками, в работе и с готовым выходом.
 
-    Сводка и три перехода — не предмет здешних тестов, но без них до `review` не
-    добраться: правила выхода из `in_progress` проверяются выше своим тестом.
+    Сводка и два перехода — не предмет здешних тестов, но без них до `done` не
+    добраться: правило сводки проверяется выше своим тестом.
     """
     task = await tasks_service.create_task(
         session,
         actor=actor,
         queue=queue,
-        title="Задача на обзоре",
+        title="Задача на закрытие",
         description="Есть",
         goal="Цель",
         context="Контекст",
@@ -79,7 +77,6 @@ async def reviewing(
     )
     await take(session, task, actor)
     await service.add_summary(session, task, actor=actor, **SUMMARY)
-    await tasks_service.transition_task(session, task, actor=actor, to=TaskStatus.REVIEW)
     return task
 
 
@@ -241,44 +238,46 @@ async def test_leaving_in_progress_needs_a_summary_filed_after_the_last_entry(
 
     with pytest.raises(SummaryRequiredError) as error:
         await tasks_service.transition_task(
-            db_session, task, actor=task_actor, to=TaskStatus.REVIEW
+            db_session, task, actor=task_actor, to=TaskStatus.OPEN, reason="Нужны уточнения"
         )
     assert error.value.code == "summary_required"
 
     await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
-    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.REVIEW)
-    assert task.status is TaskStatus.REVIEW
-
-    # Задача вернулась в очередь и взята снова: сводка первого захода уже не считается.
     await tasks_service.transition_task(
         db_session, task, actor=task_actor, to=TaskStatus.OPEN, reason="Нужны уточнения"
     )
+    assert task.status is TaskStatus.OPEN
+
+    # Задача взята снова: сводка первого захода уже не считается.
     await tasks_service.transition_task(
         db_session, task, actor=task_actor, to=TaskStatus.IN_PROGRESS
     )
 
     with pytest.raises(SummaryRequiredError):
         await tasks_service.transition_task(
-            db_session, task, actor=task_actor, to=TaskStatus.REVIEW
+            db_session, task, actor=task_actor, to=TaskStatus.OPEN, reason="Снова уточнения"
         )
 
     await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
-    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.REVIEW)
-    assert task.status is TaskStatus.REVIEW
+    await tasks_service.transition_task(
+        db_session, task, actor=task_actor, to=TaskStatus.OPEN, reason="Снова уточнения"
+    )
+    assert task.status is TaskStatus.OPEN
 
 
 async def test_closing_needs_the_last_verdict_of_every_check_to_be_passed(
     db_session: AsyncSession, task_actor: Actor, queue: Queue
 ) -> None:
     """Обзорная проверка 7: провал закрывается новым вердиктом, а не правкой старого."""
-    task = await reviewing(db_session, task_actor, queue, checks=["первая", "вторая", "третья"])
+    task = await ready(db_session, task_actor, queue, checks=["первая", "вторая", "третья"])
 
     await pass_all(db_session, task, task_actor)
     await service.add_verdict(db_session, task, actor=task_actor, check_no=2, outcome="failed")
 
     with pytest.raises(ChecksNotPassedError) as error:
         await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
-    assert error.value.details["checks"] == [2]
+    # В отказе только незасчитанная проверка и причина: пройденные в нём не упоминаются.
+    assert error.value.details["checks"] == [{"check_no": 2, "reason": "failed"}]
 
     await service.add_verdict(
         db_session, task, actor=task_actor, check_no=2, outcome="passed", evidence="Прогон зелёный"
@@ -287,15 +286,15 @@ async def test_closing_needs_the_last_verdict_of_every_check_to_be_passed(
     assert task.status is TaskStatus.DONE
 
 
-async def test_verdicts_of_the_previous_review_do_not_close_the_new_one(
+async def test_verdicts_of_the_previous_stint_do_not_close_the_new_one(
     db_session: AsyncSession, task_actor: Actor, queue: Queue
 ) -> None:
-    """Задача 31, обзорная проверка 1: возврат в `open` обнуляет зачёт вердиктов.
+    """Обзорная проверка 3: возврат в `open` обнуляет зачёт вердиктов.
 
     Проверяется именно поведение границы: вердикты никуда не деваются из дела —
-    перестаёт засчитываться то, что подшито до последнего входа в `review`.
+    перестаёт засчитываться то, что подшито до последнего входа в `in_progress`.
     """
-    task = await reviewing(db_session, task_actor, queue, checks=["первая", "вторая"])
+    task = await ready(db_session, task_actor, queue, checks=["первая", "вторая"])
     await pass_all(db_session, task, task_actor)
 
     await tasks_service.transition_task(
@@ -305,11 +304,13 @@ async def test_verdicts_of_the_previous_review_do_not_close_the_new_one(
         db_session, task, actor=task_actor, to=TaskStatus.IN_PROGRESS
     )
     await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
-    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.REVIEW)
 
     with pytest.raises(ChecksNotPassedError) as error:
         await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
-    assert error.value.details["checks"] == [1, 2]
+    assert error.value.details["checks"] == [
+        {"check_no": 1, "reason": "no_verdict"},
+        {"check_no": 2, "reason": "no_verdict"},
+    ]
     assert len(await entries(db_session, task, types=[EntryType.VERDICT])) == 2, "история цела"
 
     await pass_all(db_session, task, task_actor)
@@ -325,11 +326,11 @@ async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
     Номера проверок те же самые, а проверяют они другое: без границы вердикт по первой
     проверке молча закрыл бы переписанную первую проверку.
     """
-    task = await reviewing(db_session, task_actor, queue, checks=["первая", "вторая"])
+    task = await ready(db_session, task_actor, queue, checks=["первая", "вторая"])
     await pass_all(db_session, task, task_actor)
 
-    # Пять разделов правятся только в `backlog`, и попасть туда можно лишь через `open`
-    # (`CONCEPT.md`, 3.3): `review → backlog` в таблице переходов нет.
+    # Пять разделов правятся только в `backlog` (`CONCEPT.md`, 3.3), и задача идёт туда
+    # шагом назад с причиной.
     for status in (TaskStatus.OPEN, TaskStatus.BACKLOG):
         await tasks_service.transition_task(
             db_session, task, actor=task_actor, to=status, reason="проверки сформулированы неверно"
@@ -342,11 +343,13 @@ async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
     )
     await take(db_session, task, task_actor)
     await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
-    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.REVIEW)
 
     with pytest.raises(ChecksNotPassedError) as error:
         await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
-    assert error.value.details["checks"] == [1, 2]
+    assert error.value.details["checks"] == [
+        {"check_no": 1, "reason": "no_verdict"},
+        {"check_no": 2, "reason": "no_verdict"},
+    ]
 
 
 # --- Пакет преемника ------------------------------------------------------------------

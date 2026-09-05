@@ -63,17 +63,17 @@ async def move(
     """Проводит задачу по цепочке, подшивая то, без чего переход не пройдёт.
 
     Сводка перед выходом из `in_progress` и вердикты перед `done` — правила перехода,
-    а не предмет здешних тестов: без них до `review` и `done` не добраться вовсе. Сами
-    правила проверяются в `tests/test_case_service.py`.
+    а не предмет здешних тестов: без них до `done` не добраться вовсе. Сами правила
+    проверяются в `tests/test_case_service.py`.
     """
     for status in statuses:
         if task.status is TaskStatus.IN_PROGRESS:
             await summary(session, task, actor)
-        if task.status is TaskStatus.REVIEW and status is TaskStatus.DONE:
-            for check_no in range(1, len(task.checks) + 1):
-                await case_service.add_verdict(
-                    session, task, actor=actor, check_no=check_no, outcome="passed"
-                )
+            if status is TaskStatus.DONE:
+                for check_no in range(1, len(task.checks) + 1):
+                    await case_service.add_verdict(
+                        session, task, actor=actor, check_no=check_no, outcome="passed"
+                    )
         await service.transition_task(session, task, actor=actor, to=status, reason=reason)
     return task
 
@@ -296,9 +296,7 @@ async def test_the_assignee_changes_in_any_open_status_but_not_in_a_closed_one(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
     """Обзорная проверка 6."""
-    await move(
-        db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.REVIEW
-    )
+    await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
 
     await service.update_task(
         db_session, task, actor=task_actor, changes=TaskChanges(assignee="release_bot")

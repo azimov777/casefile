@@ -94,16 +94,16 @@ async def test_leaving_in_progress_without_a_summary_is_refused(
     await create(auth_client)
     await move(auth_client, "TRK-1", "open", "in_progress")
 
-    refused = await transition(auth_client, "TRK-1", "review")
+    refused = await transition(auth_client, "TRK-1", "open", reason="Нужны уточнения")
     assert refused.status_code == 409, refused.text
     error = refused.json()["error"]
     assert error["code"] == "summary_required"
     assert error["details"]["from"] == "in_progress"
 
     await append(auth_client, "TRK-1", type="summary", payload=SUMMARY)
-    passed = await transition(auth_client, "TRK-1", "review")
+    passed = await transition(auth_client, "TRK-1", "open", reason="Нужны уточнения")
     assert passed.status_code == 200, passed.text
-    assert passed.json()["data"]["status"] == "review"
+    assert passed.json()["data"]["status"] == "open"
 
 
 async def test_a_summary_of_the_previous_stint_does_not_count(
@@ -116,12 +116,12 @@ async def test_a_summary_of_the_previous_stint_does_not_count(
     await move(auth_client, "TRK-1", "open", reason="Жду ответа")
     await move(auth_client, "TRK-1", "in_progress")
 
-    refused = await transition(auth_client, "TRK-1", "review")
+    refused = await transition(auth_client, "TRK-1", "open", reason="Снова уточнения")
     assert refused.status_code == 409, refused.text
     assert refused.json()["error"]["code"] == "summary_required"
 
     await append(auth_client, "TRK-1", type="summary", payload=SUMMARY)
-    passed = await transition(auth_client, "TRK-1", "review")
+    passed = await transition(auth_client, "TRK-1", "open", reason="Снова уточнения")
     assert passed.status_code == 200, passed.text
 
 
@@ -186,7 +186,6 @@ async def test_closing_needs_a_passing_verdict_on_every_check(
     await create(auth_client, checks=["первая", "вторая"])
     await move(auth_client, "TRK-1", "open", "in_progress")
     await append(auth_client, "TRK-1", type="summary", payload=SUMMARY)
-    await move(auth_client, "TRK-1", "review")
 
     await append(auth_client, "TRK-1", type="verdict", payload={"check_no": 1, "outcome": "passed"})
     await append(
@@ -201,7 +200,7 @@ async def test_closing_needs_a_passing_verdict_on_every_check(
     assert refused.status_code == 409, refused.text
     error = refused.json()["error"]
     assert error["code"] == "checks_not_passed"
-    assert error["details"]["checks"] == [2]
+    assert error["details"]["checks"] == [{"check_no": 2, "reason": "failed"}]
 
     await append(
         auth_client,

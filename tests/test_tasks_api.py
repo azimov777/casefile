@@ -49,14 +49,14 @@ async def move(client: AsyncClient, key: str, *statuses: str, reason: str | None
     """Проводит задачу по цепочке, подшивая то, без чего переход не пройдёт.
 
     Сводка перед выходом из `in_progress` и вердикты перед `done` — правила перехода,
-    а не предмет здешних тестов: без них до `review` и `done` не добраться вовсе. Сами
-    правила проверяются в `tests/test_case_api.py`.
+    а не предмет здешних тестов: без них до `done` не добраться вовсе. Сами правила
+    проверяются в `tests/test_case_api.py`.
     """
     for status in statuses:
         current = (await client.get(f"/api/v1/tasks/{key}")).json()["data"]["task"]
         if current["status"] == "in_progress":
             await summary(client, key)
-        if current["status"] == "review" and status == "done":
+        if current["status"] == "in_progress" and status == "done":
             for check_no in range(1, len(current["checks"]) + 1):
                 verdict = await client.post(
                     f"/api/v1/tasks/{key}/entries",
@@ -201,12 +201,12 @@ async def test_sections_are_locked_outside_backlog(auth_client: AsyncClient, que
     assert refused.json()["error"]["details"]["fields"] == ["goal"]
 
 
-async def test_the_assignee_changes_in_review_but_not_in_done(
+async def test_the_assignee_changes_in_progress_but_not_in_done(
     auth_client: AsyncClient, queue: Queue
 ) -> None:
     """Обзорная проверка 6."""
     await create(auth_client)
-    await move(auth_client, "TRK-1", "open", "in_progress", "review")
+    await move(auth_client, "TRK-1", "open", "in_progress")
 
     changed = await auth_client.patch("/api/v1/tasks/TRK-1", json={"assignee": "release_bot"})
     assert changed.status_code == 200, changed.text
@@ -321,7 +321,7 @@ async def test_the_task_scope_runs_the_cycle(
 
     package = (await client.get(f"/api/v1/tasks/{task.key}")).json()["data"]
     assert package["task"]["status"] == "in_progress"
-    assert package["transitions"] == ["review", "open", "backlog", "cancelled"]
+    assert package["transitions"] == ["done", "open", "backlog", "cancelled"]
 
 
 async def test_entries_are_paged_by_number(auth_client: AsyncClient, queue: Queue) -> None:

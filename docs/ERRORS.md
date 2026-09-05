@@ -65,7 +65,7 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
-| `checks_not_passed` | Some review checks have no passing verdict | `review → done` требует по каждой проверке положительного вердикта текущего обзора. |
+| `checks_not_passed` | Some checks have no passing verdict recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке положительного вердикта, подшитого после последнего входа в `in_progress`. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `link_cycle_detected` | Link would create a cycle | Связь замкнула бы кольцо в иерархии или в блокировках. |
