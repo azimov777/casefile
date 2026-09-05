@@ -72,12 +72,21 @@ async def _create_database_if_missing(url: str) -> None:
         await connection.close()
 
 
-def _upgrade_to_head(url: str) -> None:
-    """Накатывает миграции. Синхронная: внутри Alembic поднимает свой цикл событий."""
+def alembic_config(url: str) -> Config:
+    """Конфиг Alembic, направленный на эту базу.
+
+    Публичная и одна на весь набор: тест миграций гоняет `upgrade` и `downgrade` по
+    своей базе, и вторая сборка конфига разъехалась бы с этой на первой же правке путей.
+    """
     config = Config(str(PROJECT_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(PROJECT_ROOT / "app" / "db" / "migrations"))
     config.set_main_option("sqlalchemy.url", url)
-    command.upgrade(config, "head")
+    return config
+
+
+def _upgrade_to_head(url: str) -> None:
+    """Накатывает миграции. Синхронная: внутри Alembic поднимает свой цикл событий."""
+    command.upgrade(alembic_config(url), "head")
 
 
 @pytest.fixture(scope="session")
