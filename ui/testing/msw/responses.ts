@@ -221,3 +221,44 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
     ...overrides,
   };
 }
+
+/**
+ * Запись любого типа с осмысленной нагрузкой. Тип выбирается параметром, поэтому тест
+ * может пройти по всему перечислению контракта и проверить каждое представление,
+ * не выписывая пятнадцать фикстур руками.
+ */
+export function entryOfType(no: number, taskKey: string, type: Entry['type']): Entry {
+  const base = entryBase(no, taskKey, `Запись типа ${type}`, 'Тело записи со ссылкой на DEMO-2.');
+
+  switch (type) {
+    case 'summary':
+      return summaryEntry(no, taskKey);
+    case 'question':
+      return questionEntry(no, taskKey);
+    case 'answer':
+      return { ...base, type, payload: { question_no: 1 } };
+    case 'verdict':
+      return verdictEntry(no, taskKey);
+    case 'status_changed':
+      return {
+        ...base,
+        type,
+        payload: { from: 'in_progress', to: 'open', reason: 'Задан блокирующий вопрос' },
+      };
+    case 'section_changed':
+      return {
+        ...base,
+        body: '',
+        type,
+        payload: { field: 'goal', before: 'Старая цель', after: 'Новая цель' },
+      };
+    case 'assignee_changed':
+      return { ...base, body: '', type, payload: { before: null, after: 'demo_agent' } };
+    case 'link_added':
+    case 'link_removed':
+      return { ...base, body: '', type, payload: { kind: 'blocked_by', other: 'DEMO-2' } };
+    default:
+      // `created`, `decision`, `attempt`, `finding`, `artifact`, `note`: общая форма.
+      return { ...base, type, refs: ['DEMO-2', 'https://example.test/build/42'] };
+  }
+}

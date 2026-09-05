@@ -97,9 +97,12 @@ export function TaskPage() {
       </section>
 
       <section className={styles.block} aria-labelledby="case">
-        <h2 className={styles.title} id="case">
-          Дело
-        </h2>
+        <div className={styles.blockHead}>
+          <h2 className={styles.title} id="case">
+            Дело
+          </h2>
+          <Link to={`/tasks/${task.key}/case`}>Читать лентой</Link>
+        </div>
         <TaskIndex taskKey={task.key} index={index} checks={task.checks} openAt={openAt} />
       </section>
     </main>

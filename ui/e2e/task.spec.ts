@@ -141,3 +141,39 @@ test('доступность карточки задачи', async ({ page }) =>
   const opened = await new AxeBuilder({ page }).analyze();
   expect(serious(opened.violations)).toEqual([]);
 });
+
+test('лента дела: все типы записей, отбор и ответ под вопросом', async ({ page }) => {
+  const calls: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/entries')) calls.push(request.url());
+  });
+
+  await page.goto('/tasks/DEMO-1/case');
+
+  // Дело закрытой задачи демо содержит записи всех типов: это её смысл в демо-наборе.
+  await expect(page.getByRole('article').first()).toBeVisible();
+  const total = await page.getByRole('article').count();
+  expect(total).toBeGreaterThan(10);
+
+  // Одна страница ленты — один запрос записей.
+  expect(calls).toHaveLength(1);
+
+  // Отбор «Служебные» оставляет только записи трекера.
+  await page.getByRole('button', { name: 'Служебные' }).click();
+  await expect(page.getByRole('article')).not.toHaveCount(total);
+  await expect(page.getByText('created').first()).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'decision' })).toHaveCount(0);
+});
+
+test('ответ на вопрос стоит под вопросом, а якорь подсвечивает запись', async ({ page }) => {
+  await page.goto('/tasks/DEMO-4/case');
+
+  // В деле DEMO-4 есть открытый вопрос: ответа под ним ещё нет, и это сказано словами.
+  const question = page.getByRole('article').filter({ hasText: 'question' }).first();
+  await expect(question).toBeVisible();
+  await expect(question.getByText('Ответа пока нет.')).toBeVisible();
+
+  await page.goto('/tasks/DEMO-6/case#4');
+  const highlighted = page.getByRole('article').filter({ hasText: '#4' }).first();
+  await expect(highlighted).toBeVisible();
+});

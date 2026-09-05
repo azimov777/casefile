@@ -20,6 +20,14 @@
   font-size: var(--text-lg);
 }
 
+.blockHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 .questions {
   display: flex;
   flex-direction: column;
