@@ -1,0 +1,39 @@
+.key {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.title {
+  min-width: 20rem;
+}
+
+.assignee {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.updated {
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.tags,
+.features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: baseline;
+}
+
+.summary {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}

@@ -5,6 +5,8 @@ import type { components } from '@/shared/api';
 export const API = 'http://localhost:3000';
 
 type Bootstrap = components['schemas']['BootstrapRead'];
+type Task = components['schemas']['TaskSearchRead'];
+type PageMeta = components['schemas']['PageMeta'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -46,6 +48,37 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
       },
     ],
     open_questions: 2,
+    ...overrides,
+  };
+}
+
+/** Страница коллекции в оболочке контракта: `data` плюс `meta` с курсором. */
+export function collection<T>(items: T[], meta: Partial<PageMeta> = {}) {
+  return HttpResponse.json({
+    data: items,
+    meta: { has_more: false, next_cursor: null, ...meta },
+  });
+}
+
+/**
+ * Строка выдачи со всеми полями, которые просит список. Признаки заданы явно:
+ * ради них строка и приходит целиком, без запроса на задачу.
+ */
+export function task(key: string, overrides: Partial<Task> = {}): Task {
+  return {
+    key,
+    title: `Задача ${key}`,
+    status: 'open',
+    assignee: null,
+    tags: [],
+    priority: 'normal',
+    updated_at: '2026-09-01T10:00:00Z',
+    features: {
+      blocked: false,
+      open_questions: 0,
+      open_blocking_questions: 0,
+      last_summary_at: null,
+    },
     ...overrides,
   };
 }

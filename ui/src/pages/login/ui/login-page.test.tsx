@@ -1,8 +1,8 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { API, bootstrap, data, failure } from '@testing/msw/responses';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { API, bootstrap, collection, data, failure } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
 
@@ -17,6 +17,13 @@ function bootstrapByToken(payload = bootstrap()) {
     return data(payload);
   });
 }
+
+// Удачный вход уводит на список задач, и тот сразу идёт за своей страницей.
+// Без этого обработчика подмена ругалась бы на неперехваченный запрос, а экран,
+// на котором проверяют шапку, стоял бы в отказе.
+beforeEach(() => {
+  server.use(http.get(`${API}/api/v1/tasks`, () => collection([])));
+});
 
 async function submitToken(token: string) {
   const user = userEvent.setup();
