@@ -646,16 +646,21 @@ async def test_list_queues_is_the_entry_point_when_no_key_is_known(
         listed = await call(session, "list_queues")
         first = await call(session, "list_queues", limit=1)
         second = await call(session, "list_queues", limit=1, cursor=first["next_cursor"])
-        chosen = await call(session, "get_queue", key=listed["items"][1]["key"])
+        chosen = await call(session, "get_queue", key=first["items"][0]["key"])
 
-    assert listed == {
-        "items": [{"key": "TRK", "title": "Трекер"}, {"key": "UI", "title": "Интерфейс"}],
-        "next_cursor": None,
-    }
-    assert first["items"] == [{"key": "TRK", "title": "Трекер"}]
+    # Порядок страниц здесь не проверяется: очереди одного теста заведены в одной
+    # транзакции, `created_at` у них общий, и пара `(created_at, id)` вырождается в
+    # сортировку по случайным UUID (`docs/notes/testing.md`). Проверяется полнота
+    # выдачи и то, что страницы не пересекаются.
+    assert listed["next_cursor"] is None
+    assert sorted(item["key"] for item in listed["items"]) == ["TRK", "UI"]
+    assert all("description" not in item for item in listed["items"]), "описание в списке"
+    assert len(first["items"]) == 1
     assert first["next_cursor"] is not None
-    assert second["items"] == [{"key": "UI", "title": "Интерфейс"}], "курсор повторил страницу"
-    assert chosen["description"] == "Фронтенд"
+    assert second["items"] != first["items"], "курсор повторил страницу"
+    assert sorted(item["key"] for item in first["items"] + second["items"]) == ["TRK", "UI"]
+    assert chosen["key"] == first["items"][0]["key"]
+    assert chosen["description"], "описание отдаёт только get_queue"
 
 
 async def test_the_main_scope_runs_the_registries(
