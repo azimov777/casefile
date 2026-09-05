@@ -9,6 +9,7 @@ export {
   splitTags,
   writeFilters,
   type TaskFilters,
+  type TaskView,
 } from './model/filters';
 export { caretLine, readQueryProblem, type QueryProblem } from './model/query-problem';
 export { useTaskFilters, type TaskFiltersControl } from './model/use-task-filters';

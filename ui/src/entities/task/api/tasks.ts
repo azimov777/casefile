@@ -1,4 +1,4 @@
-import { queryOptions, keepPreviousData } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components, type operations } from '@/shared/api';
 
 export type Task = components['schemas']['TaskSearchRead'];
@@ -58,6 +58,8 @@ export const TASK_PAGE_SIZE = 50;
 export const taskKeys = {
   all: ['tasks'] as const,
   list: (params: TaskListParams) => ['tasks', 'list', params] as const,
+  /** Тот же отбор, но страницы накапливаются: доска показывает их разом. */
+  board: (params: TaskListParams) => ['tasks', 'board', params] as const,
 };
 
 export function fetchTasks(params: TaskListParams): Promise<Page<Task>> {
@@ -77,6 +79,25 @@ export function tasksQueryOptions(params: TaskListParams) {
     // Смена фильтра меняет ключ запроса: без этого таблица на каждую правку буквы
     // в поле текста мигала бы пустотой. Строки предыдущего отбора держатся, пока
     // не придут новые.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Тот же список, но страницами, которые копятся: доска раскладывает по столбцам всё
+ * прочитанное сразу, и «ещё» дочитывает следующую страницу, а не заменяет текущую.
+ *
+ * Курсор здесь не из адреса: у доски он не состояние экрана, а положение чтения —
+ * переслать ссылку «на вторую страницу доски» бессмысленно, столбцы соберутся другие.
+ */
+export function tasksBoardQueryOptions(params: TaskListParams) {
+  return infiniteQueryOptions({
+    queryKey: taskKeys.board(params),
+    queryFn: ({ pageParam }) =>
+      fetchTasks({ ...params, cursor: pageParam === '' ? undefined : pageParam }),
+    initialPageParam: '',
+    getNextPageParam: (last: Page<Task>) =>
+      last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined,
     placeholderData: keepPreviousData,
   });
 }

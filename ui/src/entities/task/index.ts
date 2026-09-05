@@ -5,6 +5,7 @@ export {
   TASK_STATUSES,
   fetchTasks,
   taskKeys,
+  tasksBoardQueryOptions,
   tasksQueryOptions,
   type Task,
   type TaskFeatures,
@@ -21,5 +22,6 @@ export {
   type TaskPackage,
 } from './api/task-package';
 export { TASK_COLUMNS } from './ui/columns';
+export { TaskCard } from './ui/task-card';
 export { TaskFeatureBadges } from './ui/task-features';
 export { TaskRow } from './ui/task-row';

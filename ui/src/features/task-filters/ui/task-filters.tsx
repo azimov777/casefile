@@ -27,6 +27,11 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   const bootstrap = useQuery(bootstrapQueryOptions());
   const queues = bootstrap.data?.queues ?? [];
 
+  // На доске статус — это столбец, а порядок задан её устройством. Показывать поля,
+  // которые сейчас ни на что не влияют, значит врать: они спрятаны, но из адреса
+  // не стёрты и вернутся вместе с таблицей.
+  const board = filters.view === 'board';
+
   const [draft, setDraft] = useState(() => toDraft(filters));
   const problemId = useId();
 
@@ -78,38 +83,44 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
           </select>
         </label>
 
-        <label className={styles.field}>
-          <span className={styles.label}>Сортировка</span>
-          <select
-            className={styles.select}
-            value={filters.sort}
-            onChange={(event) => applyWith({ sort: event.target.value })}
-          >
-            {TASK_SORTS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {board ? null : (
+          <label className={styles.field}>
+            <span className={styles.label}>Сортировка</span>
+            <select
+              className={styles.select}
+              value={filters.sort}
+              onChange={(event) => applyWith({ sort: event.target.value })}
+            >
+              {TASK_SORTS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className={styles.line}>
-        <fieldset className={styles.group}>
-          <legend className={styles.label}>Статус</legend>
-          {TASK_STATUSES.map((status) => (
-            <label key={status} className={styles.check}>
-              <input
-                type="checkbox"
-                checked={filters.status.includes(status)}
-                onChange={(event) =>
-                  applyWith({ status: toggle(filters.status, status, event.target.checked) })
-                }
-              />
-              <code>{status}</code>
-            </label>
-          ))}
-        </fieldset>
+        {board ? (
+          <p className={styles.note}>На доске показаны все статусы: каждый своим столбцом.</p>
+        ) : (
+          <fieldset className={styles.group}>
+            <legend className={styles.label}>Статус</legend>
+            {TASK_STATUSES.map((status) => (
+              <label key={status} className={styles.check}>
+                <input
+                  type="checkbox"
+                  checked={filters.status.includes(status)}
+                  onChange={(event) =>
+                    applyWith({ status: toggle(filters.status, status, event.target.checked) })
+                  }
+                />
+                <code>{status}</code>
+              </label>
+            ))}
+          </fieldset>
+        )}
 
         <fieldset className={styles.group}>
           <legend className={styles.label}>Приоритет</legend>

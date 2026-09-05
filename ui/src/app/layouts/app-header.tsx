@@ -1,28 +1,37 @@
 import { useQuery } from '@tanstack/react-query';
-import { NavLink } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { Button, QueryState } from '@/shared/ui';
 import styles from './app-header.module.css';
 
 /** Разделы, которых ещё нет: пункт видно, но он никуда не ведёт. */
-const SOON = [
-  { title: 'Доска', task: '03' },
-  { title: 'Вопросы', task: '06' },
-];
+const SOON = [{ title: 'Вопросы', task: '06' }];
 
 export function AppHeader() {
   const bootstrap = useQuery(bootstrapQueryOptions());
   const logout = useLogout();
+
+  // Список и доска — один и тот же путь и разный `view`, поэтому активный пункт
+  // считается по параметру: `NavLink` сравнивает только путь и подсветил бы оба.
+  const [searchParams] = useSearchParams();
+  const board = searchParams.get('view') === 'board';
 
   return (
     <header className={styles.header}>
       <span className={styles.brand}>Трекер</span>
 
       <nav className={styles.nav} aria-label="Разделы">
-        <NavLink className={styles.link} to="/tasks">
+        <Link className={styles.link} to="/tasks" aria-current={board ? undefined : 'page'}>
           Задачи
-        </NavLink>
+        </Link>
+        <Link
+          className={styles.link}
+          to="/tasks?view=board"
+          aria-current={board ? 'page' : undefined}
+        >
+          Доска
+        </Link>
         {SOON.map((item) => (
           <span
             key={item.title}

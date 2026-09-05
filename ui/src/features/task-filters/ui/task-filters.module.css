@@ -89,3 +89,10 @@
   line-height: 1.2;
   white-space: pre;
 }
+
+.note {
+  margin: 0;
+  align-self: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

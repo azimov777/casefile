@@ -6,6 +6,9 @@ import {
   type TaskStatus,
 } from '@/entities/task';
 
+/** Как показываем то же самое: таблицей или доской по столбцам статусов. */
+export type TaskView = 'table' | 'board';
+
 /**
  * Состояние отбора. Живёт в адресе страницы целиком (`CONCEPT.md`, 3): ссылку можно
  * переслать, и другой человек увидит ровно то же самое.
@@ -15,6 +18,8 @@ import {
  * пришлось бы приводить к первому в каждом обработчике.
  */
 export interface TaskFilters {
+  /** Режим отображения. Живёт в адресе, как и отбор: ссылка на доску открывает доску. */
+  view: TaskView;
   queue: string;
   status: TaskStatus[];
   priority: TaskPriority[];
@@ -61,6 +66,7 @@ export const TASK_SORTS: { value: string; label: string }[] = [
 export const OPEN_QUESTIONS_CONDITION = 'open_questions: > 0';
 
 export const EMPTY_FILTERS: TaskFilters = {
+  view: 'table',
   queue: '',
   status: [],
   priority: [],
@@ -79,6 +85,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
   const sort = params.get('sort');
 
   return {
+    view: params.get('view') === 'board' ? 'board' : 'table',
     queue: params.get('queue') ?? '',
     status: keepKnown(params.getAll('status'), TASK_STATUSES),
     priority: keepKnown(params.getAll('priority'), TASK_PRIORITIES),
@@ -97,6 +104,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
 export function writeFilters(filters: TaskFilters): URLSearchParams {
   const params = new URLSearchParams();
 
+  if (filters.view === 'board') params.set('view', 'board');
   if (filters.queue !== '') params.set('queue', filters.queue);
   for (const status of filters.status) params.append('status', status);
   for (const priority of filters.priority) params.append('priority', priority);
@@ -121,9 +129,16 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
  * что-то написано, значит потерять их значения.
  */
 export function filtersToListParams(filters: TaskFilters): TaskListParams {
+  const board = filters.view === 'board';
+
   const paging = {
-    sort: [filters.sort],
-    cursor: filters.cursor === '' ? undefined : filters.cursor,
+    // На доске порядок задан её устройством: столбец — это статус, а внутри столбца
+    // свежие сверху. Чужая сортировка перемешала бы карточки внутри столбцов, и человек
+    // не смог бы объяснить себе порядок.
+    sort: [board ? DEFAULT_SORT : filters.sort],
+    // Курсор доски живёт в её собственной подгрузке, а не в адресе: страницы там
+    // накапливаются, а не заменяют друг друга.
+    cursor: board || filters.cursor === '' ? undefined : filters.cursor,
   };
 
   const query = filters.query.trim();
@@ -131,7 +146,9 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
 
   return {
     queue: filters.queue === '' ? undefined : [filters.queue],
-    status: filters.status.length > 0 ? filters.status : undefined,
+    // Столбцы доски и есть отбор по статусу: отбирать ещё и параметром значило бы
+    // показывать пустые столбцы рядом с непустыми и врать, что задач в них нет.
+    status: !board && filters.status.length > 0 ? filters.status : undefined,
     priority: filters.priority.length > 0 ? filters.priority : undefined,
     assignee: filters.assignee.trim() === '' ? undefined : [filters.assignee.trim()],
     tags: filters.tags.length > 0 ? filters.tags : undefined,
@@ -150,7 +167,7 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
  * нашлось по вашим условиям» в «в очереди пусто».
  */
 export function hasConditions(filters: TaskFilters): boolean {
-  const conditions = writeFilters({ ...filters, sort: DEFAULT_SORT, cursor: '' });
+  const conditions = writeFilters({ ...filters, view: 'table', sort: DEFAULT_SORT, cursor: '' });
   return [...conditions.keys()].length > 0;
 }
 

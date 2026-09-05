@@ -22,6 +22,7 @@ describe('чтение отбора из адреса', () => {
     );
 
     expect(readFilters(params)).toEqual({
+      view: 'table',
       queue: 'DEMO',
       status: ['open', 'in_progress'],
       priority: ['high'],
