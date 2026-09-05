@@ -159,7 +159,7 @@ async def test_get_task_returns_the_same_package_as_rest(
     assert from_mcp == response.json()["data"]
 
 
-async def test_get_task_carries_the_index_and_the_allowed_transitions(
+async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
     """Вход в задачу: опись дела и переходы приезжают одним вызовом."""
@@ -175,6 +175,35 @@ async def test_get_task_carries_the_index_and_the_allowed_transitions(
         "open_blocking_questions": 0,
         "last_summary_at": None,
     }
+
+
+async def test_transitions_are_the_table_and_not_the_moves_that_would_pass_now(
+    mcp_session: Connect, task_secret: str, open_task: Task, queue: Queue
+) -> None:
+    """`transitions` называет ходы по таблице; валидации считаются в момент перехода.
+
+    Закрепляет семантику, а не текст: у заблокированной задачи `in_progress` в списке
+    стоит, а сам ход отклоняется. Считать валидации при чтении отказались осознанно
+    (`allowed_transitions` в `app/domain/tasks.py`) — это дорого и устаревает, пока агент
+    думает. Вопрос «пустят ли» закрывает признак `blocked`.
+    """
+    del queue
+    key = open_task.key
+    async with mcp_session(task_secret) as session:
+        blocker = await call(
+            session,
+            "create_task",
+            queue="TRK",
+            title="Блокер",
+            description="Пока не закрыт",
+        )
+        await call(session, "link", key=key, kind="blocked_by", other=blocker["key"])
+        package = await call(session, "get_task", key=key)
+        refused = await refuse(session, "transition", key=key, to="in_progress")
+
+    assert "in_progress" in package["transitions"]
+    assert package["features"]["blocked"] is True
+    assert "task_blocked" in refused
 
 
 async def test_read_entries_filters_the_case_the_same_way_rest_does(

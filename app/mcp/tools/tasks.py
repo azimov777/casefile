@@ -61,11 +61,15 @@ def register(tools: Toolset) -> None:
     @tools.tool()
     async def get_task(key: TaskKeyArg) -> dict[str, Any]:
         """Всё о задаче одним вызовом: карточка, связи, признаки, последняя сводка,
-        открытые вопросы, опись дела и допустимые переходы.
+        открытые вопросы, опись дела и переходы по таблице статусов.
 
         Точка входа. Прочитай сводку и опись, выбери по заголовкам, что читать целиком,
         и возьми тела через `read_entries` — обычно это `decision` и провальные
         `attempt`, чтобы не пересматривать решённое и не повторять тупики.
+
+        `transitions` это цели по таблице из текущего статуса, а не ходы, которые
+        пройдут сейчас: разделы, сводку, вердикты, блокеры и детей трекер проверяет в
+        момент `transition`. Пустят ли в `in_progress`, говорит признак `blocked`.
         """
         async with runtime.call() as (session, actor):
             return views.task_package(
@@ -233,6 +237,8 @@ def register(tools: Toolset) -> None:
         последнего вердикта по каждой проверке, подшитого после последнего входа в
         `review`; вход в `in_progress` при открытом блокере; `done` при незакрытых
         детях. В отказе — что именно мешает.
+
+        Этих проверок нет в `transitions` у `get_task`: там таблица переходов.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
