@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
-from app.domain.case import EntryType
+from app.domain.case import SERVICE_ENTRY_TYPES, EntryType
 from app.services import case as case_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -135,11 +135,20 @@ async def test_a_task_goes_the_whole_way_through_rest(
     assert [item["type"] for item in package["index"]] == [item.value for item in FULL_CYCLE_INDEX]
     assert package["transitions"] == [], "закрытая задача никуда не переводится"
     assert package["summary"]["payload"] == SUMMARY
+    # Последняя запись агента — вердикт: после него в деле только служебная запись
+    # о переходе в `done`, а служебные признак не двигают.
+    last_agent = [
+        heading
+        for heading in package["index"]
+        if heading["type"] not in {item.value for item in SERVICE_ENTRY_TYPES}
+    ][-1]
+    assert last_agent["type"] == "verdict"
     assert package["features"] == {
         "blocked": False,
         "open_questions": 0,
         "open_blocking_questions": 0,
         "last_summary_at": package["summary"]["created_at"],
+        "last_entry_at": last_agent["created_at"],
     }
 
 

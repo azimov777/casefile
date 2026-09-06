@@ -174,6 +174,8 @@ async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
         "open_questions": 0,
         "open_blocking_questions": 0,
         "last_summary_at": None,
+        # В деле только служебная `created`: записей агента ещё нет, признак пуст.
+        "last_entry_at": None,
     }
 
 
@@ -292,6 +294,8 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
         "open_questions": 0,
         "open_blocking_questions": 0,
         "last_summary_at": None,
+        # В деле только служебная `created`: записей агента ещё нет, признак пуст.
+        "last_entry_at": None,
     }
 
 

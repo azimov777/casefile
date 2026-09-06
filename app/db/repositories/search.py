@@ -48,7 +48,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.pagination import Page, decode_sort_cursor, encode_sort_cursor, resolve_limit
-from app.db.repositories.entries import last_summary_at, open_question_count
+from app.db.repositories.entries import last_entry_at, last_summary_at, open_question_count
 from app.db.repositories.links import open_blockers_of
 from app.db.sql import ilike_contains
 from app.domain.search import (
@@ -170,6 +170,7 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
         .scalar_subquery()
         .label("open_blocking_questions"),
         last_summary_at(Task.id).correlate(Task).scalar_subquery().label("last_summary_at"),
+        last_entry_at(Task.id).correlate(Task).scalar_subquery().label("last_entry_at"),
     )
 
 
@@ -180,6 +181,7 @@ def _features_of(row: Any) -> TaskFeatures:
         open_questions=row.open_questions,
         open_blocking_questions=row.open_blocking_questions,
         last_summary_at=row.last_summary_at,
+        last_entry_at=row.last_entry_at,
     )
 
 
@@ -227,6 +229,8 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
             return _blocked(term.operator, term.values)
         case SearchValueKind.COUNT:
             return _open_questions(term, term.operator, term.values)
+        case SearchValueKind.TIMESTAMP:
+            return _scalar(_last_entry_at_column(), term.operator, term.values)
         case SearchValueKind.FULLTEXT:
             return _fulltext(term.operator, term.values)
 
@@ -242,6 +246,9 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
             return Task.assignee.is_(None)
         case SearchValueKind.TAG:
             return func.jsonb_array_length(Task.tags) == 0
+        case SearchValueKind.TIMESTAMP:
+            # «В дело ещё ничего не подшивали»: учтённых записей нет, подзапрос пуст.
+            return _last_entry_at_column().is_(None)
         case _:
             # Недостижимо: `empty()` пропускается только к полям с `is_nullable`. Явная
             # ошибка вместо тихого `false` — чтобы новое поле с пустым состоянием,
@@ -416,6 +423,15 @@ def _order_condition(
 # --- Порядок и курсор ----------------------------------------------------------------
 
 
+def _last_entry_at_column() -> ColumnElement[Any]:
+    """Признак `last_entry_at` выражением — тот же подзапрос, что и в выдаче.
+
+    Одно определение на отбор, сортировку и колонку ответа: три написания разошлись бы
+    молча, и список показывал бы одно, а отбирал по другому (`CONCEPT.md`, 4.3).
+    """
+    return last_entry_at(Task.id).correlate(Task).scalar_subquery()
+
+
 def _priority_rank() -> ColumnElement[Any]:
     return case(PRIORITY_RANK, value=Task.priority)
 
@@ -442,6 +458,8 @@ def _expressions(key: SortKey) -> tuple[ColumnElement[Any], ...]:
             return (Task.updated_at,)
         case SortKey.PRIORITY:
             return (_priority_rank(),)
+        case SortKey.LAST_ENTRY_AT:
+            return (_last_entry_at_column(),)
 
 
 def _order_by(keys: Sequence[tuple[ColumnElement[Any], bool]]) -> list[Any]:

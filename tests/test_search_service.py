@@ -539,7 +539,7 @@ async def test_an_unknown_sort_key_lists_the_allowed_ones(
         await service.search_tasks(db_session, actor=task_actor, sort=["created_at"])
 
     assert raised.value.details["reason"] == "not_sortable"
-    assert raised.value.details["allowed"] == ["key", "priority", "updated_at"]
+    assert raised.value.details["allowed"] == ["key", "last_entry_at", "priority", "updated_at"]
 
 
 async def test_an_unselectable_field_is_refused(

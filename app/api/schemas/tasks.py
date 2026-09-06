@@ -101,6 +101,18 @@ class TaskFeaturesRead(BaseModel):
         default=None,
         description="When the latest summary was filed; null if the case has none",
     )
+    last_entry_at: datetime | None = Field(
+        default=None,
+        description=(
+            "When an entry by an agent or a human was last filed into the case. "
+            "Service entries (`created`, `status_changed`, `section_changed`, "
+            "`assignee_changed`, `link_added`, `link_removed`) do not count: "
+            "`link_added` is filed into both cases when a link is made from the other "
+            "side, and a task nobody touched would look alive. Null while the case has "
+            "no such entry — a freshly created task holds only `created`. This is not "
+            "`updated_at`: that one moves when the card changes"
+        ),
+    )
 
 
 class TaskPackageRead(BaseModel):

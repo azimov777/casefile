@@ -234,7 +234,12 @@ async def test_an_unknown_sort_key_answers_with_the_allowed_ones(
     response = await auth_client.get("/api/v1/tasks", params={"sort": "created_at"})
 
     assert response.status_code == 422
-    assert response.json()["error"]["details"]["allowed"] == ["key", "priority", "updated_at"]
+    assert response.json()["error"]["details"]["allowed"] == [
+        "key",
+        "last_entry_at",
+        "priority",
+        "updated_at",
+    ]
 
 
 async def test_a_broken_cursor_is_a_named_error_and_not_a_five_hundred(
@@ -278,6 +283,7 @@ async def test_every_row_carries_the_features_of_its_own_card(
             "open_questions",
             "open_blocking_questions",
             "last_summary_at",
+            "last_entry_at",
         }
         card = await auth_client.get(f"/api/v1/tasks/{key}")
         assert card.status_code == 200, card.text
@@ -310,6 +316,7 @@ async def test_the_features_are_picked_as_a_whole_and_a_single_one_is_refused(
                 "open_questions": 0,
                 "open_blocking_questions": 0,
                 "last_summary_at": None,
+                "last_entry_at": None,
             },
         }
     ]

@@ -30,7 +30,13 @@ from app.db.pagination import (
     resolve_limit,
 )
 from app.domain.authors import Author
-from app.domain.case import FIRST_ENTRY_NUMBER, EntryHeading, EntryType, VerdictOutcome
+from app.domain.case import (
+    AGENT_ENTRY_TYPES,
+    FIRST_ENTRY_NUMBER,
+    EntryHeading,
+    EntryType,
+    VerdictOutcome,
+)
 from app.domain.tasks import TaskStatus
 
 
@@ -441,6 +447,28 @@ def last_summary_at(task_id: Any) -> Select[tuple[datetime]]:
     запросе `latest_summary`, и это единственное, что удерживает их от расхождения.
     """
     return latest_summary(task_id, Entry.created_at)
+
+
+def last_entry_at(task_id: Any) -> Select[tuple[datetime]]:
+    """Время последней записи агента или человека — признак `last_entry_at` в SQL.
+
+    Служебные типы не учитываются намеренно (`CONCEPT.md`, 4.3): `link_added`
+    подшивается в оба дела, когда связь ставят с другой стороны, и задача, которой
+    месяц никто не касался, выглядела бы живой от чужого действия.
+
+    Порядок по `no`, а не по `created_at`: номер в задаче монотонен, у него есть
+    уникальный индекс `(task_id, no)`, и обход с конца останавливается на первой
+    учтённой записи — а последняя запись в деле чаще всего именно учтённая.
+
+    `task_id` принимает и готовый идентификатор, и колонку внешнего запроса
+    (`Task.id`) — тогда это подзапрос по каждой строке выдачи списка.
+    """
+    return (
+        select(Entry.created_at)
+        .where(Entry.task_id == task_id, Entry.type.in_(AGENT_ENTRY_TYPES))
+        .order_by(Entry.no.desc())
+        .limit(1)
+    )
 
 
 def open_question_count(task_id: Any, *, blocking: bool | None = None) -> Select[tuple[int]]:

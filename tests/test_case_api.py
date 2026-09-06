@@ -9,6 +9,7 @@ from typing import Any
 from httpx import AsyncClient
 
 from app.db.models.queue import Queue
+from app.domain.case import SERVICE_ENTRY_TYPES
 
 READY = {
     "queue": "trk",
@@ -248,11 +249,20 @@ async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_
     assert data["summary"]["payload"] == SUMMARY
     assert [question["title"] for question in data["questions"]] == ["Второй вопрос"]
     assert data["questions"][0]["body"] == "Подробности"
+    # Последняя запись агента — ответ: он подшит последним, и служебных записей
+    # после него нет. Признак берётся из описи, а не выписывается числом: так он
+    # остаётся верным, если в расстановку добавят ещё запись.
+    last_agent = [
+        heading
+        for heading in data["index"]
+        if heading["type"] not in {item.value for item in SERVICE_ENTRY_TYPES}
+    ][-1]
     assert data["features"] == {
         "blocked": False,
         "open_questions": 1,
         "open_blocking_questions": 0,
         "last_summary_at": data["summary"]["created_at"],
+        "last_entry_at": last_agent["created_at"],
     }
     assert [heading["no"] for heading in data["index"]] == [1, 2, 3, 4, 5, 6]
     for heading in data["index"]:

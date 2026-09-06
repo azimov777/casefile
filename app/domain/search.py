@@ -89,6 +89,13 @@ TEXT_OPERATORS = EXACT_OPERATORS | {Operator.CONTAINS, Operator.NOT_CONTAINS}
 #: Точное совпадение плюс сравнение по порядку: у приоритета и счётчиков.
 ORDERED_OPERATORS = EXACT_OPERATORS | ORDER_OPERATORS
 
+#: Сравнение мгновений: порядок плюс равенство. `in` и `not in` не предлагаются
+#: намеренно — «быть одним из двух мгновений» не значит ничего, а список дат сам по
+#: себе не диапазон. Диапазон пишется двумя условиями через `and`, как у счётчиков.
+#: Равенство оставлено не ради сравнения с точным мгновением, а потому что `empty()`
+#: разбирается как значение при нём.
+TIME_OPERATORS = frozenset({Operator.EQ, Operator.NE}) | ORDER_OPERATORS
+
 #: Операторы, которым нужно ровно одно значение: «больше двух сразу» не значит ничего.
 SINGLE_VALUE_OPERATORS = ORDER_OPERATORS
 
@@ -258,6 +265,7 @@ class SearchField(StrEnum):
     BLOCKED = "blocked"
     OPEN_QUESTIONS = "open_questions"
     OPEN_BLOCKING_QUESTIONS = "open_blocking_questions"
+    LAST_ENTRY_AT = "last_entry_at"
     TEXT = "text"
 
 
@@ -271,6 +279,7 @@ class SearchValueKind(StrEnum):
     PRIORITY = "priority"
     FLAG = "flag"
     COUNT = "count"
+    TIMESTAMP = "timestamp"
     FULLTEXT = "fulltext"
 
 
@@ -309,6 +318,15 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         SearchFieldSpec(
             SearchField.OPEN_BLOCKING_QUESTIONS, SearchValueKind.COUNT, ORDERED_OPERATORS
         ),
+        # Время последней записи агента или человека. Пустое состояние настоящее и
+        # осмысленное: у свежей задачи в деле только служебная `created`, и `empty()`
+        # находит именно те задачи, в которые агент ещё ничего не писал.
+        SearchFieldSpec(
+            SearchField.LAST_ENTRY_AT,
+            SearchValueKind.TIMESTAMP,
+            TIME_OPERATORS,
+            is_nullable=True,
+        ),
         # Псевдополе: подстрока в названии **и** описании разом. Равенство здесь
         # означает то же, что вхождение: точное совпадение со всем текстом задачи
         # смысла не имеет, а отдельный оператор ради этого был бы лишним.
@@ -344,6 +362,9 @@ class SortKey(StrEnum):
     KEY = "key"
     UPDATED_AT = "updated_at"
     PRIORITY = "priority"
+    #: «Сначала где шевелилось» — `-last_entry_at`. Пустые значения кладутся
+    #: последними в обоих направлениях общим правилом порядка, а не исключением.
+    LAST_ENTRY_AT = "last_entry_at"
 
 
 #: Порядок по умолчанию: по ключу задачи, по возрастанию. Естественный порядок списка

@@ -110,6 +110,8 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
         "open_questions": 0,
         "open_blocking_questions": 0,
         "last_summary_at": None,
+        # В деле только служебная `created`: записей агента ещё нет, признак пуст.
+        "last_entry_at": None,
     }
     assert len(package["index"]) == 1
     heading = package["index"][0]

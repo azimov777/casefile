@@ -199,21 +199,27 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     """Собирает пакет преемника: карточка, связи, признаки, сводка, вопросы, опись, переходы.
 
     Признаки не хранятся, а считаются из уже прочитанного: связи, список открытых
-    вопросов и последняя сводка нужны пакету целиком, а `blocked`, счётчики и
-    `last_summary_at` — это их производные. Отдельных запросов ради признаков здесь нет.
+    вопросов, последняя сводка и опись нужны пакету целиком, а `blocked`, счётчики,
+    `last_summary_at` и `last_entry_at` — это их производные. Отдельных запросов ради
+    признаков здесь нет.
     """
     task = await read_task(session, key, actor=actor)
     links = await links_service.list_links(session, task, actor=actor)
     summary = await case_service.last_summary(session, task, actor=actor)
     questions = await case_service.open_questions(session, task, actor=actor)
+    # Опись читается до признаков: `last_entry_at` считается из неё, и отдельного
+    # запроса ради признака здесь по-прежнему нет ни одного.
+    index = await case_service.case_index(session, task, actor=actor)
     return TaskPackage(
         task=task,
         links=links,
-        features=case_service.features(questions, summary, blocked=links_service.blocked(links)),
+        features=case_service.features(
+            questions, summary, index, blocked=links_service.blocked(links)
+        ),
         summary=summary,
         questions=questions,
         transitions=allowed_transitions(task.status),
-        index=await case_service.case_index(session, task, actor=actor),
+        index=index,
     )
 
 

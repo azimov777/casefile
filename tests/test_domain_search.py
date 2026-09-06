@@ -264,7 +264,10 @@ def test_too_many_sort_keys_are_refused() -> None:
         parse_sort_terms(["key", "updated_at", "priority", "-key"])
 
     assert raised.value.details["reason"] in {"too_many_sort_terms", "duplicate_sort_term"}
-    assert len(sortable_names()) == MAX_SORT_TERMS
+    # Потолок достижим: ключей сортировки не меньше, чем терминов разрешено просить.
+    # Раньше здесь стояло равенство — но это было совпадением чисел, а не правилом:
+    # потолок ограничивает стоимость запроса, а не пересказывает словарь ключей.
+    assert len(sortable_names()) >= MAX_SORT_TERMS
 
 
 # --- Наборы полей ----------------------------------------------------------------------
@@ -297,8 +300,17 @@ def test_a_field_name_is_matched_case_insensitively() -> None:
     assert search_field_spec("Status") is search_field_spec("status")
 
 
-def test_the_only_name_in_both_sets_is_priority() -> None:
-    assert set(searchable_names()) & set(sortable_names()) == {SearchField.PRIORITY.value}
+def test_the_names_in_both_sets_are_those_you_both_filter_and_order_by() -> None:
+    """Пересечение словарей отбора и порядка — не случайность, а список по существу.
+
+    Приоритет и время последней записи это то, по чему одинаково осмысленно и отбирать
+    («что горит», «что шевелилось за сутки»), и сортировать. Остальные имена живут
+    только в одном словаре, и держать их в обоих было бы обещанием, которого нет.
+    """
+    assert set(searchable_names()) & set(sortable_names()) == {
+        SearchField.PRIORITY.value,
+        SearchField.LAST_ENTRY_AT.value,
+    }
 
 
 # --- Склейка ---------------------------------------------------------------------------

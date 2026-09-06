@@ -30,6 +30,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +45,7 @@ from app.db.pagination import Page
 from app.db.repositories import EntryRepository, ParticipantRepository, TaskRepository
 from app.db.wakeup import journal_wakeup
 from app.domain.case import (
+    AGENT_ENTRY_TYPES,
     EntryContext,
     EntryDraft,
     EntryHeading,
@@ -144,6 +146,7 @@ async def open_questions(session: AsyncSession, task: Task, *, actor: Actor) -> 
 def features(
     questions: Sequence[Entry],
     summary: Entry | None,
+    index: Sequence[EntryHeading],
     *,
     blocked: bool,
 ) -> TaskFeatures:
@@ -167,7 +170,25 @@ def features(
             1 for question in questions if is_blocking_question(question.payload)
         ),
         last_summary_at=summary.created_at if summary is not None else None,
+        last_entry_at=_last_entry_at(index),
     )
+
+
+def _last_entry_at(index: Sequence[EntryHeading]) -> datetime | None:
+    """Время последней записи агента или человека — из уже прочитанной описи.
+
+    Питоновский двойник запроса `last_entry_at` в `app/db/repositories/entries.py`:
+    карточка считает признак из описи, которую и так читает для пакета преемника,
+    список — подзапросом. Учтённый набор типов у обоих один и тот же, `AGENT_ENTRY_TYPES`,
+    и это единственное, что удерживает их от расхождения.
+
+    Опись приходит целиком и по возрастанию номера, поэтому нужная запись — последняя
+    учтённая с конца.
+    """
+    for heading in reversed(index):
+        if heading.type in AGENT_ENTRY_TYPES:
+            return heading.created_at
+    return None
 
 
 async def list_questions(

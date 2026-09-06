@@ -30,6 +30,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -384,6 +385,8 @@ async def _resolve_value(
             return _flag(condition, value)
         case SearchValueKind.COUNT:
             return _count(condition, value)
+        case SearchValueKind.TIMESTAMP:
+            return _timestamp(condition, value)
         case _:
             return _text(condition, value)
 
@@ -473,6 +476,34 @@ def _count(condition: Condition, value: SearchValue) -> int:
             },
         )
     return int(raw)
+
+
+def _timestamp(condition: Condition, value: SearchValue) -> datetime:
+    """Мгновение в ISO-8601: дата или дата со временем.
+
+    Дата (`2026-09-06`) означает полночь UTC. Значение без указания зоны читается как
+    UTC: трекер хранит время в UTC, а подставить зону клиента молча значило бы
+    отвечать на запрос, которого никто не задавал.
+
+    Относительные значения (`7d`, `-3h`) не принимаются намеренно: они делают запрос
+    невоспроизводимым — та же строка завтра означает другое, и пересланная ссылка на
+    отбор перестаёт показывать то же самое.
+    """
+    raw = _text(condition, value).strip()
+    try:
+        moment = datetime.fromisoformat(raw)
+    except ValueError:
+        raise SearchValueInvalidError(
+            details={
+                "field": condition.name,
+                "position": value.position,
+                "value": raw,
+                "reason": "type_mismatch",
+                "expected": "ISO-8601 date or date-time, for example 2026-09-06 "
+                "or 2026-09-06T12:30:00Z",
+            },
+        ) from None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
 
 
 def _value_rejected(

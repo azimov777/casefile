@@ -120,6 +120,7 @@ def features(value: TaskFeatures) -> dict[str, Any]:
         "open_questions": value.open_questions,
         "open_blocking_questions": value.open_blocking_questions,
         "last_summary_at": value.last_summary_at,
+        "last_entry_at": value.last_entry_at,
     }
 
 
