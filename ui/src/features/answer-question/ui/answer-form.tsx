@@ -8,26 +8,44 @@ import {
   draftKey,
   readDraft,
   saveDraft,
-  splitRefs,
   type AnswerDraft,
 } from '../model/draft';
+import type { Answered } from '../model/answering';
 import { useAnswerQuestion } from '../model/use-answer-question';
 import styles from './answer-form.module.css';
 
 interface AnswerFormProps {
   taskKey: string;
   questionNo: number;
-  /** Что сделать после удачного ответа: закрыть форму, увести со страницы. */
-  onAnswered?: () => void;
+  /**
+   * Отправка началась. Зовётся **до** запроса и синхронно: вызывающий обязан успеть
+   * закрепить вопрос на экране раньше, чем перечитывание сможет его оттуда убрать.
+   */
+  onBegin?: () => void;
+  /** Ответ подшит: номер записи и текст, каким он ушёл. */
+  onAnswered?: (answered: Answered) => void;
+  /** Отправка не удалась: закрепление можно снять, черновик остаётся в форме. */
+  onFailed?: () => void;
 }
 
 /**
- * Форма ответа на вопрос агента.
+ * Форма ответа на вопрос агента — единственная форма записи, какая есть у человека
+ * (`CONCEPT.md`, 1).
  *
  * Черновик пишется в `sessionStorage` на каждое изменение: человек уходит смотреть
  * соседнюю задачу и возвращается дописывать.
+ *
+ * Своего подтверждения форма не показывает и показать не может: удачный ответ убирает
+ * вопрос из выдачи, и форма размонтируется вместе с ним. Исход она сообщает наружу,
+ * а рисует его тот, кто переживает перечитывание, — страница.
  */
-export function AnswerForm({ taskKey, questionNo, onAnswered }: AnswerFormProps) {
+export function AnswerForm({
+  taskKey,
+  questionNo,
+  onBegin,
+  onAnswered,
+  onFailed,
+}: AnswerFormProps) {
   const storageKey = draftKey(taskKey, questionNo);
   const [draft, setDraft] = useState<AnswerDraft>(() => readDraft(storageKey));
   const [showPreview, setShowPreview] = useState(false);
@@ -35,7 +53,6 @@ export function AnswerForm({ taskKey, questionNo, onAnswered }: AnswerFormProps)
   const answer = useAnswerQuestion();
 
   const bodyId = useId();
-  const refsId = useId();
 
   // Форма живёт под каждым вопросом, и вопрос может смениться без перемонтирования.
   useEffect(() => {
@@ -47,6 +64,12 @@ export function AnswerForm({ taskKey, questionNo, onAnswered }: AnswerFormProps)
     const next = { ...draft, ...changes };
     setDraft(next);
     saveDraft(storageKey, next);
+
+    // Упрёк снимается первым же введённым символом. Сообщение, висящее над полем,
+    // в которое человек уже пишет, — это не подсказка, а штраф за прошлое: он
+    // сделал ровно то, о чём его попросили, и продолжает видеть красное.
+    if (emptyBody && next.body.trim() !== '') setEmptyBody(false);
+    if (answer.isError) answer.reset();
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -63,25 +86,29 @@ export function AnswerForm({ taskKey, questionNo, onAnswered }: AnswerFormProps)
     const idempotencyKey = draft.idempotencyKey === '' ? crypto.randomUUID() : draft.idempotencyKey;
     if (draft.idempotencyKey === '') change({ idempotencyKey });
 
+    const body = draft.body.trim();
+    // Раньше запроса и синхронно: дальше начинается гонка кадра потока с ответом
+    // сервера, и к её началу вопрос обязан быть закреплён на экране.
+    onBegin?.();
+
     answer.mutate(
+      { taskKey, questionNo, body, idempotencyKey },
       {
-        taskKey,
-        questionNo,
-        body: draft.body.trim(),
-        refs: splitRefs(draft.refs),
-        idempotencyKey,
-      },
-      {
-        onSuccess: () => {
+        onSuccess: (entry) => {
           clearDraft(storageKey);
           setDraft(EMPTY_DRAFT);
-          onAnswered?.();
+          setShowPreview(false);
+          onAnswered?.({ entryNo: entry.no, body });
         },
+        onError: () => onFailed?.(),
       },
     );
   }
 
   const fields = answer.error instanceof ApiError ? answer.error.fields : null;
+  const problem = emptyBody
+    ? 'Пустой ответ отправить нельзя: агенту нужен текст, а не факт нажатия кнопки.'
+    : fields?.body;
 
   return (
     <form
@@ -100,48 +127,22 @@ export function AnswerForm({ taskKey, questionNo, onAnswered }: AnswerFormProps)
           onChange={(event) => change({ body: event.target.value })}
           rows={5}
           placeholder="Markdown. Ссылки вида DEMO-2 и DEMO-2#7 станут ссылками."
-          aria-invalid={emptyBody || fields?.body !== undefined}
-          aria-describedby={emptyBody ? `${bodyId}-problem` : undefined}
+          aria-invalid={problem !== undefined}
+          aria-describedby={problem === undefined ? undefined : `${bodyId}-problem`}
         />
-        {emptyBody ? (
-          <span className={styles.problem} id={`${bodyId}-problem`} role="alert">
-            Пустой ответ отправить нельзя: агенту нужен текст, а не факт нажатия кнопки.
-          </span>
-        ) : null}
-        {fields?.body === undefined ? null : (
-          <span className={styles.problem} role="alert">
-            {fields.body}
-          </span>
-        )}
       </div>
 
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor={refsId}>
-          Ссылки на записи и задачи
-        </label>
-        <input
-          id={refsId}
-          className={styles.input}
-          value={draft.refs}
-          onChange={(event) => change({ refs: event.target.value })}
-          placeholder="DEMO-2#7, DEMO-3 — через запятую или пробел"
-          autoComplete="off"
-          aria-invalid={fields?.refs !== undefined}
-        />
-        {fields?.refs === undefined ? null : (
-          <span className={styles.problem} role="alert">
-            {fields.refs}
-          </span>
-        )}
-      </div>
-
-      {showPreview && draft.body.trim() !== '' ? (
-        <div className={styles.preview}>
-          <span className={styles.label}>Как это увидит агент</span>
-          <Markdown>{draft.body}</Markdown>
-        </div>
-      ) : null}
-
+      {/*
+       * Всё, что может появиться и исчезнуть, стоит НИЖЕ кнопок: и упрёк, и
+       * предпросмотр, и отказ отправки. Резервировать под них место сверху не нужно —
+       * растёт только то, что под кнопками, и «Ответить» не сдвигается ни на пиксель
+       * ни в одном состоянии формы. Раньше упрёк опускал её на 24 px, а предпросмотр
+       * ещё на 140 — прямо из-под пальца человека, который сейчас нажмёт ещё раз
+       * (`docs/notes/ui.md`, про экран входа).
+       *
+       * Упрёк при этом не отрывается от поля: связь держит `aria-describedby`,
+       * а глазами он читается там, где человек только что нажал.
+       */}
       <div className={styles.actions}>
         <Button type="submit" disabled={answer.isPending}>
           {answer.isPending ? 'Отправляем…' : 'Ответить'}
@@ -150,6 +151,19 @@ export function AnswerForm({ taskKey, questionNo, onAnswered }: AnswerFormProps)
           {showPreview ? 'Скрыть предпросмотр' : 'Предпросмотр'}
         </Button>
       </div>
+
+      {problem === undefined ? null : (
+        <span className={styles.problem} id={`${bodyId}-problem`} role="alert">
+          {problem}
+        </span>
+      )}
+
+      {showPreview && draft.body.trim() !== '' ? (
+        <div className={styles.preview}>
+          <span className={styles.label}>Как это увидит агент</span>
+          <Markdown>{draft.body}</Markdown>
+        </div>
+      ) : null}
 
       {answer.isError ? (
         <Callout tone="danger">

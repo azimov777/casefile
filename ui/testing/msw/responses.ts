@@ -175,6 +175,16 @@ export function questionEntry(no: number, taskKey: string, blocking = true): Que
   };
 }
 
+/** Ответ человека так, как его возвращает `POST /entries`: с присвоенным номером. */
+export function answerEntry(no: number, taskKey: string, questionNo: number, body: string): Entry {
+  return {
+    ...entryBase(no, taskKey, '', body),
+    author: { kind: 'human', signature: 'owner' },
+    type: 'answer',
+    payload: { question_no: questionNo },
+  };
+}
+
 export function verdictEntry(no: number, taskKey: string): Entry {
   return {
     ...entryBase(

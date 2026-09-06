@@ -3,7 +3,13 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import { questionsQueryOptions, type Question } from '@/entities/entry';
 import { bootstrapQueryOptions } from '@/entities/session';
-import { AnswerForm } from '@/features/answer-question';
+import {
+  AnswerForm,
+  AnswerReceipt,
+  useAnswering,
+  withHeld,
+  type Answering,
+} from '@/features/answer-question';
 import { Badge, Button, Markdown, QueryState, RelativeTime } from '@/shared/ui';
 import styles from './questions-page.module.css';
 
@@ -29,7 +35,13 @@ export function QuestionsPage() {
   );
 
   const questions = useInfiniteQuery(questionsQueryOptions(params));
-  const items = questions.data?.pages.flatMap((page) => page.items) ?? [];
+  const loaded = questions.data?.pages.flatMap((page) => page.items) ?? [];
+
+  // Вопросы, по которым отправка уже пошла, остаются на экране вместе со своим
+  // подтверждением, даже когда выдача их больше не содержит: удачный ответ убирает
+  // вопрос из входящей, а человеку надо увидеть, чем всё кончилось.
+  const answering = useAnswering<Question>();
+  const items = withHeld(loaded, answering.held, questionId);
 
   function apply(changes: { queue?: string; blocking?: boolean }) {
     const updated = new URLSearchParams(searchParams);
@@ -82,9 +94,9 @@ export function QuestionsPage() {
       />
 
       <ul className={styles.list}>
-        {items.map((question) => (
-          <li key={`${question.task_key}#${question.no}`}>
-            <QuestionRow question={question} />
+        {items.map((question, at) => (
+          <li key={questionId(question)}>
+            <QuestionRow question={question} at={at} answering={answering} />
           </li>
         ))}
       </ul>
@@ -101,9 +113,23 @@ export function QuestionsPage() {
   );
 }
 
+/** Тождество вопроса на всё приложение: задача и номер записи. */
+function questionId(question: Question): string {
+  return `${question.task_key}#${question.no}`;
+}
+
+interface QuestionRowProps {
+  question: Question;
+  /** Место в списке: закреплённый вопрос вернётся именно сюда. */
+  at: number;
+  answering: Answering<Question>;
+}
+
 /** Вопрос во входящей: откуда он, о чём и чем на него ответить. */
-function QuestionRow({ question }: { question: Question }) {
-  const [answering, setAnswering] = useState(false);
+function QuestionRow({ question, at, answering }: QuestionRowProps) {
+  const id = questionId(question);
+  const [open, setOpen] = useState(false);
+  const answered = answering.answerOf(id);
 
   return (
     <article className={styles.question}>
@@ -121,15 +147,27 @@ function QuestionRow({ question }: { question: Question }) {
           входящую, — и повторять «Кому: owner» у каждого вопроса незачем. */}
       <Markdown>{question.body}</Markdown>
 
-      {answering ? (
+      {answered !== undefined ? (
+        <AnswerReceipt
+          taskKey={question.task_key}
+          questionNo={question.no}
+          answered={answered}
+          onClose={() => {
+            answering.close(id);
+            setOpen(false);
+          }}
+        />
+      ) : open || answering.isHeld(id) ? (
         <AnswerForm
           taskKey={question.task_key}
           questionNo={question.no}
-          onAnswered={() => setAnswering(false)}
+          onBegin={() => answering.begin(id, question, at)}
+          onFailed={() => answering.fail(id)}
+          onAnswered={(result) => answering.complete(id, result)}
         />
       ) : (
         <div>
-          <Button onClick={() => setAnswering(true)}>Ответить</Button>
+          <Button onClick={() => setOpen(true)}>Ответить</Button>
         </div>
       )}
     </article>

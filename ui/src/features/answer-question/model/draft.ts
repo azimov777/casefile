@@ -12,12 +12,11 @@
 
 export interface AnswerDraft {
   body: string;
-  refs: string;
   /** Ключ повтора текущей попытки отправки; пуст, пока не отправляли. */
   idempotencyKey: string;
 }
 
-export const EMPTY_DRAFT: AnswerDraft = { body: '', refs: '', idempotencyKey: '' };
+export const EMPTY_DRAFT: AnswerDraft = { body: '', idempotencyKey: '' };
 
 /** Один вопрос — один черновик: ключ хранилища собран из задачи и номера записи. */
 export function draftKey(taskKey: string, questionNo: number): string {
@@ -31,7 +30,6 @@ export function readDraft(key: string): AnswerDraft {
     const parsed = JSON.parse(saved) as Partial<AnswerDraft>;
     return {
       body: typeof parsed.body === 'string' ? parsed.body : '',
-      refs: typeof parsed.refs === 'string' ? parsed.refs : '',
       idempotencyKey: typeof parsed.idempotencyKey === 'string' ? parsed.idempotencyKey : '',
     };
   } catch {
@@ -55,12 +53,4 @@ export function clearDraft(key: string): void {
   } catch {
     // См. выше.
   }
-}
-
-/** Ссылки `refs` человек пишет строкой; бэкенд ждёт список. */
-export function splitRefs(value: string): string[] {
-  return value
-    .split(/[\s,]+/)
-    .map((ref) => ref.trim())
-    .filter((ref) => ref !== '');
 }

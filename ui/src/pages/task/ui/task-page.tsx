@@ -1,8 +1,14 @@
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { EntryBody } from '@/entities/entry';
+import { EntryBody, type Question } from '@/entities/entry';
 import { taskPackageQueryOptions } from '@/entities/task';
-import { AnswerForm } from '@/features/answer-question';
+import {
+  AnswerForm,
+  AnswerReceipt,
+  useAnswering,
+  withHeld,
+  type Answering,
+} from '@/features/answer-question';
 import { ApiError } from '@/shared/api';
 import { Callout, QueryState } from '@/shared/ui';
 import { TaskHeader } from './task-header';
@@ -22,6 +28,11 @@ export function TaskPage() {
   const { key = '' } = useParams();
   const [searchParams] = useSearchParams();
   const pkg = useQuery(taskPackageQueryOptions(key));
+
+  // До ранних возвратов: хук нельзя позвать условно. Держит вопросы, по которым
+  // отправка началась, — они остаются на экране вместе с подтверждением, даже когда
+  // перечитанный пакет их уже не содержит.
+  const answering = useAnswering<Question>();
 
   const openAt = readEntryNo(searchParams.get('entry'));
 
@@ -46,7 +57,10 @@ export function TaskPage() {
     );
   }
 
-  const { task, features, transitions, summary, questions, links, index } = pkg.data;
+  const { task, features, transitions, summary, links, index } = pkg.data;
+  const questions = withHeld(pkg.data.questions, answering.held, (question) =>
+    questionId(task.key, question),
+  );
 
   return (
     <main className={styles.screen}>
@@ -71,13 +85,18 @@ export function TaskPage() {
           <p className={styles.empty}>Вопросов без ответа нет.</p>
         ) : (
           <ul className={styles.questions}>
-            {questions.map((question) => (
+            {questions.map((question, at) => (
               <li key={question.no} className={styles.question}>
                 <p className={styles.questionTitle}>
                   {task.key}#{question.no} · {question.title}
                 </p>
                 <EntryBody entry={question} />
-                <AnswerForm taskKey={task.key} questionNo={question.no} />
+                <QuestionAnswer
+                  taskKey={task.key}
+                  question={question}
+                  at={at}
+                  answering={answering}
+                />
               </li>
             ))}
           </ul>
@@ -116,4 +135,48 @@ function readEntryNo(value: string | null): number | null {
   if (value === null) return null;
   const no = Number(value);
   return Number.isInteger(no) && no > 0 ? no : null;
+}
+
+/** Тождество вопроса: задача и номер записи — то же, что во входящей. */
+function questionId(taskKey: string, question: Question): string {
+  return `${taskKey}#${question.no}`;
+}
+
+interface QuestionAnswerProps {
+  taskKey: string;
+  question: Question;
+  at: number;
+  answering: Answering<Question>;
+}
+
+/**
+ * Под вопросом стоит либо форма, либо подтверждение — и то и другое на одном месте.
+ *
+ * Форма здесь раскрыта сразу, без кнопки «Ответить»: на карточку задачи человек
+ * приходит по ссылке из уведомления или из входящей, то есть уже решив отвечать.
+ */
+function QuestionAnswer({ taskKey, question, at, answering }: QuestionAnswerProps) {
+  const id = questionId(taskKey, question);
+  const answered = answering.answerOf(id);
+
+  if (answered !== undefined) {
+    return (
+      <AnswerReceipt
+        taskKey={taskKey}
+        questionNo={question.no}
+        answered={answered}
+        onClose={() => answering.close(id)}
+      />
+    );
+  }
+
+  return (
+    <AnswerForm
+      taskKey={taskKey}
+      questionNo={question.no}
+      onBegin={() => answering.begin(id, question, at)}
+      onFailed={() => answering.fail(id)}
+      onAnswered={(result) => answering.complete(id, result)}
+    />
+  );
 }

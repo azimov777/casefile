@@ -1,9 +1,11 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { liveJournal } from '@testing/live-journal';
 import {
   API,
+  answerEntry,
   bootstrap,
   collection,
   data,
@@ -121,6 +123,48 @@ describe('карточка задачи', () => {
     expect(within(questions as HTMLElement).getByText('owner')).toBeInTheDocument();
     expect(within(questions as HTMLElement).getByText(/Хранение стоит денег/)).toBeInTheDocument();
     expect(entriesCalls()).toEqual([]);
+  });
+
+  it('ответ на вопрос из карточки подтверждается на месте, и кадр потока этого не отменяет', async () => {
+    // Второе место показа формы, кроме входящей. Проверяется тем же способом и по той
+    // же причине: перечитанный пакет приходит без отвеченного вопроса, и подтверждению
+    // негде было бы жить, будь оно внутри строки списка.
+    let answered = false;
+    let release = () => {};
+    const posts: string[] = [];
+
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-4`, () =>
+        data(taskPackage('DEMO-4', { questions: answered ? [] : [questionEntry(4, 'DEMO-4')] })),
+      ),
+      http.post(`${API}/api/v1/tasks/DEMO-4/entries`, ({ request }) => {
+        posts.push(request.url);
+        answered = true;
+        return new Promise((resolve) => {
+          release = () =>
+            resolve(data(answerEntry(9, 'DEMO-4', 4, 'Храним вечно: дело неизменяемо.'), 201));
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-4');
+
+    // На карточке форма раскрыта сразу: сюда приходят, уже решив отвечать.
+    await user.type(await screen.findByLabelText('Ответ'), 'Храним вечно: дело неизменяемо.');
+    await user.click(screen.getByRole('button', { name: 'Ответить' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+
+    // Кадр обгоняет ответ сервера: пакет перечитан и пришёл уже без вопроса.
+    act(() => liveJournal.send({ ...answerEntry(9, 'DEMO-4', 4, 'Храним вечно.'), seq: 1050 }));
+    release();
+
+    const receipt = await screen.findByRole('region', { name: 'Ответ на DEMO-4#4 подшит' });
+    expect(within(receipt).getByRole('link', { name: 'DEMO-4#9' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-4?entry=9',
+    );
+    expect(posts).toHaveLength(1);
   });
 
   it('ссылка на запись в теле раскрывает её, ссылка на задачу ведёт на карточку', async () => {
