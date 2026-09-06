@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { markSessionExpired, sessionKeys, type Bootstrap } from '@/entities/session';
 import { clearToken, getToken } from '@/shared/api';
+import { holdForRequest, holdWhileHidden, releaseHidden } from './deferred';
 import { parseFrame, type JournalFrame } from './frames';
-import { keysToInvalidate } from './invalidation';
+import { keysAfterReconnect, keysToInvalidate, type Invalidation } from './invalidation';
 import { openJournalStream } from './stream-client';
 
 /**
@@ -50,8 +51,6 @@ export function useLiveJournal(): LiveJournal {
 
   /** Последний прочитанный `seq`: с него поток продолжается после обрыва. */
   const cursor = useRef<number | null>(null);
-  /** Что перечитать, когда человек вернётся во вкладку. */
-  const pending = useRef<QueryKey[]>([]);
   /** Связь уже теряли: первое открытие потока и восстановление — разные события. */
   const reconnected = useRef(false);
   /**
@@ -69,27 +68,31 @@ export function useLiveJournal(): LiveJournal {
     if (token === null) return;
 
     /**
-     * Ключи копятся, пока вкладка в фоне: перечитывать невидимое незачем, но и терять
-     * кадры нельзя — человек вернётся и должен увидеть то, что есть на самом деле.
+     * Раскладывает устаревшее по двум срокам.
+     *
+     * Список и доска не перечитываются никогда сами: они ждут, пока человек нажмёт
+     * «показать» (`deferred.ts`). Всё остальное перечитывается сразу — или копится до
+     * возврата во вкладку, потому что перечитывать невидимое незачем, а терять кадры
+     * нельзя.
      */
-    function invalidate(keys: QueryKey[]): void {
+    function invalidate({ immediate, deferred }: Invalidation, taskKey: string | null): void {
+      holdForRequest(deferred, taskKey);
+
       if (document.hidden) {
-        pending.current.push(...keys);
+        holdWhileHidden(immediate);
         return;
       }
-      for (const key of keys) void queryClient.invalidateQueries({ queryKey: key });
+      for (const key of immediate) void queryClient.invalidateQueries({ queryKey: key });
     }
 
     function applyPending(): void {
-      if (document.hidden || pending.current.length === 0) return;
-      const keys = pending.current;
-      pending.current = [];
-      for (const key of keys) void queryClient.invalidateQueries({ queryKey: key });
+      if (document.hidden) return;
+      for (const key of releaseHidden()) void queryClient.invalidateQueries({ queryKey: key });
     }
 
     function onFrame(frame: JournalFrame): void {
       cursor.current = frame.seq;
-      invalidate(keysToInvalidate(frame));
+      invalidate(keysToInvalidate(frame), frame.taskKey);
 
       if (frame.entry.type !== 'question') return;
       // Вопрос интересен человеку, только если спросили его самого.
@@ -129,7 +132,9 @@ export function useLiveJournal(): LiveJournal {
         // запрос здесь означал бы два обращения к списку на одну отрисовку.
         if (!reconnected.current) return;
         reconnected.current = false;
-        invalidate([['tasks'], ['task'], ['questions'], sessionKeys.bootstrap]);
+        // Задача не названа: за время обрыва могло измениться что угодно, и числа для
+        // полосы взять неоткуда — она скажет об этом словами, а не выдуманным числом.
+        invalidate(keysAfterReconnect(), null);
       },
 
       onMessage: (data) => {

@@ -1,0 +1,25 @@
+/*
+ * Полоса стоит вне потока вёрстки: обновление, о котором человек ещё не просил, не
+ * вправе сдвинуть строки, которые он читает. Место — левый нижний угол: правый занят
+ * стопкой уведомлений о вопросах, и спорить за него им незачем.
+ */
+.bar {
+  position: fixed;
+  bottom: var(--space-4);
+  left: var(--space-4);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: min(26rem, calc(100vw - var(--space-8)));
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--tone-progress-border);
+  border-radius: var(--radius-md);
+  background: var(--tone-progress-bg);
+  box-shadow: var(--shadow-raised);
+  color: var(--tone-progress-text);
+}
+
+.text {
+  font-size: var(--text-md);
+}

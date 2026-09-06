@@ -12,12 +12,18 @@
   padding-bottom: var(--space-2);
 }
 
+/*
+ * Ширина задана и не делится между столбцами: при `flex: 1 1 16rem` раскрытие одного
+ * столбца сужало все остальные (замерено: 265 → 190 px), и карточки в столбце, который
+ * человек в этот момент читал, переносили текст по-другому. Не влезли — `.columns`
+ * прокручивается вбок.
+ */
 .column {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  flex: 1 1 16rem;
-  min-width: 16rem;
+  flex: 0 0 17rem;
+  width: 17rem;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -27,7 +33,7 @@
 /* Свёрнутый столбец не должен занимать ширину развёрнутого: он показывает только счёт. */
 .collapsed {
   flex: 0 0 auto;
-  min-width: 0;
+  width: auto;
 }
 
 .head {

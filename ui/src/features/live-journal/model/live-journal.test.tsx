@@ -58,7 +58,8 @@ describe('живой поток', () => {
     expect(liveJournal.closed).toBe(0);
   });
 
-  it('по кадру перечитывает показанное, а не правит кэш руками', async () => {
+  it('кадр не переставляет список сам, а предлагает показать новое', async () => {
+    const user = userEvent.setup();
     renderApp('/tasks');
     await screen.findByText('DEMO-1');
     const before = listings;
@@ -67,9 +68,47 @@ describe('живой поток', () => {
       liveJournal.send(entry(1025, 'DEMO-1', { type: 'status_changed' }));
     });
 
-    // Строка обновилась сама: значение пришло из перечитанной выдачи, а не из кадра.
+    // Список не перечитан: строки на месте, а об изменении сказано полосой.
+    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
+    expect(listings).toBe(before);
+    expect(screen.getByText('open')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Показать' }));
+
+    // Значение пришло из перечитанной выдачи, а не из кадра: кэш руками не правится.
     expect(await screen.findByText('done')).toBeInTheDocument();
     expect(listings).toBeGreaterThan(before);
+    expect(screen.queryByText(/Изменилось задач/)).not.toBeInTheDocument();
+  });
+
+  it('полоса считает задачи, а не кадры', async () => {
+    renderApp('/tasks');
+    await screen.findByText('DEMO-1');
+
+    act(() => {
+      liveJournal.send(entry(1030, 'DEMO-1'));
+      liveJournal.send(entry(1031, 'DEMO-1', { type: 'decision' }));
+      liveJournal.send(entry(1032, 'DEMO-2'));
+    });
+
+    // Три записи, но задачи две: человеку важно, сколько строк изменится.
+    expect(await screen.findByText('Изменилось задач: 2')).toBeInTheDocument();
+  });
+
+  it('накопленное переживает переход между таблицей и доской', async () => {
+    const user = userEvent.setup();
+    renderApp('/tasks');
+    await screen.findByText('DEMO-1');
+
+    act(() => {
+      liveJournal.send(entry(1035, 'DEMO-1', { type: 'status_changed' }));
+    });
+    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('radio', { name: 'Доска' }));
+
+    // Полоса на месте: страница перемонтировалась, а накопленное живёт не в ней.
+    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
   });
 
   it('вопрос, адресованный мне, объявляется уведомлением со ссылкой на запись', async () => {
@@ -196,7 +235,8 @@ describe('живой поток', () => {
     expect(screen.queryByText('нет связи')).not.toBeInTheDocument();
   });
 
-  it('обрыв виден в шапке, а восстановление перечитывает показанное', async () => {
+  it('после обрыва список ждёт просьбы, а не переставляется сам', async () => {
+    const user = userEvent.setup();
     renderApp('/tasks');
     await screen.findByText('DEMO-1');
 
@@ -206,13 +246,22 @@ describe('живой поток', () => {
     const before = listings;
     act(() => liveJournal.options?.onOpen());
 
-    // Что случилось в паузу, интерфейс не знает и знать не может: он перечитывает всё,
-    // на что человек смотрит, вместо того чтобы догонять пропущенные кадры.
     expect(await screen.findByText('на связи')).toBeInTheDocument();
+
+    // Что случилось в паузу, интерфейс не знает и знать не может — потому и числа
+    // в полосе нет. Строки при этом не тронуты: обрыв случается тогда, когда человек
+    // ничего не делал, и переставлять список под ним особенно нечестно.
+    expect(
+      await screen.findByText('Пока не было связи, список мог измениться'),
+    ).toBeInTheDocument();
+    expect(listings).toBe(before);
+
+    await user.click(screen.getByRole('button', { name: 'Показать' }));
     await waitFor(() => expect(listings).toBeGreaterThan(before));
   });
 
-  it('в фоновой вкладке кадры копятся и применяются при возврате', async () => {
+  it('в фоновой вкладке кадры копятся, а возврат не переставляет список', async () => {
+    const user = userEvent.setup();
     renderApp('/tasks');
     await screen.findByText('DEMO-1');
     const before = listings;
@@ -226,12 +275,17 @@ describe('живой поток', () => {
     await waitFor(() => expect(liveJournal.options).not.toBeNull());
     expect(listings).toBe(before);
 
-    // Человек вернулся.
+    // Человек вернулся и смотрит в ту же точку, где был.
     Object.defineProperty(document, 'hidden', { configurable: true, value: false });
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
 
+    // Накопленное не вылилось на экран: список ждёт просьбы, как и при видимой вкладке.
+    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
+    expect(listings).toBe(before);
+
+    await user.click(screen.getByRole('button', { name: 'Показать' }));
     await waitFor(() => expect(listings).toBeGreaterThan(before));
   });
 

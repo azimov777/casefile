@@ -8,6 +8,7 @@ import {
   readQueryProblem,
   useTaskFilters,
 } from '@/features/task-filters';
+import { UpdatesBar } from '@/features/live-journal';
 import { type Page } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { TasksBoard } from './tasks-board';
@@ -64,6 +65,12 @@ export function TasksPage() {
   return (
     <main className={styles.screen}>
       {/*
+       * Живой поток не перестраивает список сам: он копит изменения и предлагает их
+       * полосой. Полоса стоит вне потока вёрстки — строки от её появления не двигаются.
+       */}
+      <UpdatesBar />
+
+      {/*
        * Заголовок, отбор и переключатель режима — одной строкой. Тремя блоками друг
        * под другом они уводили первую строку таблицы на 415-й пиксель: из двадцати
        * одной задачи на экране оставалось семь.
@@ -103,6 +110,14 @@ export function TasksPage() {
             hasMore={pages.hasNextPage}
             loadingMore={pages.isFetchingNextPage}
             onMore={() => void pages.fetchNextPage()}
+            collapsed={filters.collapsed}
+            onToggle={(status, open) =>
+              apply({
+                collapsed: open
+                  ? filters.collapsed.filter((value) => value !== status)
+                  : [...filters.collapsed, status],
+              })
+            }
           />
         )
       ) : page === null ? null : page.items.length === 0 ? (

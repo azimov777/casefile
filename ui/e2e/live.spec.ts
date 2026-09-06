@@ -78,7 +78,7 @@ async function addEntry(
  * Сценарий пишет в демо-установку, поэтому живёт в проекте «ответ», который идёт
  * после читающих (`playwright.config.ts`).
  */
-test('запись, подшитая через API, доходит до открытого экрана без перезагрузки', async ({
+test('запись, подшитая через API, доходит до открытого списка полосой, а не перестановкой', async ({
   page,
   request,
 }) => {
@@ -104,7 +104,16 @@ test('запись, подшитая через API, доходит до отк�
     body: 'Запись, сделанная во время открытого экрана.',
   });
 
-  // Список перечитался сам — и ровно один раз на кадр, а не серией.
+  // Кадр дошёл, но список сам не перечитывается: он ждёт просьбы (UI-13). Что кадр
+  // именно дошёл, видно по полосе.
+  await expect(page.getByRole('status', { name: 'Обновления списка' })).toContainText(
+    'Изменилось задач',
+  );
+  await settled(() => listings.length);
+  expect(listings.length).toBe(before);
+
+  // По просьбе — ровно один запрос на всё накопленное, а не серия.
+  await page.getByRole('button', { name: 'Показать' }).click();
   await expect.poll(() => listings.length, { timeout: 5_000 }).toBeGreaterThan(before);
   await settled(() => listings.length);
   expect(listings.length).toBe(before + 1);

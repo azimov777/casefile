@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
 import { Button } from '@/shared/ui';
 import styles from './tasks-board.module.css';
@@ -9,20 +8,14 @@ interface TasksBoardProps {
   hasMore: boolean;
   loadingMore: boolean;
   onMore: () => void;
+  /**
+   * Свёрнутые столбцы. Приходят из адреса, а не из своего `useState`: свёрнутое
+   * состояние — это то, что человек увидит по пересланной ссылке, и терять его на
+   * переходе в таблицу и обратно незачем.
+   */
+  collapsed: TaskStatus[];
+  onToggle: (status: TaskStatus, open: boolean) => void;
 }
-
-/**
- * Столбцы, свёрнутые по умолчанию: закрытая и отменённая задача интересны реже
- * остальных, а места занимают столько же.
- *
- * Словарь по значению статуса, а не список: перечень и порядок столбцов приходят
- * из перечисления контракта, и здесь сказано только про особенных, каждый по имени.
- * Снятый статус исчезнет из доски сам; добавленный появится развёрнутым.
- */
-const COLLAPSED_BY_DEFAULT: Partial<Record<TaskStatus, true>> = {
-  done: true,
-  cancelled: true,
-};
 
 /**
  * Доска: те же задачи одной очереди, разложенные по столбцам статусов.
@@ -32,9 +25,14 @@ const COLLAPSED_BY_DEFAULT: Partial<Record<TaskStatus, true>> = {
  * снова — доска обязана пережить это перегенерацией клиента, без правки кода
  * (`../tracker/docs/FRONTEND.md`, «Доска без доски»).
  */
-export function TasksBoard({ tasks, hasMore, loadingMore, onMore }: TasksBoardProps) {
-  const [opened, setOpened] = useState<Partial<Record<TaskStatus, boolean>>>({});
-
+export function TasksBoard({
+  tasks,
+  hasMore,
+  loadingMore,
+  onMore,
+  collapsed,
+  onToggle,
+}: TasksBoardProps) {
   const byStatus = new Map<TaskStatus, Task[]>(TASK_STATUSES.map((status) => [status, []]));
   for (const task of tasks) {
     const status = task.status;
@@ -47,7 +45,7 @@ export function TasksBoard({ tasks, hasMore, loadingMore, onMore }: TasksBoardPr
       <div className={styles.columns}>
         {TASK_STATUSES.map((status) => {
           const column = byStatus.get(status) ?? [];
-          const open = opened[status] ?? COLLAPSED_BY_DEFAULT[status] !== true;
+          const open = !collapsed.includes(status);
 
           return (
             <section
@@ -60,7 +58,7 @@ export function TasksBoard({ tasks, hasMore, loadingMore, onMore }: TasksBoardPr
                   type="button"
                   className={styles.toggle}
                   aria-expanded={open}
-                  onClick={() => setOpened((previous) => ({ ...previous, [status]: !open }))}
+                  onClick={() => onToggle(status, !open)}
                 >
                   <code className={styles.status}>{status}</code>
                   <span className={styles.count}>

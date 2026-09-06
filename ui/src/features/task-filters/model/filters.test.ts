@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_COLLAPSED,
   DEFAULT_SORT,
   EMPTY_FILTERS,
   OPEN_QUESTIONS_CONDITION,
@@ -34,6 +35,7 @@ describe('чтение отбора из адреса', () => {
       query: '',
       sort: 'key',
       cursor: 'abc',
+      collapsed: DEFAULT_COLLAPSED,
     });
   });
 
@@ -51,6 +53,32 @@ describe('чтение отбора из адреса', () => {
     expect(parsed.status).toEqual(['open']);
     expect(parsed.priority).toEqual([]);
     expect(parsed.sort).toBe(DEFAULT_SORT);
+  });
+});
+
+describe('свёрнутые столбцы доски', () => {
+  it('без параметра свёрнуты закрытые и отменённые', () => {
+    expect(readFilters(new URLSearchParams('view=board')).collapsed).toEqual(DEFAULT_COLLAPSED);
+  });
+
+  it('пустое значение означает «ничего не свёрнуто», а не «параметра нет»', () => {
+    expect(readFilters(new URLSearchParams('view=board&collapsed=')).collapsed).toEqual([]);
+    expect(writeFilters({ ...EMPTY_FILTERS, view: 'board', collapsed: [] }).get('collapsed')).toBe(
+      '',
+    );
+  });
+
+  it('умолчание в адрес не пишет, а отличное от него — пишет целиком', () => {
+    expect(writeFilters({ ...EMPTY_FILTERS, collapsed: DEFAULT_COLLAPSED }).has('collapsed')).toBe(
+      false,
+    );
+    expect(
+      writeFilters({ ...EMPTY_FILTERS, collapsed: ['backlog', 'done'] }).getAll('collapsed'),
+    ).toEqual(['backlog', 'done']);
+  });
+
+  it('свёрнутость условием отбора не считается: она про вид, а не про состав выдачи', () => {
+    expect(hasConditions({ ...EMPTY_FILTERS, collapsed: [] })).toBe(false);
   });
 });
 

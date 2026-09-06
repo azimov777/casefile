@@ -34,7 +34,23 @@ export interface TaskFilters {
   query: string;
   sort: string;
   cursor: string;
+  /**
+   * Свёрнутые столбцы доски. Живёт в адресе, как и всё, что меняет вид выдачи:
+   * ссылка на доску должна открыться тем же самым, а не разворачивать столбцы,
+   * которые отправитель свернул.
+   */
+  collapsed: TaskStatus[];
 }
+
+/**
+ * Что свёрнуто, пока человек не сказал иначе: закрытая и отменённая задача интересны
+ * реже остальных, а места занимают столько же.
+ *
+ * Отсутствие параметра в адресе означает это умолчание, а `collapsed=` без значения —
+ * «ничего не свёрнуто». Иначе развернувший всё не смог бы переслать это ссылкой:
+ * пустой список и отсутствующий были бы неразличимы.
+ */
+export const DEFAULT_COLLAPSED: TaskStatus[] = ['done', 'cancelled'];
 
 /**
  * Порядок по умолчанию: где агенты работают прямо сейчас. Считается по
@@ -93,6 +109,7 @@ export const EMPTY_FILTERS: TaskFilters = {
   query: '',
   sort: DEFAULT_SORT,
   cursor: '',
+  collapsed: DEFAULT_COLLAPSED,
 };
 
 /** Адрес → отбор. Неизвестные значения отбрасываются: см. `keepKnown`. */
@@ -112,6 +129,9 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     query: params.get('query') ?? '',
     sort: TASK_SORTS.some((option) => option.value === sort) && sort !== null ? sort : DEFAULT_SORT,
     cursor: params.get('cursor') ?? '',
+    collapsed: params.has('collapsed')
+      ? keepKnown(params.getAll('collapsed'), TASK_STATUSES)
+      : DEFAULT_COLLAPSED,
   };
 }
 
@@ -132,7 +152,19 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   if (filters.sort !== DEFAULT_SORT) params.set('sort', filters.sort);
   if (filters.cursor !== '') params.set('cursor', filters.cursor);
 
+  // Умолчание в адрес не пишется, а «ничего не свёрнуто» пишется пустым значением:
+  // без него это состояние не отличить от «параметра нет».
+  if (!sameStatuses(filters.collapsed, DEFAULT_COLLAPSED)) {
+    if (filters.collapsed.length === 0) params.set('collapsed', '');
+    else for (const status of filters.collapsed) params.append('collapsed', status);
+  }
+
   return params;
+}
+
+/** Одинаковы ли наборы статусов: порядок в них ничего не значит. */
+function sameStatuses(left: TaskStatus[], right: TaskStatus[]): boolean {
+  return left.length === right.length && left.every((status) => right.includes(status));
 }
 
 /**
@@ -182,7 +214,13 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
  * нашлось по вашим условиям» в «в очереди пусто».
  */
 export function hasConditions(filters: TaskFilters): boolean {
-  const conditions = writeFilters({ ...filters, view: 'table', sort: DEFAULT_SORT, cursor: '' });
+  const conditions = writeFilters({
+    ...filters,
+    view: 'table',
+    sort: DEFAULT_SORT,
+    cursor: '',
+    collapsed: DEFAULT_COLLAPSED,
+  });
   return [...conditions.keys()].length > 0;
 }
 

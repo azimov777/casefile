@@ -79,6 +79,75 @@ test('доска показывает по столбцу на каждый ст
   expect(calls).toHaveLength(1);
 });
 
+test('раскрытие столбца не сужает соседей и не двигает карточки, которые читают', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO&view=board');
+  await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
+
+  const widths = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('section[aria-label]'))
+        .filter((node) => node.getAttribute('aria-label') !== 'Отбор задач')
+        .map((node) => Math.round(node.getBoundingClientRect().width)),
+    );
+  const cardTop = () =>
+    column(page, 'open')
+      .getByRole('article')
+      .first()
+      .boundingBox()
+      .then((box) => Math.round(box?.y ?? Number.NaN));
+
+  const before = { widths: await widths(), card: await cardTop() };
+
+  // Раскрытие свёрнутого столбца раньше сужало все остальные (265 → 190 px), и текст
+  // карточек в столбце, который человек читал, переносился по-другому.
+  await column(page, 'done').getByRole('button').click();
+  await expect(column(page, 'done').getByRole('article').first()).toBeVisible();
+
+  expect((await widths()).slice(0, before.widths.length - 2)).toEqual(
+    before.widths.slice(0, before.widths.length - 2),
+  );
+  expect(await cardTop()).toBe(before.card);
+
+  await column(page, 'done').getByRole('button').click();
+  await expect(column(page, 'done').getByRole('article')).toHaveCount(0);
+  expect(await cardTop()).toBe(before.card);
+});
+
+test('свёрнутые столбцы живут в адресе: переживают перезагрузку и пересылку ссылки', async ({
+  page,
+  context,
+}) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO&view=board');
+
+  // Развернули закрытые, свернули открытые: состояние, которого нет в умолчании.
+  await column(page, 'done').getByRole('button').click();
+  await column(page, 'open').getByRole('button').click();
+
+  await expect(page).toHaveURL(/collapsed=/);
+  const address = page.url();
+
+  await page.reload();
+  await expect(column(page, 'done').getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+  await expect(column(page, 'open').getByRole('button')).toHaveAttribute('aria-expanded', 'false');
+
+  const copy = await context.newPage();
+  await silenceJournal(copy);
+  await copy.goto(address);
+  await expect(copy.locator('section[aria-label="done"] button')).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  await expect(copy.locator('section[aria-label="open"] button')).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await copy.close();
+});
+
 test('закрытые и отменённые свёрнуты, показывают число и раскрываются кликом', async ({ page }) => {
   await page.goto('/tasks?queue=DEMO&view=board');
 
