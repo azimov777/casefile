@@ -84,7 +84,7 @@
 к тем, ни к другим. Проверять «влияет ли» по симметричности вида нельзя — у нынешних
 видов два свойства совпали случайно.
 **Где:** `app/domain/links.py`, `BEHAVIOURAL_LINK_KINDS` и `changes_behaviour`;
-`app/services/links.py`, `_ensure_changeable`; `CONCEPT.md`, 3.5.
+`app/services/links.py`, `_ensure_changeable`.
 
 ## Закрытие блокера снимает признак, но не связь
 
