@@ -6,14 +6,34 @@ import { parseFrame, type JournalFrame } from './frames';
 import { keysToInvalidate } from './invalidation';
 import { openJournalStream } from './stream-client';
 
-/** Что показывает индикатор в шапке. */
+/**
+ * Что показывает индикатор в шапке.
+ *
+ * `connecting` и `reconnecting` разделены не ради полноты: первое — обычное начало
+ * работы, второе — потеря связи. Слив их в одно, интерфейс краснел бы на каждой
+ * загрузке страницы и приучал бы не верить красному.
+ */
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting';
+
+/** Вопрос, адресованный этому человеку и пришедший при открытом приложении. */
+export interface IncomingQuestion {
+  /**
+   * Пара «задача и номер записи»: она же признак того, что это тот же самый вопрос.
+   * Больше ничем один вопрос от другого не отличить — номер уникален внутри задачи.
+   */
+  id: string;
+  taskKey: string;
+  no: number;
+  /** Строка описи записи: то, чем вопрос назван, а не всё его тело. */
+  title: string;
+  blocking: boolean;
+}
 
 export interface LiveJournal {
   status: LiveStatus;
-  /** Вопрос, адресованный этому человеку, пришедший при открытом приложении. */
-  incomingQuestion: { taskKey: string; no: number } | null;
-  dismissQuestion: () => void;
+  /** Все непрочитанные, в порядке прихода: второй вопрос не затирает первый. */
+  incomingQuestions: IncomingQuestion[];
+  dismissQuestion: (id: string) => void;
 }
 
 /**
@@ -26,7 +46,7 @@ export interface LiveJournal {
 export function useLiveJournal(): LiveJournal {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<LiveStatus>('connecting');
-  const [incomingQuestion, setIncomingQuestion] = useState<LiveJournal['incomingQuestion']>(null);
+  const [incomingQuestions, setIncomingQuestions] = useState<IncomingQuestion[]>([]);
 
   /** Последний прочитанный `seq`: с него поток продолжается после обрыва. */
   const cursor = useRef<number | null>(null);
@@ -34,6 +54,15 @@ export function useLiveJournal(): LiveJournal {
   const pending = useRef<QueryKey[]>([]);
   /** Связь уже теряли: первое открытие потока и восстановление — разные события. */
   const reconnected = useRef(false);
+  /**
+   * Вопросы, о которых человеку уже сказали, — показанные и закрытые вместе.
+   *
+   * Поток продолжается по `Last-Event-ID`, а граница там по включению: тот же кадр
+   * приезжает второй раз на каждом переподключении. Без этой памяти закрытое
+   * уведомление воскресало бы от каждого моргания сети, а человек переставал бы
+   * закрывать их вовсе.
+   */
+  const announced = useRef(new Set<string>());
 
   useEffect(() => {
     const token = getToken();
@@ -66,9 +95,23 @@ export function useLiveJournal(): LiveJournal {
       // Вопрос интересен человеку, только если спросили его самого.
       const me = queryClient.getQueryData<Bootstrap>(sessionKeys.bootstrap)?.participant?.name;
       if (me === undefined || me === null) return;
-      if (frame.entry.payload.addressees.includes(me)) {
-        setIncomingQuestion({ taskKey: frame.taskKey, no: frame.entry.no });
-      }
+      if (!frame.entry.payload.addressees.includes(me)) return;
+
+      const id = `${frame.taskKey}#${frame.entry.no}`;
+      if (announced.current.has(id)) return;
+      announced.current.add(id);
+
+      // Собирается до `setState`, а не внутри него: разбор по `type` живёт только
+      // в прямом коде — внутри замыкания компилятор о нём уже не помнит и видит
+      // нагрузку всех пятнадцати типов записи разом.
+      const question: IncomingQuestion = {
+        id,
+        taskKey: frame.taskKey,
+        no: frame.entry.no,
+        title: frame.entry.title,
+        blocking: frame.entry.payload.blocking,
+      };
+      setIncomingQuestions((shown) => [...shown, question]);
     }
 
     document.addEventListener('visibilitychange', applyPending);
@@ -115,7 +158,9 @@ export function useLiveJournal(): LiveJournal {
 
   return {
     status,
-    incomingQuestion,
-    dismissQuestion: () => setIncomingQuestion(null),
+    incomingQuestions,
+    // Закрытое убирается с экрана, но остаётся в `announced`: человек сказал «видел».
+    dismissQuestion: (id: string) =>
+      setIncomingQuestions((shown) => shown.filter((question) => question.id !== id)),
   };
 }

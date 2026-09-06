@@ -1,14 +1,3 @@
-.live {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.question {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
 .connected,
 .lost {
   display: inline-flex;

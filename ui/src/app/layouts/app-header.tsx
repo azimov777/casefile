@@ -43,7 +43,7 @@ export function AppHeader({ live }: { live: LiveJournal }) {
       </nav>
 
       <div className={styles.session}>
-        <LiveStatus {...live} />
+        <LiveStatus status={live.status} />
 
         {/* Отказ показывается с повтором: чинить бэкенд и перезагружать вкладку —
             разные действия, и второе не должно быть единственным доступным. */}
@@ -54,9 +54,21 @@ export function AppHeader({ live }: { live: LiveJournal }) {
             <span className={styles.participant}>
               {bootstrap.data.participant?.name ?? 'участника нет'}
             </span>
-            <span className={styles.questions}>
-              Открытых вопросов: {bootstrap.data.open_questions}
-            </span>
+            {/*
+             * Счётчик — ссылка во входящую: он был единственным местом, где человек
+             * узнавал о вопросах, и при этом никуда не вёл. Число берётся из
+             * `bootstrap` как есть: интерфейс за бэкенд не считает (`CONCEPT.md`, 6).
+             */}
+            <Link
+              className={
+                bootstrap.data.open_questions > 0 ? styles.questionsWaiting : styles.questions
+              }
+              to="/questions"
+            >
+              {bootstrap.data.open_questions > 0
+                ? `Открытых вопросов: ${bootstrap.data.open_questions}`
+                : 'Открытых вопросов нет'}
+            </Link>
           </>
         )}
 

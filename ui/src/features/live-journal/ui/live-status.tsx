@@ -1,35 +1,47 @@
-import { Link } from 'react-router';
-import type { LiveJournal } from '../model/use-live-journal';
+import type { LiveStatus as LiveStatusValue } from '../model/use-live-journal';
 import styles from './live-status.module.css';
 
 /**
- * Состояние живого потока и новый вопрос — рядом, в шапке: оба говорят «то, на что вы
- * смотрите, только что изменилось» (`CONCEPT.md`, 5).
+ * Как называется каждое состояние потока и что оно значит для человека.
+ *
+ * Перечислено ключами объекта: состояние, добавленное в `LiveStatus`, роняет сборку,
+ * а не остаётся без подписи (тот же приём, что у тонов и списков контракта).
  */
-export function LiveStatus({ status, incomingQuestion, dismissQuestion }: LiveJournal) {
-  return (
-    <span className={styles.live}>
-      {incomingQuestion === null ? null : (
-        <Link
-          className={styles.question}
-          to={`/tasks/${incomingQuestion.taskKey}?entry=${incomingQuestion.no}`}
-          onClick={dismissQuestion}
-        >
-          Вам вопрос: {incomingQuestion.taskKey}#{incomingQuestion.no}
-        </Link>
-      )}
+const STATES = {
+  connecting: {
+    label: 'подключаемся',
+    title: 'Открываем живой поток журнала',
+    alarming: false,
+  },
+  live: {
+    label: 'на связи',
+    title: 'Живой поток журнала открыт: экран обновляется сам',
+    alarming: false,
+  },
+  reconnecting: {
+    label: 'нет связи',
+    title: 'Соединение с потоком журнала потеряно, идёт переподключение',
+    alarming: true,
+  },
+} satisfies Record<LiveStatusValue, { label: string; title: string; alarming: boolean }>;
 
-      <span
-        className={status === 'live' ? styles.connected : styles.lost}
-        role="status"
-        title={
-          status === 'live'
-            ? 'Живой поток журнала открыт: экран обновляется сам'
-            : 'Соединение с потоком журнала потеряно, идёт переподключение'
-        }
-      >
-        {status === 'live' ? 'на связи' : 'нет связи'}
-      </span>
+/**
+ * Состояние живого потока в шапке: свежесть того, на что человек смотрит
+ * (`CONCEPT.md`, 5).
+ *
+ * Первое открытие не красное. Красный означает «показанному больше нельзя верить»,
+ * и вспыхивать им на каждой загрузке страницы значит обесценить его к третьему разу.
+ */
+export function LiveStatus({ status }: { status: LiveStatusValue }) {
+  const state = STATES[status];
+
+  return (
+    <span
+      className={state.alarming ? styles.lost : styles.connected}
+      role="status"
+      title={state.title}
+    >
+      {state.label}
     </span>
   );
 }

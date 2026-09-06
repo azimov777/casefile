@@ -1,0 +1,85 @@
+/*
+ * Стопка стоит вне потока вёрстки: уведомление, пришедшее само, не вправе сдвинуть
+ * то, что человек читает. Место при этом своё и постоянное — в правом нижнем углу
+ * его не закрывает ни шапка, ни первые строки таблицы, которые и читают в первую
+ * очередь.
+ */
+.stack {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: min(26rem, calc(100vw - var(--space-8)));
+}
+
+.notice {
+  position: relative;
+  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-3);
+  border: 1px solid var(--tone-attention-border);
+  border-radius: var(--radius-md);
+  background: var(--tone-attention-bg);
+  color: var(--tone-attention-text);
+  box-shadow: var(--shadow-raised);
+
+  /*
+   * Единственное движение, начинающееся само: один раз, на появление. Это ровно то
+   * событие, ради которого движение вообще заведено. При `prefers-reduced-motion`
+   * общее правило в `shared/styles/index.css` сводит его к мгновенному — уведомление
+   * просто есть.
+   */
+  animation: appear var(--motion-slow) var(--motion-ease);
+}
+
+/*
+ * Движение без прозрачности — намеренно. Появление через `opacity` смешивает цвета
+ * карточки с фоном страницы, и на промежуточных кадрах контраст текста падает ниже
+ * AA: замерено `axe` — 2.96 при норме 4.5 (`#a58c57` на `#fdf4e4` вместо `#6f4c00`
+ * на `#fbeed4`). Уведомление о вопросе, которое доли секунды нечитаемо, — плохая
+ * плата за красоту; карточка приезжает непрозрачной с первого кадра.
+ */
+@keyframes appear {
+  from {
+    transform: translateY(var(--space-4));
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.key {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: inherit;
+}
+
+.title {
+  font-size: var(--text-sm);
+  /* Длинный заголовок не растит карточку без предела и не обрезается посреди слова. */
+  overflow-wrap: anywhere;
+}
+
+.dismiss {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-lg);
+  line-height: 1.4;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.dismiss:hover {
+  border-color: currentColor;
+}

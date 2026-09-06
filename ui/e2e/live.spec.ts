@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type APIRequestContext, type Locator } from '@playwright/test';
 import { compose, readE2eToken } from './contour';
 
 const token = readE2eToken();
@@ -8,6 +9,19 @@ test.beforeEach(async ({ context }) => {
     window.localStorage.setItem('tracker.token', value);
   }, token);
 });
+
+/**
+ * Положение названных элементов на экране. Сравнивается до и после события, которое
+ * пришло само: движение позволено только тому, что о себе объявляет, — и не ценой
+ * сдвига того, что человек в этот момент читает.
+ */
+async function geometry(targets: Record<string, Locator>): Promise<Record<string, DOMRect>> {
+  const measured: Record<string, DOMRect> = {};
+  for (const [name, target] of Object.entries(targets)) {
+    measured[name] = (await target.boundingBox()) as unknown as DOMRect;
+  }
+  return measured;
+}
 
 /** Ждёт, пока счётчик перестанет расти: запросы улеглись. */
 async function settled(count: () => number): Promise<void> {
@@ -131,35 +145,125 @@ test('запись, подшитая при открытой карточке, �
  * ответом через API. Иначе он оставлял бы во входящей вопрос, и соседний пишущий
  * сценарий видел бы не то, что ожидал.
  */
-test('вопрос ко мне объявляется в шапке и растит счётчик без перезагрузки', async ({
+test('вопрос ко мне объявляется уведомлением и не сдвигает того, что человек читает', async ({
   page,
   request,
 }) => {
   await page.goto('/tasks?queue=DEMO');
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
 
+  // Замер до события: уведомление приходит само, и сдвинуть чужое оно не вправе.
+  const watched = {
+    header: page.getByRole('banner'),
+    firstRow: page.locator('tbody tr').first(),
+    logout: page.getByRole('button', { name: 'Выйти' }),
+  };
+  const before = await geometry(watched);
+
   const response = await request.post('/api/v1/tasks/DEMO-3/entries', {
     headers: { Authorization: `Bearer ${token}` },
     data: {
       type: 'question',
       title: 'Вопрос владельцу из сквозного теста',
-      body: 'Проверяем, доходит ли вопрос до шапки живым потоком.',
-      payload: { addressees: ['owner'], blocking: false },
+      body: 'Проверяем, доходит ли вопрос до экрана живым потоком.',
+      payload: { addressees: ['owner'], blocking: true },
     },
   });
   expect(response.status()).toBe(201);
+  const question = (await response.json()) as { data: { no: number } };
 
-  const notice = page.getByRole('link', { name: /Вам вопрос: DEMO-3#\d+/ });
-  await expect(notice).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByRole('banner').getByText(/Открытых вопросов: [1-9]/)).toBeVisible();
+  const notice = page.getByRole('complementary', { name: 'Вопросы ко мне' });
+  await expect(notice.getByText('Вопрос владельцу из сквозного теста')).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect(notice.getByText('блокирующий')).toBeVisible();
+
+  // Счётчик в шапке тоже ожил и стал ссылкой во входящую.
+  const counter = page.getByRole('banner').getByRole('link', { name: /Открытых вопросов: [1-9]/ });
+  await expect(counter).toHaveAttribute('href', '/questions');
+
+  expect(await geometry(watched)).toEqual(before);
+
+  // Переход по уведомлению ведёт к самому вопросу: карточка с раскрытой записью.
+  await notice.getByRole('link', { name: `DEMO-3#${question.data.no}` }).click();
+  await expect(page).toHaveURL(new RegExp(`/tasks/DEMO-3\\?entry=${question.data.no}$`));
+  await expect(page.getByText('Вопрос владельцу из сквозного теста').first()).toBeVisible();
+  // Точное совпадение: `getByLabel('Ответ')` находит и поле, и саму форму —
+  // у неё `aria-label="Ответ на DEMO-3#N"` (тот же приём в `answer.spec.ts`).
+  await expect(page.getByLabel(/^Ответ$/)).toBeVisible();
+
+  // Уведомление гаснет переходом: человек уже там, куда оно звало. Область объявления
+  // при этом остаётся — она обязана существовать до следующего вопроса.
+  await expect(
+    page.getByRole('complementary', { name: 'Вопросы ко мне' }).locator('article'),
+  ).toHaveCount(0);
 
   // Убираем за собой: вопрос закрывается ответом, счётчик возвращается к прежнему.
-  const question = (await response.json()) as { data: { no: number } };
   await addEntry(request, 'DEMO-3', {
     type: 'answer',
     body: 'Отвечено сквозным тестом, чтобы входящая осталась какой была.',
     payload: { question_no: question.data.no },
   });
+});
+
+test('два вопроса подряд видны оба: второй не затирает первый', async ({ page, request }) => {
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+
+  const asked: { key: string; no: number }[] = [];
+  for (const key of ['DEMO-3', 'DEMO-4']) {
+    const response = await request.post(`/api/v1/tasks/${key}/entries`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        type: 'question',
+        title: `Вопрос из сквозного теста по ${key}`,
+        body: 'Второй вопрос не должен затирать первый.',
+        payload: { addressees: ['owner'], blocking: false },
+      },
+    });
+    expect(response.status()).toBe(201);
+    asked.push({ key, no: ((await response.json()) as { data: { no: number } }).data.no });
+  }
+
+  const notice = page.getByRole('complementary', { name: 'Вопросы ко мне' });
+  for (const question of asked) {
+    await expect(notice.getByRole('link', { name: `${question.key}#${question.no}` })).toBeVisible({
+      timeout: 5_000,
+    });
+  }
+
+  const found = await new AxeBuilder({ page }).analyze();
+  expect(found.violations).toEqual([]);
+
+  for (const question of asked) {
+    await addEntry(request, question.key, {
+      type: 'answer',
+      body: 'Отвечено сквозным тестом, чтобы входящая осталась какой была.',
+      payload: { question_no: question.no },
+    });
+  }
+});
+
+test('на загрузке страницы индикатор ни разу не говорит «нет связи»', async ({ page }) => {
+  // Наблюдатель ставится до загрузки: состояние `connecting` живёт доли секунды,
+  // и поймать его проверкой после `goto` нельзя — к тому моменту поток уже открыт.
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { __seen: string[] }).__seen = seen;
+    new MutationObserver(() => {
+      const text = document.querySelector('header')?.textContent ?? '';
+      if (text.includes('нет связи')) seen.push('нет связи');
+      if (text.includes('подключаемся')) seen.push('подключаемся');
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+  });
+
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+
+  const seen = await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen);
+  expect(seen).not.toContain('нет связи');
+  // Первое открытие называется своими словами, а не молчанием.
+  expect(seen).toContain('подключаемся');
 });
 
 test('обрыв виден в шапке, а после восстановления пропущенное не теряется', async ({

@@ -47,6 +47,26 @@
   font-family: var(--font-mono);
 }
 
+.questions,
+.questionsWaiting {
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  text-decoration: none;
+}
+
 .questions {
   color: var(--color-text-muted);
+}
+
+/* Вопросы есть — счётчик перестаёт выглядеть как то, что можно не читать. */
+.questionsWaiting {
+  border: 1px solid var(--tone-attention-border);
+  background: var(--tone-attention-bg);
+  color: var(--tone-attention-text);
+  font-weight: 600;
+}
+
+.questions:hover,
+.questionsWaiting:hover {
+  text-decoration: underline;
 }

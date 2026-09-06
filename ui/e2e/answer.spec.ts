@@ -53,7 +53,9 @@ test('ответ на вопрос из входящей закрывает ег
 
   // Вопрос ушёл из входящей, счётчик перечитан у бэкенда.
   await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toHaveCount(0);
-  await expect(header.getByText('Открытых вопросов: 0')).toBeVisible();
+  // Ноль называется словами, а не числом: «Открытых вопросов: 0» человек читает
+  // как счётчик, который надо расшифровать, а «вопросов нет» — как ответ.
+  await expect(header.getByText('Открытых вопросов нет')).toBeVisible();
 
   // Запрос ушёл с ключом повтора, и ответ в деле ровно один.
   expect(posts).toHaveLength(1);

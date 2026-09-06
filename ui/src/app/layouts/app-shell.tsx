@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from 'react-router';
-import { useLiveJournal } from '@/features/live-journal';
+import { QuestionNotice, useLiveJournal } from '@/features/live-journal';
 import { ErrorBoundary } from '../providers/error-boundary';
 import { AppHeader } from './app-header';
 import styles from './app-shell.module.css';
@@ -26,6 +26,14 @@ export function AppShell() {
           <Outlet />
         </ErrorBoundary>
       </div>
+
+      {/*
+       * Уведомления живут в оболочке, а не на странице: вопрос приходит независимо
+       * от того, где человек сейчас находится, и уходить с экрана вместе со страницей
+       * не должен. Границей ошибок не накрыты намеренно — упавшая страница не повод
+       * замолчать о том, что человека спрашивают.
+       */}
+      <QuestionNotice {...live} />
     </div>
   );
 }

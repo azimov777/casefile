@@ -43,6 +43,25 @@ describe('шапка', () => {
     expect(screen.getByRole('heading', { name: 'Задачи' })).toBeInTheDocument();
   });
 
+  it('счётчик вопросов ведёт во входящую и называет себя по-разному при нуле и не нуле', async () => {
+    server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
+    renderApp('/tasks');
+
+    // Счётчик был единственным местом, где человек узнавал о вопросах, и никуда
+    // не вёл: увидеть, что тебя спрашивают, и попасть к вопросу — разные усилия.
+    const waiting = await screen.findByRole('link', { name: 'Открытых вопросов: 2' });
+    expect(waiting).toHaveAttribute('href', '/questions');
+  });
+
+  it('при нуле вопросов счётчик называется иначе и не требует внимания', async () => {
+    server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ open_questions: 0 }))));
+    renderApp('/tasks');
+
+    const quiet = await screen.findByRole('link', { name: 'Открытых вопросов нет' });
+    expect(quiet).toHaveAttribute('href', '/questions');
+    expect(screen.queryByRole('link', { name: /Открытых вопросов: / })).not.toBeInTheDocument();
+  });
+
   it('неизвестный код показывает фразу бэкенда и сам код', async () => {
     server.use(
       http.get(`${API}/api/v1/bootstrap`, () =>

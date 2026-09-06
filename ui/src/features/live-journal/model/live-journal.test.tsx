@@ -72,7 +72,7 @@ describe('живой поток', () => {
     expect(listings).toBeGreaterThan(before);
   });
 
-  it('вопрос, адресованный мне, объявляется в шапке ссылкой на запись', async () => {
+  it('вопрос, адресованный мне, объявляется уведомлением со ссылкой на запись', async () => {
     renderApp('/tasks');
     await screen.findByText('на связи');
 
@@ -81,16 +81,20 @@ describe('живой поток', () => {
         entry(1030, 'DEMO-4', {
           type: 'question',
           no: 7,
+          title: 'Удалять ли записи дела отменённых задач через год',
           payload: { addressees: ['owner'], blocking: true },
         }),
       );
     });
 
-    const notice = await screen.findByRole('link', { name: 'Вам вопрос: DEMO-4#7' });
+    const notice = await screen.findByRole('link', { name: 'DEMO-4#7' });
     expect(notice).toHaveAttribute('href', '/tasks/DEMO-4?entry=7');
+    // Ключа мало, чтобы решить, бросать ли текущее дело: видно, о чём спросили.
+    expect(screen.getByText('Удалять ли записи дела отменённых задач через год')).toBeVisible();
+    expect(screen.getByText('блокирующий')).toBeVisible();
   });
 
-  it('вопрос, адресованный не мне, в шапке не появляется', async () => {
+  it('вопрос, адресованный не мне, уведомления не даёт', async () => {
     renderApp('/tasks');
     await screen.findByText('на связи');
 
@@ -105,7 +109,91 @@ describe('живой поток', () => {
     });
 
     await waitFor(() => expect(liveJournal.options).not.toBeNull());
-    expect(screen.queryByText(/Вам вопрос/)).not.toBeInTheDocument();
+    // Область объявления есть всегда, а вот карточки в ней быть не должно.
+    expect(screen.getByRole('complementary', { name: 'Вопросы ко мне' })).toBeEmptyDOMElement();
+  });
+
+  it('два вопроса подряд видны оба: второй не затирает первый', async () => {
+    renderApp('/tasks');
+    await screen.findByText('на связи');
+
+    act(() => {
+      liveJournal.send(
+        entry(1032, 'DEMO-4', {
+          type: 'question',
+          no: 9,
+          payload: { addressees: ['owner'], blocking: false },
+        }),
+      );
+      liveJournal.send(
+        entry(1033, 'DEMO-3', {
+          type: 'question',
+          no: 4,
+          payload: { addressees: ['owner'], blocking: false },
+        }),
+      );
+    });
+
+    expect(await screen.findByRole('link', { name: 'DEMO-4#9' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'DEMO-3#4' })).toBeVisible();
+  });
+
+  it('тот же кадр, приехавший второй раз, второго уведомления не даёт', async () => {
+    renderApp('/tasks');
+    await screen.findByText('на связи');
+
+    const question = entry(1034, 'DEMO-4', {
+      type: 'question',
+      no: 11,
+      payload: { addressees: ['owner'], blocking: false },
+    });
+
+    // Поток продолжается по `Last-Event-ID`, а граница там по включению: после
+    // переподключения тот же кадр приезжает снова. Это норма, а не сбой.
+    act(() => {
+      liveJournal.send(question);
+      liveJournal.send(question);
+    });
+
+    expect(await screen.findAllByRole('link', { name: 'DEMO-4#11' })).toHaveLength(1);
+  });
+
+  it('закрытое человеком уведомление не возвращается повторным кадром', async () => {
+    renderApp('/tasks');
+    await screen.findByText('на связи');
+
+    const question = entry(1035, 'DEMO-4', {
+      type: 'question',
+      no: 12,
+      payload: { addressees: ['owner'], blocking: false },
+    });
+
+    act(() => liveJournal.send(question));
+    await screen.findByRole('link', { name: 'DEMO-4#12' });
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Закрыть уведомление о вопросе DEMO-4#12' }));
+    expect(screen.queryByRole('link', { name: 'DEMO-4#12' })).not.toBeInTheDocument();
+
+    // Моргание сети не повод спрашивать заново то, на что человек уже сказал «видел».
+    act(() => {
+      liveJournal.options?.onLost();
+      liveJournal.options?.onOpen();
+      liveJournal.send(question);
+    });
+
+    await waitFor(() => expect(screen.getByText('на связи')).toBeVisible());
+    expect(screen.queryByRole('link', { name: 'DEMO-4#12' })).not.toBeInTheDocument();
+  });
+
+  it('до открытия потока индикатор не пугает красным', async () => {
+    // Первое открытие — обычное начало работы, а не потеря связи: краснеть на каждой
+    // загрузке страницы значит обесценить красный к третьему разу.
+    renderApp('/tasks');
+
+    expect(await screen.findByText('на связи')).toBeVisible();
+    expect(screen.queryByText('нет связи')).not.toBeInTheDocument();
   });
 
   it('обрыв виден в шапке, а восстановление перечитывает показанное', async () => {
