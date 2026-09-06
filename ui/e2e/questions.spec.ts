@@ -12,7 +12,7 @@ test.beforeEach(async ({ context }) => {
 
 test('доступность входящей', async ({ page }) => {
   await page.goto('/questions');
-  await expect(page.getByRole('heading', { name: 'Открытые вопросы' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Входящая' })).toBeVisible();
 
   const result = await new AxeBuilder({ page }).analyze();
   const serious = result.violations
