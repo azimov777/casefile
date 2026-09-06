@@ -53,7 +53,13 @@ describe('доска', () => {
       if (within(section).queryByText(key) === null) {
         await userEvent.setup().click(within(section).getByRole('button'));
       }
-      expect(within(section).getByRole('link', { name: key })).toBeInTheDocument();
+      // Ссылка на карточке одна, и она на названии: ключ перестал быть единственной
+      // мишенью, а вести в задачу стала вся карточка (`task-card.tsx`).
+      expect(within(section).getByRole('link', { name: `Задача ${key}` })).toHaveAttribute(
+        'href',
+        `/tasks/${key}`,
+      );
+      expect(within(section).getByText(key)).toBeInTheDocument();
     }
 
     // Один запрос списка на отрисовку доски.
@@ -128,7 +134,7 @@ describe('доска', () => {
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Ещё' }));
 
-    expect(await within(open).findByRole('link', { name: 'DEMO-2' })).toBeInTheDocument();
+    expect(await within(open).findByRole('link', { name: 'Задача DEMO-2' })).toBeInTheDocument();
     expect(within(open).getByRole('button')).toHaveTextContent('2');
     expect(seen).toHaveLength(2);
     expect((seen[1] as URL).searchParams.get('cursor')).toBe('next');

@@ -122,7 +122,13 @@ test('ключ в списке ведёт на карточку, несущес�
   page,
 }) => {
   await page.goto('/tasks?queue=DEMO');
-  await page.getByRole('link', { name: 'DEMO-6' }).click();
+  // Ссылка в строке одна и названа названием задачи: в задачу ведёт вся строка,
+  // а ключ перестал быть единственной мишенью (`task-row.tsx`).
+  await page
+    .getByRole('row')
+    .filter({ has: page.getByRole('rowheader', { name: 'DEMO-6' }) })
+    .getByRole('link')
+    .click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-6');
 
   await page.goto('/tasks/DEMO-999');

@@ -67,9 +67,11 @@ test('доска показывает по столбцу на каждый ст
     if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
 
     const keys = expected.get(status) ?? [];
-    await expect(section.getByRole('link')).toHaveCount(keys.length);
+    // Карточка, а не ссылка: ссылка теперь одна на карточку и названа названием
+    // задачи, а не ключом — в задачу ведёт вся карточка (`task-card.tsx`).
+    await expect(section.getByRole('article')).toHaveCount(keys.length);
     for (const key of keys) {
-      await expect(section.getByRole('link', { name: key })).toBeVisible();
+      await expect(section.getByRole('article').filter({ hasText: key })).toBeVisible();
     }
   }
 
@@ -84,18 +86,22 @@ test('закрытые и отменённые свёрнуты, показыв�
     const toggle = column(page, status).getByRole('button');
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(toggle).toContainText(/\d/);
-    await expect(column(page, status).getByRole('link')).toHaveCount(0);
+    await expect(column(page, status).getByRole('article')).toHaveCount(0);
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(column(page, status).getByRole('link').first()).toBeVisible();
+    await expect(column(page, status).getByRole('article').first()).toBeVisible();
   }
 });
 
 test('карточка ведёт в задачу, а «назад» возвращает на доску', async ({ page }) => {
   await page.goto('/tasks?queue=DEMO&view=board');
 
-  await column(page, 'in_progress').getByRole('link', { name: 'DEMO-6' }).click();
+  await column(page, 'in_progress')
+    .getByRole('article')
+    .filter({ hasText: 'DEMO-6' })
+    .getByRole('link')
+    .click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-6$/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-6');
 
@@ -115,8 +121,10 @@ test('фильтр по исполнителю действует на доск�
 
   // В столбцах остались только задачи этого исполнителя: их меньше, чем всего в статусе.
   const openKeys = expected.get('open') ?? [];
-  await expect(column(page, 'open').getByRole('link')).not.toHaveCount(openKeys.length);
-  await expect(column(page, 'open').getByRole('link', { name: 'DEMO-4' })).toBeVisible();
+  await expect(column(page, 'open').getByRole('article')).not.toHaveCount(openKeys.length);
+  await expect(
+    column(page, 'open').getByRole('article').filter({ hasText: 'DEMO-4' }),
+  ).toBeVisible();
 
   await page.getByRole('radio', { name: 'Таблица' }).click();
 

@@ -77,7 +77,17 @@ test('сортировка живёт в адресе: вторая вкладк
   context,
 }) => {
   await page.goto('/tasks?queue=DEMO');
-  await page.getByLabel('Сортировка').selectOption('key');
+
+  // Дожидаемся именно пересортированной выдачи, а не только смены адреса: до её
+  // прихода таблица показывает прежний порядок, и снятое с неё значение сравнивалось
+  // бы с порядком второй вкладки, которая ждать не обязана.
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/v1/tasks?') && response.url().includes('sort=key'),
+    ),
+    page.getByLabel('Сортировка').selectOption('key'),
+  ]);
 
   await expect(page).toHaveURL(/sort=key/);
   const first = await rows(page).first().locator('th').innerText();

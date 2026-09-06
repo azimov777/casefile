@@ -1,4 +1,6 @@
+/* Точка отсчёта для растянутой ссылки: `inset: 0` считается отсюда. */
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -6,6 +8,53 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease);
+}
+
+/* Видно, какая карточка под курсором: на доске их десятки в шести столбцах. */
+.card:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-sunken);
+}
+
+.link {
+  color: inherit;
+  text-decoration: none;
+  /*
+   * Ссылку нельзя перетаскивать: иначе протяжка мышью по названию таскала бы её
+   * адрес вместо того, чтобы выделять текст. Атрибута `draggable="false"` для
+   * этого мало — у Chromium своё правило `-webkit-user-drag`, и по умолчанию оно
+   * у ссылок «тащить элемент».
+   */
+  -webkit-user-drag: none;
+}
+
+.link:hover .raised {
+  text-decoration: underline;
+}
+
+.link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+}
+
+.link:focus-visible {
+  outline: none;
+}
+
+.link:focus-visible::after {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* См. `task-row.module.css`: поднятое над растяжкой выделяется мышью как текст. */
+.raised {
+  position: relative;
+  z-index: 1;
 }
 
 .top {
