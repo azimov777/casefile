@@ -30,7 +30,7 @@ pytestmark = pytest.mark.anyio
 #: Сколько байт на строку описи считается дешёвым. Проверяется не ради красоты числа:
 #: опись входит в каждый пакет задачи, и строка, выросшая в разы, означает, что в неё
 #: просочилось что-то свободное по длине.
-MAX_HEADING_BYTES = 600
+MAX_HEADING_BYTES = 450
 
 
 async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) -> Task:
@@ -283,12 +283,10 @@ async def test_the_index_does_not_grow_with_the_length_of_the_sections(
 
     # Разница между описями — только в заголовках, которые собрал трекер, и в ключах
     # задач. Тексты разделов не дают ни байта: их там нет.
-    facts_size = _facts_bytes(heavy_index)
-
-    # Факты — приправа к строке, а не её содержание: больше половины веса означало бы,
-    # что в них просочилось что-то, чему место в самой записи.
-    assert facts_size < heavy_size / 2, (
-        f"факты весят больше половины описи: {facts_size} из {heavy_size}"
+    # Сами факты тоже не зависят от длины разделов: они и есть то место, куда текст
+    # разделов мог бы просочиться, и меряются отдельно от заголовков.
+    assert _facts_bytes(heavy_index) == _facts_bytes(light_index), (
+        "факты подорожали от длины разделов"
     )
     assert heavy_size < light_size * 1.1, (
         f"опись подорожала от длины разделов: {heavy_size} против {light_size}"
@@ -386,8 +384,8 @@ def _as_json(facts: Any) -> dict[str, Any]:
 def _index_bytes(index: list[Any]) -> int:
     """Сколько весит опись, если её отдать клиенту.
 
-    Считается так же, как её сериализует схема: незаполненные факты в ответ не едут,
-    и мерить их значило бы мерить не то, что уходит по сети.
+    Считается так же, как её сериализует схема: незаполненные части едут в ответе
+    как `null` — ради типизированного клиента, см. `docs/notes/api.md`.
     """
     return len(
         json.dumps(
@@ -399,7 +397,6 @@ def _index_bytes(index: list[Any]) -> int:
                     "facts": {
                         name: (value.value if hasattr(value, "value") else value)
                         for name, value in _as_json(heading.facts).items()
-                        if value is not None
                     },
                 }
                 for heading in index
@@ -417,7 +414,6 @@ def _facts_bytes(index: list[Any]) -> int:
                 {
                     name: (value.value if hasattr(value, "value") else value)
                     for name, value in _as_json(heading.facts).items()
-                    if value is not None
                 }
                 for heading in index
             ],

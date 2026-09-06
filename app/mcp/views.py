@@ -148,9 +148,10 @@ def facts(value: EntryFacts) -> dict[str, Any]:
 
     Пакет преемника обязан совпадать с ответом REST поле в поле (обзорная проверка
     задачи 03, `tests/test_mcp_tools.py`), поэтому «отдать факты только интерфейсу»
-    нельзя: расхождение здесь означало бы два разных описания одного дела.
+    нельзя: расхождение здесь означало бы два разных описания одного дела. Пустые части
+    едут вместе с остальными — по той же причине.
     """
-    filled = {
+    return {
         "from_status": None if value.from_status is None else value.from_status.value,
         "to_status": None if value.to_status is None else value.to_status.value,
         "has_reason": value.has_reason,
@@ -165,8 +166,6 @@ def facts(value: EntryFacts) -> dict[str, Any]:
         "check_no": value.check_no,
         "outcome": None if value.outcome is None else value.outcome.value,
     }
-    # Пустые части не едут — как и в схеме REST: пакеты обязаны совпадать поле в поле.
-    return {name: item for name, item in filled.items() if item is not None}
 
 
 def heading(value: EntryHeading) -> dict[str, Any]:

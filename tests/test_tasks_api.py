@@ -118,8 +118,8 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     assert sorted(heading) == ["author", "created_at", "facts", "no", "title", "type"]
     assert heading["no"] == 1
     assert heading["type"] == "created"
-    # У заведения называть строкой нечего, кроме самого типа: фактов нет вовсе.
-    assert heading["facts"] == {}
+    # У заведения называть строкой нечего, кроме самого типа: все факты пусты.
+    assert set(heading["facts"].values()) == {None}
     assert heading["author"] == {"kind": "human", "signature": "owner"}
 
 

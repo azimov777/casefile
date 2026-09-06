@@ -4765,8 +4765,174 @@
         "description": "Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках."
       },
       "EntryFactsRead": {
-        "additionalProperties": true,
-        "type": "object"
+        "properties": {
+          "from_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`status_changed`: status before the move"
+          },
+          "to_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`status_changed`: status after the move"
+          },
+          "has_reason": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Reason",
+            "description": "`status_changed`: whether a reason was given. The reason itself is free text and stays in the entry body"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskField"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`section_changed` and `field_changed`: which field was edited. Values are not here: a section can be as long as the task itself"
+          },
+          "link_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinkKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`link_added` and `link_removed`: kind of the link"
+          },
+          "other_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Key",
+            "description": "`link_added` and `link_removed`: the task on the other side",
+            "examples": [
+              "TRK-7"
+            ]
+          },
+          "assignee_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee From",
+            "description": "`assignee_changed`: assignee before, null if there was none"
+          },
+          "assignee_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee To",
+            "description": "`assignee_changed`: assignee after, null if unassigned"
+          },
+          "addressees": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addressees",
+            "description": "`question`: who is asked, at most 20 names"
+          },
+          "blocking": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocking",
+            "description": "`question`: whether the question holds the work"
+          },
+          "question_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question No",
+            "description": "`answer`: number of the question answered",
+            "examples": [
+              7
+            ]
+          },
+          "check_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check No",
+            "description": "`verdict`: number of the review check",
+            "examples": [
+              3
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerdictOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`verdict`: how the check ended"
+          }
+        },
+        "type": "object",
+        "title": "EntryFactsRead",
+        "description": "Факты записи, которыми её называют строкой, не читая тела.\n\nЗаполнены по типу записи, все части необязательны и все ограничены по длине самим\nконтрактом: значения перечислений, ключи, имена полей и участников, номера,\nпризнаки да/нет. Свободного текста здесь нет — ни причины перехода, ни значений\nразделов, ни тел записей; за ними идут в саму запись.\n\nНужны они там, где заголовок собирает трекер и собирает по-английски: клиент строит\nсвою строку по фактам, а не разбирает чужую фразу регуляркой. У записей агента и\nчеловека заполненных фактов нет — их заголовок пишет автор.\n\nНезаполненные части едут в ответе как `null`, хотя это и дороже: строка описи\nвесит 339 байт вместо 102. Причина в генерации клиента — `@model_serializer`,\nотбрасывающий пустое, заменяет схему сериализации на «словарь чего угодно», и\n`EntryFactsRead` приезжает во фронтенд как `Record<string, unknown>`. Типизированный\nклиент — то, ради чего схема вообще выгружается, и двести байт на строку его не\nстоят (`docs/notes/api.md`)."
       },
       "EntryHeadingRead": {
         "properties": {

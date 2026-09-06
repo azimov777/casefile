@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from app.api.schemas.authors import AuthorRead
 from app.db.models.entry import Entry
@@ -65,6 +65,13 @@ class EntryFactsRead(BaseModel):
     Нужны они там, где заголовок собирает трекер и собирает по-английски: клиент строит
     свою строку по фактам, а не разбирает чужую фразу регуляркой. У записей агента и
     человека заполненных фактов нет — их заголовок пишет автор.
+
+    Незаполненные части едут в ответе как `null`, хотя это и дороже: строка описи
+    весит 339 байт вместо 102. Причина в генерации клиента — `@model_serializer`,
+    отбрасывающий пустое, заменяет схему сериализации на «словарь чего угодно», и
+    `EntryFactsRead` приезжает во фронтенд как `Record<string, unknown>`. Типизированный
+    клиент — то, ради чего схема вообще выгружается, и двести байт на строку его не
+    стоят (`docs/notes/api.md`).
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -118,17 +125,6 @@ class EntryFactsRead(BaseModel):
     outcome: VerdictOutcome | None = Field(
         default=None, description="`verdict`: how the check ended"
     )
-
-    @model_serializer(mode="wrap")
-    def _drop_empty(self, serialize: Any) -> dict[str, Any]:
-        """Незаполненные факты в ответ не едут.
-
-        У каждого типа записи заполнены две-три части из тринадцати, а опись входит в
-        каждый пакет задачи: одиннадцать `null` на строку — это две трети её веса
-        (замерено: 339 байт против 122). Клиенту разницы нет — поля и так необязательны,
-        и отсутствующее читается тем же `null`.
-        """
-        return {name: value for name, value in serialize(self).items() if value is not None}
 
 
 class EntryHeadingRead(BaseModel):
