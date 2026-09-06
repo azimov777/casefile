@@ -25,6 +25,57 @@
 
   --color-focus: #23479c;
 
+  /*
+   * Тоны состояний. Их ровно шесть — столько, сколько различимых положений дел,
+   * а не столько, сколько сущностей на экране: цвет на каждый из пятнадцати типов
+   * записи дела был бы радугой, в которой не читается ничего.
+   *
+   * Тон называет положение дел, а не сущность: `positive` носит и статус `done`,
+   * и удачный вердикт. Цвет никогда не единственный носитель смысла — подпись
+   * рядом остаётся всегда (`CONCEPT.md`, 6).
+   *
+   * У каждого тона три переменные: фон плашки, её граница и текст на этом фоне.
+   * Контраст текста к своему фону проходит AA в обеих темах — это проверяет axe.
+   *
+   * Нейтральный, снятое и тревожный выражены ссылками на уже существующие цвета,
+   * а не повторены числами: красный один на всё приложение — и у плашки, и у
+   * поверхности отказа. Поэтому в тёмной теме переопределены только три тона,
+   * у которых свой цвет: ссылки следуют за темой сами.
+   */
+  --tone-neutral-bg: var(--color-surface-sunken);
+  --tone-neutral-border: var(--color-border);
+  --tone-neutral-text: var(--color-text-muted);
+
+  --tone-progress-bg: #e4edfb;
+  --tone-progress-border: #b3caee;
+  --tone-progress-text: #1c4589;
+
+  --tone-positive-bg: #e3f2e8;
+  --tone-positive-border: #aed8be;
+  --tone-positive-text: #1a6435;
+
+  /* Снятое ничем не занято: заливки нет вовсе, граница пунктиром. */
+  --tone-dropped-bg: transparent;
+  --tone-dropped-border: var(--color-border-strong);
+  --tone-dropped-text: var(--color-text-muted);
+
+  --tone-attention-bg: #fbeed4;
+  --tone-attention-border: #e2c894;
+  --tone-attention-text: #6f4c00;
+
+  --tone-danger-bg: var(--color-danger-bg);
+  --tone-danger-border: var(--color-danger-border);
+  --tone-danger-text: var(--color-danger);
+
+  /*
+   * Движение. Двух длительностей хватает: быстрая — отклик на действие человека
+   * (наведение, раскрытие), медленная — появление того, что пришло само и требует
+   * внимания. Третьей нет намеренно: она бы стала «на глаз».
+   */
+  --motion-fast: 120ms;
+  --motion-slow: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0.2, 1);
+
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 
@@ -68,5 +119,17 @@
     --color-danger-border: #63302e;
 
     --color-focus: #93b4fb;
+
+    --tone-progress-bg: #16233a;
+    --tone-progress-border: #2d4468;
+    --tone-progress-text: #9dc0f5;
+
+    --tone-positive-bg: #13251a;
+    --tone-positive-border: #294a34;
+    --tone-positive-text: #8ad3a1;
+
+    --tone-attention-bg: #2b2210;
+    --tone-attention-border: #4d3f1c;
+    --tone-attention-text: #e6c073;
   }
 }

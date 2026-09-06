@@ -1,4 +1,4 @@
-export { Badge } from './badge';
+export { Badge, type BadgeTone } from './badge';
 export { Button } from './button';
 export { Callout } from './callout';
 export { Markdown } from './markdown';

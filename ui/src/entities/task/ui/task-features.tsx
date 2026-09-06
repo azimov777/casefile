@@ -19,7 +19,9 @@ export function TaskFeatureBadges({ features }: { features: TaskFeatures }) {
       ) : null}
 
       {features.open_questions > 0 ? (
-        <Badge title="Вопросы без ответа">вопросов {features.open_questions}</Badge>
+        <Badge tone="attention" title="Вопросы без ответа">
+          вопросов {features.open_questions}
+        </Badge>
       ) : null}
 
       {features.open_blocking_questions > 0 ? (

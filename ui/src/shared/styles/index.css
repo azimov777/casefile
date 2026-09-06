@@ -1,3 +1,26 @@
 /* Единственная точка подключения глобальных стилей: её импортирует `app`. */
 @import './tokens.css';
 @import './reset.css';
+
+/*
+ * Человеку, который просит систему не двигать интерфейс, движение гасится целиком
+ * и в одном месте: правило переопределяет длительности, а не переходы поимённо, —
+ * иначе каждый новый `transition` пришлось бы вспоминать гасить, и однажды его
+ * забудут. `0.01ms` вместо нуля: переход остаётся переходом и продолжает слать
+ * `transitionend`, на который может быть завязана логика.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0.01ms;
+    --motion-slow: 0.01ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -11,6 +11,9 @@
   font-size: var(--text-md);
   font-weight: 500;
   line-height: 1.2;
+  /* Отклик на наведение — единственное движение, которое кнопке позволено:
+     оно отвечает на действие человека, а не начинается само. */
+  transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
 .button:hover:not(:disabled) {

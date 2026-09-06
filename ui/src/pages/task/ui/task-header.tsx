@@ -1,6 +1,8 @@
 import { Link } from 'react-router';
 import {
   TaskFeatureBadges,
+  priorityTone,
+  statusTone,
   type TaskDetails,
   type TaskFeatures,
   type TaskStatus,
@@ -30,8 +32,12 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
       </h1>
 
       <div className={styles.badges}>
-        <Badge mono>{task.status}</Badge>
-        <Badge mono>{task.priority}</Badge>
+        <Badge mono tone={statusTone(task.status)}>
+          {task.status}
+        </Badge>
+        <Badge mono tone={priorityTone(task.priority)}>
+          {task.priority}
+        </Badge>
         <span className={styles.assignee}>
           {task.assignee === null ? (
             <span className={styles.empty}>не назначена</span>
@@ -72,7 +78,7 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
               <span className={styles.empty}>никуда: статус конечный</span>
             ) : (
               transitions.map((status) => (
-                <Badge key={status} mono>
+                <Badge key={status} mono tone={statusTone(status)}>
                   {status}
                 </Badge>
               ))

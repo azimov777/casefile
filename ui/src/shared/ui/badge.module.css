@@ -1,10 +1,10 @@
 .badge {
   display: inline-block;
   padding: 0 var(--space-2);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--tone-neutral-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
   font-size: var(--text-xs);
   line-height: 1.6;
   white-space: nowrap;
@@ -14,8 +14,47 @@
   font-family: var(--font-mono);
 }
 
+/*
+ * Тон меняет три вещи разом: заливку, границу и текст. Меньше нельзя — текст,
+ * оставленный от нейтрального тона, не прошёл бы контраст на чужой заливке.
+ */
+.neutral {
+  border-color: var(--tone-neutral-border);
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+}
+
+.progress {
+  border-color: var(--tone-progress-border);
+  background: var(--tone-progress-bg);
+  color: var(--tone-progress-text);
+}
+
+.positive {
+  border-color: var(--tone-positive-border);
+  background: var(--tone-positive-bg);
+  color: var(--tone-positive-text);
+}
+
+/*
+ * Снятое ничем не занято, и это видно без цвета: заливки нет, граница пунктиром.
+ * Различие держится и на чёрно-белом экране, и у человека, не различающего цвета.
+ */
+.dropped {
+  border-style: dashed;
+  border-color: var(--tone-dropped-border);
+  background: var(--tone-dropped-bg);
+  color: var(--tone-dropped-text);
+}
+
+.attention {
+  border-color: var(--tone-attention-border);
+  background: var(--tone-attention-bg);
+  color: var(--tone-attention-text);
+}
+
 .danger {
-  border-color: var(--color-danger-border);
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
+  border-color: var(--tone-danger-border);
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger-text);
 }

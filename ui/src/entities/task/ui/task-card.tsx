@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { Badge, RelativeTime } from '@/shared/ui';
 import type { Task } from '../api/tasks';
 import { TaskFeatureBadges } from './task-features';
+import { priorityTone } from './tones';
 import styles from './task-card.module.css';
 
 /**
@@ -21,7 +22,9 @@ export function TaskCard({ task }: { task: Task }) {
           {task.key}
         </Link>
         {task.priority === null || task.priority === undefined ? null : (
-          <Badge mono>{task.priority}</Badge>
+          <Badge mono tone={priorityTone(task.priority)}>
+            {task.priority}
+          </Badge>
         )}
       </div>
 

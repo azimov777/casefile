@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { Badge, RelativeTime } from '@/shared/ui';
 import type { Task } from '../api/tasks';
 import { TaskFeatureBadges } from './task-features';
+import { priorityTone, statusTone } from './tones';
 import styles from './task-row.module.css';
 
 /**
@@ -20,7 +21,9 @@ export function TaskRow({ task }: { task: Task }) {
       <td className={styles.title}>{task.title ?? ''}</td>
       <td>
         {task.status === null || task.status === undefined ? null : (
-          <Badge mono>{task.status}</Badge>
+          <Badge mono tone={statusTone(task.status)}>
+            {task.status}
+          </Badge>
         )}
       </td>
       <td className={styles.assignee}>
@@ -28,7 +31,9 @@ export function TaskRow({ task }: { task: Task }) {
       </td>
       <td>
         {task.priority === null || task.priority === undefined ? null : (
-          <Badge mono>{task.priority}</Badge>
+          <Badge mono tone={priorityTone(task.priority)}>
+            {task.priority}
+          </Badge>
         )}
       </td>
       <td>
