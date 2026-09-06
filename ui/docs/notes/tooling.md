@@ -76,3 +76,15 @@
 **Как правильно:** проверять развёрнутую конфигурацию, не поднимая контур целиком:
 `docker run --rm --entrypoint sh tracker-ui:latest -c '/docker-entrypoint.sh nginx -t; grep proxy_pass /etc/nginx/conf.d/default.conf'`.
 **Где:** `docker/Dockerfile`, `docker/nginx.conf.template`.
+
+## Контур сквозных тестов не поднимается, пока на 8080 стоит прод-контур
+
+**Что:** `pnpm e2e` поднимает свой интерфейс на `UI_PORT` (по умолчанию 8080). Если
+рядом постоянно работает установка из `docker-compose.prod.yml`, порт занят, и прогон
+падает в `globalSetup` строкой `Bind for 0.0.0.0:8080 failed: port is already allocated`
+— то есть до единого сценария.
+**Почему важно:** сообщение говорит про порт, но приходит из `contour.ts` со стеком
+`execFileSync`, и его читают как поломку обвязки тестов.
+**Как правильно:** гасить прод-контур не нужно — прогон запускается на своём порту:
+`UI_PORT=8081 pnpm e2e`. Адрес для Playwright собирается из той же переменной.
+**Где:** `playwright.config.ts`, `BASE_URL`; `docker-compose.yml`, `${UI_PORT:-8080}`.

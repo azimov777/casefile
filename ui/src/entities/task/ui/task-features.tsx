@@ -1,6 +1,5 @@
-import { Badge, RelativeTime } from '@/shared/ui';
+import { Badge } from '@/shared/ui';
 import type { TaskFeatures } from '../api/tasks';
-import styles from './task-features.module.css';
 
 /**
  * Признаки задачи значками. Ничего не вычисляет: `features` считает бэкенд, а интерфейс
@@ -29,14 +28,6 @@ export function TaskFeatureBadges({ features }: { features: TaskFeatures }) {
           блокирующих {features.open_blocking_questions}
         </Badge>
       ) : null}
-
-      {features.last_summary_at === null || features.last_summary_at === undefined ? (
-        <span className={styles.empty}>сводки нет</span>
-      ) : (
-        <span className={styles.summary}>
-          сводка <RelativeTime value={features.last_summary_at} />
-        </span>
-      )}
     </>
   );
 }

@@ -84,6 +84,7 @@ export function task(key: string, overrides: Partial<Task> = {}): Task {
       open_questions: 0,
       open_blocking_questions: 0,
       last_summary_at: null,
+      last_entry_at: '2026-09-01T10:00:00Z',
     },
     ...overrides,
   };

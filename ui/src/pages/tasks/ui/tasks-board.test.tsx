@@ -94,8 +94,8 @@ describe('доска', () => {
     expect(request.searchParams.getAll('status')).toEqual([]);
     // Исполнитель — общий фильтр, он действует и на доске.
     expect(request.searchParams.getAll('assignee')).toEqual(['owner']);
-    // Порядок внутри столбца задан доской: свежие сверху.
-    expect(request.searchParams.getAll('sort')).toEqual(['-updated_at']);
+    // Порядок внутри столбца задан доской: свежие в деле сверху.
+    expect(request.searchParams.getAll('sort')).toEqual(['-last_entry_at']);
   });
 
   it('переключение в таблицу сохраняет отбор и меняет адрес', async () => {
@@ -103,11 +103,18 @@ describe('доска', () => {
     renderApp('/tasks?queue=DEMO&view=board&assignee=owner');
     await screen.findByRole('region', { name: 'open' });
 
-    await userEvent.setup().click(screen.getByRole('radio', { name: 'Таблица' }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('radio', { name: 'Таблица' }));
 
     expect(await screen.findByRole('table')).toBeInTheDocument();
     const request = seen.at(-1) as URL;
     expect(request.searchParams.getAll('assignee')).toEqual(['owner']);
+
+    // Отбор пережил смену режима: свёрнутая строка называет его, а форма — хранит.
+    expect(screen.getByRole('list', { name: 'Условия отбора' })).toHaveTextContent(
+      'исполнитель owner',
+    );
+    await user.click(screen.getByRole('button', { name: 'Изменить отбор' }));
     expect(screen.getByLabelText('Исполнитель')).toHaveValue('owner');
   });
 

@@ -20,6 +20,7 @@ export function TaskRow({ task }: { task: Task }) {
   const { search } = useLocation();
   const features = task.features ?? null;
   const tags = task.tags ?? [];
+  const activity = features?.last_entry_at ?? null;
 
   return (
     <tr className={styles.row}>
@@ -79,8 +80,15 @@ export function TaskRow({ task }: { task: Task }) {
           {features === null ? null : <TaskFeatureBadges features={features} />}
         </span>
       </td>
-      <td className={styles.updated}>
-        <RelativeTime value={task.updated_at} />
+      {/* Единственное время в строке: когда в дело последний раз что-то подшивали.
+          `updated_at` отсюда убран — он двигался и от правки карточки, и человек
+          не мог сказать, чем два относительных времени в соседних ячейках различаются. */}
+      <td className={styles.activity}>
+        {activity === null ? (
+          <span className={styles.empty}>в деле пусто</span>
+        ) : (
+          <RelativeTime value={activity} />
+        )}
       </td>
     </tr>
   );

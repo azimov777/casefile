@@ -5,12 +5,14 @@
 
 ## Папки
 
-- `model/` — отбор в адресе, перевод в параметры API, разбор отказа разбора запроса
-- `ui/` — форма отбора и подсказка у поля запроса
+- `model/` — отбор в адресе, перевод в параметры API, разбор отказа разбора запроса,
+  условия словами и память о развёрнутости формы
+- `ui/` — свёрнутая строка отбора и форма под ней
 
 ## Файлы
 
 - `index.ts` — публичный интерфейс среза: `TaskFiltersForm`, `useTaskFilters`,
   `readFilters`, `writeFilters`, `filtersToListParams`, `hasConditions`, `splitTags`,
-  `readQueryProblem`, `caretLine`, `TASK_SORTS`, `EMPTY_FILTERS`, `DEFAULT_SORT`,
-  `OPEN_QUESTIONS_CONDITION`, типы `TaskFilters`, `TaskView`, `TaskFiltersControl`, `QueryProblem`
+  `readQueryProblem`, `caretLine`, `describeFilters`, `queryOverrides`, `TASK_SORTS`,
+  `EMPTY_FILTERS`, `DEFAULT_SORT`, `OPEN_QUESTIONS_CONDITION`, типы `TaskFilters`, `TaskView`,
+  `TaskFiltersControl`, `QueryProblem`, `FilterCondition`

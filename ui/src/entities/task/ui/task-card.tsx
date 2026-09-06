@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router';
 import { Badge, RelativeTime } from '@/shared/ui';
 import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
+import { hasFeatureBadges } from './feature-badges';
 import { TaskFeatureBadges } from './task-features';
 import { priorityTone } from './tones';
 import styles from './task-card.module.css';
@@ -52,10 +53,15 @@ export function TaskCard({ task }: { task: Task }) {
             <span className={styles.raised}>{task.assignee}</span>
           </Badge>
         )}
-        <RelativeTime value={task.updated_at} />
+        {/* То же время, что в строке списка: активность в деле, а не правка карточки. */}
+        {features?.last_entry_at === null || features?.last_entry_at === undefined ? (
+          <span className={styles.empty}>в деле пусто</span>
+        ) : (
+          <RelativeTime value={features.last_entry_at} />
+        )}
       </div>
 
-      {features === null ? null : (
+      {features === null || !hasFeatureBadges(features) ? null : (
         <div className={styles.features}>
           <TaskFeatureBadges features={features} />
         </div>

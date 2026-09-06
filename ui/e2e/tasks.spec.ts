@@ -34,6 +34,10 @@ test('отбор по статусу open даёт ровно открытые �
 
   await page.reload();
 
+  // Свёрнутый отбор называет условие словами, не заставляя разворачивать форму.
+  await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('статус open');
+
+  await page.getByRole('button', { name: 'Изменить отбор' }).click();
   await expect(page.getByLabel('Очередь')).toHaveValue('DEMO');
   await expect(page.getByRole('checkbox', { name: 'open' })).toBeChecked();
   await expect(rows(page)).toHaveCount(2);
@@ -63,6 +67,7 @@ test('опечатка в запросе объясняется позицией
   await page.goto('/tasks?queue=DEMO');
   await expect(rows(page)).toHaveCount(7);
 
+  await page.getByRole('button', { name: 'Изменить отбор' }).click();
   await page.getByLabel('Запрос на языке бэкенда').fill('status: opne');
   await page.getByRole('button', { name: 'Применить' }).click();
 
@@ -116,6 +121,11 @@ test('негодный курсор в адресе объясняется по-
 test('доступность списка задач', async ({ page }) => {
   await page.goto('/tasks?queue=DEMO');
   await expect(rows(page)).toHaveCount(7);
+
+  // Форму надо раскрыть: свёрнутую её `axe` не увидит, а проверять надо и её —
+  // сценарий идёт в обеих темах, и поля формы в тёмной проверены только отсюда.
+  await page.getByRole('button', { name: 'Изменить отбор' }).click();
+  await expect(page.getByLabel('Запрос на языке бэкенда')).toBeVisible();
 
   const found = await new AxeBuilder({ page }).analyze();
   const serious = found.violations

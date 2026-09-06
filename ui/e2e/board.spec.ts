@@ -128,7 +128,9 @@ test('фильтр по исполнителю действует на доск�
 
   await page.getByRole('radio', { name: 'Таблица' }).click();
 
-  await expect(page.getByLabel('Исполнитель')).toHaveValue('demo_agent');
+  await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText(
+    'исполнитель demo_agent',
+  );
   await expect(page.getByRole('table')).toBeVisible();
   await expect(page.getByRole('rowheader', { name: 'DEMO-4' })).toBeVisible();
 });

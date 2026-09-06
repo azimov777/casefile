@@ -12,5 +12,6 @@ export {
   type TaskView,
 } from './model/filters';
 export { caretLine, readQueryProblem, type QueryProblem } from './model/query-problem';
+export { describeFilters, type FilterCondition } from './model/summary';
 export { useTaskFilters, type TaskFiltersControl } from './model/use-task-filters';
 export { TaskFiltersForm } from './ui/task-filters';

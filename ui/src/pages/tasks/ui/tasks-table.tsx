@@ -15,7 +15,7 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
   return (
     <div className={styles.scroller}>
       <table className={styles.table} aria-busy={stale}>
-        <caption className={styles.caption}>Задачи по текущему отбору: {tasks.length}</caption>
+        <caption className={styles.caption}>Задач по отбору: {tasks.length}</caption>
         <thead>
           <tr>
             {TASK_COLUMNS.map((column) => (

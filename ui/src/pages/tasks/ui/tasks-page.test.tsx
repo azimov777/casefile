@@ -27,6 +27,14 @@ function open(path: string) {
   return renderApp(path);
 }
 
+/**
+ * Раскрывает форму отбора: свёрнута по умолчанию, поэтому её поля до этого клика
+ * не существуют вовсе — ровно так же, как их не видит человек.
+ */
+async function expandFilters(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Изменить отбор' }));
+}
+
 /** Последний запрос списка. Его отсутствие — ошибка теста, а не проверяемое состояние. */
 function lastRequest(): URL {
   const url = seen.at(-1);
@@ -48,6 +56,7 @@ describe('список задач', () => {
               open_questions: 1,
               open_blocking_questions: 1,
               last_summary_at: '2026-09-01T09:00:00Z',
+              last_entry_at: '2026-09-01T09:00:00Z',
             },
           }),
           task('DEMO-6', {
@@ -58,6 +67,7 @@ describe('список задач', () => {
               open_questions: 0,
               open_blocking_questions: 0,
               last_summary_at: null,
+              last_entry_at: null,
             },
           }),
         ]),
@@ -69,7 +79,9 @@ describe('список задач', () => {
     const blocked = (await screen.findByText('DEMO-6')).closest('tr');
     expect(blocked).not.toBeNull();
     expect(within(blocked as HTMLElement).getByText('заблокирована')).toBeInTheDocument();
-    expect(within(blocked as HTMLElement).getByText('сводки нет')).toBeInTheDocument();
+    // Время в строке одно — активность в деле; у задачи без записей она названа словами.
+    expect(within(blocked as HTMLElement).getByText('в деле пусто')).toBeInTheDocument();
+    expect(within(blocked as HTMLElement).queryByText(/сводка/)).toBeNull();
 
     const waiting = screen.getByText('DEMO-4').closest('tr');
     expect(within(waiting as HTMLElement).getByText('блокирующих 1')).toBeInTheDocument();
@@ -96,10 +108,12 @@ describe('список задач', () => {
   });
 
   it('восстанавливает форму из адреса', async () => {
+    const user = userEvent.setup();
     server.use(listing(() => collection([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&assignee=owner');
     await screen.findByText('DEMO-3');
+    await expandFilters(user);
 
     expect(screen.getByLabelText('Очередь')).toHaveValue('DEMO');
     expect(screen.getByRole('checkbox', { name: 'open' })).toBeChecked();
@@ -155,6 +169,78 @@ describe('список задач', () => {
   });
 });
 
+describe('свёрнутый отбор', () => {
+  it('называет все включённые условия и ни одно не прячет за счётчиком', async () => {
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open(
+      '/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&tags=frontend&tags=ux&query=status: done',
+    );
+    await screen.findByText('DEMO-3');
+
+    // Форма закрыта: на первом экране списка стоят задачи, а не поля отбора.
+    expect(screen.queryByLabelText('Исполнитель')).toBeNull();
+
+    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    expect(
+      within(conditions)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'очередь DEMO',
+      'статус open, in_progress',
+      'исполнитель owner',
+      'теги frontend, ux',
+      'запрос: status: done',
+    ]);
+
+    // Заполненный запрос отменяет структурный отбор: условия названы, но помечены
+    // нерабочими — и это сказано на них самих, а не отдельной строкой, которая
+    // сдвинула бы таблицу вниз.
+    expect(within(conditions).getAllByTitle(/Не действует/)).toHaveLength(4);
+  });
+
+  it('без условий говорит, что показаны все задачи, и не предлагает сброс', async () => {
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks');
+    await screen.findByText('DEMO-3');
+
+    expect(screen.getByText('показаны все задачи')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Сбросить' })).toBeNull();
+  });
+
+  it('выбор человека помнится между визитами', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    const first = open('/tasks');
+    await screen.findByText('DEMO-3');
+    await expandFilters(user);
+    expect(screen.getByLabelText('Исполнитель')).toBeInTheDocument();
+    first.unmount();
+
+    open('/tasks');
+    await screen.findByText('DEMO-3');
+    expect(screen.getByLabelText('Исполнитель')).toBeInTheDocument();
+  });
+
+  it('отказ разбора раскрывает форму сам: опечатка сделана в поле, которого не видно', async () => {
+    server.use(
+      listing((url) =>
+        url.searchParams.has('query')
+          ? failure('invalid_search_query', 422, 'Cannot parse', { position: 8 })
+          : collection([task('DEMO-3')]),
+      ),
+    );
+
+    open('/tasks?query=status: opne');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ошибка в символе 9');
+    expect(screen.getByLabelText('Запрос на языке бэкенда')).toHaveValue('status: opne');
+  });
+});
+
 describe('поле запроса на языке бэкенда', () => {
   it('показывает позицию и допустимые значения, не очищая таблицу', async () => {
     const user = userEvent.setup();
@@ -173,6 +259,7 @@ describe('поле запроса на языке бэкенда', () => {
 
     open('/tasks');
     await screen.findByText('DEMO-3');
+    await expandFilters(user);
 
     await user.type(screen.getByLabelText('Запрос на языке бэкенда'), 'status: opne');
     await user.click(screen.getByRole('button', { name: 'Применить' }));
@@ -187,12 +274,34 @@ describe('поле запроса на языке бэкенда', () => {
     expect(screen.getByText(/Показаны строки предыдущего отбора/)).toBeInTheDocument();
   });
 
+  it('пока не применён, называет себя черновиком и применяется по Enter', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks');
+    await screen.findByText('DEMO-3');
+    await expandFilters(user);
+
+    // Применять нечего — кнопка выключена, и это видно до всякого ввода.
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Запрос на языке бэкенда/), 'status: done');
+    expect(screen.getByText('не применено, Enter применит')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeEnabled();
+
+    await user.keyboard('{Enter}');
+
+    expect(lastRequest().searchParams.get('query')).toBe('status: done');
+    expect(screen.queryByText('не применено, Enter применит')).toBeNull();
+  });
+
   it('заполненный запрос отменяет структурные условия', async () => {
     const user = userEvent.setup();
     server.use(listing(() => collection([task('DEMO-1', { status: 'done' })])));
 
     open('/tasks?queue=DEMO&status=open');
     await screen.findByText('DEMO-1');
+    await expandFilters(user);
 
     await user.type(screen.getByLabelText('Запрос на языке бэкенда'), 'status: done');
     await user.click(screen.getByRole('button', { name: 'Применить' }));

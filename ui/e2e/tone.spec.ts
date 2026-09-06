@@ -84,7 +84,7 @@ test('движение есть там, где оно отвечает на де
 
   // Проверка ниже требует, чтобы гасить было что: без этого «переход равен нулю»
   // проходило бы и на интерфейсе вовсе без переходов.
-  await expect(page.getByRole('button', { name: 'Применить' })).not.toHaveCSS(
+  await expect(page.getByRole('button', { name: 'Изменить отбор' })).not.toHaveCSS(
     'transition-duration',
     '0s',
   );
@@ -103,7 +103,7 @@ test('человек просит не двигать интерфейс — п�
   // `0.0001s`, то как `1e-05s`, и проверка на текст ломалась бы от формата,
   // ничего не говоря о том, видно движение или нет.
   const duration = await page
-    .getByRole('button', { name: 'Применить' })
+    .getByRole('button', { name: 'Изменить отбор' })
     .evaluate((node) => Number.parseFloat(getComputedStyle(node).transitionDuration));
 
   expect(duration).toBeLessThan(0.001);

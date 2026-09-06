@@ -79,7 +79,7 @@
   white-space: nowrap;
 }
 
-.updated {
+.activity {
   white-space: nowrap;
   color: var(--color-text-muted);
 }
@@ -90,12 +90,6 @@
   flex-wrap: wrap;
   gap: var(--space-1);
   align-items: baseline;
-}
-
-.summary {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
 }
 
 .empty {

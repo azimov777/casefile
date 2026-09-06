@@ -1,6 +1,77 @@
 .panel {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+}
+
+/*
+ * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
+ * что первый экран списка платит за отбор, — всё остальное принадлежит задачам.
+ */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/*
+ * Условия занимают всё свободное место и переносятся на вторую строку, когда их
+ * много. Ни `overflow: hidden`, ни счётчика «ещё 2»: спрятанное условие — это
+ * отфильтрованный список, который принимают за полный.
+ */
+.conditions {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.condition {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--tone-neutral-border);
+  border-radius: var(--radius-sm);
+  background: var(--tone-neutral-bg);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.all {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/*
+ * Условие, которое человек включил, но которое сейчас не работает: заполненный запрос
+ * отменяет структурный отбор. Зачёркивание, а не только цвет: цвет никогда не бывает
+ * единственным носителем смысла (`CONCEPT.md`, 6).
+ */
+.inactive {
+  border-style: dashed;
+  background: transparent;
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.sort {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
@@ -25,9 +96,34 @@
   flex: 1 1 24rem;
 }
 
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
 .label {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+}
+
+/* Сноска у подписи: стоит там всегда и потому ничего не двигает своим появлением. */
+.note {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-style: italic;
+}
+
+/* Черновик поля: напечатано, но в адрес ещё не уехало. */
+.pending {
+  color: var(--tone-attention-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.control {
+  position: relative;
+  display: block;
 }
 
 .input,
@@ -44,6 +140,11 @@
 .input {
   width: 100%;
   min-width: 10rem;
+}
+
+.draft {
+  border-color: var(--tone-attention-border);
+  box-shadow: inset 3px 0 0 var(--tone-attention-border);
 }
 
 .group {
@@ -69,16 +170,32 @@
   font-size: var(--text-sm);
 }
 
+/*
+ * Объяснение отказа наложено на страницу, а не встроено в поток формы: встроенное
+ * уводило бы таблицу вниз на две сотни пикселей ровно в тот момент, когда человек
+ * правит запрос и сверяется с прошлой выдачей.
+ */
 .problem {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  min-width: 100%;
+  max-width: 40rem;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-danger-border);
   border-radius: var(--radius-sm);
   background: var(--color-danger-bg);
+  box-shadow: var(--shadow-raised);
   color: var(--color-danger);
   font-size: var(--text-md);
+}
+
+.problem p {
+  margin: 0;
 }
 
 .caret {

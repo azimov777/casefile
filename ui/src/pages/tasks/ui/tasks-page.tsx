@@ -54,24 +54,47 @@ export function TasksPage() {
 
   const boardTasks = pages.data?.pages.flatMap((chunk) => chunk.items) ?? [];
 
+  // Сколько строк показано сейчас: у доски это всё прочитанное, у таблицы — страница.
+  const shown = board
+    ? pages.data === undefined
+      ? null
+      : boardTasks.length
+    : (page?.items.length ?? null);
+
   return (
     <main className={styles.screen}>
+      {/*
+       * Заголовок, отбор и переключатель режима — одной строкой. Тремя блоками друг
+       * под другом они уводили первую строку таблицы на 415-й пиксель: из двадцати
+       * одной задачи на экране оставалось семь.
+       */}
       <div className={styles.top}>
-        <h1 className={styles.heading}>Задачи</h1>
+        <h1 className={styles.heading}>
+          Задачи
+          {/*
+           * Число выдачи стоит здесь, а не полосой над таблицей. Из имени заголовка оно
+           * скрыто: то же число программа чтения с экрана берёт из подписи таблицы,
+           * а «Задачи 21» вместо «Задачи» ломало бы навигацию по заголовкам.
+           */}
+          {shown === null ? null : (
+            <span className={styles.count} aria-hidden="true">
+              {shown}
+            </span>
+          )}
+        </h1>
+        <div className={styles.filters}>
+          <TaskFiltersForm filters={filters} onApply={apply} onReset={reset} problem={problem} />
+        </div>
         <ViewSwitch view={filters.view} onChange={(view) => apply({ view })} />
       </div>
 
-      <TaskFiltersForm filters={filters} onApply={apply} onReset={reset} problem={problem} />
-
       {/*
-       * Отказ разбора запроса объясняет форма, у самого поля: там же и подсказка,
-       * как его починить. Всё остальное — общее состояние запроса с повтором.
+       * Отказ разбора запроса объясняет форма, у самого поля: там же сказано и то,
+       * что в таблице остались строки предыдущего отбора. Полосы над таблицей нет
+       * намеренно — она сдвигала бы строки вниз ровно тогда, когда человек правит
+       * запрос и сверяется с ними. Всё остальное — общее состояние запроса с повтором.
        */}
-      {problem === null ? (
-        <QueryState query={active} loading="Загружаем задачи…" />
-      ) : page === null ? null : (
-        <Callout>Показаны строки предыдущего отбора: последний запрос отклонён.</Callout>
-      )}
+      {problem === null ? <QueryState query={active} loading="Загружаем задачи…" /> : null}
 
       {board ? (
         pages.data === undefined ? null : (
