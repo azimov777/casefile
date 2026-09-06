@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_serializer
 
 from app.api.schemas.authors import AuthorRead
 from app.db.models.entry import Entry
@@ -42,7 +42,8 @@ from app.domain.case import (
     EntryType,
     VerdictOutcome,
 )
-from app.domain.tasks import FIRST_CHECK_NUMBER
+from app.domain.links import LinkKind
+from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
 
 _REFS_DESCRIPTION = (
     "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task "
@@ -51,6 +52,83 @@ _REFS_DESCRIPTION = (
 _TITLE_DESCRIPTION = "One line; this is what the case index shows"
 _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the payload"
 _NO_DESCRIPTION = "Number inside the task, from 1; `TRK-42#12`"
+
+
+class EntryFactsRead(BaseModel):
+    """Факты записи, которыми её называют строкой, не читая тела.
+
+    Заполнены по типу записи, все части необязательны и все ограничены по длине самим
+    контрактом: значения перечислений, ключи, имена полей и участников, номера,
+    признаки да/нет. Свободного текста здесь нет — ни причины перехода, ни значений
+    разделов, ни тел записей; за ними идут в саму запись.
+
+    Нужны они там, где заголовок собирает трекер и собирает по-английски: клиент строит
+    свою строку по фактам, а не разбирает чужую фразу регуляркой. У записей агента и
+    человека заполненных фактов нет — их заголовок пишет автор.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    from_status: TaskStatus | None = Field(
+        default=None, description="`status_changed`: status before the move"
+    )
+    to_status: TaskStatus | None = Field(
+        default=None, description="`status_changed`: status after the move"
+    )
+    has_reason: bool | None = Field(
+        default=None,
+        description=(
+            "`status_changed`: whether a reason was given. The reason itself is free "
+            "text and stays in the entry body"
+        ),
+    )
+    field: TaskField | None = Field(
+        default=None,
+        description=(
+            "`section_changed` and `field_changed`: which field was edited. Values are "
+            "not here: a section can be as long as the task itself"
+        ),
+    )
+    link_kind: LinkKind | None = Field(
+        default=None, description="`link_added` and `link_removed`: kind of the link"
+    )
+    other_key: str | None = Field(
+        default=None,
+        examples=["TRK-7"],
+        description="`link_added` and `link_removed`: the task on the other side",
+    )
+    assignee_from: str | None = Field(
+        default=None, description="`assignee_changed`: assignee before, null if there was none"
+    )
+    assignee_to: str | None = Field(
+        default=None, description="`assignee_changed`: assignee after, null if unassigned"
+    )
+    addressees: list[str] | None = Field(
+        default=None, description=f"`question`: who is asked, at most {MAX_ADDRESSEES} names"
+    )
+    blocking: bool | None = Field(
+        default=None, description="`question`: whether the question holds the work"
+    )
+    question_no: int | None = Field(
+        default=None, examples=[7], description="`answer`: number of the question answered"
+    )
+    check_no: int | None = Field(
+        default=None, examples=[3], description="`verdict`: number of the review check"
+    )
+    outcome: VerdictOutcome | None = Field(
+        default=None, description="`verdict`: how the check ended"
+    )
+
+    @model_serializer(mode="wrap")
+    def _drop_empty(self, serialize: Any) -> dict[str, Any]:
+        """Незаполненные факты в ответ не едут.
+
+        У каждого типа записи заполнены две-три части из тринадцати, а опись входит в
+        каждый пакет задачи: одиннадцать `null` на строку — это две трети её веса
+        (замерено: 339 байт против 122). Клиенту разницы нет — поля и так необязательны,
+        и отсутствующее читается тем же `null`.
+        """
+        return {name: value for name, value in serialize(self).items() if value is not None}
 
 
 class EntryHeadingRead(BaseModel):
@@ -63,6 +141,13 @@ class EntryHeadingRead(BaseModel):
     author: AuthorRead
     created_at: datetime
     title: str = Field(examples=["Status changed: backlog -> open"])
+    facts: EntryFactsRead = Field(
+        description=(
+            "Length-bounded facts of the entry: enough to name it in any language "
+            "without reading the English title the tracker builds. Empty for entries "
+            "whose title is written by their author"
+        )
+    )
 
 
 # --- Нагрузка по типам ----------------------------------------------------------------

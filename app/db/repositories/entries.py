@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -33,11 +33,14 @@ from app.domain.authors import Author
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
     FIRST_ENTRY_NUMBER,
+    NO_FACTS,
+    EntryFacts,
     EntryHeading,
     EntryType,
     VerdictOutcome,
 )
-from app.domain.tasks import TaskStatus
+from app.domain.links import LinkKind
+from app.domain.tasks import TaskField, TaskStatus
 
 
 class EntryRepository:
@@ -159,10 +162,11 @@ class EntryRepository:
         return statement
 
     async def headings(self, task_id: uuid.UUID) -> list[EntryHeading]:
-        """Опись дела: заголовки всех записей задачи, без тел и без нагрузки.
+        """Опись дела: заголовки всех записей задачи, без тел и без нагрузки целиком.
 
         Выбираются только нужные колонки: тела записей бывают длинными, а опись
-        входит в каждый пакет преемника и обязана оставаться дешёвой.
+        входит в каждый пакет преемника и обязана оставаться дешёвой. Факты записи
+        вырезаются из нагрузки прямо в запросе — см. `_facts_json`.
         """
         statement = (
             select(
@@ -172,6 +176,7 @@ class EntryRepository:
                 Entry.created_by_signature,
                 Entry.created_at,
                 Entry.title,
+                _facts_json().label("facts"),
             )
             .where(Entry.task_id == task_id)
             .order_by(Entry.no)
@@ -184,6 +189,7 @@ class EntryRepository:
                 author=Author(kind=row.created_by_kind, signature=row.created_by_signature),
                 created_at=row.created_at,
                 title=row.title,
+                facts=_read_facts(row.facts),
             )
             for row in rows
         ]
@@ -509,3 +515,99 @@ def _unanswered(statement: Select[Any]) -> Select[Any]:
         )
         .exists()
     )
+
+
+# --- Факты записи для описи ----------------------------------------------------------
+
+
+def _facts_json() -> ColumnElement[Any]:
+    """Ограниченные по длине факты записи, вырезанные из нагрузки прямо в запросе.
+
+    Вырезать надо здесь, а не после выборки: `payload` записи `section_changed` держит
+    прежнее и новое значение раздела **целиком**, и выбрать его, чтобы тут же выбросить,
+    значит тянуть из базы ровно то, ради отсутствия чего опись существует.
+
+    Каждая ветвь берёт только то, что ограничено контрактом: значения перечислений,
+    ключи, имена полей и участников, номера, признаки да/нет. Причина перехода сюда не
+    попадает — она свободный текст, и в описи от неё остаётся лишь «была или нет».
+    """
+    payload = Entry.payload
+    return case(
+        (
+            Entry.type == EntryType.STATUS_CHANGED,
+            func.jsonb_build_object(
+                "from_status",
+                payload["from"],
+                "to_status",
+                payload["to"],
+                "has_reason",
+                payload["reason"].astext.is_not(None),
+            ),
+        ),
+        (
+            Entry.type.in_((EntryType.SECTION_CHANGED, EntryType.FIELD_CHANGED)),
+            func.jsonb_build_object("field", payload["field"]),
+        ),
+        (
+            Entry.type == EntryType.ASSIGNEE_CHANGED,
+            func.jsonb_build_object(
+                "assignee_from", payload["before"], "assignee_to", payload["after"]
+            ),
+        ),
+        (
+            Entry.type.in_((EntryType.LINK_ADDED, EntryType.LINK_REMOVED)),
+            func.jsonb_build_object("link_kind", payload["kind"], "other_key", payload["other"]),
+        ),
+        (
+            Entry.type == EntryType.QUESTION,
+            func.jsonb_build_object(
+                "addressees", payload["addressees"], "blocking", payload["blocking"]
+            ),
+        ),
+        (
+            Entry.type == EntryType.ANSWER,
+            func.jsonb_build_object("question_no", payload["question_no"]),
+        ),
+        (
+            Entry.type == EntryType.VERDICT,
+            func.jsonb_build_object("check_no", payload["check_no"], "outcome", payload["outcome"]),
+        ),
+        # Записи агента и человека: их заголовок пишет автор, и называть строку нечем,
+        # кроме него самого.
+        else_=text("'{}'::jsonb"),
+    )
+
+
+def _read_facts(raw: Any) -> EntryFacts:
+    """Разбирает вырезанное в типы домена. Чужого ключа тут быть не может: набор задан
+    выражением выше, а не тем, что кто-то положил в нагрузку."""
+    if not isinstance(raw, dict) or not raw:
+        return NO_FACTS
+
+    addressees = raw.get("addressees")
+    return EntryFacts(
+        from_status=_as_enum(TaskStatus, raw.get("from_status")),
+        to_status=_as_enum(TaskStatus, raw.get("to_status")),
+        has_reason=raw.get("has_reason"),
+        field=_as_enum(TaskField, raw.get("field")),
+        link_kind=_as_enum(LinkKind, raw.get("link_kind")),
+        other_key=raw.get("other_key"),
+        assignee_from=raw.get("assignee_from"),
+        assignee_to=raw.get("assignee_to"),
+        addressees=None if addressees is None else tuple(str(name) for name in addressees),
+        blocking=raw.get("blocking"),
+        question_no=raw.get("question_no"),
+        check_no=raw.get("check_no"),
+        outcome=_as_enum(VerdictOutcome, raw.get("outcome")),
+    )
+
+
+def _as_enum(enum: Any, value: Any) -> Any:
+    """Значение перечисления или `None`. Незнакомое значение — не повод падать при
+    чтении: запись уже подшита, а перечисление могло смениться миграцией данных."""
+    if value is None:
+        return None
+    try:
+        return enum(value)
+    except ValueError:
+        return None

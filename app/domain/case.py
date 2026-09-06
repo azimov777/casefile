@@ -40,7 +40,14 @@ from typing import Any
 from app.domain.authors import Author
 from app.domain.errors import EntryFieldsInvalidError, InvalidTaskKeyError
 from app.domain.fields import FieldProblem, FieldProblems
-from app.domain.tasks import FIRST_CHECK_NUMBER, is_plain_number, normalize_task_key
+from app.domain.links import LinkKind
+from app.domain.tasks import (
+    FIRST_CHECK_NUMBER,
+    TaskField,
+    TaskStatus,
+    is_plain_number,
+    normalize_task_key,
+)
 
 
 class EntryType(StrEnum):
@@ -146,11 +153,52 @@ def format_entry_ref(task_key: str, no: int) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class EntryFacts:
+    """Факты записи, которыми её можно назвать строкой, не читая тела.
+
+    Здесь только то, что ограничено по длине самим контрактом: значения перечислений,
+    ключи, имена полей и участников, номера и признаки да/нет. Свободного текста тут
+    не бывает и быть не должно — ни причины перехода, ни значений разделов, ни тел.
+    Опись входит в каждый пакет задачи, и её дешевизна держится ровно на этом.
+
+    Заполнена по типу записи: у `status_changed` своё, у ссылок своё, у записей агента
+    и человека — пусто, потому что их заголовок пишет автор и он осмыслен сам по себе.
+    """
+
+    #: `status_changed`: откуда, куда и была ли причина. Сама причина — в теле записи.
+    from_status: TaskStatus | None = None
+    to_status: TaskStatus | None = None
+    has_reason: bool | None = None
+    #: `section_changed` и `field_changed`: какое поле правили. Значения — в теле.
+    field: TaskField | None = None
+    #: `link_added` и `link_removed`: чем задача стала другой и какой.
+    link_kind: LinkKind | None = None
+    other_key: str | None = None
+    #: `assignee_changed`: имена участников коротки, поэтому их видно прямо в описи.
+    assignee_from: str | None = None
+    assignee_to: str | None = None
+    #: `question`: кому адресовано и держит ли работу.
+    addressees: tuple[str, ...] | None = None
+    blocking: bool | None = None
+    #: `answer`: на какой вопрос отвечено.
+    question_no: int | None = None
+    #: `verdict`: какая проверка и чем кончилась.
+    check_no: int | None = None
+    outcome: VerdictOutcome | None = None
+
+
+#: Пустые факты: у записи этого типа называть строкой нечего, кроме заголовка автора.
+NO_FACTS = EntryFacts()
+
+
+@dataclass(frozen=True, slots=True)
 class EntryHeading:
     """Строка описи дела: то, что преемник видит о записи, не читая её тела.
 
-    Ровно те поля, что названы в концепции (4.2): `no`, `type`, `author`, `created_at`,
-    `title`. Тело и `payload` читаются точечно по номеру.
+    Поля концепции (4.2) — `no`, `type`, `author`, `created_at`, `title` — плюс `facts`:
+    ограниченный по длине набор, по которому ту же запись можно назвать строкой на
+    любом языке, не разбирая собранный трекером английский заголовок. Тело и `payload`
+    по-прежнему читаются точечно по номеру.
     """
 
     no: int
@@ -158,6 +206,7 @@ class EntryHeading:
     author: Author
     created_at: datetime
     title: str
+    facts: EntryFacts = NO_FACTS
 
 
 # --- Ссылки -------------------------------------------------------------------------

@@ -266,7 +266,7 @@ async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_
     }
     assert [heading["no"] for heading in data["index"]] == [1, 2, 3, 4, 5, 6]
     for heading in data["index"]:
-        assert sorted(heading) == ["author", "created_at", "no", "title", "type"]
+        assert sorted(heading) == ["author", "created_at", "facts", "no", "title", "type"]
 
 
 # --- Чтение записей -------------------------------------------------------------------

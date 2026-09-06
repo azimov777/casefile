@@ -39,7 +39,7 @@ from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.authors import Author
-from app.domain.case import EntryHeading
+from app.domain.case import EntryFacts, EntryHeading
 from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD
 from app.domain.tasks import TaskFeatures
 from app.services.links import TaskLink
@@ -143,6 +143,32 @@ def link(value: TaskLink) -> dict[str, Any]:
     }
 
 
+def facts(value: EntryFacts) -> dict[str, Any]:
+    """Факты записи для описи: те же поля и в том же порядке, что в схеме REST.
+
+    Пакет преемника обязан совпадать с ответом REST поле в поле (обзорная проверка
+    задачи 03, `tests/test_mcp_tools.py`), поэтому «отдать факты только интерфейсу»
+    нельзя: расхождение здесь означало бы два разных описания одного дела.
+    """
+    filled = {
+        "from_status": None if value.from_status is None else value.from_status.value,
+        "to_status": None if value.to_status is None else value.to_status.value,
+        "has_reason": value.has_reason,
+        "field": None if value.field is None else value.field.value,
+        "link_kind": None if value.link_kind is None else value.link_kind.value,
+        "other_key": value.other_key,
+        "assignee_from": value.assignee_from,
+        "assignee_to": value.assignee_to,
+        "addressees": None if value.addressees is None else list(value.addressees),
+        "blocking": value.blocking,
+        "question_no": value.question_no,
+        "check_no": value.check_no,
+        "outcome": None if value.outcome is None else value.outcome.value,
+    }
+    # Пустые части не едут — как и в схеме REST: пакеты обязаны совпадать поле в поле.
+    return {name: item for name, item in filled.items() if item is not None}
+
+
 def heading(value: EntryHeading) -> dict[str, Any]:
     """Строка описи дела: то, что видно о записи, не читая её тела."""
     return {
@@ -151,6 +177,7 @@ def heading(value: EntryHeading) -> dict[str, Any]:
         "author": author(value.author),
         "created_at": value.created_at,
         "title": value.title,
+        "facts": facts(value.facts),
     }
 
 

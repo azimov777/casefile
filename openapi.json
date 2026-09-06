@@ -4764,6 +4764,10 @@
         "title": "EmptyPayload",
         "description": "Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках."
       },
+      "EntryFactsRead": {
+        "additionalProperties": true,
+        "type": "object"
+      },
       "EntryHeadingRead": {
         "properties": {
           "no": {
@@ -4794,6 +4798,10 @@
             "examples": [
               "Status changed: backlog -> open"
             ]
+          },
+          "facts": {
+            "$ref": "#/components/schemas/EntryFactsRead",
+            "description": "Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Empty for entries whose title is written by their author"
           }
         },
         "type": "object",
@@ -4802,7 +4810,8 @@
           "type",
           "author",
           "created_at",
-          "title"
+          "title",
+          "facts"
         ],
         "title": "EntryHeadingRead",
         "description": "Строка описи дела: то, что видно о записи, не читая её тела."
@@ -6540,6 +6549,24 @@
         ],
         "title": "TaskFeaturesRead",
         "description": "Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).\n\nНе хранятся колонками, а считаются из дела и связей: колонка была бы вторым местом,\nгде живёт правда, и разошлась бы с делом при первом же откате."
+      },
+      "TaskField": {
+        "type": "string",
+        "enum": [
+          "title",
+          "description",
+          "goal",
+          "context",
+          "constraints",
+          "output",
+          "checks",
+          "status",
+          "assignee",
+          "tags",
+          "priority"
+        ],
+        "title": "TaskField",
+        "description": "Поле задачи в записи об изменении и в правилах редактирования.\n\nЗначения совпадают с именами полей в API: по ним строится `details.fields` ошибки и\n`payload.field` записи `section_changed`, и читающий видит то же имя, что в схеме."
       },
       "TaskLinkRead": {
         "properties": {
