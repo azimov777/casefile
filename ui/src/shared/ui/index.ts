@@ -1,7 +1,9 @@
 export { Badge, type BadgeTone } from './badge';
 export { Button } from './button';
 export { Callout } from './callout';
+export { Composer } from './composer';
 export { Markdown } from './markdown';
 export { QueryState, type QueryLike } from './query-state';
+export { Receipt } from './receipt';
 export { RelativeTime } from './relative-time';
 export { TaskText } from './task-text';
