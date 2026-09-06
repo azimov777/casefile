@@ -33,7 +33,7 @@ export function CasePage() {
   const task = useQuery(taskPackageQueryOptions(key));
 
   const entries = feed.data?.pages.flatMap((page) => page.items) ?? [];
-  const answers = groupAnswers(entries);
+  const replies = groupReplies(entries);
 
   /**
    * Запись, названная в адресе. Параметр `entry`, а не якорь `#N`: то же действие
@@ -130,13 +130,11 @@ export function CasePage() {
 
       <div className={styles.feed}>
         {entries.map((entry) => {
-          // Ответ живёт под своим вопросом. Отдельной записью он показывается только
-          // тогда, когда вопроса рядом нет: отбор по типу `answer` или страница,
-          // на которой вопрос остался выше.
-          if (
-            entry.type === 'answer' &&
-            entries.some((other) => other.no === entry.payload.question_no)
-          ) {
+          // Отклик живёт под тем, на что отвечает: ответ под вопросом, резолюция под
+          // замечанием. Отдельной записью он показывается только тогда, когда его
+          // записи рядом нет: отбор по типу или страница, на которой она осталась выше.
+          const answersTo = repliesTo(entry);
+          if (answersTo !== null && entries.some((other) => other.no === answersTo)) {
             return null;
           }
 
@@ -147,10 +145,10 @@ export function CasePage() {
               checks={task.data?.task.checks ?? []}
               highlighted={wanted === entry.no}
             >
-              {entry.type === 'question' ? (
-                <AnswersUnderQuestion
-                  answers={answers.get(entry.no) ?? []}
-                  checks={[]}
+              {entry.type === 'question' || entry.type === 'remark' ? (
+                <RepliesUnder
+                  replies={replies.get(entry.no) ?? []}
+                  waiting={entry.type === 'question' ? 'Ответа пока нет.' : 'Разбора пока нет.'}
                   highlighted={wanted}
                 />
               ) : null}
@@ -173,48 +171,65 @@ export function CasePage() {
 }
 
 /**
- * Ответы под вопросом: тот же вид записи, но вложенный.
+ * Отклики под записью, на которую отвечают: тот же вид записи, но вложенный.
  *
- * Помечается именно названный ответ, а не вопрос целиком: ссылка вида `DEMO-4#9`
+ * Помечается именно названный отклик, а не запись целиком: ссылка вида `DEMO-4#9`
  * ведёт к ответу, а показан он здесь — внутри своего вопроса, и человек должен
  * увидеть, что нашёл именно то, за чем шёл.
+ *
+ * Ответ и резолюция показываются одинаково намеренно: для читателя это одно и то же
+ * событие — «на это ответили», — и два разных вида различали бы то, что различать
+ * не нужно. Разными остаются слова ожидания: вопрос ждёт ответа, замечание — разбора.
  */
-function AnswersUnderQuestion({
-  answers,
-  checks,
+function RepliesUnder({
+  replies,
+  waiting,
   highlighted,
 }: {
-  answers: Entry[];
-  checks: string[];
+  replies: Entry[];
+  waiting: string;
   highlighted: number | null;
 }) {
-  if (answers.length === 0) {
-    return <p className={styles.waiting}>Ответа пока нет.</p>;
+  if (replies.length === 0) {
+    return <p className={styles.waiting}>{waiting}</p>;
   }
 
   return (
     <div className={styles.answers}>
-      {answers.map((answer) => (
+      {replies.map((reply) => (
         <EntryCard
-          key={answer.no}
-          entry={answer}
-          checks={checks}
-          highlighted={highlighted === answer.no}
+          key={reply.no}
+          entry={reply}
+          checks={[]}
+          highlighted={highlighted === reply.no}
         />
       ))}
     </div>
   );
 }
 
-/** Ответы по номеру вопроса, на который отвечают. */
-function groupAnswers(entries: Entry[]): Map<number, Entry[]> {
-  const byQuestion = new Map<number, Entry[]>();
+/**
+ * Номер записи, под которой стоит отклик, или `null`, если запись самостоятельна.
+ *
+ * Одно место на обе пары контракта: `answer` → `question_no`, `resolution` →
+ * `remark_no`. Третья пара, если она появится, добавляется сюда — и лента подхватит
+ * её и в группировке, и в скрытии дубля.
+ */
+function repliesTo(entry: Entry): number | null {
+  if (entry.type === 'answer') return entry.payload.question_no;
+  if (entry.type === 'resolution') return entry.payload.remark_no;
+  return null;
+}
+
+/** Отклики по номеру записи, на которую отвечают. */
+function groupReplies(entries: Entry[]): Map<number, Entry[]> {
+  const byEntry = new Map<number, Entry[]>();
   for (const entry of entries) {
-    if (entry.type !== 'answer') continue;
-    const no = entry.payload.question_no;
-    byQuestion.set(no, [...(byQuestion.get(no) ?? []), entry]);
+    const no = repliesTo(entry);
+    if (no === null) continue;
+    byEntry.set(no, [...(byEntry.get(no) ?? []), entry]);
   }
-  return byQuestion;
+  return byEntry;
 }
 
 /** Типы из адреса: чужое значение отбрасывается, как и в отборе задач. */

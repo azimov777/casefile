@@ -11,6 +11,7 @@ import {
   data,
   failure,
   questionEntry,
+  remarkEntry,
   taskPackage,
 } from '@testing/msw/responses';
 import { liveJournal } from '@testing/live-journal';
@@ -312,5 +313,57 @@ describe('входящая и ответ', () => {
       const last = sent.filter((call) => call.url.pathname.endsWith('/questions')).at(-1);
       expect(last?.url.searchParams.get('blocking')).toBe('true');
     });
+  });
+});
+
+describe('входящая: мои замечания', () => {
+  /** Входящая, где вопросов нет, а замечания есть: две половины экрана независимы. */
+  function inboxWithRemarks() {
+    const asked: URL[] = [];
+
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, ({ request }) => {
+        asked.push(new URL(request.url));
+        return collection([remarkEntry(8, 'DEMO-1', 'Дыры в нумерации сбивают с толку')]);
+      }),
+    );
+
+    return asked;
+  }
+
+  it('показывает мои неразобранные замечания и ведёт в их задачи', async () => {
+    const asked = inboxWithRemarks();
+    renderApp('/questions');
+
+    // Ждём саму строку, а не заголовок секции: секция рисуется сразу, а замечания
+    // приезжают вторым запросом — после того, как первый кадр сказал, кто вошёл.
+    const row = await screen.findByText(/Дыры в нумерации/);
+    const section = row.closest('section') as HTMLElement;
+    expect(within(section).getByText('ждёт разбора')).toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: 'DEMO-1#8' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-1',
+    );
+
+    // «Мои» — это подпись автора: у замечания нет адресата, и бэкенд сам его не
+    // подставит. Имя берётся из первого кадра, а не набирается человеком.
+    await waitFor(() => expect(asked).not.toHaveLength(0));
+    expect(asked.at(-1)?.searchParams.get('author')).toBe('owner');
+    expect(asked.at(-1)?.searchParams.get('open')).toBe('true');
+  });
+
+  it('пустая половина говорит словами, а не пустотой', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+
+    renderApp('/questions');
+
+    expect(await screen.findByText(/Неразобранных замечаний нет/)).toBeInTheDocument();
+    expect(screen.getByText(/Вопросов без ответа нет/)).toBeInTheDocument();
   });
 });

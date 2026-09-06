@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
-import { questionsQueryOptions, type Question } from '@/entities/entry';
+import {
+  questionsQueryOptions,
+  remarksQueryOptions,
+  type Question,
+  type Remark,
+} from '@/entities/entry';
 import { bootstrapQueryOptions } from '@/entities/session';
 import {
   AnswerForm,
@@ -14,10 +19,14 @@ import { Badge, Button, Markdown, QueryState, RelativeTime } from '@/shared/ui';
 import styles from './questions-page.module.css';
 
 /**
- * Входящая: вопросы без ответа, адресованные текущему участнику.
+ * Входящая: две половины одной картины — вопросы, которых ждут от человека, и
+ * замечания, которых человек ждёт от агентов.
  *
- * Адресата в запрос не кладём — бэкенд подставляет владельца токена сам
- * (`../tracker/docs/FRONTEND.md`): «моя входящая» не должна знать своего имени.
+ * Адресата в запрос вопросов не кладём — бэкенд подставляет владельца токена сам
+ * (`../tracker/docs/FRONTEND.md`): «моя входящая» не должна знать своего имени. У
+ * замечаний адресата нет вовсе, поэтому «мои» здесь означает «мной оставленные», и
+ * подпись берётся из первого кадра: страница знает, кто вошёл, а бэкенд по замечанию
+ * не догадывается.
  */
 export function QuestionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -36,6 +45,15 @@ export function QuestionsPage() {
 
   const questions = useInfiniteQuery(questionsQueryOptions(params));
   const loaded = questions.data?.pages.flatMap((page) => page.items) ?? [];
+
+  const author = bootstrap.data?.participant?.name ?? '';
+  const remarks = useInfiniteQuery({
+    ...remarksQueryOptions({ ...(queue === '' ? {} : { queue }), author }),
+    // Пока неизвестно, кто вошёл, спрашивать нечего: без подписи выдача показала бы
+    // чужие замечания под заголовком «мои».
+    enabled: author !== '',
+  });
+  const myRemarks = remarks.data?.pages.flatMap((page) => page.items) ?? [];
 
   // Вопросы, по которым отправка уже пошла, остаются на экране вместе со своим
   // подтверждением, даже когда выдача их больше не содержит: удачный ответ убирает
@@ -58,7 +76,7 @@ export function QuestionsPage() {
 
   return (
     <main className={styles.screen}>
-      <h1 className={styles.heading}>Открытые вопросы</h1>
+      <h1 className={styles.heading}>Входящая</h1>
 
       <form className={styles.filters} aria-label="Отбор вопросов">
         <label className={styles.field}>
@@ -87,29 +105,91 @@ export function QuestionsPage() {
         </label>
       </form>
 
-      <QueryState
-        query={questions}
-        loading="Читаем входящую…"
-        empty={items.length === 0 ? 'Вопросов без ответа нет: агенты вас не ждут.' : undefined}
-      />
+      <section aria-labelledby="questions-section" className={styles.section}>
+        <h2 className={styles.sectionTitle} id="questions-section">
+          Вопросы ко мне
+        </h2>
 
-      <ul className={styles.list}>
-        {items.map((question, at) => (
-          <li key={questionId(question)}>
-            <QuestionRow question={question} at={at} answering={answering} />
-          </li>
-        ))}
-      </ul>
+        <QueryState
+          query={questions}
+          loading="Читаем входящую…"
+          empty={items.length === 0 ? 'Вопросов без ответа нет: агенты вас не ждут.' : undefined}
+        />
 
-      {questions.hasNextPage ? (
-        <Button
-          onClick={() => void questions.fetchNextPage()}
-          disabled={questions.isFetchingNextPage}
-        >
-          {questions.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
-        </Button>
-      ) : null}
+        <ul className={styles.list}>
+          {items.map((question, at) => (
+            <li key={questionId(question)}>
+              <QuestionRow question={question} at={at} answering={answering} />
+            </li>
+          ))}
+        </ul>
+
+        {questions.hasNextPage ? (
+          <Button
+            onClick={() => void questions.fetchNextPage()}
+            disabled={questions.isFetchingNextPage}
+          >
+            {questions.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+          </Button>
+        ) : null}
+      </section>
+
+      {/*
+       * Вторая половина: что человек сказал агентам и на что ему ещё не ответили.
+       * Здесь только чтение — замечание оставляют на карточке задачи, глядя на то,
+       * о чём оно.
+       */}
+      <section aria-labelledby="remarks-section" className={styles.section}>
+        <h2 className={styles.sectionTitle} id="remarks-section">
+          Мои замечания без разбора
+        </h2>
+
+        <QueryState
+          query={remarks}
+          loading="Читаем замечания…"
+          empty={
+            myRemarks.length === 0
+              ? 'Неразобранных замечаний нет: всё, что вы сказали, уже разобрали.'
+              : undefined
+          }
+        />
+
+        <ul className={styles.list}>
+          {myRemarks.map((remark) => (
+            <li key={`${remark.task_key}#${remark.no}`}>
+              <RemarkRow remark={remark} />
+            </li>
+          ))}
+        </ul>
+
+        {remarks.hasNextPage ? (
+          <Button
+            onClick={() => void remarks.fetchNextPage()}
+            disabled={remarks.isFetchingNextPage}
+          >
+            {remarks.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+          </Button>
+        ) : null}
+      </section>
     </main>
+  );
+}
+
+/** Замечание во входящей: к какой задаче, когда оставлено и о чём. */
+function RemarkRow({ remark }: { remark: Remark }) {
+  return (
+    <article className={styles.remark}>
+      <header className={styles.head}>
+        <Link className={styles.task} to={`/tasks/${remark.task_key}`}>
+          {remark.task_key}#{remark.no}
+        </Link>
+        <Badge tone="attention">ждёт разбора</Badge>
+        <RelativeTime value={remark.created_at} />
+      </header>
+
+      <h3 className={styles.title}>{remark.title}</h3>
+      <Markdown>{remark.body}</Markdown>
+    </article>
   );
 }
 

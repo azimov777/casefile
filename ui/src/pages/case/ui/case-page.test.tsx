@@ -9,11 +9,13 @@ import {
   data,
   entryOfType,
   questionEntry,
+  remarkEntry,
+  resolutionEntry,
   taskPackage,
 } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
-import { ENTRY_TYPES, isServiceEntry, type Entry } from '@/entities/entry';
+import { ENTRY_TYPES, isServiceEntry, type Entry, type EntryType } from '@/entities/entry';
 import { setToken } from '@/shared/api';
 
 let seen: URL[] = [];
@@ -33,6 +35,17 @@ function wholeCase(): Entry[] {
 }
 
 /** Лента отвечает так же, как бэкенд: отбор по `types` сужает выдачу. */
+/**
+ * Номер записи нужного типа в собранном деле.
+ *
+ * Считается от порядка `ENTRY_TYPES`, а не выписан числом: новый тип записи в
+ * контракте сдвигает номера, и тест, привязанный к «двенадцатой записи», после этого
+ * проверяет соседнюю — молча и не падая по существу.
+ */
+function noOf(type: EntryType): number {
+  return ENTRY_TYPES.indexOf(type) + 1;
+}
+
 function feed(entries = wholeCase()) {
   return http.get(`${API}/api/v1/tasks/DEMO-1/entries`, ({ request }) => {
     const url = new URL(request.url);
@@ -79,13 +92,44 @@ describe('дело лентой', () => {
     renderApp('/tasks/DEMO-1/case');
     await screen.findByText(/Это всё дело/);
 
-    const section = screen.getByLabelText('DEMO-1#12');
+    const section = screen.getByLabelText(`DEMO-1#${noOf('section_changed')}`);
     expect(within(section).getByText('Было')).toBeInTheDocument();
     expect(within(section).getByText('Старая цель')).toBeInTheDocument();
     expect(within(section).getByText('Новая цель')).toBeInTheDocument();
 
-    const status = screen.getByLabelText('DEMO-1#11');
+    const status = screen.getByLabelText(`DEMO-1#${noOf('status_changed')}`);
     expect(within(status).getByText(/Задан блокирующий вопрос/)).toBeInTheDocument();
+  });
+
+  it('разбор стоит под своим замечанием и называет исход словами', async () => {
+    const remark = remarkEntry(3, 'DEMO-1', 'Дыры в нумерации сбивают с толку');
+    const resolution = resolutionEntry(4, 'DEMO-1', 3);
+    server.use(feed([remark, resolution]));
+    renderApp('/tasks/DEMO-1/case');
+    await screen.findByText(/Это всё дело/);
+
+    const card = screen.getByLabelText('DEMO-1#3');
+    // Разбор вложен в замечание — как ответ в вопрос: для читателя это одно событие.
+    const inner = within(card).getByLabelText('DEMO-1#4');
+    // Регуляркой: заголовок собран из частей, и исход стоит в строке «· принято в работу».
+    expect(within(inner).getByText(/принято в работу/)).toBeInTheDocument();
+    // Ключ продолжения остаётся ссылкой: по нему человек и переходит смотреть работу.
+    expect(within(inner).getByRole('link', { name: 'DEMO-2' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-2',
+    );
+    // Отдельной записью разбор в ленте не повторяется.
+    expect(screen.getAllByLabelText('DEMO-1#4')).toHaveLength(1);
+  });
+
+  it('неразобранное замечание честно говорит, что разбора ещё нет', async () => {
+    server.use(feed([remarkEntry(3, 'DEMO-1')]));
+    renderApp('/tasks/DEMO-1/case');
+    await screen.findByText(/Это всё дело/);
+
+    expect(
+      within(screen.getByLabelText('DEMO-1#3')).getByText('Разбора пока нет.'),
+    ).toBeInTheDocument();
   });
 
   it('ответ стоит под своим вопросом, а не отдельной записью ленты', async () => {

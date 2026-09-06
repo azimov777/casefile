@@ -50,9 +50,12 @@ describe('живой поток', () => {
     expect(liveJournal.connections).toBe(1);
 
     await userEvent.setup().click(screen.getByRole('link', { name: 'Вопросы' }));
-    server.use(http.get(`${API}/api/v1/questions`, () => collection([])));
+    server.use(
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
 
-    expect(await screen.findByRole('heading', { name: 'Открытые вопросы' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Входящая' })).toBeInTheDocument();
     // Переход между экранами не стоит нового соединения: поток живёт в оболочке.
     expect(liveJournal.connections).toBe(1);
     expect(liveJournal.closed).toBe(0);
