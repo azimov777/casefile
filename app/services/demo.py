@@ -35,7 +35,7 @@ from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.repositories import ParticipantRepository, QueueRepository
 from app.domain.authors import label_author
-from app.domain.case import EntryType, VerdictOutcome
+from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.queues import normalize_queue_key
@@ -120,6 +120,11 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     child = await _child_task(session, queue, agent=agent, parent=in_progress)
     checking = await _checking_task(session, queue, agent=agent, blocker=in_progress)
     cancelled = await _cancelled_task(session, queue, agent=agent)
+
+    # Человек правит курс: замечание к уже закрытой задаче и его разбор. Одно замечание
+    # разобрано и указывает на живую задачу, второе ждёт разбора — из него на экране
+    # виден признак `open_remarks`.
+    await _remarks_on_done(session, done, continuation=in_progress, human=human, agent=agent)
 
     # Связь, которую поставили и сняли: без неё в деле не появится `link_removed`, а он
     # такая же часть словаря записей, как и остальные.
@@ -312,6 +317,59 @@ async def _done_task(
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.DONE)
     return task
+
+
+async def _remarks_on_done(
+    session: AsyncSession,
+    done: Task,
+    *,
+    continuation: Task,
+    human: Participant,
+    agent: Actor,
+) -> None:
+    """Замечания человека к закрытой задаче и разбор одного из них.
+
+    Замечание подшивается **после** закрытия намеренно: человек смотрит на сделанное и
+    говорит «вышло не то», а карточка закрытой задачи от этого не меняется — меняется
+    только её дело (`CONCEPT.md`, 3.4). Второе замечание остаётся без резолюции: иначе
+    признак `open_remarks` был бы нулём у всех задач демо, и проверить его на экране
+    было бы не на чем.
+    """
+    reader = Actor(author=human.author, scope=TokenScope.TASK, participant=human)
+    accepted = await case_service.add_entry(
+        session,
+        done,
+        actor=reader,
+        type=EntryType.REMARK,
+        title="Дыры в нумерации сбивают с толку: TRK-8 есть, TRK-9 нет, TRK-10 есть",
+        body=(
+            "Задача закрыта и решение верное, но на экране списка это выглядит как "
+            "потерянные задачи. Нужен хотя бы признак в интерфейсе, что номер сгорел."
+        ),
+    )
+    await case_service.resolve(
+        session,
+        done,
+        actor=agent,
+        remark_no=accepted.no,
+        outcome=RemarkOutcome.ACCEPTED,
+        continuation=continuation.key,
+        body=(
+            "Согласен: дыра объяснима из дела, но не из списка. Само решение не "
+            "пересматриваю — работа по признаку идёт отдельной задачей."
+        ),
+    )
+    # Родословная: продолжение и закрытая задача видят друг друга в карточке. С закрытой
+    # задачей ставится только `relates` (`CONCEPT.md`, 3.5).
+    await links_service.add_link(session, continuation, done, actor=agent, kind=LinkKind.RELATES)
+    await case_service.add_entry(
+        session,
+        done,
+        actor=reader,
+        type=EntryType.REMARK,
+        title="В отказе не видно, какой именно номер не был выдан",
+        body="Пока никто не разбирал: это второе замечание и оно ждёт своей резолюции.",
+    )
 
 
 async def _in_progress_task(
