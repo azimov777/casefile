@@ -119,6 +119,45 @@ def test_entering_a_task_reads_what_was_filed_after_the_summary(skill_text: str)
     assert "сводк" in entering.lower()
 
 
+def test_entering_a_task_reads_the_open_remarks(skill_text: str) -> None:
+    """Дисциплина TRK-9: замечание не пропускают на входе.
+
+    Трекер отдаёт неразобранные замечания в пакете, но прочитать их — обязанность агента,
+    и потребовать этого он не может: чтение он не проверяет. Правило живёт только в
+    тексте скила, поэтому его держит тест.
+    """
+    entering = section(skill_text, "Вход в задачу")
+
+    assert "замечани" in entering.lower(), "вход перестал называть замечания среди читаемого"
+
+
+def test_closing_names_the_outcome_of_every_remark(skill_text: str) -> None:
+    """Дисциплина TRK-9: уйти в `done`, не ответив на «вышло не то», нельзя.
+
+    Валидации на это нет и не будет: замечание не обзорная проверка, и «разобрано»
+    означает «агент ответил», а не «трекер убедился». Единственное место, где обязанность
+    закреплена, — раздел «Завершение».
+    """
+    closing = section(skill_text, "Завершение")
+
+    assert "resolve" in closing, "завершение не требует исхода по замечаниям"
+    assert closing.index("resolve") < closing.index("add_summary"), (
+        "резолюции обязаны идти до финальной сводки: иначе сводка не знает их исхода"
+    )
+
+
+def test_the_skill_promises_no_delivery(skill_text: str) -> None:
+    """Дисциплина TRK-9: трекер никого не уведомляет и ничего не запускает.
+
+    Обещание доставки — самая дорогая ошибка в тексте: агент, поверивший, что замечание
+    до кого-то «дойдёт», перестаёт читать его сам.
+    """
+    lowered = skill_text.lower()
+
+    assert "уведом" not in lowered, "скил заговорил про уведомления, которых в трекере нет"
+    assert "не следит, жив ли ты" in lowered or "ничего не делает сам" in lowered
+
+
 def test_closing_puts_the_final_summary_after_the_verdicts(skill_text: str) -> None:
     """Дисциплина TRK-3: финальная сводка — последнее действие перед `done`.
 
