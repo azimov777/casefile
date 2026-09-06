@@ -246,6 +246,42 @@ async def list_questions(
     )
 
 
+async def list_remarks(
+    session: AsyncSession,
+    *,
+    actor: Actor,
+    author: str | None = None,
+    queue: Queue | None = None,
+    open_only: bool = True,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> Page[TaskEntry]:
+    """Замечания поперёк задач с фильтрами (`CONCEPT.md`, 3.4).
+
+    Умолчания у автора нет, в отличие от адресата у вопросов, и это решение, а не
+    пропуск: вопрос ждёт того, кому задан, а замечание — того, кто ведёт задачу.
+    «Показать мои» было бы неверной точкой зрения для агента, а «показать все» верна для
+    обоих: человек уточняет автора, агент читает всё.
+
+    Автор не разрешается по реестру, тоже намеренно: подписью бывает и метка временного
+    агента, которой в реестре нет, — требовать существования значило бы запретить отбор
+    по половине законных авторов. Строка канонизируется так же, как имена и метки, —
+    иначе `Owner` и `owner` дали бы разные выдачи на одних данных.
+    """
+    ensure_scope(actor, TokenScope.TASK, action="remark.list")
+    page = await EntryRepository(session).remarks_page(
+        author=None if author is None else author.strip().lower(),
+        queue_id=queue.id if queue is not None else None,
+        open_only=open_only,
+        limit=limit,
+        cursor=cursor,
+    )
+    return Page(
+        items=[TaskEntry(entry=entry, task_key=key) for entry, key in page.items],
+        next_cursor=page.next_cursor,
+    )
+
+
 async def count_open_questions(session: AsyncSession, *, participant: Participant) -> int:
     """Сколько открытых вопросов адресовано участнику.
 

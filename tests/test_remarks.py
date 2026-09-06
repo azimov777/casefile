@@ -20,9 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.queue import Queue
 from app.db.models.task import Task
+from app.domain.authors import label_author
 from app.domain.case import EntryType, RemarkOutcome
 from app.domain.errors import EntryFieldsInvalidError, SearchFieldUnknownError
 from app.domain.tasks import TaskStatus
+from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import search as search_service
 from app.services import tasks as tasks_service
@@ -502,6 +504,146 @@ async def test_the_feature_of_a_row_matches_the_card(
     assert row is not None
     assert package.features.open_remarks == 1
     assert row.open_remarks == package.features.open_remarks
+
+
+# --- Поперёк задач ---------------------------------------------------------------------
+
+
+async def inbox(client: AsyncClient, **params: Any) -> list[tuple[str, int, str]]:
+    """«Входящая» замечаний: ключ задачи, номер записи и заголовок каждой строки."""
+    response = await client.get("/api/v1/remarks", params=params)
+    assert response.status_code == 200, response.text
+    return [(item["task_key"], item["no"], item["title"]) for item in response.json()["data"]]
+
+
+async def test_the_inbox_returns_open_remarks_across_tasks_in_full(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка 1 задачи TRK-11: один запрос — и текст, и адрес каждого замечания.
+
+    Собрать это из списка задач нельзя: `open_remarks: > 0` отдаёт задачи, а не записи, и
+    за текстом пришлось бы идти в каждую задачу отдельно.
+    """
+    first = await create(auth_client, "первая задача")
+    second = await create(auth_client, "вторая задача")
+    await file_entry(auth_client, first, type="remark", title="Раз", body="тело раз")
+    await file_entry(auth_client, second, type="remark", title="Два", body="тело два")
+
+    response = await auth_client.get("/api/v1/remarks")
+
+    assert response.status_code == 200, response.text
+    rows = response.json()["data"]
+    assert [(row["task_key"], row["title"]) for row in rows] == [(first, "Раз"), (second, "Два")]
+    assert rows[0]["body"] == "тело раз"
+    assert rows[0]["author"] == {"kind": "human", "signature": "owner"}
+    assert rows[0]["no"] and rows[0]["created_at"]
+    assert response.json()["meta"]["has_more"] is False
+
+
+async def test_a_resolved_remark_leaves_the_inbox_but_not_the_case(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка 2: выдача идёт от самого старого, разбор убирает строку.
+
+    Из дела замечание при этом никуда не девается: `open=false` снимает фильтр и отдаёт
+    все замечания — и разобранные, и нет, — как тот же параметр у вопросов.
+    """
+    key = await create(auth_client, "две претензии")
+    first = await file_entry(auth_client, key, type="remark", title="Старое")
+    await file_entry(auth_client, key, type="remark", title="Новое")
+    assert [title for _, _, title in await inbox(auth_client)] == ["Старое", "Новое"]
+
+    await file_entry(
+        auth_client,
+        key,
+        type="resolution",
+        payload={"remark_no": first.json()["data"]["no"], "outcome": "fixed"},
+    )
+
+    assert [title for _, _, title in await inbox(auth_client)] == ["Новое"]
+    assert [title for _, _, title in await inbox(auth_client, open=False)] == ["Старое", "Новое"]
+
+
+async def test_the_inbox_pages_by_seq_without_losing_or_repeating(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка 3: подшивка во время листания не ломает страницы.
+
+    Курсор идёт по сквозному `seq`: новая запись получает номер больше всех выданных и
+    попадает в хвост, а не вклинивается в уже прочитанное. Проверяется именно так —
+    страница, подшивка, вторая страница.
+    """
+    key = await create(auth_client, "много замечаний")
+    for index in range(4):
+        await file_entry(auth_client, key, type="remark", title=f"замечание {index}")
+
+    first_page = await auth_client.get("/api/v1/remarks", params={"limit": 2})
+    cursor = first_page.json()["meta"]["next_cursor"]
+    await file_entry(auth_client, key, type="remark", title="подшито во время листания")
+    second_page = await auth_client.get("/api/v1/remarks", params={"limit": 2, "cursor": cursor})
+
+    seen = [row["title"] for row in first_page.json()["data"]]
+    seen += [row["title"] for row in second_page.json()["data"]]
+    assert seen == ["замечание 0", "замечание 1", "замечание 2", "замечание 3"]
+    assert len(seen) == len(set(seen))
+
+
+async def test_the_inbox_filters_by_author_and_by_queue(
+    db_session: AsyncSession,
+    auth_client: AsyncClient,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка 4: «мои» — это подпись, и агентская подпись ищется так же.
+
+    Замечание временного агента здесь главный случай: его подписи нет в реестре, и
+    отбор, разрешающий автора по участникам, потерял бы её вовсе.
+    """
+    key = await create(auth_client, "чужие и свои")
+    task = await tasks_service.get_task(db_session, key)
+    agent = Actor(author=label_author("nightly_bot"), scope=TokenScope.TASK)
+    await file_entry(auth_client, key, type="remark", title="от человека")
+    await case_service.add_entry(
+        db_session, task, actor=agent, type=EntryType.REMARK, title="от временного агента"
+    )
+
+    assert [title for _, _, title in await inbox(auth_client, author="owner")] == ["от человека"]
+    assert [title for _, _, title in await inbox(auth_client, author="NIGHTLY_BOT")] == [
+        "от временного агента"
+    ]
+    assert await inbox(auth_client, author="никого_такого_нет") == []
+    assert len(await inbox(auth_client, queue="trk")) == 2
+    assert await inbox(auth_client, queue="TRK", author="owner") == [
+        (key, 2, "от человека"),
+    ]
+
+
+async def test_the_inbox_covers_closed_tasks(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка 5: замечание к `done` и к `cancelled` не теряется.
+
+    Это не крайний случай, а основной: на сделанное человек и смотрит, когда говорит
+    «вышло не то».
+    """
+    done = await create(auth_client, "сделанная")
+    cancelled = await create(auth_client, "отменённая")
+    await close(auth_client, done)
+    moved = await auth_client.post(
+        f"/api/v1/tasks/{cancelled}/transition", json={"to": "cancelled", "reason": "не нужна"}
+    )
+    assert moved.status_code == 200, moved.text
+    await file_entry(auth_client, done, type="remark", title="к сделанной")
+    await file_entry(auth_client, cancelled, type="remark", title="к отменённой")
+
+    assert [(key, title) for key, _, title in await inbox(auth_client)] == [
+        (done, "к сделанной"),
+        (cancelled, "к отменённой"),
+    ]
 
 
 # --- MCP -------------------------------------------------------------------------------

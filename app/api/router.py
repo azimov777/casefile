@@ -27,6 +27,7 @@ from app.api.routes import (
     participants,
     questions,
     queues,
+    remarks,
     tasks,
     tokens,
 )
@@ -72,4 +73,5 @@ api_router.include_router(queues.router)
 api_router.include_router(tasks.router)
 api_router.include_router(links.router)
 api_router.include_router(questions.router)
+api_router.include_router(remarks.router)
 api_router.include_router(journal.router)

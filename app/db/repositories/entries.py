@@ -336,6 +336,41 @@ class EntryRepository:
         last_entry = page[-1][0]
         return Page(items=page, next_cursor=encode_sort_cursor([last_entry.seq], last_entry.id))
 
+    async def remarks_page(
+        self,
+        *,
+        author: str | None = None,
+        queue_id: uuid.UUID | None = None,
+        open_only: bool = True,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[tuple[Entry, str]]:
+        """Замечания всех задач с фильтрами — «входящая» замечаний.
+
+        Устроена как `questions_page` и намеренно: та же сортировка по сквозному `seq`,
+        тот же курсор, те же пары «запись, ключ задачи». Разница ровно одна — отбор идёт
+        по автору записи, а не по адресату в нагрузке: у замечания адресата нет
+        (`CONCEPT.md`, 3.4).
+        """
+        size = resolve_limit(limit)
+        statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_REMARK)
+        if author is not None:
+            statement = statement.where(authored_by(author))
+        if queue_id is not None:
+            statement = statement.where(Task.queue_id == queue_id)
+        if open_only:
+            statement = _unresolved(statement)
+        if cursor is not None:
+            (after_seq,), _ = decode_sort_cursor(cursor, arity=1)
+            statement = statement.where(Entry.seq > after_seq)
+        statement = statement.order_by(Entry.seq).limit(size + 1)
+        rows = [(entry, key) for entry, key in await self._session.execute(statement)]
+        if len(rows) <= size:
+            return Page(items=rows, next_cursor=None)
+        page = rows[:size]
+        last_entry = page[-1][0]
+        return Page(items=page, next_cursor=encode_sort_cursor([last_entry.seq], last_entry.id))
+
     async def count_questions(
         self,
         *,
@@ -427,6 +462,18 @@ def addressed_to(value: str) -> ColumnElement[bool]:
     первого экрана читают один индекс, а не два разных условия.
     """
     return Entry.payload["addressees"].contains([value])
+
+
+def authored_by(signature: str) -> ColumnElement[bool]:
+    """Запись подписана этой строкой — «мои замечания» в SQL.
+
+    Сравнивается только подпись, без рода: имя участника и метка временного агента живут
+    в одном пространстве имён и обе канонизируются в нижний регистр
+    (`app/domain/authors.py`). Отбор по паре «род и подпись» пришлось бы объяснять
+    клиенту, ничего не уточнив: двух авторов с одной подписью и разным родом в установке
+    не бывает.
+    """
+    return Entry.created_by_signature == signature
 
 
 def blocking_is(value: bool) -> ColumnElement[bool]:

@@ -3554,11 +3554,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "true keeps questions with no answer yet, false keeps the answered ones. To read every question of one task use its case with `types=question`",
+              "description": "true (the default) keeps only questions with no answer yet; false drops the filter and returns every question, answered or not. To read the questions of one task use its case with `types=question`",
               "default": true,
               "title": "Open"
             },
-            "description": "true keeps questions with no answer yet, false keeps the answered ones. To read every question of one task use its case with `types=question`"
+            "description": "true (the default) keeps only questions with no answer yet; false drops the filter and returns every question, answered or not. To read the questions of one task use its case with `types=question`"
           },
           {
             "name": "limit",
@@ -3621,6 +3621,202 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CollectionResponse_QuestionEntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/remarks": {
+      "get": {
+        "tags": [
+          "remarks"
+        ],
+        "summary": "List remarks",
+        "description": "Замечания всех задач с фильтрами; по умолчанию — все неразобранные.\n\nПорядок — от самого старого: дольше всех ждёт разбора то, что оставили первым.\nРезолюция убирает замечание из выдачи, потому что открытость считается по делу, а не\nхранится флагом; из дела оно при этом никуда не девается.\n\nАвтор не проверяется по реестру: подписью бывает и метка временного агента, которой\nв реестре нет. Неизвестная подпись поэтому даёт пустой список, а не отказ.",
+        "operationId": "list_remarks",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "author",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature the remark is filed under: a participant name or a temporary agent label; matching ignores case. Omit to get remarks by anyone",
+              "examples": [
+                "owner"
+              ],
+              "title": "Author"
+            },
+            "description": "Signature the remark is filed under: a participant name or a temporary agent label; matching ignores case. Omit to get remarks by anyone"
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Queue key of the remark's task; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Queue"
+            },
+            "description": "Queue key of the remark's task; matching ignores case"
+          },
+          {
+            "name": "open",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "true (the default) keeps only remarks with no resolution yet; false drops the filter and returns every remark, resolved or not. To read the remarks of one task use its case with `types=remark`",
+              "default": true,
+              "title": "Open"
+            },
+            "description": "true (the default) keeps only remarks with no resolution yet; false drops the filter and returns every remark, resolved or not. To read the remarks of one task use its case with `types=remark`"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_RemarkEntryRead_"
                 }
               }
             }
@@ -4676,6 +4872,25 @@
           "data"
         ],
         "title": "CollectionResponse[QueueRead]"
+      },
+      "CollectionResponse_RemarkEntryRead_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RemarkEntryRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CollectionResponse[RemarkEntryRead]"
       },
       "CollectionResponse_TaskSearchRead_": {
         "properties": {

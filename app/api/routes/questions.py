@@ -44,8 +44,9 @@ OpenQuery = Annotated[
     Query(
         alias="open",
         description=(
-            "true keeps questions with no answer yet, false keeps the answered ones. "
-            "To read every question of one task use its case with `types=question`"
+            "true (the default) keeps only questions with no answer yet; false drops the "
+            "filter and returns every question, answered or not. To read the questions "
+            "of one task use its case with `types=question`"
         ),
     ),
 ]
