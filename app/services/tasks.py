@@ -158,8 +158,9 @@ class TaskPackage:
     """Всё, что нужно агенту с чистым контекстом, одним вызовом (`CONCEPT.md`, 4.2).
 
     Полно хранится, по оглавлению читается: карточка, связи, вычисляемые признаки,
-    последняя сводка и открытые вопросы приезжают **целиком**, а остальные записи —
-    строками описи. Тела читаются точечно (`list_entries`, `read_entry`).
+    последняя сводка, открытые вопросы и неразобранные замечания приезжают **целиком**,
+    а остальные записи — строками описи. Тела читаются точечно (`list_entries`,
+    `read_entry`).
 
     Инструмент MCP `get_task` (задача 28) отдаёт эту же структуру.
     """
@@ -169,6 +170,9 @@ class TaskPackage:
     features: TaskFeatures
     summary: Entry | None
     questions: list[Entry]
+    #: Замечания без резолюции целиком: «вышло не то» обязано попасться на глаза
+    #: читателю с любым контекстом, а не лежать строкой описи (`CONCEPT.md`, 3.4).
+    remarks: list[Entry]
     transitions: tuple[TaskStatus, ...]
     index: list[EntryHeading]
 
@@ -207,6 +211,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     links = await links_service.list_links(session, task, actor=actor)
     summary = await case_service.last_summary(session, task, actor=actor)
     questions = await case_service.open_questions(session, task, actor=actor)
+    remarks = await case_service.open_remarks(session, task, actor=actor)
     # Опись читается до признаков: `last_entry_at` считается из неё, и отдельного
     # запроса ради признака здесь по-прежнему нет ни одного.
     index = await case_service.case_index(session, task, actor=actor)
@@ -214,10 +219,11 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
         task=task,
         links=links,
         features=case_service.features(
-            questions, summary, index, blocked=links_service.blocked(links)
+            questions, summary, index, blocked=links_service.blocked(links), remarks=remarks
         ),
         summary=summary,
         questions=questions,
+        remarks=remarks,
         transitions=allowed_transitions(task.status),
         index=index,
     )

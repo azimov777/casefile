@@ -23,6 +23,7 @@ from app.mcp.arguments import (
     LimitArg,
     OpenBlockingQuestionsArg,
     OpenQuestionsArg,
+    OpenRemarksArg,
     ParentKeyArg,
     PrioritiesArg,
     PriorityArg,
@@ -30,6 +31,7 @@ from app.mcp.arguments import (
     QueueKeyArg,
     QueuesArg,
     ReasonArg,
+    RemarksInWorkArg,
     SectionsArg,
     SortArg,
     StatusesArg,
@@ -87,6 +89,8 @@ def register(tools: Toolset) -> None:
         blocked: BlockedArg = None,
         open_questions: OpenQuestionsArg = None,
         open_blocking_questions: OpenBlockingQuestionsArg = None,
+        open_remarks: OpenRemarksArg = None,
+        remarks_in_work: RemarksInWorkArg = None,
         text: TextArg = None,
         sort: SortArg = None,
         fields: FieldsArg = DEFAULT_SEARCH_FIELDS,
@@ -115,6 +119,8 @@ def register(tools: Toolset) -> None:
                     blocked=blocked,
                     open_questions=open_questions,
                     open_blocking_questions=open_blocking_questions,
+                    open_remarks=open_remarks,
+                    remarks_in_work=remarks_in_work,
                     text=text,
                 ),
                 sort=sort or (),
@@ -258,6 +264,8 @@ def _terms(
     blocked: bool | None,
     open_questions: int | None,
     open_blocking_questions: int | None,
+    open_remarks: int | None,
+    remarks_in_work: int | None,
     text: str | None,
 ) -> list[StructuredTerm]:
     """Аргументы отбора → условия фильтра. Одно место перевода, как `TaskFilters` в REST.
@@ -288,6 +296,8 @@ def _terms(
             ("blocked", blocked),
             ("open_questions", open_questions),
             ("open_blocking_questions", open_blocking_questions),
+            ("open_remarks", open_remarks),
+            ("remarks_in_work", remarks_in_work),
         )
         if value is not None
     )

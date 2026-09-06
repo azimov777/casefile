@@ -28,7 +28,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.sentinels import unset_field
-from app.domain.case import EntryType, VerdictOutcome
+from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.idempotency import KEY_TTL
 from app.domain.journal import JOURNAL_START, MAX_WAIT_SECONDS
 from app.domain.links import LinkKind
@@ -181,14 +181,16 @@ EntryTypeArg = Annotated[
         EntryType.ATTEMPT,
         EntryType.FINDING,
         EntryType.ARTIFACT,
+        EntryType.REMARK,
         EntryType.NOTE,
     ],
     Field(
         description=(
             "Что случилось: `decision` — выбран вариант из нескольких, `attempt` — "
             "попытка и чем кончилась (провал ценнее успеха), `finding` — установленный "
-            "факт с источником, `artifact` — указатель на результат, `note` — всё "
-            "остальное, и это последний выбор. Сводка, вопрос, ответ и вердикт "
+            "факт с источником, `artifact` — указатель на результат, `remark` — "
+            "замечание «вышло не то» к чужой сделанной работе, `note` — всё остальное, "
+            "и это последний выбор. Сводка, вопрос, ответ, вердикт и резолюция "
             "подшиваются своими инструментами"
         ),
         examples=[EntryType.DECISION],
@@ -279,6 +281,31 @@ BlockingArg = Annotated[
 QuestionNoArg = Annotated[
     int,
     Field(description="Номер записи `question` в этой же задаче", examples=[7]),
+]
+RemarkNoArg = Annotated[
+    int,
+    Field(description="Номер записи `remark` в этой же задаче", examples=[7]),
+]
+RemarkOutcomeArg = Annotated[
+    RemarkOutcome,
+    Field(
+        description=(
+            "Чем разобрано замечание: `fixed` — поправлено сразу, `accepted` — принято "
+            "в работу отдельной задачей (тогда обязателен `task`), `needs_detail` — "
+            "нужно уточнение, `declined` — менять не будем, причина в теле"
+        ),
+        examples=[RemarkOutcome.ACCEPTED],
+    ),
+]
+ContinuationKeyArg = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Ключ задачи, в которую ушла работа. Только с исходом `accepted` и там "
+            "обязателен: «приняли» без адреса это обещание без ссылки"
+        ),
+        examples=["TRK-43"],
+    ),
 ]
 CheckNoArg = Annotated[
     int,
@@ -422,6 +449,7 @@ FieldsArg = Annotated[
         description=(
             "Какие поля вернуть. Ключ приходит всегда. `features` отдаёт вычисляемые "
             "признаки строки: `blocked`, `open_questions`, `open_blocking_questions`, "
+            "`open_remarks`, "
             "`last_summary_at` и `last_entry_at`. Пустой список означает «задачу целиком» — "
             "проси его, "
             "только когда действительно нужны разделы: они длинные"
@@ -472,6 +500,19 @@ OpenQuestionsArg = Annotated[
 OpenBlockingQuestionsArg = Annotated[
     int | None,
     Field(description="Из них помеченных `blocking`; `0` означает «ничто не мешает»"),
+]
+OpenRemarksArg = Annotated[
+    int | None,
+    Field(description="Ровно столько замечаний без резолюции. Для диапазонов есть язык запросов"),
+]
+RemarksInWorkArg = Annotated[
+    int | None,
+    Field(
+        description=(
+            "Замечаний, принятых в работу, чья задача-продолжение ещё не закрыта: "
+            "«разобрано, но работа не доделана»"
+        )
+    ),
 ]
 TextArg = Annotated[
     str | None,

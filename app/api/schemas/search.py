@@ -66,9 +66,10 @@ _SORT_DESCRIPTION = (
 _FIELDS_DESCRIPTION = (
     "Fields to return, to keep the answer small. Omit for the whole task, computed "
     "features included. The task key is always included. `features` is picked as a "
-    "whole and brings `blocked`, `open_questions`, `open_blocking_questions` and "
-    "`last_summary_at`; a single feature is not a field of the answer, and asking for "
-    "one answers 422 `search_field_unknown` with the selectable names"
+    "whole and brings `blocked`, `open_questions`, `open_blocking_questions`, "
+    "`open_remarks` and `last_summary_at`; a single feature is not a field of the "
+    "answer, and asking for one answers 422 `search_field_unknown` with the selectable "
+    "names"
 )
 _TAGS_DESCRIPTION = (
     "Tags, matched exactly and case-sensitively. Pass the parameter more than once to "
@@ -166,6 +167,26 @@ class TaskFilters:
             description=("Of those, the ones marked `blocking`; `0` means nothing is in the way"),
         ),
     ] = None
+    open_remarks: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description=(
+                "Exact number of remarks with no resolution. Use the query language for "
+                "ranges: `open_remarks: > 0`"
+            ),
+        ),
+    ] = None
+    remarks_in_work: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description=(
+                "Remarks resolved as `accepted` whose continuation task is still open: "
+                "reviewed, but the work is not finished"
+            ),
+        ),
+    ] = None
     text: Annotated[
         str | None,
         Query(
@@ -201,6 +222,8 @@ class TaskFilters:
                 ("blocked", self.blocked),
                 ("open_questions", self.open_questions),
                 ("open_blocking_questions", self.open_blocking_questions),
+                ("open_remarks", self.open_remarks),
+                ("remarks_in_work", self.remarks_in_work),
             )
             if value is not None
         )

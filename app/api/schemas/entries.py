@@ -39,7 +39,9 @@ from app.domain.case import (
     MAX_ENTRY_TITLE_LENGTH,
     MAX_REFS,
     MAX_SUMMARY_PART_LENGTH,
+    OUTCOME_WITH_CONTINUATION,
     EntryType,
+    RemarkOutcome,
     VerdictOutcome,
 )
 from app.domain.links import LinkKind
@@ -121,6 +123,22 @@ class EntryFactsRead(BaseModel):
     )
     check_no: int | None = Field(
         default=None, examples=[3], description="`verdict`: number of the review check"
+    )
+    remark_no: int | None = Field(
+        default=None, examples=[None], description="`resolution`: the remark it resolves"
+    )
+    remark_outcome: RemarkOutcome | None = Field(
+        default=None,
+        examples=[None],
+        description="`resolution`: how the remark was resolved",
+    )
+    continuation_key: str | None = Field(
+        default=None,
+        examples=[None],
+        description=(
+            "`resolution`: key of the task the work moved to; set only when the outcome "
+            "is `accepted`"
+        ),
     )
     outcome: VerdictOutcome | None = Field(
         default=None, description="`verdict`: how the check ended"
@@ -229,6 +247,32 @@ class VerdictPayload(BaseModel):
         description="Position in the task `checks` list, numbered from 1",
     )
     outcome: VerdictOutcome = Field(examples=[VerdictOutcome.PASSED])
+
+
+class ResolutionPayload(BaseModel):
+    """Нагрузка резолюции: какое замечание разобрано, чем и куда ушла работа."""
+
+    remark_no: int = Field(
+        ge=1,
+        examples=[7],
+        description="Number of the `remark` entry in the same task",
+    )
+    outcome: RemarkOutcome = Field(
+        examples=[RemarkOutcome.ACCEPTED],
+        description=(
+            "How the remark was resolved: fixed right away, accepted into a separate "
+            "task, needs more detail, or declined"
+        ),
+    )
+    task: str | None = Field(
+        default=None,
+        examples=["TRK-43"],
+        description=(
+            "Key of the continuation task; required with `"
+            + OUTCOME_WITH_CONTINUATION.value
+            + "` and not accepted with any other outcome"
+        ),
+    )
 
 
 class StatusChangedPayload(BaseModel):
@@ -360,6 +404,20 @@ class VerdictEntryRead(_EntryReadBase):
     payload: VerdictPayload
 
 
+class RemarkEntryRead(_EntryReadBase):
+    """Замечание к сделанному. Открыто, пока в деле нет `resolution` с его номером."""
+
+    type: Literal[EntryType.REMARK]
+    payload: EmptyPayload = Field(default_factory=EmptyPayload)
+
+
+class ResolutionEntryRead(_EntryReadBase):
+    """Резолюция по замечанию: чем разобрано и куда ушла работа."""
+
+    type: Literal[EntryType.RESOLUTION]
+    payload: ResolutionPayload
+
+
 class StatusChangedEntryRead(_EntryReadBase):
     """Служебная запись о переходе статуса."""
 
@@ -401,6 +459,8 @@ type EntryRead = Annotated[
     | QuestionEntryRead
     | AnswerEntryRead
     | VerdictEntryRead
+    | RemarkEntryRead
+    | ResolutionEntryRead
     | StatusChangedEntryRead
     | SectionChangedEntryRead
     | FieldChangedEntryRead
@@ -434,6 +494,8 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.QUESTION: QuestionEntryRead,
     EntryType.ANSWER: AnswerEntryRead,
     EntryType.VERDICT: VerdictEntryRead,
+    EntryType.REMARK: RemarkEntryRead,
+    EntryType.RESOLUTION: ResolutionEntryRead,
     EntryType.STATUS_CHANGED: StatusChangedEntryRead,
     EntryType.SECTION_CHANGED: SectionChangedEntryRead,
     EntryType.FIELD_CHANGED: FieldChangedEntryRead,
@@ -500,7 +562,12 @@ class _TitledEntryCreate(_EntryCreateBase):
 
 
 class PlainEntryCreate(_TitledEntryCreate):
-    """Решение, попытка, находка, артефакт, заметка. Нагрузки нет."""
+    """Решение, попытка, находка, артефакт, заметка. Нагрузки нет.
+
+    Замечание сюда не входит: у него свой вариант (`RemarkEntryCreate`), потому что
+    `type` — разметка объединения, и один вариант на шесть типов не дал бы фронтенду
+    сузить тип до замечания там, где это нужно.
+    """
 
     type: Literal[
         EntryType.DECISION,
@@ -539,12 +606,27 @@ class VerdictEntryCreate(_EntryCreateBase):
     payload: VerdictPayload
 
 
+class RemarkEntryCreate(_TitledEntryCreate):
+    """Замечание: «вышло не то». Нагрузки нет, заголовок пишет автор."""
+
+    type: Literal[EntryType.REMARK]
+
+
+class ResolutionEntryCreate(_EntryCreateBase):
+    """Резолюция. Заголовок не принимается: он собирается из ссылки на замечание и исхода."""
+
+    type: Literal[EntryType.RESOLUTION]
+    payload: ResolutionPayload
+
+
 type EntryCreate = Annotated[
     PlainEntryCreate
     | SummaryEntryCreate
     | QuestionEntryCreate
     | AnswerEntryCreate
-    | VerdictEntryCreate,
+    | VerdictEntryCreate
+    | RemarkEntryCreate
+    | ResolutionEntryCreate,
     Field(discriminator="type"),
 ]
 """Подшиваемая запись: те же типы, что доступны агенту, размеченные по `type`."""

@@ -144,9 +144,11 @@ async def list_tasks(
     search_field_unknown` со списком допустимых в `details.allowed`.
 
     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
-    `open_blocking_questions`): колонок под них нет, они считаются из связей и дела
-    прямо в запросе. Запрос кандидатов назначателя — одна строка: `queue: TRK and
-    status: open and blocked: false and open_blocking_questions: 0`.
+    `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
+    связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
+    `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`.
+    Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
+    названная задача ещё не закрыта».
 
     Те же признаки приходят **в каждой строке** объектом `features` — тем самым, что
     в пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,
@@ -179,8 +181,9 @@ async def read_task(
     """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 
     Карточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые
-    признаки, последняя сводка целиком, открытые вопросы целиком, опись дела и переходы
-    по таблице. Тела остальных записей читаются отдельно в `GET /tasks/{key}/entries`.
+    признаки, последняя сводка целиком, открытые вопросы и неразобранные замечания
+    целиком, опись дела и переходы по таблице. Тела остальных записей читаются отдельно
+    в `GET /tasks/{key}/entries`.
     Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
     блокеры, дети) проверяются в момент перехода, а не при чтении.
     """
@@ -192,9 +195,11 @@ async def read_task(
             links=[TaskLinkRead.model_validate(link) for link in package.links],
             features=TaskFeaturesRead.model_validate(package.features, from_attributes=True),
             # `entry_read` отдаёт вариант по типу записи, а сценарий гарантирует, что
-            # сюда попали именно сводка и вопросы: сузить тип здесь нечем и незачем.
+            # сюда попали именно сводка, вопросы и замечания: сузить тип здесь нечем и
+            # незачем.
             summary=None if package.summary is None else entry_read(package.summary, task_key=key),
             questions=[entry_read(question, task_key=key) for question in package.questions],
+            remarks=[entry_read(remark, task_key=key) for remark in package.remarks],
             transitions=list(package.transitions),
             index=[EntryHeadingRead.model_validate(heading) for heading in package.index],
         )

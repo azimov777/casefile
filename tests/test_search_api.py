@@ -282,6 +282,7 @@ async def test_every_row_carries_the_features_of_its_own_card(
             "blocked",
             "open_questions",
             "open_blocking_questions",
+            "open_remarks",
             "last_summary_at",
             "last_entry_at",
         }
@@ -315,6 +316,7 @@ async def test_the_features_are_picked_as_a_whole_and_a_single_one_is_refused(
                 "blocked": False,
                 "open_questions": 0,
                 "open_blocking_questions": 0,
+                "open_remarks": 0,
                 "last_summary_at": None,
                 "last_entry_at": None,
             },

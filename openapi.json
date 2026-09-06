@@ -1762,7 +1762,7 @@
           "tasks"
         ],
         "summary": "List and search tasks",
-        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=queue: TRK and status: open` и\n`?queue=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`): колонок под них нет, они считаются из связей и дела\nпрямо в запросе. Запрос кандидатов назначателя — одна строка: `queue: TRK and\nstatus: open and blocked: false and open_blocking_questions: 0`.\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.",
+        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=queue: TRK and status: open` и\n`?queue=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из\nсвязей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:\n`queue: TRK and status: open and blocked: false and open_blocking_questions: 0`.\nЕсть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а\nназванная задача ещё не закрыта».\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.",
         "operationId": "list_tasks",
         "security": [
           {
@@ -1784,13 +1784,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `priority`, `queue`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character",
+              "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character",
               "examples": [
                 "queue: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `priority`, `queue`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character"
+            "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character"
           },
           {
             "name": "sort",
@@ -1835,7 +1835,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names",
+              "description": "Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names",
               "examples": [
                 [
                   "title",
@@ -1844,7 +1844,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names"
+            "description": "Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names"
           },
           {
             "name": "limit",
@@ -2068,6 +2068,44 @@
             "description": "Of those, the ones marked `blocking`; `0` means nothing is in the way"
           },
           {
+            "name": "open_remarks",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact number of remarks with no resolution. Use the query language for ranges: `open_remarks: > 0`",
+              "title": "Open Remarks"
+            },
+            "description": "Exact number of remarks with no resolution. Use the query language for ranges: `open_remarks: > 0`"
+          },
+          {
+            "name": "remarks_in_work",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Remarks resolved as `accepted` whose continuation task is still open: reviewed, but the work is not finished",
+              "title": "Remarks In Work"
+            },
+            "description": "Remarks resolved as `accepted` whose continuation task is still open: reviewed, but the work is not finished"
+          },
+          {
             "name": "text",
             "in": "query",
             "required": false,
@@ -2191,7 +2229,7 @@
           "tasks"
         ],
         "summary": "Read a task",
-        "description": "Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.\n\nКарточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые\nпризнаки, последняя сводка целиком, открытые вопросы целиком, опись дела и переходы\nпо таблице. Тела остальных записей читаются отдельно в `GET /tasks/{key}/entries`.\nПереходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,\nблокеры, дети) проверяются в момент перехода, а не при чтении.",
+        "description": "Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.\n\nКарточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые\nпризнаки, последняя сводка целиком, открытые вопросы и неразобранные замечания\nцеликом, опись дела и переходы по таблице. Тела остальных записей читаются отдельно\nв `GET /tasks/{key}/entries`.\nПереходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,\nблокеры, дети) проверяются в момент перехода, а не при чтении.",
         "operationId": "read_task",
         "security": [
           {
@@ -2666,6 +2704,12 @@
                   },
                   {
                     "$ref": "#/components/schemas/VerdictEntryCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RemarkEntryCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResolutionEntryCreate"
                   }
                 ],
                 "discriminator": {
@@ -2679,7 +2723,9 @@
                     "summary": "#/components/schemas/SummaryEntryCreate",
                     "question": "#/components/schemas/QuestionEntryCreate",
                     "answer": "#/components/schemas/AnswerEntryCreate",
-                    "verdict": "#/components/schemas/VerdictEntryCreate"
+                    "verdict": "#/components/schemas/VerdictEntryCreate",
+                    "remark": "#/components/schemas/RemarkEntryCreate",
+                    "resolution": "#/components/schemas/ResolutionEntryCreate"
                   }
                 },
                 "title": "Entry"
@@ -4068,6 +4114,8 @@
                       "link_removed": "#/components/schemas/LinkEntryRead",
                       "note": "#/components/schemas/PlainEntryRead",
                       "question": "#/components/schemas/QuestionEntryRead",
+                      "remark": "#/components/schemas/RemarkEntryRead",
+                      "resolution": "#/components/schemas/ResolutionEntryRead",
                       "section_changed": "#/components/schemas/SectionChangedEntryRead",
                       "status_changed": "#/components/schemas/StatusChangedEntryRead",
                       "summary": "#/components/schemas/SummaryEntryRead",
@@ -4090,6 +4138,12 @@
                     },
                     {
                       "$ref": "#/components/schemas/VerdictEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RemarkEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResolutionEntryRead"
                     },
                     {
                       "$ref": "#/components/schemas/StatusChangedEntryRead"
@@ -4918,6 +4972,50 @@
               3
             ]
           },
+          "remark_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remark No",
+            "description": "`resolution`: the remark it resolves",
+            "examples": [
+              null
+            ]
+          },
+          "remark_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RemarkOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`resolution`: how the remark was resolved",
+            "examples": [
+              null
+            ]
+          },
+          "continuation_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Key",
+            "description": "`resolution`: key of the task the work moved to; set only when the outcome is `accepted`",
+            "examples": [
+              null
+            ]
+          },
           "outcome": {
             "anyOf": [
               {
@@ -5000,6 +5098,12 @@
             "$ref": "#/components/schemas/VerdictEntryRead"
           },
           {
+            "$ref": "#/components/schemas/RemarkEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/ResolutionEntryRead"
+          },
+          {
             "$ref": "#/components/schemas/StatusChangedEntryRead"
           },
           {
@@ -5030,6 +5134,8 @@
             "link_removed": "#/components/schemas/LinkEntryRead",
             "note": "#/components/schemas/PlainEntryRead",
             "question": "#/components/schemas/QuestionEntryRead",
+            "remark": "#/components/schemas/RemarkEntryRead",
+            "resolution": "#/components/schemas/ResolutionEntryRead",
             "section_changed": "#/components/schemas/SectionChangedEntryRead",
             "status_changed": "#/components/schemas/StatusChangedEntryRead",
             "summary": "#/components/schemas/SummaryEntryRead",
@@ -5048,6 +5154,8 @@
           "question",
           "answer",
           "verdict",
+          "remark",
+          "resolution",
           "note",
           "created",
           "status_changed",
@@ -5664,7 +5772,7 @@
           "type"
         ],
         "title": "PlainEntryCreate",
-        "description": "Решение, попытка, находка, артефакт, заметка. Нагрузки нет."
+        "description": "Решение, попытка, находка, артефакт, заметка. Нагрузки нет.\n\nЗамечание сюда не входит: у него свой вариант (`RemarkEntryCreate`), потому что\n`type` — разметка объединения, и один вариант на шесть типов не дал бы фронтенду\nсузить тип до замечания там, где это нужно."
       },
       "PlainEntryRead": {
         "properties": {
@@ -6071,6 +6179,329 @@
         "type": "object",
         "title": "QueueUpdate",
         "description": "Частичное обновление: применяется только переданное.\n\nПоля `key` здесь нет и не будет: ключ вшит в ключ каждой задачи очереди, и правка\nзадним числом порвала бы все уже записанные ссылки. Схема отвергает лишнее поле, а\nне игнорирует его молча — иначе клиент получил бы `200` на изменение, которого не\nбыло."
+      },
+      "RemarkEntryCreate": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Markdown body of the entry",
+            "default": ""
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Refs",
+            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              []
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Номер задачи выдаётся до валидации"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "remark",
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "type"
+        ],
+        "title": "RemarkEntryCreate",
+        "description": "Замечание: «вышло не то». Нагрузки нет, заголовок пишет автор."
+      },
+      "RemarkEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "type": {
+            "type": "string",
+            "const": "remark",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EmptyPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type"
+        ],
+        "title": "RemarkEntryRead",
+        "description": "Замечание к сделанному. Открыто, пока в деле нет `resolution` с его номером."
+      },
+      "RemarkOutcome": {
+        "type": "string",
+        "enum": [
+          "fixed",
+          "accepted",
+          "needs_detail",
+          "declined"
+        ],
+        "title": "RemarkOutcome",
+        "description": "Чем разобрано замечание (`CONCEPT.md`, 3.4).\n\nСписок закрыт и покрывает все четыре судьбы претензии: поправили сразу, приняли в\nработу отдельной задачей, не поняли и ждём уточнения, менять не будем. Свободного\n«прочее» здесь нет намеренно — оно снова сделало бы исход текстом."
+      },
+      "ResolutionEntryCreate": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Markdown body of the entry",
+            "default": ""
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Refs",
+            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              []
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "resolution",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ResolutionPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "ResolutionEntryCreate",
+        "description": "Резолюция. Заголовок не принимается: он собирается из ссылки на замечание и исхода."
+      },
+      "ResolutionEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "type": {
+            "type": "string",
+            "const": "resolution",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ResolutionPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "ResolutionEntryRead",
+        "description": "Резолюция по замечанию: чем разобрано и куда ушла работа."
+      },
+      "ResolutionPayload": {
+        "properties": {
+          "remark_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Remark No",
+            "description": "Number of the `remark` entry in the same task",
+            "examples": [
+              7
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RemarkOutcome",
+            "description": "How the remark was resolved: fixed right away, accepted into a separate task, needs more detail, or declined",
+            "examples": [
+              "accepted"
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task",
+            "description": "Key of the continuation task; required with `accepted` and not accepted with any other outcome",
+            "examples": [
+              "TRK-43"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "remark_no",
+          "outcome"
+        ],
+        "title": "ResolutionPayload",
+        "description": "Нагрузка резолюции: какое замечание разобрано, чем и куда ушла работа."
       },
       "SectionChangedEntryRead": {
         "properties": {
@@ -6680,6 +7111,14 @@
               1
             ]
           },
+          "open_remarks": {
+            "type": "integer",
+            "title": "Open Remarks",
+            "description": "Remarks with no resolution: someone said the result is not what was needed and nobody has answered yet",
+            "examples": [
+              1
+            ]
+          },
           "last_summary_at": {
             "anyOf": [
               {
@@ -6711,7 +7150,8 @@
         "required": [
           "blocked",
           "open_questions",
-          "open_blocking_questions"
+          "open_blocking_questions",
+          "open_remarks"
         ],
         "title": "TaskFeaturesRead",
         "description": "Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).\n\nНе хранятся колонками, а считаются из дела и связей: колонка была бы вторым местом,\nгде живёт правда, и разошлась бы с делом при первом же откате."
@@ -6800,6 +7240,14 @@
             "title": "Questions",
             "description": "Every question with no answer yet, in full"
           },
+          "remarks": {
+            "items": {
+              "$ref": "#/components/schemas/RemarkEntryRead"
+            },
+            "type": "array",
+            "title": "Remarks",
+            "description": "Every remark with no resolution yet, in full"
+          },
           "transitions": {
             "items": {
               "$ref": "#/components/schemas/TaskStatus"
@@ -6829,6 +7277,7 @@
           "links",
           "features",
           "questions",
+          "remarks",
           "transitions",
           "index"
         ],

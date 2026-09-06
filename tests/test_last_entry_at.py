@@ -106,6 +106,18 @@ async def _file(session: AsyncSession, actor: Actor, task: Task, entry_type: Ent
             return await case_service.add_verdict(
                 session, task, actor=actor, check_no=1, outcome="passed", evidence="прогон зелёный"
             )
+        case EntryType.RESOLUTION:
+            remark = await case_service.add_entry(
+                session, task, actor=actor, type=EntryType.REMARK, title="Вышло не то"
+            )
+            return await case_service.resolve(
+                session,
+                task,
+                actor=actor,
+                remark_no=remark.no,
+                outcome="fixed",
+                body="Поправил",
+            )
         case _:
             return await case_service.add_entry(
                 session, task, actor=actor, type=entry_type, title="Заголовок записи", body="тело"

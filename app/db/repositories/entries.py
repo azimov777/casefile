@@ -9,6 +9,10 @@
 разошлась бы с делом в первый же откат транзакции. Открытость считается запросом —
 «нет записи `answer` с этим `question_no` в той же задаче», — и опирается на частичный
 GIN-индекс по нагрузке вопросов (миграция `case entry lookups`).
+
+Замечание устроено так же: открыто, пока в задаче нет `resolution` с его номером
+(`_unresolved`). Одна форма на два правила — не совпадение, а требование: две разные
+механики «открытости» разошлись бы в первом же крайнем случае.
 """
 
 import uuid
@@ -16,7 +20,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, case, func, select, text
+from sqlalchemy import Select, case, distinct, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -34,13 +38,15 @@ from app.domain.case import (
     AGENT_ENTRY_TYPES,
     FIRST_ENTRY_NUMBER,
     NO_FACTS,
+    OUTCOME_WITH_CONTINUATION,
     EntryFacts,
     EntryHeading,
     EntryType,
+    RemarkOutcome,
     VerdictOutcome,
 )
 from app.domain.links import LinkKind
-from app.domain.tasks import TaskField, TaskStatus
+from app.domain.tasks import CLOSED_STATUSES, TaskField, TaskStatus
 
 
 class EntryRepository:
@@ -277,6 +283,17 @@ class EntryRepository:
         ).order_by(Entry.no)
         return list(await self._session.scalars(statement))
 
+    async def open_remarks(self, task_id: uuid.UUID) -> list[Entry]:
+        """Замечания задачи без резолюции, в порядке подшивки.
+
+        Тот же приём, что у открытых вопросов: один запрос отдаёт и список для пакета
+        преемника, и признак `open_remarks` — его значение это длина списка.
+        """
+        statement = _unresolved(select(Entry).where(Entry.task_id == task_id, _IS_REMARK)).order_by(
+            Entry.no
+        )
+        return list(await self._session.scalars(statement))
+
     # --- Вопросы поперёк задач -------------------------------------------------------
 
     async def questions_page(
@@ -398,6 +415,8 @@ class EntryRepository:
 #: Признак записи-вопроса. Отдельной константой, потому что участвует и в выборке
 #: открытых вопросов задачи, и во «входящей» участника: две копии условия разъехались бы.
 _IS_QUESTION = Entry.type == EntryType.QUESTION
+_IS_REMARK = Entry.type == EntryType.REMARK
+_IS_RESOLUTION = Entry.type == EntryType.RESOLUTION
 
 
 def addressed_to(value: str) -> ColumnElement[bool]:
@@ -423,6 +442,53 @@ def blocking_is(value: bool) -> ColumnElement[bool]:
     неблокирующие. Условие поэтому всегда идёт вместе с `_IS_QUESTION`.
     """
     return Entry.payload["blocking"].as_boolean() == value
+
+
+def open_remark_count(task_id: Any) -> Select[tuple[int]]:
+    """Запрос «сколько у задачи замечаний без резолюции», годный и как подзапрос.
+
+    Одно определение открытого замечания на весь проект: тот же `_unresolved`, что и у
+    `open_remarks`, из которого карточка считает свой признак (`app/services/case.py`,
+    `features`). `task_id` принимает и готовый идентификатор, и колонку внешнего запроса
+    (`Task.id`) — тогда подзапрос считается для каждой строки выдачи списка.
+    """
+    return _unresolved(
+        select(func.count()).select_from(Entry).where(Entry.task_id == task_id, _IS_REMARK)
+    )
+
+
+def remarks_in_work_count(task_id: Any) -> Select[tuple[int]]:
+    """Сколько замечаний принято в работу, а названная задача ещё не закрыта.
+
+    Поле отбора `remarks_in_work` (`CONCEPT.md`, 4.4) и единственное условие поиска,
+    которое смотрит на **чужую** задачу: ключ продолжения лежит в нагрузке резолюции, и
+    соединение идёт по нему. Признаком карточки этот счёт намеренно не стал — он
+    меняется, когда закрывается другая задача, без единой записи в этом деле.
+
+    Считаются замечания, а не резолюции: `distinct` по `remark_no` — иначе второй разбор
+    того же замечания удвоил бы счёт, ничего не изменив по сути.
+    """
+    continuation = aliased(Task)
+    return (
+        select(func.count(distinct(Entry.payload["remark_no"].as_integer())))
+        .select_from(Entry)
+        .join(continuation, continuation.key == Entry.payload["task"].astext)
+        .where(
+            Entry.task_id == task_id,
+            _IS_RESOLUTION,
+            Entry.payload["outcome"].astext == OUTCOME_WITH_CONTINUATION.value,
+            continuation.status.not_in(CLOSED_STATUSES),
+        )
+    )
+
+
+def continuation_of() -> ColumnElement[Any]:
+    """Ключ задачи-продолжения из нагрузки резолюции — то же поле, что читает домен.
+
+    Питоновский двойник — `app/domain/case.py`, `continuation_key`: карточка и опись
+    берут ключ у прочитанной записи, отбор ищет его соединением.
+    """
+    return Entry.payload["task"].astext
 
 
 def latest_summary(task_id: Any, *entities: Any) -> Select[Any]:
@@ -499,6 +565,25 @@ def open_question_count(task_id: Any, *, blocking: bool | None = None) -> Select
     return _unanswered(statement)
 
 
+def _unresolved(statement: Select[Any]) -> Select[Any]:
+    """Оставляет замечания, по которым в той же задаче нет ни одной `resolution`.
+
+    Дословно то же правило, что и у вопроса с ответом: первый разбор закрывает замечание
+    любым исходом, остальные дополняют (`CONCEPT.md`, 3.4). Оттого и форма та же —
+    `NOT EXISTS`, а не подсчёт.
+    """
+    resolution = aliased(Entry)
+    return statement.where(
+        ~select(1)
+        .where(
+            resolution.task_id == Entry.task_id,
+            resolution.type == EntryType.RESOLUTION,
+            resolution.payload["remark_no"].as_integer() == Entry.no,
+        )
+        .exists()
+    )
+
+
 def _unanswered(statement: Select[Any]) -> Select[Any]:
     """Оставляет вопросы, на которые в той же задаче нет ни одной записи `answer`.
 
@@ -572,6 +657,20 @@ def _facts_json() -> ColumnElement[Any]:
             Entry.type == EntryType.VERDICT,
             func.jsonb_build_object("check_no", payload["check_no"], "outcome", payload["outcome"]),
         ),
+        # Исход резолюции уезжает под своим именем, а не общим `outcome`: перечисления
+        # у вердикта и у разбора разные, и одно имя на два набора значений читалось бы
+        # неверно ровно в тот момент, когда значения совпадут по написанию.
+        (
+            Entry.type == EntryType.RESOLUTION,
+            func.jsonb_build_object(
+                "remark_no",
+                payload["remark_no"],
+                "remark_outcome",
+                payload["outcome"],
+                "continuation_key",
+                payload["task"],
+            ),
+        ),
         # Записи агента и человека: их заголовок пишет автор, и называть строку нечем,
         # кроме него самого.
         else_=text("'{}'::jsonb"),
@@ -599,6 +698,9 @@ def _read_facts(raw: Any) -> EntryFacts:
         question_no=raw.get("question_no"),
         check_no=raw.get("check_no"),
         outcome=_as_enum(VerdictOutcome, raw.get("outcome")),
+        remark_no=raw.get("remark_no"),
+        remark_outcome=_as_enum(RemarkOutcome, raw.get("remark_outcome")),
+        continuation_key=raw.get("continuation_key"),
     )
 
 

@@ -61,6 +61,8 @@ class EntryType(StrEnum):
     QUESTION = "question"
     ANSWER = "answer"
     VERDICT = "verdict"
+    REMARK = "remark"
+    RESOLUTION = "resolution"
     NOTE = "note"
     CREATED = "created"
     STATUS_CHANGED = "status_changed"
@@ -76,6 +78,26 @@ class VerdictOutcome(StrEnum):
 
     PASSED = "passed"
     FAILED = "failed"
+
+
+class RemarkOutcome(StrEnum):
+    """Чем разобрано замечание (`CONCEPT.md`, 3.4).
+
+    Список закрыт и покрывает все четыре судьбы претензии: поправили сразу, приняли в
+    работу отдельной задачей, не поняли и ждём уточнения, менять не будем. Свободного
+    «прочее» здесь нет намеренно — оно снова сделало бы исход текстом.
+    """
+
+    FIXED = "fixed"
+    ACCEPTED = "accepted"
+    NEEDS_DETAIL = "needs_detail"
+    DECLINED = "declined"
+
+
+#: Исход, при котором резолюция обязана назвать задачу-продолжение, — и единственный, при
+#: котором поле `task` вообще принимается. «Приняли в работу» без адреса работы это
+#: обещание без ссылки, а «поправлено сразу» с адресом — два способа сказать одно.
+OUTCOME_WITH_CONTINUATION = RemarkOutcome.ACCEPTED
 
 
 #: Записи, которые подшивает сам трекер в той же транзакции, что и изменение. Агент
@@ -104,6 +126,7 @@ TITLED_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.FINDING,
         EntryType.ARTIFACT,
         EntryType.QUESTION,
+        EntryType.REMARK,
         EntryType.NOTE,
     }
 )
@@ -185,6 +208,10 @@ class EntryFacts:
     #: `verdict`: какая проверка и чем кончилась.
     check_no: int | None = None
     outcome: VerdictOutcome | None = None
+    #: `resolution`: какое замечание разобрано, чем и куда ушла работа.
+    remark_no: int | None = None
+    remark_outcome: RemarkOutcome | None = None
+    continuation_key: str | None = None
 
 
 #: Пустые факты: у записи этого типа называть строкой нечего, кроме заголовка автора.
@@ -339,6 +366,17 @@ def summary_title(next_step: str) -> str:
     # Пустых частей у сводки не бывает — их отвергает проверка, — но текст из одних
     # переводов строки формально непуст, и заголовку нужно хоть что-то.
     return _shorten(next_step.strip())
+
+
+def continuation_key(payload: Mapping[str, Any]) -> str | None:
+    """Задача, в которую ушла работа по замечанию, — из нагрузки резолюции.
+
+    Отдельной функцией по той же причине, что и `is_blocking_question`: тот же ключ
+    ищет запросом отбор `remarks_in_work` (`app/db/repositories/entries.py`,
+    `continuation_of`), и двум формам одного определения нужно общее имя.
+    """
+    key = payload.get("task")
+    return key if isinstance(key, str) else None
 
 
 def is_blocking_question(payload: Mapping[str, Any]) -> bool:
@@ -560,6 +598,62 @@ def _verdict_payload(
     return payload
 
 
+def _resolution_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """Номер разбираемого замечания, исход из четырёх и адрес работы.
+
+    Что `remark_no` указывает именно на замечание **этой** задачи, проверяет сценарий, —
+    как и у ответа. Здесь только форма: номер, значение исхода и правило про `task`.
+    """
+    _reject_extra(raw, ("remark_no", "outcome", "task"), problems)
+    payload: dict[str, Any] = {}
+    with problems.field("remark_no"):
+        payload["remark_no"] = _entry_number(raw.get("remark_no"))
+
+    outcome: RemarkOutcome | None = None
+    with problems.field("outcome"):
+        try:
+            outcome = RemarkOutcome(raw.get("outcome"))
+        except ValueError:
+            raise FieldProblem(
+                "not_allowed", allowed=[item.value for item in RemarkOutcome]
+            ) from None
+        payload["outcome"] = outcome.value
+
+    with problems.field("task"):
+        # Ключ кладётся всегда, в том числе пустым: форма записи одна на все интерфейсы,
+        # и `payload` без ключа в MCP против `"task": null` в REST означал бы два разных
+        # описания одной записи. Так же устроен `reason` у `status_changed`.
+        payload["task"] = _continuation_key(raw.get("task"), outcome)
+    return payload
+
+
+def _continuation_key(value: Any, outcome: RemarkOutcome | None) -> str | None:
+    """Ключ задачи-продолжения: обязателен при `accepted` и не принимается при остальных.
+
+    Существование задачи проверяет сценарий; здесь только форма ключа и правило пары
+    «исход — адрес». Пока исход не разобрался, поле молчит: сказать о нём нечего, а
+    второе замечание о том же поле сбивало бы с толку.
+    """
+    if outcome is None:
+        return None
+    if outcome is not OUTCOME_WITH_CONTINUATION:
+        if value is not None:
+            raise FieldProblem(
+                "not_allowed", required_for=OUTCOME_WITH_CONTINUATION.value, got=outcome.value
+            )
+        return None
+    if value is None:
+        raise FieldProblem("required", required_for=OUTCOME_WITH_CONTINUATION.value)
+    try:
+        return normalize_task_key(_text(value))
+    except InvalidTaskKeyError:
+        # Ключ разбирается тем же кодом, что и ссылки, но замечание о нём приходит
+        # полем нагрузки: агент чинит `task`, а не гадает, какая часть запроса не та.
+        raise FieldProblem("malformed_task_key", got=value) from None
+
+
 def _entry_number(value: Any) -> int:
     """Номер записи: целое с 1. `bool` — тоже `int`, поэтому отсеивается явно."""
     if isinstance(value, bool) or not isinstance(value, int):
@@ -599,6 +693,8 @@ _PAYLOAD_BUILDERS: dict[EntryType, _PayloadBuilder] = {
     EntryType.QUESTION: _question_payload,
     EntryType.ANSWER: _answer_payload,
     EntryType.VERDICT: _verdict_payload,
+    EntryType.REMARK: _no_payload,
+    EntryType.RESOLUTION: _resolution_payload,
     EntryType.NOTE: _no_payload,
 }
 
@@ -608,6 +704,7 @@ _TITLE_SOURCES: dict[EntryType, str] = {
     EntryType.SUMMARY: "next_step",
     EntryType.ANSWER: "question_no",
     EntryType.VERDICT: "check_no, outcome",
+    EntryType.RESOLUTION: "remark_no, outcome",
 }
 
 
@@ -624,4 +721,7 @@ def _derive_title(entry_type: EntryType, payload: dict[str, Any], context: Entry
         return f"Answer to {format_entry_ref(context.task_key, payload['question_no'])}"
     if entry_type is EntryType.VERDICT:
         return f"Verdict on check {payload['check_no']}: {payload['outcome']}"
+    if entry_type is EntryType.RESOLUTION:
+        remark = format_entry_ref(context.task_key, payload["remark_no"])
+        return f"Resolution of {remark}: {payload['outcome']}"
     raise AssertionError(f"Entry type {entry_type.value} carries its own title")

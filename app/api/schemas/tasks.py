@@ -14,7 +14,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
-from app.api.schemas.entries import EntryHeadingRead, QuestionEntryRead, SummaryEntryRead
+from app.api.schemas.entries import (
+    EntryHeadingRead,
+    QuestionEntryRead,
+    RemarkEntryRead,
+    SummaryEntryRead,
+)
 from app.api.schemas.links import TaskLinkRead
 from app.domain.tasks import (
     MAX_ASSIGNEE_LENGTH,
@@ -97,6 +102,13 @@ class TaskFeaturesRead(BaseModel):
     open_blocking_questions: int = Field(
         examples=[1], description="Of those, the ones marked `blocking`"
     )
+    open_remarks: int = Field(
+        examples=[1],
+        description=(
+            "Remarks with no resolution: someone said the result is not what was needed "
+            "and nobody has answered yet"
+        ),
+    )
     last_summary_at: datetime | None = Field(
         default=None,
         description="When the latest summary was filed; null if the case has none",
@@ -141,6 +153,9 @@ class TaskPackageRead(BaseModel):
     )
     questions: list[QuestionEntryRead] = Field(
         description="Every question with no answer yet, in full"
+    )
+    remarks: list[RemarkEntryRead] = Field(
+        description="Every remark with no resolution yet, in full"
     )
     transitions: list[TaskStatus] = Field(
         examples=[[TaskStatus.OPEN, TaskStatus.CANCELLED]],

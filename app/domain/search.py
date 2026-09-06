@@ -252,9 +252,11 @@ def depth_of(node: Node | None) -> int:
 class SearchField(StrEnum):
     """Поле, по которому можно отбирать задачи (`CONCEPT.md`, 4.4).
 
-    Набор закрыт: новое поле отбора — правка концепции, а не запроса. Четыре последних
-    имени — не колонки, а вычисляемые признаки (`CONCEPT.md`, 4.3): они считаются из
-    связей и дела прямо в запросе.
+    Набор закрыт: новое поле отбора — правка концепции, а не запроса. Имена после
+    `priority` — не колонки: они считаются из связей и дела прямо в запросе. Пять из них
+    вычисляемые признаки карточки (`CONCEPT.md`, 4.3), а `remarks_in_work` — только поле
+    отбора: оно смотрит на статус **чужой** задачи и признаком не стало намеренно
+    (`CONCEPT.md`, 4.4).
     """
 
     QUEUE = "queue"
@@ -265,6 +267,8 @@ class SearchField(StrEnum):
     BLOCKED = "blocked"
     OPEN_QUESTIONS = "open_questions"
     OPEN_BLOCKING_QUESTIONS = "open_blocking_questions"
+    OPEN_REMARKS = "open_remarks"
+    REMARKS_IN_WORK = "remarks_in_work"
     LAST_ENTRY_AT = "last_entry_at"
     TEXT = "text"
 
@@ -318,6 +322,11 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         SearchFieldSpec(
             SearchField.OPEN_BLOCKING_QUESTIONS, SearchValueKind.COUNT, ORDERED_OPERATORS
         ),
+        SearchFieldSpec(SearchField.OPEN_REMARKS, SearchValueKind.COUNT, ORDERED_OPERATORS),
+        # «Разобрано, но работа не закрыта»: замечания с резолюцией `accepted`, чья
+        # задача-продолжение ещё не в `done` и не в `cancelled`. Единственное условие
+        # отбора, зависящее от статуса другой задачи.
+        SearchFieldSpec(SearchField.REMARKS_IN_WORK, SearchValueKind.COUNT, ORDERED_OPERATORS),
         # Время последней записи агента или человека. Пустое состояние настоящее и
         # осмысленное: у свежей задачи в деле только служебная `created`, и `empty()`
         # находит именно те задачи, в которые агент ещё ничего не писал.

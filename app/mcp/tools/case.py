@@ -18,6 +18,7 @@ from app.mcp.arguments import (
     AfterNoArg,
     BlockingArg,
     CheckNoArg,
+    ContinuationKeyArg,
     CursorArg,
     EntryBodyArg,
     EntryNosArg,
@@ -29,6 +30,8 @@ from app.mcp.arguments import (
     IdempotencyKeyArg,
     LimitArg,
     QuestionNoArg,
+    RemarkNoArg,
+    RemarkOutcomeArg,
     SummaryBlockersArg,
     SummaryDoneArg,
     SummaryNextStepArg,
@@ -232,6 +235,51 @@ def register(tools: Toolset) -> None:
 
             return await Once.of(answer, session, actor, idempotency_key).run(
                 request={"task": task.key, "question_no": question_no, "body": body},
+                build=append,
+            )
+
+    @tools.tool(creating=True)
+    async def resolve(
+        key: TaskKeyArg,
+        remark_no: RemarkNoArg,
+        outcome: RemarkOutcomeArg,
+        task: ContinuationKeyArg = None,
+        body: EntryBodyArg = "",
+        idempotency_key: IdempotencyKeyArg = None,
+    ) -> dict[str, Any]:
+        """Разбирает замечание к задаче: чем кончилось и куда ушла работа.
+
+        Неразобранные замечания приезжают в `get_task` целиком, рядом с открытыми
+        вопросами: их читают на входе и по каждому называют исход перед выходом.
+
+        Разбирает замечание любой исход, в том числе `needs_detail` — «открыто» означает
+        «никто не ответил», а не «ответ недостаточен». Не согласен с замечанием —
+        `declined` с причиной в теле: молчание разбором не считается. Заголовок не
+        принимается: он собирается из ссылки на замечание и исхода.
+        """
+        async with runtime.call() as (session, actor):
+            entry_task = await tasks_service.get_task(session, key)
+
+            async def append() -> dict[str, Any]:
+                entry = await case_service.resolve(
+                    session,
+                    entry_task,
+                    actor=actor,
+                    remark_no=remark_no,
+                    outcome=outcome,
+                    continuation=task,
+                    body=body,
+                )
+                return views.entry(entry, task_key=entry_task.key)
+
+            return await Once.of(resolve, session, actor, idempotency_key).run(
+                request={
+                    "task": entry_task.key,
+                    "remark_no": remark_no,
+                    "outcome": outcome,
+                    "continuation": task,
+                    "body": body,
+                },
                 build=append,
             )
 

@@ -54,6 +54,7 @@ from app.domain.case import (
     TaskRef,
     VerdictOutcome,
     build_entry,
+    continuation_key,
     format_entry_ref,
     is_blocking_question,
 )
@@ -143,12 +144,24 @@ async def open_questions(session: AsyncSession, task: Task, *, actor: Actor) -> 
     return await EntryRepository(session).open_questions(task.id)
 
 
+async def open_remarks(session: AsyncSession, task: Task, *, actor: Actor) -> list[Entry]:
+    """Замечания задачи без резолюции целиком. Из них же считается признак `open_remarks`.
+
+    Приезжают в пакете преемника рядом с открытыми вопросами (`CONCEPT.md`, 4.2): агент
+    с чистым контекстом обязан увидеть «вышло не то» одним вызовом, а не найти его в
+    описи среди двух десятков строк.
+    """
+    ensure_scope(actor, TokenScope.TASK, action="case.read")
+    return await EntryRepository(session).open_remarks(task.id)
+
+
 def features(
     questions: Sequence[Entry],
     summary: Entry | None,
     index: Sequence[EntryHeading],
     *,
     blocked: bool,
+    remarks: Sequence[Entry] = (),
 ) -> TaskFeatures:
     """Вычисляемые признаки из уже прочитанного, без новых запросов.
 
@@ -169,6 +182,7 @@ def features(
         open_blocking_questions=sum(
             1 for question in questions if is_blocking_question(question.payload)
         ),
+        open_remarks=len(remarks),
         last_summary_at=summary.created_at if summary is not None else None,
         last_entry_at=_last_entry_at(index),
     )
@@ -385,6 +399,35 @@ async def add_verdict(
     )
 
 
+async def resolve(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    remark_no: Any,
+    outcome: Any,
+    continuation: Any = None,
+    body: Any = "",
+    refs: Any = (),
+) -> Entry:
+    """Резолюция по замечанию: чем разобрано и куда ушла работа.
+
+    Разбирает замечание любой исход, в том числе `needs_detail` (`CONCEPT.md`, 3.4).
+    Ключ задачи-продолжения принимается только с исходом `accepted` и тогда обязателен —
+    это правило домена, здесь оно только передаётся дальше под именем `task`, под каким
+    и ляжет в нагрузку.
+    """
+    return await append_entry(
+        session,
+        task,
+        actor=actor,
+        type=EntryType.RESOLUTION,
+        body=body,
+        refs=refs,
+        payload={"remark_no": remark_no, "outcome": outcome, "task": continuation},
+    )
+
+
 async def add_entry(
     session: AsyncSession,
     task: Task,
@@ -395,7 +438,7 @@ async def add_entry(
     body: Any = "",
     refs: Any = (),
 ) -> Entry:
-    """Запись без нагрузки: `decision`, `attempt`, `finding`, `artifact`, `note`."""
+    """Запись без нагрузки: `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`."""
     return await append_entry(
         session, task, actor=actor, type=type, title=title, body=body, refs=refs
     )
@@ -554,6 +597,8 @@ async def _ensure_targets_exist(session: AsyncSession, task: Task, draft: EntryD
     problems = FieldProblems()
     await _check_addressees(session, draft, problems)
     await _check_question_no(session, task, draft, problems)
+    await _check_remark_no(session, task, draft, problems)
+    await _check_continuation(session, draft, problems)
     await _check_refs(session, task, draft, problems)
     problems.raise_as(EntryFieldsInvalidError, key=task.key)
 
@@ -598,6 +643,47 @@ async def _check_question_no(
             no=question_no,
             got=question.type.value,
         )
+
+
+async def _check_remark_no(
+    session: AsyncSession, task: Task, draft: EntryDraft, problems: FieldProblems
+) -> None:
+    """`remark_no` указывает на запись `remark` **этой** задачи — как `question_no` у ответа.
+
+    Тип проверяется наравне с существованием: резолюция по сводке закрыла бы неизвестно
+    что, а признак `open_remarks` при этом не сдвинулся бы — расхождение, которое потом
+    не объяснить.
+    """
+    if draft.type is not EntryType.RESOLUTION:
+        return
+    remark_no = draft.payload["remark_no"]
+    remark = await EntryRepository(session).get_by_no(task.id, remark_no)
+    if remark is None:
+        problems.add("remark_no", "unknown_entry", key=task.key, no=remark_no)
+    elif remark.type is not EntryType.REMARK:
+        problems.add(
+            "remark_no",
+            "not_a_remark",
+            key=task.key,
+            no=remark_no,
+            got=remark.type.value,
+        )
+
+
+async def _check_continuation(
+    session: AsyncSession, draft: EntryDraft, problems: FieldProblems
+) -> None:
+    """Задача-продолжение существует. Её статус не проверяется вовсе.
+
+    Работа могла уйти в задачу, которую уже успели закрыть, — резолюция описывает
+    прошлое и от чужого статуса не зависит. Отбор `remarks_in_work` этот статус
+    учитывает сам, в момент запроса.
+    """
+    key = continuation_key(draft.payload)
+    if draft.type is not EntryType.RESOLUTION or key is None:
+        return
+    if not await TaskRepository(session).get_by_keys([key]):
+        problems.add("task", "unknown_task", key=key)
 
 
 async def _check_refs(

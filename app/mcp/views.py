@@ -119,6 +119,7 @@ def features(value: TaskFeatures) -> dict[str, Any]:
         "blocked": value.blocked,
         "open_questions": value.open_questions,
         "open_blocking_questions": value.open_blocking_questions,
+        "open_remarks": value.open_remarks,
         "last_summary_at": value.last_summary_at,
         "last_entry_at": value.last_entry_at,
     }
@@ -165,6 +166,9 @@ def facts(value: EntryFacts) -> dict[str, Any]:
         "question_no": value.question_no,
         "check_no": value.check_no,
         "outcome": None if value.outcome is None else value.outcome.value,
+        "remark_no": value.remark_no,
+        "remark_outcome": None if value.remark_outcome is None else value.remark_outcome.value,
+        "continuation_key": value.continuation_key,
     }
 
 
@@ -211,6 +215,7 @@ def task_package(package: TaskPackage) -> dict[str, Any]:
         "features": features(package.features),
         "summary": None if package.summary is None else entry(package.summary, task_key=key),
         "questions": [entry(question, task_key=key) for question in package.questions],
+        "remarks": [entry(remark, task_key=key) for remark in package.remarks],
         "transitions": [status.value for status in package.transitions],
         "index": [heading(item) for item in package.index],
     }

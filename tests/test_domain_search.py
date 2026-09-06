@@ -284,6 +284,8 @@ def test_every_concept_field_has_a_spec() -> None:
         "blocked",
         "open_questions",
         "open_blocking_questions",
+        "open_remarks",
+        "remarks_in_work",
         "text",
     ):
         assert search_field_spec(name) is not None, name

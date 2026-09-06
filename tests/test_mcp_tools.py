@@ -45,6 +45,7 @@ TASK_TOOLS = {
     "ask",
     "answer",
     "add_verdict",
+    "resolve",
     "link",
     "unlink",
     "get_queue",
@@ -84,7 +85,7 @@ async def open_task(db_session: AsyncSession, task_actor: Actor, task: Task) -> 
 async def test_a_task_token_sees_exactly_the_working_cycle(
     mcp_session: Connect, task_secret: str
 ) -> None:
-    """Обзорная проверка 1: семнадцать инструментов рабочего цикла и ни одного лишнего."""
+    """Обзорная проверка 1: восемнадцать инструментов рабочего цикла и ни одного лишнего."""
     async with mcp_session(task_secret) as session:
         listed = {tool.name for tool in (await session.list_tools()).tools}
 
@@ -173,6 +174,7 @@ async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
         "blocked": False,
         "open_questions": 0,
         "open_blocking_questions": 0,
+        "open_remarks": 0,
         "last_summary_at": None,
         # В деле только служебная `created`: записей агента ещё нет, признак пуст.
         "last_entry_at": None,
@@ -261,6 +263,7 @@ async def test_search_tasks_understands_the_query_language_and_the_arguments_ali
             status=["open"],
             blocked=False,
             open_blocking_questions=0,
+            open_remarks=0,
         )
         empty_assignee = await call(session, "search_tasks", assignee=["empty()"])
 
@@ -293,6 +296,7 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
         "blocked": False,
         "open_questions": 0,
         "open_blocking_questions": 0,
+        "open_remarks": 0,
         "last_summary_at": None,
         # В деле только служебная `created`: записей агента ещё нет, признак пуст.
         "last_entry_at": None,

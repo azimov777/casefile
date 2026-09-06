@@ -48,7 +48,13 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.pagination import Page, decode_sort_cursor, encode_sort_cursor, resolve_limit
-from app.db.repositories.entries import last_entry_at, last_summary_at, open_question_count
+from app.db.repositories.entries import (
+    last_entry_at,
+    last_summary_at,
+    open_question_count,
+    open_remark_count,
+    remarks_in_work_count,
+)
 from app.db.repositories.links import open_blockers_of
 from app.db.sql import ilike_contains
 from app.domain.search import (
@@ -169,6 +175,7 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
         .correlate(Task)
         .scalar_subquery()
         .label("open_blocking_questions"),
+        open_remark_count(Task.id).correlate(Task).scalar_subquery().label("open_remarks"),
         last_summary_at(Task.id).correlate(Task).scalar_subquery().label("last_summary_at"),
         last_entry_at(Task.id).correlate(Task).scalar_subquery().label("last_entry_at"),
     )
@@ -180,6 +187,7 @@ def _features_of(row: Any) -> TaskFeatures:
         blocked=row.blocked,
         open_questions=row.open_questions,
         open_blocking_questions=row.open_blocking_questions,
+        open_remarks=row.open_remarks,
         last_summary_at=row.last_summary_at,
         last_entry_at=row.last_entry_at,
     )
@@ -228,7 +236,7 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
         case SearchValueKind.FLAG:
             return _blocked(term.operator, term.values)
         case SearchValueKind.COUNT:
-            return _open_questions(term, term.operator, term.values)
+            return _counter(term, term.operator, term.values)
         case SearchValueKind.TIMESTAMP:
             return _scalar(_last_entry_at_column(), term.operator, term.values)
         case SearchValueKind.FULLTEXT:
@@ -305,21 +313,42 @@ def _blocked(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
     return not_(matching) if operator in NEGATIVE_OPERATORS else matching
 
 
-def _open_questions(
+def _counter(
     term: SearchTerm,
     operator: Operator,
     values: Sequence[Any],
 ) -> ColumnElement[bool]:
-    """Счётчик открытых вопросов — скалярный подзапрос по тому же определению, что в карточке.
+    """Счётчик дела — скалярный подзапрос по тому же определению, что в карточке.
 
     Подзапрос считается для каждой строки, дошедшей до этого условия, и это осознанная
     цена: колонки под признак нет намеренно (`CONCEPT.md`, 4.3), а сузить набор заранее
-    можно любым условием по колонке — очередью, статусом, исполнителем. Подзапрос идёт
+    можно любым условием по колонке — очередью, статусом, исполнителем. Подзапросы идут
     по `ix_entries_task_id_type`.
     """
-    blocking = True if term.field is SearchField.OPEN_BLOCKING_QUESTIONS else None
-    counted = open_question_count(Task.id, blocking=blocking).correlate(Task).scalar_subquery()
-    return _scalar(counted, operator, values)
+    return _scalar(_counted(term.field), operator, values)
+
+
+def _counted(field: SearchField) -> ColumnElement[Any]:
+    """Какой счёт стоит за именем поля. Все четыре — чужие определения, не свои.
+
+    `remarks_in_work` — единственный, кто заглядывает в другую задачу: он соединяется с
+    ней по ключу из нагрузки резолюции и смотрит на её статус (`CONCEPT.md`, 4.4).
+    Признаком карточки он поэтому и не стал.
+    """
+    match field:
+        case SearchField.OPEN_QUESTIONS:
+            counted = open_question_count(Task.id)
+        case SearchField.OPEN_BLOCKING_QUESTIONS:
+            counted = open_question_count(Task.id, blocking=True)
+        case SearchField.OPEN_REMARKS:
+            counted = open_remark_count(Task.id)
+        case SearchField.REMARKS_IN_WORK:
+            counted = remarks_in_work_count(Task.id)
+        case _:
+            # Недостижимо: сюда приходят только поля вида `COUNT`. Явная ошибка вместо
+            # тихого нуля — чтобы новый счётчик, забытый здесь, назвал себя сам.
+            raise ValueError(f"Search field {field.value!r} is not a counter")
+    return counted.correlate(Task).scalar_subquery()
 
 
 def _fulltext(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
