@@ -11,6 +11,8 @@ import {
   data,
   failure,
   questionEntry,
+  remarkEntry,
+  taskDetails,
   taskPackage,
   verdictEntry,
 } from '@testing/msw/responses';
@@ -306,5 +308,131 @@ describe('карточка задачи', () => {
       'href',
       '/tasks',
     );
+  });
+});
+
+describe('замечание к задаче', () => {
+  /** Карточка с замечаниями и подменённой отправкой: считаем, сколько раз её позвали. */
+  function withRemarks(overrides = {}) {
+    const posts: { key: string | null; body: unknown }[] = [];
+    let filed = false;
+
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-6`, () =>
+        data(
+          taskPackage('DEMO-6', {
+            remarks: filed ? [remarkEntry(8, 'DEMO-6'), remarkEntry(9, 'DEMO-6', 'Ещё одно')] : [],
+            features: {
+              blocked: false,
+              open_questions: 0,
+              open_blocking_questions: 0,
+              open_remarks: filed ? 2 : 0,
+              last_summary_at: null,
+              last_entry_at: null,
+            },
+            ...overrides,
+          }),
+        ),
+      ),
+      http.post(`${API}/api/v1/tasks/DEMO-6/entries`, async ({ request }) => {
+        posts.push({ key: request.headers.get('Idempotency-Key'), body: await request.json() });
+        filed = true;
+        return data(remarkEntry(9, 'DEMO-6', 'Ещё одно'), 201);
+      }),
+    );
+
+    return posts;
+  }
+
+  it('замечание подшивается с карточки, а подтверждение остаётся на экране', async () => {
+    const posts = withRemarks();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6');
+
+    // Пока замечаний нет, блок занимает строку и не съедает первый экран.
+    expect(await screen.findByText('Неразобранных замечаний нет.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Оставить замечание' }));
+    await user.type(screen.getByLabelText('Замечание'), 'Дыры в нумерации сбивают с толку.');
+    await user.click(screen.getByRole('button', { name: 'Оставить замечание' }));
+
+    const receipt = await screen.findByRole('region', { name: 'Замечание к DEMO-6 подшито' });
+    expect(within(receipt).getByRole('link', { name: 'DEMO-6#9' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-6?entry=9',
+    );
+
+    // Заголовок записи выведен из первой строки текста: второго поля у формы нет.
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(posts[0]?.body).toEqual({
+      type: 'remark',
+      title: 'Дыры в нумерации сбивают с толку.',
+      body: 'Дыры в нумерации сбивают с толку.',
+    });
+
+    // Перечитанный пакет принёс замечания — они видны рядом с подтверждением.
+    // Регуляркой: строка замечания собрана из ключа, номера и заголовка, и точное
+    // совпадение искало бы её целиком.
+    await waitFor(() => expect(screen.getByText(/Ещё одно/)).toBeInTheDocument());
+    expect(screen.getByText('замечаний 2')).toBeInTheDocument();
+  });
+
+  it('кадр живого потока обгоняет ответ сервера — подтверждение всё равно показано', async () => {
+    const posts = withRemarks();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6');
+
+    await user.click(await screen.findByRole('button', { name: 'Оставить замечание' }));
+    await user.type(screen.getByLabelText('Замечание'), 'Дыры в нумерации сбивают с толку.');
+    await user.click(screen.getByRole('button', { name: 'Оставить замечание' }));
+
+    // Кадр о той же записи перечитывает пакет. Форма замечания стоит вне списка,
+    // поэтому переживает перечитывание — и своё подтверждение показывает сама.
+    act(() => liveJournal.send({ ...remarkEntry(9, 'DEMO-6', 'Ещё одно'), seq: 2050 }));
+
+    expect(
+      await screen.findByRole('region', { name: 'Замечание к DEMO-6 подшито' }),
+    ).toBeInTheDocument();
+    // Второй записи кадр не породил: подшивку делает форма, а поток только перечитывает.
+    expect(posts).toHaveLength(1);
+  });
+
+  it('на закрытой задаче форма есть, а переходов и правки разделов нет', async () => {
+    withRemarks({ task: taskDetails('DEMO-6', { status: 'done' }), transitions: [] });
+    renderApp('/tasks/DEMO-6');
+
+    expect(await screen.findByRole('button', { name: 'Оставить замечание' })).toBeInTheDocument();
+    // Роль человека не расширяется (`CONCEPT.md`, 7): статусы двигают агенты.
+    for (const name of [/перевести/i, /изменить статус/i, /править/i, /редактировать/i]) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
+    }
+    expect(screen.queryByRole('textbox', { name: 'Цель' })).toBeNull();
+  });
+
+  it('черновик переживает уход со страницы и отказ отправки', async () => {
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-6`, () => data(taskPackage('DEMO-6', { remarks: [] }))),
+      http.get(`${API}/api/v1/tasks`, () => collection([])),
+      http.post(`${API}/api/v1/tasks/DEMO-6/entries`, () => failure('internal_error', 500, 'Boom')),
+    );
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6');
+
+    await user.click(await screen.findByRole('button', { name: 'Оставить замечание' }));
+    await user.type(screen.getByLabelText('Замечание'), 'Недописанное замечание');
+
+    // Отказ сети текст не уносит: повторять набранное человек не должен.
+    await user.click(screen.getByRole('button', { name: 'Оставить замечание' }));
+    await screen.findByRole('alert');
+    expect(screen.getByLabelText('Замечание')).toHaveValue('Недописанное замечание');
+
+    // Уход на список и возврат — тоже: черновик живёт в хранилище сеанса.
+    await user.click(screen.getByRole('link', { name: 'Задачи' }));
+    await screen.findByRole('heading', { name: 'Задачи' });
+    renderApp('/tasks/DEMO-6');
+
+    await user.click((await screen.findAllByRole('button', { name: 'Оставить замечание' }))[0]!);
+    expect(screen.getAllByLabelText('Замечание')[0]).toHaveValue('Недописанное замечание');
   });
 });

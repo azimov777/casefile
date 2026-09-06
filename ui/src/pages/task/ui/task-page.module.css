@@ -35,26 +35,40 @@
  */
 @media (min-width: 80rem) {
   .layout {
-    display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    align-items: start;
-    column-gap: var(--space-4);
+    flex-direction: row;
+    align-items: flex-start;
   }
 
-  .summary,
-  .questionsBlock,
-  .case {
-    grid-column: 1;
+  /*
+   * Две колонки, а не сетка из блоков. Сетка связывала их высоты: длинное задание
+   * справа растягивало ряд, и опись слева уезжала за первый экран 1440×900 — стоило
+   * добавить справа четвёртый блок (`e2e/layout.spec.ts`). Колонками этого не
+   * случается вовсе: каждая складывается сама по себе.
+   *
+   * `min-width: 0` обязателен: без него длинная строка в колонке растянула бы её
+   * шире доли и увела бы страницу в горизонтальную прокрутку.
+   */
+  .main {
+    flex: 3 1 0;
+    min-width: 0;
   }
 
-  .sections {
-    grid-column: 2;
-    grid-row: 1 / span 3;
+  .aside {
+    flex: 2 1 0;
+    min-width: 0;
   }
+}
 
-  .links {
-    grid-column: 2;
-  }
+/*
+ * Колонки одним потоком каждая: на узком экране они идут друг за другом, на широком
+ * встают рядом. Высоты при этом независимы — в этом всё дело, см. комментарий у
+ * `@media` ниже.
+ */
+.main,
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .block {
@@ -123,6 +137,35 @@
 }
 
 .questionTitle {
+  margin: 0;
+  font-weight: 600;
+}
+
+.remarks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * Замечание выделено тоном внимания, а не опасности: оно правит курс, но ничего не
+ * останавливает (`../tracker/docs/CONCEPT.md`, 3.4). Красным здесь остаётся только
+ * то, что действительно держит работу, — блокирующий вопрос.
+ */
+.remark {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--tone-attention-border);
+  border-radius: var(--radius-sm);
+  background: var(--tone-attention-bg);
+}
+
+.remarkTitle {
   margin: 0;
   font-weight: 600;
 }

@@ -10,6 +10,7 @@ import {
   withHeld,
   type Answering,
 } from '@/features/answer-question';
+import { RemarkForm } from '@/features/leave-remark';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, readEntryNo } from '@/shared/lib';
@@ -35,6 +36,12 @@ export function TaskPage() {
   // отправка началась, — они остаются на экране вместе с подтверждением, даже когда
   // перечитанный пакет их уже не содержит.
   const answering = useAnswering<Question>();
+
+  /**
+   * Раскрыта ли форма замечания. На уровне страницы, а не внутри блока: от неё
+   * зависит, показывать ли блок строкой (пусто и форма свёрнута) или карточкой.
+   */
+  const [remarkOpen, setRemarkOpen] = useState(false);
 
   const openAt = readEntryNo(searchParams.get('entry'));
 
@@ -83,7 +90,7 @@ export function TaskPage() {
     );
   }
 
-  const { task, features, transitions, summary, links, index } = pkg.data;
+  const { task, features, transitions, summary, links, index, remarks } = pkg.data;
   const questions = withHeld(pkg.data.questions, answering.held, (question) =>
     questionId(task.key, question),
   );
@@ -93,90 +100,150 @@ export function TaskPage() {
       <TaskNav taskKey={task.key} view="card" />
       <TaskHeader task={task} features={features} transitions={transitions} />
 
+      {/*
+       * Две колонки, каждая своим потоком. Слева то, ради чего карточку открывают:
+       * сводка, вопросы и опись дела. Справа то, что читают реже: замечания, задание
+       * и связи. Высоты колонок независимы — сеткой из отдельных блоков они были
+       * связаны, и длинное задание справа уносило начало описи слева за первый экран
+       * (`e2e/layout.spec.ts`).
+       */}
       <div className={styles.layout}>
-        <section
-          className={
-            summary == null
-              ? `${styles.block} ${styles.blockEmpty} ${styles.summary}`
-              : `${styles.block} ${styles.summary}`
-          }
-          aria-labelledby="summary"
-        >
-          <h2 className={styles.title} id="summary">
-            Последняя сводка
-          </h2>
-          {summary == null ? (
-            <p className={styles.empty}>Сводки ещё нет: по этой задаче никто не отчитывался.</p>
-          ) : (
-            <EntryBody entry={summary} />
-          )}
-        </section>
-
-        <section
-          className={
-            questions.length === 0
-              ? `${styles.block} ${styles.blockEmpty} ${styles.questionsBlock}`
-              : `${styles.block} ${styles.questionsBlock}`
-          }
-          aria-labelledby="questions"
-        >
-          <h2 className={styles.title} id="questions">
-            Открытые вопросы
-          </h2>
-          {questions.length === 0 ? (
-            <p className={styles.empty}>Вопросов без ответа нет.</p>
-          ) : (
-            <ul className={styles.questions}>
-              {questions.map((question, at) => (
-                <li key={question.no} className={styles.question}>
-                  <p className={styles.questionTitle}>
-                    {task.key}#{question.no} · {question.title}
-                  </p>
-                  <EntryBody entry={question} />
-                  <QuestionAnswer
-                    taskKey={task.key}
-                    question={question}
-                    at={at}
-                    answering={answering}
-                    askedFor={openAt === question.no}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className={`${styles.block} ${styles.sections}`} aria-labelledby="sections">
-          <h2 className={styles.title} id="sections">
-            Задание
-          </h2>
-          <TaskSections task={task} />
-        </section>
-
-        <section className={`${styles.block} ${styles.links}`} aria-labelledby="links">
-          <h2 className={styles.title} id="links">
-            Связи
-          </h2>
-          <TaskLinks links={links} />
-        </section>
-
-        <section className={`${styles.block} ${styles.case}`} aria-labelledby="case">
-          <div className={styles.blockHead}>
-            <h2 className={styles.title} id="case">
-              Дело
+        <div className={styles.main}>
+          <section
+            className={
+              summary == null
+                ? `${styles.block} ${styles.blockEmpty} ${styles.summary}`
+                : `${styles.block} ${styles.summary}`
+            }
+            aria-labelledby="summary"
+          >
+            <h2 className={styles.title} id="summary">
+              Последняя сводка
             </h2>
-            {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
+            {summary == null ? (
+              <p className={styles.empty}>Сводки ещё нет: по этой задаче никто не отчитывался.</p>
+            ) : (
+              <EntryBody entry={summary} />
+            )}
+          </section>
+
+          <section
+            className={
+              questions.length === 0
+                ? `${styles.block} ${styles.blockEmpty} ${styles.questionsBlock}`
+                : `${styles.block} ${styles.questionsBlock}`
+            }
+            aria-labelledby="questions"
+          >
+            <h2 className={styles.title} id="questions">
+              Открытые вопросы
+            </h2>
+            {questions.length === 0 ? (
+              <p className={styles.empty}>Вопросов без ответа нет.</p>
+            ) : (
+              <ul className={styles.questions}>
+                {questions.map((question, at) => (
+                  <li key={question.no} className={styles.question}>
+                    <p className={styles.questionTitle}>
+                      {task.key}#{question.no} · {question.title}
+                    </p>
+                    <EntryBody entry={question} />
+                    <QuestionAnswer
+                      taskKey={task.key}
+                      question={question}
+                      at={at}
+                      answering={answering}
+                      askedFor={openAt === question.no}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className={`${styles.block} ${styles.case}`} aria-labelledby="case">
+            <div className={styles.blockHead}>
+              <h2 className={styles.title} id="case">
+                Дело
+              </h2>
+              {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
               1300-м пикселе прокрутки и находился только теми, кто дочитал. */}
-            <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
-          </div>
-          <TaskIndex
-            taskKey={task.key}
-            index={index}
-            checks={task.checks}
-            openAt={openAt}
-            onOpenChange={rememberOpen}
-          />
-        </section>
+              <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
+            </div>
+            <TaskIndex
+              taskKey={task.key}
+              index={index}
+              checks={task.checks}
+              openAt={openAt}
+              onOpenChange={rememberOpen}
+            />
+          </section>
+        </div>
+
+        <div className={styles.aside}>
+          {/*
+           * Замечания стоят первыми: это второй способ, каким человек участвует в
+           * работе, и единственный, который начинает он сам
+           * (`../tracker/docs/CONCEPT.md`, 3.4). Претензия к сделанному важнее
+           * договора о нём и не должна лежать за пятью разделами задания.
+           *
+           * Форма не привязана к элементу выдачи и переживает перечитывание пакета —
+           * в отличие от формы ответа, которая уходит вместе со своим вопросом.
+           */}
+          <section
+            className={
+              remarks.length === 0 && !remarkOpen
+                ? `${styles.block} ${styles.blockEmpty} ${styles.remarksBlock}`
+                : `${styles.block} ${styles.remarksBlock}`
+            }
+            aria-labelledby="remarks"
+          >
+            <h2 className={styles.title} id="remarks">
+              Замечания
+            </h2>
+            {remarks.length === 0 ? (
+              <p className={styles.empty}>Неразобранных замечаний нет.</p>
+            ) : (
+              <ul className={styles.remarks}>
+                {remarks.map((remark) => (
+                  <li key={remark.no} className={styles.remark}>
+                    <p className={styles.remarkTitle}>
+                      {task.key}#{remark.no} · {remark.title}
+                    </p>
+                    <EntryBody entry={remark} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {remarkOpen ? (
+              <RemarkForm taskKey={task.key} />
+            ) : (
+              <div>
+                {/*
+                 * Кнопка есть на задаче в любом статусе, включая закрытую: именно на
+                 * сделанное человек и смотрит, когда говорит «вышло не то». Форма при
+                 * этом свёрнута — поле в пять строк стоит около 180 пикселей экрана,
+                 * и платить за него должен тот, кто пришёл писать.
+                 */}
+                <Button onClick={() => setRemarkOpen(true)}>Оставить замечание</Button>
+              </div>
+            )}
+          </section>
+
+          <section className={`${styles.block} ${styles.sections}`} aria-labelledby="sections">
+            <h2 className={styles.title} id="sections">
+              Задание
+            </h2>
+            <TaskSections task={task} />
+          </section>
+
+          <section className={`${styles.block} ${styles.links}`} aria-labelledby="links">
+            <h2 className={styles.title} id="links">
+              Связи
+            </h2>
+            <TaskLinks links={links} />
+          </section>
+        </div>
       </div>
     </main>
   );
