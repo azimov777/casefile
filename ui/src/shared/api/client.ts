@@ -1,6 +1,7 @@
 import createClient, { type Middleware } from 'openapi-fetch';
 import type { paths } from './openapi';
-import { clearToken, getToken } from './token';
+import { ApiError, CLIENT_ERROR_CODES } from './error';
+import { authorizationHeader, clearToken, getToken } from './token';
 
 /**
  * Клиент API. Базовый адрес пуст: и dev-сервер Vite, и nginx в образе проксируют
@@ -44,7 +45,23 @@ const authMiddleware: Middleware = {
     // сохранённый токен тем же клиентом.
     if (!request.headers.has('Authorization')) {
       const token = getToken();
-      if (token !== null) request.headers.set('Authorization', `Bearer ${token}`);
+      if (token !== null) {
+        const header = authorizationHeader(token);
+        if (header === null) {
+          // Сохранённый токен испорчен: заголовка из него не выйдет, и запроса
+          // не будет. Для человека это тот же случай, что истёкший сеанс, — его
+          // ведут на вход. Молча ронять запрос нельзя: он выглядел бы отказом сети.
+          clearToken();
+          for (const listener of expiredListeners) listener();
+          throw new ApiError(
+            CLIENT_ERROR_CODES.tokenNotHeaderSafe,
+            'Stored token cannot be put into a header',
+            0,
+            {},
+          );
+        }
+        request.headers.set('Authorization', header);
+      }
     }
     return request;
   },

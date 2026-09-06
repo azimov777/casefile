@@ -235,6 +235,18 @@ describe('живой поток', () => {
     await waitFor(() => expect(listings).toBeGreaterThan(before));
   });
 
+  it('испорченный токен не роняет поток в вечное переподключение, а ведёт на вход', async () => {
+    // Токен, из которого не собрать заголовок: поток с ним не откроется никогда,
+    // и «нет связи» было бы единственным и притом неверным объяснением.
+    setToken(`trk_${String.fromCharCode(1087, 1088, 1080)}`);
+    renderApp('/tasks');
+
+    expect(await screen.findByLabelText('Токен участника')).toBeInTheDocument();
+    expect(window.localStorage.getItem('tracker.token')).toBeNull();
+    // Соединения не открывалось вовсе: переподключаться нечему.
+    expect(liveJournal.connections).toBe(0);
+  });
+
   it('при 401 поток отдаёт сеанс общей обработке входа', async () => {
     renderApp('/tasks');
     await screen.findByText('на связи');

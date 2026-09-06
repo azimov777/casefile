@@ -1,5 +1,12 @@
 import { queryOptions } from '@tanstack/react-query';
-import { apiClient, unwrap, type components } from '@/shared/api';
+import {
+  ApiError,
+  CLIENT_ERROR_CODES,
+  apiClient,
+  authorizationHeader,
+  unwrap,
+  type components,
+} from '@/shared/api';
 
 export type Bootstrap = components['schemas']['BootstrapRead'];
 export type Participant = components['schemas']['ParticipantRead'];
@@ -17,9 +24,24 @@ export const sessionKeys = {
  * Во всех остальных случаях заголовок подставляет перехватчик клиента.
  */
 export function fetchBootstrap(token?: string): Promise<Bootstrap> {
+  // Заголовок собирается одной общей функцией, а не строкой по месту: проверка
+  // «можно ли это положить в заголовок» обязана быть одна на все пути (`shared/api`).
+  const header = token === undefined ? undefined : authorizationHeader(token);
+
+  if (header === null) {
+    return Promise.reject(
+      new ApiError(
+        CLIENT_ERROR_CODES.tokenNotHeaderSafe,
+        'Token cannot be put into a header',
+        0,
+        {},
+      ),
+    );
+  }
+
   return unwrap(
     apiClient.GET('/api/v1/bootstrap', {
-      headers: token === undefined ? undefined : { Authorization: `Bearer ${token}` },
+      headers: header === undefined ? undefined : { Authorization: header },
     }),
   );
 }

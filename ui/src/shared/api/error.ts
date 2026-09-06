@@ -10,6 +10,12 @@ export const CLIENT_ERROR_CODES = {
   malformed: 'malformed_response',
   /** Токен рабочий, но участника за ним нет: общий агентский токен. */
   participantRequired: 'participant_required',
+  /**
+   * Из значения нельзя собрать заголовок `Authorization`: в нём символы, которые
+   * браузер туда не пустит. Запроса при этом не было — и выдавать это за отказ
+   * сети значит послать человека чинить бэкенд вместо буфера обмена.
+   */
+  tokenNotHeaderSafe: 'token_not_header_safe',
 } as const;
 
 /**

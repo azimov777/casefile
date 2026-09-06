@@ -45,6 +45,10 @@ async function settle<TData>(call: Promise<FetchResult<TData>>): Promise<TData> 
   try {
     result = await call;
   } catch (cause) {
+    // Своя ошибка, брошенная до запроса — например, «из токена не собрать заголовок»,
+    // — приходит сюда так же, как обрыв сети. Превращать её в `network_error` значит
+    // соврать про причину: запроса не было, и бэкенд ни при чём.
+    if (cause instanceof ApiError) throw cause;
     throw ApiError.network(cause);
   }
 

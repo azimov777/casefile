@@ -1,5 +1,5 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
-import { apiBaseUrl } from '@/shared/api';
+import { apiBaseUrl, authorizationHeader } from '@/shared/api';
 
 export interface StreamOptions {
   token: string;
@@ -31,6 +31,18 @@ export function openJournalStream(options: StreamOptions): () => void {
   const controller = new AbortController();
   let attempt = 0;
 
+  /*
+   * Токен, из которого не собрать заголовок, поток не откроет никогда. Без этой
+   * ветки библиотека молча падала бы на каждой попытке, и человек видел бы вечное
+   * «нет связи» — единственное объяснение, и притом неверное. Для него это тот же
+   * случай, что истёкший сеанс: его ведут на вход.
+   */
+  const authorization = authorizationHeader(options.token);
+  if (authorization === null) {
+    options.onUnauthorized();
+    return () => controller.abort();
+  }
+
   void fetchEventSource(`${apiBaseUrl}/api/v1/journal/stream`, {
     signal: controller.signal,
     // Вкладка в фоне поток не закрывает: иначе каждое переключение вкладок стоило бы
@@ -38,7 +50,7 @@ export function openJournalStream(options: StreamOptions): () => void {
     openWhenHidden: true,
 
     headers: {
-      Authorization: `Bearer ${options.token}`,
+      Authorization: authorization,
       ...(options.after === null ? {} : { 'Last-Event-ID': String(options.after) }),
     },
 
