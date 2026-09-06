@@ -255,6 +255,15 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
               />
               есть открытые вопросы
             </label>
+
+            <label className={styles.check}>
+              <input
+                type="checkbox"
+                checked={filters.withRemarks}
+                onChange={(event) => applyWith({ withRemarks: event.target.checked })}
+              />
+              есть неразобранные замечания
+            </label>
           </div>
 
           <div className={styles.line}>

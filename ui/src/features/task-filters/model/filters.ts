@@ -30,6 +30,8 @@ export interface TaskFilters {
   blocked: boolean;
   /** Только с открытыми вопросами; см. `OPEN_QUESTIONS_CONDITION`. */
   withQuestions: boolean;
+  /** Только с неразобранными замечаниями; см. `OPEN_REMARKS_CONDITION`. */
+  withRemarks: boolean;
   /** Строка на языке запросов бэкенда. Клиент её не разбирает. */
   query: string;
   sort: string;
@@ -96,6 +98,9 @@ export const TASK_SORTS: { value: string; label: string }[] = [
  */
 export const OPEN_QUESTIONS_CONDITION = 'open_questions: > 0';
 
+/** То же для замечаний: структурный параметр берёт точное число, а нужен диапазон. */
+export const OPEN_REMARKS_CONDITION = 'open_remarks: > 0';
+
 export const EMPTY_FILTERS: TaskFilters = {
   view: 'table',
   queue: '',
@@ -106,6 +111,7 @@ export const EMPTY_FILTERS: TaskFilters = {
   text: '',
   blocked: false,
   withQuestions: false,
+  withRemarks: false,
   query: '',
   sort: DEFAULT_SORT,
   cursor: '',
@@ -126,6 +132,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     text: params.get('text') ?? '',
     blocked: params.get('blocked') === 'true',
     withQuestions: params.get('questions') === 'true',
+    withRemarks: params.get('remarks') === 'true',
     query: params.get('query') ?? '',
     sort: TASK_SORTS.some((option) => option.value === sort) && sort !== null ? sort : DEFAULT_SORT,
     cursor: params.get('cursor') ?? '',
@@ -148,6 +155,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   if (filters.text.trim() !== '') params.set('text', filters.text.trim());
   if (filters.blocked) params.set('blocked', 'true');
   if (filters.withQuestions) params.set('questions', 'true');
+  if (filters.withRemarks) params.set('remarks', 'true');
   if (filters.query.trim() !== '') params.set('query', filters.query.trim());
   if (filters.sort !== DEFAULT_SORT) params.set('sort', filters.sort);
   if (filters.cursor !== '') params.set('cursor', filters.cursor);
@@ -201,9 +209,23 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
     tags: filters.tags.length > 0 ? filters.tags : undefined,
     text: filters.text.trim() === '' ? undefined : filters.text.trim(),
     blocked: filters.blocked ? true : undefined,
-    query: filters.withQuestions ? OPEN_QUESTIONS_CONDITION : undefined,
+    // Флажки признаков уезжают одной строкой языка запросов: структурные параметры
+    // `open_questions` и `open_remarks` принимают точное число, а спрашивается
+    // диапазон «больше нуля». Два флажка складываются через `and` — так же, как их
+    // читает человек: «есть вопросы **и** есть замечания».
+    query: conditionsOf(filters),
     ...paging,
   };
+}
+
+/** Условия-флажки одной строкой языка запросов; `undefined`, если не отмечено ничего. */
+function conditionsOf(filters: TaskFilters): string | undefined {
+  const conditions = [
+    filters.withQuestions ? OPEN_QUESTIONS_CONDITION : null,
+    filters.withRemarks ? OPEN_REMARKS_CONDITION : null,
+  ].filter((condition) => condition !== null);
+
+  return conditions.length === 0 ? undefined : conditions.join(' and ');
 }
 
 /**

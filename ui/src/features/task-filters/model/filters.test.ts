@@ -4,6 +4,7 @@ import {
   DEFAULT_SORT,
   EMPTY_FILTERS,
   OPEN_QUESTIONS_CONDITION,
+  OPEN_REMARKS_CONDITION,
   filtersToListParams,
   hasConditions,
   readFilters,
@@ -19,7 +20,7 @@ function filters(overrides: Partial<TaskFilters> = {}): TaskFilters {
 describe('чтение отбора из адреса', () => {
   it('разбирает повторяющиеся параметры и флажки', () => {
     const params = new URLSearchParams(
-      'queue=DEMO&status=open&status=in_progress&priority=high&tags=backend&tags=search&blocked=true&questions=true&text=поиск&assignee=owner&sort=key&cursor=abc',
+      'queue=DEMO&status=open&status=in_progress&priority=high&tags=backend&tags=search&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&cursor=abc',
     );
 
     expect(readFilters(params)).toEqual({
@@ -32,6 +33,7 @@ describe('чтение отбора из адреса', () => {
       text: 'поиск',
       blocked: true,
       withQuestions: true,
+      withRemarks: true,
       query: '',
       sort: 'key',
       cursor: 'abc',
@@ -115,6 +117,15 @@ describe('перевод отбора в параметры запроса', () 
   it('«есть открытые вопросы» уезжает условием языка запросов: числом его не выразить', () => {
     expect(filtersToListParams(filters({ withQuestions: true })).query).toBe(
       OPEN_QUESTIONS_CONDITION,
+    );
+  });
+
+  it('«есть неразобранные замечания» — такое же условие, и складывается с вопросами', () => {
+    expect(filtersToListParams(filters({ withRemarks: true })).query).toBe(OPEN_REMARKS_CONDITION);
+
+    // Два флажка — одно условие через `and`: иначе второй молча вытеснил бы первый.
+    expect(filtersToListParams(filters({ withQuestions: true, withRemarks: true })).query).toBe(
+      `${OPEN_QUESTIONS_CONDITION} and ${OPEN_REMARKS_CONDITION}`,
     );
   });
 

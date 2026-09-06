@@ -72,6 +72,10 @@ export function describeFilters(filters: TaskFilters): FilterCondition[] {
     conditions.push({ id: 'questions', label: 'есть открытые вопросы' });
   }
 
+  if (filters.withRemarks) {
+    conditions.push({ id: 'remarks', label: 'есть неразобранные замечания' });
+  }
+
   const query = filters.query.trim();
   if (query !== '') {
     // Заполненный запрос отменяет структурный отбор целиком (`filtersToListParams`),

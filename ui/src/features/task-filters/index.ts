@@ -3,6 +3,7 @@ export {
   DEFAULT_SORT,
   EMPTY_FILTERS,
   OPEN_QUESTIONS_CONDITION,
+  OPEN_REMARKS_CONDITION,
   TASK_SORTS,
   filtersToListParams,
   hasConditions,

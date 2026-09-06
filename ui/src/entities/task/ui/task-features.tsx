@@ -28,6 +28,16 @@ export function TaskFeatureBadges({ features }: { features: TaskFeatures }) {
           блокирующих {features.open_blocking_questions}
         </Badge>
       ) : null}
+
+      {/*
+       * Замечание ничего не останавливает, поэтому тон внимания, а не опасности:
+       * человек сказал «вышло не то», и это ждёт ответа, а не спасения.
+       */}
+      {features.open_remarks > 0 ? (
+        <Badge tone="attention" title="Замечания человека без резолюции">
+          замечаний {features.open_remarks}
+        </Badge>
+      ) : null}
     </>
   );
 }

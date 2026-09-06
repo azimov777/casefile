@@ -9,5 +9,10 @@ import type { TaskFeatures } from '../api/tasks';
  * и компонент, и функцию, ломает горячую перезагрузку.
  */
 export function hasFeatureBadges(features: TaskFeatures): boolean {
-  return features.blocked || features.open_questions > 0 || features.open_blocking_questions > 0;
+  return (
+    features.blocked ||
+    features.open_questions > 0 ||
+    features.open_blocking_questions > 0 ||
+    features.open_remarks > 0
+  );
 }
