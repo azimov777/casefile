@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EntryBody, type Question } from '@/entities/entry';
@@ -11,7 +11,7 @@ import {
   type Answering,
 } from '@/features/answer-question';
 import { ApiError } from '@/shared/api';
-import { Callout, QueryState } from '@/shared/ui';
+import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
 import { TaskIndex } from './task-index';
@@ -93,74 +93,91 @@ export function TaskPage() {
       <TaskNav taskKey={task.key} view="card" />
       <TaskHeader task={task} features={features} transitions={transitions} />
 
-      <section className={styles.block} aria-labelledby="summary">
-        <h2 className={styles.title} id="summary">
-          Последняя сводка
-        </h2>
-        {summary == null ? (
-          <p className={styles.empty}>Сводки ещё нет: по этой задаче никто не отчитывался.</p>
-        ) : (
-          <EntryBody entry={summary} />
-        )}
-      </section>
-
-      <section className={styles.block} aria-labelledby="questions">
-        <h2 className={styles.title} id="questions">
-          Открытые вопросы
-        </h2>
-        {questions.length === 0 ? (
-          <p className={styles.empty}>Вопросов без ответа нет.</p>
-        ) : (
-          <ul className={styles.questions}>
-            {questions.map((question, at) => (
-              <li key={question.no} className={styles.question}>
-                <p className={styles.questionTitle}>
-                  {task.key}#{question.no} · {question.title}
-                </p>
-                <EntryBody entry={question} />
-                <QuestionAnswer
-                  taskKey={task.key}
-                  question={question}
-                  at={at}
-                  answering={answering}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className={styles.block} aria-labelledby="sections">
-        <h2 className={styles.title} id="sections">
-          Задание
-        </h2>
-        <TaskSections task={task} />
-      </section>
-
-      <section className={styles.block} aria-labelledby="links">
-        <h2 className={styles.title} id="links">
-          Связи
-        </h2>
-        <TaskLinks links={links} />
-      </section>
-
-      <section className={styles.block} aria-labelledby="case">
-        <div className={styles.blockHead}>
-          <h2 className={styles.title} id="case">
-            Дело
+      <div className={styles.layout}>
+        <section
+          className={
+            summary == null
+              ? `${styles.block} ${styles.blockEmpty} ${styles.summary}`
+              : `${styles.block} ${styles.summary}`
+          }
+          aria-labelledby="summary"
+        >
+          <h2 className={styles.title} id="summary">
+            Последняя сводка
           </h2>
-          {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
+          {summary == null ? (
+            <p className={styles.empty}>Сводки ещё нет: по этой задаче никто не отчитывался.</p>
+          ) : (
+            <EntryBody entry={summary} />
+          )}
+        </section>
+
+        <section
+          className={
+            questions.length === 0
+              ? `${styles.block} ${styles.blockEmpty} ${styles.questionsBlock}`
+              : `${styles.block} ${styles.questionsBlock}`
+          }
+          aria-labelledby="questions"
+        >
+          <h2 className={styles.title} id="questions">
+            Открытые вопросы
+          </h2>
+          {questions.length === 0 ? (
+            <p className={styles.empty}>Вопросов без ответа нет.</p>
+          ) : (
+            <ul className={styles.questions}>
+              {questions.map((question, at) => (
+                <li key={question.no} className={styles.question}>
+                  <p className={styles.questionTitle}>
+                    {task.key}#{question.no} · {question.title}
+                  </p>
+                  <EntryBody entry={question} />
+                  <QuestionAnswer
+                    taskKey={task.key}
+                    question={question}
+                    at={at}
+                    answering={answering}
+                    askedFor={openAt === question.no}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className={`${styles.block} ${styles.sections}`} aria-labelledby="sections">
+          <h2 className={styles.title} id="sections">
+            Задание
+          </h2>
+          <TaskSections task={task} />
+        </section>
+
+        <section className={`${styles.block} ${styles.links}`} aria-labelledby="links">
+          <h2 className={styles.title} id="links">
+            Связи
+          </h2>
+          <TaskLinks links={links} />
+        </section>
+
+        <section className={`${styles.block} ${styles.case}`} aria-labelledby="case">
+          <div className={styles.blockHead}>
+            <h2 className={styles.title} id="case">
+              Дело
+            </h2>
+            {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
               1300-м пикселе прокрутки и находился только теми, кто дочитал. */}
-          <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
-        </div>
-        <TaskIndex
-          taskKey={task.key}
-          index={index}
-          checks={task.checks}
-          openAt={openAt}
-          onOpenChange={rememberOpen}
-        />
-      </section>
+            <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
+          </div>
+          <TaskIndex
+            taskKey={task.key}
+            index={index}
+            checks={task.checks}
+            openAt={openAt}
+            onOpenChange={rememberOpen}
+          />
+        </section>
+      </div>
     </main>
   );
 }
@@ -176,17 +193,31 @@ interface QuestionAnswerProps {
   question: Question;
   at: number;
   answering: Answering<Question>;
+  /** Адрес называет именно этот вопрос: человека звали отвечать сюда. */
+  askedFor: boolean;
 }
 
 /**
- * Под вопросом стоит либо форма, либо подтверждение — и то и другое на одном месте.
+ * Под вопросом стоит либо кнопка «Ответить», либо форма, либо подтверждение.
  *
- * Форма здесь раскрыта сразу, без кнопки «Ответить»: на карточку задачи человек
- * приходит по ссылке из уведомления или из входящей, то есть уже решив отвечать.
+ * Форма раскрывается по кнопке, а не стоит раскрытой всегда: поле в пять строк
+ * с кнопками — это около 180 пикселей, то есть половина того, чем карточка платит
+ * за первый экран. Человек, открывший карточку посмотреть, что происходит, платить
+ * за это не должен.
+ *
+ * Но если адрес называет этот вопрос — человек пришёл по уведомлению или по ссылке
+ * из входящей, то есть уже решив отвечать, — форма раскрыта сразу, и лишнего клика
+ * между «меня спросили» и «отвечаю» нет.
  */
-function QuestionAnswer({ taskKey, question, at, answering }: QuestionAnswerProps) {
+function QuestionAnswer({ taskKey, question, at, answering, askedFor }: QuestionAnswerProps) {
   const id = questionId(taskKey, question);
   const answered = answering.answerOf(id);
+  const [open, setOpen] = useState(askedFor);
+
+  // Ссылка на другой вопрос той же задачи меняет адрес, не перемонтируя страницу.
+  useEffect(() => {
+    if (askedFor) setOpen(true);
+  }, [askedFor]);
 
   if (answered !== undefined) {
     return (
@@ -194,8 +225,19 @@ function QuestionAnswer({ taskKey, question, at, answering }: QuestionAnswerProp
         taskKey={taskKey}
         questionNo={question.no}
         answered={answered}
-        onClose={() => answering.close(id)}
+        onClose={() => {
+          answering.close(id);
+          setOpen(false);
+        }}
       />
+    );
+  }
+
+  if (!open && !answering.isHeld(id)) {
+    return (
+      <div>
+        <Button onClick={() => setOpen(true)}>Ответить</Button>
+      </div>
     );
   }
 

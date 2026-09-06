@@ -14,6 +14,16 @@ export type BadgeTone = 'neutral' | 'progress' | 'positive' | 'dropped' | 'atten
 interface BadgeProps {
   /** Нейтральный по умолчанию: плашка без своего положения дел (тег, исполнитель). */
   tone?: BadgeTone;
+  /**
+   * Род значения: «статус», «приоритет», «тег». Пишется внутри плашки мелким и
+   * приглушённым — и потому попадает в её доступное имя.
+   *
+   * Подпись именно внутри, а не рядом: рядом стоящая подпись читалась бы диктору
+   * отдельной строкой, а плашка осталась бы просто словом `open`. Четыре плашки
+   * подряд без родов — `open`, `normal`, `demo_agent`, `retention` — не читаются
+   * ни глазами, ни на слух.
+   */
+  kind?: string;
   /** Моноширинный: идентификатор из контракта, а не подпись (`CONVENTIONS.md`). */
   mono?: boolean;
   title?: string;
@@ -27,11 +37,12 @@ interface BadgeProps {
  * (`CONCEPT.md`, 6) — тон только позволяет просканировать список взглядом,
  * не читая каждую строку.
  */
-export function Badge({ tone = 'neutral', mono = false, title, children }: BadgeProps) {
+export function Badge({ tone = 'neutral', kind, mono = false, title, children }: BadgeProps) {
   const classes = [styles.badge, styles[tone], mono ? styles.mono : null].filter(Boolean).join(' ');
 
   return (
     <span className={classes} title={title}>
+      {kind === undefined ? null : <span className={styles.kind}>{kind} </span>}
       {children}
     </span>
   );

@@ -148,9 +148,10 @@ describe('карточка задачи', () => {
     );
 
     const user = userEvent.setup();
-    renderApp('/tasks/DEMO-4');
+    // Адрес называет вопрос — так сюда приводит уведомление и ссылка из входящей,
+    // и форма раскрыта сразу, без лишнего клика между «меня спросили» и «отвечаю».
+    renderApp('/tasks/DEMO-4?entry=4');
 
-    // На карточке форма раскрыта сразу: сюда приходят, уже решив отвечать.
     await user.type(await screen.findByLabelText('Ответ'), 'Храним вечно: дело неизменяемо.');
     await user.click(screen.getByRole('button', { name: 'Ответить' }));
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -244,6 +245,38 @@ describe('карточка задачи', () => {
     expect(list.tagName).toBe('OL');
     expect(within(list).getAllByRole('listitem')).toHaveLength(2);
     expect(list).toHaveTextContent('Незнакомое поле отвечает списком допустимых');
+  });
+
+  it('каждая плашка шапки называет род своего значения', async () => {
+    server.use(packageOf('DEMO-4'));
+    renderApp('/tasks/DEMO-4');
+
+    // Плашка целиком — это родитель подписи рода: подпись живёт внутри плашки,
+    // поэтому и попадает в её доступное имя.
+    // `getAllByText` и первое совпадение: тегов у задачи бывает несколько, и
+    // каждый несёт свою подпись — проверяем, что подпись есть, а не сколько их.
+    const badgeOf = (kind: string) =>
+      screen.getAllByText(new RegExp(`^${kind}\\s*$`))[0]?.parentElement;
+
+    // Четыре плашки подряд — `open`, `normal`, `demo_agent`, `retention` — без
+    // подписей различались только по колонке в списке, которой на карточке нет.
+    await screen.findByText(/^статус\s*$/);
+    expect(badgeOf('статус')).toHaveTextContent(/статус\s+in_progress/);
+    for (const kind of ['приоритет', 'исполнитель', 'тег']) {
+      // Значение проверяется как «непустое»: конкретные `normal` и `demo_agent`
+      // задаёт закреплённый набор, и привязывать к ним проверку подписей незачем.
+      expect(badgeOf(kind)).toHaveTextContent(new RegExp(`${kind}\\s+\\S+`));
+    }
+  });
+
+  it('возможные переходы остаются справкой: ни роли, ни фокуса', async () => {
+    server.use(packageOf('DEMO-4'));
+    renderApp('/tasks/DEMO-4');
+
+    const transitions = await screen.findByText('done, open, cancelled');
+    // Переходы человек не делает (`CONCEPT.md`, 7): это текст, а не кнопки.
+    expect(transitions.tagName).toBe('DD');
+    expect(transitions.querySelector('button, a, [tabindex]')).toBeNull();
   });
 
   it('на несуществующей задаче объясняет по коду и зовёт обратно к списку', async () => {

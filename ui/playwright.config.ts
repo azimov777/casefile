@@ -40,17 +40,17 @@ export default defineConfig({
   projects: [
     {
       name: 'светлая',
-      testIgnore: /(answer|live|paging)\.spec\.ts/,
+      testIgnore: /(answer|live|paging|layout)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
-      testIgnore: /(answer|live|paging)\.spec\.ts/,
+      testIgnore: /(answer|live|paging|layout)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
     },
     {
       name: 'запись',
-      testMatch: /(answer|live|paging)\.spec\.ts/,
+      testMatch: /(answer|live|paging|layout)\.spec\.ts/,
       // По одному пишущему сценарию за раз: они меняют одну и ту же демо-установку,
       // и параллельно каждый видел бы следы соседа.
       fullyParallel: false,

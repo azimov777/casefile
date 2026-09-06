@@ -31,28 +31,36 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
         <span className={styles.key}>{task.key}</span> {task.title}
       </h1>
 
+      {/*
+       * Род значения написан у каждой плашки. Четыре плашки подряд — `open`,
+       * `normal`, `demo_agent`, `retention` — это статус, приоритет, исполнитель
+       * и тег, и без подписей понять это можно было только по колонке в списке,
+       * которой здесь нет.
+       */}
       <div className={styles.badges}>
-        <Badge mono tone={statusTone(task.status)}>
+        <Badge mono kind="статус" tone={statusTone(task.status)}>
           {task.status}
         </Badge>
-        <Badge mono tone={priorityTone(task.priority)}>
+        <Badge mono kind="приоритет" tone={priorityTone(task.priority)}>
           {task.priority}
         </Badge>
         <span className={styles.assignee}>
           {task.assignee === null ? (
-            <span className={styles.empty}>не назначена</span>
+            <span className={styles.empty}>исполнитель не назначен</span>
           ) : (
-            <Badge mono>{task.assignee}</Badge>
+            <Badge mono kind="исполнитель">
+              {task.assignee}
+            </Badge>
           )}
         </span>
         {task.tags.map((tag) => (
-          <Badge key={tag} mono>
+          <Badge key={tag} mono kind="тег">
             {tag}
           </Badge>
         ))}
-      </div>
 
-      <div className={styles.badges}>
+        {/* Признаки в той же строке, что и плашки: две отдельные строки одинаковых
+            плашек занимали место главного, ничего не добавляя к различимости. */}
         <TaskFeatureBadges features={features} />
       </div>
 
@@ -73,15 +81,17 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
           <dt title="Куда задача может уйти по таблице статусов. Проверки перехода считаются в момент перехода">
             Возможные переходы
           </dt>
+          {/*
+           * Возможные переходы — справка, и выглядеть должны справкой. Плашками они
+           * читались как кнопки, которых нет и не будет: статусы двигают агенты
+           * (`CONCEPT.md`, 7), а человек их только видит. Поэтому обычный текст
+           * моноширинным, через запятую.
+           */}
           <dd className={styles.transitions}>
             {transitions.length === 0 ? (
               <span className={styles.empty}>никуда: статус конечный</span>
             ) : (
-              transitions.map((status) => (
-                <Badge key={status} mono tone={statusTone(status)}>
-                  {status}
-                </Badge>
-              ))
+              transitions.join(', ')
             )}
           </dd>
         </div>
