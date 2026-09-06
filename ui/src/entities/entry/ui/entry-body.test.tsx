@@ -25,6 +25,7 @@ const EXPECTED: Record<EntryType, (string | RegExp)[]> = {
   verdict: ['Проверка 2', 'failed'],
   status_changed: ['in_progress', 'open', /Задан блокирующий вопрос/],
   section_changed: ['goal', 'Было', 'Стало', 'Старая цель', 'Новая цель'],
+  field_changed: ['priority', 'Было', 'Стало', 'normal', 'critical'],
   assignee_changed: ['не назначена', 'demo_agent'],
   link_added: ['blocked_by', 'DEMO-2'],
   link_removed: ['blocked_by', 'DEMO-2'],

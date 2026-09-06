@@ -47,23 +47,27 @@ test('статус читается тоном: работа, завершени
   expect(open).toBe(await background(badge(page, 'normal')));
 });
 
-test('приоритет выше обычного виден взглядом: high отличается от normal', async ({ page }) => {
+test('приоритет выше обычного виден взглядом: и high, и critical отличаются от normal', async ({
+  page,
+}) => {
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
 
-  expect(await background(badge(page, 'high'))).not.toBe(await background(badge(page, 'normal')));
+  const normal = await background(badge(page, 'normal'));
+  expect(await background(badge(page, 'high'))).not.toBe(normal);
+  expect(await background(badge(page, 'critical'))).not.toBe(normal);
 });
 
 /**
- * `critical` в демо-данных нет ни одной задачи (`../tracker/app/services/demo.py`:
- * только `high`, `low` и умолчание `normal`), поэтому прямое сравнение двух плашек
- * на живом контуре невозможно. Различимость доказывается двумя звеньями:
- * соответствие `critical → danger`, `normal → neutral` держит модульный тест
- * `src/entities/task/ui/tones.test.ts`, а здесь проверяется второе звено — что эти
- * два тона действительно рисуются разным фоном в обеих темах. Плашка «заблокирована»
- * несёт ровно тон `danger`, который получает `critical`.
+ * Тон тревоги носит не только `critical`: его же получает признак «заблокирована».
+ * Проверяется он отдельно, потому что признак и приоритет — разные поводы для тревоги,
+ * и разойтись они могут независимо.
+ *
+ * Раньше эта проверка была единственным способом сказать что-либо о `critical`: в демо
+ * не было ни одной такой задачи. Теперь есть (`../tracker/app/services/demo.py`), и
+ * различимость `critical` от `normal` проверяется прямо, соседним тестом.
  */
-test('тон тревоги отличается от нейтрального — этим отличается critical', async ({ page }) => {
+test('тон тревоги отличается от нейтрального', async ({ page }) => {
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
 

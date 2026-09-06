@@ -53,10 +53,10 @@ describe('дело лентой', () => {
 
     renderApp('/tasks/DEMO-1/case');
 
-    await screen.findByText('Это всё дело: записей 15.');
+    await screen.findByText(`Это всё дело: записей ${ENTRY_TYPES.length}.`);
     const numbers = cards().map((card) => card.getAttribute('aria-label'));
     expect(numbers[0]).toBe('DEMO-1#1');
-    expect(numbers.at(-1)).toBe('DEMO-1#15');
+    expect(numbers.at(-1)).toBe(`DEMO-1#${ENTRY_TYPES.length}`);
 
     expect(seen).toHaveLength(1);
     expect(seen[0]?.searchParams.getAll('types')).toEqual([]);

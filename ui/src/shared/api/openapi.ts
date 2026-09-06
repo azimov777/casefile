@@ -308,9 +308,11 @@ export interface paths {
          *
          *     Название, описание и пять разделов — только в `backlog` (иначе `409
          *     task_field_locked`); исполнитель, теги и приоритет — в любом незакрытом статусе; в
-         *     `done` и `cancelled` не меняется ничего (`409 task_closed`). Правка раздела
-         *     подшивает `section_changed`, смена исполнителя — `assignee_changed`. `version` —
-         *     не поле задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
+         *     `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение
+         *     подшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,
+         *     теги и приоритет — `field_changed`. Поля без записи не бывает: изменение, не
+         *     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
+         *     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
          */
         patch: operations["update_task"];
         trace?: never;
@@ -891,13 +893,13 @@ export interface components {
              */
             title: string;
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
          * @enum {string}
          */
-        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "note" | "created" | "status_changed" | "section_changed" | "assignee_changed" | "link_added" | "link_removed";
+        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed";
         /**
          * ErrorDetail
          * @description Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд.
@@ -924,6 +926,92 @@ export interface components {
          */
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
+        };
+        /**
+         * FieldChangedEntryRead
+         * @description Служебная запись о правке обвязки: сегодня это `tags` и `priority`.
+         */
+        FieldChangedEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the task, from 1; `TRK-42#12`
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "field_changed";
+            payload: components["schemas"]["FieldChangedPayload"];
+        };
+        /**
+         * FieldChangedPayload
+         * @description Правка обвязки задачи: «было» и «стало» целиком.
+         *
+         *     Отдельно от `SectionChangedPayload`, хотя поля те же: там правка задания и только
+         *     в `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на
+         *     оба случая означала бы «section» у приоритета.
+         */
+        FieldChangedPayload: {
+            /**
+             * Field
+             * @example priority
+             */
+            field: string;
+            /**
+             * Before
+             * @description Previous value; a list for `tags`
+             */
+            before?: string | string[] | null;
+            /**
+             * After
+             * @description New value; a list for `tags`
+             */
+            after?: string | string[] | null;
         };
         /**
          * HealthResponse
@@ -4500,7 +4588,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

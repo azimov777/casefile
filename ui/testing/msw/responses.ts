@@ -262,6 +262,13 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         type,
         payload: { field: 'goal', before: 'Старая цель', after: 'Новая цель' },
       };
+    case 'field_changed':
+      return {
+        ...base,
+        body: '',
+        type,
+        payload: { field: 'priority', before: 'normal', after: 'critical' },
+      };
     case 'assignee_changed':
       return { ...base, body: '', type, payload: { before: null, after: 'demo_agent' } };
     case 'link_added':

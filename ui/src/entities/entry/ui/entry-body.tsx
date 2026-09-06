@@ -114,6 +114,25 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
         </div>
       );
 
+    /*
+     * Правка обвязки: то же «было / стало», что у раздела, и намеренно тем же видом.
+     * Различие между ними не в том, как это выглядит, а в том, что за этим стоит:
+     * задание — договор с агентом, метки — бухгалтерия. Отличать их читателю
+     * помогает подпись типа записи, а не второй способ показать пару значений.
+     */
+    case 'field_changed':
+      return (
+        <div className={styles.block}>
+          <p className={styles.meta}>
+            Поле <Badge mono>{entry.payload.field}</Badge>
+          </p>
+          <div className={styles.diff}>
+            <Side title="Было" value={entry.payload.before} />
+            <Side title="Стало" value={entry.payload.after} />
+          </div>
+        </div>
+      );
+
     case 'assignee_changed':
       return (
         <p className={styles.meta}>
