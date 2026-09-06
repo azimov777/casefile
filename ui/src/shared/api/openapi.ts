@@ -1851,6 +1851,11 @@ export interface components {
              * @description When the latest summary was filed; null if the case has none
              */
             last_summary_at?: string | null;
+            /**
+             * Last Entry At
+             * @description When an entry by an agent or a human was last filed into the case. Service entries (`created`, `status_changed`, `section_changed`, `assignee_changed`, `link_added`, `link_removed`) do not count: `link_added` is filed into both cases when a link is made from the other side, and a task nobody touched would look alive. Null while the case has no such entry — a freshly created task holds only `created`. This is not `updated_at`: that one moves when the card changes
+             */
+            last_entry_at?: string | null;
         };
         /**
          * TaskLinkRead
@@ -3422,9 +3427,9 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `open_blocking_questions`, `open_questions`, `priority`, `queue`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character */
+                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `priority`, `queue`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character */
                 query?: string | null;
-                /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
+                /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
                 /** @description Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names */
                 fields?: string[] | null;
