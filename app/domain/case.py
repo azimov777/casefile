@@ -58,6 +58,7 @@ class EntryType(StrEnum):
     CREATED = "created"
     STATUS_CHANGED = "status_changed"
     SECTION_CHANGED = "section_changed"
+    FIELD_CHANGED = "field_changed"
     ASSIGNEE_CHANGED = "assignee_changed"
     LINK_ADDED = "link_added"
     LINK_REMOVED = "link_removed"
@@ -77,6 +78,7 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.CREATED,
         EntryType.STATUS_CHANGED,
         EntryType.SECTION_CHANGED,
+        EntryType.FIELD_CHANGED,
         EntryType.ASSIGNEE_CHANGED,
         EntryType.LINK_ADDED,
         EntryType.LINK_REMOVED,

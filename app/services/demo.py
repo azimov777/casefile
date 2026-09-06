@@ -223,6 +223,11 @@ async def _done_task(
     await tasks_service.update_task(
         session, task, actor=agent, changes=TaskChanges(assignee=DEMO_AGENT_NAME)
     )
+    # Правка обвязки: она оставляет `field_changed` — запись, без которой смена
+    # приоритета не дошла бы до ленты и до открытого экрана (`CONCEPT.md`, 4.1).
+    await tasks_service.update_task(
+        session, task, actor=agent, changes=TaskChanges(priority=TaskPriority.CRITICAL)
+    )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
 

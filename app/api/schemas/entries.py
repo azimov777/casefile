@@ -178,6 +178,23 @@ class SectionChangedPayload(BaseModel):
     )
 
 
+class FieldChangedPayload(BaseModel):
+    """Правка обвязки задачи: «было» и «стало» целиком.
+
+    Отдельно от `SectionChangedPayload`, хотя поля те же: там правка задания и только
+    в `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на
+    оба случая означала бы «section» у приоритета.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str = Field(examples=["priority"])
+    before: str | list[str] | None = Field(
+        default=None, description="Previous value; a list for `tags`"
+    )
+    after: str | list[str] | None = Field(default=None, description="New value; a list for `tags`")
+
+
 class AssigneeChangedPayload(BaseModel):
     """Смена исполнителя. `null` с любой стороны означает «исполнителя не было»."""
 
@@ -276,6 +293,13 @@ class SectionChangedEntryRead(_EntryReadBase):
     payload: SectionChangedPayload
 
 
+class FieldChangedEntryRead(_EntryReadBase):
+    """Служебная запись о правке обвязки: сегодня это `tags` и `priority`."""
+
+    type: Literal[EntryType.FIELD_CHANGED]
+    payload: FieldChangedPayload
+
+
 class AssigneeChangedEntryRead(_EntryReadBase):
     """Служебная запись о смене исполнителя."""
 
@@ -298,6 +322,7 @@ type EntryRead = Annotated[
     | VerdictEntryRead
     | StatusChangedEntryRead
     | SectionChangedEntryRead
+    | FieldChangedEntryRead
     | AssigneeChangedEntryRead
     | LinkEntryRead,
     Field(discriminator="type"),
@@ -330,6 +355,7 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.VERDICT: VerdictEntryRead,
     EntryType.STATUS_CHANGED: StatusChangedEntryRead,
     EntryType.SECTION_CHANGED: SectionChangedEntryRead,
+    EntryType.FIELD_CHANGED: FieldChangedEntryRead,
     EntryType.ASSIGNEE_CHANGED: AssigneeChangedEntryRead,
     EntryType.LINK_ADDED: LinkEntryRead,
     EntryType.LINK_REMOVED: LinkEntryRead,

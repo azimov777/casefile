@@ -212,9 +212,11 @@ async def update_task(
 
     Название, описание и пять разделов — только в `backlog` (иначе `409
     task_field_locked`); исполнитель, теги и приоритет — в любом незакрытом статусе; в
-    `done` и `cancelled` не меняется ничего (`409 task_closed`). Правка раздела
-    подшивает `section_changed`, смена исполнителя — `assignee_changed`. `version` —
-    не поле задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
+    `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение
+    подшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,
+    теги и приоритет — `field_changed`. Поля без записи не бывает: изменение, не
+    оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
+    задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
     """
     task = await service.get_task(session, task_key)
     # `exclude_unset` — единственный фильтр: у `assignee` явный `null` осмыслен и обязан

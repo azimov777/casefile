@@ -462,6 +462,36 @@ async def record_section_changed(
     )
 
 
+async def record_field_changed(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    field: TaskField,
+    before: Any,
+    after: Any,
+) -> Entry:
+    """Правка обвязки задачи: то, что меняется в любом незакрытом статусе.
+
+    Сегодня это `tags` и `priority`. Отдельно от `section_changed` не ради симметрии:
+    тот про задание — договор с агентом, неизменяемый от `open` и дальше, — а это
+    метки, которые перекладывают когда угодно. Один тип на оба означал бы «section»
+    у приоритета.
+
+    Запись нужна не делу, а ленте: изменение, не оставившее записи, не доходит до
+    открытого экрана вовсе (`CONCEPT.md`, 4.1). Читателю дела она стоит одной строки:
+    служебные записи сжимаются в ленте и не входят в `last_entry_at`.
+    """
+    return await _append(
+        session,
+        task,
+        actor=actor,
+        type=EntryType.FIELD_CHANGED,
+        title=f"Field changed: {field.value}",
+        payload={"field": field.value, "before": before, "after": after},
+    )
+
+
 async def record_assignee_changed(
     session: AsyncSession,
     task: Task,

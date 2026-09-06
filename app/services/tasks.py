@@ -399,7 +399,8 @@ async def apply_task_changes(
     await _flush_checking_version(session, task, expected_version)
 
     # Служебные записи — после записи задачи и в той же транзакции. Тип записи выбирает
-    # сценарий дела по полю; теги и приоритет в дело не подшиваются (`CONCEPT.md`, 3.4).
+    # сценарий дела по полю, и поле без записи остаться не может: изменение, не
+    # оставившее записи, не доходит до ленты и до открытого экрана (`CONCEPT.md`, 4.1).
     for change in recorded:
         field = TaskField(change.field)
         if field is TaskField.STATUS:
@@ -419,6 +420,12 @@ async def apply_task_changes(
             )
         elif field in BACKLOG_ONLY_FIELDS:
             await case_service.record_section_changed(
+                session, task, actor=actor, field=field, before=change.before, after=change.after
+            )
+        else:
+            # Обвязка: `tags` и `priority`. Ветка без условия намеренно — новое поле
+            # карточки получит запись само, а не окажется тихо немым в ленте.
+            await case_service.record_field_changed(
                 session, task, actor=actor, field=field, before=change.before, after=change.after
             )
     return TaskMutation(task=task, changes=tuple(recorded))

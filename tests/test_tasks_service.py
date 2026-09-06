@@ -315,10 +315,18 @@ async def test_the_assignee_changes_in_any_open_status_but_not_in_a_closed_one(
     assert error.value.code == "task_closed"
 
 
-async def test_tags_and_priority_bump_the_version_without_an_entry(
+async def test_tags_and_priority_leave_a_field_changed_entry_each(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
-    """Обвязка меняется, версия растёт, но в дело подшивается только смена исполнителя."""
+    """Правка обвязки оставляет по записи на поле — иначе она не дошла бы до ленты.
+
+    Раньше здесь стояло обратное: теги и приоритет версию поднимали, а записи не
+    оставляли. Довод был верный — дело не про перекладывание меток, — но у него
+    оказалась цена: лента журнала это лента записей дела, и изменение без записи
+    не доходит до открытого экрана вовсе (`CONCEPT.md`, 4.1). Правило снято, а
+    «дело не про метки» держится тем, что записи служебные: они сжимаются в ленте,
+    отбираются по типу и не входят в `last_entry_at`.
+    """
     await move(db_session, task, task_actor, TaskStatus.OPEN)
     before = len(await entries(db_session, task))
 
@@ -332,7 +340,12 @@ async def test_tags_and_priority_bump_the_version_without_an_entry(
     assert {change.field for change in mutation.changes} == {"tags", "priority"}
     assert task.version == 3
     assert task.priority is TaskPriority.HIGH
-    assert len(await entries(db_session, task)) == before
+
+    filed = await entries(db_session, task)
+    assert len(filed) == before + 2, "по записи на каждое изменённое поле"
+    added = filed[before:]
+    assert {entry.type for entry in added} == {EntryType.FIELD_CHANGED}
+    assert {entry.payload["field"] for entry in added} == {"tags", "priority"}
 
 
 async def test_sending_the_current_values_changes_nothing(

@@ -2313,7 +2313,7 @@
           "tasks"
         ],
         "summary": "Update a task",
-        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, теги и приоритет — в любом незакрытом статусе; в\n`done` и `cancelled` не меняется ничего (`409 task_closed`). Правка раздела\nподшивает `section_changed`, смена исполнителя — `assignee_changed`. `version` —\nне поле задачи, а условие: устаревшая версия отвечает `409 version_conflict`.",
+        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, теги и приоритет — в любом незакрытом статусе; в\n`done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение\nподшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,\nтеги и приоритет — `field_changed`. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.",
         "operationId": "update_task",
         "security": [
           {
@@ -4062,6 +4062,7 @@
                       "attempt": "#/components/schemas/PlainEntryRead",
                       "created": "#/components/schemas/PlainEntryRead",
                       "decision": "#/components/schemas/PlainEntryRead",
+                      "field_changed": "#/components/schemas/FieldChangedEntryRead",
                       "finding": "#/components/schemas/PlainEntryRead",
                       "link_added": "#/components/schemas/LinkEntryRead",
                       "link_removed": "#/components/schemas/LinkEntryRead",
@@ -4095,6 +4096,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/SectionChangedEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FieldChangedEntryRead"
                     },
                     {
                       "$ref": "#/components/schemas/AssigneeChangedEntryRead"
@@ -4827,6 +4831,9 @@
             "$ref": "#/components/schemas/SectionChangedEntryRead"
           },
           {
+            "$ref": "#/components/schemas/FieldChangedEntryRead"
+          },
+          {
             "$ref": "#/components/schemas/AssigneeChangedEntryRead"
           },
           {
@@ -4842,6 +4849,7 @@
             "attempt": "#/components/schemas/PlainEntryRead",
             "created": "#/components/schemas/PlainEntryRead",
             "decision": "#/components/schemas/PlainEntryRead",
+            "field_changed": "#/components/schemas/FieldChangedEntryRead",
             "finding": "#/components/schemas/PlainEntryRead",
             "link_added": "#/components/schemas/LinkEntryRead",
             "link_removed": "#/components/schemas/LinkEntryRead",
@@ -4869,6 +4877,7 @@
           "created",
           "status_changed",
           "section_changed",
+          "field_changed",
           "assignee_changed",
           "link_added",
           "link_removed"
@@ -4918,6 +4927,153 @@
         ],
         "title": "ErrorResponse",
         "description": "Единый формат ошибки: всё содержательное лежит под ключом `error`."
+      },
+      "FieldChangedEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "type": {
+            "type": "string",
+            "const": "field_changed",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/FieldChangedPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "FieldChangedEntryRead",
+        "description": "Служебная запись о правке обвязки: сегодня это `tags` и `priority`."
+      },
+      "FieldChangedPayload": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field",
+            "examples": [
+              "priority"
+            ]
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before",
+            "description": "Previous value; a list for `tags`"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After",
+            "description": "New value; a list for `tags`"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "field"
+        ],
+        "title": "FieldChangedPayload",
+        "description": "Правка обвязки задачи: «было» и «стало» целиком.\n\nОтдельно от `SectionChangedPayload`, хотя поля те же: там правка задания и только\nв `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на\nоба случая означала бы «section» у приоритета."
       },
       "HealthResponse": {
         "properties": {

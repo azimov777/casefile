@@ -184,7 +184,10 @@ async def test_the_migration_rolls_back_and_reapplies(
     """
     url = f"{test_database_url}_migrations"
     await _seed_task_in_review(migration_engine)
-    await migrate(url, "head")
+    # До своей ревизии, а не до `head`: тест проверяет конкретную миграцию, и каждая
+    # новая ревизия сверху делала бы `-1` шагом не туда. Раньше здесь стояло `head`,
+    # и первая же следующая миграция это и вскрыла.
+    await migrate(url, REVISION)
 
     await migrate(url, "-1", down=True)
     async with migration_engine.connect() as connection:
@@ -193,7 +196,110 @@ async def test_the_migration_rolls_back_and_reapplies(
     assert revision == PREVIOUS_REVISION
     assert status == "in_progress"
 
-    await migrate(url, "head")
+    await migrate(url, REVISION)
     async with migration_engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == REVISION
+
+
+# --- Тип записи `field_changed` -------------------------------------------------------
+
+#: Ревизия, заводящая тип записи об изменении обвязки, и ревизия перед ней.
+FIELD_CHANGED_REVISION = "a1c8f2d47b06"
+FIELD_CHANGED_PREVIOUS = "f3b90c47ad15"
+
+
+async def test_the_new_entry_type_is_refused_before_its_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """До миграции запись такого типа не проходит: список типов закреплён схемой.
+
+    Это и есть довод за проверку в базе рядом с проверкой в коде: тип, забытый в
+    миграции, скажет о себе отказом на вставке, а не тихо ляжет в дело.
+    """
+    url = f"{test_database_url}_migrations"
+    await _seed_task_in_review(migration_engine)
+    await migrate(url, FIELD_CHANGED_PREVIOUS)
+
+    with pytest.raises(Exception, match="ck_entries_entry_type"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(text(_INSERT_FIELD_CHANGED))
+
+
+async def test_the_new_entry_type_passes_after_its_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """После миграции запись такого типа проходит."""
+    url = f"{test_database_url}_migrations"
+    await _seed_task_in_review(migration_engine)
+    await migrate(url, FIELD_CHANGED_REVISION)
+
+    async with migration_engine.begin() as connection:
+        await connection.execute(text(_INSERT_FIELD_CHANGED))
+
+    async with migration_engine.connect() as connection:
+        filed = await connection.scalar(
+            text("SELECT count(*) FROM entries WHERE type = 'field_changed'")
+        )
+    assert filed == 1
+
+
+async def test_the_new_migration_rolls_back_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Схема ходит в обе стороны, пока записей нового типа ещё нет.
+
+    Записи здесь и не подшиваются: удалить их потом нельзя — дело неизменяемо на уровне
+    триггера, — а откат с ними отказывается намеренно (проверяется соседним тестом).
+    """
+    url = f"{test_database_url}_migrations"
+    await migrate(url, FIELD_CHANGED_REVISION)
+
+    await migrate(url, "-1", down=True)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == FIELD_CHANGED_PREVIOUS
+
+    await migrate(url, FIELD_CHANGED_REVISION)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == FIELD_CHANGED_REVISION
+
+
+async def test_the_rollback_refuses_while_such_entries_exist(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Откат отказывается, пока такие записи подшиты, — и это верное поведение.
+
+    Молча снести их нельзя: дело неизменяемо, и откат схемы историю не отменяет
+    (`CONCEPT.md`, 3.4). Отказ говорит «откатывать уже поздно», а не ломает установку;
+    альтернатива — потерять записи — хуже во всех отношениях.
+    """
+    url = f"{test_database_url}_migrations"
+    await _seed_task_in_review(migration_engine)
+    await migrate(url, FIELD_CHANGED_REVISION)
+
+    async with migration_engine.begin() as connection:
+        await connection.execute(text(_INSERT_FIELD_CHANGED))
+
+    with pytest.raises(Exception, match="ck_entries_entry_type"):
+        await migrate(url, "-1", down=True)
+
+
+_INSERT_FIELD_CHANGED = """
+INSERT INTO entries (
+    task_id, no, type, title, body, payload, refs, created_by_kind, created_by_signature
+)
+SELECT
+    tasks.id,
+    COALESCE((SELECT MAX(entries.no) FROM entries WHERE entries.task_id = tasks.id), 0) + 1,
+    'field_changed',
+    'Field changed: priority',
+    '',
+    jsonb_build_object('field', 'priority', 'before', 'normal', 'after', 'high'),
+    '[]'::jsonb,
+    'tracker',
+    NULL
+FROM tasks
+WHERE tasks.key = 'OLD-1'
+"""
