@@ -59,8 +59,9 @@ async def create_task_link(
 
     Отказы: связь с самой собой — `422 link_self_not_allowed`; кольцо в иерархии или в
     блокировках — `409 link_cycle_detected` (виды не смешиваются: родитель, у которого
-    `blocked_by` на своих детей, кольцом не считается); задача в `done` или
-    `cancelled` с любой стороны — `409 task_closed`. Повтор с тем же `Idempotency-Key`
+    `blocked_by` на своих детей, кольцом не считается); `parent` или `blocks` с задачей в
+    `done` или `cancelled` с любой стороны — `409 task_closed`. `relates` с закрытой
+    задачей проходит: им связывают её с продолжением. Повтор с тем же `Idempotency-Key`
     отвечает первой связью, а не `409 link_exists`.
     """
     task = await tasks_service.get_task(session, task_key)
@@ -93,7 +94,8 @@ async def delete_task_link(
 
     Адресуется связь так же, как ставилась, — видом со стороны задачи из пути. Снять её
     можно с любой стороны: `blocks` у одной и `blocked_by` у другой — одна строка.
-    Связи нет — `404 link_not_found`; задача закрыта — `409 task_closed`.
+    Связи нет — `404 link_not_found`; `parent` или `blocks` у закрытой задачи —
+    `409 task_closed`, `relates` снимается и у закрытой.
     """
     task = await tasks_service.get_task(session, task_key)
     other = await tasks_service.get_task(session, other_key)

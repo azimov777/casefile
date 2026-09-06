@@ -5,11 +5,13 @@ import pytest
 from app.domain.errors import InvalidLinkKindError, LinkSelfError
 from app.domain.links import (
     ACYCLIC_LINK_KINDS,
+    BEHAVIOURAL_LINK_KINDS,
     INVERSE_KINDS,
     STORED_LINK_KINDS,
     SYMMETRIC_LINK_KINDS,
     LinkKind,
     canonical_form,
+    changes_behaviour,
     ensure_not_self,
     inverse,
     is_acyclic,
@@ -55,6 +57,24 @@ def test_cycles_are_forbidden_in_hierarchy_and_blocking_only() -> None:
     assert is_acyclic(LinkKind.PARENT)
     assert is_acyclic(LinkKind.BLOCKS)
     assert not is_acyclic(LinkKind.RELATES)
+
+
+def test_every_kind_is_classified_by_whether_it_changes_behaviour() -> None:
+    """Новый вид связи обязан попасть в набор или быть из него исключён осознанно.
+
+    От этого зависит, пройдёт ли связь с закрытой задачей: незачисленный вид молча
+    оказался бы «ни на что не влияющим» и появился бы у закрытой задачи (`CONCEPT.md`,
+    3.5).
+    """
+    assert BEHAVIOURAL_LINK_KINDS | {LinkKind.RELATES} == set(LinkKind)
+    assert all(changes_behaviour(kind) for kind in BEHAVIOURAL_LINK_KINDS)
+    assert not changes_behaviour(LinkKind.RELATES)
+
+
+def test_both_sides_of_a_pair_are_classified_the_same() -> None:
+    """Влияние на поведение — свойство связи, а не той стороны, с которой её назвали."""
+    for kind in LinkKind:
+        assert changes_behaviour(kind) is changes_behaviour(inverse(kind))
 
 
 # --- Канонический вид ---------------------------------------------------------------

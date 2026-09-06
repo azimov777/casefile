@@ -74,7 +74,7 @@
 | `queue_key_taken` | Queue key is already taken | Ключ очереди уже занят: ключи уникальны без учёта регистра. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
-| `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля и связи закрытой задачи не меняются. |
+| `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
 | `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
 | `task_has_unclosed_children` | Task has children that are not closed | Переход в `done` при детях не в `done` и не в `cancelled`. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |

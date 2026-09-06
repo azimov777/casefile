@@ -26,9 +26,17 @@
 
 Задачи приезжают сюда объектами, прочитанными до вызова, то есть снимком, который мог
 устареть, пока сценарий стоял в очереди. Поэтому изменение связи начинается с
-`lock_changes` по обеим задачам (`app/db/locks.py`): без перечитывания связь могла бы
-появиться у задачи, закрытой соседней транзакцией минуту назад, — а связи закрытой
-задачи не меняются (`CONCEPT.md`, 3.5).
+`lock_changes` по обеим задачам (`app/db/locks.py`): без перечитывания блокер или
+родитель могли бы появиться у задачи, закрытой соседней транзакцией минуту назад, — а
+связь, влияющая на поведение, у закрытой задачи не меняется (`CONCEPT.md`, 3.5).
+
+## Закрытый статус держит не все виды связей
+
+Запрет касается только `parent`/`child` и `blocks`/`blocked_by`: они меняют смысл уже
+случившегося — незакрытый ребёнок у закрытого родителя или новый блокер у сделанной
+задачи. `relates` статусом сторон не ограничен вовсе, ни на постановку, ни на снятие:
+им и выражается родословная, когда из закрытой задачи выросло продолжение
+(`app/domain/links.py`, `changes_behaviour`).
 """
 
 from collections.abc import Sequence
@@ -53,6 +61,7 @@ from app.domain.errors import (
 from app.domain.links import (
     LinkKind,
     canonical_form,
+    changes_behaviour,
     ensure_not_self,
     is_acyclic,
     parse_link_kind,
@@ -142,7 +151,7 @@ async def add_link(
     requested = parse_link_kind(kind)
     ensure_not_self(task.key, other.key)
     await lock_changes(session, task, other)
-    _ensure_open(task, other, kind=requested)
+    _ensure_changeable(task, other, kind=requested)
 
     source, target, stored_kind = _canonical_pair(task, other, requested)
     repository = LinkRepository(session)
@@ -187,7 +196,7 @@ async def remove_link(
     requested = parse_link_kind(kind)
     ensure_not_self(task.key, other.key)
     await lock_changes(session, task, other)
-    _ensure_open(task, other, kind=requested)
+    _ensure_changeable(task, other, kind=requested)
 
     source, target, stored_kind = _canonical_pair(task, other, requested)
     repository = LinkRepository(session)
@@ -216,13 +225,21 @@ def _canonical_pair(task: Task, other: Task, kind: LinkKind) -> tuple[Task, Task
     return source, target, canonical.kind
 
 
-def _ensure_open(task: Task, other: Task, *, kind: LinkKind) -> None:
-    """Связи закрытой задачи не меняются — ни с её стороны, ни с чужой.
+def _ensure_changeable(task: Task, other: Task, *, kind: LinkKind) -> None:
+    """Связь, влияющая на поведение, у закрытой задачи не ставится и не снимается.
 
     Проверяются обе стороны: связь принадлежит обеим, и поставить её закрытой задаче
     «снаружи» значило бы обойти правило с той стороны, где его не проверяют. Отказ
     называет ту задачу, которая закрыта, — иначе агент чинил бы не тот ключ.
+
+    `relates` сюда не попадает совсем: он ничего не двигает, и связать им закрытую
+    задачу с её продолжением — единственный способ показать родословную в карточке
+    обеих (`CONCEPT.md`, 3.5). Вид берётся запрошенный, а не хранимый: `child` и
+    `blocked_by` — те же две пары с другой стороны, и обратная сторона вида про влияние
+    на поведение говорит то же самое.
     """
+    if not changes_behaviour(kind):
+        return
     for side, opposite in ((task, other), (other, task)):
         if is_closed(side.status):
             raise TaskClosedError(

@@ -142,7 +142,12 @@ class TaskVersionConflictError(ConflictError):
 
 
 class TaskClosedError(ConflictError):
-    """Задача в `done` или `cancelled`: поля и связи закрытой задачи не меняются."""
+    """Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже.
+
+    Влияющие виды — `parent`/`child` и `blocks`/`blocked_by`: они задним числом сделали бы
+    неверным уже случившееся. `relates` этим кодом не отвечает никогда: он ничего не
+    двигает, и именно им закрытую задачу связывают с её продолжением (`CONCEPT.md`, 3.5).
+    """
 
     code = "task_closed"
     message = "Task is closed"

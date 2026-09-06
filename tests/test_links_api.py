@@ -150,19 +150,88 @@ async def test_a_self_link_is_refused(auth_client: AsyncClient, queue: Queue) ->
     assert response.json()["error"]["code"] == "link_self_not_allowed"
 
 
-async def test_a_closed_task_does_not_take_new_links(
+async def test_a_closed_task_does_not_take_links_that_change_its_behaviour(
     auth_client: AsyncClient,
     queue: Queue,
 ) -> None:
-    """Обзорная проверка 6."""
+    """Обзорная проверка 6 задачи 24 и проверка 2 задачи TRK-10: две пары, обе стороны."""
     closed = await create(auth_client, "закрытая")
     other = await create(auth_client, "живая")
     await close(auth_client, closed)
 
-    response = await link(auth_client, closed, "relates", other)
+    for kind in ("parent", "child", "blocks", "blocked_by"):
+        from_closed = await link(auth_client, closed, kind, other)
+        from_open = await link(auth_client, other, kind, closed)
 
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "task_closed"
+        assert from_closed.status_code == 409, kind
+        assert from_closed.json()["error"]["code"] == "task_closed"
+        assert from_closed.json()["error"]["details"]["key"] == closed
+        assert from_open.status_code == 409, kind
+        assert from_open.json()["error"]["details"]["key"] == closed
+
+
+async def test_a_closed_task_shows_the_continuation_that_grew_from_it(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Главная проверка TRK-10 в REST: один `GET` на закрытой задаче отдаёт продолжение.
+
+    Ключ и статус продолжения приезжают в карточке, а не в теле записи: `read_entries`
+    для родословной не нужен.
+    """
+    closed = await create(auth_client, "сделанная")
+    await close(auth_client, closed)
+    continuation = await create(auth_client, "продолжение")
+
+    created = await link(auth_client, continuation, "relates", closed)
+
+    assert created.status_code == 201, created.text
+    assert created.json()["data"]["other"]["status"] == "done"
+    from_closed = (await card(auth_client, closed))["links"]
+    assert [
+        (item["kind"], item["other"]["key"], item["other"]["status"]) for item in from_closed
+    ] == [("relates", continuation, "backlog")]
+    assert await links_of(auth_client, continuation) == [("relates", closed)]
+
+
+async def test_a_continuation_leaves_the_closed_card_as_it_was(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка 3 задачи TRK-10: закрытое дело не оживает от новой связи.
+
+    Сравнивается весь пакет, кроме связей и описи: статус, разделы, версия, признаки,
+    сводка, вопросы и допустимые переходы обязаны совпасть до знака.
+    """
+    closed = await create(auth_client, "сделанная")
+    await close(auth_client, closed)
+    continuation = await create(auth_client, "продолжение")
+    before = await card(auth_client, closed)
+
+    assert (await link(auth_client, continuation, "relates", closed)).status_code == 201
+
+    after = await card(auth_client, closed)
+    changed = {"links", "index"}
+    assert {key: value for key, value in after.items() if key not in changed} == {
+        key: value for key, value in before.items() if key not in changed
+    }
+    assert [item["type"] for item in after["index"][len(before["index"]) :]] == ["link_added"]
+
+
+async def test_relates_is_removed_from_a_closed_task_too(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Промах ключом у закрытой задачи снимается: правило одно и на постановку, и на снятие."""
+    closed = await create(auth_client, "закрытая")
+    other = await create(auth_client, "живая")
+    await close(auth_client, closed)
+    assert (await link(auth_client, other, "relates", closed)).status_code == 201
+
+    removed = await auth_client.delete(f"/api/v1/tasks/{closed}/links/relates/{other}")
+
+    assert removed.status_code == 204
+    assert await links_of(auth_client, closed) == []
 
 
 async def test_an_unknown_kind_never_reaches_the_service(

@@ -82,6 +82,16 @@ SYMMETRIC_LINK_KINDS: frozenset[LinkKind] = frozenset(
     kind for kind, opposite in INVERSE_KINDS.items() if kind is opposite
 )
 
+#: Виды, чья связь меняет поведение задачи: `blocks`/`blocked_by` держат вход в
+#: `in_progress`, `parent`/`child` держат закрытие родителя и считаются в незакрытых детях.
+#: Такую связь у закрытой задачи не ставят и не снимают — она задним числом сделала бы
+#: неверным уже случившееся (`CONCEPT.md`, 3.5). Набор перечислен, а не выведен из
+#: симметричности вида: «влияет на переходы» и «совпадает со своей обратной стороной» —
+#: разные свойства, у нынешних видов совпавшие случайно.
+BEHAVIOURAL_LINK_KINDS: frozenset[LinkKind] = frozenset(
+    {LinkKind.PARENT, LinkKind.CHILD, LinkKind.BLOCKS, LinkKind.BLOCKED_BY}
+)
+
 #: Хранимые виды, в которых кольцо запрещено. Каждый — свой граф, и проверка идёт по
 #: рёбрам **одного** вида: см. раздел «Иерархия и блокировки — два независимых графа».
 ACYCLIC_LINK_KINDS: frozenset[LinkKind] = frozenset({LinkKind.PARENT, LinkKind.BLOCKS})
@@ -114,6 +124,17 @@ def inverse(kind: LinkKind) -> LinkKind:
 def is_acyclic(stored_kind: LinkKind) -> bool:
     """Нужна ли этому хранимому виду проверка кольца."""
     return stored_kind in ACYCLIC_LINK_KINDS
+
+
+def changes_behaviour(kind: LinkKind) -> bool:
+    """Влияет ли связь этого вида на переходы задачи и на её признаки.
+
+    По этому и различаются связи закрытой задачи: влияющую нельзя ни поставить, ни снять,
+    а `relates` — чистый контекст, и статус сторон его не ограничивает. Именно им
+    выражается родословная: продолжение, выросшее из закрытой задачи, видно с обеих
+    сторон в карточке (`CONCEPT.md`, 3.5).
+    """
+    return kind in BEHAVIOURAL_LINK_KINDS
 
 
 def canonical_form(kind: LinkKind, *, source_key: str, target_key: str) -> CanonicalLink:

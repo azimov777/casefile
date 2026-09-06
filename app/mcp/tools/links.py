@@ -44,6 +44,10 @@ def register(tools: Toolset) -> None:
 
         Упёрся в другую задачу: `blocked_by`, потом сводка, потом `transition` в `open`
         с причиной. Трекер не пустит задачу в `in_progress`, пока блокер не закрыт.
+
+        С закрытой задачей (`done`, `cancelled`) ставится только `relates` — им и
+        связывают её с продолжением, выросшим из неё. `parent` и `blocks` у закрытой
+        задачи отклоняются: они меняли бы смысл уже случившегося.
         """
         async with runtime.call() as (session, actor):
             # Ключи разрешаются до занятия ключа идемпотентности: вызов, отклонённый до
@@ -67,7 +71,7 @@ def register(tools: Toolset) -> None:
 
         Снять можно с любой стороны и любым её именем: «снять с `TRK-1` связь `blocks` с
         `TRK-7`» и «снять с `TRK-7` связь `blocked_by` с `TRK-1`» — это одна и та же
-        строка. Связи закрытой задачи не меняются.
+        строка. У закрытой задачи не снимаются `parent` и `blocks`, `relates` снимается.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)

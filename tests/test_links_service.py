@@ -266,40 +266,95 @@ async def test_a_task_cannot_be_linked_to_itself(
         await service.add_link(db_session, first, first, actor=task_actor, kind=LinkKind.RELATES)
 
 
-async def test_a_closed_task_keeps_its_links(
+async def test_a_closed_task_takes_no_link_that_changes_its_behaviour(
     db_session: AsyncSession,
     task_actor: Actor,
     queue: Queue,
 ) -> None:
-    """Обзорная проверка 6: закрытая задача не принимает связь ни со своей стороны, ни с чужой."""
+    """Обзорная проверка 2 задачи TRK-10: у закрытой задачи не заводится ни родитель, ни блокер.
+
+    Проверяются все четыре имени двух пар и обе стороны каждого: правило принадлежит
+    связи, а не той задаче, с которой её попросили.
+    """
     closed = await make(db_session, task_actor, queue, "закрытая")
     other = await make(db_session, task_actor, queue, "живая")
     await move(db_session, closed, task_actor, TaskStatus.CANCELLED, reason="не нужна")
 
-    with pytest.raises(TaskClosedError) as from_closed:
-        await service.add_link(db_session, closed, other, actor=task_actor, kind=LinkKind.RELATES)
-    assert from_closed.value.details["key"] == "TRK-1"
+    for kind in (LinkKind.PARENT, LinkKind.CHILD, LinkKind.BLOCKS, LinkKind.BLOCKED_BY):
+        with pytest.raises(TaskClosedError) as from_closed:
+            await service.add_link(db_session, closed, other, actor=task_actor, kind=kind)
+        assert from_closed.value.details["key"] == closed.key
 
-    with pytest.raises(TaskClosedError) as from_open:
-        await service.add_link(db_session, other, closed, actor=task_actor, kind=LinkKind.RELATES)
-    assert from_open.value.details["key"] == "TRK-1"
-    assert from_open.value.details["status"] == "cancelled"
+        with pytest.raises(TaskClosedError) as from_open:
+            await service.add_link(db_session, other, closed, actor=task_actor, kind=kind)
+        assert from_open.value.details["key"] == closed.key
+        assert from_open.value.details["status"] == "cancelled"
 
 
-async def test_a_link_of_a_closed_task_cannot_be_removed_either(
+async def test_a_link_that_changes_behaviour_cannot_be_removed_from_a_closed_task_either(
     db_session: AsyncSession,
     task_actor: Actor,
     queue: Queue,
 ) -> None:
     first = await make(db_session, task_actor, queue, "первая")
     second = await make(db_session, task_actor, queue, "вторая")
-    await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.RELATES)
+    await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
     await move(db_session, second, task_actor, TaskStatus.CANCELLED, reason="не нужна")
 
     with pytest.raises(TaskClosedError):
-        await service.remove_link(
-            db_session, first, second, actor=task_actor, kind=LinkKind.RELATES
-        )
+        await service.remove_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
+
+
+async def test_a_continuation_relates_to_the_closed_task_it_grew_from(
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Главная проверка TRK-10: родословная ставится с обеих сторон и читается из связей.
+
+    Закрытая задача отдаёт ключ продолжения и его статус в своём списке связей — то
+    есть в пакете преемника, без чтения дела.
+    """
+    closed = await make(db_session, task_actor, queue, "сделанная")
+    await move(
+        db_session,
+        closed,
+        task_actor,
+        TaskStatus.OPEN,
+        TaskStatus.IN_PROGRESS,
+        TaskStatus.DONE,
+    )
+    continuation = await make(db_session, task_actor, queue, "продолжение")
+
+    added = await service.add_link(
+        db_session, continuation, closed, actor=task_actor, kind=LinkKind.RELATES
+    )
+
+    assert (added.kind, added.other.key) == (LinkKind.RELATES, closed.key)
+    from_closed = await service.list_links(db_session, closed, actor=task_actor)
+    assert [(link.kind, link.other.key, link.other.status) for link in from_closed] == [
+        (LinkKind.RELATES, continuation.key, TaskStatus.BACKLOG)
+    ]
+    assert not service.blocked(from_closed)
+
+
+async def test_relates_is_removed_from_a_closed_task_as_well(
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Ошибочная родословная снимается: иначе промах ключом остался бы у закрытой навсегда."""
+    closed = await make(db_session, task_actor, queue, "закрытая")
+    other = await make(db_session, task_actor, queue, "живая")
+    await move(db_session, closed, task_actor, TaskStatus.CANCELLED, reason="не нужна")
+    await service.add_link(db_session, other, closed, actor=task_actor, kind=LinkKind.RELATES)
+
+    await service.remove_link(db_session, closed, other, actor=task_actor, kind=LinkKind.RELATES)
+
+    assert await service.list_links(db_session, closed, actor=task_actor) == []
+    kinds = [entry.type for entry in await entries(db_session, closed, task_actor)]
+    assert kinds.count(EntryType.LINK_ADDED) == 1
+    assert kinds.count(EntryType.LINK_REMOVED) == 1
 
 
 # --- Циклы ------------------------------------------------------------------------------

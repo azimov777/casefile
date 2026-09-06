@@ -691,6 +691,44 @@ async def test_a_link_to_itself_is_refused(
     assert "link_self_not_allowed" in failure
 
 
+async def test_a_closed_task_carries_its_continuation_but_takes_no_blocker(
+    mcp_session: Connect, task_secret: str, task: Task, queue: Queue
+) -> None:
+    """Главная проверка TRK-10 в MCP: продолжение видно из `get_task` закрытой задачи.
+
+    Ключ и статус продолжения лежат в связях пакета — `read_entries` для родословной не
+    нужен. `blocked_by` при этом по-прежнему отклоняется: закрытую задачу не делают
+    заблокированной задним числом.
+    """
+    del queue
+    key = task.key
+    async with mcp_session(task_secret) as session:
+        await call(session, "transition", key=key, to="cancelled", reason="вышло не то")
+        continuation = await call(
+            session,
+            "create_task",
+            queue="TRK",
+            title="Продолжение",
+            description="Выросло из отменённой",
+        )
+        await call(session, "link", key=continuation["key"], kind="relates", other=key)
+        closed_package = await call(session, "get_task", key=key)
+        grown_package = await call(session, "get_task", key=continuation["key"])
+        refused = await refuse(
+            session, "link", key=continuation["key"], kind="blocked_by", other=key
+        )
+
+    assert closed_package["task"]["status"] == "cancelled"
+    assert [
+        (item["kind"], item["other"]["key"], item["other"]["status"])
+        for item in closed_package["links"]
+    ] == [("relates", continuation["key"], "backlog")]
+    assert [(item["kind"], item["other"]["key"]) for item in grown_package["links"]] == [
+        ("relates", key)
+    ]
+    assert "task_closed" in refused
+
+
 # --- Реестры --------------------------------------------------------------------------
 
 
