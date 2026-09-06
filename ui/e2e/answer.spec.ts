@@ -149,6 +149,10 @@ test('кнопка «Ответить» не уезжает из-под курс
   );
 
   await page.goto('/tasks/DEMO-3');
+  // Карточка догружается блоками, и последний из них — опись дела. Пока её нет,
+  // замер снимается с ещё не сложившейся страницы, и «кнопка уехала» означало бы
+  // только «страница дорисовалась».
+  await expect(page.getByText(/Записей в деле:/)).toBeVisible();
 
   const form = page.getByRole('form', { name: `Ответ на DEMO-3#${question.no}` });
   const submit = form.getByRole('button', { name: 'Ответить' });
@@ -158,29 +162,39 @@ test('кнопка «Ответить» не уезжает из-под курс
     return (await submit.boundingBox())?.y ?? -1;
   }
 
-  const empty = await top();
-  expect(empty).toBeGreaterThan(0);
+  try {
+    // Кнопку надо привести в вид до первого замера, а не после: `click()` сам
+    // прокручивает элемент в вид, и замер, снятый с кнопки ниже сгиба, оказался бы
+    // в другой системе координат, чем следующие за ним. Ловится это тем, что все
+    // три «после» отличаются от «до» на одну и ту же величину прокрутки.
+    await submit.scrollIntoViewIfNeeded();
 
-  // Состояние «с ошибкой»: пустая отправка отклонена проверкой формы.
-  await submit.click();
-  await expect(form.getByText(/Пустой ответ отправить нельзя/)).toBeVisible();
-  const withProblem = await top();
+    const empty = await top();
+    expect(empty).toBeGreaterThan(0);
 
-  // Состояние «с текстом»: упрёк гаснет первым же символом.
-  await field.fill('Ответ в одну строку.');
-  await expect(form.getByText(/Пустой ответ отправить нельзя/)).toBeHidden();
-  const withText = await top();
+    // Состояние «с ошибкой»: пустая отправка отклонена проверкой формы.
+    await submit.click();
+    await expect(form.getByText(/Пустой ответ отправить нельзя/)).toBeVisible();
+    const withProblem = await top();
 
-  // Состояние «с раскрытым предпросмотром».
-  await form.getByRole('button', { name: 'Предпросмотр' }).click();
-  await expect(form.getByText('Как это увидит агент')).toBeVisible();
-  const withPreview = await top();
+    // Состояние «с текстом»: упрёк гаснет первым же символом.
+    await field.fill('Ответ в одну строку.');
+    await expect(form.getByText(/Пустой ответ отправить нельзя/)).toBeHidden();
+    const withText = await top();
 
-  expect(withProblem).toBe(empty);
-  expect(withText).toBe(empty);
-  expect(withPreview).toBe(empty);
+    // Состояние «с раскрытым предпросмотром».
+    await form.getByRole('button', { name: 'Предпросмотр' }).click();
+    await expect(form.getByText('Как это увидит агент')).toBeVisible();
+    const withPreview = await top();
 
-  await question.cleanup();
+    expect(withProblem).toBe(empty);
+    expect(withText).toBe(empty);
+    expect(withPreview).toBe(empty);
+  } finally {
+    // Уборка обязана случиться и при падении: оставленный открытым вопрос ломает
+    // соседние сценарии, и разбирать пришлось бы уже два падения вместо одного.
+    await question.cleanup();
+  }
 });
 
 /**

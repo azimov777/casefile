@@ -11,6 +11,12 @@ interface TaskIndexProps {
   checks: string[];
   /** Номер записи из адреса: ссылка `TRK-42#12` открывает карточку уже раскрытой. */
   openAt: number | null;
+  /**
+   * Раскрытие записи человеком уходит в адрес. `null` — «раскрытого больше нет»:
+   * закрыв ту запись, ради которой пришёл, человек не должен уносить её номер
+   * в адресе дальше.
+   */
+  onOpenChange: (no: number | null) => void;
 }
 
 /**
@@ -19,9 +25,10 @@ interface TaskIndexProps {
  * Так дело и задумано читать (`CONCEPT.md`, 4): полное дело весит столько, что карточка
  * открывалась бы секундами, а нужны из него обычно две-три записи.
  */
-export function TaskIndex({ taskKey, index, checks, openAt }: TaskIndexProps) {
-  // Раскрытое живёт в состоянии страницы, а не в адресе: адрес называет запись, ради
-  // которой человек пришёл по ссылке, и замусоривать его каждым кликом незачем.
+export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: TaskIndexProps) {
+  // Раскрытых может быть несколько — сравнивают соседние записи. В адрес уходит
+  // последняя раскрытая: адрес называет запись, ради которой человек здесь, и
+  // перезагрузка возвращает её раскрытой.
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(openAt === null ? [] : [openAt]),
   );
@@ -33,13 +40,25 @@ export function TaskIndex({ taskKey, index, checks, openAt }: TaskIndexProps) {
     setExpanded((previous) => (previous.has(openAt) ? previous : new Set(previous).add(openAt)));
   }, [openAt]);
 
-  const toggle = useCallback((no: number) => {
-    setExpanded((previous) => {
-      const next = new Set(previous);
-      if (!next.delete(no)) next.add(no);
-      return next;
-    });
-  }, []);
+  const toggle = useCallback(
+    (no: number) => {
+      // Решение принимается снаружи обновления состояния: правка адреса — побочное
+      // действие, а функцию обновления React вправе позвать дважды.
+      const closing = expanded.has(no);
+
+      setExpanded((previous) => {
+        const next = new Set(previous);
+        if (closing) next.delete(no);
+        else next.add(no);
+        return next;
+      });
+
+      // Закрыли ту запись, что названа в адресе, — адрес перестаёт её называть;
+      // закрыли соседнюю — названная остаётся названной.
+      onOpenChange(closing ? (openAt === no ? null : openAt) : no);
+    },
+    [expanded, onOpenChange, openAt],
+  );
 
   if (index.length === 0) return <p className={styles.empty}>Дело пусто: записей ещё нет.</p>;
 

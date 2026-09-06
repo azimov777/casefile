@@ -1,6 +1,6 @@
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Badge, RelativeTime } from '@/shared/ui';
-import { skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
+import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
 import { TaskFeatureBadges } from './task-features';
 import { priorityTone } from './tones';
@@ -15,6 +15,7 @@ import styles from './task-card.module.css';
  * и не будет: статусы двигают агенты (`CONCEPT.md`, 7).
  */
 export function TaskCard({ task }: { task: Task }) {
+  const { search } = useLocation();
   const features = task.features ?? null;
 
   return (
@@ -33,6 +34,9 @@ export function TaskCard({ task }: { task: Task }) {
         <Link
           className={styles.link}
           to={taskRefHref({ key: task.key, entryNo: null })}
+          // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
+          // он вернётся к тем же строкам, а не ко всем задачам очереди.
+          state={listReturnState(search)}
           draggable={false}
           onClick={skipClickWhileSelecting}
         >

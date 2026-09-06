@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import {
   ENTRY_TYPES,
   EntryCard,
@@ -8,9 +8,10 @@ import {
   type Entry,
   type EntryType,
 } from '@/entities/entry';
-import { taskPackageQueryOptions } from '@/entities/task';
+import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
+import { readEntryNo } from '@/shared/lib';
 import { CaseFilters } from './case-filters';
 import styles from './case-page.module.css';
 
@@ -23,7 +24,6 @@ import styles from './case-page.module.css';
 export function CasePage() {
   const { key = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { hash } = useLocation();
 
   const types = useMemo(() => readTypes(searchParams.getAll('type')), [searchParams]);
   const params = useMemo(() => (types.length > 0 ? { types } : {}), [types]);
@@ -34,15 +34,41 @@ export function CasePage() {
 
   const entries = feed.data?.pages.flatMap((page) => page.items) ?? [];
   const answers = groupAnswers(entries);
-  const highlighted = readEntryNo(hash);
 
-  // Браузер прокручивает к якорю сам только если элемент уже есть; лента приезжает
-  // позже адреса, поэтому прокрутка повторяется, когда записи наконец пришли.
+  /**
+   * Запись, названная в адресе. Параметр `entry`, а не якорь `#N`: то же действие
+   * человека — «покажи запись N» — называется в адресе одинаково и здесь, и в описи
+   * карточки. Якорь вдобавок обрабатывал бы браузер сам, а нам нужно ещё дочитать
+   * до записи страницы ленты.
+   */
+  const wanted = readEntryNo(searchParams.get('entry'));
+  const found = entries.some((entry) => entry.no === wanted);
+
+  /**
+   * Дочитываем ленту, пока названная запись не найдётся или дело не кончится.
+   *
+   * Лента страничная, и запись с последней страницы иначе просто не приехала бы:
+   * человек, пришедший по ссылке «см. #7», смотрел бы в ленту без седьмой записи
+   * и не понимал, почему.
+   */
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = feed;
   useEffect(() => {
-    if (highlighted === null || entries.length === 0) return;
-    const target = document.getElementById(`entry-${highlighted}`);
-    target?.scrollIntoView?.({ block: 'center' });
-  }, [highlighted, entries.length]);
+    if (wanted === null || found) return;
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [wanted, found, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Прокрутка повторяется, когда записи наконец пришли: до этого прокручивать не к чему.
+  useEffect(() => {
+    if (wanted === null || !found) return;
+    document.getElementById(`entry-${wanted}`)?.scrollIntoView?.({ block: 'center' });
+  }, [wanted, found]);
+
+  /**
+   * Дело дочитано до конца, а записи всё нет. Причин ровно две, и человеку надо
+   * сказать какая: она не попала в отбор по типу — или её в деле нет вовсе.
+   * Пустого экрана без объяснения здесь не бывает.
+   */
+  const missing = wanted !== null && !found && !hasNextPage && !feed.isFetching;
 
   if (task.error instanceof ApiError && task.error.code === 'task_not_found') {
     return (
@@ -56,14 +82,9 @@ export function CasePage() {
 
   return (
     <main className={styles.screen}>
-      <div className={styles.top}>
-        <div>
-          <p className={styles.breadcrumbs}>
-            <Link to={`/tasks/${key}`}>{key}</Link>
-          </p>
-          <h1 className={styles.heading}>Дело {key}</h1>
-        </div>
-      </div>
+      <TaskNav taskKey={key} view="case" />
+
+      <h1 className={styles.heading}>Дело {key}</h1>
 
       <CaseFilters
         selected={types}
@@ -74,6 +95,32 @@ export function CasePage() {
           setSearchParams(updated, { replace: true });
         }}
       />
+
+      {missing ? (
+        <Callout tone={types.length > 0 ? 'neutral' : 'danger'}>
+          {types.length > 0 ? (
+            <>
+              Записи {key}#{wanted} не видно: она не попадает в отбор по типу.{' '}
+              <button
+                type="button"
+                className={styles.reset}
+                onClick={() => {
+                  const updated = new URLSearchParams(searchParams);
+                  updated.delete('type');
+                  setSearchParams(updated, { replace: true });
+                }}
+              >
+                Показать все типы
+              </button>
+            </>
+          ) : (
+            <>
+              Записи {key}#{wanted} в деле нет: возможно, номер набран с опечаткой или ссылка ведёт
+              в другую задачу.
+            </>
+          )}
+        </Callout>
+      ) : null}
 
       <QueryState
         query={feed}
@@ -98,10 +145,14 @@ export function CasePage() {
               key={entry.no}
               entry={entry}
               checks={task.data?.task.checks ?? []}
-              highlighted={highlighted === entry.no}
+              highlighted={wanted === entry.no}
             >
               {entry.type === 'question' ? (
-                <AnswersUnderQuestion answers={answers.get(entry.no) ?? []} checks={[]} />
+                <AnswersUnderQuestion
+                  answers={answers.get(entry.no) ?? []}
+                  checks={[]}
+                  highlighted={wanted}
+                />
               ) : null}
             </EntryCard>
           );
@@ -109,9 +160,9 @@ export function CasePage() {
       </div>
 
       <div className={styles.paging}>
-        {feed.hasNextPage ? (
-          <Button onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
-            {feed.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+        {hasNextPage ? (
+          <Button onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? 'Читаем…' : 'Ещё'}
           </Button>
         ) : entries.length === 0 ? null : (
           <span className={styles.end}>Это всё дело: записей {entries.length}.</span>
@@ -121,8 +172,22 @@ export function CasePage() {
   );
 }
 
-/** Ответы под вопросом: тот же вид записи, но вложенный. */
-function AnswersUnderQuestion({ answers, checks }: { answers: Entry[]; checks: string[] }) {
+/**
+ * Ответы под вопросом: тот же вид записи, но вложенный.
+ *
+ * Помечается именно названный ответ, а не вопрос целиком: ссылка вида `DEMO-4#9`
+ * ведёт к ответу, а показан он здесь — внутри своего вопроса, и человек должен
+ * увидеть, что нашёл именно то, за чем шёл.
+ */
+function AnswersUnderQuestion({
+  answers,
+  checks,
+  highlighted,
+}: {
+  answers: Entry[];
+  checks: string[];
+  highlighted: number | null;
+}) {
   if (answers.length === 0) {
     return <p className={styles.waiting}>Ответа пока нет.</p>;
   }
@@ -130,7 +195,12 @@ function AnswersUnderQuestion({ answers, checks }: { answers: Entry[]; checks: s
   return (
     <div className={styles.answers}>
       {answers.map((answer) => (
-        <EntryCard key={answer.no} entry={answer} checks={checks} />
+        <EntryCard
+          key={answer.no}
+          entry={answer}
+          checks={checks}
+          highlighted={highlighted === answer.no}
+        />
       ))}
     </div>
   );
@@ -150,10 +220,4 @@ function groupAnswers(entries: Entry[]): Map<number, Entry[]> {
 /** Типы из адреса: чужое значение отбрасывается, как и в отборе задач. */
 function readTypes(values: string[]): EntryType[] {
   return values.filter((value): value is EntryType => (ENTRY_TYPES as string[]).includes(value));
-}
-
-/** Номер записи из якоря `#12`. */
-function readEntryNo(hash: string): number | null {
-  const no = Number(hash.replace('#', ''));
-  return Number.isInteger(no) && no > 0 ? no : null;
 }

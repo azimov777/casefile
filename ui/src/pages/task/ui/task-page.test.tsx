@@ -15,7 +15,7 @@ import {
   verdictEntry,
 } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
-import { renderApp } from '@testing/render';
+import { address, renderApp } from '@testing/render';
 import { setToken } from '@/shared/api';
 
 /** Адреса всех запросов прогона: по ним видно, что лишних не было. */
@@ -195,6 +195,42 @@ describe('карточка задачи', () => {
     const calls = entriesCalls();
     expect(calls).toHaveLength(1);
     expect(new URL(calls[0] as string).searchParams.getAll('nos')).toEqual(['6']);
+  });
+
+  it('раскрытие записи в описи уходит в адрес, и перезагрузка возвращает её раскрытой', async () => {
+    server.use(packageOf('DEMO-4'), entries('DEMO-4'));
+    const user = userEvent.setup();
+    const { unmount } = renderApp('/tasks/DEMO-4');
+
+    const heading = await screen.findByRole('button', {
+      name: /Список допустимого собирается по типу поля/,
+    });
+    await user.click(heading);
+
+    // Раньше клик и ссылка делали одно и то же двумя разными способами: ссылка
+    // меняла адрес, клик — нет, и перезагрузка теряла раскрытое.
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-4?entry=4'));
+
+    // Перезагрузка по этому адресу: запись раскрыта сразу, без второго клика.
+    unmount();
+    renderApp('/tasks/DEMO-4?entry=4');
+    expect(
+      await screen.findByRole('button', { name: /Список допустимого собирается по типу поля/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('закрытие названной записи убирает её номер из адреса', async () => {
+    server.use(packageOf('DEMO-4'), entries('DEMO-4'));
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-4?entry=4');
+
+    const heading = await screen.findByRole('button', {
+      name: /Список допустимого собирается по типу поля/,
+    });
+    expect(heading).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(heading);
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-4'));
   });
 
   it('обзорные проверки нумерованы с единицы, как их считает вердикт', async () => {

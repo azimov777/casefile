@@ -24,5 +24,6 @@ export {
 export { TASK_COLUMNS } from './ui/columns';
 export { TASK_PRIORITY_TONE, TASK_STATUS_TONE, priorityTone, statusTone } from './ui/tones';
 export { TaskCard } from './ui/task-card';
+export { TaskNav } from './ui/task-nav';
 export { TaskFeatureBadges } from './ui/task-features';
 export { TaskRow } from './ui/task-row';

@@ -1,7 +1,8 @@
+import { useCallback } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EntryBody, type Question } from '@/entities/entry';
-import { taskPackageQueryOptions } from '@/entities/task';
+import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
   AnswerForm,
   AnswerReceipt,
@@ -11,6 +12,7 @@ import {
 } from '@/features/answer-question';
 import { ApiError } from '@/shared/api';
 import { Callout, QueryState } from '@/shared/ui';
+import { caseHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
 import { TaskIndex } from './task-index';
 import { TaskLinks } from './task-links';
@@ -26,7 +28,7 @@ import styles from './task-page.module.css';
  */
 export function TaskPage() {
   const { key = '' } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const pkg = useQuery(taskPackageQueryOptions(key));
 
   // До ранних возвратов: хук нельзя позвать условно. Держит вопросы, по которым
@@ -35,6 +37,30 @@ export function TaskPage() {
   const answering = useAnswering<Question>();
 
   const openAt = readEntryNo(searchParams.get('entry'));
+
+  /**
+   * Раскрытие записи в описи попадает в адрес — тем же параметром, которым запись
+   * называет внешняя ссылка. Раньше клик и ссылка делали одно и то же двумя разными
+   * способами: ссылка меняла адрес, клик — нет, и перезагрузка теряла раскрытое.
+   *
+   * `replace`, а не новая запись истории: раскрытие записи — это не «страница»,
+   * и кнопка «назад» после трёх кликов по описи должна вести в список, а не
+   * разворачивать их обратно по одному.
+   */
+  const rememberOpen = useCallback(
+    (no: number | null) => {
+      setSearchParams(
+        (current) => {
+          const updated = new URLSearchParams(current);
+          if (no === null) updated.delete('entry');
+          else updated.set('entry', String(no));
+          return updated;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   if (pkg.error instanceof ApiError && pkg.error.code === 'task_not_found') {
     return (
@@ -64,6 +90,7 @@ export function TaskPage() {
 
   return (
     <main className={styles.screen}>
+      <TaskNav taskKey={task.key} view="card" />
       <TaskHeader task={task} features={features} transitions={transitions} />
 
       <section className={styles.block} aria-labelledby="summary">
@@ -122,21 +149,23 @@ export function TaskPage() {
           <h2 className={styles.title} id="case">
             Дело
           </h2>
-          <Link to={`/tasks/${task.key}/case`}>Читать лентой</Link>
+          {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
+              1300-м пикселе прокрутки и находился только теми, кто дочитал. */}
+          <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
         </div>
-        <TaskIndex taskKey={task.key} index={index} checks={task.checks} openAt={openAt} />
+        <TaskIndex
+          taskKey={task.key}
+          index={index}
+          checks={task.checks}
+          openAt={openAt}
+          onOpenChange={rememberOpen}
+        />
       </section>
     </main>
   );
 }
 
 /** Номер записи из адреса. Мусор — то же самое, что его отсутствие. */
-function readEntryNo(value: string | null): number | null {
-  if (value === null) return null;
-  const no = Number(value);
-  return Number.isInteger(no) && no > 0 ? no : null;
-}
-
 /** Тождество вопроса: задача и номер записи — то же, что во входящей. */
 function questionId(taskKey: string, question: Question): string {
   return `${taskKey}#${question.no}`;

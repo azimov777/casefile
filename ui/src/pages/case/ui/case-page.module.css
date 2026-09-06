@@ -5,20 +5,6 @@
   max-width: 64rem;
 }
 
-.top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.breadcrumbs {
-  margin: 0 0 var(--space-1);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-}
-
 .heading {
   margin: 0;
   font-size: var(--text-xl);
@@ -56,4 +42,14 @@
 .end {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+}
+
+/* Сброс отбора прямо из объяснения: человек уже читает, почему записи не видно. */
+.reset {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  text-decoration: underline;
+  font: inherit;
 }

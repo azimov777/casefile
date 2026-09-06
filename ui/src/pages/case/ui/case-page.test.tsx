@@ -115,10 +115,74 @@ describe('дело лентой', () => {
     expect(screen.queryByLabelText('DEMO-1#3')).not.toBeInTheDocument();
   });
 
-  it('адрес с якорем подсвечивает названную запись', async () => {
+  it('запись со второй страницы дочитывается сама, а не теряется', async () => {
+    // Лента страничная: без дочитывания человек, пришедший по ссылке «см. #15»,
+    // смотрел бы в ленту без пятнадцатой записи и не понимал, почему.
+    const all = wholeCase();
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-1/entries`, ({ request }) => {
+        const url = new URL(request.url);
+        seen.push(url);
+        const cursor = url.searchParams.get('cursor');
+        if (cursor === null) {
+          return collection(all.slice(0, 5), { has_more: true, next_cursor: 'вторая' });
+        }
+        return collection(all.slice(5));
+      }),
+    );
+
+    renderApp('/tasks/DEMO-1/case?entry=15');
+
+    const target = await screen.findByLabelText('DEMO-1#15');
+    expect(target.className).toMatch(/highlighted/);
+    // Дочитано именно страницами по курсору, а не одним запросом «дай всё».
+    expect(seen).toHaveLength(2);
+  });
+
+  it('запись вне отбора по типу объясняется словами и отбор можно сбросить', async () => {
+    server.use(feed());
+    const user = userEvent.setup();
+
+    // Отбор оставляет в ленте только сводки, а названа запись другого типа.
+    renderApp('/tasks/DEMO-1/case?type=summary&entry=4');
+
+    expect(await screen.findByText(/не попадает в отбор по типу/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('DEMO-1#4')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Показать все типы' }));
+
+    const target = await screen.findByLabelText('DEMO-1#4');
+    expect(target.className).toMatch(/highlighted/);
+    expect(screen.queryByText(/не попадает в отбор по типу/)).not.toBeInTheDocument();
+  });
+
+  it('номер записи, которой в деле нет, объясняется, а не оставляет пустой экран', async () => {
+    server.use(feed());
+    renderApp('/tasks/DEMO-1/case?entry=99');
+
+    expect(await screen.findByText(/в деле нет/)).toBeInTheDocument();
+  });
+
+  it('ссылка на ответ ведёт к нему туда, где он показан — внутрь вопроса', async () => {
+    const question = questionEntry(3, 'DEMO-1');
+    const answer = { ...entryOfType(4, 'DEMO-1', 'answer'), payload: { question_no: 3 } } as Entry;
+    server.use(feed([question, answer]));
+
+    renderApp('/tasks/DEMO-1/case?entry=4');
+
+    const questionCard = await screen.findByLabelText('DEMO-1#3');
+    const answerCard = within(questionCard).getByLabelText('DEMO-1#4');
+    // Помечен именно ответ, а не вопрос, внутри которого он показан.
+    expect(answerCard.className).toMatch(/highlighted/);
+    expect(questionCard.className).not.toMatch(/highlighted/);
+  });
+
+  it('адрес с номером записи подсвечивает названную запись', async () => {
     server.use(feed());
 
-    renderApp('/tasks/DEMO-1/case#4');
+    // Параметр `entry`, а не якорь `#4`: одно и то же действие человека называется
+    // в адресе одинаково и здесь, и в описи карточки (`shared/lib/task-refs.ts`).
+    renderApp('/tasks/DEMO-1/case?entry=4');
 
     const target = await screen.findByLabelText('DEMO-1#4');
     expect(target.className).toMatch(/highlighted/);

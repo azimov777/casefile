@@ -1,6 +1,6 @@
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Badge, RelativeTime } from '@/shared/ui';
-import { skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
+import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
 import { TaskFeatureBadges } from './task-features';
 import { priorityTone, statusTone } from './tones';
@@ -16,6 +16,8 @@ import styles from './task-row.module.css';
  * а обход с клавиатуры дал бы остановку на каждой ячейке вместо одной на задачу.
  */
 export function TaskRow({ task }: { task: Task }) {
+  // Адрес списка целиком, вместе с отбором: он поедет в задачу состоянием перехода.
+  const { search } = useLocation();
   const features = task.features ?? null;
   const tags = task.tags ?? [];
 
@@ -30,6 +32,9 @@ export function TaskRow({ task }: { task: Task }) {
         <Link
           className={styles.link}
           to={taskRefHref({ key: task.key, entryNo: null })}
+          // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
+          // он вернётся к тем же строкам, а не ко всем задачам очереди.
+          state={listReturnState(search)}
           // Перетаскивание ссылки выключено, иначе протяжка по названию таскала бы
           // ссылку вместо того, чтобы выделять текст.
           draggable={false}

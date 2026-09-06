@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { taskRefHref } from '@/shared/lib';
 import { Badge, Markdown, TaskText } from '@/shared/ui';
 import type { Entry } from '../api/entries';
 import styles from './entry-body.module.css';
@@ -52,7 +53,7 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
         <div className={styles.block}>
           <p className={styles.meta}>
             Ответ на{' '}
-            <Link to={`/tasks/${entry.task_key}?entry=${entry.payload.question_no}`}>
+            <Link to={taskRefHref({ key: entry.task_key, entryNo: entry.payload.question_no })}>
               {entry.task_key}#{entry.payload.question_no}
             </Link>
           </p>
