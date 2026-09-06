@@ -223,10 +223,12 @@ async def _done_task(
     await tasks_service.update_task(
         session, task, actor=agent, changes=TaskChanges(assignee=DEMO_AGENT_NAME)
     )
-    # Правка обвязки: она оставляет `field_changed` — запись, без которой смена
-    # приоритета не дошла бы до ленты и до открытого экрана (`CONCEPT.md`, 4.1).
+    # Правка обвязки: она оставляет `field_changed` — запись, без которой изменение
+    # не дошло бы до ленты и до открытого экрана (`CONCEPT.md`, 4.1). Приоритет здесь
+    # не трогается намеренно: он `high`, и в наборе должны быть представлены все
+    # четыре значения, а `critical` получает соседняя задача.
     await tasks_service.update_task(
-        session, task, actor=agent, changes=TaskChanges(priority=TaskPriority.CRITICAL)
+        session, task, actor=agent, changes=TaskChanges(tags=["backend", "queues", "hot"])
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
@@ -341,6 +343,12 @@ async def _in_progress_task(
         checks=["Разрыв после записи N и переподключение с `Last-Event-ID: N` отдаёт N+1"],
         assignee=DEMO_AGENT_NAME,
         tags=["backend", "journal"],
+    )
+    # Поднятый приоритет: в наборе должны быть все четыре значения, иначе различимость
+    # `critical` и `normal` нечем проверить на живом контуре. Заодно это вторая запись
+    # `field_changed` — правка обвязки уже после заведения задачи.
+    await tasks_service.update_task(
+        session, task, actor=agent, changes=TaskChanges(priority=TaskPriority.CRITICAL)
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
