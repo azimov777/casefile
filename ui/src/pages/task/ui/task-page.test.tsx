@@ -83,13 +83,20 @@ describe('карточка задачи', () => {
 
     await userEvent
       .setup()
-      .click(await screen.findByRole('button', { name: 'Verdict on check 2: failed' }));
+      .click(await screen.findByRole('button', { name: /Обзорная проверка 2/ }));
 
-    const opened = (await screen.findByText('Проверка 2')).closest('td') as HTMLElement;
-    expect(within(opened).getByText('failed')).toBeInTheDocument();
+    // Номер проверки и исход называет строка описи — заголовок собран по фактам.
+    const line = screen.getByRole('button', { name: /Обзорная проверка 2/ });
+    expect(line).toHaveTextContent('failed');
+
     // Текст проверки берётся из `checks` задачи по номеру: в самой записи его нет,
     // поэтому ищем именно в раскрытой записи, а не в разделе «Обзорные проверки».
-    expect(within(opened).getByText('Неприменимый оператор отвечает списком')).toBeInTheDocument();
+    // Ищем в пределах описи: тот же текст проверки стоит и в разделе «Обзорные
+    // проверки» задачи, и поиск по всей странице нашёл бы оба.
+    const index = screen.getByRole('table', { name: /Записей в деле/ });
+    const opened = (
+      await within(index).findByText('Неприменимый оператор отвечает списком')
+    ).closest('td') as HTMLElement;
     // Тело записи — markdown: `details.allowed` уехало в `code`, ключи задач — в ссылки,
     // поэтому текст ищется по содержимому целиком, а не одним узлом.
     expect(opened).toHaveTextContent('details.allowed');
@@ -173,8 +180,10 @@ describe('карточка задачи', () => {
     const user = userEvent.setup();
     renderApp('/tasks/DEMO-6');
 
-    await user.click(await screen.findByRole('button', { name: 'Verdict on check 2: failed' }));
-    await screen.findByText('Проверка 2');
+    await user.click(await screen.findByRole('button', { name: /Обзорная проверка 2/ }));
+    await within(screen.getByRole('table', { name: /Записей в деле/ })).findByText(
+      'Неприменимый оператор отвечает списком',
+    );
 
     // `DEMO-6#4` в тексте записи — ссылка на запись 4 той же задачи.
     await user.click(screen.getByRole('link', { name: 'DEMO-6#4' }));
@@ -192,7 +201,11 @@ describe('карточка задачи', () => {
 
     renderApp('/tasks/DEMO-6?entry=6');
 
-    expect(await screen.findByText('Проверка 2')).toBeInTheDocument();
+    // Таблицы описи ещё нет в первый кадр: пакет только загружается.
+    const index = await screen.findByRole('table', { name: /Записей в деле/ });
+    expect(
+      await within(index).findByText('Неприменимый оператор отвечает списком'),
+    ).toBeInTheDocument();
     const calls = entriesCalls();
     expect(calls).toHaveLength(1);
     expect(new URL(calls[0] as string).searchParams.getAll('nos')).toEqual(['6']);

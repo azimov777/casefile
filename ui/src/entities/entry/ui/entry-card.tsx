@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { Badge, RelativeTime } from '@/shared/ui';
 import type { Entry } from '../api/entries';
+import { isServiceEntry } from '../api/entries';
+import { entryHeadline, factsOfEntry } from '../model/headline';
 import { AuthorName } from './author-name';
 import { EntryBody } from './entry-body';
+import { EntryHeadline } from './entry-headline';
 import styles from './entry-card.module.css';
 
 interface EntryCardProps {
@@ -23,22 +26,51 @@ interface EntryCardProps {
  */
 export function EntryCard({ entry, checks, highlighted = false, children }: EntryCardProps) {
   const reference = `${entry.task_key}#${entry.no}`;
+  const headline = entryHeadline(entry.type, factsOfEntry(entry), entry.task_key);
+  // Служебная запись несёт один факт и получает столько места, сколько в ней смысла:
+  // строка вместо карточки. Прятать её нельзя — дело обязано быть полным.
+  const service = isServiceEntry(entry.type);
 
   return (
     <article
       id={`entry-${entry.no}`}
-      className={`${styles.card} ${highlighted ? styles.highlighted : ''}`}
+      className={`${styles.card} ${service ? styles.service : ''} ${
+        highlighted ? styles.highlighted : ''
+      }`}
+      // Тип записи виден разметке, а не только глазу: сквозной тест меряет высоту
+      // служебных записей, а искать их по тексту плашки значило бы завязаться на
+      // подпись, которую завтра перепишут.
+      data-type={entry.type}
       aria-label={reference}
     >
       <header className={styles.head}>
         <span className={styles.no}>#{entry.no}</span>
         <Badge mono>{entry.type}</Badge>
+        {/* Заголовок служебной записи стоит прямо в шапке: отдельной строкой он был бы
+            вторым разом сказанным одним и тем же. */}
+        {service && headline.kind === 'built' ? (
+          <span className={styles.headline}>
+            <EntryHeadline headline={headline} />
+          </span>
+        ) : null}
         <AuthorName author={entry.author} />
         <RelativeTime value={entry.created_at} />
         <CopyReference reference={reference} />
       </header>
 
-      <h3 className={styles.title}>{entry.title}</h3>
+      {/*
+       * Чей заголовок — решает `entryHeadline`. У записи агента он написан автором;
+       * у `answer` и `verdict` его выводит трекер по-английски, и здесь он собирается
+       * заново по-русски; у сводки он дословно повторяет «следующий шаг» из тела,
+       * и второй раз его показывать незачем.
+       */}
+      {service ? null : headline.kind === 'built' ? (
+        <h3 className={styles.title}>
+          <EntryHeadline headline={headline} />
+        </h3>
+      ) : headline.kind === 'author' ? (
+        <h3 className={styles.title}>{entry.title}</h3>
+      ) : null}
 
       <EntryBody entry={entry} checks={checks} />
 

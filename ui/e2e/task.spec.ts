@@ -68,14 +68,13 @@ test('клик по вердикту читает ровно эту запись
 
   await page.goto('/tasks/DEMO-6');
 
-  const row = entryRow(page, 'Verdict on check 2: failed');
+  const row = entryRow(page, 'Обзорная проверка 2');
   const no = (await row.getByRole('rowheader').innerText()).trim();
-  await row.getByRole('button', { name: 'Verdict on check 2: failed' }).click();
+  await row.getByRole('button', { name: /Обзорная проверка 2/ }).click();
 
-  const body = page.getByRole('cell').filter({ hasText: 'Проверка 2' });
-  await expect(body).toContainText('failed');
+  await expect(row).toContainText('failed');
   // Текст проверки берётся из `checks` задачи по номеру: в записи его нет.
-  await expect(body).toContainText('Неприменимый оператор');
+  const body = page.getByRole('cell').filter({ hasText: 'Неприменимый оператор' });
   await expect(body).toContainText('details.allowed');
 
   expect(entryCalls).toHaveLength(1);
@@ -100,11 +99,11 @@ test('DEMO-4 показывает открытый блокирующий воп
 
 test('адрес с номером записи открывает карточку уже раскрытой', async ({ page }) => {
   await page.goto('/tasks/DEMO-6');
-  const no = (await entryRow(page, 'Task created').getByRole('rowheader').innerText()).trim();
+  const no = (await entryRow(page, 'Задача заведена').getByRole('rowheader').innerText()).trim();
 
   await page.goto(`/tasks/DEMO-6?entry=${no}`);
 
-  await expect(page.getByRole('button', { name: 'Task created' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Задача заведена' })).toHaveAttribute(
     'aria-expanded',
     'true',
   );
@@ -159,8 +158,8 @@ test('доступность карточки задачи', async ({ page }) =>
   const closed = await new AxeBuilder({ page }).analyze();
   expect(serious(closed.violations)).toEqual([]);
 
-  await page.getByRole('button', { name: 'Verdict on check 2: failed' }).click();
-  await expect(page.getByText('Проверка 2')).toBeVisible();
+  await page.getByRole('button', { name: /Обзорная проверка 2/ }).click();
+  await expect(page.getByText('Неприменимый оператор').first()).toBeVisible();
 
   const opened = await new AxeBuilder({ page }).analyze();
   expect(serious(opened.violations)).toEqual([]);

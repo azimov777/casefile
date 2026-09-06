@@ -132,6 +132,8 @@ export function heading(
     author: AGENT,
     created_at: '2026-09-01T10:00:00Z',
     title,
+    // Факты приходят у каждой строки описи; пустые — это «называть нечем, кроме типа».
+    facts: {},
     ...overrides,
   };
 }
@@ -222,11 +224,19 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
     transitions: ['done', 'open', 'cancelled'],
     index: [
       heading(1, 'created', 'Task created'),
-      heading(2, 'status_changed', 'Status changed: backlog -> open'),
-      heading(3, 'status_changed', 'Status changed: open -> in_progress'),
+      heading(2, 'status_changed', 'Status changed: backlog -> open', {
+        facts: { from_status: 'backlog', to_status: 'open', has_reason: false },
+      }),
+      heading(3, 'status_changed', 'Status changed: open -> in_progress', {
+        facts: { from_status: 'open', to_status: 'in_progress', has_reason: false },
+      }),
       heading(4, 'decision', 'Список допустимого собирается по типу поля'),
-      heading(5, 'verdict', 'Verdict on check 1: passed'),
-      heading(6, 'verdict', 'Verdict on check 2: failed'),
+      heading(5, 'verdict', 'Verdict on check 1: passed', {
+        facts: { check_no: 1, outcome: 'passed' },
+      }),
+      heading(6, 'verdict', 'Verdict on check 2: failed', {
+        facts: { check_no: 2, outcome: 'failed' },
+      }),
       heading(7, 'summary', 'Дособрать `details.allowed` и подшить новый вердикт'),
     ],
     ...overrides,

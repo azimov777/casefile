@@ -869,6 +869,81 @@ export interface components {
          */
         EmptyPayload: Record<string, never>;
         /**
+         * EntryFactsRead
+         * @description Факты записи, которыми её называют строкой, не читая тела.
+         *
+         *     Заполнены по типу записи, все части необязательны и все ограничены по длине самим
+         *     контрактом: значения перечислений, ключи, имена полей и участников, номера,
+         *     признаки да/нет. Свободного текста здесь нет — ни причины перехода, ни значений
+         *     разделов, ни тел записей; за ними идут в саму запись.
+         *
+         *     Нужны они там, где заголовок собирает трекер и собирает по-английски: клиент строит
+         *     свою строку по фактам, а не разбирает чужую фразу регуляркой. У записей агента и
+         *     человека заполненных фактов нет — их заголовок пишет автор.
+         *
+         *     Незаполненные части едут в ответе как `null`, хотя это и дороже: строка описи
+         *     весит 339 байт вместо 102. Причина в генерации клиента — `@model_serializer`,
+         *     отбрасывающий пустое, заменяет схему сериализации на «словарь чего угодно», и
+         *     `EntryFactsRead` приезжает во фронтенд как `Record<string, unknown>`. Типизированный
+         *     клиент — то, ради чего схема вообще выгружается, и двести байт на строку его не
+         *     стоят (`docs/notes/api.md`).
+         */
+        EntryFactsRead: {
+            /** @description `status_changed`: status before the move */
+            from_status?: components["schemas"]["TaskStatus"] | null;
+            /** @description `status_changed`: status after the move */
+            to_status?: components["schemas"]["TaskStatus"] | null;
+            /**
+             * Has Reason
+             * @description `status_changed`: whether a reason was given. The reason itself is free text and stays in the entry body
+             */
+            has_reason?: boolean | null;
+            /** @description `section_changed` and `field_changed`: which field was edited. Values are not here: a section can be as long as the task itself */
+            field?: components["schemas"]["TaskField"] | null;
+            /** @description `link_added` and `link_removed`: kind of the link */
+            link_kind?: components["schemas"]["LinkKind"] | null;
+            /**
+             * Other Key
+             * @description `link_added` and `link_removed`: the task on the other side
+             * @example TRK-7
+             */
+            other_key?: string | null;
+            /**
+             * Assignee From
+             * @description `assignee_changed`: assignee before, null if there was none
+             */
+            assignee_from?: string | null;
+            /**
+             * Assignee To
+             * @description `assignee_changed`: assignee after, null if unassigned
+             */
+            assignee_to?: string | null;
+            /**
+             * Addressees
+             * @description `question`: who is asked, at most 20 names
+             */
+            addressees?: string[] | null;
+            /**
+             * Blocking
+             * @description `question`: whether the question holds the work
+             */
+            blocking?: boolean | null;
+            /**
+             * Question No
+             * @description `answer`: number of the question answered
+             * @example 7
+             */
+            question_no?: number | null;
+            /**
+             * Check No
+             * @description `verdict`: number of the review check
+             * @example 3
+             */
+            check_no?: number | null;
+            /** @description `verdict`: how the check ended */
+            outcome?: components["schemas"]["VerdictOutcome"] | null;
+        };
+        /**
          * EntryHeadingRead
          * @description Строка описи дела: то, что видно о записи, не читая её тела.
          */
@@ -892,6 +967,8 @@ export interface components {
              * @example Status changed: backlog -> open
              */
             title: string;
+            /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Empty for entries whose title is written by their author */
+            facts: components["schemas"]["EntryFactsRead"];
         };
         EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
         /**
@@ -1945,6 +2022,15 @@ export interface components {
              */
             last_entry_at?: string | null;
         };
+        /**
+         * TaskField
+         * @description Поле задачи в записи об изменении и в правилах редактирования.
+         *
+         *     Значения совпадают с именами полей в API: по ним строится `details.fields` ошибки и
+         *     `payload.field` записи `section_changed`, и читающий видит то же имя, что в схеме.
+         * @enum {string}
+         */
+        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "tags" | "priority";
         /**
          * TaskLinkRead
          * @description Связь со стороны одной задачи.

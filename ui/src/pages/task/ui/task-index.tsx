@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AuthorName, EntryBody, entryQueryOptions, type EntryHeading } from '@/entities/entry';
+import {
+  AuthorName,
+  EntryBody,
+  EntryHeadline,
+  entryHeadline,
+  entryQueryOptions,
+  type EntryHeading,
+} from '@/entities/entry';
 import { Badge, QueryState, RelativeTime, TaskText } from '@/shared/ui';
 import styles from './task-index.module.css';
 
@@ -105,6 +112,7 @@ interface IndexRowProps {
 
 function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexRowProps) {
   const row = useRef<HTMLTableRowElement>(null);
+  const headline = entryHeadline(heading.type, heading.facts, taskKey);
 
   useEffect(() => {
     if (!scrollTo) return;
@@ -134,7 +142,16 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
             aria-expanded={open}
             onClick={() => onToggle(heading.no)}
           >
-            {heading.title}
+            {/*
+             * Заголовок собирается по фактам описи, а не берётся готовым: у служебных
+             * записей, у ответа и вердикта его строит трекер и строит по-английски.
+             * У записи агента заголовок написан автором — его и показываем.
+             */}
+            {headline.kind === 'built' ? (
+              <EntryHeadline headline={headline} linked={false} />
+            ) : (
+              heading.title
+            )}
           </button>
         </td>
       </tr>

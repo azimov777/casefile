@@ -1,5 +1,3 @@
-import { Link } from 'react-router';
-import { taskRefHref } from '@/shared/lib';
 import { Badge, Markdown, TaskText } from '@/shared/ui';
 import type { Entry } from '../api/entries';
 import styles from './entry-body.module.css';
@@ -48,15 +46,10 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
         </div>
       );
 
+    // На какой вопрос отвечено — сказано заголовком, со ссылкой на сам вопрос.
     case 'answer':
       return (
         <div className={styles.block}>
-          <p className={styles.meta}>
-            Ответ на{' '}
-            <Link to={taskRefHref({ key: entry.task_key, entryNo: entry.payload.question_no })}>
-              {entry.task_key}#{entry.payload.question_no}
-            </Link>
-          </p>
           <Text body={entry.body} />
         </div>
       );
@@ -65,12 +58,6 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
       const check = checks[entry.payload.check_no - 1];
       return (
         <div className={styles.block}>
-          <p className={styles.meta}>
-            <span>Проверка {entry.payload.check_no}</span>
-            <Badge tone={entry.payload.outcome === 'passed' ? 'neutral' : 'danger'} mono>
-              {entry.payload.outcome}
-            </Badge>
-          </p>
           {check === undefined ? null : (
             <div className={styles.check}>
               {/* Тем же markdown, что и в разделе «Обзорные проверки»: это одна и та же
@@ -83,34 +70,24 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
       );
     }
 
+    /*
+     * Откуда и куда сказано заголовком (`entryHeadline`), и повторять это бейджами
+     * значило бы занять три строки одним фактом. В теле остаётся то, чего в заголовке
+     * быть не может: причина перехода — свободный текст, и он показывается целиком.
+     */
     case 'status_changed':
+      if (entry.payload.reason == null || entry.payload.reason === '') return null;
       return (
-        <div className={styles.block}>
-          <p className={styles.meta}>
-            <Badge mono>{entry.payload.from}</Badge>
-            <span>→</span>
-            <Badge mono>{entry.payload.to}</Badge>
-          </p>
-          {entry.payload.reason == null || entry.payload.reason === '' ? (
-            <p className={styles.absent}>Причина не названа: переход её не требовал.</p>
-          ) : (
-            <p>
-              <TaskText>{entry.payload.reason}</TaskText>
-            </p>
-          )}
-        </div>
+        <p className={styles.block}>
+          <TaskText>{entry.payload.reason}</TaskText>
+        </p>
       );
 
     case 'section_changed':
       return (
-        <div className={styles.block}>
-          <p className={styles.meta}>
-            Поле <Badge mono>{entry.payload.field}</Badge>
-          </p>
-          <div className={styles.diff}>
-            <Side title="Было" value={entry.payload.before} />
-            <Side title="Стало" value={entry.payload.after} />
-          </div>
+        <div className={styles.diff}>
+          <Side title="Было" value={entry.payload.before} />
+          <Side title="Стало" value={entry.payload.after} />
         </div>
       );
 
@@ -122,38 +99,22 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
      */
     case 'field_changed':
       return (
-        <div className={styles.block}>
-          <p className={styles.meta}>
-            Поле <Badge mono>{entry.payload.field}</Badge>
-          </p>
-          <div className={styles.diff}>
-            <Side title="Было" value={entry.payload.before} />
-            <Side title="Стало" value={entry.payload.after} />
-          </div>
+        <div className={styles.diff}>
+          <Side title="Было" value={entry.payload.before} />
+          <Side title="Стало" value={entry.payload.after} />
         </div>
       );
 
+    // Смена исполнителя и связь целиком умещаются в заголовке: имена участников,
+    // вид связи и ключ задачи — всё это он и называет. Тела у них не бывает.
     case 'assignee_changed':
-      return (
-        <p className={styles.meta}>
-          <Assignee value={entry.payload.before} />
-          <span>→</span>
-          <Assignee value={entry.payload.after} />
-        </p>
-      );
-
     case 'link_added':
     case 'link_removed':
-      return (
-        <p className={styles.meta}>
-          <Badge mono>{entry.payload.kind}</Badge>
-          <Link to={`/tasks/${entry.payload.other}`}>{entry.payload.other}</Link>
-        </p>
-      );
-
-    // `created`, `decision`, `attempt`, `finding`, `artifact`, `note`: заголовок и тело.
-    // У них общая форма и общая нагрузка — пустая.
     case 'created':
+      return null;
+
+    // `decision`, `attempt`, `finding`, `artifact`, `note`: заголовок и тело.
+    // У них общая форма и общая нагрузка — пустая.
     case 'decision':
     case 'attempt':
     case 'finding':
@@ -228,13 +189,6 @@ function Side({ title, value }: { title: string; value?: string | string[] | nul
       )}
     </div>
   );
-}
-
-function Assignee({ value }: { value?: string | null }) {
-  if (value === null || value === undefined || value === '') {
-    return <span className={styles.absent}>не назначена</span>;
-  }
-  return <Badge mono>{value}</Badge>;
 }
 
 function assertNever(entry: never): never {

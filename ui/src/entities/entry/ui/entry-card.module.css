@@ -9,10 +9,32 @@
   scroll-margin-top: calc(var(--header-height) + var(--space-4));
 }
 
+/*
+ * Служебная запись несёт один факт, и места ей столько же: строка без рамки карточки,
+ * с меньшими полями. Прятать её нельзя — дело обязано быть полным, — но и занимать
+ * столько же, сколько сводка из четырёх частей, ей незачем.
+ */
+.service {
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-4);
+  border-color: transparent;
+  background: none;
+}
+
+/* Заголовок служебной записи стоит в шапке, поэтому читается как её продолжение. */
+.headline {
+  color: var(--color-text);
+}
+
 /* Запись, на которую пришли по ссылке: её надо найти глазами за долю секунды. */
 .highlighted {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+/* Подсветку видно и на служебной записи: у неё своей рамки нет. */
+.service.highlighted {
+  border-color: var(--color-accent);
 }
 
 .head {

@@ -18,6 +18,16 @@ export {
   type Question,
   type QuestionListParams,
 } from './api/questions';
+export {
+  ENTRY_TYPE_NAMES,
+  entryHeadline,
+  factsOfEntry,
+  headlineText,
+  type EntryFacts,
+  type Headline,
+  type HeadlinePart,
+} from './model/headline';
 export { AuthorName } from './ui/author-name';
 export { EntryBody } from './ui/entry-body';
 export { EntryCard } from './ui/entry-card';
+export { EntryHeadline } from './ui/entry-headline';
