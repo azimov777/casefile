@@ -1,10 +1,10 @@
 import { delay, http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, collection, data, failure, task } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
-import { renderApp } from '@testing/render';
+import { address, renderApp } from '@testing/render';
 import { setToken } from '@/shared/api';
 
 /** Адреса всех запросов прогона: по ним проверяется, что лишних не было. */
@@ -55,6 +55,7 @@ describe('список задач', () => {
               blocked: false,
               open_questions: 1,
               open_blocking_questions: 1,
+              open_remarks: 0,
               last_summary_at: '2026-09-01T09:00:00Z',
               last_entry_at: '2026-09-01T09:00:00Z',
             },
@@ -66,6 +67,7 @@ describe('список задач', () => {
               blocked: true,
               open_questions: 0,
               open_blocking_questions: 0,
+              open_remarks: 0,
               last_summary_at: null,
               last_entry_at: null,
             },
@@ -354,5 +356,29 @@ describe('порядок и страницы', () => {
 
     expect(screen.queryByRole('button', { name: 'Ещё' })).not.toBeInTheDocument();
     expect(screen.getByText('Это последняя страница.')).toBeInTheDocument();
+  });
+});
+
+describe('отбор по замечаниям', () => {
+  it('флажок «есть неразобранные замечания» уходит в адрес и в запрос', async () => {
+    const asked: URL[] = [];
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/tasks`, ({ request }) => {
+        asked.push(new URL(request.url));
+        return collection([task('DEMO-1')]);
+      }),
+    );
+    const user = userEvent.setup();
+    open('/tasks');
+
+    await screen.findByText('DEMO-1');
+    await expandFilters(user);
+    await user.click(screen.getByLabelText('есть неразобранные замечания'));
+
+    // Отбор живёт в адресе: перезагрузка и присланная ссылка покажут то же самое.
+    await waitFor(() => expect(address.current).toContain('remarks=true'));
+    await waitFor(() => expect(asked.at(-1)?.searchParams.get('query')).toBe('open_remarks: > 0'));
+    expect(screen.getByLabelText('есть неразобранные замечания')).toBeChecked();
   });
 });

@@ -113,12 +113,27 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'created':
       return null;
 
-    // `decision`, `attempt`, `finding`, `artifact`, `note`: заголовок и тело.
+    /*
+     * Разбор замечания. Исход и адрес работы называет заголовок; в теле — объяснение,
+     * ради которого разбор и читают: что именно поправили, чего не хватило, почему не
+     * будут менять. Ссылку на продолжение здесь не повторяем: она уже в заголовке, и
+     * второй такой же ключ рядом читается как два разных.
+     */
+    case 'resolution':
+      return (
+        <div className={styles.block}>
+          <Text body={entry.body} />
+          <Refs refs={entry.refs ?? []} />
+        </div>
+      );
+
+    // `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`: заголовок и тело.
     // У них общая форма и общая нагрузка — пустая.
     case 'decision':
     case 'attempt':
     case 'finding':
     case 'artifact':
+    case 'remark':
     case 'note':
       return (
         <div className={styles.block}>

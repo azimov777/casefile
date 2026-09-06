@@ -29,6 +29,8 @@ const ENTRY_TYPE_SET = {
   question: true,
   answer: true,
   verdict: true,
+  remark: true,
+  resolution: true,
   note: true,
   created: true,
   status_changed: true,

@@ -25,6 +25,9 @@ const EXPECTED: Record<EntryType, (string | RegExp)[]> = {
   question: ['Кому:', 'owner', 'блокирующий'],
   answer: ['Ответ на', 'DEMO-1#1'],
   verdict: ['Обзорная проверка 2', 'failed'],
+  remark: [/Тело записи/],
+  // Исход — словами: замечание оставил человек, и «accepted» ему ни о чём не говорит.
+  resolution: ['Разбор', 'DEMO-1#1', 'принято в работу', 'DEMO-2'],
   status_changed: ['Статус', 'in_progress', 'open', /Задан блокирующий вопрос/],
   section_changed: ['Правка раздела', 'goal', 'Было', 'Стало', 'Старая цель', 'Новая цель'],
   field_changed: ['Правка поля', 'priority', 'Было', 'Стало', 'normal', 'critical'],
@@ -36,6 +39,7 @@ const EXPECTED: Record<EntryType, (string | RegExp)[]> = {
 /** Английские заготовки трекера: в русском интерфейсе их быть не должно ни у одного типа. */
 const ENGLISH = [
   'Task created',
+  'Resolution of',
   'Status changed',
   'Section changed',
   'Field changed',

@@ -4,6 +4,9 @@ import type { Entry, EntryType } from '../api/entries';
 /** Факты записи из описи дела: то, чем её называют, не читая тела. */
 export type EntryFacts = components['schemas']['EntryFactsRead'];
 
+/** Чем разобрано замечание: значение из контракта, показывается словами. */
+export type RemarkOutcome = components['schemas']['RemarkOutcome'];
+
 /**
  * Часть собранной строки: либо слова, либо идентификатор контракта, либо ссылка.
  *
@@ -46,6 +49,8 @@ export const ENTRY_TYPE_NAMES = {
   question: 'вопрос',
   answer: 'ответ',
   verdict: 'вердикт',
+  remark: 'замечание',
+  resolution: 'резолюция',
   note: 'заметка',
   created: 'заведение',
   status_changed: 'смена статуса',
@@ -55,6 +60,20 @@ export const ENTRY_TYPE_NAMES = {
   link_added: 'связь добавлена',
   link_removed: 'связь снята',
 } satisfies Record<EntryType, string>;
+
+/**
+ * Исход разбора замечания — словами.
+ *
+ * Именно словами, а не идентификатором контракта: замечание оставляет человек, и ему
+ * читать, чем оно кончилось. `accepted` рядом с ключом задачи выглядело бы как ещё
+ * один служебный код, а это единственный ответ, которого человек ждал.
+ */
+export const REMARK_OUTCOME_NAMES = {
+  fixed: 'поправлено',
+  accepted: 'принято в работу',
+  needs_detail: 'нужно уточнение',
+  declined: 'менять не будем',
+} satisfies Record<RemarkOutcome, string>;
 
 const words = (text: string): HeadlinePart => ({ kind: 'words', text });
 const id = (text: string): HeadlinePart => ({ kind: 'id', text });
@@ -134,6 +153,28 @@ export function entryHeadline(type: EntryType, facts: EntryFacts, taskKey: strin
         ],
       };
 
+    /*
+     * Разбор замечания: на что отвечено, чем и куда ушла работа. Исход — словами, в
+     * отличие от вердикта: вердикт читает агент, а резолюцию — человек, оставивший
+     * замечание. Ключ задачи-продолжения остаётся ссылкой: по нему переходят.
+     */
+    case 'resolution':
+      return {
+        kind: 'built',
+        parts: [
+          words('Разбор'),
+          ...(facts.remark_no == null
+            ? []
+            : [{ kind: 'entry' as const, key: taskKey, no: facts.remark_no }]),
+          ...(facts.remark_outcome == null
+            ? []
+            : [words(`· ${REMARK_OUTCOME_NAMES[facts.remark_outcome]}`)]),
+          ...(facts.continuation_key == null
+            ? []
+            : [words('→'), { kind: 'task' as const, key: facts.continuation_key }]),
+        ],
+      };
+
     // Заголовок сводки — первая строка «следующего шага»: в ленте он стоял бы жирным
     // над тем же текстом, а в описи это единственное, чем сводку назвать.
     case 'summary':
@@ -189,6 +230,12 @@ export function factsOfEntry(entry: Entry): EntryFacts {
       return { question_no: entry.payload.question_no };
     case 'verdict':
       return { check_no: entry.payload.check_no, outcome: entry.payload.outcome };
+    case 'resolution':
+      return {
+        remark_no: entry.payload.remark_no,
+        remark_outcome: entry.payload.outcome,
+        continuation_key: entry.payload.task,
+      };
     default:
       return {};
   }

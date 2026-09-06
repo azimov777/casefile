@@ -19,11 +19,20 @@ export {
   type QuestionListParams,
 } from './api/questions';
 export {
+  REMARK_PAGE_SIZE,
+  remarkKeys,
+  remarksQueryOptions,
+  type Remark,
+  type RemarkListParams,
+} from './api/remarks';
+export {
   ENTRY_TYPE_NAMES,
   entryHeadline,
   factsOfEntry,
   headlineText,
+  REMARK_OUTCOME_NAMES,
   type EntryFacts,
+  type RemarkOutcome,
   type Headline,
   type HeadlinePart,
 } from './model/headline';

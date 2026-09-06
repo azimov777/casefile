@@ -13,6 +13,7 @@ type Entry = components['schemas']['EntryRead'];
 type EntryHeading = components['schemas']['EntryHeadingRead'];
 type Summary = components['schemas']['SummaryEntryRead'];
 type Question = components['schemas']['QuestionEntryRead'];
+type Remark = components['schemas']['RemarkEntryRead'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -83,6 +84,7 @@ export function task(key: string, overrides: Partial<Task> = {}): Task {
       blocked: false,
       open_questions: 0,
       open_blocking_questions: 0,
+      open_remarks: 0,
       last_summary_at: null,
       last_entry_at: '2026-09-01T10:00:00Z',
     },
@@ -188,6 +190,29 @@ export function answerEntry(no: number, taskKey: string, questionNo: number, bod
   };
 }
 
+/** Замечание человека: то, что видно в пакете задачи и во входящей. */
+export function remarkEntry(no: number, taskKey: string, title = 'Вышло не то'): Remark {
+  return {
+    ...entryBase(no, taskKey, title, 'В списке это выглядит как потерянные задачи.'),
+    author: { kind: 'human', signature: 'owner' },
+    type: 'remark',
+  };
+}
+
+/** Разбор замечания агентом: исход и, при `accepted`, ключ задачи-продолжения. */
+export function resolutionEntry(
+  no: number,
+  taskKey: string,
+  remarkNo: number,
+  overrides: Partial<Extract<Entry, { type: 'resolution' }>['payload']> = {},
+): Entry {
+  return {
+    ...entryBase(no, taskKey, '', 'Согласен, работа ушла в отдельную задачу.'),
+    type: 'resolution',
+    payload: { remark_no: remarkNo, outcome: 'accepted', task: 'DEMO-2', ...overrides },
+  };
+}
+
 export function verdictEntry(no: number, taskKey: string): Entry {
   return {
     ...entryBase(
@@ -217,10 +242,12 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
       blocked: true,
       open_questions: 0,
       open_blocking_questions: 0,
+      open_remarks: 0,
       last_summary_at: '2026-09-01T10:00:00Z',
     },
     summary: summaryEntry(7, key),
     questions: [],
+    remarks: [],
     transitions: ['done', 'open', 'cancelled'],
     index: [
       heading(1, 'created', 'Task created'),
@@ -285,8 +312,11 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
     case 'link_added':
     case 'link_removed':
       return { ...base, body: '', type, payload: { kind: 'blocked_by', other: 'DEMO-2' } };
+    case 'resolution':
+      return { ...base, type, payload: { remark_no: 1, outcome: 'accepted', task: 'DEMO-2' } };
     default:
-      // `created`, `decision`, `attempt`, `finding`, `artifact`, `note`: общая форма.
+      // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`:
+      // общая форма.
       return { ...base, type, refs: ['DEMO-2', 'https://example.test/build/42'] };
   }
 }

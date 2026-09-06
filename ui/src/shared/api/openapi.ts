@@ -246,9 +246,11 @@ export interface paths {
          *     search_field_unknown` со списком допустимых в `details.allowed`.
          *
          *     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
-         *     `open_blocking_questions`): колонок под них нет, они считаются из связей и дела
-         *     прямо в запросе. Запрос кандидатов назначателя — одна строка: `queue: TRK and
-         *     status: open and blocked: false and open_blocking_questions: 0`.
+         *     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
+         *     связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
+         *     `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`.
+         *     Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
+         *     названная задача ещё не закрыта».
          *
          *     Те же признаки приходят **в каждой строке** объектом `features` — тем самым, что
          *     в пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,
@@ -291,8 +293,9 @@ export interface paths {
          * @description Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
          *
          *     Карточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые
-         *     признаки, последняя сводка целиком, открытые вопросы целиком, опись дела и переходы
-         *     по таблице. Тела остальных записей читаются отдельно в `GET /tasks/{key}/entries`.
+         *     признаки, последняя сводка целиком, открытые вопросы и неразобранные замечания
+         *     целиком, опись дела и переходы по таблице. Тела остальных записей читаются отдельно
+         *     в `GET /tasks/{key}/entries`.
          *     Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
          *     блокеры, дети) проверяются в момент перехода, а не при чтении.
          */
@@ -434,8 +437,9 @@ export interface paths {
          *
          *     Отказы: связь с самой собой — `422 link_self_not_allowed`; кольцо в иерархии или в
          *     блокировках — `409 link_cycle_detected` (виды не смешиваются: родитель, у которого
-         *     `blocked_by` на своих детей, кольцом не считается); задача в `done` или
-         *     `cancelled` с любой стороны — `409 task_closed`. Повтор с тем же `Idempotency-Key`
+         *     `blocked_by` на своих детей, кольцом не считается); `parent` или `blocks` с задачей в
+         *     `done` или `cancelled` с любой стороны — `409 task_closed`. `relates` с закрытой
+         *     задачей проходит: им связывают её с продолжением. Повтор с тем же `Idempotency-Key`
          *     отвечает первой связью, а не `409 link_exists`.
          */
         post: operations["create_task_link"];
@@ -461,7 +465,8 @@ export interface paths {
          *
          *     Адресуется связь так же, как ставилась, — видом со стороны задачи из пути. Снять её
          *     можно с любой стороны: `blocks` у одной и `blocked_by` у другой — одна строка.
-         *     Связи нет — `404 link_not_found`; задача закрыта — `409 task_closed`.
+         *     Связи нет — `404 link_not_found`; `parent` или `blocks` у закрытой задачи —
+         *     `409 task_closed`, `relates` снимается и у закрытой.
          */
         delete: operations["delete_task_link"];
         options?: never;
@@ -487,6 +492,33 @@ export interface paths {
          *     список молча соврал бы, что вопросов не пришло.
          */
         get: operations["list_questions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List remarks
+         * @description Замечания всех задач с фильтрами; по умолчанию — все неразобранные.
+         *
+         *     Порядок — от самого старого: дольше всех ждёт разбора то, что оставили первым.
+         *     Резолюция убирает замечание из выдачи, потому что открытость считается по делу, а не
+         *     хранится флагом; из дела оно при этом никуда не девается.
+         *
+         *     Автор не проверяется по реестру: подписью бывает и метка временного агента, которой
+         *     в реестре нет. Неизвестная подпись поэтому даёт пустой список, а не отказ.
+         */
+        get: operations["list_remarks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -819,6 +851,12 @@ export interface components {
             data: components["schemas"]["QueueRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        /** CollectionResponse[RemarkEntryRead] */
+        CollectionResponse_RemarkEntryRead_: {
+            /** Data */
+            data: components["schemas"]["RemarkEntryRead"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         /** CollectionResponse[TaskSearchRead] */
         CollectionResponse_TaskSearchRead_: {
             /** Data */
@@ -940,6 +978,23 @@ export interface components {
              * @example 3
              */
             check_no?: number | null;
+            /**
+             * Remark No
+             * @description `resolution`: the remark it resolves
+             * @example null
+             */
+            remark_no?: number | null;
+            /**
+             * @description `resolution`: how the remark was resolved
+             * @example null
+             */
+            remark_outcome?: components["schemas"]["RemarkOutcome"] | null;
+            /**
+             * Continuation Key
+             * @description `resolution`: key of the task the work moved to; set only when the outcome is `accepted`
+             * @example null
+             */
+            continuation_key?: string | null;
             /** @description `verdict`: how the check ended */
             outcome?: components["schemas"]["VerdictOutcome"] | null;
         };
@@ -970,13 +1025,13 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Empty for entries whose title is written by their author */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
          * @enum {string}
          */
-        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed";
+        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed";
         /**
          * ErrorDetail
          * @description Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд.
@@ -1343,6 +1398,10 @@ export interface components {
         /**
          * PlainEntryCreate
          * @description Решение, попытка, находка, артефакт, заметка. Нагрузки нет.
+         *
+         *     Замечание сюда не входит: у него свой вариант (`RemarkEntryCreate`), потому что
+         *     `type` — разметка объединения, и один вариант на шесть типов не дал бы фронтенду
+         *     сузить тип до замечания там, где это нужно.
          */
         PlainEntryCreate: {
             /**
@@ -1631,6 +1690,214 @@ export interface components {
              * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
              */
             description?: string;
+        };
+        /**
+         * RemarkEntryCreate
+         * @description Замечание: «вышло не то». Нагрузки нет, заголовок пишет автор.
+         */
+        RemarkEntryCreate: {
+            /**
+             * Body
+             * @description Markdown body of the entry
+             * @default
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example []
+             */
+            refs?: string[];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Номер задачи выдаётся до валидации
+             */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "remark";
+        };
+        /**
+         * RemarkEntryRead
+         * @description Замечание к сделанному. Открыто, пока в деле нет `resolution` с его номером.
+         */
+        RemarkEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the task, from 1; `TRK-42#12`
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "remark";
+            payload?: components["schemas"]["EmptyPayload"];
+        };
+        /**
+         * RemarkOutcome
+         * @description Чем разобрано замечание (`CONCEPT.md`, 3.4).
+         *
+         *     Список закрыт и покрывает все четыре судьбы претензии: поправили сразу, приняли в
+         *     работу отдельной задачей, не поняли и ждём уточнения, менять не будем. Свободного
+         *     «прочее» здесь нет намеренно — оно снова сделало бы исход текстом.
+         * @enum {string}
+         */
+        RemarkOutcome: "fixed" | "accepted" | "needs_detail" | "declined";
+        /**
+         * ResolutionEntryCreate
+         * @description Резолюция. Заголовок не принимается: он собирается из ссылки на замечание и исхода.
+         */
+        ResolutionEntryCreate: {
+            /**
+             * Body
+             * @description Markdown body of the entry
+             * @default
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example []
+             */
+            refs?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resolution";
+            payload: components["schemas"]["ResolutionPayload"];
+        };
+        /**
+         * ResolutionEntryRead
+         * @description Резолюция по замечанию: чем разобрано и куда ушла работа.
+         */
+        ResolutionEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the task, from 1; `TRK-42#12`
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resolution";
+            payload: components["schemas"]["ResolutionPayload"];
+        };
+        /**
+         * ResolutionPayload
+         * @description Нагрузка резолюции: какое замечание разобрано, чем и куда ушла работа.
+         */
+        ResolutionPayload: {
+            /**
+             * Remark No
+             * @description Number of the `remark` entry in the same task
+             * @example 7
+             */
+            remark_no: number;
+            /**
+             * @description How the remark was resolved: fixed right away, accepted into a separate task, needs more detail, or declined
+             * @example accepted
+             */
+            outcome: components["schemas"]["RemarkOutcome"];
+            /**
+             * Task
+             * @description Key of the continuation task; required with `accepted` and not accepted with any other outcome
+             * @example TRK-43
+             */
+            task?: string | null;
         };
         /**
          * SectionChangedEntryRead
@@ -2012,6 +2279,12 @@ export interface components {
              */
             open_blocking_questions: number;
             /**
+             * Open Remarks
+             * @description Remarks with no resolution: someone said the result is not what was needed and nobody has answered yet
+             * @example 1
+             */
+            open_remarks: number;
+            /**
              * Last Summary At
              * @description When the latest summary was filed; null if the case has none
              */
@@ -2073,6 +2346,11 @@ export interface components {
              * @description Every question with no answer yet, in full
              */
             questions: components["schemas"]["QuestionEntryRead"][];
+            /**
+             * Remarks
+             * @description Every remark with no resolution yet, in full
+             */
+            remarks: components["schemas"]["RemarkEntryRead"][];
             /**
              * Transitions
              * @description Targets allowed by the transition table from the current status. Transition validations (sections, summary, verdicts, blockers) are checked on the move
@@ -3601,11 +3879,11 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `priority`, `queue`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character */
+                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names */
+                /** @description Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -3627,6 +3905,10 @@ export interface operations {
                 open_questions?: number | null;
                 /** @description Of those, the ones marked `blocking`; `0` means nothing is in the way */
                 open_blocking_questions?: number | null;
+                /** @description Exact number of remarks with no resolution. Use the query language for ranges: `open_remarks: > 0` */
+                open_remarks?: number | null;
+                /** @description Remarks resolved as `accepted` whose continuation task is still open: reviewed, but the work is not finished */
+                remarks_in_work?: number | null;
                 /** @description Substring of the title or the description, matched case-insensitively */
                 text?: string | null;
             };
@@ -4143,7 +4425,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlainEntryCreate"] | components["schemas"]["SummaryEntryCreate"] | components["schemas"]["QuestionEntryCreate"] | components["schemas"]["AnswerEntryCreate"] | components["schemas"]["VerdictEntryCreate"];
+                "application/json": components["schemas"]["PlainEntryCreate"] | components["schemas"]["SummaryEntryCreate"] | components["schemas"]["QuestionEntryCreate"] | components["schemas"]["AnswerEntryCreate"] | components["schemas"]["VerdictEntryCreate"] | components["schemas"]["RemarkEntryCreate"] | components["schemas"]["ResolutionEntryCreate"];
             };
         };
         responses: {
@@ -4471,7 +4753,7 @@ export interface operations {
                 queue?: string | null;
                 /** @description Keep only questions that do (or do not) block the work */
                 blocking?: boolean | null;
-                /** @description true keeps questions with no answer yet, false keeps the answered ones. To read every question of one task use its case with `types=question` */
+                /** @description true (the default) keeps only questions with no answer yet; false drops the filter and returns every question, answered or not. To read the questions of one task use its case with `types=question` */
                 open?: boolean;
                 /** @description Page size */
                 limit?: number;
@@ -4494,6 +4776,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CollectionResponse_QuestionEntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_remarks: {
+        parameters: {
+            query?: {
+                /** @description Signature the remark is filed under: a participant name or a temporary agent label; matching ignores case. Omit to get remarks by anyone */
+                author?: string | null;
+                /** @description Queue key of the remark's task; matching ignores case */
+                queue?: string | null;
+                /** @description true (the default) keeps only remarks with no resolution yet; false drops the filter and returns every remark, resolved or not. To read the remarks of one task use its case with `types=remark` */
+                open?: boolean;
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_RemarkEntryRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -4674,7 +5044,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
