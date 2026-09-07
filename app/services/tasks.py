@@ -139,14 +139,23 @@ class TaskChange:
 
 @dataclass(frozen=True, slots=True)
 class TaskMutation:
-    """Результат применения изменений: сама задача и то, что реально изменилось.
+    """Результат применения изменений: сама задача, что реально изменилось и чем это подшито.
 
     Пустой список — законный результат: клиент прислал то, что уже стоит. Версия при
-    этом не растёт, и повторный запрос с той же версией не упрётся в конфликт.
+    этом не растёт, дело не пополняется, и повторный запрос с той же версией не упрётся
+    в конфликт.
+
+    `entries` — номера служебных записей, подшитых **этим** вызовом, в порядке полей из
+    `changes`: на каждое изменение приходится ровно одна запись, и списки идут парой.
+    Номера нужны короткому ответу MCP (`app/mcp/views.py`, `mutation`): без них агент,
+    получивший короткий ответ, не сможет сослаться на только что подшитую запись и
+    пойдёт за ней вторым вызовом — то есть ровно за тем, что короткий ответ экономил.
+    REST их не показывает: интерфейс перечитывает карточку целиком.
     """
 
     task: Task
     changes: tuple[TaskChange, ...] = ()
+    entries: tuple[int, ...] = ()
 
     @property
     def changed(self) -> bool:
@@ -407,12 +416,16 @@ async def apply_task_changes(
     # Служебные записи — после записи задачи и в той же транзакции. Тип записи выбирает
     # сценарий дела по полю, и поле без записи остаться не может: изменение, не
     # оставившее записи, не доходит до ленты и до открытого экрана (`CONCEPT.md`, 4.1).
+    # Номера записей собираются здесь же, а не пересчитываются потом запросом: они
+    # известны в момент подшивки, и второй проход по делу ради них был бы запросом за
+    # тем, что уже держали в руках.
+    filed: list[int] = []
     for change in recorded:
         field = TaskField(change.field)
         if field is TaskField.STATUS:
             assert status_change is not None
             from_status, to_status, reason = status_change
-            await case_service.record_status_changed(
+            entry = await case_service.record_status_changed(
                 session,
                 task,
                 actor=actor,
@@ -421,20 +434,21 @@ async def apply_task_changes(
                 reason=reason,
             )
         elif field is TaskField.ASSIGNEE:
-            await case_service.record_assignee_changed(
+            entry = await case_service.record_assignee_changed(
                 session, task, actor=actor, before=change.before, after=change.after
             )
         elif field in BACKLOG_ONLY_FIELDS:
-            await case_service.record_section_changed(
+            entry = await case_service.record_section_changed(
                 session, task, actor=actor, field=field, before=change.before, after=change.after
             )
         else:
             # Обвязка: `tags` и `priority`. Ветка без условия намеренно — новое поле
             # карточки получит запись само, а не окажется тихо немым в ленте.
-            await case_service.record_field_changed(
+            entry = await case_service.record_field_changed(
                 session, task, actor=actor, field=field, before=change.before, after=change.after
             )
-    return TaskMutation(task=task, changes=tuple(recorded))
+        filed.append(entry.no)
+    return TaskMutation(task=task, changes=tuple(recorded), entries=tuple(filed))
 
 
 # --- Внутреннее -----------------------------------------------------------------------

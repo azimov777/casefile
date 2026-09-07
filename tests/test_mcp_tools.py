@@ -17,6 +17,7 @@
   чем показывал интерфейс», и упиралось бы в два разных ответа на один вопрос.
 """
 
+import json
 import uuid
 from typing import Any
 
@@ -26,7 +27,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.queue import Queue
 from app.db.models.task import Task
+from app.domain.case import EntryType
+from app.domain.tokens import TokenScope
 from app.mcp.arguments import DEFAULT_SEARCH_FIELDS
+from app.services import case as case_service
 from app.services import queues as queues_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -333,19 +337,159 @@ async def test_search_tasks_clips_a_long_text_and_says_so(
 async def test_update_task_touches_only_what_was_passed(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
-    """Обзорная проверка 5: теги не трогают исполнителя, а `null` его снимает."""
+    """Обзорная проверка 5: теги не трогают исполнителя, а `null` его снимает.
+
+    Состояние читается `get_task` после каждой правки, а не её ответом: изменяющий
+    инструмент отвечает коротко (TRK-12), карточки в его ответе больше нет. Проверка от
+    этого не ослабла — она смотрит на то же самое там, где оно теперь живёт, и по-прежнему
+    ловит промежуточное состояние, а не только итог.
+    """
     async with mcp_session(task_secret) as session:
+
+        async def card() -> dict[str, Any]:
+            return (await call(session, "get_task", key=task.key))["task"]
+
         assigned = await call(
             session, "update_task", key=task.key, changes={"assignee": "release_bot"}
         )
+        after_assign = await card()
         tagged = await call(session, "update_task", key=task.key, changes={"tags": ["x"]})
+        after_tag = await card()
         cleared = await call(session, "update_task", key=task.key, changes={"assignee": None})
+        after_clear = await card()
 
-    assert assigned["assignee"] == "release_bot"
-    assert tagged["assignee"] == "release_bot", "правка тегов сняла исполнителя"
-    assert tagged["tags"] == ["x"]
-    assert cleared["assignee"] is None
-    assert cleared["tags"] == ["x"], "снятие исполнителя стёрло теги"
+    # Каждая правка что-то подшила: пустой `entries` означал бы «прислано то, что уже
+    # стоит», и тогда проверка ниже прошла бы по чужой причине.
+    assert assigned["entries"] and tagged["entries"] and cleared["entries"]
+    assert after_assign["assignee"] == "release_bot"
+    assert after_tag["assignee"] == "release_bot", "правка тегов сняла исполнителя"
+    assert after_tag["tags"] == ["x"]
+    assert after_clear["assignee"] is None
+    assert after_clear["tags"] == ["x"], "снятие исполнителя стёрло теги"
+
+
+async def test_the_short_answer_carries_enough_for_the_next_move(
+    mcp_session: Connect, task_secret: str, open_task: Task
+) -> None:
+    """Обзорная проверка 3 TRK-12: версии из короткого ответа хватает на следующий ход.
+
+    Это и есть граница урезания. Ответ изменяющего инструмента лишился карточки, но
+    обязан оставить то, чего агент не мог знать заранее: новую версию, новый статус и
+    номера подшитых записей. Версия проверяется делом, а не наличием поля: полученная
+    из `transition`, она уходит в `update_task` следующим вызовом и не должна дать
+    `version_conflict` — иначе экономия обернулась бы лишним `get_task` после каждого
+    перехода, ровно тем, что задача убирала.
+    """
+    key = open_task.key
+    async with mcp_session(task_secret) as session:
+        moved = await call(session, "transition", key=key, to="in_progress")
+        updated = await call(
+            session, "update_task", key=key, changes={"tags": ["x"]}, version=moved["version"]
+        )
+        card = (await call(session, "get_task", key=key))["task"]
+
+    assert moved["key"] == key
+    assert moved["status"] == "in_progress"
+    # Переход всегда что-то меняет, поэтому запись ровно одна — подшитая `status_changed`.
+    assert len(moved["entries"]) == 1
+    # Карточки в ответе больше нет: это и есть снятое поведение.
+    assert set(moved) == {"key", "status", "version", "entries"}
+
+    assert updated["version"] == moved["version"] + 1
+    assert updated["entries"] == [moved["entries"][0] + 1]
+    assert card["tags"] == ["x"]
+
+
+async def test_an_update_that_changes_nothing_files_nothing(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Пустой `entries` — законный ответ, и по нему агент отличает «уже так было».
+
+    Отдельного признака рядом нет намеренно (`app/mcp/views.py`, `mutation`): два способа
+    узнать один факт разошлись бы при первой же правке. Значит пустой список обязан
+    приходить именно тогда, когда версия не выросла, — это и проверяется.
+    """
+    async with mcp_session(task_secret) as session:
+        first = await call(session, "update_task", key=task.key, changes={"tags": ["x"]})
+        again = await call(session, "update_task", key=task.key, changes={"tags": ["x"]})
+
+    assert first["entries"]
+    assert again["entries"] == []
+    assert again["version"] == first["version"], "версия выросла на правке, ничего не изменившей"
+
+
+#: Раздел задачи, похожей на настоящую. Разделы боевых задач очереди `TRK` — это абзацы
+#: по несколько сотен символов каждый, и именно они дают тот множитель, ради которого
+#: задача затевалась. Задача из фикстуры их не имеет: её разделы в одну строку, и на ней
+#: замер показал бы восьмикратную разницу вместо настоящей — то есть соврал бы в меньшую
+#: сторону про боевой случай.
+REALISTIC_SECTION = (
+    "Ответы собираются в `app/mcp/views.py`; сами инструменты — `app/mcp/tools/tasks.py` "
+    "и `app/mcp/tools/links.py`. Там же в шапке уже записано правило, которое эта задача "
+    "продолжает: справочные представления короче реестровых, потому что агенту нужен "
+    "контекст, не строка таблицы. Пакет преемника остаётся полным: это вход в задачу."
+)
+
+#: Потолок короткого ответа. Он не зависит от карточки вовсе: четыре поля, из которых
+#: растёт только список номеров записей, и то на единицы байт. Число с запасом.
+SHORT_ANSWER_CEILING = 256
+
+
+async def test_the_short_answer_is_an_order_of_magnitude_smaller(
+    mcp_session: Connect, task_secret: str, queue: Queue, db_session: AsyncSession, task: Task
+) -> None:
+    """Обзорная проверка 2 TRK-12: ответ перехода короче прежнего больше чем в десять раз.
+
+    Меряется тем же текстом, который уезжает в контекст агента: `tool_text` — это ровно
+    то, что он получает. Прежний ответ восстанавливается не по памяти: он был
+    `views.task`, а это в точности раздел `task` пакета преемника, и его отдаёт тот же
+    `get_task` тем же сериализатором. Обе величины сняты с одной задачи в один момент.
+
+    Проверяются два разных утверждения, и второе важнее первого:
+
+    - десятикратность — на задаче с разделами такой длины, какая бывает у настоящих;
+    - **независимость** короткого ответа от карточки — на любой. Это и есть снятое
+      свойство: раньше цена перехода росла вместе с задачей, теперь она постоянна, и
+      никакая правка разделов её не поднимет.
+
+    Дело набивается двадцатью записями, как требует проверка. На размер ответа они не
+    влияют и не влияли: он от длины дела не зависел никогда (`TRK-12#5`).
+    """
+    actor = Actor(author=task.created_by, scope=TokenScope.TASK)
+    big = await tasks_service.create_task(
+        db_session,
+        actor=actor,
+        queue=queue,
+        title="Разделы длиной, будто из боевой очереди",
+        description=REALISTIC_SECTION,
+        goal=REALISTIC_SECTION,
+        context=REALISTIC_SECTION,
+        constraints=REALISTIC_SECTION,
+        output=REALISTIC_SECTION,
+        checks=[REALISTIC_SECTION, REALISTIC_SECTION],
+    )
+    await tasks_service.transition_task(db_session, big, actor=actor, to="open")
+    for number in range(20):
+        await case_service.add_entry(
+            db_session, big, actor=actor, type=EntryType.NOTE, title=f"Запись {number}"
+        )
+    await db_session.commit()
+
+    async with mcp_session(task_secret) as session:
+        package = await call(session, "get_task", key=big.key)
+        assert len(package["index"]) >= 20, "проверка требует описи не меньше двадцати записей"
+        moved = await session.call_tool("transition", {"key": big.key, "to": "in_progress"})
+        # Задача из фикстуры: карточка на порядок меньше, ответ обязан быть тем же.
+        small = await session.call_tool("transition", {"key": task.key, "to": "open"})
+
+    before = len(json.dumps(package["task"], ensure_ascii=False, default=str))
+    after = len(tool_text(moved))
+
+    assert after * 10 < before, f"было {before} Б, стало {after} Б — меньше десяти раз"
+    assert after < SHORT_ANSWER_CEILING
+    assert len(tool_text(small)) < SHORT_ANSWER_CEILING, (
+        "короткий ответ вырос вслед за длиной карточки"
+    )
 
 
 async def test_update_task_refuses_a_stale_version(

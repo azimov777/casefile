@@ -218,6 +218,11 @@ def register(tools: Toolset) -> None:
         работе, что ограничения или выход неверны — сначала сводка, потом
         `transition(key, "backlog", reason=...)`, потом правка: изменённый контракт
         заслуживает страницы в деле, поэтому путь намеренно не короткий.
+
+        Отвечает коротко: ключ, статус, новая версия и номера подшитых записей. Пустой
+        `entries` означает «прислано то, что уже стоит» — версия тогда не выросла.
+        Карточку целиком не возвращает: ты её только что прислал. Нужна она вся —
+        `get_task`, но после правки он обычно не нужен.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -228,7 +233,7 @@ def register(tools: Toolset) -> None:
                 changes=tasks_service.TaskChanges(**changes.model_dump(exclude_unset=True)),
                 expected_version=version,
             )
-            return views.task(mutation.task)
+            return views.mutation(mutation)
 
     @tools.tool()
     async def transition(
@@ -256,13 +261,18 @@ def register(tools: Toolset) -> None:
         `in_progress` и закрывайся оттуда: прямого хода `waiting → done` нет, вердикты
         по проверкам никто не отменял. Сам трекер в `waiting` не переводит и из него не
         выводит: оба хода твои.
+
+        Отвечает коротко: ключ, новый статус, новая версия и номер подшитой
+        `status_changed`. Карточку целиком не возвращает — ты её прочитал, входя в
+        задачу, и разделы с прошлого хода не изменились. Нужна она вся — `get_task`, но
+        после перехода он обычно не нужен.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
             mutation = await tasks_service.transition_task(
                 session, task, actor=actor, to=to, reason=reason
             )
-            return views.task(mutation.task)
+            return views.mutation(mutation)
 
 
 def _terms(
