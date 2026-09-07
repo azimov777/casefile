@@ -71,6 +71,13 @@
   gap: calc(var(--spacing) * 4);
 }
 
+/*
+ * Блоки различаются ролью, а не рамкой (решение Д11). Главное — сводка, вопросы,
+ * замечания и задание: у них поля, и текст в них живёт с воздухом. Справочное —
+ * опись дела и связи: это списки, и они идут во всю ширину поверхности, без своих
+ * полей. Одинаковая рамка на каждом блоке уравнивала главное и справочное, хотя
+ * карточку открывают ради первого.
+ */
 .block {
   display: flex;
   flex-direction: column;
@@ -84,6 +91,21 @@
   border: 1px solid var(--color-line);
   border-radius: var(--radius-control);
   background: var(--color-surface);
+}
+
+/*
+ * Список внутри поверхности: заголовок отделён линией, а строки идут краями блока.
+ * Так справочное перестаёт выглядеть ещё одной карточкой рядом с главным.
+ */
+.listBlock {
+  gap: 0;
+  padding: 0;
+}
+
+.listBlock > .title,
+.listBlock > .blockHead {
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3) calc(var(--spacing) * 2);
+  border-bottom: 1px solid var(--color-line);
 }
 
 /*

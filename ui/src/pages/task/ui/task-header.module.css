@@ -27,11 +27,6 @@
   gap: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
 }
 
-.assignee {
-  display: inline-flex;
-  align-items: center;
-}
-
 .facts {
   display: flex;
   flex-wrap: wrap;
@@ -62,4 +57,39 @@
 .empty {
   color: var(--color-muted);
   font-style: italic;
+}
+
+/* Исполнитель: аватар из двух букв и имя рядом — единственная строка про человека. */
+.assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 1.5);
+  font-size: var(--text-meta);
+  color: var(--color-muted);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: calc(var(--spacing) * 5);
+  height: calc(var(--spacing) * 5);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-sunken);
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.assigneeName {
+  font-family: var(--font-mono);
+  font-size: var(--text-mark);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing) * 1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

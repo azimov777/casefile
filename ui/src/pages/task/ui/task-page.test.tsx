@@ -50,6 +50,27 @@ function entriesCalls() {
 }
 
 describe('карточка задачи', () => {
+  it('в описи род записи виден знаком, а тип по-прежнему назван словом контракта', async () => {
+    server.use(packageOf('DEMO-6'), entries('DEMO-6'));
+
+    renderApp('/tasks/DEMO-6');
+    await screen.findByRole('heading', { name: /DEMO-6/ });
+
+    const kinds = ['created', 'status_changed', 'decision', 'verdict', 'summary'];
+    const shapes = kinds.map((type) => {
+      const mark = screen.getAllByText(type)[0]?.closest('[data-mark="kind"]');
+      expect(mark, `у записи ${type} нет знака рода`).not.toBeNull();
+      return (mark as HTMLElement).querySelector('svg')?.innerHTML ?? '';
+    });
+
+    // Пять родов — пять разных рисунков: в описи их по двадцать подряд, и без
+    // знака `verdict` от `section_changed` отличается только чтением слова.
+    expect(new Set(shapes).size).toBe(kinds.length);
+
+    // Идентификатор контракта остаётся на месте: он тот же, что видит агент.
+    for (const type of kinds) expect(screen.getAllByText(type)[0]).toBeInTheDocument();
+  });
+
   it('в шапке статус и приоритет названы родом: четыре плашки расслоились', async () => {
     server.use(packageOf('DEMO-6'), entries('DEMO-6'));
 
@@ -276,26 +297,25 @@ describe('карточка задачи', () => {
     expect(list).toHaveTextContent('Незнакомое поле отвечает списком допустимых');
   });
 
-  it('каждая плашка шапки называет род своего значения', async () => {
+  it('в шапке четыре рода значений различаются формой, а не подписью внутри плашки', async () => {
     server.use(packageOf('DEMO-4'));
     renderApp('/tasks/DEMO-4');
 
-    // Плашка целиком — это родитель подписи рода: подпись живёт внутри плашки,
-    // поэтому и попадает в её доступное имя.
-    // `getAllByText` и первое совпадение: тегов у задачи бывает несколько, и
-    // каждый несёт свою подпись — проверяем, что подпись есть, а не сколько их.
-    const badgeOf = (kind: string) =>
-      screen.getAllByText(new RegExp(`^${kind}\\s*$`))[0]?.parentElement;
+    const heading = await screen.findByRole('heading', { name: /DEMO-4/ });
+    const header = heading.closest('header') as HTMLElement;
 
-    // Четыре плашки подряд — `open`, `normal`, `demo_agent`, `retention` — без
-    // подписей различались только по колонке в списке, которой на карточке нет.
-    await screen.findByText(/^статус\s*$/);
-    expect(badgeOf('статус')).toHaveTextContent(/статус\s+in_progress/);
-    for (const kind of ['приоритет', 'исполнитель', 'тег']) {
-      // Значение проверяется как «непустое»: конкретные `normal` и `demo_agent`
-      // задаёт закреплённый набор, и привязывать к ним проверку подписей незачем.
-      expect(badgeOf(kind)).toHaveTextContent(new RegExp(`${kind}\\s+\\S+`));
-    }
+    // Статус и приоритет — знаки со своей формой (решение Д7), и род остаётся
+    // слышен диктору.
+    expect(header).toHaveTextContent(/статус\s+in_progress/);
+    expect(header).toHaveTextContent(/приоритет\s+\S+/);
+
+    // Исполнитель — имя с аватаром, а не плашка: это единственная строка про
+    // человека, и плашка уравнивала её со статусом и тегом.
+    expect(header).toHaveTextContent(/исполнитель\s+\S+/);
+
+    // Теги — список с общим именем, а не набор плашек, каждая со словом «тег».
+    const tags = within(header).getByRole('list', { name: 'Теги' });
+    expect(within(tags).getAllByRole('listitem').length).toBeGreaterThan(0);
   });
 
   it('возможные переходы остаются справкой: ни роли, ни фокуса', async () => {

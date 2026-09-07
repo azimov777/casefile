@@ -40,20 +40,35 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
       <div className={styles.badges}>
         <StatusMark status={task.status} />
         <PriorityMark priority={task.priority} />
+
+        {/*
+         * Исполнитель — не плашка, а имя с аватаром: плашка уравнивала его со статусом
+         * и тегом, хотя это единственная в шапке строка про человека. Род значения
+         * остаётся в доступном имени.
+         */}
         <span className={styles.assignee}>
+          <span className="sr-only">исполнитель </span>
           {task.assignee === null ? (
-            <span className={styles.empty}>исполнитель не назначен</span>
+            <span className={styles.empty}>не назначен</span>
           ) : (
-            <Badge mono kind="исполнитель">
-              {task.assignee}
-            </Badge>
+            <>
+              <span className={styles.avatar} aria-hidden="true">
+                {task.assignee.slice(0, 2)}
+              </span>
+              <span className={styles.assigneeName}>{task.assignee}</span>
+            </>
           )}
         </span>
-        {task.tags.map((tag) => (
-          <Badge key={tag} mono kind="тег">
-            {tag}
-          </Badge>
-        ))}
+
+        {task.tags.length === 0 ? null : (
+          <ul className={styles.tags} aria-label="Теги">
+            {task.tags.map((tag) => (
+              <li key={tag}>
+                <Badge mono>{tag}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {/* Признаки в той же строке, что и плашки: две отдельные строки одинаковых
             плашек занимали место главного, ничего не добавляя к различимости. */}

@@ -1,7 +1,12 @@
+/*
+ * Связи — список внутри поверхности карточки (решение Д11), поэтому свои поля
+ * держит он сам: у блока-списка их нет, иначе строки не доходили бы до краёв.
+ */
 .groups {
   display: flex;
   flex-direction: column;
   gap: calc(var(--spacing) * 3);
+  padding: calc(var(--spacing) * 3);
 }
 
 .group {

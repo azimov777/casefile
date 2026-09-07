@@ -4,11 +4,12 @@ import {
   AuthorName,
   EntryBody,
   EntryHeadline,
+  EntryKind,
   entryHeadline,
   entryQueryOptions,
   type EntryHeading,
 } from '@/entities/entry';
-import { Badge, QueryState, RelativeTime, TaskText } from '@/shared/ui';
+import { QueryState, RelativeTime, TaskText } from '@/shared/ui';
 import styles from './task-index.module.css';
 
 interface TaskIndexProps {
@@ -127,7 +128,9 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
           {heading.no}
         </th>
         <td>
-          <Badge mono>{heading.type}</Badge>
+          {/* Род записи знаком (решение Д10): в описи их по двадцать подряд, и
+              `verdict` от `section_changed` иначе отличается только чтением слова. */}
+          <EntryKind type={heading.type} />
         </td>
         <td>
           <AuthorName author={heading.author} />

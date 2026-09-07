@@ -161,7 +161,7 @@ export function TaskPage() {
             )}
           </section>
 
-          <section className={`${styles.block} ${styles.case}`} aria-labelledby="case">
+          <section className={`${styles.block} ${styles.listBlock}`} aria-labelledby="case">
             <div className={styles.blockHead}>
               <h2 className={styles.title} id="case">
                 Дело
@@ -230,14 +230,14 @@ export function TaskPage() {
             )}
           </section>
 
-          <section className={`${styles.block} ${styles.sections}`} aria-labelledby="sections">
+          <section className={styles.block} aria-labelledby="sections">
             <h2 className={styles.title} id="sections">
               Задание
             </h2>
             <TaskSections task={task} />
           </section>
 
-          <section className={`${styles.block} ${styles.links}`} aria-labelledby="links">
+          <section className={`${styles.block} ${styles.listBlock}`} aria-labelledby="links">
             <h2 className={styles.title} id="links">
               Связи
             </h2>
