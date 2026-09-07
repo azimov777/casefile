@@ -120,19 +120,22 @@ test('возврат с доски в задачу и назад сохраня�
   await card.getByRole('link').first().click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-\d+$/);
 
-  // Активный раздел не врёт: «Задачи» — это и таблица, и доска, и карточка.
-  await expect(page.getByRole('link', { name: 'Задачи' })).toHaveAttribute('aria-current', 'page');
+  // Место не врёт: очередь задачи прочитана из её ключа и подсвечена в панели —
+  // подробнее это проверяет `side.spec.ts`.
+  await expect(page.getByLabel('Где я')).toContainText('DEMO');
 
   await page.getByRole('link', { name: 'К списку с отбором' }).click();
   await expect(page).toHaveURL(/view=board/);
   await expect(page).toHaveURL(/assignee=demo_agent/);
 });
 
-test('из входящей раздел «Задачи» ведёт ко всем задачам, а не в чужой отбор', async ({ page }) => {
+test('из входящей ссылка «Все задачи» ведёт ко всем задачам, а не в чужой отбор', async ({
+  page,
+}) => {
   await silenceJournal(page);
   await page.goto('/questions');
 
-  const section = page.getByRole('link', { name: 'Задачи' });
+  const section = page.getByRole('link', { name: 'Все задачи' });
   await expect(section).toHaveAttribute('href', '/tasks');
   await section.click();
   await expect(page).toHaveURL(/\/tasks$/);

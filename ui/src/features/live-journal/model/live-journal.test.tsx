@@ -49,7 +49,7 @@ describe('живой поток', () => {
     expect(await screen.findByText('на связи')).toBeInTheDocument();
     expect(liveJournal.connections).toBe(1);
 
-    await userEvent.setup().click(screen.getByRole('link', { name: 'Вопросы' }));
+    await userEvent.setup().click(screen.getByRole('link', { name: /Входящая/ }));
     server.use(
       http.get(`${API}/api/v1/questions`, () => collection([])),
       http.get(`${API}/api/v1/remarks`, () => collection([])),

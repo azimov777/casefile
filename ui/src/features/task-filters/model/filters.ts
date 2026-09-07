@@ -234,17 +234,29 @@ function conditionsOf(filters: TaskFilters): string | undefined {
  * Считается через запись в адрес, а не своим перечислением полей: новый фильтр иначе
  * пришлось бы вспомнить в двух местах, и забытый здесь тихо превратил бы «ничего не
  * нашлось по вашим условиям» в «в очереди пусто».
+ *
+ * Очередь условием не считается: она стала местом в интерфейсе (UI-38). Пустая очередь
+ * — это «здесь пока ничего нет», а не «ваши условия ничего не нашли», и предлагать
+ * сброс, который вынесет человека из очереди, здесь нечего.
  */
 export function hasConditions(filters: TaskFilters): boolean {
   const conditions = writeFilters({
     ...filters,
-    view: 'table',
+    ...PLACE,
     sort: DEFAULT_SORT,
     cursor: '',
     collapsed: DEFAULT_COLLAPSED,
   });
   return [...conditions.keys()].length > 0;
 }
+
+/**
+ * Что в адресе списка называет место, а не условие: очередь и вид.
+ *
+ * Сброс отбора их не трогает — человек остаётся там, где стоял, и смотрит тем же
+ * видом; «уйти из очереди» — отдельное действие, и делается оно в боковой панели.
+ */
+export const PLACE: Pick<TaskFilters, 'queue' | 'view'> = { queue: '', view: 'table' };
 
 /** Теги принимаются и повтором параметра, и перечислением через запятую. */
 export function splitTags(value: string): string[] {

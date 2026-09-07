@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
+import { fontsReady, readE2eToken, shellReady, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -23,9 +23,7 @@ function row(page: Page, key: string): Locator {
  * успевало, в полном — нет.
  */
 async function settled(page: Page): Promise<void> {
-  await expect(
-    page.getByRole('banner').getByRole('link', { name: /Открытых вопросов/ }),
-  ).toBeVisible();
+  await shellReady(page);
   await expect(page.locator('tbody tr').first()).toBeVisible();
 }
 
@@ -155,9 +153,7 @@ test('доступность списка и доски с растянутой 
 test('карточка доски ведёт в задачу целиком', async ({ page }) => {
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO&view=board');
-  await expect(
-    page.getByRole('banner').getByRole('link', { name: /Открытых вопросов/ }),
-  ).toBeVisible();
+  await shellReady(page);
 
   const card = page.getByRole('article').filter({ hasText: 'DEMO-3' }).first();
   await expect(card).toBeVisible();

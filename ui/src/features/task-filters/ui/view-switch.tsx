@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router';
-import { tasksHref, type TaskView } from '@/features/task-filters';
+import { tasksHref } from '../model/href';
+import type { TaskView } from '../model/filters';
 import { cn } from '@/shared/lib';
 
 const VIEWS: { value: TaskView; label: string }[] = [

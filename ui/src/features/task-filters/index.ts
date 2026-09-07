@@ -23,3 +23,4 @@ export {
 } from './model/summary';
 export { useTaskFilters, type TaskFiltersControl } from './model/use-task-filters';
 export { TaskFiltersForm } from './ui/task-filters';
+export { ViewSwitch } from './ui/view-switch';

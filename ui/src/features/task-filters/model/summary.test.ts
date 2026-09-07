@@ -25,7 +25,6 @@ describe('условия отбора словами', () => {
         withRemarks: true,
       }),
     ).toEqual([
-      'очередь DEMO',
       'статус open, in_progress',
       'приоритет high',
       'исполнитель owner',
@@ -38,7 +37,13 @@ describe('условия отбора словами', () => {
   });
 
   it('на доске не называет статус: столбцы показаны все, и параметром он не уходит', () => {
-    expect(labels({ view: 'board', queue: 'DEMO', status: ['open'] })).toEqual(['очередь DEMO']);
+    expect(labels({ view: 'board', queue: 'DEMO', status: ['open'], priority: ['high'] })).toEqual([
+      'приоритет high',
+    ]);
+  });
+
+  it('очередь условием не считает: она стала местом в интерфейсе, а не отбором', () => {
+    expect(labels({ queue: 'DEMO' })).toEqual([]);
   });
 
   it('порядок и режим условиями не считает: они меняют вид, а не состав выдачи', () => {

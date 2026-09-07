@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
-import { readFilters, writeFilters, type TaskFilters } from './filters';
+import { EMPTY_FILTERS, readFilters, writeFilters, type TaskFilters } from './filters';
 
 export interface TaskFiltersControl {
   filters: TaskFilters;
@@ -40,8 +40,18 @@ export function useTaskFilters(): TaskFiltersControl {
     [setSearchParams],
   );
 
+  /**
+   * Сброс снимает условия, но не место: очередь и вид остаются. Человек просил
+   * показать всё, а не унести себя из очереди, в которую он пришёл (UI-38).
+   */
   const reset = useCallback(() => {
-    setSearchParams(new URLSearchParams(), { replace: true });
+    setSearchParams(
+      (previous) => {
+        const { queue, view } = readFilters(previous);
+        return writeFilters({ ...EMPTY_FILTERS, queue, view });
+      },
+      { replace: true },
+    );
   }, [setSearchParams]);
 
   return { filters, apply, goToPage, reset };

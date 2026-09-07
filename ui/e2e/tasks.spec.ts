@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { readE2eToken, side, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -37,10 +37,14 @@ test('отбор по статусу open даёт ровно открытые �
   // Свёрнутый отбор называет условие словами, не заставляя разворачивать форму.
   await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('статус open');
 
+  // Очередь стоит там, где она теперь живёт, — местом в боковой панели, а не полем
+  // формы: подсветка переживает перезагрузку вместе с адресом (UI-38).
+  await expect(side(page).getByRole('link', { name: /DEMO/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
   await page.getByRole('button', { name: 'Изменить отбор' }).click();
-  // Подпись поля оборачивает и текст, и сам список, поэтому доступное имя длиннее
-  // слова «Очередь»; отбор по началу имени отделяет его от кнопки снятия чипа.
-  await expect(page.getByRole('combobox', { name: /^Очередь/ })).toHaveValue('DEMO');
   await expect(page.getByRole('checkbox', { name: 'open' })).toBeChecked();
   await expect(rows(page)).toHaveCount(2);
 });

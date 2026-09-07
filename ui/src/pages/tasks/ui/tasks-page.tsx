@@ -13,7 +13,6 @@ import { type Page } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { TasksBoard } from './tasks-board';
 import { TasksTable } from './tasks-table';
-import { ViewSwitch } from './view-switch';
 import styles from './tasks-page.module.css';
 
 /**
@@ -92,7 +91,6 @@ export function TasksPage() {
         <div className={styles.filters}>
           <TaskFiltersForm filters={filters} onApply={apply} onReset={reset} problem={problem} />
         </div>
-        <ViewSwitch view={filters.view} />
       </div>
 
       {/*

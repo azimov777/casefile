@@ -23,7 +23,10 @@ test('свёрнутый отбор с двумя условиями заним�
   // Развёрнутая форма занимала около 295 px первого экрана; свёрнутая обязана
   // укладываться в строку — иначе чипы просто заменили бы одну потерю места другой.
   expect(box?.height ?? 0).toBeLessThanOrEqual(56);
-  await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('очередь DEMO');
+  // Очередь среди условий не значится: она стала местом в интерфейсе (UI-38).
+  const conditions = page.getByRole('list', { name: 'Условия отбора' });
+  await expect(conditions).toContainText('статус open, in_progress');
+  await expect(conditions).not.toContainText('очередь');
 });
 
 test('чип снимается клавиатурой, и фокус не падает на body', async ({ page }) => {

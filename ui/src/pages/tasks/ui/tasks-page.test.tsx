@@ -59,8 +59,8 @@ describe('список задач', () => {
     await screen.findByText('DEMO-3');
 
     const conditions = screen.getByRole('list', { name: 'Условия отбора' });
-    expect(within(conditions).getAllByRole('listitem')).toHaveLength(2);
-    expect(conditions).toHaveTextContent('очередь DEMO');
+    // Очередь среди чипов не значится: она место, а не условие (UI-38).
+    expect(within(conditions).getAllByRole('listitem')).toHaveLength(1);
     expect(conditions).toHaveTextContent('статус open, in_progress');
 
     // Доступное имя называет условие целиком: «крестик» сам по себе диктору
@@ -257,7 +257,6 @@ describe('список задач', () => {
     await screen.findByText('DEMO-3');
     await expandFilters(user);
 
-    expect(screen.getByLabelText('Очередь')).toHaveValue('DEMO');
     expect(screen.getByRole('checkbox', { name: 'open' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'in_progress' })).not.toBeChecked();
     expect(screen.getByLabelText('Исполнитель')).toHaveValue('owner');
@@ -278,7 +277,7 @@ describe('список задач', () => {
     expect(await screen.findByText('DEMO-3')).toBeInTheDocument();
   });
 
-  it('пустую выдачу объясняет и даёт сбросить условия', async () => {
+  it('пустую выдачу объясняет и даёт сбросить условия, не унося из очереди', async () => {
     const user = userEvent.setup();
     server.use(listing(() => collection([])));
 
@@ -287,9 +286,12 @@ describe('список задач', () => {
     expect(await screen.findByText('Задач по этим условиям нет')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Сбросить фильтры' }));
 
+    // Сброс снимает условия, но не место: человек остаётся в очереди, в которую
+    // пришёл, — «уйти отсюда» делается в боковой панели (UI-38).
     const last = lastRequest();
-    expect(last.searchParams.get('queue')).toBeNull();
+    expect(last.searchParams.getAll('queue')).toEqual(['DEMO']);
     expect(last.searchParams.getAll('status')).toEqual([]);
+    expect(address.current).toBe('/tasks?queue=DEMO');
   });
 
   it('отказ бэкенда объясняет по коду, а не английской фразой', async () => {
@@ -326,12 +328,7 @@ describe('свёрнутый отбор', () => {
       within(conditions)
         .getAllByRole('listitem')
         .map((item) => item.textContent?.replace('Убрать условие: ', '')),
-    ).toEqual([
-      'очередь DEMO',
-      'статус open, in_progress',
-      'исполнитель owner',
-      'теги frontend, ux',
-    ]);
+    ).toEqual(['статус open, in_progress', 'исполнитель owner', 'теги frontend, ux']);
   });
 
   it('без условий говорит, что показаны все задачи, и не предлагает сброс', async () => {
@@ -566,18 +563,16 @@ describe('переключение вида', () => {
     expect(screen.getAllByRole('link', { name: 'Доска' })).toHaveLength(1);
   });
 
-  it('раздел «Задачи» в шапке подсвечен на доске и возвращает в неё с отбором', async () => {
+  it('верхняя полоса называет место: очередь и раздел', async () => {
     server.use(listing(() => collection([task('DEMO-3')])));
 
     open('/tasks?view=board&queue=DEMO&priority=high');
     await screen.findByText('DEMO-3');
 
-    const section = screen.getByRole('link', { name: 'Задачи' });
-    expect(section).toHaveAttribute('aria-current', 'page');
-    expect(section).toHaveAttribute('href', '/tasks?view=board&queue=DEMO&priority=high');
+    expect(screen.getByLabelText('Где я')).toHaveTextContent('DEMO/Задачи');
   });
 
-  it('с карточки задачи раздел зовёт ко всем задачам: условиям взяться неоткуда', async () => {
+  it('внутри задачи место называет её очередь и ключ, а вида не показывает', async () => {
     server.use(
       listing(() => collection([task('DEMO-3')])),
       http.get(`${API}/api/v1/tasks/DEMO-3`, () => data(taskPackage('DEMO-3'))),
@@ -586,6 +581,9 @@ describe('переключение вида', () => {
     open('/tasks/DEMO-3?entry=4');
     await screen.findAllByText('DEMO-3');
 
-    expect(screen.getByRole('link', { name: 'Задачи' })).toHaveAttribute('href', '/tasks');
+    // Очередь прочитана из ключа задачи: отдельного запроса ради неё нет.
+    expect(screen.getByLabelText('Где я')).toHaveTextContent('DEMO/DEMO-3');
+    // Переключать нечего: вид есть только у списка.
+    expect(screen.queryByRole('link', { name: 'Доска' })).not.toBeInTheDocument();
   });
 });

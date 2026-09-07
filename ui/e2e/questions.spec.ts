@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { fontsReady, readE2eToken } from './contour';
+import { fontsReady, readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
@@ -24,8 +24,8 @@ test('доступность входящей', async ({ page }) => {
 test('входящая показывает адресованный вопрос и отбирает блокирующие', async ({ page }) => {
   await page.goto('/questions');
 
-  const header = page.getByRole('banner');
-  await expect(header.getByText(/^Открытых вопросов: \d+$/)).toBeVisible();
+  // Счётчик переехал из шапки в боковую панель (UI-38) и подписан там числом.
+  await expect(side(page).getByText(/^Открытых вопросов: \d+$/)).toBeVisible();
 
   const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
   await expect(question).toBeVisible();

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import type { Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -43,4 +43,20 @@ export async function silenceJournal(page: Page): Promise<void> {
  */
 export async function fontsReady(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
+}
+
+/**
+ * Боковая панель оболочки: очереди, входящая со счётчиком, участник, состояние потока
+ * и выход. До UI-38 всё это стояло в шапке, и тесты искали его в `banner`.
+ */
+export function side(page: Page): Locator {
+  return page.getByRole('complementary', { name: 'Разделы трекера' });
+}
+
+/**
+ * Ждёт, пока оболочка договорит: участник и счётчик вопросов приходят `bootstrap`ом
+ * уже после первой отрисовки. Замер геометрии до этого ведёт мимо.
+ */
+export async function shellReady(page: Page): Promise<void> {
+  await expect(side(page).getByRole('link', { name: /Открытых вопросов/ })).toBeVisible();
 }

@@ -462,7 +462,7 @@ describe('замечание к задаче', () => {
     expect(screen.getByLabelText('Замечание')).toHaveValue('Недописанное замечание');
 
     // Уход на список и возврат — тоже: черновик живёт в хранилище сеанса.
-    await user.click(screen.getByRole('link', { name: 'Задачи' }));
+    await user.click(screen.getByRole('link', { name: 'Все задачи' }));
     await screen.findByRole('heading', { name: 'Задачи' });
     renderApp('/tasks/DEMO-6');
 

@@ -38,7 +38,7 @@ describe('граница ошибок', () => {
     expect(screen.getByRole('button', { name: 'Перезагрузить' })).toBeInTheDocument();
 
     // Шапка жива: человек уходит со сломанной страницы ссылкой, а не перезагрузкой.
-    expect(screen.getByRole('link', { name: 'Задачи' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Все задачи' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
   });
 

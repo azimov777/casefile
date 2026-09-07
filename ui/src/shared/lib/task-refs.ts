@@ -84,3 +84,18 @@ export function readEntryNo(value: string | null): number | null {
   const no = Number(value);
   return Number.isInteger(no) && no > 0 ? no : null;
 }
+
+/**
+ * Ключ очереди, которой принадлежит задача: `UI-38` → `UI`.
+ *
+ * Разбор ключа, а не вычисление за бэкенд: ключ задачи по контракту состоит из ключа
+ * очереди и номера, и очередь читается из него так же, как её читает человек.
+ * Спрашивать ради этого задачу отдельно значило бы платить запросом за то, что уже
+ * написано в адресе.
+ *
+ * `null` — строка ключом не является: показывать очередь тогда нечего.
+ */
+export function queueOfKey(key: string): string | null {
+  const match = /^([A-Za-z][A-Za-z0-9]{1,15})-\d+$/.exec(key);
+  return match?.[1] === undefined ? null : match[1].toUpperCase();
+}

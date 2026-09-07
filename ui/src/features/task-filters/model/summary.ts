@@ -7,7 +7,6 @@ import { splitTags, type TaskFilters } from './filters';
  * проверка остаётся на месте.
  */
 export type ConditionId =
-  | 'queue'
   | 'status'
   | 'priority'
   | 'assignee'
@@ -32,7 +31,6 @@ export interface FilterCondition {
  * тем же путём, что и форма, и никакого второго состояния не заводит.
  */
 export const CONDITION_RESET = {
-  queue: { queue: '' },
   status: { status: [] },
   priority: { priority: [] },
   assignee: { assignee: '' },
@@ -54,6 +52,11 @@ export const CONDITION_RESET = {
  *
  * Режим, сортировка и курсор сюда не входят: они меняют вид и порядок, а не состав
  * выдачи. Сортировка и без того стоит на панели отдельным полем, видимым всегда.
+ *
+ * Очередь тоже не входит, и это решение UI-38: она стала местом в интерфейсе, а не
+ * условием отбора. Место видно в боковой панели подсветкой и в верхней полосе словами;
+ * чип «очередь UI» рядом с ними был бы третьим именем того же самого — и снимался бы
+ * так, что человек не понимал бы, куда он после этого попал.
  */
 export function describeFilters(filters: TaskFilters): FilterCondition[] {
   const query = filters.query.trim();
@@ -69,10 +72,6 @@ export function describeFilters(filters: TaskFilters): FilterCondition[] {
 
   const conditions: FilterCondition[] = [];
   const board = filters.view === 'board';
-
-  if (filters.queue !== '') {
-    conditions.push({ id: 'queue', label: `очередь ${filters.queue}` });
-  }
 
   // На доске статус — это столбец, и параметром он не уезжает (`filtersToListParams`).
   // Назвать его здесь значило бы соврать про выдачу: столбцы показаны все.

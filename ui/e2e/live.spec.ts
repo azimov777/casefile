@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Locator } from '@playwright/test';
-import { compose, fontsReady, readE2eToken } from './contour';
+import { compose, fontsReady, readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
@@ -91,7 +91,7 @@ test('запись, подшитая через API, доходит до отк�
   await expect(page.getByRole('rowheader', { name: 'DEMO-3' })).toBeVisible();
 
   // Поток открыт: шапка говорит об этом словами.
-  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+  await expect(side(page).getByText('на связи')).toBeVisible();
 
   // Открытие потока само перечитывает показанное (в паузу могло случиться что угодно),
   // поэтому «до» считается, когда запросы улеглись, — иначе тест считал бы чужой запрос.
@@ -164,11 +164,11 @@ test('вопрос ко мне объявляется уведомлением �
   // причины. Здесь единственное, что может сдвинуть вёрстку, — само уведомление.
   await page.goto('/tasks?queue=DEMO&status=done');
   await expect(page.locator('tbody tr')).toHaveCount(1);
-  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+  await expect(side(page).getByText('на связи')).toBeVisible();
 
   // Замер до события: уведомление приходит само, и сдвинуть чужое оно не вправе.
   const watched = {
-    header: page.getByRole('banner'),
+    side: side(page),
     firstRow: page.locator('tbody tr').first(),
     logout: page.getByRole('button', { name: 'Выйти' }),
   };
@@ -197,7 +197,7 @@ test('вопрос ко мне объявляется уведомлением �
   await expect(notice.getByText('блокирующий')).toBeVisible();
 
   // Счётчик в шапке тоже ожил и стал ссылкой во входящую.
-  const counter = page.getByRole('banner').getByRole('link', { name: /Открытых вопросов: [1-9]/ });
+  const counter = side(page).getByRole('link', { name: /Открытых вопросов: [1-9]/ });
   await expect(counter).toHaveAttribute('href', '/questions');
 
   expect(await geometry(watched)).toEqual(before);
@@ -226,7 +226,7 @@ test('вопрос ко мне объявляется уведомлением �
 
 test('два вопроса подряд видны оба: второй не затирает первый', async ({ page, request }) => {
   await page.goto('/tasks?queue=DEMO');
-  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+  await expect(side(page).getByText('на связи')).toBeVisible();
 
   const asked: { key: string; no: number }[] = [];
   for (const key of ['DEMO-3', 'DEMO-4']) {
@@ -269,14 +269,16 @@ test('на загрузке страницы индикатор ни разу н
     const seen: string[] = [];
     (window as unknown as { __seen: string[] }).__seen = seen;
     new MutationObserver(() => {
-      const text = document.querySelector('header')?.textContent ?? '';
+      // Состояние потока живёт в боковой панели оболочки, а не в шапке (UI-38).
+      const text =
+        document.querySelector('aside[aria-label="Разделы трекера"]')?.textContent ?? '';
       if (text.includes('нет связи')) seen.push('нет связи');
       if (text.includes('подключаемся')) seen.push('подключаемся');
     }).observe(document, { childList: true, subtree: true, characterData: true });
   });
 
   await page.goto('/tasks?queue=DEMO');
-  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+  await expect(side(page).getByText('на связи')).toBeVisible();
 
   const seen = await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen);
   expect(seen).not.toContain('нет связи');
@@ -284,7 +286,7 @@ test('на загрузке страницы индикатор ни разу н
   expect(seen).toContain('подключаемся');
 });
 
-test('обрыв виден в шапке, а после восстановления пропущенное не теряется', async ({
+test('обрыв виден в панели, а после восстановления пропущенное не теряется', async ({
   page,
   request,
 }) => {
@@ -292,14 +294,14 @@ test('обрыв виден в шапке, а после восстановле�
   test.setTimeout(180_000);
 
   await page.goto('/tasks/DEMO-3');
-  const header = page.getByRole('banner');
-  await expect(header.getByText('на связи')).toBeVisible();
+  const panel = side(page);
+  await expect(panel.getByText('на связи')).toBeVisible();
 
   // Рвём связь так, как она рвётся в жизни: бэкенд ушёл. Перехват маршрута этого не
   // умеет (он действует на новые запросы), а `setOffline` не закрывает уже открытый
   // поток — сервер продолжает держать соединение.
   compose(['stop', 'api']);
-  await expect(header.getByText('нет связи')).toBeVisible({ timeout: 60_000 });
+  await expect(panel.getByText('нет связи')).toBeVisible({ timeout: 60_000 });
 
   compose(['start', 'api']);
 
@@ -311,7 +313,7 @@ test('обрыв виден в шапке, а после восстановле�
     body: 'После восстановления она обязана быть на экране.',
   });
 
-  await expect(header.getByText('на связи')).toBeVisible({ timeout: 90_000 });
+  await expect(panel.getByText('на связи')).toBeVisible({ timeout: 90_000 });
   await expect(
     page.getByRole('row').filter({ hasText: 'Запись, сделанная во время обрыва' }),
   ).toBeVisible({ timeout: 30_000 });

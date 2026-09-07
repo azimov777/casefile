@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { readE2eToken } from './contour';
+import { readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
@@ -33,21 +33,21 @@ test('отказ шапки объясняется по-русски и чини
 
   await page.goto('/tasks?queue=DEMO');
 
-  const header = page.getByRole('banner');
-  await expect(header.getByRole('alert')).toHaveText('База данных недоступна.', {
+  const panel = side(page);
+  await expect(panel.getByRole('alert')).toHaveText('База данных недоступна.', {
     timeout: 15_000,
   });
-  await expect(header.getByText('owner')).toBeHidden();
+  await expect(panel.getByText('owner')).toBeHidden();
 
-  // Список под шапкой отказа не заметил: у каждого запроса своё состояние.
+  // Список рядом с панелью отказа не заметил: у каждого запроса своё состояние.
   await expect(page.getByRole('rowheader', { name: 'DEMO-1' })).toBeVisible();
 
   const before = page.url();
   broken = false;
-  await header.getByRole('button', { name: 'Повторить' }).click();
+  await panel.getByRole('button', { name: 'Повторить' }).click();
 
-  await expect(header.getByText('owner')).toBeVisible();
-  await expect(header.getByRole('button', { name: 'Повторить' })).toHaveCount(0);
+  await expect(panel.getByText('owner')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Повторить' })).toHaveCount(0);
   // Повтор — это `refetch`: адрес тот же, страница не перезагружалась.
   expect(page.url()).toBe(before);
 });

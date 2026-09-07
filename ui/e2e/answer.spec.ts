@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { fontsReady, readE2eToken } from './contour';
+import { fontsReady, readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
@@ -37,10 +37,9 @@ test('ответ на вопрос из входящей закрывает ег
 
   await page.goto('/questions');
 
-  // Счётчик в шапке — то же число, что показывает `bootstrap`. Пишущие сценарии идут
+  // Счётчик в панели — то же число, что показывает `bootstrap`. Пишущие сценарии идут
   // по одному и убирают за собой, поэтому здесь открыт ровно вопрос демо.
-  const header = page.getByRole('banner');
-  await expect(header.getByText('Открытых вопросов: 1')).toBeVisible();
+  await expect(side(page).getByText('Открытых вопросов: 1')).toBeVisible();
 
   const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
   await expect(question.getByText('блокирующий')).toBeVisible();
@@ -63,7 +62,7 @@ test('ответ на вопрос из входящей закрывает ег
   await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toHaveCount(1);
   // Ноль называется словами, а не числом: «Открытых вопросов: 0» человек читает
   // как счётчик, который надо расшифровать, а «вопросов нет» — как ответ.
-  await expect(header.getByText('Открытых вопросов нет')).toBeVisible();
+  await expect(side(page).getByText('Открытых вопросов нет')).toBeVisible();
 
   // Подтверждение закрывает человек, а не таймер, — и только после этого вопрос
   // уходит с экрана.

@@ -1,6 +1,4 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { bootstrapQueryOptions } from '@/entities/session';
 import { TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { X } from 'lucide-react';
 import { Button, Select } from '@/shared/ui';
@@ -34,9 +32,6 @@ interface Draft {
  * спрятана, человек принял бы за все задачи.
  */
 export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFiltersFormProps) {
-  const bootstrap = useQuery(bootstrapQueryOptions());
-  const queues = bootstrap.data?.queues ?? [];
-
   // На доске статус — это столбец, а порядок задан её устройством. Показывать поля,
   // которые сейчас ни на что не влияют, значит врать: они спрятаны, но из адреса
   // не стёрты и вернутся вместе с таблицей.
@@ -163,22 +158,11 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
           onSubmit={submit}
         >
           <div className={styles.line}>
-            <label className={styles.field}>
-              <span className={styles.label}>Очередь</span>
-              <select
-                className={styles.select}
-                value={filters.queue}
-                onChange={(event) => applyWith({ queue: event.target.value })}
-              >
-                <option value="">все очереди</option>
-                {queues.map((queue) => (
-                  <option key={queue.key} value={queue.key}>
-                    {queue.key} — {queue.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-
+            {/*
+             * Очереди здесь нет и не должно быть: она стала местом в интерфейсе и живёт
+             * в боковой панели (UI-38, решение Д25). В форме остались условия, которые
+             * действительно отбор.
+             */}
             {board ? null : (
               <fieldset className={styles.group}>
                 <legend className={styles.label}>Статус</legend>

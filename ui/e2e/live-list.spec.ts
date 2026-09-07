@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { compose, fontsReady, readE2eToken } from './contour';
+import { compose, fontsReady, readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
@@ -184,10 +184,10 @@ test.describe('список под живым потоком', () => {
     await expect(rows(page).first()).toBeVisible();
     const before = { keys: await keys(page), tops: await tops(page) };
 
-    const header = page.getByRole('banner');
+    const panel = side(page);
     // Рвём связь так, как она рвётся в жизни: бэкенд ушёл (см. `live.spec.ts`).
     compose(['stop', 'api']);
-    await expect(header.getByText('нет связи')).toBeVisible({ timeout: 60_000 });
+    await expect(panel.getByText('нет связи')).toBeVisible({ timeout: 60_000 });
 
     compose(['start', 'api']);
     await expect
@@ -211,7 +211,7 @@ test.describe('список под живым потоком', () => {
       )
       .toBe(201);
 
-    await expect(header.getByText('на связи')).toBeVisible({ timeout: 90_000 });
+    await expect(panel.getByText('на связи')).toBeVisible({ timeout: 90_000 });
 
     // Обрыв случается тогда, когда человек ничего не делал: переставлять список под
     // ним особенно нечестно. Полоса при этом обязана появиться.
