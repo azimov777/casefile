@@ -179,6 +179,29 @@ describe('список задач', () => {
     expect(row).toHaveTextContent('приоритет critical');
   });
 
+  it('в задачу ведёт вся строка: клик по ячейке без ссылок уходит в её задачу', async () => {
+    const user = userEvent.setup();
+    server.use(
+      listing(() => collection([task('DEMO-3'), task('DEMO-4')])),
+      // Переход настоящий, значит карточка спросит свой пакет: без подмены прогон
+      // писал бы в вывод жалобу на неперехваченный запрос.
+      http.get(`${API}/api/v1/tasks/DEMO-4`, () => data(taskPackage('DEMO-4'))),
+    );
+
+    open('/tasks?queue=DEMO');
+
+    const row = await screen.findByRole('row', { name: /DEMO-4/ });
+    // Знак приоритета: ссылок и кнопок в этой ячейке нет. До UI-39 сюда попадала
+    // растяжка псевдоэлементом, и проверить её можно было только в браузере —
+    // а в WebKit она вдобавок накрывала весь экран. Обработчик строки проверяется
+    // где угодно, потому и стоит здесь, рядом с остальными разборами строки.
+    await user.click(within(row).getByText('normal'));
+
+    await waitFor(() => {
+      expect(address.current).toBe('/tasks/DEMO-4');
+    });
+  });
+
   it('рисует признаки из строки выдачи, не спрашивая задачу отдельно', async () => {
     server.use(
       listing(() =>

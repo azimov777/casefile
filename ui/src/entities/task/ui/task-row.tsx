@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router';
+import type { MouseEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { RelativeTime } from '@/shared/ui';
 import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
@@ -12,9 +13,16 @@ import { TaskTags } from './task-tags';
  * выдачи, поэтому запроса на строку нет (`../tracker/docs/FRONTEND.md`, «Строка списка»).
  *
  * В задачу ведёт вся строка, а не один ключ. Настоящая ссылка ровно одна — на
- * названии, самой широкой и самой заметной ячейке, — а на всю строку её растягивает
- * псевдоэлемент. Обернуть строку в `<a>` нельзя: ссылка внутри ссылки недопустима,
- * а обход с клавиатуры дал бы остановку на каждой ячейке вместо одной на задачу.
+ * названии, самой широкой и самой заметной ячейке: она даёт обход с клавиатуры одной
+ * остановкой на задачу, контекстное меню, «копировать адрес» и cmd-клик. Остальную
+ * площадь строки в задачу уводит обработчик клика на `<tr>`.
+ *
+ * **Растяжки псевдоэлементом здесь больше нет** (UI-39). Она рисовала `inset: 0` от
+ * `<tr class="relative">`, а `position: relative` у элемента с `display: table-row`
+ * в WebKit containing block не создаёт: в Safari растяжка считалась от документа и
+ * накрывала весь экран — клик в любом месте страницы уводил в последнюю задачу выдачи.
+ * Обёрткой строки в `<a>` это не лечится: ссылка внутри ссылки недопустима, а обход
+ * табом дал бы остановку на каждой ячейке.
  *
  * Высота строки задана токеном и не зависит от содержимого: список сканируют
  * взглядом сверху вниз, и строка, выросшая от третьего тега, ломает ритм там,
@@ -23,22 +31,64 @@ import { TaskTags } from './task-tags';
 export function TaskRow({ task }: { task: Task }) {
   // Адрес списка целиком, вместе с отбором: он поедет в задачу состоянием перехода.
   const { search } = useLocation();
+  const navigate = useNavigate();
   const features = task.features ?? null;
   const tags = task.tags ?? [];
   const activity = features?.last_entry_at ?? null;
   const title = task.title ?? '';
+  const href = taskRefHref({ key: task.key, entryNo: null });
+
+  /**
+   * Клик по площади строки. Уводит в задачу ровно тогда, когда человек этого хотел.
+   *
+   * Клик по настоящей ссылке сюда доходит всплытием, но обрабатывать его нельзя:
+   * переход по ней делает браузер, и второй переход поверх первого — это два разных
+   * пути к одному и тому же, а второй путь мы не заводим.
+   */
+  function openTask(event: MouseEvent<HTMLTableRowElement>) {
+    if (event.target instanceof Element && event.target.closest('a, button, input, label')) return;
+
+    // Протяжка мышью по имени исполнителя или тегам кончается кликом внутри строки:
+    // человек выделял текст, чтобы скопировать его, а не уходил со страницы.
+    if ((window.getSelection()?.toString() ?? '') !== '') return;
+
+    // «Открой рядом» остаётся тем же жестом, что и на ссылке: клик с модификатором
+    // ведёт во вторую вкладку, а `alt` у браузера значит «скачать» и переходом не является.
+    if (event.metaKey || event.ctrlKey || event.shiftKey) {
+      window.open(href, '_blank', 'noopener');
+      return;
+    }
+    if (event.altKey) return;
+
+    navigate(href, { state: listReturnState(search) });
+  }
+
+  /** Средняя кнопка мыши — «во вторую вкладку», и на пустом месте строки тоже. */
+  function openTaskAside(event: MouseEvent<HTMLTableRowElement>) {
+    if (event.button !== 1) return;
+    if (event.target instanceof Element && event.target.closest('a')) return;
+    event.preventDefault();
+    window.open(href, '_blank', 'noopener');
+  }
 
   return (
-    <tr className="relative h-(--ui-row-height) border-t border-line hover:bg-sunken">
-      {/* Ключ намеренно не поднят над растяжкой: клик по нему ведёт в ту же задачу,
-          то есть туда, куда он и вёл, когда был единственной мишенью. */}
+    /*
+     * Обводка фокуса рисуется строкой, а не ссылкой: остановка одна на задачу, и
+     * показать надо задачу целиком. `outline` — единственное, чем это можно нарисовать:
+     * `box-shadow` у `table-row` не рисует ни один движок (UI-39#5).
+     */
+    <tr
+      className="h-(--ui-row-height) cursor-pointer border-t border-line hover:bg-sunken has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-focus"
+      onClick={openTask}
+      onAuxClick={openTaskAside}
+    >
       <th scope="row" className="px-3 text-left font-normal font-mono text-mark text-faint">
         {task.key}
       </th>
       <td className="max-w-0 overflow-hidden px-3">
         <Link
-          className="text-text no-underline [-webkit-user-drag:none] after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:outline-none focus-visible:after:rounded-mark focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
-          to={taskRefHref({ key: task.key, entryNo: null })}
+          className="text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
+          to={href}
           // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
           // он вернётся к тем же строкам, а не ко всем задачам очереди.
           state={listReturnState(search)}
@@ -61,8 +111,10 @@ export function TaskRow({ task }: { task: Task }) {
         {task.assignee === null || task.assignee === undefined ? (
           <span aria-hidden="true">—</span>
         ) : (
-          /* Поднят над растяжкой: имя исполнителя из списка выделяют и копируют. */
-          <span className="relative z-1">{task.assignee}</span>
+          /* Курсор текстовый: имя исполнителя из списка выделяют и копируют, и рука
+             над ним обещала бы, что здесь нечего выделять. Мишенью оно при этом
+             остаётся — обработчик строки отличает выделение от клика. */
+          <span className="cursor-text">{task.assignee}</span>
         )}
       </td>
       <td className="px-3">

@@ -51,11 +51,11 @@ test('в задачу ведёт название и пустое место с�
   await row(page, 'DEMO-3').getByRole('link').click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-3$/);
 
-  // Пустое место строки: последняя ячейка, с подписью времени. Её содержимое над
-  // растяжкой не поднято, значит вся ячейка — мишень.
+  // Пустое место строки: последняя ячейка, с подписью времени. Ссылок в ней нет,
+  // и уводит отсюда обработчик строки, а не растяжка (UI-39).
   await page.goBack();
   await settled(page);
-  await row(page, 'DEMO-3').getByRole('cell').last().click({ force: true });
+  await row(page, 'DEMO-3').getByRole('cell').last().click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-3$/);
 });
 
@@ -66,10 +66,9 @@ test('клик по ключу ведёт в ту же задачу: он пер
   await page.goto('/tasks?queue=DEMO');
   await settled(page);
 
-  // `force`, потому что Playwright отказывается кликать перекрытый элемент, — и это
-  // ровно то, что здесь проверяется: ключ перекрыт растяжкой. Человеку перекрытие
-  // незаметно, он целится в ключ и попадает в задачу.
-  await row(page, 'DEMO-3').getByRole('rowheader').click({ force: true });
+  // Ключ ничем не перекрыт: человек целится в него и попадает в задачу, потому что
+  // мишень — вся строка целиком, а не отдельные её куски.
+  await row(page, 'DEMO-3').getByRole('rowheader').click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-3$/);
 });
 
@@ -116,6 +115,21 @@ test('cmd-клик по строке открывает задачу второ�
   // Исходная вкладка осталась там же: это настоящая ссылка, а не переход по клику.
   await expect(page).toHaveURL(/\/tasks\?/);
   await opened.close();
+
+  // То же самое по пустому месту строки: ссылки там нет, и вторую вкладку открывает
+  // обработчик строки. Жест человека один и тот же, значит и ответ обязан быть один.
+  await settled(page);
+  const [aside] = await Promise.all([
+    context.waitForEvent('page'),
+    row(page, 'DEMO-3')
+      .getByRole('cell')
+      .last()
+      .click({ modifiers: [modifier] }),
+  ]);
+
+  await aside.waitForURL(/\/tasks\/DEMO-3$/);
+  await expect(page).toHaveURL(/\/tasks\?/);
+  await aside.close();
 });
 
 test('обход табом даёт одну остановку на строку, и фокус виден', async ({ page }) => {
@@ -132,9 +146,17 @@ test('обход табом даёт одну остановку на строк
   const second = page.locator('tbody tr').nth(1).getByRole('link');
   await expect(second).toBeFocused();
 
-  // Обводка рисуется растяжкой, то есть охватывает строку целиком.
-  const outline = await second.evaluate((node) => getComputedStyle(node, '::after').outlineStyle);
-  expect(outline).not.toBe('none');
+  // Обводку рисует сама строка, а не ссылка внутри неё: остановка одна на задачу,
+  // и показать надо задачу целиком. Проверяется на `<tr>`, потому что растяжки,
+  // которой это рисовалось раньше, больше нет (UI-39).
+  const outline = await second.evaluate((node) => {
+    const rowElement = node.closest('tr');
+    if (rowElement === null) throw new Error('Ссылка названия оказалась вне строки таблицы');
+    const style = getComputedStyle(rowElement);
+    return { style: style.outlineStyle, width: style.outlineWidth };
+  });
+  expect(outline.style).not.toBe('none');
+  expect(outline.width).not.toBe('0px');
 });
 
 test('доступность списка и доски с растянутой ссылкой', async ({ page }) => {

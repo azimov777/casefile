@@ -48,7 +48,15 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
       role="region"
       aria-label="Задачи, таблица прокручивается вбок"
       tabIndex={0}
-      className="max-fold:overflow-x-auto fold:overflow-x-clip rounded-block border border-line bg-surface focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+      /*
+       * `relative` здесь не украшение и не задел на будущее: без позиционированной
+       * рамки прокрутка вбок остаётся внутри, а **ширина документа** всё равно растёт
+       * на ширину таблицы — на 320 px документ становится 789 px и страница едет
+       * вширь целиком. Проверено пробой в обоих движках; раньше то же самое держал
+       * `relative` у `<tr>`, поставленный ради растяжки ссылки, и связь эта была
+       * невидимой: растяжка ушла (UI-39) — и узкий экран сломался.
+       */
+      className="relative max-fold:overflow-x-auto fold:overflow-x-clip rounded-block border border-line bg-surface focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
     >
       {/*
        * `min-w-[60rem]` — наименьшая ширина, при которой читаются все восемь колонок:
