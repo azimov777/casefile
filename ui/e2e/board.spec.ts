@@ -199,7 +199,7 @@ test('фильтр по исполнителю действует на доск�
     column(page, 'open').getByRole('article').filter({ hasText: 'DEMO-4' }),
   ).toBeVisible();
 
-  await page.getByRole('radio', { name: 'Таблица' }).click();
+  await page.getByRole('link', { name: 'Таблица' }).click();
 
   await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText(
     'исполнитель demo_agent',

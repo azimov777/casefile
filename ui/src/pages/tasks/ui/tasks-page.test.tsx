@@ -2,7 +2,15 @@ import { delay, http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, collection, data, failure, task } from '@testing/msw/responses';
+import {
+  API,
+  bootstrap,
+  collection,
+  data,
+  failure,
+  task,
+  taskPackage,
+} from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { setToken } from '@/shared/api';
@@ -508,5 +516,76 @@ describe('отбор по замечаниям', () => {
     await waitFor(() => expect(address.current).toContain('remarks=true'));
     await waitFor(() => expect(asked.at(-1)?.searchParams.get('query')).toBe('open_remarks: > 0'));
     expect(screen.getByLabelText('есть неразобранные замечания')).toBeChecked();
+  });
+});
+
+describe('переключение вида', () => {
+  it('переносит на доску весь отбор, а не только адрес раздела', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks?queue=DEMO&status=open&priority=high&tags=docs&sort=key');
+    await screen.findByText('DEMO-3');
+
+    await user.click(screen.getByRole('link', { name: 'Доска' }));
+
+    // Раньше отсюда уходили на голое `/tasks?view=board`: очередь и всё остальное
+    // молча оставались позади, и человек видел чужую выдачу.
+    await waitFor(() => expect(address.current).toContain('view=board'));
+    expect(address.current).toContain('queue=DEMO');
+    expect(address.current).toContain('priority=high');
+    expect(address.current).toContain('tags=docs');
+    expect(address.current).toContain('sort=key');
+
+    const request = lastRequest();
+    expect(request.searchParams.getAll('queue')).toEqual(['DEMO']);
+    expect(request.searchParams.getAll('priority')).toEqual(['high']);
+  });
+
+  it('возврат в таблицу отдаёт тот же отбор обратно', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks?view=board&queue=DEMO&priority=high');
+    await screen.findByText('DEMO-3');
+
+    await user.click(screen.getByRole('link', { name: 'Таблица' }));
+
+    await waitFor(() => expect(address.current).toBe('/tasks?queue=DEMO&priority=high'));
+  });
+
+  it('текущий вид назван текущим, и переключатель на странице один', async () => {
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks?view=board&queue=DEMO');
+    await screen.findByText('DEMO-3');
+
+    expect(screen.getByRole('link', { name: 'Доска' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('link', { name: 'Таблица' })).not.toHaveAttribute('aria-current');
+    // Второй точки переключения нет: в шапке доска больше не раздел.
+    expect(screen.getAllByRole('link', { name: 'Доска' })).toHaveLength(1);
+  });
+
+  it('раздел «Задачи» в шапке подсвечен на доске и возвращает в неё с отбором', async () => {
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks?view=board&queue=DEMO&priority=high');
+    await screen.findByText('DEMO-3');
+
+    const section = screen.getByRole('link', { name: 'Задачи' });
+    expect(section).toHaveAttribute('aria-current', 'page');
+    expect(section).toHaveAttribute('href', '/tasks?view=board&queue=DEMO&priority=high');
+  });
+
+  it('с карточки задачи раздел зовёт ко всем задачам: условиям взяться неоткуда', async () => {
+    server.use(
+      listing(() => collection([task('DEMO-3')])),
+      http.get(`${API}/api/v1/tasks/DEMO-3`, () => data(taskPackage('DEMO-3'))),
+    );
+
+    open('/tasks/DEMO-3?entry=4');
+    await screen.findAllByText('DEMO-3');
+
+    expect(screen.getByRole('link', { name: 'Задачи' })).toHaveAttribute('href', '/tasks');
   });
 });

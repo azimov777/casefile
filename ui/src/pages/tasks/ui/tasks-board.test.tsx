@@ -119,7 +119,7 @@ describe('доска', () => {
     await screen.findByRole('region', { name: 'open' });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('radio', { name: 'Таблица' }));
+    await user.click(screen.getByRole('link', { name: 'Таблица' }));
 
     expect(await screen.findByRole('table')).toBeInTheDocument();
     const request = seen.at(-1) as URL;

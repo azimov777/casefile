@@ -86,3 +86,55 @@ test('номер записи, которой в деле нет, объясня
 
   await expect(page.getByText(/в деле нет/)).toBeVisible();
 });
+
+test('смена вида сохраняет отбор в обе стороны и не заводит второго пути', async ({ page }) => {
+  await silenceJournal(page);
+
+  const listed = '/tasks?queue=DEMO&status=open&status=in_progress&sort=key';
+  await page.goto(listed);
+  await expect(page.getByRole('table')).toBeVisible();
+
+  // Таблица → доска: раньше отсюда уходили на голое `/tasks?view=board`, и очередь
+  // с остальными условиями оставались позади молча.
+  await page.getByRole('link', { name: 'Доска' }).click();
+  await expect(page).toHaveURL(/view=board/);
+  await expect(page).toHaveURL(/queue=DEMO/);
+  await expect(page).toHaveURL(/status=in_progress/);
+  await expect(page).toHaveURL(/sort=key/);
+  await expect(page.getByRole('region', { name: 'open' })).toBeVisible();
+
+  // И обратно тем же правилом: адрес возвращается к исходному посимвольно.
+  await page.getByRole('link', { name: 'Таблица' }).click();
+  await expect(page).toHaveURL(new RegExp(`${listed.replace('?', '\\?')}$`));
+
+  // Второй точки переключения вида в интерфейсе нет: в шапке доска не раздел.
+  await expect(page.getByRole('link', { name: 'Доска' })).toHaveCount(1);
+});
+
+test('возврат с доски в задачу и назад сохраняет и вид, и условия', async ({ page }) => {
+  await silenceJournal(page);
+
+  await page.goto('/tasks?queue=DEMO&view=board&assignee=demo_agent');
+  const card = page.getByRole('article').first();
+  await expect(card).toBeVisible();
+  await card.getByRole('link').first().click();
+  await expect(page).toHaveURL(/\/tasks\/DEMO-\d+$/);
+
+  // Активный раздел не врёт: «Задачи» — это и таблица, и доска, и карточка.
+  await expect(page.getByRole('link', { name: 'Задачи' })).toHaveAttribute('aria-current', 'page');
+
+  await page.getByRole('link', { name: 'К списку с отбором' }).click();
+  await expect(page).toHaveURL(/view=board/);
+  await expect(page).toHaveURL(/assignee=demo_agent/);
+});
+
+test('из входящей раздел «Задачи» ведёт ко всем задачам, а не в чужой отбор', async ({ page }) => {
+  await silenceJournal(page);
+  await page.goto('/questions');
+
+  const section = page.getByRole('link', { name: 'Задачи' });
+  await expect(section).toHaveAttribute('href', '/tasks');
+  await section.click();
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByRole('link', { name: 'Доска' })).toBeVisible();
+});

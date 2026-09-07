@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { useLogout } from '@/features/auth';
+import { tasksHref } from '@/features/task-filters';
 import { LiveStatus, type LiveJournal } from '@/features/live-journal';
 import { Button, QueryState } from '@/shared/ui';
 import styles from './app-header.module.css';
@@ -10,32 +11,37 @@ export function AppHeader({ live }: { live: LiveJournal }) {
   const bootstrap = useQuery(bootstrapQueryOptions());
   const logout = useLogout();
 
-  // Список и доска — один и тот же путь и разный `view`, поэтому активный пункт
-  // считается по пути вместе с параметром: `NavLink` сравнивает только путь
-  // и подсветил бы оба пункта сразу.
+  /*
+   * Разделов два, а не три: доска — не раздел, а вид того же списка, и переключается
+   * она там же, где живёт, — на самой странице задач. Пока «Доска» стояла в шапке
+   * рядом с «Задачами», это был второй переключатель вида, собиравший адрес с нуля
+   * и терявший отбор (`UI-22`).
+   *
+   * Раздел «Задачи» подсвечен и на таблице, и на доске, и на карточке задачи: человек
+   * находится в одном месте независимо от того, каким видом он на него смотрит.
+   */
   const [searchParams] = useSearchParams();
   const { pathname } = useLocation();
   const onTasks = pathname.startsWith('/tasks');
-  const board = onTasks && searchParams.get('view') === 'board';
+  const onList = pathname === '/tasks';
 
   return (
     <header className={styles.header}>
       <span className={styles.brand}>Трекер</span>
 
       <nav className={styles.nav} aria-label="Разделы">
+        {/*
+         * Со списка ссылка ведёт в него же вместе с отбором — тем же правилом, что
+         * и переключатель вида: возврат в раздел не должен незаметно показывать
+         * другие задачи. С прочих экранов условиям взяться неоткуда, и ссылка честно
+         * зовёт ко всем задачам.
+         */}
         <Link
           className={styles.link}
-          to="/tasks"
-          aria-current={onTasks && !board ? 'page' : undefined}
+          to={onList ? tasksHref(searchParams) : '/tasks'}
+          aria-current={onTasks ? 'page' : undefined}
         >
           Задачи
-        </Link>
-        <Link
-          className={styles.link}
-          to="/tasks?view=board"
-          aria-current={board ? 'page' : undefined}
-        >
-          Доска
         </Link>
         <NavLink className={styles.link} to="/questions">
           Вопросы

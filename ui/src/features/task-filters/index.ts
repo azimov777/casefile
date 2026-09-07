@@ -13,6 +13,7 @@ export {
   type TaskFilters,
   type TaskView,
 } from './model/filters';
+export { tasksHref } from './model/href';
 export { caretLine, readQueryProblem, type QueryProblem } from './model/query-problem';
 export {
   CONDITION_RESET,

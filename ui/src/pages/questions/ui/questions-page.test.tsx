@@ -72,10 +72,7 @@ describe('входящая и ответ', () => {
     server.use(
       http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
       http.get(`${API}/api/v1/questions`, () =>
-        collection([
-          questionEntry(7, 'DEMO-3', true),
-          questionEntry(8, 'DEMO-4', false),
-        ]),
+        collection([questionEntry(7, 'DEMO-3', true), questionEntry(8, 'DEMO-4', false)]),
       ),
       http.get(`${API}/api/v1/remarks`, () => collection([])),
     );

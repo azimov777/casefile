@@ -108,7 +108,7 @@ describe('живой поток', () => {
     });
     expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('radio', { name: 'Доска' }));
+    await user.click(screen.getByRole('link', { name: 'Доска' }));
 
     // Полоса на месте: страница перемонтировалась, а накопленное живёт не в ней.
     expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();

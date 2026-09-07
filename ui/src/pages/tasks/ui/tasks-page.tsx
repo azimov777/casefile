@@ -92,7 +92,7 @@ export function TasksPage() {
         <div className={styles.filters}>
           <TaskFiltersForm filters={filters} onApply={apply} onReset={reset} problem={problem} />
         </div>
-        <ViewSwitch view={filters.view} onChange={(view) => apply({ view })} />
+        <ViewSwitch view={filters.view} />
       </div>
 
       {/*
