@@ -1,4 +1,4 @@
-import { TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
+import { StatusMark, TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
 import { Button } from '@/shared/ui';
 import styles from './tasks-board.module.css';
 
@@ -60,7 +60,9 @@ export function TasksBoard({
                   aria-expanded={open}
                   onClick={() => onToggle(status, !open)}
                 >
-                  <code className={styles.status}>{status}</code>
+                  {/* Тот же знак, что в списке и на карточке: где бы человек ни
+                      увидел `in_progress`, это один и тот же полукруг (решение Д20). */}
+                  <StatusMark status={status} className={styles.status} />
                   <span className={styles.count}>
                     {/* «из ?»: сколько задач в статусе всего, знает только дочитанная
                         до конца выдача — врать точным числом до этого нельзя. */}

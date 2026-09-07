@@ -2,8 +2,9 @@ import { Link, useLocation } from 'react-router';
 import { Badge, RelativeTime } from '@/shared/ui';
 import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
+import { PriorityMark } from './priority-mark';
+import { StatusMark } from './status-mark';
 import { TaskFeatureBadges } from './task-features';
-import { priorityTone, statusTone } from './tones';
 import styles from './task-row.module.css';
 
 /**
@@ -45,11 +46,7 @@ export function TaskRow({ task }: { task: Task }) {
         </Link>
       </td>
       <td>
-        {task.status === null || task.status === undefined ? null : (
-          <Badge mono tone={statusTone(task.status)}>
-            {task.status}
-          </Badge>
-        )}
+        <StatusMark status={task.status} />
       </td>
       <td className={styles.assignee}>
         {task.assignee === null || task.assignee === undefined ? (
@@ -60,11 +57,7 @@ export function TaskRow({ task }: { task: Task }) {
         )}
       </td>
       <td>
-        {task.priority === null || task.priority === undefined ? null : (
-          <Badge mono tone={priorityTone(task.priority)}>
-            {task.priority}
-          </Badge>
-        )}
+        <PriorityMark priority={task.priority} />
       </td>
       <td>
         <span className={styles.tags}>

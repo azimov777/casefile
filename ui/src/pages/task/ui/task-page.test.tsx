@@ -50,6 +50,20 @@ function entriesCalls() {
 }
 
 describe('карточка задачи', () => {
+  it('в шапке статус и приоритет названы родом: четыре плашки расслоились', async () => {
+    server.use(packageOf('DEMO-6'), entries('DEMO-6'));
+
+    renderApp('/tasks/DEMO-6');
+
+    const heading = await screen.findByRole('heading', { name: /DEMO-6/ });
+    const header = heading.closest('header') as HTMLElement;
+
+    // Знак несёт форму, род значения — текстом рядом: без него диктор читал бы
+    // подряд четыре значения и не сказал бы, что из них чем является (решение Д7).
+    expect(header).toHaveTextContent('статус in_progress');
+    expect(header).toHaveTextContent('приоритет normal');
+  });
+
   it('рисуется одним запросом пакета, без запросов за телами записей', async () => {
     server.use(packageOf('DEMO-6'), entries('DEMO-6'));
 

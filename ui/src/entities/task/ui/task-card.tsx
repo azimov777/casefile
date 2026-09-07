@@ -3,8 +3,8 @@ import { Badge, RelativeTime } from '@/shared/ui';
 import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
 import { hasFeatureBadges } from './feature-badges';
+import { PriorityMark } from './priority-mark';
 import { TaskFeatureBadges } from './task-features';
-import { priorityTone } from './tones';
 import styles from './task-card.module.css';
 
 /**
@@ -24,11 +24,7 @@ export function TaskCard({ task }: { task: Task }) {
       <div className={styles.top}>
         {/* Ключ не поднят над растяжкой: клик по нему ведёт в ту же задачу. */}
         <span className={styles.key}>{task.key}</span>
-        {task.priority === null || task.priority === undefined ? null : (
-          <Badge mono tone={priorityTone(task.priority)}>
-            {task.priority}
-          </Badge>
-        )}
+        <PriorityMark priority={task.priority} withName={false} />
       </div>
 
       <p className={styles.title}>

@@ -22,29 +22,52 @@ function background(target: Locator): Promise<string> {
   return target.evaluate((node) => getComputedStyle(node).backgroundColor);
 }
 
-test('статус читается тоном: работа, завершение и снятие рисуются разным фоном', async ({
+/** Знак статуса или приоритета в строке списка: форма и имя значения рядом. */
+function mark(page: Page, kind: 'status' | 'priority', value: string): Locator {
+  return (
+    page
+      .locator('tbody')
+      .locator(`[data-mark="${kind}"]`)
+      // Текст знака — это род и значение вместе: «статус in_progress». Род читается
+      // диктором и не виден глазом, но в `textContent` он есть, и якорь `^…$` без него
+      // не совпадёт ни с чем.
+      .filter({ hasText: new RegExp(`^(?:статус|приоритет)\\s+${value}$`) })
+      .first()
+  );
+}
+
+/** Цвет формы: у знака красится сам рисунок, а не заливка под ним. */
+function shapeColor(target: Locator): Promise<string> {
+  return target.locator('svg').evaluate((node) => getComputedStyle(node).color);
+}
+
+test('статус читается тоном формы: работа, завершение и снятие покрашены по-разному', async ({
   page,
 }) => {
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
   await expect(page.locator('tbody tr')).toHaveCount(7);
 
-  const inProgress = await background(badge(page, 'in_progress'));
-  const done = await background(badge(page, 'done'));
-  const cancelled = await background(badge(page, 'cancelled'));
-  const open = await background(badge(page, 'open'));
+  const inProgress = await shapeColor(mark(page, 'status', 'in_progress'));
+  const done = await shapeColor(mark(page, 'status', 'done'));
+  const open = await shapeColor(mark(page, 'status', 'open'));
 
   // Ради чего задача и заводилась: «работают сейчас» и «сделано» были одним серым.
   expect(inProgress).not.toBe(done);
   expect(inProgress).not.toBe(open);
   expect(done).not.toBe(open);
 
-  // Снятое не занято ничем: заливки нет вовсе, и это видно без различения цвета.
-  expect(cancelled).toBe('rgba(0, 0, 0, 0)');
-  await expect(badge(page, 'cancelled')).toHaveCSS('border-style', 'dashed');
+  // Снятое по-прежнему отличается от остальных, но уже формой и своим цветом.
+  const cancelled = await shapeColor(mark(page, 'status', 'cancelled'));
+  expect(cancelled).not.toBe(done);
+  expect(cancelled).not.toBe(inProgress);
+
+  // Заливки у статуса больше нет вовсе: смысл несёт форма, цвет только помогает
+  // (решение Д1). Плашка ушла — с ней ушёл и фон под ней.
+  expect(await background(mark(page, 'status', 'cancelled'))).toBe('rgba(0, 0, 0, 0)');
 
   // Обычный ход дел остаётся серым: покрасив `open`, тон перестал бы что-то значить.
-  expect(open).toBe(await background(badge(page, 'normal')));
+  expect(open).toBe(await shapeColor(mark(page, 'priority', 'normal')));
 });
 
 test('приоритет выше обычного виден взглядом: и high, и critical отличаются от normal', async ({
@@ -53,9 +76,9 @@ test('приоритет выше обычного виден взглядом: 
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
 
-  const normal = await background(badge(page, 'normal'));
-  expect(await background(badge(page, 'high'))).not.toBe(normal);
-  expect(await background(badge(page, 'critical'))).not.toBe(normal);
+  const normal = await shapeColor(mark(page, 'priority', 'normal'));
+  expect(await shapeColor(mark(page, 'priority', 'high'))).not.toBe(normal);
+  expect(await shapeColor(mark(page, 'priority', 'critical'))).not.toBe(normal);
 });
 
 /**
@@ -72,7 +95,9 @@ test('тон тревоги отличается от нейтрального',
   await page.goto('/tasks?queue=DEMO');
 
   const danger = await background(badge(page, 'заблокирована'));
-  const neutral = await background(badge(page, 'normal'));
+  // Нейтральная плашка берётся любая: после UI-30 статус и приоритет перестали быть
+  // плашками, и единственные оставшиеся нейтральные в строке — теги.
+  const neutral = await background(page.locator('tbody [data-badge="neutral"]').first());
 
   expect(danger).not.toBe(neutral);
   expect(danger).not.toBe('rgba(0, 0, 0, 0)');

@@ -23,6 +23,8 @@ export {
 } from './api/task-package';
 export { TASK_COLUMNS } from './ui/columns';
 export { TASK_PRIORITY_TONE, TASK_STATUS_TONE, priorityTone, statusTone } from './ui/tones';
+export { StatusMark } from './ui/status-mark';
+export { PriorityMark } from './ui/priority-mark';
 export { TaskCard } from './ui/task-card';
 export { TaskNav } from './ui/task-nav';
 export { hasFeatureBadges } from './ui/feature-badges';

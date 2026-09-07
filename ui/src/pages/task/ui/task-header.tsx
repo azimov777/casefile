@@ -1,8 +1,8 @@
 import { Link } from 'react-router';
 import {
+  PriorityMark,
+  StatusMark,
   TaskFeatureBadges,
-  priorityTone,
-  statusTone,
   type TaskDetails,
   type TaskFeatures,
   type TaskStatus,
@@ -32,18 +32,14 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
       </h1>
 
       {/*
-       * Род значения написан у каждой плашки. Четыре плашки подряд — `open`,
-       * `normal`, `demo_agent`, `retention` — это статус, приоритет, исполнитель
-       * и тег, и без подписей понять это можно было только по колонке в списке,
-       * которой здесь нет.
+       * Четыре разных вещи перестали быть четырьмя одинаковыми плашками (решение Д7):
+       * статус — форма со значением, приоритет — высота столбиков, исполнитель и теги
+       * остаются плашками, потому что они и есть метки. Род значения при этом никуда
+       * не делся: он ушёл в доступное имя знака и в подпись плашки.
        */}
       <div className={styles.badges}>
-        <Badge mono kind="статус" tone={statusTone(task.status)}>
-          {task.status}
-        </Badge>
-        <Badge mono kind="приоритет" tone={priorityTone(task.priority)}>
-          {task.priority}
-        </Badge>
+        <StatusMark status={task.status} />
+        <PriorityMark priority={task.priority} />
         <span className={styles.assignee}>
           {task.assignee === null ? (
             <span className={styles.empty}>исполнитель не назначен</span>

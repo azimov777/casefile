@@ -120,6 +120,7 @@
  * суток не зависит.
  */
 :root {
+  --ui-mark: calc(var(--spacing) * 3.5); /* 14px — знак статуса, приоритета, признака */
   --ui-row-height: calc(var(--spacing) * 9.5); /* 38px — строка списка */
   --ui-row-head: calc(var(--spacing) * 7.5); /* 30px — её липкая шапка */
   --ui-topbar: calc(var(--spacing) * 10); /* 40px — верхняя полоса оболочки */

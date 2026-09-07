@@ -39,6 +39,21 @@ function column(status: string) {
 }
 
 describe('доска', () => {
+  it('знак статуса стоит в заголовке столбца, а приоритет карточки назван родом', async () => {
+    server.use(listing([task('DEMO-9', { status: 'open', priority: 'critical' })]));
+
+    renderApp('/tasks?queue=DEMO&view=board');
+
+    // Тот же словарь форм, что в списке и на карточке (решение Д20).
+    const open = await screen.findByRole('region', { name: 'open' });
+    expect(open).toHaveTextContent('статус open');
+
+    // На карточке подписи для приоритета нет — места нет, — но значение не пропало:
+    // оно ушло в доступное имя.
+    const card = within(open).getByRole('article');
+    expect(card).toHaveTextContent('приоритет critical');
+  });
+
   it('раскладывает задачи по столбцу на каждое значение статуса из контракта', async () => {
     server.use(listing());
 

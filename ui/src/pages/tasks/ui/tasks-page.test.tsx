@@ -43,6 +43,20 @@ function lastRequest(): URL {
 }
 
 describe('список задач', () => {
+  it('статус и приоритет в строке названы родом: знак читается и глазом, и диктором', async () => {
+    server.use(
+      listing(() => collection([task('DEMO-4', { status: 'in_progress', priority: 'critical' })])),
+    );
+
+    open('/tasks?queue=DEMO');
+
+    const row = await screen.findByRole('row', { name: /DEMO-4/ });
+    // Знак несёт форму, а род значения — текстом рядом: иначе диктор прочёл бы
+    // «in_progress critical» и не сказал бы, что из этого чем является.
+    expect(row).toHaveTextContent('статус in_progress');
+    expect(row).toHaveTextContent('приоритет critical');
+  });
+
   it('рисует признаки из строки выдачи, не спрашивая задачу отдельно', async () => {
     server.use(
       listing(() =>

@@ -41,7 +41,7 @@ export function Badge({ tone = 'neutral', kind, mono = false, title, children }:
   const classes = [styles.badge, styles[tone], mono ? styles.mono : null].filter(Boolean).join(' ');
 
   return (
-    <span className={classes} title={title}>
+    <span data-badge={tone} className={classes} title={title}>
       {kind === undefined ? null : <span className={styles.kind}>{kind} </span>}
       {children}
     </span>
