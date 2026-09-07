@@ -4,7 +4,6 @@ import { Inbox } from 'lucide-react';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
-import { LiveStatus, type LiveJournal } from '@/features/live-journal';
 import { Button, QueryState } from '@/shared/ui';
 import { cn } from '@/shared/lib';
 import { readPlace } from './place';
@@ -19,7 +18,7 @@ import { readPlace } from './place';
  * Действий, меняющих данные, здесь нет и не будет: человек наблюдает и отвечает,
  * остальное делают агенты (`CONCEPT.md`, 1 и 7). Единственная кнопка — выход.
  */
-export function AppSide({ live, onNavigate }: { live: LiveJournal; onNavigate?: () => void }) {
+export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const bootstrap = useQuery(bootstrapQueryOptions());
   const logout = useLogout();
   const [searchParams] = useSearchParams();
@@ -117,14 +116,14 @@ export function AppSide({ live, onNavigate }: { live: LiveJournal; onNavigate?: 
       </nav>
 
       <div className="mt-auto flex flex-col items-start gap-1 border-t border-line px-2 pt-2 text-mark">
-        <LiveStatus status={live.status} />
-
         {/* Отказ показывается с повтором: чинить бэкенд и перезагружать вкладку —
             разные действия, и второе не должно быть единственным доступным. */}
         <QueryState query={bootstrap} loading="Загружаем участника…" compact />
 
+        {/* Имя переносится по любому месту: подпись участника — чужая строка, её длину
+            интерфейс не выбирает, а горизонтальной прокрутки быть не должно. */}
         {bootstrap.data === undefined ? null : (
-          <span className="font-mono text-muted">
+          <span className="max-w-full break-all font-mono text-muted">
             {bootstrap.data.participant?.name ?? 'участника нет'}
           </span>
         )}

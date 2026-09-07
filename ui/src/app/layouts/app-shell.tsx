@@ -41,7 +41,7 @@ export function AppShell() {
       >
         {/* Панель прилипает: очередь — то, куда переходят с любой глубины прокрутки. */}
         <div className="sticky top-0 h-dvh">
-          <AppSide live={live} />
+          <AppSide />
         </div>
       </aside>
 
@@ -53,11 +53,11 @@ export function AppShell() {
         title="Разделы трекера"
         returnFocusTo={openerRef}
       >
-        <AppSide live={live} onNavigate={() => setSideOpen(false)} />
+        <AppSide onNavigate={() => setSideOpen(false)} />
       </Sheet>
 
       <div className="fold:col-start-2">
-        <AppTopbar openerRef={openerRef} onOpenSide={() => setSideOpen(true)} />
+        <AppTopbar live={live} openerRef={openerRef} onOpenSide={() => setSideOpen(true)} />
 
         <div className="px-4 pt-4 pb-12">
           {/*

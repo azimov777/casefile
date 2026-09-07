@@ -25,7 +25,10 @@ export function Select({ value, onValueChange, label, options, className }: Sele
       <SelectPrimitive.Trigger
         aria-label={label}
         className={cn(
-          'inline-flex items-center gap-1 rounded-control border border-transparent bg-transparent px-2 py-1',
+          // `max-w-full` и усечение значения: подпись порядка приходит из списка, а не
+          // из вёрстки, и при увеличенном вдвое тексте она шире узкого экрана — кнопка
+          // расширяла документ, вместо того чтобы обрезать своё содержимое.
+          'inline-flex max-w-full min-w-0 items-center gap-1 rounded-control border border-transparent bg-transparent px-2 py-1',
           'text-meta text-muted',
           'transition-colors duration-(--motion-fast) ease-fast',
           'hover:bg-sunken hover:text-text',
@@ -33,7 +36,9 @@ export function Select({ value, onValueChange, label, options, className }: Sele
           className,
         )}
       >
-        <SelectPrimitive.Value />
+        <span className="truncate">
+          <SelectPrimitive.Value />
+        </span>
         <SelectPrimitive.Icon>
           <ChevronDown className="size-(--ui-mark) text-faint" aria-hidden="true" />
         </SelectPrimitive.Icon>

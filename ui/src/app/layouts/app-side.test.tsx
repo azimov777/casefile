@@ -89,6 +89,27 @@ describe('боковая панель', () => {
     expect(screen.getByRole('link', { name: 'Все задачи' })).not.toHaveAttribute('aria-current');
   });
 
+  it('длинное имя участника не расширяет панель, а переносится', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () =>
+        data(
+          bootstrap({
+            participant: {
+              ...bootstrap().participant!,
+              name: 'очень-длинное-имя-участника-которое-никто-не-выбирал',
+            },
+          }),
+        ),
+      ),
+    );
+    renderApp('/tasks');
+
+    // Имя участника — чужая строка: её длину интерфейс не выбирает, и перенос по любому
+    // месту здесь единственный способ не получить горизонтальную прокрутку.
+    const name = await screen.findByText('очень-длинное-имя-участника-которое-никто-не-выбирал');
+    expect(name).toHaveClass(/break-all/);
+  });
+
   it('действий, меняющих данные, в панели нет: единственная кнопка — выход', async () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
     renderApp('/tasks');
