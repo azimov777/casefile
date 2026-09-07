@@ -9,6 +9,11 @@
 Что и зачем строим: `docs/CONCEPT.md`. Как строим: `docs/CONVENTIONS.md`. Порядок
 работ: `docs/ROADMAP.md`, задания в `docs/tasks/`.
 
+Стек: React 19 и Vite, маршруты React Router, серверное состояние TanStack Query,
+клиент API из `openapi-typescript` и `openapi-fetch`. Оформление — Tailwind CSS 4
+с токенами в `@theme` и компоненты shadcn/ui на Radix; шрифты Fira Sans и Fira Code
+с запасной системной гарнитурой. Раскладка кода — Feature-Sliced Design.
+
 ## Требования
 
 Node 22 или новее и pnpm — для разработки; Docker и Docker Compose — для сборки
@@ -41,6 +46,13 @@ VITE_API_URL=http://localhost:8080 pnpm dev  # или на любой друго
 pnpm check   # формат, линт, типы, границы слоёв (steiger), модульные и страничные тесты
 pnpm e2e     # Playwright против настоящего бэкенда в Docker
 pnpm gen:api # перегенерировать клиент из ../tracker/openapi.json
+```
+
+Новый кирпич интерфейса из shadcn/ui добавляется его же командой — псевдонимы
+в `components.json` уже настроены на слои проекта, и файл попадает в `src/shared/ui`:
+
+```bash
+pnpm dlx shadcn@latest add dialog   # положит src/shared/ui/dialog.tsx
 ```
 
 `pnpm check` сверяет закоммиченный `src/shared/api/openapi.ts` с контрактом соседнего
