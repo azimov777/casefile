@@ -59,7 +59,7 @@ test('замечание с карточки подшивается один р�
 
   // Замечание тут же видно в списке неразобранных, а признак вырос.
   await expect(remarks.getByText(/Из карточки не видно/).first()).toBeVisible();
-  await expect(page.getByText('замечаний 1')).toBeVisible();
+  await expect(page.getByText('замечаний без разбора: 1')).toBeVisible();
 
   // Запрос ушёл с ключом повтора, и замечание в деле ровно одно.
   expect(posts).toHaveLength(1);

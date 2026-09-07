@@ -43,6 +43,63 @@ function lastRequest(): URL {
 }
 
 describe('список задач', () => {
+  it('теги сверх двух уходят в счётчик, и он называет скрытые поимённо', async () => {
+    server.use(
+      listing(() =>
+        collection([
+          task('DEMO-8', {
+            tags: ['frontend', 'ux', 'design', 'responsive', 'accessibility'],
+          }),
+        ]),
+      ),
+    );
+
+    open('/tasks?queue=DEMO');
+
+    const row = await screen.findByRole('row', { name: /DEMO-8/ });
+    // Два тега показаны, три ушли в счётчик — но не пропали: обрезание без доступа
+    // к скрытому было бы потерей данных, а не плотностью.
+    expect(within(row).getByText('frontend')).toBeInTheDocument();
+    expect(within(row).getByText('ux')).toBeInTheDocument();
+    expect(within(row).queryByText('design')).not.toBeInTheDocument();
+    expect(row).toHaveTextContent('ещё теги: design, responsive, accessibility');
+  });
+
+  it('признаки строки — три разных знака, и каждый называет себя по-русски', async () => {
+    server.use(
+      listing(() =>
+        collection([
+          task('DEMO-9', {
+            features: {
+              blocked: true,
+              open_questions: 2,
+              open_blocking_questions: 0,
+              open_remarks: 3,
+              last_summary_at: null,
+              last_entry_at: null,
+            },
+          }),
+        ]),
+      ),
+    );
+
+    open('/tasks?queue=DEMO');
+
+    const row = await screen.findByRole('row', { name: /DEMO-9/ });
+    const marks = within(row)
+      .getAllByTitle(/./)
+      .filter((node) => node.dataset.mark === 'feature');
+
+    expect(marks).toHaveLength(3);
+    expect(row).toHaveTextContent(/заблокирована/);
+    expect(row).toHaveTextContent('вопросов без ответа: 2');
+    expect(row).toHaveTextContent('замечаний без разбора: 3');
+
+    // Различие держится не только цветом: у каждого знака свой рисунок.
+    const shapes = marks.map((node) => node.querySelector('svg')?.innerHTML ?? '');
+    expect(new Set(shapes).size).toBe(3);
+  });
+
   it('статус и приоритет в строке названы родом: знак читается и глазом, и диктором', async () => {
     server.use(
       listing(() => collection([task('DEMO-4', { status: 'in_progress', priority: 'critical' })])),
@@ -94,14 +151,18 @@ describe('список задач', () => {
 
     const blocked = (await screen.findByText('DEMO-6')).closest('tr');
     expect(blocked).not.toBeNull();
-    expect(within(blocked as HTMLElement).getByText('заблокирована')).toBeInTheDocument();
+    expect(within(blocked as HTMLElement).getByText(/^заблокирована/)).toBeInTheDocument();
     // Время в строке одно — активность в деле; у задачи без записей она названа словами.
     expect(within(blocked as HTMLElement).getByText('в деле пусто')).toBeInTheDocument();
     expect(within(blocked as HTMLElement).queryByText(/сводка/)).toBeNull();
 
     const waiting = screen.getByText('DEMO-4').closest('tr');
-    expect(within(waiting as HTMLElement).getByText('блокирующих 1')).toBeInTheDocument();
-    expect(within(waiting as HTMLElement).getByText('вопросов 1')).toBeInTheDocument();
+    // Блокирующий вопрос — не отдельный знак, а состояние знака вопросов: четвёртый
+    // значок рядом с третьим перестаёт читаться, а различие «вопрос есть» и «вопрос
+    // держит работу» важнее ещё одного числа.
+    expect(
+      within(waiting as HTMLElement).getByText('вопросов без ответа: 1, из них блокирующих: 1'),
+    ).toBeInTheDocument();
 
     // Один запрос на страницу списка и ни одного на строку.
     expect(seen).toHaveLength(1);

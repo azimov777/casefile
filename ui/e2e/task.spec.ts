@@ -36,7 +36,7 @@ test('карточка DEMO-6 рисуется одним запросом па�
   await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-6');
   const card = page.getByRole('main');
   await expect(card.getByText('in_progress').first()).toBeVisible();
-  await expect(card.getByText('заблокирована')).toBeVisible();
+  await expect(card.getByText(/^заблокирована/)).toBeVisible();
 
   // Кто именно держит — видно из связей, с ключом и статусом другой стороны.
   const links = page.getByRole('region', { name: 'Связи' });

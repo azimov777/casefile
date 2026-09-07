@@ -73,7 +73,7 @@ describe('карточка задачи', () => {
     // Статус ищется в шапке: тот же `in_progress` стоит и у задачи на другом конце связи.
     const header = heading.closest('header') as HTMLElement;
     expect(within(header).getByText('in_progress')).toBeInTheDocument();
-    expect(within(header).getByText('заблокирована')).toBeInTheDocument();
+    expect(within(header).getByText(/^заблокирована/)).toBeInTheDocument();
 
     // Признак «заблокирована» подкреплён связью: видно, кто именно держит.
     const links = screen.getByRole('heading', { name: 'Связи' }).closest('section');
@@ -389,7 +389,7 @@ describe('замечание к задаче', () => {
     // Регуляркой: строка замечания собрана из ключа, номера и заголовка, и точное
     // совпадение искало бы её целиком.
     await waitFor(() => expect(screen.getByText(/Ещё одно/)).toBeInTheDocument());
-    expect(screen.getByText('замечаний 2')).toBeInTheDocument();
+    expect(screen.getByText('замечаний без разбора: 2')).toBeInTheDocument();
   });
 
   it('кадр живого потока обгоняет ответ сервера — подтверждение всё равно показано', async () => {

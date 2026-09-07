@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import {
   PriorityMark,
   StatusMark,
-  TaskFeatureBadges,
+  TaskFeatureMarks,
   type TaskDetails,
   type TaskFeatures,
   type TaskStatus,
@@ -57,7 +57,7 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
 
         {/* Признаки в той же строке, что и плашки: две отдельные строки одинаковых
             плашек занимали место главного, ничего не добавляя к различимости. */}
-        <TaskFeatureBadges features={features} />
+        <TaskFeatureMarks features={features} />
       </div>
 
       <dl className={styles.facts}>

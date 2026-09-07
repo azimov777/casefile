@@ -9,15 +9,6 @@ test.beforeEach(async ({ context }) => {
   }, token);
 });
 
-/**
- * Плашка с точно таким текстом внутри таблицы. Область обязательна: подписи фильтров
- * над таблицей называются теми же словами контракта (`open`, `done`), и без `tbody`
- * поиск нашёл бы галочку отбора вместо плашки строки.
- */
-function badge(page: Page, text: string): Locator {
-  return page.locator('tbody').getByText(text, { exact: true }).first();
-}
-
 function background(target: Locator): Promise<string> {
   return target.evaluate((node) => getComputedStyle(node).backgroundColor);
 }
@@ -94,13 +85,21 @@ test('тон тревоги отличается от нейтрального',
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
 
-  const danger = await background(badge(page, 'заблокирована'));
-  // Нейтральная плашка берётся любая: после UI-30 статус и приоритет перестали быть
-  // плашками, и единственные оставшиеся нейтральные в строке — теги.
-  const neutral = await background(page.locator('tbody [data-badge="neutral"]').first());
+  // После UI-31 признак — знак, а не плашка: заливки у него нет, и тревога выражена
+  // цветом самого рисунка. Сравнивается он с нейтральной плашкой тега — единственной
+  // нейтральной вещью, оставшейся в строке.
+  const danger = await page
+    .locator('tbody [data-mark="feature"]')
+    .filter({ hasText: /^заблокирована/ })
+    .first()
+    .locator('svg')
+    .evaluate((node) => getComputedStyle(node).color);
+  const neutral = await page
+    .locator('tbody [data-badge="neutral"]')
+    .first()
+    .evaluate((node) => getComputedStyle(node).color);
 
   expect(danger).not.toBe(neutral);
-  expect(danger).not.toBe('rgba(0, 0, 0, 0)');
 });
 
 test('движение есть там, где оно отвечает на действие человека', async ({ page }) => {

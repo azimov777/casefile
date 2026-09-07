@@ -53,9 +53,12 @@ test('признаки строки берутся из выдачи списк�
   await page.goto('/tasks?queue=DEMO');
   await expect(rows(page)).toHaveCount(7);
 
-  await expect(row(page, 'DEMO-6').getByText('заблокирована')).toBeVisible();
-  await expect(row(page, 'DEMO-4').getByText('блокирующих 1')).toBeVisible();
-  await expect(row(page, 'DEMO-4').getByText('вопросов 1')).toBeVisible();
+  await expect(row(page, 'DEMO-6').getByText(/^заблокирована/)).toBeVisible();
+  // Блокирующий вопрос — не отдельный знак, а состояние знака вопросов: четвёртый
+  // значок рядом с третьим перестаёт читаться (UI-31).
+  await expect(
+    row(page, 'DEMO-4').getByText('вопросов без ответа: 1, из них блокирующих: 1'),
+  ).toBeVisible();
 
   expect(calls.filter((url) => /\/api\/v1\/tasks\?/.test(url))).toHaveLength(1);
   expect(calls.filter((url) => /\/api\/v1\/tasks\/[^?]/.test(url))).toEqual([]);

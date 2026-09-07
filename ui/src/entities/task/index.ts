@@ -28,5 +28,6 @@ export { PriorityMark } from './ui/priority-mark';
 export { TaskCard } from './ui/task-card';
 export { TaskNav } from './ui/task-nav';
 export { hasFeatureBadges } from './ui/feature-badges';
-export { TaskFeatureBadges } from './ui/task-features';
+export { TaskFeatureMarks } from './ui/feature-marks';
+export { TaskTags } from './ui/task-tags';
 export { TaskRow } from './ui/task-row';

@@ -4,7 +4,7 @@ import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/
 import type { Task } from '../api/tasks';
 import { hasFeatureBadges } from './feature-badges';
 import { PriorityMark } from './priority-mark';
-import { TaskFeatureBadges } from './task-features';
+import { TaskFeatureMarks } from './feature-marks';
 import styles from './task-card.module.css';
 
 /**
@@ -59,7 +59,7 @@ export function TaskCard({ task }: { task: Task }) {
 
       {features === null || !hasFeatureBadges(features) ? null : (
         <div className={styles.features}>
-          <TaskFeatureBadges features={features} />
+          <TaskFeatureMarks features={features} />
         </div>
       )}
     </article>

@@ -77,6 +77,7 @@ function seed(request: APIRequestContext): Promise<string[]> {
     for (let index = keys.length; index < TASKS; index += 1) {
       const twoLines = index < 3;
       const alive = index === TASKS - 1;
+      const manyTags = index % 4 === 0;
       keys.push(
         await makeTask(
           request,
@@ -85,7 +86,13 @@ function seed(request: APIRequestContext): Promise<string[]> {
             : twoLines
               ? `${long} — ${index + 1}`
               : `Задача набора № ${index + 1}`,
-          { priority: !alive && index % 4 === 0 ? 'high' : 'normal' },
+          {
+            priority: !alive && manyTags ? 'high' : 'normal',
+            // Пять тегов у каждой четвёртой: строка обязана остаться той же высоты.
+            tags: manyTags
+              ? [TAG, 'frontend', 'ux', 'design', 'responsive', 'accessibility']
+              : [TAG, 'frontend'],
+          },
         ),
       );
     }
@@ -120,6 +127,51 @@ async function visibleRows(page: Page): Promise<number> {
 
 test.describe('первый экран списка', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('все строки одной высоты, включая строку с пятью тегами', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    await seed(request);
+    await silenceJournal(page);
+
+    await page.goto(`/tasks?queue=DEMO&tags=${TAG}`);
+    await expect(rows(page)).toHaveCount(TASKS);
+    await fontsReady(page);
+
+    const heights = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('tbody tr')).map(
+        (node) => node.getBoundingClientRect().height,
+      ),
+    );
+
+    // Было (замер до правки, UI-31#11): 40.3 px у всех строк, и это при том, что
+    // колонка тегов расширялась под самый длинный набор, отнимая ширину у названия.
+    const spread = Math.max(...heights) - Math.min(...heights);
+    expect(spread).toBeLessThanOrEqual(2);
+
+    // Строк на первом экране не меньше, чем было: 17.
+    expect(await visibleRows(page)).toBeGreaterThanOrEqual(17);
+  });
+
+  test('длинное название обрезается, но отдаётся целиком подсказкой', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    await seed(request);
+    await silenceJournal(page);
+
+    await page.goto(`/tasks?queue=DEMO&tags=${TAG}&sort=key`);
+    await expect(rows(page)).toHaveCount(TASKS);
+    await fontsReady(page);
+
+    // У первых трёх задач набора название заведомо длиннее колонки.
+    const long = rows(page).first().locator('[title]').first();
+    const measured = await long.evaluate((node) => ({
+      scroll: node.scrollWidth,
+      client: node.clientWidth,
+      title: node.getAttribute('title') ?? '',
+    }));
+
+    expect(measured.scroll).toBeGreaterThan(measured.client);
+    expect(measured.title.length).toBeGreaterThan(60);
+  });
 
   test('занят задачами, а не формой отбора', async ({ page, request }) => {
     test.setTimeout(120_000);
