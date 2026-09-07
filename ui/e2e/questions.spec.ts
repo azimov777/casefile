@@ -40,6 +40,44 @@ test('входящая показывает адресованный вопро�
   await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toBeVisible();
 });
 
+test('ссылка вопроса ведёт в саму запись, а не только в задачу', async ({ page }) => {
+  await page.goto('/questions');
+
+  const link = page.getByRole('link', { name: 'DEMO-4#4' });
+  await expect(link).toHaveAttribute('href', '/tasks/DEMO-4?entry=4');
+
+  // Переход раскрывает названную запись на карточке, а перезагрузка её там и оставляет:
+  // подпись `KEY#N` обещает запись, и открыться обязана именно она.
+  await link.click();
+  await expect(page).toHaveURL(/\/tasks\/DEMO-4\?entry=4$/);
+  const row = page.getByRole('button', { name: /Срок хранения дел отменённых задач/ });
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  // Раскрыто — значит видно и тело записи, а не только её строка описи. Ищем внутри
+  // описи: тот же вопрос показан выше целиком, в блоке открытых вопросов карточки.
+  await expect(page.getByLabel('Дело').getByText(/Сколько храним\?/)).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole('button', { name: /Срок хранения дел отменённых задач/ }),
+  ).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('очередь отбирает обе половины, и это сказано словами', async ({ page }) => {
+  await page.goto('/questions');
+  await expect(page.getByRole('main')).toBeVisible();
+
+  // Область действия названа у самого поля: очередь общая, «только блокирующие» —
+  // условие вопросов и стоит внутри их половины.
+  await expect(page.getByText('Очередь отбирает обе половины входящей.')).toBeVisible();
+  const questions = page.getByRole('region').filter({ hasText: 'Вопросы ко мне' });
+  await expect(page.getByRole('checkbox', { name: 'только блокирующие' })).toBeVisible();
+
+  // Отбор по очереди уходит в адрес и держится в обеих половинах.
+  await page.goto('/questions?queue=DEMO');
+  await expect(page.getByRole('combobox', { name: 'Очередь' })).toHaveValue('DEMO');
+  await expect(questions.getByRole('article').first()).toBeVisible();
+});
+
 /** Ширина широкого замера: та же, что в `test.use` ниже. */
 const WIDE = 1440;
 

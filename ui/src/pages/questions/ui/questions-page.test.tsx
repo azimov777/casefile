@@ -16,7 +16,7 @@ import {
 } from '@testing/msw/responses';
 import { liveJournal } from '@testing/live-journal';
 import { server } from '@testing/msw/server';
-import { renderApp } from '@testing/render';
+import { address, renderApp } from '@testing/render';
 import { setToken } from '@/shared/api';
 
 /** Что и с какими заголовками уходило на бэкенд за прогон. */
@@ -353,6 +353,79 @@ describe('входящая: мои замечания', () => {
     return asked;
   }
 
+  it('пустой отбор вопросов говорит о несовпадении, а не о том, что агенты не ждут', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      // Бэкенд отбирает как настоящий: неблокирующий вопрос под условие не подходит.
+      http.get(`${API}/api/v1/questions`, ({ request }) => {
+        const blocking = new URL(request.url).searchParams.get('blocking') === 'true';
+        return collection(blocking ? [] : [questionEntry(8, 'DEMO-4', false)]);
+      }),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+
+    renderApp('/questions?blocking=true');
+
+    // Вывод обо всей входящей по отобранной выдаче не делается, а условие названо
+    // поимённо в самом сообщении: человек мог о нём забыть.
+    const empty = await screen.findByText(/ничего не нашлось/);
+    expect(empty).toHaveTextContent('только блокирующие');
+    expect(screen.queryByText(/агенты вас не ждут/)).not.toBeInTheDocument();
+
+    // И снимается на месте, вместе с адресом.
+    await user.click(screen.getAllByRole('button', { name: 'Сбросить отбор' })[0]!);
+    expect(await screen.findByText(/Вопрос DEMO-4#8|DEMO-4#8/)).toBeInTheDocument();
+    expect(address.current).not.toContain('blocking=true');
+  });
+
+  it('пустая половина замечаний под отбором очереди не выдумывает историю', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      // Замечание есть, но в другой очереди: под условие оно не подходит.
+      http.get(`${API}/api/v1/remarks`, ({ request }) => {
+        const queue = new URL(request.url).searchParams.get('queue');
+        return collection(queue === 'TRK' ? [] : [remarkEntry(8, 'DEMO-1')]);
+      }),
+    );
+
+    renderApp('/questions?queue=TRK');
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/ничего не нашлось/).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(/уже разобрали/)).not.toBeInTheDocument();
+  });
+
+  it('без отбора пустая половина замечаний говорит нейтрально', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+
+    renderApp('/questions');
+
+    expect(await screen.findByText('Неразобранных замечаний нет.')).toBeInTheDocument();
+    expect(screen.queryByText(/уже разобрали/)).not.toBeInTheDocument();
+  });
+
+  it('ссылка вопроса открывает свою запись, а не только задачу', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () => collection([questionEntry(12, 'DEMO-4', true)])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+
+    renderApp('/questions');
+
+    expect(await screen.findByRole('link', { name: 'DEMO-4#12' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-4?entry=12',
+    );
+  });
+
   it('показывает мои неразобранные замечания и ведёт в их задачи', async () => {
     const asked = inboxWithRemarks();
     renderApp('/questions');
@@ -362,9 +435,11 @@ describe('входящая: мои замечания', () => {
     const row = await screen.findByText(/Дыры в нумерации/);
     const section = row.closest('section') as HTMLElement;
     expect(within(section).getByText('ждёт разбора')).toBeInTheDocument();
+    // Ссылка называет запись и её же открывает: подпись `KEY#N` без номера в адресе
+    // обещала бы одно, а вела в другое место.
     expect(within(section).getByRole('link', { name: 'DEMO-1#8' })).toHaveAttribute(
       'href',
-      '/tasks/DEMO-1',
+      '/tasks/DEMO-1?entry=8',
     );
 
     // «Мои» — это подпись автора: у замечания нет адресата, и бэкенд сам его не

@@ -16,6 +16,7 @@ import {
   type Answering,
 } from '@/features/answer-question';
 import { Badge, Button, Markdown, QueryState, RelativeTime } from '@/shared/ui';
+import { taskRefHref } from '@/shared/lib';
 import styles from './questions-page.module.css';
 
 /**
@@ -61,6 +62,16 @@ export function QuestionsPage() {
   const answering = useAnswering<Question>();
   const items = withHeld(loaded, answering.held, questionId);
 
+  /**
+   * Условия, действующие на вопросы. Нужны, чтобы отличить «ничего нет» от «ничего
+   * не нашлось»: из пустого ответа отобранной выдачи не следует, что агенты вообще
+   * ни о чём не спрашивают, — а прежний текст утверждал именно это.
+   */
+  const questionConditions = [
+    ...(queue === '' ? [] : [`очередь ${queue}`]),
+    ...(blocking ? ['только блокирующие'] : []),
+  ];
+
   function apply(changes: { queue?: string; blocking?: boolean }) {
     const updated = new URLSearchParams(searchParams);
     if (changes.queue !== undefined) {
@@ -76,9 +87,16 @@ export function QuestionsPage() {
 
   return (
     <main className={styles.screen}>
-      <h1 className={styles.heading}>Входящая</h1>
+      <div>
+        <h1 className={styles.heading}>Входящая</h1>
+        {/* Что здесь лежит — сказано словами: из названия раздела не видно, что
+            половин две, а искать свои замечания человек приходит именно сюда. */}
+        <p className={styles.lede}>
+          Вопросы, которых агенты ждут от вас, и ваши замечания, которых ждёте вы.
+        </p>
+      </div>
 
-      <form className={styles.filters} aria-label="Отбор вопросов">
+      <form className={styles.filters} aria-label="Отбор входящей">
         <label className={styles.field}>
           <span className={styles.label}>Очередь</span>
           <select
@@ -95,14 +113,9 @@ export function QuestionsPage() {
           </select>
         </label>
 
-        <label className={styles.check}>
-          <input
-            type="checkbox"
-            checked={blocking}
-            onChange={(event) => apply({ blocking: event.target.checked })}
-          />
-          только блокирующие
-        </label>
+        {/* Область действия названа рядом с полем: очередь отбирает обе половины,
+            а «только блокирующие» стоит внутри вопросов и к замечаниям не относится. */}
+        <p className={styles.hint}>Очередь отбирает обе половины входящей.</p>
       </form>
 
       {/*
@@ -116,10 +129,31 @@ export function QuestionsPage() {
             Вопросы ко мне
           </h2>
 
+          {/*
+           * Флажок принадлежит вопросам и стоит у них: блокирующих замечаний не бывает,
+           * и в общей форме он обещал бы отбор, которого нет. Под заголовком, а не в
+           * одной строке с ним: в строке он поднимал заголовок левой половины на два
+           * пикселя относительно правой, и колонки переставали начинаться на одной линии.
+           */}
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={blocking}
+              onChange={(event) => apply({ blocking: event.target.checked })}
+            />
+            только блокирующие
+          </label>
+
           <QueryState
             query={questions}
             loading="Читаем входящую…"
-            empty={items.length === 0 ? 'Вопросов без ответа нет: агенты вас не ждут.' : undefined}
+            empty={
+              items.length === 0
+                ? questionConditions.length === 0
+                  ? 'Вопросов без ответа нет: агенты вас не ждут.'
+                  : emptyByFilter(questionConditions, () => apply({ queue: '', blocking: false }))
+                : undefined
+            }
           />
 
           <ul className={styles.list}>
@@ -155,7 +189,9 @@ export function QuestionsPage() {
             loading="Читаем замечания…"
             empty={
               myRemarks.length === 0
-                ? 'Неразобранных замечаний нет: всё, что вы сказали, уже разобрали.'
+                ? queue === ''
+                  ? 'Неразобранных замечаний нет.'
+                  : emptyByFilter([`очередь ${queue}`], () => apply({ queue: '' }))
                 : undefined
             }
           />
@@ -182,12 +218,35 @@ export function QuestionsPage() {
   );
 }
 
+/**
+ * Пустота по отбору: что именно не нашлось и как снять условия.
+ *
+ * Отдельно от пустоты без отбора намеренно: «агенты вас не ждут» — вывод обо всей
+ * входящей, и делать его по отобранной выдаче нельзя. Условия перечислены поимённо,
+ * потому что человек мог забыть про одно из них.
+ */
+function emptyByFilter(conditions: string[], onReset: () => void) {
+  return (
+    <>
+      По этому отбору ({conditions.join(', ')}) ничего не нашлось.{' '}
+      <button type="button" className={styles.reset} onClick={onReset}>
+        Сбросить отбор
+      </button>
+    </>
+  );
+}
+
 /** Замечание во входящей: к какой задаче, когда оставлено и о чём. */
 function RemarkRow({ remark }: { remark: Remark }) {
   return (
     <article className={styles.remark}>
       <header className={styles.head}>
-        <Link className={styles.task} to={`/tasks/${remark.task_key}`}>
+        {/* Подпись `KEY#N` и адрес собираются одним правилом: ссылка, называющая
+            запись, обязана её и открывать (`shared/lib`, `taskRefHref`). */}
+        <Link
+          className={styles.task}
+          to={taskRefHref({ key: remark.task_key, entryNo: remark.no })}
+        >
           {remark.task_key}#{remark.no}
         </Link>
         <Badge tone="attention">ждёт разбора</Badge>
@@ -229,7 +288,10 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
       aria-label={blocking ? `Блокирующий вопрос ${id}` : `Вопрос ${id}`}
     >
       <header className={styles.head}>
-        <Link className={styles.task} to={`/tasks/${question.task_key}`}>
+        <Link
+          className={styles.task}
+          to={taskRefHref({ key: question.task_key, entryNo: question.no })}
+        >
           {question.task_key}#{question.no}
         </Link>
         {/* Плашка остаётся рядом с кромкой: цвет не единственный носитель смысла. */}
