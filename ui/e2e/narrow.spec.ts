@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, side, silenceJournal } from './contour';
+import { fontsReady, readE2eToken, side, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -111,4 +111,65 @@ test('доступность узкого экрана на всех пяти э
       .map((violation) => violation.id);
     expect(serious, address).toEqual([]);
   }
+});
+
+test('таблица прокручивается вбок внутри рамки, а не прячет колонки', async ({ page }) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.getByRole('table')).toBeVisible();
+  await fontsReady(page);
+
+  const scroller = page.getByRole('region', { name: /таблица прокручивается вбок/ });
+  const last = page.getByRole('columnheader', { name: 'Активность' });
+
+  // До прокрутки последняя колонка за правым краем рамки — но она существует и
+  // доступна, а не отрезана: раньше `overflow-x: clip` не давал до неё добраться.
+  const box = await scroller.boundingBox();
+  const before = await last.boundingBox();
+  expect((before?.x ?? 0) + (before?.width ?? 0)).toBeGreaterThan(
+    (box?.x ?? 0) + (box?.width ?? 0),
+  );
+
+  // Прокрутка идёт внутри рамки: страница вширь не едет.
+  await scroller.evaluate((node) => {
+    node.scrollLeft = node.scrollWidth;
+  });
+  await expect
+    .poll(async () => {
+      const after = await last.boundingBox();
+      return (after?.x ?? 0) + (after?.width ?? 0);
+    })
+    .toBeLessThanOrEqual((box?.x ?? 0) + (box?.width ?? 0) + 1);
+  expect(await overflow(page)).toBeLessThanOrEqual(0);
+
+  // И то же самое доступно с клавиатуры: область фокусируется и ходит стрелками.
+  await scroller.evaluate((node) => {
+    node.scrollLeft = 0;
+  });
+  await scroller.focus();
+  await expect(scroller).toBeFocused();
+  // Стрелками, а не `End`: `End` уводит прокрутку по вертикали, а вбок область ходит
+  // именно стрелками — это и есть клавиатурный доступ к правым колонкам.
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => scroller.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+});
+
+test('на широком экране таблица не прокручивается, а шапка липнет к верху', async ({ page }) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.getByRole('table')).toBeVisible();
+  await fontsReady(page);
+
+  const scroller = page.getByRole('region', { name: /таблица прокручивается вбок/ });
+  // Прокручивать нечего: колонки помещаются, и обёртка остаётся `clip` — без этого
+  // липкая шапка прилипала бы к ней вместо окна (требование UI-12).
+  const overflowX = await scroller.evaluate((node) => node.scrollWidth - node.clientWidth);
+  expect(overflowX).toBeLessThanOrEqual(0);
+
+  await page.mouse.wheel(0, 600);
+  const head = page.getByRole('columnheader', { name: 'Активность' });
+  await expect(head).toBeInViewport();
 });

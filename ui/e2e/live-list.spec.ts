@@ -153,6 +153,9 @@ test.describe('список под живым потоком', () => {
   }) => {
     await page.goto('/tasks/DEMO-3');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-3');
+    // Прокрутка снимается уже подставленным шрифтом: Fira приходит с внешнего хоста
+    // и меняет высоту документа, а вместе с ней и то, докуда страница прокрутилась.
+    await fontsReady(page);
 
     await page.evaluate(() => window.scrollTo(0, 200));
     const scrolled = await page.evaluate(() => window.scrollY);
