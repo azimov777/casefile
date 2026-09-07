@@ -173,3 +173,62 @@ test('на широком экране таблица не прокручива�
   const head = page.getByRole('columnheader', { name: 'Активность' });
   await expect(head).toBeInViewport();
 });
+
+test('на карточке замечание доступно до описи и одним действием из навигации', async ({ page }) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/tasks/DEMO-3');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-3');
+
+  // Порядок чтения, а не только вид: блок замечаний стоит в разметке до описи дела.
+  const order = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('main section[aria-labelledby]')).map((node) =>
+      node.getAttribute('aria-labelledby'),
+    ),
+  );
+  expect(order.indexOf('remarks')).toBeGreaterThan(-1);
+  expect(order.indexOf('remarks')).toBeLessThan(order.indexOf('case'));
+
+  // И то же самое — одним действием из липкой навигации, с любой глубины прокрутки.
+  await page.mouse.wheel(0, 4000);
+  const action = page
+    .getByRole('navigation', { name: /Навигация по задаче/ })
+    .getByRole('button', { name: 'Оставить замечание' });
+  await expect(action).toBeInViewport();
+  await action.click();
+  await expect(page.getByLabel(/^Замечание$/)).toBeVisible();
+});
+
+test('сводка на узком экране идёт подписью над текстом', async ({ page }) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  // Сводка есть не у каждой задачи демо, а проверять надо именно её: берём первую,
+  // по которой кто-то отчитывался.
+  const parts = page.locator('section[aria-labelledby="summary"] dl > div');
+  for (const key of ['DEMO-1', 'DEMO-2', 'DEMO-3', 'DEMO-4', 'DEMO-5', 'DEMO-6', 'DEMO-7']) {
+    await page.goto(`/tasks/${key}`);
+    await expect(page.getByRole('heading', { name: 'Последняя сводка' })).toBeVisible();
+    await fontsReady(page);
+    if ((await parts.count()) > 0) break;
+  }
+  expect(await parts.count()).toBeGreaterThan(0);
+
+  // Подпись части и её текст стоят друг под другом, а не двумя колонками: колонка
+  // подписей в 8rem ужимала текст примерно до 190 px и растягивала сводку.
+  const stacked = await parts.evaluateAll((nodes) =>
+    nodes.map((part) => {
+      const term = part.querySelector('dt')?.getBoundingClientRect();
+      const value = part.querySelector('dd')?.getBoundingClientRect();
+      if (term === undefined || value === undefined) return null;
+      return { below: value.top >= term.bottom - 1, wide: Math.round(value.width) };
+    }),
+  );
+
+  for (const part of stacked) {
+    expect(part).not.toBeNull();
+    expect(part?.below).toBe(true);
+    // Значение занимает ширину блока, а не остаток от колонки подписей.
+    expect(part?.wide).toBeGreaterThan(250);
+  }
+});

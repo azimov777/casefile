@@ -97,12 +97,25 @@ export function TaskPage() {
 
   return (
     <main className={styles.screen}>
-      <TaskNav taskKey={task.key} view="card" />
+      {/*
+       * Единственное, что человек начинает сам, стоит в липкой строке: до неё не надо
+       * прокручивать опись в сотню записей. Второй такой кнопки в блоке замечаний нет —
+       * заменённый путь удалён, а не оставлен вторым вариантом.
+       */}
+      <TaskNav
+        taskKey={task.key}
+        view="card"
+        action={
+          remarkOpen ? null : (
+            <Button onClick={() => setRemarkOpen(true)}>Оставить замечание</Button>
+          )
+        }
+      />
       <TaskHeader task={task} features={features} transitions={transitions} />
 
       {/*
        * Две колонки, каждая своим потоком. Слева то, ради чего карточку открывают:
-       * сводка, вопросы и опись дела. Справа то, что читают реже: замечания, задание
+       * сводка, вопросы, замечания и опись дела. Справа то, что читают реже: задание
        * и связи. Высоты колонок независимы — сеткой из отдельных блоков они были
        * связаны, и длинное задание справа уносило начало описи слева за первый экран
        * (`e2e/layout.spec.ts`).
@@ -161,31 +174,14 @@ export function TaskPage() {
             )}
           </section>
 
-          <section className={`${styles.block} ${styles.listBlock}`} aria-labelledby="case">
-            <div className={styles.blockHead}>
-              <h2 className={styles.title} id="case">
-                Дело
-              </h2>
-              {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
-              1300-м пикселе прокрутки и находился только теми, кто дочитал. */}
-              <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
-            </div>
-            <TaskIndex
-              taskKey={task.key}
-              index={index}
-              checks={task.checks}
-              openAt={openAt}
-              onOpenChange={rememberOpen}
-            />
-          </section>
-        </div>
-
-        <div className={styles.aside}>
           {/*
-           * Замечания стоят первыми: это второй способ, каким человек участвует в
-           * работе, и единственный, который начинает он сам
-           * (`../tracker/docs/CONCEPT.md`, 3.4). Претензия к сделанному важнее
-           * договора о нём и не должна лежать за пятью разделами задания.
+           * Замечания стоят до описи, а не после неё: это второй способ, каким человек
+           * участвует в работе, и единственный, который начинает он сам
+           * (`../tracker/docs/CONCEPT.md`, 3.4). В правой колонке они оказывались за
+           * всей описью в порядке чтения — на узком экране на 3527-м пикселе, — то есть
+           * дальше всего от человека лежало ровно то, ради чего он сюда приходит.
+           * Порядок задаёт разметка, а не `order`: Tab и программа чтения с экрана
+           * идут по ней, а не по тому, как блоки расставлены на экране.
            *
            * Форма не привязана к элементу выдачи и переживает перечитывание пакета —
            * в отличие от формы ответа, которая уходит вместе со своим вопросом.
@@ -215,29 +211,49 @@ export function TaskPage() {
                 ))}
               </ul>
             )}
-            {remarkOpen ? (
-              <RemarkForm taskKey={task.key} />
-            ) : (
-              <div>
-                {/*
-                 * Кнопка есть на задаче в любом статусе, включая закрытую: именно на
-                 * сделанное человек и смотрит, когда говорит «вышло не то». Форма при
-                 * этом свёрнута — поле в пять строк стоит около 180 пикселей экрана,
-                 * и платить за него должен тот, кто пришёл писать.
-                 */}
-                <Button onClick={() => setRemarkOpen(true)}>Оставить замечание</Button>
-              </div>
-            )}
+            {/*
+             * Форма свёрнута, пока её не попросили: поле в пять строк стоит около 180
+             * пикселей экрана, и платить за него должен тот, кто пришёл писать. Открыть
+             * её можно на задаче в любом статусе, включая закрытую: именно на сделанное
+             * человек и смотрит, когда говорит «вышло не то».
+             */}
+            {remarkOpen ? <RemarkForm taskKey={task.key} /> : null}
           </section>
 
-          <section className={styles.block} aria-labelledby="sections">
+          <section
+            className={`${styles.block} ${styles.listBlock} ${styles.caseBlock}`}
+            aria-labelledby="case"
+          >
+            <div className={styles.blockHead}>
+              <h2 className={styles.title} id="case">
+                Дело
+              </h2>
+              {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
+              1300-м пикселе прокрутки и находился только теми, кто дочитал. */}
+              <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
+            </div>
+            <TaskIndex
+              taskKey={task.key}
+              index={index}
+              checks={task.checks}
+              openAt={openAt}
+              onOpenChange={rememberOpen}
+            />
+          </section>
+        </div>
+
+        <div className={styles.aside}>
+          <section className={`${styles.block} ${styles.sectionsBlock}`} aria-labelledby="sections">
             <h2 className={styles.title} id="sections">
               Задание
             </h2>
             <TaskSections task={task} />
           </section>
 
-          <section className={`${styles.block} ${styles.listBlock}`} aria-labelledby="links">
+          <section
+            className={`${styles.block} ${styles.listBlock} ${styles.linksBlock}`}
+            aria-labelledby="links"
+          >
             <h2 className={styles.title} id="links">
               Связи
             </h2>

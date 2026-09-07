@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { caseHref, listReturnHref, taskRefHref } from '@/shared/lib';
 import styles from './task-nav.module.css';
@@ -6,6 +7,15 @@ interface TaskNavProps {
   taskKey: string;
   /** Где человек сейчас: это меняет подсветку, а не набор ссылок. */
   view: 'card' | 'case';
+  /**
+   * Действие страницы — на карточке это «оставить замечание».
+   *
+   * Живёт здесь, потому что строка липкая: единственное, что человеку разрешено
+   * начать самому, должно быть доступно с любой глубины прокрутки, а не лежать
+   * за описью в сотню записей. Что именно это за действие, слой сущности не знает
+   * и знать не должен.
+   */
+  action?: ReactNode;
 }
 
 /**
@@ -18,7 +28,7 @@ interface TaskNavProps {
  * Живёт в `entities/task`, потому что её показывают обе страницы задачи: разъехавшись,
  * два экземпляра одной и той же навигации начали бы вести в разные места.
  */
-export function TaskNav({ taskKey, view }: TaskNavProps) {
+export function TaskNav({ taskKey, view, action }: TaskNavProps) {
   const location = useLocation();
   const back = listReturnHref(location.state);
 
@@ -33,27 +43,31 @@ export function TaskNav({ taskKey, view }: TaskNavProps) {
         {back === null ? '← Ко всем задачам' : '← К списку с отбором'}
       </Link>
 
-      <span className={styles.views}>
-        {/*
-         * Состояние перехода передаётся дальше: уйдя в дело и вернувшись, человек
-         * не должен терять отбор, с которым пришёл из списка.
-         */}
-        <Link
-          className={styles.view}
-          to={taskRefHref({ key: taskKey, entryNo: null })}
-          state={location.state}
-          aria-current={view === 'card' ? 'page' : undefined}
-        >
-          Карточка
-        </Link>
-        <Link
-          className={styles.view}
-          to={caseHref(taskKey)}
-          state={location.state}
-          aria-current={view === 'case' ? 'page' : undefined}
-        >
-          Дело
-        </Link>
+      <span className={styles.right}>
+        {action}
+
+        <span className={styles.views}>
+          {/*
+           * Состояние перехода передаётся дальше: уйдя в дело и вернувшись, человек
+           * не должен терять отбор, с которым пришёл из списка.
+           */}
+          <Link
+            className={styles.view}
+            to={taskRefHref({ key: taskKey, entryNo: null })}
+            state={location.state}
+            aria-current={view === 'card' ? 'page' : undefined}
+          >
+            Карточка
+          </Link>
+          <Link
+            className={styles.view}
+            to={caseHref(taskKey)}
+            state={location.state}
+            aria-current={view === 'case' ? 'page' : undefined}
+          >
+            Дело
+          </Link>
+        </span>
       </span>
     </nav>
   );

@@ -24,9 +24,13 @@ test('неразобранное замечание видно на карточ
     .filter({ has: page.getByRole('heading', { name: 'Замечания' }) });
   await expect(remarks.getByText(/В отказе не видно/)).toBeVisible();
 
-  // Форма есть и на закрытой задаче: именно на сделанное человек и смотрит, когда
-  // говорит «вышло не то».
-  await expect(remarks.getByRole('button', { name: 'Оставить замечание' })).toBeVisible();
+  // Действие есть и на закрытой задаче: именно на сделанное человек и смотрит, когда
+  // говорит «вышло не то». Кнопка живёт в липкой навигации задачи (UI-25).
+  await expect(
+    page
+      .getByRole('navigation', { name: /Навигация по задаче/ })
+      .getByRole('button', { name: 'Оставить замечание' }),
+  ).toBeVisible();
   // Именно плашка шапки: слово `done` встречается и в теле сводки, и в описи.
   await expect(page.getByText('статус done')).toBeVisible();
 });

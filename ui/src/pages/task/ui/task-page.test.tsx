@@ -345,6 +345,27 @@ describe('карточка задачи', () => {
   });
 });
 
+describe('порядок чтения карточки', () => {
+  it('замечания идут до описи дела, а действие стоит в липкой навигации', async () => {
+    server.use(packageOf('DEMO-6'), entries('DEMO-6'));
+    renderApp('/tasks/DEMO-6');
+    await screen.findByRole('heading', { name: 'Замечания' });
+
+    // Порядок разметки и есть порядок чтения: Tab и программа чтения с экрана идут
+    // по нему, а не по тому, как блоки расставлены на широком экране.
+    const order = Array.from(document.querySelectorAll('main section[aria-labelledby]')).map(
+      (node) => node.getAttribute('aria-labelledby'),
+    );
+    expect(order.indexOf('remarks')).toBeLessThan(order.indexOf('case'));
+    expect(order.indexOf('summary')).toBeLessThan(order.indexOf('remarks'));
+
+    // Кнопка одна и живёт в навигации: второго пути к форме нет.
+    const nav = screen.getByRole('navigation', { name: /Навигация по задаче/ });
+    expect(within(nav).getByRole('button', { name: 'Оставить замечание' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Оставить замечание' })).toHaveLength(1);
+  });
+});
+
 describe('замечание к задаче', () => {
   /** Карточка с замечаниями и подменённой отправкой: считаем, сколько раз её позвали. */
   function withRemarks(overrides = {}) {

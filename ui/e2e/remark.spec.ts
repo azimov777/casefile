@@ -44,7 +44,10 @@ test('замечание с карточки подшивается один р�
   // До отправки блок занимает строку и не съедает первый экран.
   await expect(remarks.getByText('Неразобранных замечаний нет.')).toBeVisible();
 
-  await remarks.getByRole('button', { name: 'Оставить замечание' }).click();
+  await page
+    .getByRole('navigation', { name: /Навигация по задаче/ })
+    .getByRole('button', { name: 'Оставить замечание' })
+    .click();
   await page
     .getByLabel(/^Замечание$/)
     .fill('Из карточки не видно, чем задача отличается от соседней.');
@@ -72,7 +75,7 @@ test('черновик замечания переживает уход на д�
   await page.getByRole('button', { name: 'Оставить замечание' }).click();
   await page.getByLabel(/^Замечание$/).fill('Недописанное замечание');
 
-  await page.getByRole('link', { name: 'Задачи' }).click();
+  await page.getByRole('link', { name: 'Все задачи' }).click();
   await expect(page.getByRole('heading', { name: 'Задачи' })).toBeVisible();
 
   await page.goto('/tasks/DEMO-5');
