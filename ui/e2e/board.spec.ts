@@ -218,3 +218,61 @@ test('доступность доски', async ({ page }) => {
     .map((violation) => violation.id);
   expect(serious).toEqual([]);
 });
+
+test('столбцы одной ширины при любом сочетании свёрнутых и развёрнутых', async ({ page }) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO&view=board');
+  await expect(column(page, 'open')).toBeVisible();
+  await fontsReady(page);
+
+  const widths = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('section[aria-label]'))
+        .filter((node) => node.getAttribute('aria-label') !== 'Отбор задач')
+        .map((node) => Math.round(node.getBoundingClientRect().width * 10) / 10),
+    );
+
+  // Свёрнутый столбец раньше превращался в пилюлю по ширине содержимого, и ряд
+  // читался как набор разных вещей (решение Д19). По умолчанию свёрнуты `done`
+  // и `cancelled` — то есть замер идёт как раз на смешанном сочетании.
+  const mixed = await widths();
+  expect(mixed.length).toBeGreaterThanOrEqual(5);
+  expect(Math.max(...mixed) - Math.min(...mixed)).toBeLessThanOrEqual(1);
+
+  // Раскрытие столбца не меняет ширины соседей.
+  await column(page, 'done').getByRole('button').click();
+  await expect(column(page, 'done').getByRole('article').first()).toBeVisible();
+
+  const opened = await widths();
+  expect(Math.max(...opened) - Math.min(...opened)).toBeLessThanOrEqual(1);
+  expect(opened).toEqual(mixed);
+});
+
+test('у карточек столбца подвал на одном месте, а название не длиннее двух строк', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO&view=board');
+  await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const measured = await column(page, 'open').evaluate((node) => {
+    const cards = Array.from(node.querySelectorAll('article'));
+    return cards.map((card) => {
+      const box = card.getBoundingClientRect();
+      const foot = card.lastElementChild?.getBoundingClientRect();
+      const title = card.querySelector('p');
+      const lineHeight = Number.parseFloat(getComputedStyle(title as Element).lineHeight);
+      return {
+        fromBottom: Math.round((box.bottom - (foot?.bottom ?? box.bottom)) * 10) / 10,
+        titleLines:
+          Math.round(((title?.getBoundingClientRect().height ?? 0) / lineHeight) * 10) / 10,
+      };
+    });
+  });
+
+  expect(measured.length).toBeGreaterThan(1);
+  const distances = measured.map((card) => card.fromBottom);
+  expect(Math.max(...distances) - Math.min(...distances)).toBeLessThanOrEqual(1);
+  for (const card of measured) expect(card.titleLines).toBeLessThanOrEqual(2);
+});

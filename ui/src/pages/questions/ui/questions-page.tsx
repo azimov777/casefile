@@ -105,72 +105,79 @@ export function QuestionsPage() {
         </label>
       </form>
 
-      <section aria-labelledby="questions-section" className={styles.section}>
-        <h2 className={styles.sectionTitle} id="questions-section">
-          Вопросы ко мне
-        </h2>
-
-        <QueryState
-          query={questions}
-          loading="Читаем входящую…"
-          empty={items.length === 0 ? 'Вопросов без ответа нет: агенты вас не ждут.' : undefined}
-        />
-
-        <ul className={styles.list}>
-          {items.map((question, at) => (
-            <li key={questionId(question)}>
-              <QuestionRow question={question} at={at} answering={answering} />
-            </li>
-          ))}
-        </ul>
-
-        {questions.hasNextPage ? (
-          <Button
-            onClick={() => void questions.fetchNextPage()}
-            disabled={questions.isFetchingNextPage}
-          >
-            {questions.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
-          </Button>
-        ) : null}
-      </section>
-
       {/*
-       * Вторая половина: что человек сказал агентам и на что ему ещё не ответили.
-       * Здесь только чтение — замечание оставляют на карточке задачи, глядя на то,
-       * о чём оно.
+       * Два списка рядом (решение Д16): на 1440 половина экрана перестаёт пустовать,
+       * а вопросы и замечания перестают выглядеть продолжением друг друга. На узком
+       * экране сетка складывается в одну колонку в порядке разметки — вопросы первыми.
        */}
-      <section aria-labelledby="remarks-section" className={styles.section}>
-        <h2 className={styles.sectionTitle} id="remarks-section">
-          Мои замечания без разбора
-        </h2>
+      <div className={styles.columns}>
+        <section aria-labelledby="questions-section" className={styles.section}>
+          <h2 className={styles.sectionTitle} id="questions-section">
+            Вопросы ко мне
+          </h2>
 
-        <QueryState
-          query={remarks}
-          loading="Читаем замечания…"
-          empty={
-            myRemarks.length === 0
-              ? 'Неразобранных замечаний нет: всё, что вы сказали, уже разобрали.'
-              : undefined
-          }
-        />
+          <QueryState
+            query={questions}
+            loading="Читаем входящую…"
+            empty={items.length === 0 ? 'Вопросов без ответа нет: агенты вас не ждут.' : undefined}
+          />
 
-        <ul className={styles.list}>
-          {myRemarks.map((remark) => (
-            <li key={`${remark.task_key}#${remark.no}`}>
-              <RemarkRow remark={remark} />
-            </li>
-          ))}
-        </ul>
+          <ul className={styles.list}>
+            {items.map((question, at) => (
+              <li key={questionId(question)}>
+                <QuestionRow question={question} at={at} answering={answering} />
+              </li>
+            ))}
+          </ul>
 
-        {remarks.hasNextPage ? (
-          <Button
-            onClick={() => void remarks.fetchNextPage()}
-            disabled={remarks.isFetchingNextPage}
-          >
-            {remarks.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
-          </Button>
-        ) : null}
-      </section>
+          {questions.hasNextPage ? (
+            <Button
+              onClick={() => void questions.fetchNextPage()}
+              disabled={questions.isFetchingNextPage}
+            >
+              {questions.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+            </Button>
+          ) : null}
+        </section>
+
+        {/*
+         * Вторая половина: что человек сказал агентам и на что ему ещё не ответили.
+         * Здесь только чтение — замечание оставляют на карточке задачи, глядя на то,
+         * о чём оно.
+         */}
+        <section aria-labelledby="remarks-section" className={styles.section}>
+          <h2 className={styles.sectionTitle} id="remarks-section">
+            Мои замечания без разбора
+          </h2>
+
+          <QueryState
+            query={remarks}
+            loading="Читаем замечания…"
+            empty={
+              myRemarks.length === 0
+                ? 'Неразобранных замечаний нет: всё, что вы сказали, уже разобрали.'
+                : undefined
+            }
+          />
+
+          <ul className={styles.list}>
+            {myRemarks.map((remark) => (
+              <li key={`${remark.task_key}#${remark.no}`}>
+                <RemarkRow remark={remark} />
+              </li>
+            ))}
+          </ul>
+
+          {remarks.hasNextPage ? (
+            <Button
+              onClick={() => void remarks.fetchNextPage()}
+              disabled={remarks.isFetchingNextPage}
+            >
+              {remarks.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+            </Button>
+          ) : null}
+        </section>
+      </div>
     </main>
   );
 }
@@ -211,13 +218,22 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
   const [open, setOpen] = useState(false);
   const answered = answering.answerOf(id);
 
+  const blocking = question.payload.blocking;
+
   return (
-    <article className={styles.question}>
+    <article
+      className={`${styles.question} ${blocking ? styles.blocking : ''}`}
+      // Признак виден разметке, а не только глазу: сквозной тест ищет блокирующий
+      // вопрос по нему, а не по цвету кромки и не по тексту плашки.
+      data-blocking={blocking ? 'true' : undefined}
+      aria-label={blocking ? `Блокирующий вопрос ${id}` : `Вопрос ${id}`}
+    >
       <header className={styles.head}>
         <Link className={styles.task} to={`/tasks/${question.task_key}`}>
           {question.task_key}#{question.no}
         </Link>
-        {question.payload.blocking ? <Badge tone="danger">блокирующий</Badge> : null}
+        {/* Плашка остаётся рядом с кромкой: цвет не единственный носитель смысла. */}
+        {blocking ? <Badge tone="danger">блокирующий</Badge> : null}
         <RelativeTime value={question.created_at} />
       </header>
 

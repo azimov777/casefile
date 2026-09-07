@@ -27,7 +27,7 @@ export function TaskCard({ task }: { task: Task }) {
         <PriorityMark priority={task.priority} withName={false} />
       </div>
 
-      <p className={styles.title}>
+      <p className={styles.title} title={task.title ?? ''}>
         <Link
           className={styles.link}
           to={taskRefHref({ key: task.key, entryNo: null })}

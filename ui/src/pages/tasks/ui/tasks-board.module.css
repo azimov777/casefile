@@ -22,18 +22,25 @@
   display: flex;
   flex-direction: column;
   gap: calc(var(--spacing) * 2);
-  flex: 0 0 17rem;
-  width: 17rem;
+  flex: 0 0 var(--ui-board-column);
+  width: var(--ui-board-column);
   padding: calc(var(--spacing) * 3);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-control);
   background: var(--color-sunken);
 }
 
-/* Свёрнутый столбец не должен занимать ширину развёрнутого: он показывает только счёт. */
-.collapsed {
-  flex: 0 0 auto;
-  width: auto;
+/*
+ * Свёрнутый столбец остаётся столбцом той же ширины (решение Д19). Раньше он
+ * превращался в пилюлю по ширине содержимого, и ряд из пяти столбцов читался как
+ * набор разных вещей: `backlog 0`, `done 32`, `cancelled 0` — три разные ширины
+ * подряд. Гаснет он не прозрачностью, а отсутствием заливки: `opacity` смешивает
+ * текст с фоном и роняет контраст (`docs/notes/ui.md`).
+ */
+.collapsed,
+.dim {
+  border-style: dashed;
+  background: transparent;
 }
 
 .head {

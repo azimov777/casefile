@@ -68,6 +68,29 @@ function posts() {
 }
 
 describe('входящая и ответ', () => {
+  it('блокирующий вопрос отличается признаком в разметке и доступным именем', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () =>
+        collection([
+          questionEntry(7, 'DEMO-3', true),
+          questionEntry(8, 'DEMO-4', false),
+        ]),
+      ),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+
+    renderApp('/questions');
+
+    const blocking = await screen.findByRole('article', { name: 'Блокирующий вопрос DEMO-3#7' });
+    const usual = screen.getByRole('article', { name: 'Вопрос DEMO-4#8' });
+
+    // Различие держится не цветом кромки: признак есть в разметке и в доступном имени,
+    // а рядом остаётся плашка со словом.
+    expect(blocking).toHaveAttribute('data-blocking', 'true');
+    expect(usual).not.toHaveAttribute('data-blocking');
+    expect(blocking).toHaveTextContent('блокирующий');
+  });
   it('показывает адресованный вопрос и отвечает на него с ключом повтора', async () => {
     inbox();
     const user = userEvent.setup();

@@ -50,7 +50,9 @@ export function TasksBoard({
           return (
             <section
               key={status}
-              className={`${styles.column} ${open ? '' : styles.collapsed}`}
+              className={`${styles.column} ${open ? '' : styles.collapsed} ${
+                column.length === 0 ? styles.dim : ''
+              }`}
               aria-label={status}
             >
               <h3 className={styles.head}>
