@@ -165,6 +165,55 @@ async def test_both_inputs_narrow_each_other_instead_of_replacing(
     assert found == [board["blocked"].key]
 
 
+async def test_waiting_is_selected_by_status_without_touching_the_search(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue, board: dict[str, Task]
+) -> None:
+    """Обзорная проверка 6: новый статус находится отбором, и поиск для этого не правился.
+
+    Это главное свойство статуса: очередь ожидания человек получает списком, а не
+    вычитыванием сводок. Поиск разбирает значение статуса перечислением `TaskStatus`,
+    поэтому новый член работает сам — тест стережёт, что это так и осталось, и заодно
+    что `waiting` не подмешивается в выдачу `status: open`.
+    """
+    parked = await make(db_session, task_actor, queue, "ждёт человека")
+    parked = await open_task(db_session, task_actor, parked)
+    await tasks_service.transition_task(
+        db_session, parked, actor=task_actor, to=TaskStatus.WAITING, reason="Жду решения владельца"
+    )
+
+    assert await keys(db_session, task_actor, query="status: waiting") == [parked.key]
+    assert parked.key not in await keys(db_session, task_actor, query="status: open")
+
+    both = await keys(db_session, task_actor, query="status: in waiting, open")
+    assert parked.key in both
+    assert board["plain"].key in both
+
+    # Структурный вход обязан находить то же самое: второй реализации отбора нет.
+    assert await keys(
+        db_session, task_actor, structured=[StructuredTerm(name="status", values=["waiting"])]
+    ) == [parked.key]
+
+
+async def test_waiting_does_not_touch_the_blocked_feature(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Признак `blocked` остался про `blocked_by` и нового смысла не приобрёл.
+
+    Ожидание человека и блокировка задачей — разные вещи (`CONCEPT.md`, 4.6), и слить их
+    в один признак значило бы потерять различие ровно там, где оно и нужно.
+    """
+    parked = await make(db_session, task_actor, queue, "ждёт человека")
+    parked = await open_task(db_session, task_actor, parked)
+    await tasks_service.transition_task(
+        db_session, parked, actor=task_actor, to=TaskStatus.WAITING, reason="Жду доступ"
+    )
+
+    features = await found_features(db_session, task_actor, parked.key)
+    assert features is not None
+    assert features.blocked is False
+    assert await keys(db_session, task_actor, query="blocked: true") == []
+
+
 # --- Вычисляемые признаки ---------------------------------------------------------------
 
 

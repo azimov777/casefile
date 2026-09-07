@@ -19,6 +19,7 @@ from app.domain.errors import (
 from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
     OPEN_FIELDS,
+    STATUS_CHAIN,
     TRANSITION_CHECKS,
     TRANSITIONS,
     CheckGap,
@@ -31,6 +32,7 @@ from app.domain.tasks import (
     editable_fields,
     ensure_transition_allowed,
     format_task_key,
+    is_closed,
     is_step_back,
     normalize_fields,
     normalize_reason,
@@ -108,10 +110,22 @@ def test_a_malformed_task_key_is_rejected(raw: str) -> None:
 def test_the_transition_table_matches_the_concept() -> None:
     """Таблица зашита; тест повторяет её из `CONCEPT.md`, чтобы правка была осознанной."""
     assert TRANSITIONS == {
-        TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
-        TaskStatus.OPEN: (TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG, TaskStatus.CANCELLED),
+        TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.WAITING, TaskStatus.CANCELLED),
+        TaskStatus.OPEN: (
+            TaskStatus.IN_PROGRESS,
+            TaskStatus.WAITING,
+            TaskStatus.BACKLOG,
+            TaskStatus.CANCELLED,
+        ),
         TaskStatus.IN_PROGRESS: (
             TaskStatus.DONE,
+            TaskStatus.WAITING,
+            TaskStatus.OPEN,
+            TaskStatus.BACKLOG,
+            TaskStatus.CANCELLED,
+        ),
+        TaskStatus.WAITING: (
+            TaskStatus.IN_PROGRESS,
             TaskStatus.OPEN,
             TaskStatus.BACKLOG,
             TaskStatus.CANCELLED,
@@ -120,6 +134,40 @@ def test_the_transition_table_matches_the_concept() -> None:
         TaskStatus.CANCELLED: (),
     }
     assert allowed_transitions(TaskStatus.DONE) == ()
+
+
+def test_waiting_is_entered_from_the_first_three_and_never_leads_to_done() -> None:
+    """Обзорная проверка 2: форма `waiting` в таблице переходов.
+
+    Отдельным тестом, а не только сверкой всей таблицы: сверка ловит любую правку, но не
+    говорит, какое именно свойство статуса нарушено. Здесь названы три свойства, каждое
+    из которых выведено из решения владельца (`CONCEPT.md`, 3.3).
+    """
+    for status in (TaskStatus.BACKLOG, TaskStatus.OPEN, TaskStatus.IN_PROGRESS):
+        assert TaskStatus.WAITING in allowed_transitions(status)
+
+    assert allowed_transitions(TaskStatus.WAITING) == (
+        TaskStatus.IN_PROGRESS,
+        TaskStatus.OPEN,
+        TaskStatus.BACKLOG,
+        TaskStatus.CANCELLED,
+    )
+    # Дождавшаяся задача возвращается в работу и закрывается оттуда: прямой ход в `done`
+    # обошёл бы проверку вердиктов, которая висит на `in_progress → done`.
+    assert TaskStatus.DONE not in allowed_transitions(TaskStatus.WAITING)
+
+    for closed in (TaskStatus.DONE, TaskStatus.CANCELLED):
+        assert TaskStatus.WAITING not in allowed_transitions(closed)
+
+
+def test_waiting_is_not_a_step_of_the_chain() -> None:
+    """`waiting` вне цепочки: ни вход в него, ни выход из него шагом назад не считаются."""
+    assert TaskStatus.WAITING not in STATUS_CHAIN
+    assert is_step_back(TaskStatus.IN_PROGRESS, TaskStatus.WAITING) is False
+    assert is_step_back(TaskStatus.WAITING, TaskStatus.BACKLOG) is False
+    # И он не конечный: поля правятся, а родителя в `done` такой ребёнок не пустит.
+    assert not is_closed(TaskStatus.WAITING)
+    assert editable_fields(TaskStatus.WAITING) == OPEN_FIELDS
 
 
 @pytest.mark.parametrize(
@@ -131,6 +179,8 @@ def test_the_transition_table_matches_the_concept() -> None:
         (TaskStatus.OPEN, TaskStatus.BACKLOG, True),
         (TaskStatus.OPEN, TaskStatus.IN_PROGRESS, False),
         (TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, False),
+        (TaskStatus.IN_PROGRESS, TaskStatus.WAITING, False),
+        (TaskStatus.WAITING, TaskStatus.OPEN, False),
     ],
 )
 def test_a_step_back_is_a_move_to_a_lower_status_of_the_chain(
@@ -145,7 +195,7 @@ def test_a_transition_outside_the_table_lists_the_allowed_ones() -> None:
         ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.DONE))
 
     assert error.value.code == "transition_not_allowed"
-    assert error.value.details["allowed"] == ["in_progress", "backlog", "cancelled"]
+    assert error.value.details["allowed"] == ["in_progress", "waiting", "backlog", "cancelled"]
 
 
 # --- Проверки перехода --------------------------------------------------------------
@@ -158,9 +208,14 @@ def test_a_transition_outside_the_table_lists_the_allowed_ones() -> None:
         (TaskStatus.OPEN, TaskStatus.BACKLOG, "step_back"),
         (TaskStatus.BACKLOG, TaskStatus.CANCELLED, "cancel"),
         (TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, "cancel"),
+        # Обзорная проверка 3: вход в `waiting` отклоняется тем же кодом, что и шаг
+        # назад без причины, но своим правилом — по нему клиент видит, что нарушено.
+        (TaskStatus.BACKLOG, TaskStatus.WAITING, "wait"),
+        (TaskStatus.OPEN, TaskStatus.WAITING, "wait"),
+        (TaskStatus.IN_PROGRESS, TaskStatus.WAITING, "wait"),
     ],
 )
-def test_a_step_back_and_a_cancellation_require_a_reason(
+def test_a_step_back_a_cancellation_and_a_wait_require_a_reason(
     from_status: TaskStatus, to_status: TaskStatus, rule: str
 ) -> None:
     with pytest.raises(TransitionReasonRequiredError) as error:
@@ -181,6 +236,17 @@ def test_a_blank_reason_counts_as_no_reason() -> None:
 def test_a_forward_move_does_not_need_a_reason() -> None:
     ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS))
     ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE))
+
+
+def test_leaving_waiting_does_not_need_a_reason() -> None:
+    """Требование причины висит на входе в `waiting`, а не на выходе.
+
+    Дождались — обычный ход в работу, объяснять в нём нечего. Шагом назад выход из
+    `waiting` тоже не считается, поэтому и та ветка его не ловит.
+    """
+    ensure_transition_allowed(facts(TaskStatus.WAITING, TaskStatus.IN_PROGRESS))
+    ensure_transition_allowed(facts(TaskStatus.WAITING, TaskStatus.OPEN))
+    ensure_transition_allowed(facts(TaskStatus.WAITING, TaskStatus.BACKLOG))
 
 
 def test_opening_lists_every_unfilled_section_at_once() -> None:

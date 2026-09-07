@@ -169,7 +169,7 @@ async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
 
     assert package["task"]["key"] == task.key
     assert [heading["type"] for heading in package["index"]] == ["created"]
-    assert package["transitions"] == ["open", "cancelled"]
+    assert package["transitions"] == ["open", "waiting", "cancelled"]
     assert package["features"] == {
         "blocked": False,
         "open_questions": 0,

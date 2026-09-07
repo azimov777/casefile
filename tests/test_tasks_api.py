@@ -103,7 +103,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     ]
     assert package["links"] == []
     assert package["task"]["key"] == "TRK-1"
-    assert package["transitions"] == ["open", "cancelled"]
+    assert package["transitions"] == ["open", "waiting", "cancelled"]
     assert package["summary"] is None
     assert package["questions"] == []
     assert package["features"] == {
@@ -158,7 +158,7 @@ async def test_a_move_outside_the_table_is_a_conflict_with_the_allowed_list(
     assert response.status_code == 409
     error = response.json()["error"]
     assert error["code"] == "transition_not_allowed"
-    assert error["details"]["allowed"] == ["in_progress", "backlog", "cancelled"]
+    assert error["details"]["allowed"] == ["in_progress", "waiting", "backlog", "cancelled"]
 
 
 async def test_a_step_back_needs_a_reason_that_lands_in_the_case(
@@ -327,7 +327,7 @@ async def test_the_task_scope_runs_the_cycle(
 
     package = (await client.get(f"/api/v1/tasks/{task.key}")).json()["data"]
     assert package["task"]["status"] == "in_progress"
-    assert package["transitions"] == ["done", "open", "backlog", "cancelled"]
+    assert package["transitions"] == ["done", "waiting", "open", "backlog", "cancelled"]
 
 
 async def test_entries_are_paged_by_number(auth_client: AsyncClient, queue: Queue) -> None:

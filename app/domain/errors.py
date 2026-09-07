@@ -172,7 +172,7 @@ class TransitionNotAllowedError(ConflictError):
 
 
 class TransitionReasonRequiredError(ValidationError):
-    """Шаг назад по цепочке статусов и отмена требуют причины `reason`."""
+    """Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`."""
 
     code = "transition_reason_required"
     message = "Transition requires a reason"

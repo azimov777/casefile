@@ -131,6 +131,7 @@ class TaskStatus(StrEnum):
     BACKLOG = "backlog"
     OPEN = "open"
     IN_PROGRESS = "in_progress"
+    WAITING = "waiting"
     DONE = "done"
     CANCELLED = "cancelled"
 
@@ -139,7 +140,9 @@ class TaskStatus(StrEnum):
 INITIAL_STATUS = TaskStatus.BACKLOG
 
 #: Порядок цепочки: `backlog` < `open` < `in_progress` < `done`. Переход к меньшему
-#: статусу — шаг назад. `cancelled` в цепочке не стоит: это выход из неё.
+#: статусу — шаг назад. `cancelled` и `waiting` в цепочке не стоят: это выходы в сторону,
+#: и `is_step_back` для них отвечает `False` — причину у перехода в них требует не
+#: правило шага назад, а собственные ветки `check_reason_for_step_back_cancel_or_wait`.
 STATUS_CHAIN: tuple[TaskStatus, ...] = (
     TaskStatus.BACKLOG,
     TaskStatus.OPEN,
@@ -153,12 +156,29 @@ _CHAIN_RANK = {status: rank for rank, status in enumerate(STATUS_CHAIN)}
 CLOSED_STATUSES: frozenset[TaskStatus] = frozenset({TaskStatus.DONE, TaskStatus.CANCELLED})
 
 #: Таблица переходов. Порядок целей в каждой строке — порядок в ответе «доступные
-#: переходы»: сначала вперёд по цепочке, потом назад, потом отмена.
+#: переходы»: сначала вперёд по цепочке, потом в сторону (`waiting`), потом назад, потом
+#: отмена. У `waiting` хода вперёд нет — он вне цепочки, — поэтому его цели идут по
+#: убыванию ранга: возврат в работу это главный ход дождавшейся задачи.
+#:
+#: Прямого хода `waiting → done` нет намеренно (`CONCEPT.md`, 3.3): он обошёл бы
+#: проверку вердиктов, которая висит на `in_progress → done`.
 TRANSITIONS: Mapping[TaskStatus, tuple[TaskStatus, ...]] = {
-    TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
-    TaskStatus.OPEN: (TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG, TaskStatus.CANCELLED),
+    TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.WAITING, TaskStatus.CANCELLED),
+    TaskStatus.OPEN: (
+        TaskStatus.IN_PROGRESS,
+        TaskStatus.WAITING,
+        TaskStatus.BACKLOG,
+        TaskStatus.CANCELLED,
+    ),
     TaskStatus.IN_PROGRESS: (
         TaskStatus.DONE,
+        TaskStatus.WAITING,
+        TaskStatus.OPEN,
+        TaskStatus.BACKLOG,
+        TaskStatus.CANCELLED,
+    ),
+    TaskStatus.WAITING: (
+        TaskStatus.IN_PROGRESS,
         TaskStatus.OPEN,
         TaskStatus.BACKLOG,
         TaskStatus.CANCELLED,
@@ -179,7 +199,12 @@ def allowed_transitions(status: TaskStatus) -> tuple[TaskStatus, ...]:
 
 
 def is_step_back(from_status: TaskStatus, to_status: TaskStatus) -> bool:
-    """Шаг назад — переход к меньшему статусу цепочки. `cancelled` шагом назад не считается."""
+    """Шаг назад — переход к меньшему статусу цепочки.
+
+    `cancelled` и `waiting` вне цепочки, поэтому шагом назад не считаются ни переходы в
+    них, ни выходы из `waiting`: `waiting → backlog` откатом не является, потому что
+    ожидание ступенью работы не было.
+    """
     if from_status not in _CHAIN_RANK or to_status not in _CHAIN_RANK:
         return False
     return _CHAIN_RANK[to_status] < _CHAIN_RANK[from_status]
@@ -529,16 +554,24 @@ class TransitionFacts:
 type TransitionCheck = Callable[[TransitionFacts], None]
 
 
-def check_reason_for_step_back_or_cancel(facts: TransitionFacts) -> None:
-    """Любой шаг назад и любой переход в `cancelled` требует причины.
+def check_reason_for_step_back_cancel_or_wait(facts: TransitionFacts) -> None:
+    """Шаг назад, отмена и уход в `waiting` требуют причины.
 
     Причина уезжает в запись `status_changed` — это то, по чему преемник понимает,
-    почему задача откатилась, не переживая ситуацию заново.
+    почему задача сошла с прямого пути, не переживая ситуацию заново. У `waiting` она
+    несёт вдобавок то, чего больше нигде нет: **чего** ждём. Ожидание без этого
+    неотличимо от его отсутствия — задача просто стоит.
+
+    Требование висит только на **входе** в `waiting`. Выход из него причины не требует:
+    дождались — обычный ход в работу, и объяснять в нём нечего. Шагом назад выход из
+    `waiting` тоже не считается (`is_step_back`), поэтому и та ветка его не поймает.
     """
     if facts.reason is not None:
         return
     if facts.to_status is TaskStatus.CANCELLED:
         rule = "cancel"
+    elif facts.to_status is TaskStatus.WAITING:
+        rule = "wait"
     elif is_step_back(facts.from_status, facts.to_status):
         rule = "step_back"
     else:
@@ -639,8 +672,12 @@ def check_no_open_blockers(facts: TransitionFacts) -> None:
     """`* → in_progress`: ни одной связи `blocked_by` на незакрытую задачу.
 
     Единственная валидация, которая читает связи. Она не «ждёт» и ничего не назначает:
-    статуса ожидания в трекере нет, а блокировка — это просто отказ взять задачу в
-    работу, пока блокер открыт (`CONCEPT.md`, 4.6).
+    блокировка — это просто отказ взять задачу в работу, пока блокер открыт. Статус
+    `waiting` тут ни при чём и заменой ему не является: он про ход, который делает
+    человек, а `blocked_by` — про ход, который делает другая задача (`CONCEPT.md`, 4.6).
+
+    Проверка висит на входе в `in_progress`, а значит и на возврате из `waiting`:
+    задача, пока она ждала, могла обзавестись блокером.
     """
     if facts.to_status is not TaskStatus.IN_PROGRESS:
         return
@@ -675,6 +712,10 @@ def check_children_closed_before_done(facts: TransitionFacts) -> None:
     `cancelled` закрывает ребёнка наравне с `done`: декомпозиция, от которой отказались,
     родителя держать не должна. Отменять детей сам трекер при этом не станет — статусы
     по связям не распространяются.
+
+    `waiting` ребёнка **не** закрывает: он не в `CLOSED_STATUSES`, и родитель с таким
+    ребёнком в `done` не уйдёт. Так и задумано — ждущий ребёнок это незаконченная
+    работа, а не отменённая (`CONCEPT.md`, 3.3).
     """
     if facts.to_status is not TaskStatus.DONE:
         return
@@ -710,7 +751,7 @@ def check_children_closed_before_done(facts: TransitionFacts) -> None:
 #: `TRANSITIONS` при этом не трогать — она описывает, какие ходы существуют, а не при
 #: каких условиях они проходят.
 TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
-    check_reason_for_step_back_or_cancel,
+    check_reason_for_step_back_cancel_or_wait,
     check_sections_filled_before_open,
     check_summary_before_leaving_in_progress,
     check_verdicts_before_done,

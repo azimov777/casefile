@@ -528,3 +528,36 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
     await tasks_service.transition_task(db_session, parent, actor=task_actor, to=TaskStatus.DONE)
 
     assert parent.status is TaskStatus.DONE
+
+
+async def test_a_waiting_child_keeps_the_parent_from_closing(
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка 5 задачи TRK-15: `waiting` ребёнка не закрывает.
+
+    Закрывают только `done` и `cancelled`. Ждущий ребёнок — незаконченная работа, а не
+    отменённая, и родитель, ушедший в `done` поверх него, соврал бы про целое
+    (`CONCEPT.md`, 3.3). Отказ обязан назвать ключ ребёнка: иначе родитель большой
+    декомпозиции придётся искать виновника перебором.
+    """
+    parent = await make(db_session, task_actor, queue, "родитель")
+    child = await make(db_session, task_actor, queue, "ребёнок")
+    await service.add_link(db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT)
+    await move(db_session, child, task_actor, TaskStatus.OPEN)
+    await tasks_service.transition_task(
+        db_session, child, actor=task_actor, to=TaskStatus.WAITING, reason="Жду ответа человека"
+    )
+    await move(db_session, parent, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
+    await summary(db_session, parent, task_actor)
+    for check_no in range(1, len(parent.checks) + 1):
+        await case_service.add_verdict(
+            db_session, parent, actor=task_actor, check_no=check_no, outcome="passed"
+        )
+
+    with pytest.raises(TaskHasUnclosedChildrenError) as error:
+        await tasks_service.transition_task(
+            db_session, parent, actor=task_actor, to=TaskStatus.DONE
+        )
+    assert error.value.details["children"] == [child.key]
