@@ -72,3 +72,35 @@ test('колонка «Приоритет» не выросла: знак вме
   expect(width).not.toBeNull();
   expect(width as number).toBeLessThanOrEqual(94.8 + 8);
 });
+
+test('счётчик скрытых тегов помещается в свою колонку, а не уезжает за край', async ({ page }) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.locator('tbody tr').first()).toBeVisible();
+  await fontsReady(page);
+
+  // Счётчик «+N» — единственный доступ к тегам, которые не показаны. Уехав за край
+  // ячейки, он исчезает вместе с этим доступом, и обрезание становится потерей данных.
+  const overflow = await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('tbody tr'));
+    return rows
+      .map((row) => {
+        const cell = row.children[5];
+        if (cell === undefined) return 0;
+        const box = cell.getBoundingClientRect();
+        // Внутренний край ячейки: у неё горизонтальные поля по 12 px.
+        const limit = box.right - 12;
+        const parts = Array.from(cell.querySelectorAll('*')).filter(
+          (node) => node.children.length === 0,
+        );
+        return parts.reduce(
+          (worst, node) => Math.max(worst, node.getBoundingClientRect().right - limit),
+          0,
+        );
+      })
+      .reduce((worst, value) => Math.max(worst, value), 0);
+  });
+
+  // Полпикселя на округление подпиксельной раскладки — и ни пикселя больше.
+  expect(overflow).toBeLessThanOrEqual(0.5);
+});
