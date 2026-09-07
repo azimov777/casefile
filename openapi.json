@@ -7921,6 +7921,7 @@
           "backlog",
           "open",
           "in_progress",
+          "waiting",
           "done",
           "cancelled"
         ],

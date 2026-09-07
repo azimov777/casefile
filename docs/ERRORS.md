@@ -103,7 +103,7 @@
 | `search_value_invalid` | Search value is invalid | Значение условия не разрешается: нет такой очереди, статуса, не число. |
 | `task_fields_invalid` | Task fields are invalid | Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`. |
 | `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
-| `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов и отмена требуют причины `reason`. |
+| `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`. |
 | `validation_error` | Validation failed | Входные данные синтаксически корректны, но нарушают правило предметной области. |
 
 ## 429 — слишком часто
