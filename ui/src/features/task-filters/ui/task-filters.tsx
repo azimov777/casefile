@@ -1,12 +1,13 @@
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
-import { Button } from '@/shared/ui';
+import { X } from 'lucide-react';
+import { Button, Select } from '@/shared/ui';
 import { TASK_SORTS, splitTags, type TaskFilters } from '../model/filters';
 import { useFiltersExpanded } from '../model/expanded';
 import { caretLine, type QueryProblem } from '../model/query-problem';
-import { describeFilters } from '../model/summary';
+import { CONDITION_RESET, describeFilters } from '../model/summary';
 import styles from './task-filters.module.css';
 
 interface TaskFiltersFormProps {
@@ -16,12 +17,6 @@ interface TaskFiltersFormProps {
   /** Отказ разбора отбора: показывается под полем запроса, а не поверх таблицы. */
   problem: QueryProblem | null;
 }
-
-/**
- * Чем помечено условие, которое человек включил, но которое сейчас не работает:
- * заполненное поле запроса отменяет структурный отбор целиком.
- */
-const NOT_ACTING = 'Не действует, пока заполнено поле запроса';
 
 /** Текстовые поля до отправки: они применяются по «Применить», а не по каждой букве. */
 interface Draft {
@@ -53,6 +48,12 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   const [expanded, setExpanded] = useFiltersExpanded(problem !== null);
   const formId = useId();
   const problemId = useId();
+  /*
+   * Кнопка раскрытия — якорь фокуса. Снятый чип исчезает вместе со своей кнопкой,
+   * и фокус улетал бы на `body`: следующий Tab начинал бы обход страницы с начала,
+   * то есть человек, снявший условие с клавиатуры, терял бы место.
+   */
+  const toggleRef = useRef<HTMLButtonElement>(null);
 
   // Отбор меняется и мимо формы: «сбросить», кнопка «назад», открытая ссылка.
   useEffect(() => {
@@ -91,6 +92,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
     <section className={styles.panel} aria-label="Отбор задач">
       <div className={styles.bar}>
         <Button
+          ref={toggleRef}
           tone="quiet"
           aria-expanded={expanded}
           aria-controls={formId}
@@ -106,12 +108,24 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
             <li className={styles.all}>показаны все задачи</li>
           ) : (
             conditions.map((condition) => (
-              <li
-                key={condition.id}
-                className={`${styles.condition} ${condition.inactive ? styles.inactive : ''}`}
-                title={condition.inactive ? NOT_ACTING : undefined}
-              >
-                {condition.label}
+              /*
+               * Чип — не кнопка с кнопкой внутри: снятие стоит рядом с текстом условия,
+               * а не вложено в другую мишень. Текст условия читается, а не нажимается:
+               * раскрывает форму по-прежнему одна кнопка слева.
+               */
+              <li key={condition.id} className={styles.chip}>
+                <span>{condition.label}</span>
+                <button
+                  type="button"
+                  className={styles.remove}
+                  aria-label={`Убрать условие: ${condition.label}`}
+                  onClick={() => {
+                    applyWith(CONDITION_RESET[condition.id]);
+                    toggleRef.current?.focus();
+                  }}
+                >
+                  <X className="size-(--ui-mark)" aria-hidden="true" />
+                </button>
               </li>
             ))
           )}
@@ -125,20 +139,13 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
          * подпись вроде «сначала живые в деле» говорит за себя и без него.
          */}
         {board ? null : (
-          <label className={styles.sort}>
-            <select
-              className={styles.select}
-              aria-label="Сортировка"
-              value={filters.sort}
-              onChange={(event) => applyWith({ sort: event.target.value })}
-            >
-              {TASK_SORTS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            className={styles.sort}
+            label="Сортировка"
+            value={filters.sort}
+            onValueChange={(sort) => applyWith({ sort })}
+            options={TASK_SORTS.map((option) => ({ value: option.value, label: option.label }))}
+          />
         )}
 
         {conditions.length === 0 ? null : (

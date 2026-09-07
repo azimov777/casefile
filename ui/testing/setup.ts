@@ -8,6 +8,20 @@ import { liveJournal } from './live-journal';
 import { resetDeferred } from '@/features/live-journal/model/deferred';
 import { server } from './msw/server';
 
+/*
+ * Чего нет в jsdom, но что зовут компоненты Radix: захват указателя и прокрутка
+ * элемента в вид. Без заглушек клик по их триггеру падает
+ * `target.hasPointerCapture is not a function` — падает среда, а не поведение.
+ *
+ * Заглушки чинят падение, но не дают поведения: открыть список Radix в jsdom всё
+ * равно нельзя (проверено — см. `docs/notes/testing.md`). Ходьбу стрелками, `Esc`,
+ * возврат фокуса и сам выбор значения проверяет сквозной тест в настоящем браузере.
+ */
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.setPointerCapture ??= () => {};
+Element.prototype.releasePointerCapture ??= () => {};
+Element.prototype.scrollIntoView ??= () => {};
+
 // Подмена API поднимается на весь прогон: тест, который сходил в сеть мимо обработчика,
 // должен падать, а не тихо получать чужой ответ.
 beforeAll(() => {

@@ -38,7 +38,9 @@ test('отбор по статусу open даёт ровно открытые �
   await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('статус open');
 
   await page.getByRole('button', { name: 'Изменить отбор' }).click();
-  await expect(page.getByLabel('Очередь')).toHaveValue('DEMO');
+  // Подпись поля оборачивает и текст, и сам список, поэтому доступное имя длиннее
+  // слова «Очередь»; отбор по началу имени отделяет его от кнопки снятия чипа.
+  await expect(page.getByRole('combobox', { name: /^Очередь/ })).toHaveValue('DEMO');
   await expect(page.getByRole('checkbox', { name: 'open' })).toBeChecked();
   await expect(rows(page)).toHaveCount(2);
 });
@@ -94,7 +96,11 @@ test('сортировка живёт в адресе: вторая вкладк
       (response) =>
         response.url().includes('/api/v1/tasks?') && response.url().includes('sort=key'),
     ),
-    page.getByLabel('Сортировка').selectOption('key'),
+    // Сортировка — список Radix: открывается кнопкой, значение выбирается пунктом.
+    (async () => {
+      await page.getByRole('combobox', { name: 'Сортировка' }).click();
+      await page.getByRole('option', { name: 'по ключу', exact: true }).click();
+    })(),
   ]);
 
   await expect(page).toHaveURL(/sort=key/);
@@ -103,7 +109,7 @@ test('сортировка живёт в адресе: вторая вкладк
   const copy = await context.newPage();
   await copy.goto(page.url());
 
-  await expect(copy.getByLabel('Сортировка')).toHaveValue('key');
+  await expect(copy.getByRole('combobox', { name: 'Сортировка' })).toContainText('по ключу');
   expect(await rows(copy).first().locator('th').innerText()).toBe(first);
   await copy.close();
 });

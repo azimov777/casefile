@@ -22,7 +22,7 @@ describe('условия отбора словами', () => {
         text: 'токен',
         blocked: true,
         withQuestions: true,
-        query: 'status: done',
+        withRemarks: true,
       }),
     ).toEqual([
       'очередь DEMO',
@@ -33,7 +33,7 @@ describe('условия отбора словами', () => {
       'текст «токен»',
       'только заблокированные',
       'есть открытые вопросы',
-      'запрос: status: done',
+      'есть неразобранные замечания',
     ]);
   });
 
@@ -45,7 +45,7 @@ describe('условия отбора словами', () => {
     expect(labels({ sort: 'key', cursor: 'page-2', view: 'board' })).toEqual([]);
   });
 
-  it('при заполненном запросе помечает нерабочими все остальные условия', () => {
+  it('при заполненном запросе условие ровно одно: сам запрос', () => {
     const conditions = describeFilters({
       ...EMPTY_FILTERS,
       queue: 'DEMO',
@@ -53,15 +53,9 @@ describe('условия отбора словами', () => {
       query: 'status: open',
     });
 
-    expect(conditions.map((condition) => [condition.id, condition.inactive])).toEqual([
-      ['queue', true],
-      ['blocked', true],
-      ['query', false],
-    ]);
-  });
-
-  it('без запроса не помечает нерабочим ничего', () => {
-    const conditions = describeFilters({ ...EMPTY_FILTERS, queue: 'DEMO', blocked: true });
-    expect(conditions.every((condition) => !condition.inactive)).toBe(true);
+    // Запрос отменяет структурный отбор целиком, и перечислять рядом отменённое
+    // значило бы показывать то, что на выдачу не влияет. Условия не потеряны:
+    // они остались в адресе и вернутся, как только запрос опустеет.
+    expect(conditions).toEqual([{ id: 'query', label: 'запрос: status: open' }]);
   });
 });

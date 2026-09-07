@@ -1,6 +1,6 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-import type { ButtonHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, Ref } from 'react';
 import { cn } from '../lib';
 
 /*
@@ -40,6 +40,8 @@ const button = cva(
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof button> {
   /** Отдать классы и поведение своему ребёнку — ссылке, которая выглядит кнопкой. */
   asChild?: boolean;
+  /** Нужен там, где кнопка — якорь фокуса: например, после исчезновения соседа. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function Button({

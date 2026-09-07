@@ -258,14 +258,19 @@ test.describe('первый экран списка', () => {
     await expect(first.locator('time')).toHaveCount(1);
     await expect(rows(page).nth(1).getByText('в деле пусто')).toBeVisible();
 
-    // Порядок берётся из адреса и меняется полем, которое видно и при свёрнутом отборе.
-    await expect(page.getByLabel('Сортировка')).toHaveValue('-last_entry_at');
+    // Порядок берётся из адреса и меняется списком, который виден и при свёрнутом
+    // отборе. Список — компонент Radix: открывается кнопкой, значение выбирается пунктом.
+    const sort = page.getByRole('combobox', { name: 'Сортировка' });
+    await expect(sort).toContainText('сначала живые в деле');
     await Promise.all([
       page.waitForResponse(
         (response) =>
           response.url().includes('/api/v1/tasks?') && response.url().includes('sort=key'),
       ),
-      page.getByLabel('Сортировка').selectOption('key'),
+      (async () => {
+        await sort.click();
+        await page.getByRole('option', { name: 'по ключу', exact: true }).click();
+      })(),
     ]);
     await expect(first.getByRole('rowheader')).not.toHaveText(key);
   });

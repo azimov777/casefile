@@ -35,14 +35,40 @@
   list-style: none;
 }
 
-.condition {
-  padding: 0 calc(var(--spacing) * 2);
-  border: 1px solid var(--color-neutral-line);
-  border-radius: var(--radius-mark);
-  background: var(--color-neutral-soft);
+/*
+ * Чип условия: текст читается, кнопка рядом снимает. Пилюля, а не прямоугольник, —
+ * чтобы условие не путалось с тегом задачи, который стоит такой же меткой в строке
+ * списка (решение Д5).
+ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 1);
+  padding: 0 calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
   color: var(--color-text);
-  font-size: var(--text-meta);
-  line-height: 1.6;
+  font-size: var(--text-mark);
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.remove {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  line-height: 1;
+  transition: background-color var(--motion-fast) var(--ease-fast);
+}
+
+.remove:hover {
+  background: var(--color-sunken);
+  color: var(--color-text);
 }
 
 .all {
@@ -50,22 +76,7 @@
   font-size: var(--text-meta);
 }
 
-/*
- * Условие, которое человек включил, но которое сейчас не работает: заполненный запрос
- * отменяет структурный отбор. Зачёркивание, а не только цвет: цвет никогда не бывает
- * единственным носителем смысла (`CONCEPT.md`, 6).
- */
-.inactive {
-  border-style: dashed;
-  background: transparent;
-  color: var(--color-muted);
-  text-decoration: line-through;
-}
-
 .sort {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--spacing) * 2);
   white-space: nowrap;
 }
 

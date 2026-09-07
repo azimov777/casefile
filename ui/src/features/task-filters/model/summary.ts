@@ -6,16 +6,43 @@ import { splitTags, type TaskFilters } from './filters';
  * `id` нужен разметке ключом и тесту адресом: подпись переписать легко, а по `id`
  * проверка остаётся на месте.
  */
+export type ConditionId =
+  | 'queue'
+  | 'status'
+  | 'priority'
+  | 'assignee'
+  | 'tags'
+  | 'text'
+  | 'blocked'
+  | 'questions'
+  | 'remarks'
+  | 'query';
+
 export interface FilterCondition {
-  id: string;
+  id: ConditionId;
   label: string;
-  /**
-   * Условие названо, но на бэкенд не уезжает: так ведут себя структурные условия при
-   * заполненном поле запроса (`filtersToListParams`). Показывать их обычной плашкой
-   * значило бы соврать про выдачу, а прятать — соврать про то, что человек включил.
-   */
-  inactive: boolean;
 }
+
+/**
+ * Чем снимается условие. Перечислено ключами через `satisfies Record<ConditionId, …>`:
+ * новое условие в резюме обязано уронить сборку, а не остаться чипом, который нельзя
+ * закрыть.
+ *
+ * Значение по-прежнему живёт в адресе страницы: снятие чипа отправляет эти изменения
+ * тем же путём, что и форма, и никакого второго состояния не заводит.
+ */
+export const CONDITION_RESET = {
+  queue: { queue: '' },
+  status: { status: [] },
+  priority: { priority: [] },
+  assignee: { assignee: '' },
+  tags: { tags: [] },
+  text: { text: '' },
+  blocked: { blocked: false },
+  questions: { withQuestions: false },
+  remarks: { withRemarks: false },
+  query: { query: '' },
+} satisfies Record<ConditionId, Partial<TaskFilters>>;
 
 /**
  * Что сейчас включено в отборе — списком, целиком.
@@ -29,7 +56,18 @@ export interface FilterCondition {
  * выдачи. Сортировка и без того стоит на панели отдельным полем, видимым всегда.
  */
 export function describeFilters(filters: TaskFilters): FilterCondition[] {
-  const conditions: Omit<FilterCondition, 'inactive'>[] = [];
+  const query = filters.query.trim();
+
+  /*
+   * Заполненный запрос отменяет структурный отбор целиком (`filtersToListParams`),
+   * и тогда условие ровно одно — сам запрос. Перечислять рядом отменённые условия
+   * значило бы показывать человеку то, что на выдачу не влияет: он читал бы пять
+   * чипов, из которых работает один. Условия при этом не потеряны — они остались
+   * в адресе и вернутся, как только запрос опустеет.
+   */
+  if (query !== '') return [{ id: 'query', label: `запрос: ${query}` }];
+
+  const conditions: FilterCondition[] = [];
   const board = filters.view === 'board';
 
   if (filters.queue !== '') {
@@ -76,20 +114,5 @@ export function describeFilters(filters: TaskFilters): FilterCondition[] {
     conditions.push({ id: 'remarks', label: 'есть неразобранные замечания' });
   }
 
-  const query = filters.query.trim();
-  if (query !== '') {
-    // Заполненный запрос отменяет структурный отбор целиком (`filtersToListParams`),
-    // и человеку об этом говорится здесь же: иначе он читал бы список условий, из
-    // которых действует одно последнее.
-    conditions.push({ id: 'query', label: `запрос: ${query}` });
-  }
-
-  // Заполненный запрос отменяет структурный отбор целиком. Сказано это не отдельной
-  // строкой — она переносила бы список на вторую строку и двигала таблицу вниз, — а
-  // на самих условиях, которые сейчас не работают.
-  const overridden = query !== '';
-  return conditions.map((condition) => ({
-    ...condition,
-    inactive: overridden && condition.id !== 'query',
-  }));
+  return conditions;
 }

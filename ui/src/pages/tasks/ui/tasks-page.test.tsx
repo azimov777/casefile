@@ -43,6 +43,63 @@ function lastRequest(): URL {
 }
 
 describe('список задач', () => {
+  it('свёрнутый отбор показывает условия чипами, и чип снимается на месте', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks?queue=DEMO&status=open&status=in_progress');
+    await screen.findByText('DEMO-3');
+
+    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    expect(within(conditions).getAllByRole('listitem')).toHaveLength(2);
+    expect(conditions).toHaveTextContent('очередь DEMO');
+    expect(conditions).toHaveTextContent('статус open, in_progress');
+
+    // Доступное имя называет условие целиком: «крестик» сам по себе диктору
+    // ничего не говорит, а условий в строке несколько.
+    await user.click(
+      screen.getByRole('button', { name: 'Убрать условие: статус open, in_progress' }),
+    );
+
+    expect(address.current).toContain('queue=DEMO');
+    expect(address.current).not.toContain('status=');
+  });
+
+  it('без условий чипов нет, а на их месте честная фраза', async () => {
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks');
+    await screen.findByText('DEMO-3');
+
+    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    expect(conditions).toHaveTextContent('показаны все задачи');
+    expect(within(conditions).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('заполненный запрос оставляет один чип: остальное он всё равно отменяет', async () => {
+    server.use(listing(() => collection([task('DEMO-3')])));
+
+    open('/tasks?queue=DEMO&blocked=true&query=status%3A+open');
+    await screen.findByText('DEMO-3');
+
+    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    const items = within(conditions).getAllByRole('listitem');
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent('запрос: status: open');
+  });
+
+  it('смена отбора объявляется вслух, без перевода фокуса', async () => {
+    server.use(listing(() => collection([task('DEMO-3'), task('DEMO-4')])));
+
+    open('/tasks?queue=DEMO');
+
+    // Область постоянная, а не появляется вместе с текстом: `aria-live` объявляет
+    // только то, что пришло внутрь уже существующего контейнера.
+    await waitFor(() => {
+      expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent('Показано задач: 2');
+    });
+  });
+
   it('теги сверх двух уходят в счётчик, и он называет скрытые поимённо', async () => {
     server.use(
       listing(() =>
@@ -250,9 +307,7 @@ describe('свёрнутый отбор', () => {
   it('называет все включённые условия и ни одно не прячет за счётчиком', async () => {
     server.use(listing(() => collection([task('DEMO-3')])));
 
-    open(
-      '/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&tags=frontend&tags=ux&query=status: done',
-    );
+    open('/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&tags=frontend&tags=ux');
     await screen.findByText('DEMO-3');
 
     // Форма закрыта: на первом экране списка стоят задачи, а не поля отбора.
@@ -262,19 +317,13 @@ describe('свёрнутый отбор', () => {
     expect(
       within(conditions)
         .getAllByRole('listitem')
-        .map((item) => item.textContent),
+        .map((item) => item.textContent?.replace('Убрать условие: ', '')),
     ).toEqual([
       'очередь DEMO',
       'статус open, in_progress',
       'исполнитель owner',
       'теги frontend, ux',
-      'запрос: status: done',
     ]);
-
-    // Заполненный запрос отменяет структурный отбор: условия названы, но помечены
-    // нерабочими — и это сказано на них самих, а не отдельной строкой, которая
-    // сдвинула бы таблицу вниз.
-    expect(within(conditions).getAllByTitle(/Не действует/)).toHaveLength(4);
   });
 
   it('без условий говорит, что показаны все задачи, и не предлагает сброс', async () => {
@@ -391,15 +440,19 @@ describe('поле запроса на языке бэкенда', () => {
 });
 
 describe('порядок и страницы', () => {
-  it('смена сортировки перезапрашивает список новым ключом', async () => {
-    const user = userEvent.setup();
+  it('порядок берётся из адреса и уезжает в запрос тем же ключом', async () => {
     server.use(listing(() => collection([task('DEMO-3')])));
 
-    open('/tasks');
+    open('/tasks?sort=-priority');
     await screen.findByText('DEMO-3');
 
-    await user.selectOptions(screen.getByLabelText('Сортировка'), '-priority');
-
+    // Список сортировки — компонент Radix, и открыть его в jsdom нельзя: вёрстки нет,
+    // а он опирается на неё (`docs/notes/testing.md`). Здесь проверяется то, что от
+    // страницы и зависит: порядок читается из адреса, показан человеку и уходит в
+    // запрос. Сам выбор значения клавиатурой проверяет `e2e/filters.spec.ts`.
+    expect(screen.getByRole('combobox', { name: 'Сортировка' })).toHaveTextContent(
+      'сначала важные',
+    );
     expect(lastRequest().searchParams.getAll('sort')).toEqual(['-priority']);
   });
 
