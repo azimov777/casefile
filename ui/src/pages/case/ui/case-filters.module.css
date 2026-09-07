@@ -1,8 +1,20 @@
 .panel {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--spacing) * 3);
-  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+  gap: calc(var(--spacing) * 2);
+}
+
+/*
+ * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
+ * что дело платит за отбор, — всё остальное принадлежит записям. Тот же язык, что
+ * у строки отбора списка задач: два экрана с одним смыслом обязаны выглядеть одинаково.
+ */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-control);
   background: var(--color-surface);
@@ -14,14 +26,68 @@
   gap: calc(var(--spacing) * 2);
 }
 
+/*
+ * Отобранные типы занимают свободное место и переносятся на вторую строку, когда их
+ * много. Ни `overflow: hidden`, ни счётчика «ещё 5»: спрятанное условие — это
+ * отфильтрованное дело, которое принимают за полное.
+ */
+.conditions {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Чип типа: имя из контракта моноширинным, кнопка рядом снимает его с отбора. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 1);
+  padding: 0 calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-mark);
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.remove {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  line-height: 1;
+  transition: background-color var(--motion-fast) var(--ease-fast);
+}
+
+.remove:hover {
+  background: var(--color-sunken);
+  color: var(--color-text);
+}
+
+.all {
+  color: var(--color-muted);
+  font-size: var(--text-meta);
+}
+
 .types {
   display: flex;
   flex-wrap: wrap;
   gap: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
   margin: 0;
-  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-mark);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
 }
 
 .legend {

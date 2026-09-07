@@ -9,7 +9,7 @@ import {
   entryQueryOptions,
   type EntryHeading,
 } from '@/entities/entry';
-import { QueryState, RelativeTime, TaskText } from '@/shared/ui';
+import { Button, QueryState, RelativeTime, TaskText } from '@/shared/ui';
 import styles from './task-index.module.css';
 
 interface TaskIndexProps {
@@ -28,6 +28,12 @@ interface TaskIndexProps {
 }
 
 /**
+ * Опись длиннее этого читается прокруткой, и по ней имеет смысл прыгать. Короткая
+ * видна целиком, и два действия над ней были бы шумом там, где всё и так на экране.
+ */
+const LONG_INDEX = 12;
+
+/**
  * Опись дела: заголовок каждой записи, тело — по клику.
  *
  * Так дело и задумано читать (`CONCEPT.md`, 4): полное дело весит столько, что карточка
@@ -40,6 +46,8 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(openAt === null ? [] : [openAt]),
   );
+  /** Начало описи: сюда возвращает прыжок «в начало», не трогая прокрутку страницы. */
+  const scroller = useRef<HTMLDivElement>(null);
 
   // Ссылка `TRK-42#12` внутри той же карточки меняет адрес, не перемонтируя страницу,
   // поэтому раскрытие следит за параметром, а не только за первым рендером.
@@ -70,33 +78,58 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
 
   if (index.length === 0) return <p className={styles.empty}>Дело пусто: записей ещё нет.</p>;
 
+  // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
+  // именно последняя, а не последняя из подгруженных (`../tracker/docs/FRONTEND.md`).
+  const lastNo = index[index.length - 1]?.no ?? null;
+
   return (
-    <div className={styles.scroller}>
-      <table className={styles.table}>
-        <caption className={styles.caption}>Записей в деле: {index.length}</caption>
-        <thead>
-          <tr>
-            <th scope="col">№</th>
-            <th scope="col">Тип</th>
-            <th scope="col">Автор</th>
-            <th scope="col">Когда</th>
-            <th scope="col">Заголовок</th>
-          </tr>
-        </thead>
-        <tbody>
-          {index.map((heading) => (
-            <IndexRow
-              key={heading.no}
-              taskKey={taskKey}
-              heading={heading}
-              checks={checks}
-              open={expanded.has(heading.no)}
-              scrollTo={openAt === heading.no}
-              onToggle={toggle}
-            />
-          ))}
-        </tbody>
-      </table>
+    <div className={styles.section}>
+      {index.length > LONG_INDEX && lastNo !== null ? (
+        /*
+         * Два прыжка по описи: к свежей записи и обратно к началу. Свежая раскрывается
+         * и читается точечно — своим запросом на свой номер, а не чтением всего дела
+         * до неё. Прыгает человек, а не экран: живой поток опись не прокручивает.
+         */
+        <div className={styles.actions}>
+          <Button tone="quiet" onClick={() => onOpenChange(lastNo)}>
+            К свежей записи
+          </Button>
+          <Button
+            tone="quiet"
+            onClick={() => scroller.current?.scrollIntoView?.({ block: 'start' })}
+          >
+            В начало описи
+          </Button>
+        </div>
+      ) : null}
+
+      <div className={styles.scroller} ref={scroller}>
+        <table className={styles.table}>
+          <caption className={styles.caption}>Записей в деле: {index.length}</caption>
+          <thead>
+            <tr>
+              <th scope="col">№</th>
+              <th scope="col">Тип</th>
+              <th scope="col">Автор</th>
+              <th scope="col">Когда</th>
+              <th scope="col">Заголовок</th>
+            </tr>
+          </thead>
+          <tbody>
+            {index.map((heading) => (
+              <IndexRow
+                key={heading.no}
+                taskKey={taskKey}
+                heading={heading}
+                checks={checks}
+                open={expanded.has(heading.no)}
+                scrollTo={openAt === heading.no}
+                onToggle={toggle}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

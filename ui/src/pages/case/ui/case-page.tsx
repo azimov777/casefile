@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router';
 import {
+  ENTRY_PAGE_SIZE,
   ENTRY_TYPES,
   EntryCard,
   caseFeedQueryOptions,
@@ -16,6 +17,15 @@ import { CaseFilters } from './case-filters';
 import styles from './case-page.module.css';
 
 /**
+ * Сколько записей показать до той, за которой человек пришёл по ссылке.
+ *
+ * Ссылка `DEMO-4#137` ведёт к одной записи, но читают её вместе с соседями: решение
+ * понятно рядом с попыткой, которая его вызвала. Пять — это примерно экран контекста
+ * и один запрос, а не листание всего дела до сто тридцать седьмой записи.
+ */
+const CONTEXT_BEFORE = 5;
+
+/**
  * Дело лентой: все записи по порядку, каждая нарисована по своему типу.
  *
  * Страницами по курсору бэкенда: дело растёт, и «прочитать всё одним запросом» однажды
@@ -26,36 +36,74 @@ export function CasePage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const types = useMemo(() => readTypes(searchParams.getAll('type')), [searchParams]);
-  const params = useMemo(() => (types.length > 0 ? { types } : {}), [types]);
+
+  /**
+   * С какой записи читать дело. `null` — с начала, число — «всё, что после неё».
+   *
+   * Окно, а не листание: запись из конца стосорокастраничного дела иначе стоила бы
+   * пяти запросов и всех тел по дороге. Живёт в адресе, как и остальное состояние
+   * экрана: ссылка на хвост дела пересылается и переживает перезагрузку.
+   */
+  const from = readEntryNo(searchParams.get('from'));
+
+  const params = useMemo(
+    () => ({
+      ...(types.length > 0 ? { types } : {}),
+      ...(from === null ? {} : { after_no: from }),
+    }),
+    [types, from],
+  );
 
   const feed = useInfiniteQuery(caseFeedQueryOptions(key, params));
   // Проверки нужны вердиктам: их номера в записи есть, а текст живёт в задаче.
+  // Оттуда же приходит полная опись — по ней видно, какая запись в деле последняя.
   const task = useQuery(taskPackageQueryOptions(key));
 
   const entries = feed.data?.pages.flatMap((page) => page.items) ?? [];
   const replies = groupReplies(entries);
 
+  const index = task.data?.index ?? [];
+  /** Последняя запись всего дела, а не последняя из показанных: их легко перепутать. */
+  const lastNo = index.at(-1)?.no ?? null;
+
   /**
    * Запись, названная в адресе. Параметр `entry`, а не якорь `#N`: то же действие
    * человека — «покажи запись N» — называется в адресе одинаково и здесь, и в описи
-   * карточки. Якорь вдобавок обрабатывал бы браузер сам, а нам нужно ещё дочитать
-   * до записи страницы ленты.
+   * карточки. Якорь вдобавок обрабатывал бы браузер сам, а нам нужно ещё довести
+   * до записи саму ленту.
    */
   const wanted = readEntryNo(searchParams.get('entry'));
   const found = entries.some((entry) => entry.no === wanted);
+  const inIndex = wanted !== null && index.some((heading) => heading.no === wanted);
 
   /**
-   * Дочитываем ленту, пока названная запись не найдётся или дело не кончится.
+   * Названная запись приезжает окном, а не листанием.
    *
-   * Лента страничная, и запись с последней страницы иначе просто не приехала бы:
-   * человек, пришедший по ссылке «см. #7», смотрел бы в ленту без седьмой записи
-   * и не понимал, почему.
+   * Раньше лента дочитывала страницу за страницей, пока запись не найдётся: человек,
+   * пришедший по ссылке на запись №137, ждал шесть запросов и получал все тела по
+   * дороге. Теперь окно ставится сразу — по описи известно, что такая запись есть.
    */
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = feed;
+  const windowStart = wanted === null ? 0 : Math.max(0, wanted - CONTEXT_BEFORE);
+  const fetching = feed.isFetching;
   useEffect(() => {
-    if (wanted === null || found) return;
-    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
-  }, [wanted, found, hasNextPage, isFetchingNextPage, fetchNextPage]);
+    if (wanted === null || found || !inIndex) return;
+    // Пока лента едет, судить не о чем: показанное — прошлое окно, и запись, которая
+    // уже в пути, выглядела бы отсюда потерянной. Без этого «к свежей записи» ставило
+    // своё окно, а эффект тут же перебивал его своим — и запросов выходило два.
+    if (fetching) return;
+    if ((from ?? 0) === windowStart) return;
+    setSearchParams(
+      (previous) => {
+        const updated = new URLSearchParams(previous);
+        if (windowStart === 0) updated.delete('from');
+        else updated.set('from', String(windowStart));
+        return updated;
+      },
+      // Заменой, а не новой записью истории: окно подобрано за человека, и «назад»
+      // должно уводить туда, откуда он пришёл, а не в предыдущее окно той же ленты.
+      { replace: true },
+    );
+  }, [wanted, found, inIndex, fetching, from, windowStart, setSearchParams]);
 
   // Прокрутка повторяется, когда записи наконец пришли: до этого прокручивать не к чему.
   useEffect(() => {
@@ -64,11 +112,30 @@ export function CasePage() {
   }, [wanted, found]);
 
   /**
-   * Дело дочитано до конца, а записи всё нет. Причин ровно две, и человеку надо
-   * сказать какая: она не попала в отбор по типу — или её в деле нет вовсе.
+   * Запись показать не удалось, и человеку надо сказать почему. Причин ровно две:
+   * она не попала в отбор по типу — или её в деле нет вовсе, и это видно по описи.
    * Пустого экрана без объяснения здесь не бывает.
    */
-  const missing = wanted !== null && !found && !hasNextPage && !feed.isFetching;
+  const missing = wanted !== null && !found && !feed.isFetching && task.data !== undefined;
+
+  /** «К свежей записи»: окно на хвост дела и метка на последней записи. */
+  function goToLatest() {
+    if (lastNo === null) return;
+    const updated = new URLSearchParams(searchParams);
+    updated.set('entry', String(lastNo));
+    // Хвост целиком, а не одна запись: свежую читают вместе с тем, что к ней привело.
+    if (lastNo > ENTRY_PAGE_SIZE) updated.set('from', String(lastNo - ENTRY_PAGE_SIZE));
+    else updated.delete('from');
+    setSearchParams(updated);
+  }
+
+  /** Возврат к началу дела: окно снимается, метка записи вместе с ним. */
+  function readFromStart() {
+    const updated = new URLSearchParams(searchParams);
+    updated.delete('from');
+    updated.delete('entry');
+    setSearchParams(updated);
+  }
 
   if (task.error instanceof ApiError && task.error.code === 'task_not_found') {
     return (
@@ -84,7 +151,19 @@ export function CasePage() {
     <main className={styles.screen}>
       <TaskNav taskKey={key} view="case" />
 
-      <h1 className={styles.heading}>Дело {key}</h1>
+      <div className={styles.top}>
+        <h1 className={styles.heading}>Дело {key}</h1>
+        {/*
+         * Переход к свежему — действие человека, а не поведение экрана: живой поток
+         * ленту не прокручивает и никогда не прокрутит (UI-13). Кнопка стоит у
+         * заголовка, потому что за свежим сюда и приходят.
+         */}
+        {lastNo === null ? null : (
+          <Button tone="quiet" onClick={goToLatest}>
+            К свежей записи
+          </Button>
+        )}
+      </div>
 
       <CaseFilters
         selected={types}
@@ -95,6 +174,16 @@ export function CasePage() {
           setSearchParams(updated, { replace: true });
         }}
       />
+
+      {/* Окно названо вслух: человек обязан видеть, что перед ним не всё дело. */}
+      {from === null ? null : (
+        <Callout>
+          Показаны записи после {key}#{from}.{' '}
+          <button type="button" className={styles.reset} onClick={readFromStart}>
+            Читать дело сначала
+          </button>
+        </Callout>
+      )}
 
       {missing ? (
         <Callout tone={types.length > 0 ? 'neutral' : 'danger'}>
@@ -132,7 +221,7 @@ export function CasePage() {
         {entries.map((entry) => {
           // Отклик живёт под тем, на что отвечает: ответ под вопросом, резолюция под
           // замечанием. Отдельной записью он показывается только тогда, когда его
-          // записи рядом нет: отбор по типу или страница, на которой она осталась выше.
+          // записи рядом нет: отбор по типу или окно, начавшееся после неё.
           const answersTo = repliesTo(entry);
           if (answersTo !== null && entries.some((other) => other.no === answersTo)) {
             return null;
@@ -158,12 +247,21 @@ export function CasePage() {
       </div>
 
       <div className={styles.paging}>
-        {hasNextPage ? (
-          <Button onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}>
-            {isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+        {feed.hasNextPage ? (
+          <Button onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
+            {feed.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
           </Button>
         ) : entries.length === 0 ? null : (
-          <span className={styles.end}>Это всё дело: записей {entries.length}.</span>
+          <span className={styles.end}>
+            {from === null
+              ? `Это всё дело: записей ${entries.length}.`
+              : `Это конец дела: показано записей ${entries.length}.`}
+          </span>
+        )}
+        {from === null ? null : (
+          <Button tone="quiet" onClick={readFromStart}>
+            Читать дело сначала
+          </Button>
         )}
       </div>
     </main>

@@ -5,6 +5,18 @@
   max-width: 64rem;
 }
 
+/*
+ * Заголовок и переход к свежему — одной строкой: за свежими записями в дело и
+ * приходят, и искать это действие ниже ленты человек не должен. Перенос разрешён,
+ * на узком экране кнопка встаёт под заголовком.
+ */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--spacing) * 3);
+}
+
 .heading {
   margin: 0;
   font-size: var(--text-title);

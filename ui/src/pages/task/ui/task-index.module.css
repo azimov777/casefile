@@ -1,3 +1,19 @@
+/*
+ * Опись целиком: прыжки над ней и прокручиваемая таблица под ними. Действия стоят
+ * сверху, потому что прыжок «к свежей записи» нужен до чтения, а не после.
+ */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing) * 2);
+}
+
 .scroller {
   overflow-x: auto;
 }

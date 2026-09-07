@@ -10,6 +10,7 @@ import {
   collection,
   data,
   failure,
+  heading,
   questionEntry,
   remarkEntry,
   taskDetails,
@@ -268,6 +269,44 @@ describe('карточка задачи', () => {
     expect(
       await screen.findByRole('button', { name: /Список допустимого собирается по типу поля/ }),
     ).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('в длинной описи «К свежей записи» раскрывает последнюю и читает только её', async () => {
+    // Опись из двадцати записей: короткая видна целиком, и прыгать по ней незачем.
+    const long = Array.from({ length: 20 }, (_, at) =>
+      heading(at + 1, 'decision', `Решение номер ${at + 1}`),
+    );
+    server.use(packageOf('DEMO-4', { index: long }), entries('DEMO-4'));
+    const user = userEvent.setup();
+
+    renderApp('/tasks/DEMO-4');
+    await screen.findByRole('table', { name: /Записей в деле/ });
+
+    await user.click(screen.getByRole('button', { name: 'К свежей записи' }));
+
+    // Последняя запись описи раскрыта, и её номер уехал в адрес: перезагрузка
+    // вернёт человека туда же.
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-4?entry=20'));
+    expect(screen.getByRole('button', { name: /Решение номер 20/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    // Прочитана ровно одна запись — двадцатая. Тел с первого по девятнадцатое
+    // ради этого перехода никто не спрашивал.
+    const calls = entriesCalls();
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0] as string).searchParams.getAll('nos')).toEqual(['20']);
+  });
+
+  it('в короткой описи прыжков нет: она и так видна целиком', async () => {
+    server.use(packageOf('DEMO-4'), entries('DEMO-4'));
+
+    renderApp('/tasks/DEMO-4');
+    await screen.findByRole('table', { name: /Записей в деле/ });
+
+    expect(screen.queryByRole('button', { name: 'К свежей записи' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'В начало описи' })).not.toBeInTheDocument();
   });
 
   it('закрытие названной записи убирает её номер из адреса', async () => {
