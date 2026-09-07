@@ -6,22 +6,23 @@
  */
 .stack {
   position: fixed;
-  right: var(--space-4);
-  bottom: var(--space-4);
+  right: calc(var(--spacing) * 4);
+  bottom: calc(var(--spacing) * 4);
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  max-width: min(26rem, calc(100vw - var(--space-8)));
+  gap: calc(var(--spacing) * 2);
+  max-width: min(26rem, calc(100vw - calc(var(--spacing) * 12)));
 }
 
 .notice {
   position: relative;
-  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-3);
-  border: 1px solid var(--tone-attention-border);
-  border-radius: var(--radius-md);
-  background: var(--tone-attention-bg);
-  color: var(--tone-attention-text);
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 8) calc(var(--spacing) * 3)
+    calc(var(--spacing) * 3);
+  border: 1px solid var(--color-attention-line);
+  border-radius: var(--radius-control);
+  background: var(--color-attention-soft);
+  color: var(--color-attention);
   box-shadow: var(--shadow-raised);
 
   /*
@@ -30,7 +31,7 @@
    * общее правило в `shared/styles/index.css` сводит его к мгновенному — уведомление
    * просто есть.
    */
-  animation: appear var(--motion-slow) var(--motion-ease);
+  animation: appear var(--motion-slow) var(--ease-fast);
 }
 
 /*
@@ -42,42 +43,42 @@
  */
 @keyframes appear {
   from {
-    transform: translateY(var(--space-4));
+    transform: translateY(calc(var(--spacing) * 4));
   }
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-1);
+  gap: calc(var(--spacing) * 2);
+  margin-bottom: calc(var(--spacing) * 1);
 }
 
 .key {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   font-weight: 600;
   color: inherit;
 }
 
 .title {
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   /* Длинный заголовок не растит карточку без предела и не обрезается посреди слова. */
   overflow-wrap: anywhere;
 }
 
 .dismiss {
   position: absolute;
-  top: var(--space-1);
-  right: var(--space-1);
-  padding: 0 var(--space-2);
+  top: calc(var(--spacing) * 1);
+  right: calc(var(--spacing) * 1);
+  padding: 0 calc(var(--spacing) * 2);
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-mark);
   background: transparent;
   color: inherit;
-  font-size: var(--text-lg);
+  font-size: var(--text-screen);
   line-height: 1.4;
-  transition: border-color var(--motion-fast) var(--motion-ease);
+  transition: border-color var(--motion-fast) var(--ease-fast);
 }
 
 .dismiss:hover {

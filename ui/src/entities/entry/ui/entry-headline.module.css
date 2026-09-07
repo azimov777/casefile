@@ -2,16 +2,16 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-1) var(--space-2);
+  gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
 }
 
 /* Идентификатор контракта: не переводится и выглядит так же, как в адресе и у агента. */
 .id {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 .ref {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }

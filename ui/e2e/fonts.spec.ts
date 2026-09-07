@@ -90,7 +90,7 @@ test.describe('тёмная тема', () => {
 
     const [background, token] = await page.evaluate(() => {
       const styles = getComputedStyle(document.body);
-      return [styles.backgroundColor, styles.getPropertyValue('--t-bg').trim()];
+      return [styles.backgroundColor, styles.getPropertyValue('--t-ground').trim()];
     });
 
     // Фон страницы — ровно ночное значение токена, а не дневное и не браузерное.

@@ -17,9 +17,9 @@ body,
 
 body {
   font-family: var(--font-sans);
-  font-size: var(--text-md);
+  font-size: var(--text-body);
   line-height: 1.5;
-  background: var(--color-bg);
+  background: var(--color-ground);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -34,6 +34,19 @@ select {
 
 button {
   cursor: pointer;
+}
+
+code,
+kbd,
+samp,
+pre,
+time {
+  /*
+   * Табличные цифры: в колонке «Активность» и в номерах записей числа стоят друг под
+   * другом, и пропорциональная единица уводит разряды вбок — колонка «гуляет» на
+   * ширину символа при каждом обновлении.
+   */
+  font-variant-numeric: tabular-nums;
 }
 
 code,

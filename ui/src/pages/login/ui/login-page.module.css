@@ -9,7 +9,8 @@
   align-items: flex-start;
   justify-content: center;
   min-height: 100%;
-  padding: clamp(var(--space-6), 18vh, 12rem) var(--space-4) var(--space-6);
+  padding: clamp(calc(var(--spacing) * 8), 18vh, 12rem) calc(var(--spacing) * 4)
+    calc(var(--spacing) * 8);
 }
 
 .card {
@@ -17,19 +18,19 @@
   max-width: 28rem;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: calc(var(--spacing) * 6);
+  padding: calc(var(--spacing) * 8);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
 }
 
 .title {
-  font-size: var(--text-xl);
+  font-size: var(--text-title);
 }
 
 .subtitle {
-  margin-top: var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  margin-top: calc(var(--spacing) * 1);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
 }

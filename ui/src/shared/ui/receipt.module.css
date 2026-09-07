@@ -1,25 +1,25 @@
 .receipt {
-  border: 1px solid var(--tone-positive-border);
-  border-radius: var(--radius-md);
-  background: var(--tone-positive-bg);
-  padding: var(--space-3);
+  border: 1px solid var(--color-positive-line);
+  border-radius: var(--radius-control);
+  background: var(--color-positive-soft);
+  padding: calc(var(--spacing) * 3);
 }
 
 .head {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
+  gap: calc(var(--spacing) * 3);
+  margin-bottom: calc(var(--spacing) * 2);
 }
 
 .done {
-  color: var(--tone-positive-text);
+  color: var(--color-positive);
   font-weight: 600;
 }
 
 .entry {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 /*
@@ -38,18 +38,18 @@
   min-height: 6rem;
   max-height: 9rem;
   overflow-y: auto;
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 .close {
-  margin-top: var(--space-2);
-  padding: 0 var(--space-2);
-  border: 1px solid var(--tone-positive-border);
-  border-radius: var(--radius-sm);
+  margin-top: calc(var(--spacing) * 2);
+  padding: 0 calc(var(--spacing) * 2);
+  border: 1px solid var(--color-positive-line);
+  border-radius: var(--radius-mark);
   background: transparent;
-  color: var(--tone-positive-text);
-  font-size: var(--text-sm);
-  transition: background-color var(--motion-fast) var(--motion-ease);
+  color: var(--color-positive);
+  font-size: var(--text-meta);
+  transition: background-color var(--motion-fast) var(--ease-fast);
 }
 
 .close:hover {

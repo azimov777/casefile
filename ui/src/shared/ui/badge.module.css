@@ -1,11 +1,11 @@
 .badge {
   display: inline-block;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--tone-neutral-border);
-  border-radius: var(--radius-sm);
-  background: var(--tone-neutral-bg);
-  color: var(--tone-neutral-text);
-  font-size: var(--text-xs);
+  padding: 0 calc(var(--spacing) * 2);
+  border: 1px solid var(--color-neutral-line);
+  border-radius: var(--radius-mark);
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
+  font-size: var(--text-label);
   line-height: 1.6;
   white-space: nowrap;
 }
@@ -25,7 +25,7 @@
  */
 .kind {
   font-family: var(--font-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-label);
   font-weight: 400;
 }
 
@@ -34,21 +34,21 @@
  * оставленный от нейтрального тона, не прошёл бы контраст на чужой заливке.
  */
 .neutral {
-  border-color: var(--tone-neutral-border);
-  background: var(--tone-neutral-bg);
-  color: var(--tone-neutral-text);
+  border-color: var(--color-neutral-line);
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
 }
 
 .progress {
-  border-color: var(--tone-progress-border);
-  background: var(--tone-progress-bg);
-  color: var(--tone-progress-text);
+  border-color: var(--color-progress-line);
+  background: var(--color-progress-soft);
+  color: var(--color-progress);
 }
 
 .positive {
-  border-color: var(--tone-positive-border);
-  background: var(--tone-positive-bg);
-  color: var(--tone-positive-text);
+  border-color: var(--color-positive-line);
+  background: var(--color-positive-soft);
+  color: var(--color-positive);
 }
 
 /*
@@ -57,19 +57,19 @@
  */
 .dropped {
   border-style: dashed;
-  border-color: var(--tone-dropped-border);
-  background: var(--tone-dropped-bg);
-  color: var(--tone-dropped-text);
+  border-color: var(--color-dropped-line);
+  background: transparent;
+  color: var(--color-dropped);
 }
 
 .attention {
-  border-color: var(--tone-attention-border);
-  background: var(--tone-attention-bg);
-  color: var(--tone-attention-text);
+  border-color: var(--color-attention-line);
+  background: var(--color-attention-soft);
+  color: var(--color-attention);
 }
 
 .danger {
-  border-color: var(--tone-danger-border);
-  background: var(--tone-danger-bg);
-  color: var(--tone-danger-text);
+  border-color: var(--color-danger-line);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }

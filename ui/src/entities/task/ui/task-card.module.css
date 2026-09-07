@@ -3,20 +3,20 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-mark);
   background: var(--color-surface);
   transition:
-    border-color var(--motion-fast) var(--motion-ease),
-    background-color var(--motion-fast) var(--motion-ease);
+    border-color var(--motion-fast) var(--ease-fast),
+    background-color var(--motion-fast) var(--ease-fast);
 }
 
 /* Видно, какая карточка под курсором: на доске их десятки в шести столбцах. */
 .card:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-sunken);
+  border-color: var(--color-line-strong);
+  background: var(--color-sunken);
 }
 
 .link {
@@ -39,7 +39,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-mark);
 }
 
 .link:focus-visible {
@@ -61,12 +61,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: calc(var(--spacing) * 2);
 }
 
 .key {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 .title {
@@ -79,9 +79,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  gap: calc(var(--spacing) * 2);
+  font-size: var(--text-meta);
+  color: var(--color-muted);
 }
 
 .empty {

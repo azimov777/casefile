@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { errorMessage } from '@/shared/errors';
-import { Button, Callout } from '@/shared/ui';
+import { Button, Callout, Input } from '@/shared/ui';
 import { useLogin } from '../model/use-login';
 import styles from './login-form.module.css';
 
@@ -29,9 +29,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         <label className={styles.label} htmlFor={inputId}>
           Токен участника
         </label>
-        <input
+        <Input
           id={inputId}
-          className={styles.input}
           type="password"
           value={token}
           onChange={(event) => setToken(event.target.value)}

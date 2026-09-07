@@ -1,28 +1,28 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: calc(var(--spacing) * 3);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: calc(var(--spacing) * 1);
 }
 
 .label {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
 }
 
 .textarea {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-mark);
   background: var(--color-surface);
   color: var(--color-text);
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   resize: vertical;
 }
 
@@ -39,20 +39,20 @@
  */
 .problem {
   color: var(--color-danger);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 .preview {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  gap: calc(var(--spacing) * 1);
+  padding: calc(var(--spacing) * 3);
+  border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-mark);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: calc(var(--spacing) * 2);
 }

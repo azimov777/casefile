@@ -1,53 +1,132 @@
 /*
- * Семантический слой темы: то, из чего Tailwind порождает утилиты. Здесь только
- * имена, называющие роль (`surface`, `border`, `text-muted`), — значения лежат
- * в `tokens.css` под именами `--t-*` и переключаются там медиазапросом.
+ * Слой 2, техническая половина: `@theme` берёт семантику из `tokens.css` и порождает
+ * из неё утилиты — `bg-surface`, `text-faint`, `border-line`, `rounded-block`.
+ * Значений здесь нет, только имена и ссылки: значение обязано жить там, где его
+ * переписывает тёмная тема.
  *
- * Шкала Tailwind по умолчанию гасится целиком (`--color-*: initial` и соседи):
- * иначе рядом с нашей палитрой в разметке была бы доступна чужая, и `gray-500`
- * протёк бы в первой же задаче — а он не переключается вместе с темой.
+ * Шкала Tailwind по умолчанию гасится целиком там, где у нас есть своя. Иначе рядом
+ * с нашей палитрой в разметке доступна чужая (`gray-500`, `text-xs`, `rounded-md`),
+ * а она не переключается вместе с темой и не подчиняется ни одному нашему решению.
  */
 @theme {
   --color-*: initial;
   --font-*: initial;
   --text-*: initial;
   --radius-*: initial;
+  --shadow-*: initial;
+  --breakpoint-*: initial;
+  --ease-*: initial;
 
-  --color-bg: var(--t-bg);
+  /* Поверхности и две линии */
+  --color-ground: var(--t-ground);
   --color-surface: var(--t-surface);
-  --color-surface-sunken: var(--t-surface-sunken);
-  --color-border: var(--t-border);
-  --color-border-strong: var(--t-border-strong);
+  --color-sunken: var(--t-sunken);
+  --color-line: var(--t-line);
+  --color-line-strong: var(--t-line-strong);
 
+  /* Три уровня текста: содержание, объяснение, служебное */
   --color-text: var(--t-text);
-  --color-text-muted: var(--t-text-muted);
+  --color-muted: var(--t-muted);
+  --color-faint: var(--t-faint);
 
   --color-accent: var(--t-accent);
-  --color-accent-hover: var(--t-accent-hover);
-  --color-accent-contrast: var(--t-accent-contrast);
-
-  --color-danger: var(--t-danger);
-  --color-danger-bg: var(--t-danger-bg);
-  --color-danger-border: var(--t-danger-border);
-
+  --color-accent-strong: var(--t-accent-strong);
+  --color-accent-soft: var(--t-accent-soft);
+  --color-accent-text: var(--t-accent-text);
   --color-focus: var(--t-focus);
 
+  /* Шесть тонов: текст тона, его заливка и его граница */
+  --color-neutral: var(--t-neutral);
+  --color-neutral-soft: var(--t-neutral-soft);
+  --color-neutral-line: var(--t-neutral-line);
+
+  --color-progress: var(--t-progress);
+  --color-progress-soft: var(--t-progress-soft);
+  --color-progress-line: var(--t-progress-line);
+
+  --color-positive: var(--t-positive);
+  --color-positive-soft: var(--t-positive-soft);
+  --color-positive-line: var(--t-positive-line);
+
+  --color-dropped: var(--t-dropped);
+  --color-dropped-line: var(--t-dropped-line);
+
+  --color-attention: var(--t-attention);
+  --color-attention-soft: var(--t-attention-soft);
+  --color-attention-line: var(--t-attention-line);
+
+  --color-danger: var(--t-danger);
+  --color-danger-soft: var(--t-danger-soft);
+  --color-danger-line: var(--t-danger-line);
+
   /*
-   * Fira Sans набирает подписи, Fira Code — идентификаторы контракта: ключи,
-   * статусы, типы записей. Обе гарнитуры с кириллицей: среди тегов есть русские.
-   * Системная запасная обязательна и стоит первой после Fira — контур сквозных
-   * тестов поднимается без интернета, и без неё там не было бы букв вовсе.
+   * Fira Sans набирает подписи, Fira Code — идентификаторы контракта: ключи, статусы,
+   * типы записей. У Fira Code прорезанный ноль (решение Д23): ключ задачи диктуют
+   * вслух и ищут глазами, а в `ui-monospace` на 11–12 px `0` и `O` почти неразличимы.
+   * Обе гарнитуры с кириллицей, системная запасная в стеке обязательна: контур
+   * сквозных тестов поднимается без интернета.
    */
   --font-sans:
     'Fira Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-md: 0.875rem;
-  --text-lg: 1rem;
-  --text-xl: 1.25rem;
+  /*
+   * Кегль по ролям, а не по размерам: `text-body` говорит, чем набран текст, а `text-sm`
+   * — только насколько он мелкий, и через полгода никто не помнит, что именно им набрано.
+   *
+   * Нижняя граница — решение Д24: тело не меньше 13 px, любая подпись не меньше 11 px.
+   * Плотность набирается высотой строки и отступами, а не уменьшением букв: ниже этого
+   * порога подпись перестаёт читаться на ноутбучном экране и первой страдает у людей
+   * с дальнозоркостью.
+   */
+  --text-title: 1.1875rem; /* 19px — название задачи на её карточке */
+  --text-screen: 0.9375rem; /* 15px — заголовок экрана */
+  --text-body: 0.8125rem; /* 13px — содержание: названия, тела записей, ответы */
+  --text-meta: 0.75rem; /* 12px — то, что объясняет содержание */
+  --text-mark: 0.71875rem; /* 11.5px — ключи, время, номера записей */
+  --text-label: 0.6875rem; /* 11px — подписи колонок, теги, надстрочные метки */
 
-  --radius-sm: 3px;
-  --radius-md: 6px;
+  /*
+   * Радиусы шкалой, а не парой на глаз: метка меньше кнопки, кнопка меньше блока —
+   * вложенность читается по скруглению, а не только по рамке.
+   */
+  --radius-mark: 4px;
+  --radius-control: 7px;
+  --radius-block: 10px;
+  --radius-pill: 999px;
+
+  --shadow-raised: var(--t-shadow);
+  --shadow-sticky: var(--t-sticky);
+
+  /*
+   * Точки остановки названы решением, а не размером экрана. `fold` — где строка списка
+   * складывается в две (решение Д6) и уезжает боковая панель; `wide` — где входящая
+   * встаёт в две колонки (Д16); `card` — где карточка задачи делится на две колонки.
+   */
+  --breakpoint-fold: 44rem;
+  --breakpoint-wide: 64rem;
+  --breakpoint-card: 80rem;
+
+  --ease-fast: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/*
+ * Слой 3 — компоненты: измерения, принадлежащие одному кирпичу. Здесь нет ни одного
+ * литерала: значение выражено шагом сетки или семантическим токеном. Литерал в этом
+ * слое не переключился бы вместе с темой и пережил бы её молча — а найти его потом
+ * можно только глазами.
+ *
+ * Тёмная тема этот слой не повторяет ни строкой: высота строки списка от времени
+ * суток не зависит.
+ */
+:root {
+  --ui-row-height: calc(var(--spacing) * 9.5); /* 38px — строка списка */
+  --ui-row-head: calc(var(--spacing) * 7.5); /* 30px — её липкая шапка */
+  --ui-topbar: calc(var(--spacing) * 10); /* 40px — верхняя полоса оболочки */
+  --ui-header: calc(var(--spacing) * 12); /* 3rem — высота шапки приложения */
+  --ui-side: calc(var(--spacing) * 50); /* 12.5rem — боковая панель очередей */
+  --ui-board-column: calc(var(--spacing) * 62); /* 15.5rem — столбец доски */
+  --ui-page-max: calc(var(--spacing) * 400); /* 100rem — предел ширины страницы */
+  --ui-text-max: var(--t-measure); /* предел ширины читаемого текста */
+  --ui-answer-max: calc(var(--spacing) * 60); /* 15rem — предел высоты поля ответа */
 }

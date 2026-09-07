@@ -2,12 +2,12 @@
 .lost {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
+  gap: calc(var(--spacing) * 1);
+  font-size: var(--text-label);
 }
 
 .connected {
-  color: var(--color-text-muted);
+  color: var(--color-muted);
 }
 
 .lost {

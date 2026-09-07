@@ -1,7 +1,7 @@
 .panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: calc(var(--spacing) * 2);
 }
 
 /*
@@ -12,10 +12,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
 }
 
@@ -29,25 +29,25 @@
   flex: 1 1 12rem;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-2);
+  gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .condition {
-  padding: 0 var(--space-2);
-  border: 1px solid var(--tone-neutral-border);
-  border-radius: var(--radius-sm);
-  background: var(--tone-neutral-bg);
+  padding: 0 calc(var(--spacing) * 2);
+  border: 1px solid var(--color-neutral-line);
+  border-radius: var(--radius-mark);
+  background: var(--color-neutral-soft);
   color: var(--color-text);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   line-height: 1.6;
 }
 
 .all {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
 }
 
 /*
@@ -58,24 +58,24 @@
 .inactive {
   border-style: dashed;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-muted);
   text-decoration: line-through;
 }
 
 .sort {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: calc(var(--spacing) * 2);
   white-space: nowrap;
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: calc(var(--spacing) * 3);
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
 }
 
@@ -83,13 +83,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: var(--space-3);
+  gap: calc(var(--spacing) * 3);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: calc(var(--spacing) * 1);
 }
 
 .wide {
@@ -99,25 +99,25 @@
 .head {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2);
+  gap: calc(var(--spacing) * 2);
 }
 
 .label {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  color: var(--color-muted);
+  font-size: var(--text-label);
 }
 
 /* Сноска у подписи: стоит там всегда и потому ничего не двигает своим появлением. */
 .note {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  color: var(--color-muted);
+  font-size: var(--text-label);
   font-style: italic;
 }
 
 /* Черновик поля: напечатано, но в адрес ещё не уехало. */
 .pending {
-  color: var(--tone-attention-text);
-  font-size: var(--text-xs);
+  color: var(--color-attention);
+  font-size: var(--text-label);
   font-weight: 600;
 }
 
@@ -128,13 +128,13 @@
 
 .input,
 .select {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-mark);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
-  font-size: var(--text-md);
+  font-size: var(--text-body);
 }
 
 .input {
@@ -143,31 +143,31 @@
 }
 
 .draft {
-  border-color: var(--tone-attention-border);
-  box-shadow: inset 3px 0 0 var(--tone-attention-border);
+  border-color: var(--color-attention-line);
+  box-shadow: inset 3px 0 0 var(--color-attention-line);
 }
 
 .group {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-3);
-  padding: 0 var(--space-2) var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  gap: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+  padding: 0 calc(var(--spacing) * 2) calc(var(--spacing) * 1);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-mark);
 }
 
 .check {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-md);
+  gap: calc(var(--spacing) * 1);
+  font-size: var(--text-body);
   white-space: nowrap;
 }
 
 .check code {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 /*
@@ -177,21 +177,21 @@
  */
 .problem {
   position: absolute;
-  top: calc(100% + var(--space-1));
+  top: calc(100% + calc(var(--spacing) * 1));
   left: 0;
   z-index: 5;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: calc(var(--spacing) * 2);
   min-width: 100%;
   max-width: 40rem;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-danger-bg);
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+  border: 1px solid var(--color-danger-line);
+  border-radius: var(--radius-mark);
+  background: var(--color-danger-soft);
   box-shadow: var(--shadow-raised);
   color: var(--color-danger);
-  font-size: var(--text-md);
+  font-size: var(--text-body);
 }
 
 .problem p {
@@ -202,7 +202,7 @@
   overflow-x: auto;
   margin: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
   line-height: 1.2;
   white-space: pre;
 }
@@ -210,6 +210,6 @@
 .note {
   margin: 0;
   align-self: center;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
 }

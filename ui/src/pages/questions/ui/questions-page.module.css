@@ -1,41 +1,41 @@
 .screen {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: calc(var(--spacing) * 4);
   max-width: 64rem;
 }
 
 .heading {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-title);
 }
 
 .filters {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: calc(var(--spacing) * 4);
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: calc(var(--spacing) * 1);
 }
 
 .label {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
 }
 
 .select {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-mark);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
@@ -44,14 +44,14 @@
 .check {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: calc(var(--spacing) * 2);
   cursor: pointer;
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: calc(var(--spacing) * 3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -60,10 +60,10 @@
 .question {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
 }
 
@@ -71,9 +71,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  gap: calc(var(--spacing) * 3);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
 }
 
 .task {
@@ -82,18 +82,18 @@
 
 .title {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-screen);
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: calc(var(--spacing) * 3);
 }
 
 .sectionTitle {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-screen);
 }
 
 /*
@@ -104,9 +104,9 @@
 .remark {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--tone-attention-border);
-  border-radius: var(--radius-md);
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 3);
+  border: 1px solid var(--color-attention-line);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
 }

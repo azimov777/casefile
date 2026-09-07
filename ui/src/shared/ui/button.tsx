@@ -15,20 +15,22 @@ import { cn } from '../lib';
  */
 const button = cva(
   [
-    'inline-flex items-center justify-center gap-2 rounded-sm border border-transparent',
-    'px-4 py-2 text-md font-medium leading-[1.2]',
+    'inline-flex items-center justify-center gap-2 rounded-mark border border-transparent',
+    'px-4 py-2 text-body font-medium leading-[1.2]',
     // Отклик на наведение — единственное движение, которое кнопке позволено:
     // оно отвечает на действие человека, а не начинается само.
-    'transition-colors duration-(--motion-fast) ease-(--motion-ease)',
+    'transition-colors duration-(--motion-fast) ease-fast',
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-    'disabled:cursor-default disabled:border-border disabled:bg-surface-sunken',
-    'disabled:text-text-muted',
+    'disabled:cursor-default disabled:border-line disabled:bg-sunken disabled:text-muted',
   ],
   {
     variants: {
       tone: {
-        primary: 'bg-accent text-accent-contrast enabled:hover:bg-accent-hover',
-        quiet: 'border-border-strong text-text enabled:hover:bg-surface-sunken',
+        primary: 'bg-accent text-accent-text enabled:hover:bg-accent-strong',
+        // Фон назван явно, а не оставлен на умолчание: у кнопки без `background`
+        // браузер рисует свой `ButtonFace` (в тёмной теме это #6b6b6b), и текст на
+        // нём даёт 4.47 при норме 4.5 — поймано `axe` в сквозных.
+        quiet: 'border-line-strong bg-transparent text-text enabled:hover:bg-sunken',
       },
     },
     defaultVariants: { tone: 'primary' },

@@ -1,10 +1,10 @@
 .header {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  height: var(--header-height);
-  padding: 0 var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  gap: calc(var(--spacing) * 6);
+  height: var(--ui-header);
+  padding: 0 calc(var(--spacing) * 4);
+  border-bottom: 1px solid var(--color-line);
   background: var(--color-surface);
 }
 
@@ -16,18 +16,18 @@
 .nav {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: calc(var(--spacing) * 4);
 }
 
 .link {
   color: var(--color-text);
   text-decoration: none;
-  padding: var(--space-1) 0;
+  padding: calc(var(--spacing) * 1) 0;
   border-bottom: 2px solid transparent;
 }
 
 .link:hover {
-  border-bottom-color: var(--color-border-strong);
+  border-bottom-color: var(--color-line-strong);
 }
 
 .link[aria-current='page'] {
@@ -38,9 +38,9 @@
 .session {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: calc(var(--spacing) * 4);
   margin-left: auto;
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 
 .participant {
@@ -49,20 +49,20 @@
 
 .questions,
 .questionsWaiting {
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-2);
+  border-radius: var(--radius-mark);
+  padding: 0 calc(var(--spacing) * 2);
   text-decoration: none;
 }
 
 .questions {
-  color: var(--color-text-muted);
+  color: var(--color-muted);
 }
 
 /* Вопросы есть — счётчик перестаёт выглядеть как то, что можно не читать. */
 .questionsWaiting {
-  border: 1px solid var(--tone-attention-border);
-  background: var(--tone-attention-bg);
-  color: var(--tone-attention-text);
+  border: 1px solid var(--color-attention-line);
+  background: var(--color-attention-soft);
+  color: var(--color-attention);
   font-weight: 600;
 }
 

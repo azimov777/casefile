@@ -1,7 +1,7 @@
 .switch {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: calc(var(--spacing) * 3);
   margin: 0;
   padding: 0;
   border: none;
@@ -9,14 +9,14 @@
 
 .legend {
   float: left;
-  margin-right: var(--space-3);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  margin-right: calc(var(--spacing) * 3);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
 }
 
 .option {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: calc(var(--spacing) * 1);
   cursor: pointer;
 }
