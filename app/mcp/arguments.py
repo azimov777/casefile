@@ -108,8 +108,9 @@ ReasonArg = Annotated[
     Field(
         description=(
             "Почему задача идёт туда. Обязательна для любого шага назад по цепочке "
-            "`backlog < open < in_progress < done` и для `cancelled`; в остальных "
-            "переходах необязательна. Попадает в дело записью `status_changed`"
+            "`backlog < open < in_progress < done`, для `cancelled` и для `waiting`; в "
+            "остальных переходах необязательна. У `waiting` она называет, чего ждём, — "
+            "больше это записать негде. Попадает в дело записью `status_changed`"
         ),
         examples=["Жду ответа на TRK-42#7"],
     ),
