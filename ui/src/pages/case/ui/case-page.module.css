@@ -10,10 +10,27 @@
   font-size: var(--text-title);
 }
 
+/*
+ * Нить времени (решение Д13). Линию рисует лента, а не запись: запись не знает про
+ * соседей, и собранная из отрезков нить рвалась бы на каждом промежутке между
+ * карточками. Знак рода записи садится на нить своей точкой.
+ */
 .feed {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: calc(var(--spacing) * 3);
+  padding-left: calc(var(--spacing) * 8);
+}
+
+.feed::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--spacing) * 2.5);
+  top: calc(var(--spacing) * 2);
+  bottom: calc(var(--spacing) * 2);
+  width: 1px;
+  background: var(--color-line);
 }
 
 /* Ответы вложены в вопрос: сдвиг показывает, что это не отдельные записи ленты. */

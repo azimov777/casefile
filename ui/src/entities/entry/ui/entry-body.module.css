@@ -60,6 +60,11 @@
   }
 }
 
+/*
+ * Стороны сравнения красятся тоном исхода (решение Д14): было — снятое, стало —
+ * удачное. Тон берётся из тех же шести, седьмого ради сравнения не заводится.
+ * Подпись при этом остаётся: цвет никогда не единственный носитель смысла.
+ */
 .side {
   display: flex;
   flex-direction: column;
@@ -69,6 +74,25 @@
   border: 1px solid var(--color-line);
   border-radius: var(--radius-mark);
   background: var(--color-sunken);
+}
+
+.was {
+  border-color: var(--color-dropped-line);
+  border-style: dashed;
+  background: transparent;
+}
+
+.was .partTitle {
+  color: var(--color-dropped);
+}
+
+.now {
+  border-color: var(--color-positive-line);
+  background: var(--color-positive-soft);
+}
+
+.now .partTitle {
+  color: var(--color-positive);
 }
 
 .list {

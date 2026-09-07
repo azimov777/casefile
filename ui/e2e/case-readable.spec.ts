@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { fontsReady, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -143,6 +143,28 @@ async function serviceHeight(page: Page): Promise<number> {
 }
 
 test.describe('дело читается по-русски', () => {
+  test('ссылка на запись стоит на одном месте в каждой строке', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const key = await seed(request);
+    await silenceJournal(page);
+
+    await page.goto(`/tasks/${key}/case`);
+    await expect(page.getByRole('article').first()).toBeVisible();
+    await fontsReady(page);
+
+    // Ссылку копируют, чтобы сослаться из другой задачи (решение Д15). Если она
+    // едет вправо на разную длину, её каждый раз ищут глазами заново.
+    const rights = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('article'))
+        .map((card) => card.querySelector('button[type="button"]'))
+        .filter((node): node is HTMLElement => node !== null)
+        .map((node) => Math.round(node.getBoundingClientRect().right * 10) / 10),
+    );
+
+    expect(rights.length).toBeGreaterThan(3);
+    expect(Math.max(...rights) - Math.min(...rights)).toBeLessThanOrEqual(1);
+  });
+
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('ни лента, ни опись не говорят по-английски', async ({ page, request }) => {

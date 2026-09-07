@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
-import { Badge, RelativeTime } from '@/shared/ui';
+import { RelativeTime } from '@/shared/ui';
 import type { Entry } from '../api/entries';
 import { isServiceEntry } from '../api/entries';
 import { entryHeadline, factsOfEntry } from '../model/headline';
 import { AuthorName } from './author-name';
 import { EntryBody } from './entry-body';
 import { EntryHeadline } from './entry-headline';
+import { EntryKind } from './entry-kind';
 import styles from './entry-card.module.css';
 
 interface EntryCardProps {
@@ -44,8 +45,12 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
       aria-label={reference}
     >
       <header className={styles.head}>
+        {/* Точка на нити времени: род записи виден до чтения слова (решение Д13). */}
+        <span className={styles.dot} aria-hidden="true">
+          <EntryKind type={entry.type} withName={false} />
+        </span>
         <span className={styles.no}>#{entry.no}</span>
-        <Badge mono>{entry.type}</Badge>
+        <EntryKind type={entry.type} />
         {/* Заголовок служебной записи стоит прямо в шапке: отдельной строкой он был бы
             вторым разом сказанным одним и тем же. */}
         {service && headline.kind === 'built' ? (

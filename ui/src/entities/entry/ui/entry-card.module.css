@@ -1,4 +1,5 @@
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: calc(var(--spacing) * 2);
@@ -37,6 +38,27 @@
   border-color: var(--color-accent);
 }
 
+/*
+ * Точка на нити: кружок поверхности с рамкой, чтобы линия под ним не просвечивала.
+ * Знак внутри — тот же, что в описи карточки: словарь родов один на всё приложение.
+ *
+ * Точка стоит в потоке шапки и выносится на нить отрицательным полем, а не
+ * `position: absolute`. Абсолютный потомок, выступающий за низ короткой служебной
+ * записи, увеличивал её `scrollHeight` — и сквозная проверка «ничего не спрятано
+ * переполнением» считала запись обрезанной.
+ */
+.dot {
+  margin-left: calc(var(--spacing) * -8);
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--spacing) * 5);
+  height: calc(var(--spacing) * 5);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+
 .head {
   display: flex;
   flex-wrap: wrap;
@@ -58,11 +80,17 @@
   font-weight: 600;
 }
 
+/*
+ * Ссылка на запись стоит справа и на одном месте в каждой строке (решение Д15):
+ * её копируют, чтобы сослаться из другой задачи, и искать её глазами каждый раз
+ * заново — работа, которой быть не должно.
+ */
 .copy {
   display: inline-flex;
   align-items: center;
   gap: calc(var(--spacing) * 2);
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .copyButton {

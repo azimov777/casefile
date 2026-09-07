@@ -111,3 +111,55 @@ describe('представление записи по типу', () => {
     );
   });
 });
+
+describe('сравнение раздела', () => {
+  it('стороны различаются тоном и подписью, а порядок чтения остаётся прежним', () => {
+    const { container } = show('section_changed');
+
+    const sides = Array.from(container.querySelectorAll('[class*="side"]'));
+    expect(sides).toHaveLength(2);
+
+    // Тон исхода: у «было» и «стало» разные классы, то есть разные цвета (решение Д14).
+    const [was, now] = sides as [HTMLElement, HTMLElement];
+    expect(was.className).not.toBe(now.className);
+
+    // Цвет при этом не единственный носитель: подписи на месте и идут в том порядке,
+    // в котором их прочитает программа чтения с экрана.
+    expect(was).toHaveTextContent('Было');
+    expect(now).toHaveTextContent('Стало');
+    expect(container.textContent?.indexOf('Было')).toBeLessThan(
+      container.textContent?.indexOf('Стало') ?? -1,
+    );
+  });
+});
+
+describe('служебная запись', () => {
+  it('без причины умещается в строку шапки, с причиной показывает её целиком', () => {
+    const entry = entryOfType(5, 'DEMO-1', 'status_changed');
+
+    // С причиной: свободный текст показан целиком — это то, чего в заголовке быть
+    // не может, и ради него у служебной записи вообще есть тело.
+    const withReason = render(
+      <MemoryRouter>
+        <EntryCard entry={entry} checks={[]} />
+      </MemoryRouter>,
+    );
+    expect(withReason.container).toHaveTextContent('Задан блокирующий вопрос');
+    withReason.unmount();
+
+    // Без причины: тела нет вовсе, весь факт уместился в шапку. Заголовок и тело
+    // не должны говорить одно и то же (`docs/notes/ui.md`).
+    const bare = render(
+      <MemoryRouter>
+        <EntryCard
+          entry={{ ...entry, payload: { ...entry.payload, reason: null } } as typeof entry}
+          checks={[]}
+        />
+      </MemoryRouter>,
+    );
+    const card = bare.container.querySelector('[data-type="status_changed"]');
+    expect(card).not.toBeNull();
+    expect(card?.querySelectorAll('p')).toHaveLength(0);
+    expect(card).toHaveTextContent(/backlog|open|in_progress/);
+  });
+});

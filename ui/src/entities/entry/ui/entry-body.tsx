@@ -86,8 +86,8 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'section_changed':
       return (
         <div className={styles.diff}>
-          <Side title="Было" value={entry.payload.before} />
-          <Side title="Стало" value={entry.payload.after} />
+          <Side title="Было" value={entry.payload.before} tone="was" />
+          <Side title="Стало" value={entry.payload.after} tone="now" />
         </div>
       );
 
@@ -100,8 +100,8 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'field_changed':
       return (
         <div className={styles.diff}>
-          <Side title="Было" value={entry.payload.before} />
-          <Side title="Стало" value={entry.payload.after} />
+          <Side title="Было" value={entry.payload.before} tone="was" />
+          <Side title="Стало" value={entry.payload.after} tone="now" />
         </div>
       );
 
@@ -186,10 +186,25 @@ function Refs({ refs }: { refs: string[] }) {
   );
 }
 
-/** Сторона сравнения: `checks` приходит списком, остальные разделы — строкой. */
-function Side({ title, value }: { title: string; value?: string | string[] | null }) {
+/**
+ * Сторона сравнения: `checks` приходит списком, остальные разделы — строкой.
+ *
+ * Тон исхода, а не две серые колонки (решение Д14): «было» получает тон снятого,
+ * «стало» — тон удачного. Тонов при этом не прибавилось — берутся те же шесть, что
+ * у статусов. Цвет не единственный носитель: подписи «Было» и «Стало» остаются
+ * на месте и читаются диктором в том же порядке.
+ */
+function Side({
+  title,
+  value,
+  tone,
+}: {
+  title: string;
+  value?: string | string[] | null;
+  tone: 'was' | 'now';
+}) {
   return (
-    <div className={styles.side}>
+    <div className={`${styles.side} ${tone === 'was' ? styles.was : styles.now}`}>
       <span className={styles.partTitle}>{title}</span>
       {value === null || value === undefined || value === '' ? (
         <p className={styles.absent}>пусто</p>
