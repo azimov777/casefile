@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { fontsReady, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -99,6 +99,10 @@ test('раскрытие столбца не сужает соседей и не
       .boundingBox()
       .then((box) => Math.round(box?.y ?? Number.NaN));
 
+  // Замеры «до» и «после» обязаны быть сняты одним шрифтом: Fira приходит с внешнего
+  // хоста и после подстановки двигает карточку на пиксель — точное сравнение падало бы
+  // не от раскрытия столбца, а от того, что шрифт успел прийти между замерами.
+  await fontsReady(page);
   const before = { widths: await widths(), card: await cardTop() };
 
   // Раскрытие свёрнутого столбца раньше сужало все остальные (265 → 190 px), и текст

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Locator } from '@playwright/test';
-import { compose, readE2eToken } from './contour';
+import { compose, fontsReady, readE2eToken } from './contour';
 
 const token = readE2eToken();
 
@@ -172,6 +172,10 @@ test('вопрос ко мне объявляется уведомлением �
     firstRow: page.locator('tbody tr').first(),
     logout: page.getByRole('button', { name: 'Выйти' }),
   };
+  // Замеры «до» и «после» снимаются одним шрифтом: Fira приходит с внешнего хоста
+  // и после подстановки меняет ширину кнопки на пару пикселей — точное сравнение
+  // падало бы не от уведомления, а от того, что шрифт успел прийти между замерами.
+  await fontsReady(page);
   const before = await geometry(watched);
 
   const response = await request.post('/api/v1/tasks/DEMO-3/entries', {

@@ -32,3 +32,15 @@ export function writeE2eToken(token: string): void {
 export async function silenceJournal(page: Page): Promise<void> {
   await page.route('**/api/v1/journal/stream*', () => new Promise(() => {}));
 }
+
+/**
+ * Ждёт, пока страница дорисуется тем шрифтом, которым будет жить.
+ *
+ * Fira приходит с внешнего хоста уже после первой отрисовки и меняет метрику: ширины
+ * ячеек, высоты строк и точки переноса сдвигаются. Координата, снятая до этого, ведёт
+ * мимо — протяжка по имени исполнителя начиналась в соседней ячейке. Любой замер
+ * геометрии в сквозном тесте снимается после этого ожидания.
+ */
+export async function fontsReady(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready);
+}

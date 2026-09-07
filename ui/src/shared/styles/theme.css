@@ -1,0 +1,53 @@
+/*
+ * Семантический слой темы: то, из чего Tailwind порождает утилиты. Здесь только
+ * имена, называющие роль (`surface`, `border`, `text-muted`), — значения лежат
+ * в `tokens.css` под именами `--t-*` и переключаются там медиазапросом.
+ *
+ * Шкала Tailwind по умолчанию гасится целиком (`--color-*: initial` и соседи):
+ * иначе рядом с нашей палитрой в разметке была бы доступна чужая, и `gray-500`
+ * протёк бы в первой же задаче — а он не переключается вместе с темой.
+ */
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+
+  --color-bg: var(--t-bg);
+  --color-surface: var(--t-surface);
+  --color-surface-sunken: var(--t-surface-sunken);
+  --color-border: var(--t-border);
+  --color-border-strong: var(--t-border-strong);
+
+  --color-text: var(--t-text);
+  --color-text-muted: var(--t-text-muted);
+
+  --color-accent: var(--t-accent);
+  --color-accent-hover: var(--t-accent-hover);
+  --color-accent-contrast: var(--t-accent-contrast);
+
+  --color-danger: var(--t-danger);
+  --color-danger-bg: var(--t-danger-bg);
+  --color-danger-border: var(--t-danger-border);
+
+  --color-focus: var(--t-focus);
+
+  /*
+   * Fira Sans набирает подписи, Fira Code — идентификаторы контракта: ключи,
+   * статусы, типы записей. Обе гарнитуры с кириллицей: среди тегов есть русские.
+   * Системная запасная обязательна и стоит первой после Fira — контур сквозных
+   * тестов поднимается без интернета, и без неё там не было бы букв вовсе.
+   */
+  --font-sans:
+    'Fira Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.25rem;
+
+  --radius-sm: 3px;
+  --radius-md: 6px;
+}

@@ -27,7 +27,8 @@
 - `pnpm-lock.yaml` — закреплённые версии зависимостей
 - `pnpm-workspace.yaml` — какие зависимости вправе запускать сборочные скрипты
 - `index.html` — страница-оболочка Vite
-- `vite.config.ts` — сборка, псевдонимы `@` и `@testing`, прокси `/api`, настройки Vitest
+- `vite.config.ts` — сборка, Tailwind плагином, псевдонимы `@` и `@testing`, прокси `/api`, Vitest
+- `components.json` — псевдонимы shadcn/ui: компоненты в `src/shared/ui`, утилиты в `src/shared/lib`
 - `tsconfig.json` — корневой конфиг: ссылки на два ниже
 - `tsconfig.app.json` — типы приложения и тестов: `src` и `testing`
 - `tsconfig.node.json` — типы оснастки: конфигурации сборки и сквозные тесты

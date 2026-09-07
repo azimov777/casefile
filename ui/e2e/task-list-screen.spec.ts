@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { fontsReady, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -106,6 +106,9 @@ async function topOf(target: Locator): Promise<number> {
 
 /** Сколько строк целиком помещается в окно. */
 async function visibleRows(page: Page): Promise<number> {
+  // Замер снимается тем шрифтом, которым экран будет жить: Fira приходит с внешнего
+  // хоста и после подстановки меняет высоту строки, а с ней и число видимых строк.
+  await fontsReady(page);
   return page.evaluate(() => {
     const height = window.innerHeight;
     return Array.from(document.querySelectorAll('tbody tr')).filter((node) => {
@@ -163,6 +166,7 @@ test.describe('первый экран списка', () => {
     await expect(rows(page)).toHaveCount(TASKS);
 
     await page.getByRole('button', { name: 'Изменить отбор' }).click();
+    await fontsReady(page);
     const before = await topOf(rows(page).first());
 
     const field = page.getByLabel('Запрос на языке бэкенда');

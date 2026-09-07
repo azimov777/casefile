@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { fontsReady, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -34,6 +34,9 @@ async function settled(page: Page): Promise<void> {
  * `page.mouse`, а не `dragTo`: нужен именно жест выделения, а не перетаскивание.
  */
 async function dragAcross(page: Page, target: Locator): Promise<void> {
+  // Замер снимается тем шрифтом, которым страница будет жить: Fira приходит с
+  // внешнего хоста и после подстановки двигает края ячейки на несколько пикселей.
+  await fontsReady(page);
   const box = await target.boundingBox();
   if (box === null) throw new Error('Не найден элемент для протяжки');
   await page.mouse.move(box.x + 2, box.y + box.height / 2);
@@ -83,7 +86,7 @@ test('текст вне ссылки выделяется и не уводит �
   await silenceJournal(page);
   // Отбор по исполнителю: нужны строки, у которых имя исполнителя вообще есть.
   await page.goto('/tasks?queue=DEMO&assignee=demo_agent');
-  await expect(page.locator('tbody tr').first()).toBeVisible();
+  await settled(page);
 
   const assignee = page.locator('tbody tr').first().getByText('demo_agent', { exact: true });
   await dragAcross(page, assignee);
@@ -107,7 +110,10 @@ test('cmd-клик по строке открывает задачу второ�
       .click({ modifiers: [modifier] }),
   ]);
 
-  await opened.waitForLoadState();
+  // Ждать надо адрес, а не загрузку: только что открытая вкладка успевает побывать
+  // на `about:blank`, и `waitForLoadState` возвращается на ней же — тогда проверка
+  // читает `blank` вместо пути задачи и падает через раз.
+  await opened.waitForURL(/\/tasks\/DEMO-3$/);
   expect(new URL(opened.url()).pathname).toBe('/tasks/DEMO-3');
   // Исходная вкладка осталась там же: это настоящая ссылка, а не переход по клику.
   await expect(page).toHaveURL(/\/tasks\?/);

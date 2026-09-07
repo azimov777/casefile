@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { readE2eToken } from './contour';
+import { fontsReady, readE2eToken } from './contour';
 
 const token = readE2eToken();
 
@@ -161,6 +161,8 @@ test('кнопка «Ответить» не уезжает из-под курс
   const field = form.getByLabel(/^Ответ$/);
 
   async function top(): Promise<number> {
+    // Шрифт обязан прийти до первого замера: подстановка Fira двигает всё, что ниже.
+    await fontsReady(page);
     return (await submit.boundingBox())?.y ?? -1;
   }
 
@@ -230,6 +232,7 @@ test('ответ не схлопывает блок открытых вопро�
     .first();
   await expect(block.getByText('Длинный вопрос для замера высоты')).toBeVisible();
 
+  await fontsReady(page);
   const before = (await block.boundingBox())?.height ?? 0;
   expect(before).toBeGreaterThan(0);
 

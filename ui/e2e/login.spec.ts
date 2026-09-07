@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { readE2eToken } from './contour';
+import { fontsReady, readE2eToken } from './contour';
 
 const token = readE2eToken();
 
@@ -37,7 +37,10 @@ test('пробел в конце токена не мешает, а карточ
   const submit = page.getByRole('button', { name: 'Войти' });
 
   // Замер до отказа. Карточку входа уже чинили однажды: центрирование по вертикали
-  // превращало рост карточки в сдвиг кнопки вверх (`docs/notes/ui.md`).
+  // превращало рост карточки в сдвиг кнопки вверх (`docs/notes/ui.md`). Замеры «до»
+  // и «после» снимаются одним шрифтом: Fira приходит с внешнего хоста и двигает
+  // высоту строки уже после первой отрисовки.
+  await fontsReady(page);
   const before = (await submit.boundingBox())?.y ?? -1;
   expect(before).toBeGreaterThan(0);
 

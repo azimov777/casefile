@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { compose, readE2eToken } from './contour';
+import { compose, fontsReady, readE2eToken } from './contour';
 
 const token = readE2eToken();
 
@@ -20,6 +20,9 @@ async function keys(page: Page): Promise<string[]> {
 
 /** Верх каждой видимой строки: сдвиг на любой пиксель — это движение под рукой. */
 async function tops(page: Page): Promise<number[]> {
+  // Первый замер снимается уже подставленным шрифтом, иначе разница «до и после»
+  // окажется разницей между системной гарнитурой и Fira, а не движением строк.
+  await fontsReady(page);
   return page.evaluate(() =>
     Array.from(document.querySelectorAll('tbody tr')).map((node) =>
       Math.round(node.getBoundingClientRect().top),
