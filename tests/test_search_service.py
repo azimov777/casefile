@@ -17,6 +17,7 @@ from app.domain.errors import (
     SearchValueInvalidError,
 )
 from app.domain.links import LinkKind
+from app.domain.search import Operator
 from app.domain.tasks import TaskFeatures, TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
@@ -146,6 +147,92 @@ async def test_the_structured_filter_gives_the_same_list_in_the_same_order(
         ],
     )
 
+    assert by_query == by_filter
+
+
+async def test_a_structured_value_with_a_space_is_one_value_and_not_a_parse_error(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Обзорная проверка 1 TRK-21: `text=выдача ключей` ищет, а не отказывает.
+
+    Границы значения у структурного параметра задал протокол, и разбирать его правилами
+    языка значило требовать кавычек там, где они уже не нужны. Так и было: до этой
+    правки такой отбор отвечал `invalid_search_query` на втором слове — а с ним
+    отказывало и поле «Текст» в интерфейсе, где никакого запроса человек не писал.
+    """
+    task = await make(db_session, task_actor, queue, "Ключ задачи сгорает на выдача ключей")
+    await make(db_session, task_actor, queue, "Другая задача про выдачу")
+
+    by_filter = await keys(
+        db_session,
+        task_actor,
+        structured=[
+            StructuredTerm(name="text", values=["выдача ключей"], operator=Operator.CONTAINS)
+        ],
+    )
+
+    assert by_filter == [task.key]
+
+    # Тот же вопрос строкой языка — с кавычками, потому что там границы задаёт синтаксис.
+    by_query = await keys(db_session, task_actor, query='text: ~ "выдача ключей"')
+    assert by_query == by_filter
+
+
+async def test_a_free_string_field_takes_a_space_too(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Не только `text`: исполнитель — свободная строка, и пробел в ней законен."""
+    task = await make(db_session, task_actor, queue, "чужая работа", assignee="release bot")
+    await make(db_session, task_actor, queue, "своя работа", assignee="release_bot")
+
+    by_filter = await keys(
+        db_session, task_actor, structured=[StructuredTerm(name="assignee", values=["release bot"])]
+    )
+    by_query = await keys(db_session, task_actor, query='assignee: "release bot"')
+
+    assert by_filter == [task.key]
+    assert by_query == by_filter
+
+
+async def test_a_quote_inside_a_structured_value_is_searched_literally(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Кавычки — часть значения, а не его границы: разбирать структурный ввод нечем.
+
+    Дописать кавычки вокруг значения было бы вторым способом сломать то же самое:
+    значение с настоящей кавычкой внутри тогда разобралось бы неверно.
+    """
+    task = await make(db_session, task_actor, queue, 'он сказал "нет" и ушёл')
+    await make(db_session, task_actor, queue, "он сказал нет и ушёл")
+
+    found = await keys(
+        db_session,
+        task_actor,
+        structured=[
+            StructuredTerm(name="text", values=['сказал "нет"'], operator=Operator.CONTAINS)
+        ],
+    )
+
+    assert found == [task.key]
+
+
+async def test_empty_still_means_no_value_on_both_inputs(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """`empty()` остаётся маркером, а не подстрокой: иначе правка сломала бы «без исполнителя».
+
+    Маркер разбирается парсером языка, а не сравнением строк, — потому и совпадает
+    с языком буква в букву, включая регистр и пробел перед скобками.
+    """
+    await make(db_session, task_actor, queue, "задача Алисы", assignee="alice")
+    nobody = await make(db_session, task_actor, queue, "ничей")
+
+    by_filter = await keys(
+        db_session, task_actor, structured=[StructuredTerm(name="assignee", values=["empty()"])]
+    )
+    by_query = await keys(db_session, task_actor, query="assignee: empty()")
+
+    assert by_filter == [nobody.key]
     assert by_query == by_filter
 
 

@@ -196,6 +196,20 @@ async def test_a_removed_search_field_answers_with_the_list_without_it(
     assert {"assignee", "priority", "status", "text"} <= set(error["details"]["allowed"])
 
 
+async def test_a_structured_value_with_a_space_reaches_the_search(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Обзорная проверка 1 TRK-21 на уровне маршрута: два слова — выдача, а не 422.
+
+    Отдельно от сценарного теста намеренно: значение проходит ещё и через разбор
+    параметров запроса FastAPI, и «работает в сервисе, отказывает в маршруте» — ровно
+    тот случай, который человек в интерфейсе и видел.
+    """
+    response = await auth_client.get("/api/v1/tasks", params={"text": "обычная задача"})
+
+    assert response.status_code == 200, response.text
+
+
 # --- Прочее ------------------------------------------------------------------------------
 
 

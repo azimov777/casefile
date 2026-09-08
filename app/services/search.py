@@ -12,12 +12,18 @@
 «структурный фильтр плюс ещё одно условие строкой» — это не особый режим, а обычная
 склейка, и вести себя она обязана так же, как одна строка с тем же смыслом.
 
-Структурный фильтр разбирает свои значения **той же** функцией, что и язык
-(`parse_value_expression`). Поэтому `?assignee=empty()` и `assignee: empty()` — это
-буквально один и тот же путь исполнения, а не два похожих. Соблазн собрать структурный
-фильтр «напрямую в SQL, там же проще» — главный способ сломать требование «одинаковые по
-смыслу фильтр и строка дают одинаковый результат»: разойдутся сначала краевые случаи
-(пустое значение, отрицание, несколько значений), и разойдутся молча.
+Одинаково у двух источников **значение**, а не разбор текста. Значение языка приходит
+куском строки, и границы ему задаёт синтаксис: пробел кончает слово, кавычки продолжают.
+Значению структурного параметра границы задал протокол, поэтому оно берётся целиком
+(`parse_structured_value`), а из синтаксиса языка признаёт один маркер — `empty()`,
+и признаёт его парсером языка. Отсюда `?assignee=empty()` и `assignee: empty()` — один
+и тот же вопрос, а `?text=выдача ключей` — одно значение с пробелом, а не отказ разбора
+(TRK-21).
+
+Соблазн собрать структурный фильтр «напрямую в SQL, там же проще» — главный способ
+сломать требование «одинаковые по смыслу фильтр и строка дают одинаковый результат»:
+разойдутся сначала краевые случаи (пустое значение, отрицание, несколько значений), и
+разойдутся молча.
 
 ## Что проверяется здесь, а что раньше
 
@@ -44,7 +50,7 @@ from app.domain.errors import (
     SearchOperatorNotSupportedError,
     SearchValueInvalidError,
 )
-from app.domain.query_language import parse_query, parse_sort_terms, parse_value_expression
+from app.domain.query_language import parse_query, parse_sort_terms, parse_structured_value
 from app.domain.search import (
     DEFAULT_SORT_KEY,
     MANDATORY_FIELD,
@@ -228,12 +234,16 @@ def filter_from_structured(terms: Sequence[StructuredTerm]) -> SearchFilter:
 
 
 def _structured_value(value: Any) -> SearchValue:
-    """Значение структурного фильтра по правилам языка.
+    """Значение структурного фильтра.
 
     `None` — это `empty()`: у структурного параметра «значения нет» выражается именно
     так, и второй способ сказать то же самое проект не заводит. Логическое значение и
     число превращаются в литерал, а не разбираются как строка языка: `?blocked=false`
     приезжает уже типизированным, и гонять его через лексер незачем.
+
+    Строка уходит в `parse_structured_value`, а не в разбор языка: границы значения у
+    структурного параметра задал протокол, и `?text=выдача ключей` — одно значение
+    с пробелом. Разбором языка это отвечало `invalid_search_query` (TRK-21).
     """
     if value is None:
         return EmptyValue()
@@ -242,7 +252,7 @@ def _structured_value(value: Any) -> SearchValue:
     if isinstance(value, int | float):
         return Literal(text=str(value))
     if isinstance(value, str):
-        return parse_value_expression(value)
+        return parse_structured_value(value)
     raise SearchValueInvalidError(
         details={"value": repr(value), "reason": "unsupported_value_type"},
     )
