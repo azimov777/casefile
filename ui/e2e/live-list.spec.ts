@@ -104,8 +104,8 @@ test.describe('список под живым потоком', () => {
       .getByRole('row')
       .filter({ has: page.getByRole('rowheader', { name: key, exact: true }) });
 
-    // Приоритет и теги в дело не подшиваются записью агента — с TRK-7 они приходят
-    // отдельным родом события (`field_changed`). Провалиться мимо полосы он не вправе.
+    // Приоритет в дело не подшивается записью агента — с TRK-7 он приходит отдельным
+    // родом события (`field_changed`). Провалиться мимо полосы оно не вправе.
     const patched = await request.patch(`/api/v1/tasks/${key}`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { priority: was },

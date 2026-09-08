@@ -1,4 +1,4 @@
-import { splitTags, type TaskFilters } from './filters';
+import type { TaskFilters } from './filters';
 
 /**
  * Условие отбора, названное словами: свёрнутая форма показывает такие подряд.
@@ -7,15 +7,7 @@ import { splitTags, type TaskFilters } from './filters';
  * проверка остаётся на месте.
  */
 export type ConditionId =
-  | 'status'
-  | 'priority'
-  | 'assignee'
-  | 'tags'
-  | 'text'
-  | 'blocked'
-  | 'questions'
-  | 'remarks'
-  | 'query';
+  'status' | 'priority' | 'assignee' | 'text' | 'blocked' | 'questions' | 'remarks' | 'query';
 
 export interface FilterCondition {
   id: ConditionId;
@@ -34,7 +26,6 @@ export const CONDITION_RESET = {
   status: { status: [] },
   priority: { priority: [] },
   assignee: { assignee: '' },
-  tags: { tags: [] },
   text: { text: '' },
   blocked: { blocked: false },
   questions: { withQuestions: false },
@@ -86,14 +77,6 @@ export function describeFilters(filters: TaskFilters): FilterCondition[] {
   const assignee = filters.assignee.trim();
   if (assignee !== '') {
     conditions.push({ id: 'assignee', label: `исполнитель ${assignee}` });
-  }
-
-  const tags = filters.tags.flatMap(splitTags);
-  if (tags.length > 0) {
-    conditions.push({
-      id: 'tags',
-      label: `${tags.length === 1 ? 'тег' : 'теги'} ${tags.join(', ')}`,
-    });
   }
 
   const text = filters.text.trim();

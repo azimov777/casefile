@@ -77,7 +77,6 @@ export function task(key: string, overrides: Partial<Task> = {}): Task {
     title: `Задача ${key}`,
     status: 'open',
     assignee: null,
-    tags: [],
     priority: 'normal',
     updated_at: '2026-09-01T10:00:00Z',
     features: {
@@ -112,7 +111,6 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
     ],
     status: 'in_progress',
     assignee: 'nightly_agent',
-    tags: ['backend', 'search'],
     priority: 'normal',
     version: 4,
     created_by: AGENT,

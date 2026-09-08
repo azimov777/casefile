@@ -24,7 +24,6 @@ export interface TaskFilters {
   status: TaskStatus[];
   priority: TaskPriority[];
   assignee: string;
-  tags: string[];
   text: string;
   /** Только заблокированные: у структурного фильтра это `blocked=true`. */
   blocked: boolean;
@@ -78,7 +77,7 @@ export const DEFAULT_SORT = '-last_entry_at';
  * `last_entry_at`, `updated_at`, `priority`), минус впереди означает по убыванию.
  *
  * Порядки по `updated_at` остаются, хотя этой колонки в строке нет: правка карточки
- * мимо дела — приоритет, теги, разделы задания — видна только через них.
+ * мимо дела — приоритет, исполнитель, разделы задания — видна только через них.
  */
 export const TASK_SORTS: { value: string; label: string }[] = [
   { value: '-last_entry_at', label: 'сначала живые в деле' },
@@ -113,7 +112,6 @@ export const EMPTY_FILTERS: TaskFilters = {
   status: [],
   priority: [],
   assignee: '',
-  tags: [],
   text: '',
   blocked: false,
   withQuestions: false,
@@ -134,7 +132,6 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     status: keepKnown(params.getAll('status'), TASK_STATUSES),
     priority: keepKnown(params.getAll('priority'), TASK_PRIORITIES),
     assignee: params.get('assignee') ?? '',
-    tags: params.getAll('tags').flatMap(splitTags),
     text: params.get('text') ?? '',
     blocked: params.get('blocked') === 'true',
     withQuestions: params.get('questions') === 'true',
@@ -157,7 +154,6 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   for (const status of filters.status) params.append('status', status);
   for (const priority of filters.priority) params.append('priority', priority);
   if (filters.assignee.trim() !== '') params.set('assignee', filters.assignee.trim());
-  for (const tag of filters.tags) params.append('tags', tag);
   if (filters.text.trim() !== '') params.set('text', filters.text.trim());
   if (filters.blocked) params.set('blocked', 'true');
   if (filters.withQuestions) params.set('questions', 'true');
@@ -212,7 +208,6 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
     status: !board && filters.status.length > 0 ? filters.status : undefined,
     priority: filters.priority.length > 0 ? filters.priority : undefined,
     assignee: filters.assignee.trim() === '' ? undefined : [filters.assignee.trim()],
-    tags: filters.tags.length > 0 ? filters.tags : undefined,
     text: filters.text.trim() === '' ? undefined : filters.text.trim(),
     blocked: filters.blocked ? true : undefined,
     // Флажки признаков уезжают одной строкой языка запросов: структурные параметры
@@ -263,14 +258,6 @@ export function hasConditions(filters: TaskFilters): boolean {
  * видом; «уйти из очереди» — отдельное действие, и делается оно в боковой панели.
  */
 export const PLACE: Pick<TaskFilters, 'queue' | 'view'> = { queue: '', view: 'table' };
-
-/** Теги принимаются и повтором параметра, и перечислением через запятую. */
-export function splitTags(value: string): string[] {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter((tag) => tag !== '');
-}
 
 /**
  * Оставляет только значения, которые есть в контракте.

@@ -40,24 +40,38 @@ async function api(
  */
 let ready: Promise<string> | null = null;
 
+/**
+ * Чем сценарий узнаёт свою же задачу между прогонами. Раньше это была машинная метка
+ * `tags`, но поле снято вместе со всей механикой (UI-41): опознавателем стала фраза из
+ * описания, а находит её отбор `text` — он ищет в названии и в описании сразу.
+ *
+ * Опознаватель живёт в описании, а не в названии, намеренно: описание в списке не
+ * показано, поэтому он не участвует ни в одном замере ширин и переносов.
+ *
+ * И это **одно слово**, а не фраза: структурный отбор `text` разбирает значение так же,
+ * как значение языка запросов, и на втором слове отвечает `422 invalid_search_query`
+ * (заведено задачей TRK-21). Пока это так, машинная метка обязана быть односложной.
+ */
+const MARKER = 'ui26-long';
+
 function seed(request: APIRequestContext): Promise<string> {
   ready ??= (async () => {
-    const existing = await request.get('/api/v1/tasks?queue=DEMO&tags=ui26-long&fields=title', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const existing = await request.get(
+      `/api/v1/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
     const found = ((await existing.json()) as { data: { key: string }[] }).data;
     if (found.length > 0) return (found[0] as { key: string }).key;
 
     const task = await api(request, '/api/v1/tasks', {
       queue: 'DEMO',
       title: 'Дело длиннее четырёх страниц',
-      description: 'Заведена сквозным тестом ради перехода к свежей записи.',
+      description: `Заведена сквозным тестом ради перехода к свежей записи (${MARKER}).`,
       goal: 'цель',
       context: 'контекст',
       constraints: 'ограничения',
       output: 'выход',
       checks: ['единственная проверка'],
-      tags: ['ui26-long'],
     });
     const key = task.key as string;
 

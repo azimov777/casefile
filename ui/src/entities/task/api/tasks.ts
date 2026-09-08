@@ -43,7 +43,7 @@ export const TASK_PRIORITIES = Object.keys(PRIORITY_SET) as TaskPriority[];
  * нужны, а весят больше всего остального вместе взятого. `features` выбирается целиком
  * одним именем — иначе `422 search_field_unknown` (`../tracker/docs/FRONTEND.md`).
  */
-export const TASK_LIST_FIELDS = ['title', 'status', 'assignee', 'tags', 'priority', 'features'];
+export const TASK_LIST_FIELDS = ['title', 'status', 'assignee', 'priority', 'features'];
 
 /** Сколько строк на странице: столько помещается на экран без прокрутки шапки. */
 export const TASK_PAGE_SIZE = 50;

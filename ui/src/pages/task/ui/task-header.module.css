@@ -84,12 +84,3 @@
   font-family: var(--font-mono);
   font-size: var(--text-mark);
 }
-
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(var(--spacing) * 1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}

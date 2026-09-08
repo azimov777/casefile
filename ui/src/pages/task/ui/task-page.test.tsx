@@ -349,12 +349,8 @@ describe('карточка задачи', () => {
     expect(header).toHaveTextContent(/приоритет\s+\S+/);
 
     // Исполнитель — имя с аватаром, а не плашка: это единственная строка про
-    // человека, и плашка уравнивала её со статусом и тегом.
+    // человека, и плашка уравнивала её со статусом.
     expect(header).toHaveTextContent(/исполнитель\s+\S+/);
-
-    // Теги — список с общим именем, а не набор плашек, каждая со словом «тег».
-    const tags = within(header).getByRole('list', { name: 'Теги' });
-    expect(within(tags).getAllByRole('listitem').length).toBeGreaterThan(0);
   });
 
   it('возможные переходы остаются справкой: ни роли, ни фокуса', async () => {

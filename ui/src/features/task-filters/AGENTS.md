@@ -12,7 +12,7 @@
 ## Файлы
 
 - `index.ts` — публичный интерфейс среза: `TaskFiltersForm`, `useTaskFilters`,
-  `readFilters`, `writeFilters`, `filtersToListParams`, `hasConditions`, `splitTags`,
+  `readFilters`, `writeFilters`, `filtersToListParams`, `hasConditions`,
   `readQueryProblem`, `caretLine`, `describeFilters`, `queryOverrides`, `TASK_SORTS`,
   `EMPTY_FILTERS`, `DEFAULT_SORT`, `OPEN_QUESTIONS_CONDITION`, типы `TaskFilters`, `TaskView`,
   `TaskFiltersControl`, `QueryProblem`, `FilterCondition`

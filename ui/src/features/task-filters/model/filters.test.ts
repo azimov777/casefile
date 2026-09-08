@@ -8,7 +8,6 @@ import {
   filtersToListParams,
   hasConditions,
   readFilters,
-  splitTags,
   writeFilters,
   type TaskFilters,
 } from './filters';
@@ -20,7 +19,7 @@ function filters(overrides: Partial<TaskFilters> = {}): TaskFilters {
 describe('чтение отбора из адреса', () => {
   it('разбирает повторяющиеся параметры и флажки', () => {
     const params = new URLSearchParams(
-      'queue=DEMO&status=open&status=in_progress&priority=high&tags=backend&tags=search&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&cursor=abc',
+      'queue=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&cursor=abc',
     );
 
     expect(readFilters(params)).toEqual({
@@ -29,7 +28,6 @@ describe('чтение отбора из адреса', () => {
       status: ['open', 'in_progress'],
       priority: ['high'],
       assignee: 'owner',
-      tags: ['backend', 'search'],
       text: 'поиск',
       blocked: true,
       withQuestions: true,
@@ -39,13 +37,6 @@ describe('чтение отбора из адреса', () => {
       cursor: 'abc',
       collapsed: DEFAULT_COLLAPSED,
     });
-  });
-
-  it('теги принимает и перечислением через запятую', () => {
-    expect(readFilters(new URLSearchParams('tags=backend,+search')).tags).toEqual([
-      'backend',
-      'search',
-    ]);
   });
 
   it('значения не из контракта отбрасывает, а не отправляет на бэкенд', () => {
@@ -91,7 +82,7 @@ describe('запись отбора в адрес', () => {
 
   it('переживает круг: адрес → отбор → адрес', () => {
     const source = new URLSearchParams(
-      'queue=DEMO&status=open&priority=low&assignee=owner&tags=docs&text=очередь&blocked=true&questions=true&sort=key&cursor=xyz',
+      'queue=DEMO&status=open&priority=low&assignee=owner&text=очередь&blocked=true&questions=true&sort=key&cursor=xyz',
     );
 
     expect(writeFilters(readFilters(source)).toString()).toBe(source.toString());
@@ -150,11 +141,5 @@ describe('признак «условия заданы»', () => {
     expect(hasConditions(filters({ sort: 'key', cursor: 'abc' }))).toBe(false);
     expect(hasConditions(filters({ blocked: true }))).toBe(true);
     expect(hasConditions(filters({ query: 'status: open' }))).toBe(true);
-  });
-});
-
-describe('разбор тегов', () => {
-  it('обрезает пробелы и выбрасывает пустые', () => {
-    expect(splitTags(' backend , , search ')).toEqual(['backend', 'search']);
   });
 });

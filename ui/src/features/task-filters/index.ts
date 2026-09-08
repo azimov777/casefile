@@ -8,7 +8,6 @@ export {
   filtersToListParams,
   hasConditions,
   readFilters,
-  splitTags,
   writeFilters,
   type TaskFilters,
   type TaskView,

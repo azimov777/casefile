@@ -41,8 +41,9 @@ test('с сетью: Fira Sans и Fira Code загружены, кириллиц
   await fontsReady(page);
 
   expect(await facesFor(page, 'Fira Sans', 'Задачи')).toContain('loaded');
-  // Среди тегов есть русские, и набирает их моноширинный: без кириллицы в Fira Code
-  // тег молча съезжал бы на запасную гарнитуру и ломал ряд.
+  // Моноширинным набираются идентификаторы контракта, и часть из них — свободные
+  // строки: исполнителя и название очереди трекер не ограничивает латиницей. Без
+  // кириллицы в Fira Code такое значение молча съезжало бы на запасную гарнитуру.
   expect(await facesFor(page, 'Fira Code', 'программа')).toContain('loaded');
 
   const body = await page.evaluate(() => getComputedStyle(document.body).fontFamily);

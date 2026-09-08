@@ -1061,7 +1061,11 @@ export interface components {
         };
         /**
          * FieldChangedEntryRead
-         * @description Служебная запись о правке обвязки: сегодня это `tags` и `priority`.
+         * @description Служебная запись о правке обвязки: сегодня это только `priority`.
+         *
+         *     Список в `before` и `after` при этом остаётся допустимым видом значения, хотя ни одно
+         *     сегодняшнее поле обвязки списком не является: записи дела неизменяемы и постоянны
+         *     (`CONCEPT.md`, 4.1), и сузить схему значило бы перестать читать то, что уже подшито.
          */
         FieldChangedEntryRead: {
             /**
@@ -1136,12 +1140,12 @@ export interface components {
             field: string;
             /**
              * Before
-             * @description Previous value; a list for `tags`
+             * @description Previous value; a list if the field holds a list
              */
             before?: string | string[] | null;
             /**
              * After
-             * @description New value; a list for `tags`
+             * @description New value; a list if the field holds a list
              */
             after?: string | string[] | null;
         };
@@ -2241,14 +2245,6 @@ export interface components {
              * @example release_bot
              */
             assignee?: string | null;
-            /**
-             * Tags
-             * @description Flat labels; order is kept, duplicates are dropped case-insensitively
-             * @example [
-             *       "backend"
-             *     ]
-             */
-            tags?: string[];
             /** @default normal */
             priority: components["schemas"]["TaskPriority"];
         };
@@ -2303,7 +2299,7 @@ export interface components {
          *     `payload.field` записи `section_changed`, и читающий видит то же имя, что в схеме.
          * @enum {string}
          */
-        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "tags" | "priority";
+        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "priority";
         /**
          * TaskLinkRead
          * @description Связь со стороны одной задачи.
@@ -2451,14 +2447,6 @@ export interface components {
              * @example release_bot
              */
             assignee: string | null;
-            /**
-             * Tags
-             * @description Flat labels; order is kept, duplicates are dropped case-insensitively
-             * @example [
-             *       "backend"
-             *     ]
-             */
-            tags: string[];
             /** @example normal */
             priority: components["schemas"]["TaskPriority"];
             /**
@@ -2513,8 +2501,6 @@ export interface components {
             status?: components["schemas"]["TaskStatus"] | null;
             /** Assignee */
             assignee?: string | null;
-            /** Tags */
-            tags?: string[] | null;
             priority?: components["schemas"]["TaskPriority"] | null;
             /** Version */
             version?: number | null;
@@ -2609,14 +2595,6 @@ export interface components {
              * @example release_bot
              */
             assignee?: string | null;
-            /**
-             * Tags
-             * @description Flat labels; order is kept, duplicates are dropped case-insensitively. Replaces the whole set
-             * @example [
-             *       "backend"
-             *     ]
-             */
-            tags?: string[];
             /** @example high */
             priority?: components["schemas"]["TaskPriority"];
             /**
@@ -3879,7 +3857,7 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character */
+                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
@@ -3895,8 +3873,6 @@ export interface operations {
                 status?: components["schemas"]["TaskStatus"][] | null;
                 /** @description Assignee names, matched exactly; `empty()` finds unassigned tasks */
                 assignee?: string[] | null;
-                /** @description Tags, matched exactly and case-sensitively. Pass the parameter more than once to accept any of several tags */
-                tags?: string[] | null;
                 /** @description Task priorities */
                 priority?: components["schemas"]["TaskPriority"][] | null;
                 /** @description Whether the task has a `blocked_by` link to a task that is neither `done` nor `cancelled`. Computed from links, not stored */

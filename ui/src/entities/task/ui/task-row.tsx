@@ -6,7 +6,6 @@ import type { Task } from '../api/tasks';
 import { TaskFeatureMarks } from './feature-marks';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
-import { TaskTags } from './task-tags';
 
 /**
  * Строка списка задач. Ничего не вычисляет: признаки приходят из `features` той же
@@ -25,7 +24,7 @@ import { TaskTags } from './task-tags';
  * табом дал бы остановку на каждой ячейке.
  *
  * Высота строки задана токеном и не зависит от содержимого: список сканируют
- * взглядом сверху вниз, и строка, выросшая от третьего тега, ломает ритм там,
+ * взглядом сверху вниз, и строка, выросшая от длинного значения, ломает ритм там,
  * где содержания не прибавилось (решение Д4).
  */
 export function TaskRow({ task }: { task: Task }) {
@@ -33,7 +32,6 @@ export function TaskRow({ task }: { task: Task }) {
   const { search } = useLocation();
   const navigate = useNavigate();
   const features = task.features ?? null;
-  const tags = task.tags ?? [];
   const activity = features?.last_entry_at ?? null;
   const title = task.title ?? '';
   const href = taskRefHref({ key: task.key, entryNo: null });
@@ -48,8 +46,8 @@ export function TaskRow({ task }: { task: Task }) {
   function openTask(event: MouseEvent<HTMLTableRowElement>) {
     if (event.target instanceof Element && event.target.closest('a, button, input, label')) return;
 
-    // Протяжка мышью по имени исполнителя или тегам кончается кликом внутри строки:
-    // человек выделял текст, чтобы скопировать его, а не уходил со страницы.
+    // Протяжка мышью по имени исполнителя кончается кликом внутри строки: человек
+    // выделял текст, чтобы скопировать его, а не уходил со страницы.
     if ((window.getSelection()?.toString() ?? '') !== '') return;
 
     // «Открой рядом» остаётся тем же жестом, что и на ссылке: клик с модификатором
@@ -119,9 +117,6 @@ export function TaskRow({ task }: { task: Task }) {
       </td>
       <td className="px-3">
         <PriorityMark priority={task.priority} />
-      </td>
-      <td className="px-3">
-        <TaskTags tags={tags} />
       </td>
       <td className="px-3">
         <span className="flex items-center gap-2">

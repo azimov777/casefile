@@ -12,10 +12,22 @@ const token = readE2eToken();
  */
 
 /**
- * Метка своего набора данных. Замеры первого экрана нельзя ставить на демо-задачи:
+ * Опознаватель своего набора данных. Замеры первого экрана нельзя ставить на демо-задачи:
  * их семь, они короткие, и число строк на экране менялось бы вместе с демо.
+ *
+ * Раньше набор помечался машинной меткой `tags`; поле снято вместе со всей механикой
+ * (UI-41), и опознавателем стало слово из **описания**, а находит его отбор `text` — он
+ * ищет в названии и в описании сразу. Описание, а не название, намеренно: в списке оно
+ * не показано, поэтому опознаватель не участвует ни в одном замере ширин и переносов,
+ * а этот файл только их и делает.
+ *
+ * Слово, а не фраза: структурный отбор `text` разбирает значение так же, как значение
+ * языка запросов, и на втором слове отвечает `422 invalid_search_query` (TRK-21).
  */
-const TAG = 'ui12-first-screen';
+const MARKER = 'ui12-first-screen';
+
+/** Адрес списка, отобранного до своего набора: им начинается каждый сценарий файла. */
+const LIST = `/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}`;
 
 /** Столько задач заводится: экран обязан вместить больше, чем помещалось раньше. */
 const TASKS = 21;
@@ -36,8 +48,7 @@ async function makeTask(
     data: {
       queue: 'DEMO',
       title,
-      description: 'Заведена сквозным тестом ради замеров первого экрана списка.',
-      tags: [TAG],
+      description: `Заведена сквозным тестом ради замеров первого экрана списка (${MARKER}).`,
       ...overrides,
     },
   });
@@ -46,9 +57,9 @@ async function makeTask(
 }
 
 /** Ключи задач набора, уже заведённых в установке. */
-async function taggedKeys(request: APIRequestContext): Promise<string[]> {
+async function seededKeys(request: APIRequestContext): Promise<string[]> {
   const response = await request.get(
-    `/api/v1/tasks?queue=DEMO&tags=${TAG}&fields=title&limit=200&sort=key`,
+    `/api/v1/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}&fields=title&limit=200&sort=key`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   expect(response.status()).toBe(200);
@@ -73,7 +84,7 @@ function seed(request: APIRequestContext): Promise<string[]> {
       'Задача с намеренно длинным названием, которое не помещается в одну строку ' +
       'колонки и переносится, как переносятся настоящие названия заданий';
 
-    const keys = await taggedKeys(request);
+    const keys = await seededKeys(request);
     for (let index = keys.length; index < TASKS; index += 1) {
       const twoLines = index < 3;
       const alive = index === TASKS - 1;
@@ -88,10 +99,6 @@ function seed(request: APIRequestContext): Promise<string[]> {
               : `Задача набора № ${index + 1}`,
           {
             priority: !alive && manyTags ? 'high' : 'normal',
-            // Пять тегов у каждой четвёртой: строка обязана остаться той же высоты.
-            tags: manyTags
-              ? [TAG, 'frontend', 'ux', 'design', 'responsive', 'accessibility']
-              : [TAG, 'frontend'],
           },
         ),
       );
@@ -128,12 +135,15 @@ async function visibleRows(page: Page): Promise<number> {
 test.describe('первый экран списка', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('все строки одной высоты, включая строку с пятью тегами', async ({ page, request }) => {
+  test('все строки одной высоты, включая строки с длинными названиями', async ({
+    page,
+    request,
+  }) => {
     test.setTimeout(120_000);
     await seed(request);
     await silenceJournal(page);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}`);
+    await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
     await fontsReady(page);
 
@@ -145,6 +155,7 @@ test.describe('первый экран списка', () => {
 
     // Было (замер до правки, UI-31#11): 40.3 px у всех строк, и это при том, что
     // колонка тегов расширялась под самый длинный набор, отнимая ширину у названия.
+    // Колонки тегов больше нет (UI-41), а требование к ритму строк осталось прежним.
     const spread = Math.max(...heights) - Math.min(...heights);
     expect(spread).toBeLessThanOrEqual(2);
 
@@ -157,7 +168,7 @@ test.describe('первый экран списка', () => {
     await seed(request);
     await silenceJournal(page);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}&sort=key`);
+    await page.goto(`${LIST}&sort=key`);
     await expect(rows(page)).toHaveCount(TASKS);
     await fontsReady(page);
 
@@ -178,11 +189,13 @@ test.describe('первый экран списка', () => {
     await seed(request);
     await silenceJournal(page);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}`);
+    await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
 
     // Форма свёрнута, но отбор не спрятан: свёрнутая строка называет его словами.
-    await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText(`тег ${TAG}`);
+    await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText(
+      `текст «${MARKER}»`,
+    );
     await expect(page.getByLabel('Исполнитель')).toBeHidden();
 
     // Было: 415 px до первой строки и семь строк на экране.
@@ -198,7 +211,7 @@ test.describe('первый экран списка', () => {
     await seed(request);
     await silenceJournal(page);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}`);
+    await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
 
     await rows(page).last().scrollIntoViewIfNeeded();
@@ -214,7 +227,7 @@ test.describe('первый экран списка', () => {
     await seed(request);
     await silenceJournal(page);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}`);
+    await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
 
     await page.getByRole('button', { name: 'Изменить отбор' }).click();
@@ -249,7 +262,7 @@ test.describe('первый экран списка', () => {
     });
     expect(entry.status()).toBe(201);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}&sort=-last_entry_at`);
+    await page.goto(`${LIST}&sort=-last_entry_at`);
 
     const first = rows(page).first();
     await expect(first.getByRole('rowheader')).toHaveText(key);
@@ -284,7 +297,7 @@ test.describe('первый экран списка', () => {
     await seed(request);
     await silenceJournal(page);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}&priority=high&sort=key`);
+    await page.goto(`${LIST}&priority=high&sort=key`);
     await expect(rows(page)).toHaveCount(5);
     const keys = await page.getByRole('rowheader').allInnerTexts();
 
@@ -321,7 +334,7 @@ test.describe('список на узком экране', () => {
     await seed(request);
     await silenceJournal(page);
 
-    await page.goto(`/tasks?queue=DEMO&tags=${TAG}`);
+    await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
 
     // Таблица сжимаема: обёртка обрезает переполнение (`overflow-x: clip`) и потому
@@ -333,7 +346,9 @@ test.describe('список на узком экране', () => {
     expect(scroll.width).toBe(scroll.client);
 
     // Условия отбора не спрятаны и на узком экране: перенеслись, но названы все.
-    await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText(`тег ${TAG}`);
+    await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText(
+      `текст «${MARKER}»`,
+    );
 
     await rows(page).last().scrollIntoViewIfNeeded();
     await expect(page.getByRole('columnheader', { name: 'Ключ' })).toBeInViewport();

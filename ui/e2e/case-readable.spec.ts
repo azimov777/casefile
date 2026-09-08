@@ -59,11 +59,22 @@ async function api(
  */
 let ready: Promise<string> | null = null;
 
+/**
+ * Чем сценарий узнаёт свою же задачу между прогонами. Раньше это была машинная метка
+ * `tags`, снятая вместе со всей механикой (UI-41); теперь — слово из описания, а находит
+ * его отбор `text`: он ищет в названии и в описании сразу.
+ *
+ * Именно одно слово: структурный отбор `text` разбирает значение так же, как значение
+ * языка запросов, и на втором слове отвечает `422 invalid_search_query` (TRK-21).
+ */
+const MARKER = 'ui17-case';
+
 function seed(request: APIRequestContext): Promise<string> {
   ready ??= (async () => {
-    const existing = await request.get('/api/v1/tasks?queue=DEMO&tags=ui17-case&fields=title', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const existing = await request.get(
+      `/api/v1/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
     const found = ((await existing.json()) as { data: { key: string }[] }).data;
     if (found.length > 0) return (found[0] as { key: string }).key;
 
@@ -74,13 +85,12 @@ function seed(request: APIRequestContext): Promise<string> {
       {
         queue: 'DEMO',
         title: 'Дело со служебными записями всех родов',
-        description: 'Заведена сквозным тестом ради читаемости дела.',
+        description: `Заведена сквозным тестом ради читаемости дела (${MARKER}).`,
         goal: LONG_GOAL,
         context: 'контекст',
         constraints: 'ограничения',
         output: 'выход',
         checks: ['первая проверка', 'вторая проверка'],
-        tags: ['ui17-case'],
       },
       201,
     );
@@ -100,7 +110,6 @@ function seed(request: APIRequestContext): Promise<string> {
         queue: 'DEMO',
         title: 'Вторая сторона связи для дела',
         description: 'Заведена сквозным тестом.',
-        tags: ['ui17-case-other'],
       },
       201,
     );

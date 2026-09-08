@@ -95,18 +95,16 @@ test('тон тревоги отличается от нейтрального',
   await page.goto('/tasks?queue=DEMO');
 
   // После UI-31 признак — знак, а не плашка: заливки у него нет, и тревога выражена
-  // цветом самого рисунка. Сравнивается он с нейтральной плашкой тега — единственной
-  // нейтральной вещью, оставшейся в строке.
+  // цветом самого рисунка. Сравнивается он со знаком статуса `open` — тот нейтрален
+  // намеренно и остаётся эталоном «обычного» в строке. Плашкой тега это сравнивалось
+  // до UI-41; плашек в строке списка больше нет вовсе.
   const danger = await page
     .locator('tbody [data-mark="feature"]')
     .filter({ hasText: /^заблокирована/ })
     .first()
     .locator('svg')
     .evaluate((node) => getComputedStyle(node).color);
-  const neutral = await page
-    .locator('tbody [data-badge="neutral"]')
-    .first()
-    .evaluate((node) => getComputedStyle(node).color);
+  const neutral = await shapeColor(mark(page, 'status', 'open'));
 
   expect(danger).not.toBe(neutral);
 });

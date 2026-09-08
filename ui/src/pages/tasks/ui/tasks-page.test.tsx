@@ -108,26 +108,22 @@ describe('список задач', () => {
     });
   });
 
-  it('теги сверх двух уходят в счётчик, и он называет скрытые поимённо', async () => {
-    server.use(
-      listing(() =>
-        collection([
-          task('DEMO-8', {
-            tags: ['frontend', 'ux', 'design', 'responsive', 'accessibility'],
-          }),
-        ]),
-      ),
-    );
+  it('старая ссылка со снятым условием открывает список без него, а не падает', async () => {
+    server.use(listing(() => collection([task('DEMO-8')])));
 
-    open('/tasks?queue=DEMO');
+    // `tags` сняты вместе с полем задачи (UI-41), но разосланные ссылки остались.
+    // Неизвестное значение в адресе отбрасывается тем же правилом, что и опечатка:
+    // человек видит список очереди, а не пустоту и не сломанный экран.
+    open('/tasks?queue=DEMO&tags=frontend&priority=high');
 
-    const row = await screen.findByRole('row', { name: /DEMO-8/ });
-    // Два тега показаны, три ушли в счётчик — но не пропали: обрезание без доступа
-    // к скрытому было бы потерей данных, а не плотностью.
-    expect(within(row).getByText('frontend')).toBeInTheDocument();
-    expect(within(row).getByText('ux')).toBeInTheDocument();
-    expect(within(row).queryByText('design')).not.toBeInTheDocument();
-    expect(row).toHaveTextContent('ещё теги: design, responsive, accessibility');
+    await screen.findByText('DEMO-8');
+    const request = lastRequest();
+    expect(request.searchParams.getAll('tags')).toEqual([]);
+    expect(request.searchParams.getAll('priority')).toEqual(['high']);
+
+    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    expect(conditions).toHaveTextContent('приоритет high');
+    expect(conditions).not.toHaveTextContent(/тег/i);
   });
 
   it('признаки строки — три разных знака, и каждый называет себя по-русски', async () => {
@@ -246,7 +242,6 @@ describe('список задач', () => {
           task('DEMO-4', {
             status: 'open',
             assignee: 'demo_agent',
-            tags: ['retention'],
             features: {
               blocked: false,
               open_questions: 1,
@@ -297,14 +292,13 @@ describe('список задач', () => {
   it('отправляет условия из адреса структурными параметрами', async () => {
     server.use(listing(() => collection([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&status=in_progress&priority=high&tags=docs&blocked=true');
+    open('/tasks?queue=DEMO&status=open&status=in_progress&priority=high&blocked=true');
     await screen.findByText('DEMO-3');
 
     const request = lastRequest();
     expect(request.searchParams.getAll('queue')).toEqual(['DEMO']);
     expect(request.searchParams.getAll('status')).toEqual(['open', 'in_progress']);
     expect(request.searchParams.getAll('priority')).toEqual(['high']);
-    expect(request.searchParams.getAll('tags')).toEqual(['docs']);
     expect(request.searchParams.get('blocked')).toBe('true');
     expect(request.searchParams.get('query')).toBeNull();
   });
@@ -377,7 +371,7 @@ describe('свёрнутый отбор', () => {
   it('называет все включённые условия и ни одно не прячет за счётчиком', async () => {
     server.use(listing(() => collection([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&tags=frontend&tags=ux');
+    open('/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&text=токен');
     await screen.findByText('DEMO-3');
 
     // Форма закрыта: на первом экране списка стоят задачи, а не поля отбора.
@@ -388,7 +382,7 @@ describe('свёрнутый отбор', () => {
       within(conditions)
         .getAllByRole('listitem')
         .map((item) => item.textContent?.replace('Убрать условие: ', '')),
-    ).toEqual(['статус open, in_progress', 'исполнитель owner', 'теги frontend, ux']);
+    ).toEqual(['статус open, in_progress', 'исполнитель owner', 'текст «токен»']);
   });
 
   it('без условий говорит, что показаны все задачи, и не предлагает сброс', async () => {
@@ -581,7 +575,7 @@ describe('переключение вида', () => {
     const user = userEvent.setup();
     server.use(listing(() => collection([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&priority=high&tags=docs&sort=key');
+    open('/tasks?queue=DEMO&status=open&priority=high&assignee=owner&sort=key');
     await screen.findByText('DEMO-3');
 
     await user.click(screen.getByRole('link', { name: 'Доска' }));
@@ -591,7 +585,7 @@ describe('переключение вида', () => {
     await waitFor(() => expect(address.current).toContain('view=board'));
     expect(address.current).toContain('queue=DEMO');
     expect(address.current).toContain('priority=high');
-    expect(address.current).toContain('tags=docs');
+    expect(address.current).toContain('assignee=owner');
     expect(address.current).toContain('sort=key');
 
     const request = lastRequest();

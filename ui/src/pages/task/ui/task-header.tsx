@@ -7,7 +7,7 @@ import {
   type TaskFeatures,
   type TaskStatus,
 } from '@/entities/task';
-import { Badge, RelativeTime } from '@/shared/ui';
+import { RelativeTime } from '@/shared/ui';
 import styles from './task-header.module.css';
 
 interface TaskHeaderProps {
@@ -32,19 +32,18 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
       </h1>
 
       {/*
-       * Четыре разных вещи перестали быть четырьмя одинаковыми плашками (решение Д7):
-       * статус — форма со значением, приоритет — высота столбиков, исполнитель и теги
-       * остаются плашками, потому что они и есть метки. Род значения при этом никуда
-       * не делся: он ушёл в доступное имя знака и в подпись плашки.
+       * Разные вещи перестали быть одинаковыми плашками (решение Д7): статус — форма
+       * со значением, приоритет — высота столбиков, исполнитель — имя с аватаром. Род
+       * значения при этом никуда не делся: он ушёл в доступное имя знака.
        */}
       <div className={styles.badges}>
         <StatusMark status={task.status} />
         <PriorityMark priority={task.priority} />
 
         {/*
-         * Исполнитель — не плашка, а имя с аватаром: плашка уравнивала его со статусом
-         * и тегом, хотя это единственная в шапке строка про человека. Род значения
-         * остаётся в доступном имени.
+         * Исполнитель — не плашка, а имя с аватаром: плашка уравнивала его со статусом,
+         * хотя это единственная в шапке строка про человека. Род значения остаётся
+         * в доступном имени.
          */}
         <span className={styles.assignee}>
           <span className="sr-only">исполнитель </span>
@@ -59,16 +58,6 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
             </>
           )}
         </span>
-
-        {task.tags.length === 0 ? null : (
-          <ul className={styles.tags} aria-label="Теги">
-            {task.tags.map((tag) => (
-              <li key={tag}>
-                <Badge mono>{tag}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
 
         {/* Признаки в той же строке, что и плашки: две отдельные строки одинаковых
             плашек занимали место главного, ничего не добавляя к различимости. */}

@@ -3,13 +3,15 @@ import { tasksHref } from './href';
 
 describe('адрес списка', () => {
   it('меняет вид, не трогая остальные условия', () => {
-    const href = tasksHref('queue=UI&status=open&status=done&tags=ux&sort=key', { view: 'board' });
+    const href = tasksHref('queue=UI&status=open&status=done&assignee=owner&sort=key', {
+      view: 'board',
+    });
     const params = new URLSearchParams(href.slice('/tasks?'.length));
 
     expect(params.get('view')).toBe('board');
     expect(params.get('queue')).toBe('UI');
     expect(params.getAll('status')).toEqual(['open', 'done']);
-    expect(params.getAll('tags')).toEqual(['ux']);
+    expect(params.getAll('assignee')).toEqual(['owner']);
     expect(params.get('sort')).toBe('key');
   });
 

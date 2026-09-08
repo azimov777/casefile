@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { X } from 'lucide-react';
 import { Button, Select } from '@/shared/ui';
-import { TASK_SORTS, splitTags, type TaskFilters } from '../model/filters';
+import { TASK_SORTS, type TaskFilters } from '../model/filters';
 import { useFiltersExpanded } from '../model/expanded';
 import { caretLine, type QueryProblem } from '../model/query-problem';
 import { CONDITION_RESET, describeFilters } from '../model/summary';
@@ -19,7 +19,6 @@ interface TaskFiltersFormProps {
 /** Текстовые поля до отправки: они применяются по «Применить», а не по каждой букве. */
 interface Draft {
   assignee: string;
-  tags: string;
   text: string;
   query: string;
 }
@@ -67,7 +66,6 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   function applyWith(changes: Partial<TaskFilters>) {
     onApply({
       assignee: draft.assignee,
-      tags: splitTags(draft.tags),
       text: draft.text,
       query: draft.query,
       ...changes,
@@ -211,14 +209,6 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
               pending={pending.assignee}
               placeholder="имя целиком"
               onChange={(value) => setDraft({ ...draft, assignee: value })}
-            />
-
-            <DraftField
-              label="Теги"
-              value={draft.tags}
-              pending={pending.tags}
-              placeholder="через запятую"
-              onChange={(value) => setDraft({ ...draft, tags: value })}
             />
 
             <DraftField
@@ -400,7 +390,6 @@ function QueryProblemHint({ id, problem }: { id: string; problem: QueryProblem }
 function pendingFields(draft: Draft, filters: TaskFilters): Record<keyof Draft, boolean> {
   return {
     assignee: draft.assignee.trim() !== filters.assignee.trim(),
-    tags: splitTags(draft.tags).join(',') !== filters.tags.join(','),
     text: draft.text.trim() !== filters.text.trim(),
     query: draft.query.trim() !== filters.query.trim(),
   };
@@ -409,7 +398,6 @@ function pendingFields(draft: Draft, filters: TaskFilters): Record<keyof Draft, 
 function toDraft(filters: TaskFilters): Draft {
   return {
     assignee: filters.assignee,
-    tags: filters.tags.join(', '),
     text: filters.text,
     query: filters.query,
   };

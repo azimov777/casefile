@@ -29,5 +29,4 @@ export { TaskCard } from './ui/task-card';
 export { TaskNav } from './ui/task-nav';
 export { hasFeatureBadges } from './ui/feature-badges';
 export { TaskFeatureMarks } from './ui/feature-marks';
-export { TaskTags } from './ui/task-tags';
 export { TaskRow } from './ui/task-row';
