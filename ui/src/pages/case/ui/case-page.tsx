@@ -14,7 +14,24 @@ import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { readEntryNo } from '@/shared/lib';
 import { CaseFilters } from './case-filters';
-import styles from './case-page.module.css';
+
+/**
+ * Ширина экрана дела. Число написано числом, а не взято из токенов, намеренно:
+ * 64rem — мера чтения ленты, и своего имени у неё нет. Совпадение с
+ * `--breakpoint-wide` случайное: сослаться на точку остановки значило бы связать
+ * ширину дела с решением про две колонки входящей (Д16), которое к ленте отношения
+ * не имеет, — и однажды одно поехало бы вслед за другим.
+ */
+const SCREEN = 'flex max-w-[64rem] flex-col gap-4';
+
+/**
+ * Сброс прямо из объяснения: человек уже читает, почему записи не видно, и второй раз
+ * искать то же условие глазами он не должен. Кнопка, а не ссылка, — действие меняет
+ * состояние экрана, а не ведёт по адресу; вид у неё подчёркнутый, потому что стоит
+ * она внутри предложения. Фон и граница названы явно: у `<button>` без объявленного
+ * фона браузер рисует свой `ButtonFace` (`docs/notes/ui.md`).
+ */
+const INLINE_RESET = 'border-none bg-transparent p-0 text-accent underline';
 
 /**
  * Сколько записей показать до той, за которой человек пришёл по ссылке.
@@ -139,8 +156,8 @@ export function CasePage() {
 
   if (task.error instanceof ApiError && task.error.code === 'task_not_found') {
     return (
-      <main className={styles.screen}>
-        <h1 className={styles.heading}>Дела {key} нет</h1>
+      <main className={SCREEN}>
+        <h1 className="text-title">Дела {key} нет</h1>
         <Callout>Задачи с таким ключом нет, а значит нет и дела.</Callout>
         <Link to="/tasks">Вернуться к списку задач</Link>
       </main>
@@ -148,11 +165,16 @@ export function CasePage() {
   }
 
   return (
-    <main className={styles.screen}>
+    <main className={SCREEN}>
       <TaskNav taskKey={key} view="case" />
 
-      <div className={styles.top}>
-        <h1 className={styles.heading}>Дело {key}</h1>
+      {/*
+       * Заголовок и переход к свежему — одной строкой: за свежими записями в дело и
+       * приходят, и искать это действие ниже ленты человек не должен. Перенос
+       * разрешён — на узком экране кнопка встаёт под заголовком.
+       */}
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h1 className="text-title">Дело {key}</h1>
         {/*
          * Переход к свежему — действие человека, а не поведение экрана: живой поток
          * ленту не прокручивает и никогда не прокрутит (UI-13). Кнопка стоит у
@@ -179,7 +201,7 @@ export function CasePage() {
       {from === null ? null : (
         <Callout>
           Показаны записи после {key}#{from}.{' '}
-          <button type="button" className={styles.reset} onClick={readFromStart}>
+          <button type="button" className={INLINE_RESET} onClick={readFromStart}>
             Читать дело сначала
           </button>
         </Callout>
@@ -192,7 +214,7 @@ export function CasePage() {
               Записи {key}#{wanted} не видно: она не попадает в отбор по типу.{' '}
               <button
                 type="button"
-                className={styles.reset}
+                className={INLINE_RESET}
                 onClick={() => {
                   const updated = new URLSearchParams(searchParams);
                   updated.delete('type');
@@ -217,7 +239,14 @@ export function CasePage() {
         empty={entries.length === 0 ? 'По этим типам записей в деле нет.' : undefined}
       />
 
-      <div className={styles.feed}>
+      {/*
+       * Нить времени (решение Д13). Линию рисует лента псевдоэлементом, а не запись:
+       * запись не знает про соседей, и собранная из отрезков нить рвалась бы на каждом
+       * промежутке между карточками. Знак рода записи садится на нить своей точкой,
+       * поэтому левое поле ленты и отступ нити согласованы: `pl-8` под карточки,
+       * `left-2.5` — середина знака.
+       */}
+      <div className="relative flex flex-col gap-3 pl-8 before:absolute before:top-2 before:bottom-2 before:left-2.5 before:w-px before:bg-line">
         {entries.map((entry) => {
           // Отклик живёт под тем, на что отвечает: ответ под вопросом, резолюция под
           // замечанием. Отдельной записью он показывается только тогда, когда его
@@ -246,13 +275,13 @@ export function CasePage() {
         })}
       </div>
 
-      <div className={styles.paging}>
+      <div className="flex items-center gap-3">
         {feed.hasNextPage ? (
           <Button onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
             {feed.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
           </Button>
         ) : entries.length === 0 ? null : (
-          <span className={styles.end}>
+          <span className="text-label text-muted">
             {from === null
               ? `Это всё дело: записей ${entries.length}.`
               : `Это конец дела: показано записей ${entries.length}.`}
@@ -289,11 +318,13 @@ function RepliesUnder({
   highlighted: number | null;
 }) {
   if (replies.length === 0) {
-    return <p className={styles.waiting}>{waiting}</p>;
+    return <p className="ml-4 text-muted italic">{waiting}</p>;
   }
 
+  // Ответы вложены в вопрос: сдвиг и полоса слева показывают, что это не отдельные
+  // записи ленты, а отклики под той, что стоит выше.
   return (
-    <div className={styles.answers}>
+    <div className="ml-4 flex flex-col gap-2 border-l-2 border-l-line-strong pl-3">
       {replies.map((reply) => (
         <EntryCard
           key={reply.no}
