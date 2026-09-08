@@ -10,7 +10,6 @@ import {
   type EntryHeading,
 } from '@/entities/entry';
 import { Button, QueryState, RelativeTime, TaskText } from '@/shared/ui';
-import styles from './task-index.module.css';
 
 interface TaskIndexProps {
   taskKey: string;
@@ -32,6 +31,25 @@ interface TaskIndexProps {
  * видна целиком, и два действия над ней были бы шумом там, где всё и так на экране.
  */
 const LONG_INDEX = 12;
+
+/**
+ * Ячейка описи: поля, линия под строкой и выравнивание по верху — одинаковые
+ * у заголовков и у данных. Раньше это был потомковый селектор `.table th, .table td`;
+ * утилите не на чем висеть, кроме самой ячейки, поэтому набор назван один раз здесь.
+ *
+ * Линия остаётся и под раскрытой строкой. В модуле стояло `.opened > * {
+ * border-bottom: none }`, но оно не действовало ни разу: `.opened > *` — это 0-1-0,
+ * а `.table td` — 0-1-1, и граница выигрывала. Переносится наблюдаемое, а не
+ * написанное: раскрытая строка меняет только заливку.
+ *
+ * Цвет назван стороной (`border-b-line`, а не `border-line`): `border-line` красит все
+ * четыре стороны, и три из них перестали бы быть `currentColor`. Ширина у них нулевая,
+ * на экране этого не видно — а в вычисленном стиле видно, и замер это ловит.
+ *
+ * Склеивается набор строкой, а не `cn`: `twMerge` считает `text-meta` и `text-muted`
+ * одной группой и оставил бы из них последний — кегль служебной ячейки пропал бы молча.
+ */
+const CELL = 'border-b border-b-line px-3 py-2 text-left align-top';
 
 /**
  * Опись дела: заголовок каждой записи, тело — по клику.
@@ -76,21 +94,22 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
     [expanded, onOpenChange, openAt],
   );
 
-  if (index.length === 0) return <p className={styles.empty}>Дело пусто: записей ещё нет.</p>;
+  if (index.length === 0) return <p className="text-muted italic">Дело пусто: записей ещё нет.</p>;
 
   // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
   // именно последняя, а не последняя из подгруженных (`../tracker/docs/FRONTEND.md`).
   const lastNo = index[index.length - 1]?.no ?? null;
 
   return (
-    <div className={styles.section}>
+    /* Прыжки над описью, а не под ней: «к свежей записи» нужно до чтения, а не после. */
+    <div className="flex flex-col gap-2">
       {index.length > LONG_INDEX && lastNo !== null ? (
         /*
          * Два прыжка по описи: к свежей записи и обратно к началу. Свежая раскрывается
          * и читается точечно — своим запросом на свой номер, а не чтением всего дела
          * до неё. Прыгает человек, а не экран: живой поток опись не прокручивает.
          */
-        <div className={styles.actions}>
+        <div className="flex flex-wrap gap-2">
           <Button tone="quiet" onClick={() => onOpenChange(lastNo)}>
             К свежей записи
           </Button>
@@ -103,16 +122,22 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
         </div>
       ) : null}
 
-      <div className={styles.scroller} ref={scroller}>
-        <table className={styles.table}>
-          <caption className={styles.caption}>Записей в деле: {index.length}</caption>
+      <div className="overflow-x-auto" ref={scroller}>
+        <table className="w-full border-collapse text-body">
+          <caption className="px-3 pt-2 text-left text-meta text-muted">
+            Записей в деле: {index.length}
+          </caption>
           <thead>
             <tr>
-              <th scope="col">№</th>
-              <th scope="col">Тип</th>
-              <th scope="col">Автор</th>
-              <th scope="col">Когда</th>
-              <th scope="col">Заголовок</th>
+              {['№', 'Тип', 'Автор', 'Когда', 'Заголовок'].map((column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  className={`${CELL} text-meta font-semibold whitespace-nowrap text-muted`}
+                >
+                  {column}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -147,6 +172,8 @@ interface IndexRowProps {
 function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexRowProps) {
   const row = useRef<HTMLTableRowElement>(null);
   const headline = entryHeadline(heading.type, heading.facts, taskKey);
+  /* Раскрытая строка утоплена заливкой и так читается вместе со своим телом ниже. */
+  const cell = open ? `${CELL} bg-sunken` : CELL;
 
   useEffect(() => {
     if (!scrollTo) return;
@@ -156,25 +183,39 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
 
   return (
     <>
-      <tr ref={row} className={open ? styles.opened : undefined}>
-        <th scope="row" className={styles.no}>
+      <tr ref={row}>
+        {/* Ширина в 1% сжимает колонку номера по содержимому: остаток ширины таблицы
+            забирает заголовок, самая длинная ячейка строки. */}
+        <th scope="row" className={`${cell} w-[1%] font-mono text-muted`}>
           {heading.no}
         </th>
-        <td>
+        <td className={cell}>
           {/* Род записи знаком (решение Д10): в описи их по двадцать подряд, и
               `verdict` от `section_changed` иначе отличается только чтением слова. */}
           <EntryKind type={heading.type} />
         </td>
-        <td>
+        <td className={cell}>
           <AuthorName author={heading.author} />
         </td>
-        <td className={styles.when}>
+        <td className={`${cell} whitespace-nowrap text-muted`}>
           <RelativeTime value={heading.created_at} />
         </td>
-        <td>
+        <td className={cell}>
+          {/*
+           * Заголовок записи — кнопка: раскрытие это действие, и с клавиатуры оно
+           * тоже нужно. Фон и рамку кнопка называет явно: без объявленного фона
+           * браузер рисует свой `ButtonFace` (`docs/notes/ui.md`, «Кнопка без
+           * объявленного фона»), а рамка у неё своя по умолчанию — и снять её мало,
+           * надо ещё вернуть цвет: `border: none` возвращал `currentColor`, а
+           * `border-none` трогает только начертание и оставляет `buttonborder`.
+           *
+           * Треугольник перед заголовком — псевдоэлемент, а не узел разметки: диктор
+           * читает состояние по `aria-expanded`, и второй, текстовый, знак того же
+           * состояния он произнёс бы вслух.
+           */}
           <button
             type="button"
-            className={styles.title}
+            className="cursor-pointer border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▸_'] hover:underline aria-expanded:before:content-['▾_']"
             aria-expanded={open}
             onClick={() => onToggle(heading.no)}
           >
@@ -193,8 +234,8 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
       </tr>
 
       {open ? (
-        <tr className={styles.bodyRow}>
-          <td colSpan={5}>
+        <tr>
+          <td className={`${CELL} bg-sunken`} colSpan={5}>
             <EntryDetails taskKey={taskKey} no={heading.no} checks={checks} title={heading.title} />
           </td>
         </tr>
@@ -223,8 +264,12 @@ function EntryDetails({
   const entry = useQuery(entryQueryOptions(taskKey, no));
 
   return (
-    <div className={styles.body}>
-      <p className={styles.bodyTitle}>
+    /*
+     * Предел ширины тела записи — своё число, а не `--ui-text-max` (62ch): тот вдвое
+     * уже и обрезал бы таблицы и блоки кода, которые в теле записи бывают.
+     */
+    <div className="flex max-w-[60rem] flex-col gap-2">
+      <p className="font-semibold">
         <TaskText>{title}</TaskText>
       </p>
       <QueryState query={entry} loading="Читаем запись…" />

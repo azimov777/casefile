@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { cva } from 'class-variance-authority';
 import { EntryBody, type Question } from '@/entities/entry';
 import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
@@ -18,7 +19,74 @@ import { TaskHeader } from './task-header';
 import { TaskIndex } from './task-index';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
-import styles from './task-page.module.css';
+
+/**
+ * Шапка навигации и шапка задачи остаются прямыми детьми колонки страницы: липкая
+ * навигация обязана липнуть относительно всей страницы, а не внутри своей ячейки
+ * раскладки — там ей просто некуда двигаться.
+ */
+const SCREEN = 'flex max-w-(--ui-page-max) flex-col gap-4';
+
+/**
+ * Блоки различаются ролью, а не рамкой (решение Д11).
+ *
+ * `full` — главное: сводка, вопросы, замечания и задание. У них поля, и текст в них
+ * живёт с воздухом. Поля сжаты до трёх шагов: карточка обязана уместить на первом
+ * экране сводку, вопросы и начало описи, а поля — то место, которое отдаётся дешевле
+ * всего (`CONCEPT.md`, 6).
+ *
+ * `list` — справочное: опись дела и связи. Это списки, и они идут во всю ширину
+ * поверхности, без своих полей: свои поля держит содержимое, иначе строки не
+ * доходили бы до краёв. Одинаковая рамка на каждом блоке уравнивала главное и
+ * справочное, хотя карточку открывают ради первого.
+ *
+ * `empty` — пустой блок занимает строку, а не карточку в полный рост: заголовок и
+ * честное «ничего нет» встают рядом. Два пустых блока подряд — «Сводки ещё нет» и
+ * «Вопросов без ответа нет» — иначе съедали первый экран целиком, ничего на нём
+ * не сообщив. Сама честность пустого состояния при этом остаётся: текст на месте.
+ */
+const block = cva('flex rounded-control border border-line bg-surface', {
+  variants: {
+    kind: {
+      full: 'flex-col gap-3 p-3',
+      list: 'flex-col gap-0',
+      empty: 'flex-row flex-wrap items-baseline gap-3 px-3 py-2',
+    },
+  },
+  defaultVariants: { kind: 'full' },
+});
+
+/**
+ * Заголовок блока. У пустого он на шаг мельче — блок стал строкой, и заголовок
+ * экрана в ней спорил бы с самим текстом.
+ *
+ * У блока-списка заголовок несёт поля и линию сам: полей у блока нет, а отделить
+ * заголовок от строк списка чем-то надо. Цвет линии назван стороной (`border-b-line`):
+ * `border-line` покрасил бы все четыре, и три из них перестали бы быть `currentColor`.
+ */
+const blockTitle = cva('', {
+  variants: {
+    kind: {
+      full: 'text-screen',
+      list: 'border-b border-b-line px-3 pt-3 pb-2 text-screen',
+      empty: 'text-body',
+    },
+  },
+  defaultVariants: { kind: 'full' },
+});
+
+/** Заголовок списка с действием справа: те же поля и та же линия, что у заголовка. */
+const BLOCK_HEAD =
+  'flex flex-wrap items-baseline justify-between gap-3 border-b border-b-line px-3 pt-3 pb-2';
+
+/** Плитка открытого вопроса и разобранного замечания: рамка, заливка, свои поля. */
+const NOTICE = 'flex flex-col gap-2 rounded-mark border p-3';
+
+/** Список плиток внутри блока: маркеров у него нет, поля тоже — их держат плитки. */
+const NOTICE_LIST = 'flex list-none flex-col gap-3 p-0';
+
+/** Честное «ничего нет»: курсив вместо прочерка — его читают, а не сканируют. */
+const EMPTY = 'text-muted italic';
 
 /**
  * Карточка задачи: один запрос пакета преемника на открытие экрана
@@ -71,8 +139,8 @@ export function TaskPage() {
 
   if (pkg.error instanceof ApiError && pkg.error.code === 'task_not_found') {
     return (
-      <main className={styles.screen}>
-        <h1 className={styles.missing}>Задачи {key} нет</h1>
+      <main className={SCREEN}>
+        <h1 className="text-title">Задачи {key} нет</h1>
         <Callout>
           Задачи с таким ключом нет: возможно, ключ набран с опечаткой или задача из другой
           установки.
@@ -84,7 +152,7 @@ export function TaskPage() {
 
   if (pkg.data === undefined) {
     return (
-      <main className={styles.screen}>
+      <main className={SCREEN}>
         <QueryState query={pkg} loading={`Загружаем задачу ${key}…`} />
       </main>
     );
@@ -95,8 +163,12 @@ export function TaskPage() {
     questionId(task.key, question),
   );
 
+  const summaryKind = summary == null ? 'empty' : 'full';
+  const questionsKind = questions.length === 0 ? 'empty' : 'full';
+  const remarksKind = remarks.length === 0 && !remarkOpen ? 'empty' : 'full';
+
   return (
-    <main className={styles.screen}>
+    <main className={SCREEN}>
       {/*
        * Единственное, что человек начинает сам, стоит в липкой строке: до неё не надо
        * прокручивать опись в сотню записей. Второй такой кнопки в блоке замечаний нет —
@@ -114,50 +186,48 @@ export function TaskPage() {
       <TaskHeader task={task} features={features} transitions={transitions} />
 
       {/*
-       * Две колонки, каждая своим потоком. Слева то, ради чего карточку открывают:
-       * сводка, вопросы, замечания и опись дела. Справа то, что читают реже: задание
-       * и связи. Высоты колонок независимы — сеткой из отдельных блоков они были
-       * связаны, и длинное задание справа уносило начало описи слева за первый экран
-       * (`e2e/layout.spec.ts`).
+       * Две колонки, каждая своим потоком, и делятся они на точке `card` (80rem).
+       * Слева то, ради чего карточку открывают: сводка, вопросы, замечания и опись
+       * дела. Справа то, что читают реже: задание и связи. Доли 3:2.
+       *
+       * Колонки, а не сетка из блоков: сетка связывала их высоты — длинное задание
+       * справа растягивало ряд, и опись слева уезжала за первый экран 1440×900,
+       * стоило добавить справа четвёртый блок (`e2e/layout.spec.ts`). Колонками этого
+       * не случается вовсе: каждая складывается сама по себе.
+       *
+       * Узкий экран ставит колонки друг за другом, и порядок разметки становится
+       * порядком показа. Переставлять его `order` нельзя: Tab и программа чтения
+       * с экрана всё равно шли бы по разметке.
+       *
+       * `card:min-w-0` обязателен обеим: без него длинная строка в колонке растянула
+       * бы её шире доли и увела бы страницу в горизонтальную прокрутку.
        */}
-      <div className={styles.layout}>
-        <div className={styles.main}>
-          <section
-            className={
-              summary == null
-                ? `${styles.block} ${styles.blockEmpty} ${styles.summary}`
-                : `${styles.block} ${styles.summary}`
-            }
-            aria-labelledby="summary"
-          >
-            <h2 className={styles.title} id="summary">
+      <div className="flex flex-col gap-4 card:flex-row card:items-start">
+        <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
+          <section className={block({ kind: summaryKind })} aria-labelledby="summary">
+            <h2 className={blockTitle({ kind: summaryKind })} id="summary">
               Последняя сводка
             </h2>
             {summary == null ? (
-              <p className={styles.empty}>Сводки ещё нет: по этой задаче никто не отчитывался.</p>
+              <p className={EMPTY}>Сводки ещё нет: по этой задаче никто не отчитывался.</p>
             ) : (
               <EntryBody entry={summary} />
             )}
           </section>
 
-          <section
-            className={
-              questions.length === 0
-                ? `${styles.block} ${styles.blockEmpty} ${styles.questionsBlock}`
-                : `${styles.block} ${styles.questionsBlock}`
-            }
-            aria-labelledby="questions"
-          >
-            <h2 className={styles.title} id="questions">
+          <section className={block({ kind: questionsKind })} aria-labelledby="questions">
+            <h2 className={blockTitle({ kind: questionsKind })} id="questions">
               Открытые вопросы
             </h2>
             {questions.length === 0 ? (
-              <p className={styles.empty}>Вопросов без ответа нет.</p>
+              <p className={EMPTY}>Вопросов без ответа нет.</p>
             ) : (
-              <ul className={styles.questions}>
+              <ul className={NOTICE_LIST}>
                 {questions.map((question, at) => (
-                  <li key={question.no} className={styles.question}>
-                    <p className={styles.questionTitle}>
+                  /* Красным здесь только то, что действительно держит работу, —
+                     открытый вопрос. */
+                  <li key={question.no} className={`${NOTICE} border-danger-line bg-danger-soft`}>
+                    <p className="font-semibold">
                       {task.key}#{question.no} · {question.title}
                     </p>
                     <EntryBody entry={question} />
@@ -186,24 +256,24 @@ export function TaskPage() {
            * Форма не привязана к элементу выдачи и переживает перечитывание пакета —
            * в отличие от формы ответа, которая уходит вместе со своим вопросом.
            */}
-          <section
-            className={
-              remarks.length === 0 && !remarkOpen
-                ? `${styles.block} ${styles.blockEmpty} ${styles.remarksBlock}`
-                : `${styles.block} ${styles.remarksBlock}`
-            }
-            aria-labelledby="remarks"
-          >
-            <h2 className={styles.title} id="remarks">
+          <section className={block({ kind: remarksKind })} aria-labelledby="remarks">
+            <h2 className={blockTitle({ kind: remarksKind })} id="remarks">
               Замечания
             </h2>
             {remarks.length === 0 ? (
-              <p className={styles.empty}>Неразобранных замечаний нет.</p>
+              <p className={EMPTY}>Неразобранных замечаний нет.</p>
             ) : (
-              <ul className={styles.remarks}>
+              <ul className={NOTICE_LIST}>
                 {remarks.map((remark) => (
-                  <li key={remark.no} className={styles.remark}>
-                    <p className={styles.remarkTitle}>
+                  /*
+                   * Замечание выделено тоном внимания, а не опасности: оно правит курс,
+                   * но ничего не останавливает (`../tracker/docs/CONCEPT.md`, 3.4).
+                   */
+                  <li
+                    key={remark.no}
+                    className={`${NOTICE} border-attention-line bg-attention-soft`}
+                  >
+                    <p className="font-semibold">
                       {task.key}#{remark.no} · {remark.title}
                     </p>
                     <EntryBody entry={remark} />
@@ -220,12 +290,9 @@ export function TaskPage() {
             {remarkOpen ? <RemarkForm taskKey={task.key} /> : null}
           </section>
 
-          <section
-            className={`${styles.block} ${styles.listBlock} ${styles.caseBlock}`}
-            aria-labelledby="case"
-          >
-            <div className={styles.blockHead}>
-              <h2 className={styles.title} id="case">
+          <section className={block({ kind: 'list' })} aria-labelledby="case">
+            <div className={BLOCK_HEAD}>
+              <h2 className="text-screen" id="case">
                 Дело
               </h2>
               {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
@@ -242,19 +309,18 @@ export function TaskPage() {
           </section>
         </div>
 
-        <div className={styles.aside}>
-          <section className={`${styles.block} ${styles.sectionsBlock}`} aria-labelledby="sections">
-            <h2 className={styles.title} id="sections">
+        <div className="flex flex-col gap-4 card:min-w-0 card:flex-[2_1_0]">
+          <section className={block()} aria-labelledby="sections">
+            <h2 className={blockTitle()} id="sections">
               Задание
             </h2>
+            {/* Задание показывается целиком и не прячется под сворачивание: это
+                договор с агентом, его читают подряд и ищут поиском браузера. */}
             <TaskSections task={task} />
           </section>
 
-          <section
-            className={`${styles.block} ${styles.listBlock} ${styles.linksBlock}`}
-            aria-labelledby="links"
-          >
-            <h2 className={styles.title} id="links">
+          <section className={block({ kind: 'list' })} aria-labelledby="links">
+            <h2 className={blockTitle({ kind: 'list' })} id="links">
               Связи
             </h2>
             <TaskLinks links={links} />

@@ -8,7 +8,6 @@ import {
   type TaskStatus,
 } from '@/entities/task';
 import { RelativeTime } from '@/shared/ui';
-import styles from './task-header.module.css';
 
 interface TaskHeaderProps {
   task: TaskDetails;
@@ -17,18 +16,23 @@ interface TaskHeaderProps {
   transitions: TaskStatus[];
 }
 
+/** Отсутствующее значение: курсив вместо прочерка — его читают, а не сканируют. */
+const EMPTY = 'text-muted italic';
+
 /** Шапка карточки: где задача стоит и чья она. */
 export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
   return (
-    <header className={styles.header}>
-      <p className={styles.breadcrumbs}>
+    <header className="flex flex-col gap-2">
+      <p className="text-meta">
         <Link to={`/tasks?queue=${task.queue.key}`}>
           {task.queue.key} — {task.queue.title}
         </Link>
       </p>
 
-      <h1 className={styles.heading}>
-        <span className={styles.key}>{task.key}</span> {task.title}
+      {/* Междустрочие названия шире, чем у заголовков вообще (1.25 в сбросе): название
+          задачи бывает в три строки, и на кегле 19 px они слипались. */}
+      <h1 className="text-title leading-[1.3]">
+        <span className="font-mono text-muted">{task.key}</span> {task.title}
       </h1>
 
       {/*
@@ -36,7 +40,7 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
        * со значением, приоритет — высота столбиков, исполнитель — имя с аватаром. Род
        * значения при этом никуда не делся: он ушёл в доступное имя знака.
        */}
-      <div className={styles.badges}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <StatusMark status={task.status} />
         <PriorityMark priority={task.priority} />
 
@@ -45,16 +49,21 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
          * хотя это единственная в шапке строка про человека. Род значения остаётся
          * в доступном имени.
          */}
-        <span className={styles.assignee}>
+        <span className="inline-flex items-center gap-1.5 text-meta text-muted">
           <span className="sr-only">исполнитель </span>
           {task.assignee === null ? (
-            <span className={styles.empty}>не назначен</span>
+            <span className={EMPTY}>не назначен</span>
           ) : (
             <>
-              <span className={styles.avatar} aria-hidden="true">
+              {/* Аватар из двух букв: круг с границей, а не заливкой цвета участника —
+                  цветов у нас шесть и все они называют положение дел, а не сущность. */}
+              <span
+                className="grid size-5 place-items-center rounded-pill border border-line-strong bg-sunken text-label font-semibold"
+                aria-hidden="true"
+              >
                 {task.assignee.slice(0, 2)}
               </span>
-              <span className={styles.assigneeName}>{task.assignee}</span>
+              <span className="font-mono text-mark">{task.assignee}</span>
             </>
           )}
         </span>
@@ -64,21 +73,24 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
         <TaskFeatureMarks features={features} />
       </div>
 
-      <dl className={styles.facts}>
-        <div className={styles.fact}>
-          <dt>Обновлена</dt>
+      <dl className="flex flex-wrap gap-x-6 gap-y-2 text-meta">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted">Обновлена</dt>
           <dd>
             <RelativeTime value={task.updated_at} />
           </dd>
         </div>
-        <div className={styles.fact}>
-          <dt>Заведена</dt>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted">Заведена</dt>
           <dd>
             <RelativeTime value={task.created_at} />
           </dd>
         </div>
-        <div className={styles.fact}>
-          <dt title="Куда задача может уйти по таблице статусов. Проверки перехода считаются в момент перехода">
+        <div className="flex items-baseline gap-2">
+          <dt
+            className="text-muted"
+            title="Куда задача может уйти по таблице статусов. Проверки перехода считаются в момент перехода"
+          >
             Возможные переходы
           </dt>
           {/*
@@ -87,9 +99,9 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
            * (`CONCEPT.md`, 7), а человек их только видит. Поэтому обычный текст
            * моноширинным, через запятую.
            */}
-          <dd className={styles.transitions}>
+          <dd className="font-mono text-muted">
             {transitions.length === 0 ? (
-              <span className={styles.empty}>никуда: статус конечный</span>
+              <span className={EMPTY}>никуда: статус конечный</span>
             ) : (
               transitions.join(', ')
             )}
