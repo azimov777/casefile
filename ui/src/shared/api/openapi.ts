@@ -695,6 +695,23 @@ export interface components {
             payload: components["schemas"]["AnswerPayload"];
         };
         /**
+         * AnswerFactsRead
+         * @description Ответ: на какой вопрос той же задачи.
+         */
+        AnswerFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "answer";
+            /**
+             * Question No
+             * @description Number of the question answered
+             * @example 7
+             */
+            question_no?: number | null;
+        };
+        /**
          * AnswerPayload
          * @description Ответ на вопрос той же задачи.
          */
@@ -766,6 +783,27 @@ export interface components {
              */
             type: "assignee_changed";
             payload: components["schemas"]["AssigneeChangedPayload"];
+        };
+        /**
+         * AssigneeChangedFactsRead
+         * @description Смена исполнителя: имена участников коротки и видны прямо в описи.
+         */
+        AssigneeChangedFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assignee_changed";
+            /**
+             * Assignee From
+             * @description Assignee before, null if there was none
+             */
+            assignee_from?: string | null;
+            /**
+             * Assignee To
+             * @description Assignee after, null if unassigned
+             */
+            assignee_to?: string | null;
         };
         /**
          * AssigneeChangedPayload
@@ -933,104 +971,7 @@ export interface components {
          * @description Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках.
          */
         EmptyPayload: Record<string, never>;
-        /**
-         * EntryFactsRead
-         * @description Факты записи, которыми её называют строкой, не читая тела.
-         *
-         *     Заполнены по типу записи, все части необязательны и все ограничены по длине самим
-         *     контрактом: значения перечислений, ключи, имена полей и участников, номера,
-         *     признаки да/нет. Свободного текста здесь нет — ни причины перехода, ни значений
-         *     разделов, ни тел записей; за ними идут в саму запись.
-         *
-         *     Нужны они там, где заголовок собирает трекер и собирает по-английски: клиент строит
-         *     свою строку по фактам, а не разбирает чужую фразу регуляркой. У записей агента и
-         *     человека заполненных фактов нет — их заголовок пишет автор.
-         *
-         *     Незаполненные части едут в ответе как `null`, хотя это и дороже: строка описи
-         *     весит 339 байт вместо 102. Причина в генерации клиента — `@model_serializer`,
-         *     отбрасывающий пустое, заменяет схему сериализации на «словарь чего угодно», и
-         *     `EntryFactsRead` приезжает во фронтенд как `Record<string, unknown>`. Типизированный
-         *     клиент — то, ради чего схема вообще выгружается, и двести байт на строку его не
-         *     стоят (`docs/notes/api.md`).
-         */
-        EntryFactsRead: {
-            /** @description `status_changed`: status before the move */
-            from_status?: components["schemas"]["TaskStatus"] | null;
-            /** @description `status_changed`: status after the move */
-            to_status?: components["schemas"]["TaskStatus"] | null;
-            /**
-             * Has Reason
-             * @description `status_changed`: whether a reason was given. The reason itself is free text and stays in the entry body
-             */
-            has_reason?: boolean | null;
-            /** @description `section_changed` and `field_changed`: which field was edited. Values are not here: a section can be as long as the task itself */
-            field?: components["schemas"]["TaskField"] | null;
-            /** @description `link_added` and `link_removed`: kind of the link */
-            link_kind?: components["schemas"]["LinkKind"] | null;
-            /**
-             * Other Key
-             * @description `link_added` and `link_removed`: the task on the other side
-             * @example TRK-7
-             */
-            other_key?: string | null;
-            /**
-             * Assignee From
-             * @description `assignee_changed`: assignee before, null if there was none
-             */
-            assignee_from?: string | null;
-            /**
-             * Assignee To
-             * @description `assignee_changed`: assignee after, null if unassigned
-             */
-            assignee_to?: string | null;
-            /**
-             * Addressees
-             * @description `question`: who is asked, at most 20 names
-             */
-            addressees?: string[] | null;
-            /**
-             * Blocking
-             * @description `question`: whether the question holds the work
-             */
-            blocking?: boolean | null;
-            /**
-             * Question No
-             * @description `answer`: number of the question answered
-             * @example 7
-             */
-            question_no?: number | null;
-            /**
-             * Check No
-             * @description `verdict`: number of the review check. `section_changed`: which check was reworded, when the edit was a point one rather than a whole-list replacement
-             * @example 3
-             */
-            check_no?: number | null;
-            /**
-             * Remark No
-             * @description `resolution`: the remark it resolves
-             * @example null
-             */
-            remark_no?: number | null;
-            /**
-             * @description `resolution`: how the remark was resolved
-             * @example null
-             */
-            remark_outcome?: components["schemas"]["RemarkOutcome"] | null;
-            /**
-             * Continuation Key
-             * @description `resolution`: key of the task the work moved to; set only when the outcome is `accepted`
-             * @example null
-             */
-            continuation_key?: string | null;
-            /** @description `verdict`: how the check ended */
-            outcome?: components["schemas"]["VerdictOutcome"] | null;
-            /**
-             * Outdated
-             * @description `verdict`: whether the check was reworded after this verdict was filed. A verdict points at a check by **number**, not by text, so an outdated one reads as «check 3 passed» while what passed was its previous wording. The record itself is never touched: this is computed when the case is read
-             * @example false
-             */
-            outdated?: boolean | null;
-        };
+        EntryFactsRead: components["schemas"]["NoFactsRead"] | components["schemas"]["StatusChangedFactsRead"] | components["schemas"]["SectionChangedFactsRead"] | components["schemas"]["FieldChangedFactsRead"] | components["schemas"]["AssigneeChangedFactsRead"] | components["schemas"]["LinkFactsRead"] | components["schemas"]["QuestionFactsRead"] | components["schemas"]["AnswerFactsRead"] | components["schemas"]["VerdictFactsRead"] | components["schemas"]["ResolutionFactsRead"];
         /**
          * EntryHeadingRead
          * @description Строка описи дела: то, что видно о записи, не читая её тела.
@@ -1055,7 +996,7 @@ export interface components {
              * @example Status changed: backlog -> open
              */
             title: string;
-            /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Empty for entries whose title is written by their author */
+            /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
         EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"];
@@ -1095,10 +1036,6 @@ export interface components {
         /**
          * FieldChangedEntryRead
          * @description Служебная запись о правке обвязки: сегодня это только `priority`.
-         *
-         *     Список в `before` и `after` при этом остаётся допустимым видом значения, хотя ни одно
-         *     сегодняшнее поле обвязки списком не является: записи дела неизменяемы и постоянны
-         *     (`CONCEPT.md`, 4.1), и сузить схему значило бы перестать читать то, что уже подшито.
          */
         FieldChangedEntryRead: {
             /**
@@ -1158,12 +1095,30 @@ export interface components {
             payload: components["schemas"]["FieldChangedPayload"];
         };
         /**
+         * FieldChangedFactsRead
+         * @description Правка обвязки: какое поле. Значения не здесь, они в самой записи.
+         */
+        FieldChangedFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "field_changed";
+            /** @description Which field was edited */
+            field?: components["schemas"]["TaskField"] | null;
+        };
+        /**
          * FieldChangedPayload
          * @description Правка обвязки задачи: «было» и «стало» целиком.
          *
-         *     Отдельно от `SectionChangedPayload`, хотя поля те же: там правка задания и только
+         *     Отдельно от `SectionChangedPayload`, хотя поля похожи: там правка задания и только
          *     в `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на
          *     оба случая означала бы «section» у приоритета.
+         *
+         *     Значения — строки, а не «строка либо список»: список остался здесь от снятых меток
+         *     (TRK-18), ни одно сегодняшнее поле обвязки списком не является, и записей со списком
+         *     в базе нет ни одной. Пока объединение было плоским, оно только расширяло тип «на
+         *     всякий случай»; появится поле-список — у него будет своя форма, а не общая на всех.
          */
         FieldChangedPayload: {
             /**
@@ -1173,14 +1128,14 @@ export interface components {
             field: string;
             /**
              * Before
-             * @description Previous value; a list if the field holds a list
+             * @description Previous value
              */
-            before?: string | string[] | null;
+            before?: string | null;
             /**
              * After
-             * @description New value; a list if the field holds a list
+             * @description New value
              */
-            after?: string | string[] | null;
+            after?: string | null;
         };
         /**
          * HealthResponse
@@ -1281,6 +1236,25 @@ export interface components {
             payload: components["schemas"]["LinkPayload"];
         };
         /**
+         * LinkFactsRead
+         * @description Связь появилась или снята: её вид и вторая сторона.
+         */
+        LinkFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "link_added" | "link_removed";
+            /** @description Kind of the link */
+            link_kind?: components["schemas"]["LinkKind"] | null;
+            /**
+             * Other Key
+             * @description The task on the other side
+             * @example TRK-7
+             */
+            other_key?: string | null;
+        };
+        /**
          * LinkKind
          * @description Вид связи. Перечислены обе стороны каждой пары: клиент адресует любую из них.
          * @enum {string}
@@ -1327,6 +1301,17 @@ export interface components {
              * @example open
              */
             status: components["schemas"]["TaskStatus"];
+        };
+        /**
+         * NoFactsRead
+         * @description Фактов нет: заголовок записи пишет её автор, и он осмыслен сам по себе.
+         */
+        NoFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artifact" | "attempt" | "created" | "decision" | "finding" | "note" | "remark" | "summary";
         };
         /**
          * PageMeta
@@ -1616,6 +1601,27 @@ export interface components {
              */
             type: "question";
             payload: components["schemas"]["QuestionPayload"];
+        };
+        /**
+         * QuestionFactsRead
+         * @description Вопрос: кому адресован и держит ли работу.
+         */
+        QuestionFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "question";
+            /**
+             * Addressees
+             * @description Who is asked, at most 20 names
+             */
+            addressees?: string[] | null;
+            /**
+             * Blocking
+             * @description Whether the question holds the work
+             */
+            blocking?: boolean | null;
         };
         /**
          * QuestionPayload
@@ -1914,6 +1920,31 @@ export interface components {
             payload: components["schemas"]["ResolutionPayload"];
         };
         /**
+         * ResolutionFactsRead
+         * @description Резолюция: какое замечание разобрано, чем и куда ушла работа.
+         */
+        ResolutionFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resolution";
+            /**
+             * Remark No
+             * @description The remark it resolves
+             * @example 7
+             */
+            remark_no?: number | null;
+            /** @description How the remark was resolved */
+            outcome?: components["schemas"]["RemarkOutcome"] | null;
+            /**
+             * Continuation Key
+             * @description Key of the task the work moved to; set only when the outcome is `accepted`
+             * @example null
+             */
+            continuation_key?: string | null;
+        };
+        /**
          * ResolutionPayload
          * @description Нагрузка резолюции: какое замечание разобрано, чем и куда ушла работа.
          */
@@ -1996,6 +2027,25 @@ export interface components {
              */
             type: "section_changed";
             payload: components["schemas"]["SectionChangedPayload"];
+        };
+        /**
+         * SectionChangedFactsRead
+         * @description Правка задания: какой раздел. Значения не здесь — раздел бывает длиннее задачи.
+         */
+        SectionChangedFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "section_changed";
+            /** @description Which section was edited */
+            field?: components["schemas"]["TaskField"] | null;
+            /**
+             * Check No
+             * @description Which check was reworded, for a point edit of `checks`. Absent when the whole list was replaced
+             * @example 3
+             */
+            check_no?: number | null;
         };
         /**
          * SectionChangedPayload
@@ -2087,6 +2137,26 @@ export interface components {
              */
             type: "status_changed";
             payload: components["schemas"]["StatusChangedPayload"];
+        };
+        /**
+         * StatusChangedFactsRead
+         * @description Переход статуса: оба конца и был ли назван повод.
+         */
+        StatusChangedFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "status_changed";
+            /** @description Status before the move */
+            from_status?: components["schemas"]["TaskStatus"] | null;
+            /** @description Status after the move */
+            to_status?: components["schemas"]["TaskStatus"] | null;
+            /**
+             * Has Reason
+             * @description Whether a reason was given. The reason itself is free text and stays in the entry body
+             */
+            has_reason?: boolean | null;
         };
         /**
          * StatusChangedPayload
@@ -2861,6 +2931,31 @@ export interface components {
              */
             type: "verdict";
             payload: components["schemas"]["VerdictPayload"];
+        };
+        /**
+         * VerdictFactsRead
+         * @description Вердикт: какая обзорная проверка, чем кончилась и не переписали ли её после.
+         */
+        VerdictFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "verdict";
+            /**
+             * Check No
+             * @description Number of the review check
+             * @example 3
+             */
+            check_no?: number | null;
+            /** @description How the check ended */
+            outcome?: components["schemas"]["VerdictOutcome"] | null;
+            /**
+             * Outdated
+             * @description Whether the check was reworded after this verdict was filed. A verdict points at a check by **number**, not by text, so an outdated one reads as «check 3 passed» while what passed was its previous wording. The record itself is never touched: this is computed when the case is read
+             * @example false
+             */
+            outdated?: boolean | null;
         };
         /**
          * VerdictOutcome
