@@ -383,7 +383,7 @@ export interface paths {
          *
          *     Форма нагрузки зависит от типа: тело запроса — размеченное по `type` объединение.
          *     Заголовок принимается только там, где его нечем вывести: у `summary` он равен
-         *     первой строке `next_step`, у `answer` и `verdict` собирается из нагрузки.
+         *     первой строке `done`, у `answer` и `verdict` собирается из нагрузки.
          *     Служебные типы (`status_changed`, `created`, ...) подшивает сам трекер, и в запросе
          *     они не принимаются. Замечания к форме приходят разом в `422 entry_fields_invalid`,
          *     списком `details.fields`. Записи неизменяемы, а в закрытую задачу подшиваются.
@@ -2112,7 +2112,7 @@ export interface components {
         };
         /**
          * SummaryEntryCreate
-         * @description Сводка. Заголовок не принимается: он равен первой строке `next_step`.
+         * @description Сводка. Заголовок не принимается: он равен первой строке `done`.
          */
         SummaryEntryCreate: {
             /**
@@ -2202,7 +2202,7 @@ export interface components {
         SummaryPayload: {
             /**
              * Done
-             * @description What has been done
+             * @description What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary
              * @example Разобрался, где сгорает номер
              */
             done: string;
@@ -2220,7 +2220,7 @@ export interface components {
             blockers: string;
             /**
              * Next Step
-             * @description The next step; its first line becomes the entry title
+             * @description The next step: one concrete action for whoever picks the case up
              * @example Перенести вызов next_task_number в конец create_task
              */
             next_step: string;
@@ -3905,7 +3905,7 @@ export interface operations {
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks` and `last_summary_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
