@@ -89,21 +89,22 @@ async def pass_all(session: AsyncSession, task: Task, actor: Actor) -> None:
 # --- Подшивка -------------------------------------------------------------------------
 
 
-async def test_a_summary_lands_in_the_index_titled_by_its_next_step(
+async def test_a_summary_lands_in_the_index_titled_by_what_was_done(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
-    """Обзорная проверка 1 на уровне сценария."""
+    """Обзорная проверка 1 на уровне сценария: в опись едет `done`, а не `next_step`."""
     entry = await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
 
     assert entry.type is EntryType.SUMMARY
-    assert entry.title == SUMMARY["next_step"]
+    assert entry.title == SUMMARY["done"]
+    assert entry.title != SUMMARY["next_step"]
     assert entry.payload == SUMMARY
     assert entry.author.signature == "owner"
 
     index = await service.case_index(db_session, task, actor=task_actor)
     assert [(heading.no, heading.title) for heading in index] == [
         (1, "Task created"),
-        (2, SUMMARY["next_step"]),
+        (2, SUMMARY["done"]),
     ]
 
 

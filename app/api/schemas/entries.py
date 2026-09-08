@@ -17,7 +17,7 @@
 Подшить можно только запись агента: служебные типы (`status_changed`, `link_added`,
 ...) в объединение запроса не входят — их подшивает сценарий, выводя тип из действия.
 Заголовок принимается лишь там, где его нечем вывести: у `summary` он равен первой
-строке `next_step`, у `answer` и `verdict` собирается из нагрузки.
+строке `done`, у `answer` и `verdict` собирается из нагрузки.
 
 Границы длин повторяют домен (`app/domain/case.py`): здесь они ради документации и
 раннего отсева, настоящую проверку делает домен — одинаково для REST и MCP.
@@ -197,7 +197,10 @@ class SummaryPayload(BaseModel):
         min_length=1,
         max_length=MAX_SUMMARY_PART_LENGTH,
         examples=["Разобрался, где сгорает номер"],
-        description="What has been done",
+        description=(
+            "What has been done. Its first line becomes the entry title, so make it one "
+            "phrase naming what happened; an over-long line is cut at a word boundary"
+        ),
     )
     remaining: str = Field(
         min_length=1,
@@ -215,7 +218,7 @@ class SummaryPayload(BaseModel):
         min_length=1,
         max_length=MAX_SUMMARY_PART_LENGTH,
         examples=["Перенести вызов next_task_number в конец create_task"],
-        description="The next step; its first line becomes the entry title",
+        description="The next step: one concrete action for whoever picks the case up",
     )
 
 
@@ -616,7 +619,7 @@ class PlainEntryCreate(_TitledEntryCreate):
 
 
 class SummaryEntryCreate(_EntryCreateBase):
-    """Сводка. Заголовок не принимается: он равен первой строке `next_step`."""
+    """Сводка. Заголовок не принимается: он равен первой строке `done`."""
 
     type: Literal[EntryType.SUMMARY]
     payload: SummaryPayload

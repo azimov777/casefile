@@ -74,10 +74,10 @@ TASK_TOOLS = {
 #: Что набор `main` добавляет сверху. Выпуска токенов среди них нет намеренно.
 MAIN_TOOLS = {"create_queue", "update_queue", "register_participant", "update_participant"}
 
-#: Следующий шаг из двух строк: заголовок сводки — только первая из них. Строки
+#: «Сделано» из двух строк: заголовок сводки — только первая из них. Строки
 #: собираются соединением, а не одним литералом с `\n`: escape внутри русского текста
 #: читается хуже, чем список строк.
-NEXT_STEP_LINES = ("Перенести вызов последним шагом", "вторая строка")
+DONE_LINES = ("Нашёл, где сгорает номер", "вторая строка")
 
 #: Аргументы, с которыми инструмент набора `main` доходит до проверки прав. Значения
 #: намеренно осмысленные: отказ должен приходить из прав, а не из разбора аргументов.
@@ -853,22 +853,27 @@ async def test_add_summary_names_the_empty_part(
     assert '"reason": "required"' in failure
 
 
-async def test_a_summary_takes_its_title_from_the_next_step(
+async def test_a_summary_takes_its_title_from_what_was_done(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
-    """Заголовок сводки не принимается: опись и содержание не должны расходиться."""
+    """Заголовок сводки не принимается: опись и содержание не должны расходиться.
+
+    Источник — `done`: строка описи говорит о случившемся (TRK-34). Следующий шаг здесь
+    непустой и другой, поэтому возврат источника к нему тест не пропустит.
+    """
     async with mcp_session(task_secret) as session:
         summary = await call(
             session,
             "add_summary",
             key=task.key,
-            done="Разобрался",
+            done="\n".join(DONE_LINES),
             remaining="Дописать",
             blockers="Ничего",
-            next_step="\n".join(NEXT_STEP_LINES),
+            next_step="Перенести вызов последним шагом",
         )
 
-    assert summary["title"] == NEXT_STEP_LINES[0]
+    assert summary["title"] == DONE_LINES[0]
+    assert summary["title"] != summary["payload"]["next_step"]
     assert summary["payload"]["blockers"] == "Ничего"
 
 

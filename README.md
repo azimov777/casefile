@@ -271,7 +271,7 @@ OpenAPI, знает её точно.
 
 ```bash
 # сводка: четыре части, все непустые. Заголовок не принимается — им становится
-# первая строка next_step
+# первая строка done
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      -d '{"type": "summary", "payload": {"done": "Разобрался", "remaining": "Дописать",
           "blockers": "нет", "next_step": "Перенести вызов в конец create_task"}}' \
@@ -297,7 +297,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 ```
 
 Заголовок принимается только там, где его нечем вывести. У `summary` он равен первой
-строке `next_step`, у `answer` и `verdict` собирается из нагрузки. Служебные типы
+строке `done`, у `answer` и `verdict` собирается из нагрузки. Служебные типы
 (`status_changed`, `created`, ...) подшивает сам трекер, и в запросе они не принимаются.
 `refs` со ссылками на задачи (`TRK-7`) и записи (`TRK-42#12`) проверяются на
 существование; адреса — нет.

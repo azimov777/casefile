@@ -24,14 +24,17 @@ from app.domain.fields import FieldProblem
 
 CONTEXT = EntryContext(task_key="TRK-1", checks=("первая", "вторая", "третья"))
 
-#: Первая строка `next_step` — то, чем сводка подписывается в описи дела.
-FIRST_LINE = "Перенести вызов в конец create_task"
+#: Первая строка `done` — то, чем сводка подписывается в описи дела.
+FIRST_LINE = "Разобрался, где сгорает номер"
+
+#: Следующий шаг заведомо не равен заголовку: на этом и держится проверка источника.
+NEXT_STEP = "Перенести вызов в конец create_task"
 
 SUMMARY = {
-    "done": "Разобрался, где сгорает номер",
+    "done": FIRST_LINE,
     "remaining": "Перенести выдачу номера",
     "blockers": "нет",
-    "next_step": FIRST_LINE,
+    "next_step": NEXT_STEP,
 }
 
 
@@ -74,25 +77,62 @@ def test_a_summary_needs_all_four_parts_and_names_every_missing_one() -> None:
     assert problems(error) == {"done": "required", "next_step": "required"}
 
 
-def test_a_summary_takes_its_title_from_the_first_line_of_the_next_step() -> None:
+def test_a_summary_takes_its_title_from_the_first_line_of_what_was_done() -> None:
+    """TRK-34: опись — хронология, поэтому источник заголовка `done`, а не `next_step`.
+
+    Обе части здесь непустые и разные: тест краснеет и от возврата источника к
+    следующему шагу, и от подмены первой строки всем текстом.
+    """
     draft = build_entry(
         CONTEXT,
         type=EntryType.SUMMARY,
-        payload={**SUMMARY, "next_step": f"\n{FIRST_LINE}\nи дописать тест"},
+        payload={**SUMMARY, "done": f"\n{FIRST_LINE}\nи дописал тест"},
     )
 
     assert draft.title == FIRST_LINE
-    assert draft.payload["next_step"] == f"{FIRST_LINE}\nи дописать тест"
+    assert draft.title != NEXT_STEP
+    assert draft.payload["done"] == f"{FIRST_LINE}\nи дописал тест"
+
+
+def test_the_next_step_no_longer_reaches_the_index() -> None:
+    """Прямая проверка снятого поведения: следующий шаг в заголовок больше не попадает.
+
+    Отдельным тестом, а не строкой в предыдущем: если источник вернут к `next_step`,
+    падение должно называть именно это, а не «первая строка разобрана не так».
+    """
+    draft = build_entry(
+        CONTEXT,
+        type=EntryType.SUMMARY,
+        payload={**SUMMARY, "next_step": "Закрыть задачу"},
+    )
+
+    assert draft.title == FIRST_LINE
+    assert "Закрыть задачу" not in draft.title
 
 
 def test_a_long_first_line_is_shortened_rather_than_refused() -> None:
     """Отклонять справку из-за длинной первой строки значило бы терять её содержимое."""
-    draft = build_entry(
-        CONTEXT, type=EntryType.SUMMARY, payload={**SUMMARY, "next_step": "ш" * 500}
-    )
+    draft = build_entry(CONTEXT, type=EntryType.SUMMARY, payload={**SUMMARY, "done": "ш" * 500})
 
     assert len(draft.title) == MAX_ENTRY_TITLE_LENGTH
     assert draft.title.endswith("…")
+
+
+def test_a_long_first_line_is_cut_on_a_word_boundary() -> None:
+    """TRK-34: посимвольная обрезка рвала слово и разметку — «…(кирпичи `shared/…»."""
+    words = ("перевёл " * 40).strip()
+    draft = build_entry(CONTEXT, type=EntryType.SUMMARY, payload={**SUMMARY, "done": words})
+
+    assert draft.title.endswith("перевёл…")
+    assert len(draft.title) <= MAX_ENTRY_TITLE_LENGTH
+
+
+def test_a_word_boundary_cut_does_not_leave_a_dangling_separator() -> None:
+    """Многоточие после запятой читается как обрыв фразы, а не как продолжение."""
+    words = ("слово, " * 60).strip()
+    draft = build_entry(CONTEXT, type=EntryType.SUMMARY, payload={**SUMMARY, "done": words})
+
+    assert draft.title.endswith("слово…")
 
 
 def test_a_summary_does_not_accept_a_title() -> None:
@@ -101,7 +141,7 @@ def test_a_summary_does_not_accept_a_title() -> None:
         build_entry(CONTEXT, type=EntryType.SUMMARY, title="Своя строка", payload=SUMMARY)
 
     assert problems(error) == {"title": "not_allowed"}
-    assert error.value.details["fields"][0]["derived_from"] == "next_step"
+    assert error.value.details["fields"][0]["derived_from"] == "done"
 
 
 # --- Вопрос, ответ, вердикт ---------------------------------------------------------
