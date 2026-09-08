@@ -264,9 +264,9 @@ async def transition_task(
     входа в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в
     `details.checks` парами `check_no` и `reason`). Вход в
     `in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в
-    `details.blockers`), переход в `done` — при детях не в `done` и не в `cancelled`
-    (`409 task_has_unclosed_children`, ключи в `details.children`). Переход подшивает
-    `status_changed` с `from`, `to` и `reason`.
+    `details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и
+    не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
+    Переход подшивает `status_changed` с `from`, `to` и `reason`.
     """
     task = await service.get_task(session, task_key)
     mutation = await service.transition_task(

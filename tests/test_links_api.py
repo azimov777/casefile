@@ -306,6 +306,65 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
     assert (await move(auth_client, parent, "done")).status_code == 200
 
 
+async def test_a_parent_is_not_cancelled_while_a_child_is_open(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """Отмена закрывает родителя так же окончательно, как `done`, и ждёт тех же детей.
+
+    Отменённый родитель с живым ребёнком оставил бы за собой работу, чья причина
+    существовать только что исчезла, — и заметить её было бы некому: статусы по связям
+    не распространяются, детей трекер сам не закроет.
+    """
+    parent = await create(auth_client, "родитель")
+    child = await create(auth_client, "ребёнок")
+    assert (await link(auth_client, child, "child", parent)).status_code == 201
+    assert (await move(auth_client, child, "open")).status_code == 200
+
+    refused = await move(auth_client, parent, "cancelled", reason="передумали")
+
+    assert refused.status_code == 409
+    problem = refused.json()["error"]
+    assert problem["code"] == "task_has_unclosed_children"
+    assert problem["details"]["children"] == [child]
+    # Статус читается из базы, а не из ответа отказа: отказ обязан не только сказать
+    # «нельзя», но и ничего не сделать.
+    assert (await card(auth_client, parent))["task"]["status"] == "backlog"
+
+    assert (await move(auth_client, child, "cancelled", reason="не понадобился")).status_code == 200
+    assert (await move(auth_client, parent, "cancelled", reason="передумали")).status_code == 200
+
+
+async def test_a_waiting_child_holds_both_ways_of_closing_a_parent(
+    auth_client: AsyncClient,
+    queue: Queue,
+) -> None:
+    """`waiting` ребёнка не закрывает: это незаконченная работа, а не отменённая.
+
+    Проверяются оба закрытия сразу — правило одно, и разойтись им нельзя.
+    """
+    parent = await create(auth_client, "родитель")
+    child = await create(auth_client, "ребёнок")
+    assert (await link(auth_client, parent, "parent", child)).status_code == 201
+    assert (await move(auth_client, child, "waiting", reason="жду ответа")).status_code == 200
+
+    assert (await move(auth_client, parent, "open")).status_code == 200
+    assert (await move(auth_client, parent, "in_progress")).status_code == 200
+    await auth_client.post(
+        f"/api/v1/tasks/{parent}/entries", json={"type": "summary", "payload": SUMMARY}
+    )
+    await auth_client.post(
+        f"/api/v1/tasks/{parent}/entries",
+        json={"type": "verdict", "payload": {"check_no": 1, "outcome": "passed"}},
+    )
+
+    for to, body in (("done", {}), ("cancelled", {"reason": "передумали"})):
+        refused = await move(auth_client, parent, to, **body)
+        assert refused.status_code == 409, to
+        assert refused.json()["error"]["code"] == "task_has_unclosed_children", to
+        assert refused.json()["error"]["details"]["children"] == [child], to
+
+
 # --- Записи о связях --------------------------------------------------------------------
 
 

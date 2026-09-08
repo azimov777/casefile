@@ -710,18 +710,25 @@ def check_no_open_blockers(facts: TransitionFacts) -> None:
     )
 
 
-def check_children_closed_before_done(facts: TransitionFacts) -> None:
-    """`* → done`: все дети в `done` или в `cancelled`.
+def check_children_closed_before_closing(facts: TransitionFacts) -> None:
+    """`* → done` и `* → cancelled`: все дети в `done` или в `cancelled`.
 
-    `cancelled` закрывает ребёнка наравне с `done`: декомпозиция, от которой отказались,
-    родителя держать не должна. Отменять детей сам трекер при этом не станет — статусы
-    по связям не распространяются.
+    Правило одно и говорит о **закрытии**, а не о `done`: закрытая задача — это `done`
+    или `cancelled` (`CLOSED_STATUSES`), и отмена закрывает родителя так же
+    окончательно. Отменённый родитель, оставивший за собой открытых детей, — это
+    брошенная работа, чья причина существовать только что исчезла, и заметить её будет
+    некому: статусы по связям не распространяются, детей трекер сам не закроет.
+
+    Симметрия здесь двусторонняя. `cancelled` **ребёнка** закрывает его наравне с
+    `done` и родителя не держит: декомпозиция, от которой отказались, тоже работа,
+    доведённая до конца. `cancelled` **родителя** обязан ждать закрытых детей ровно по
+    той же причине, по какой их ждёт `done`.
 
     `waiting` ребёнка **не** закрывает: он не в `CLOSED_STATUSES`, и родитель с таким
-    ребёнком в `done` не уйдёт. Так и задумано — ждущий ребёнок это незаконченная
+    ребёнком не закроется никак. Так и задумано — ждущий ребёнок это незаконченная
     работа, а не отменённая (`CONCEPT.md`, 3.3).
     """
-    if facts.to_status is not TaskStatus.DONE:
+    if not is_closed(facts.to_status):
         return
     children = facts.unclosed_children
     if children is None:
@@ -760,7 +767,7 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     check_summary_before_leaving_in_progress,
     check_verdicts_before_done,
     check_no_open_blockers,
-    check_children_closed_before_done,
+    check_children_closed_before_closing,
 )
 
 

@@ -109,7 +109,7 @@
 соврал бы клиенту ровно в тот момент, когда врать нельзя.
 **Как правильно:** факту-списку, у которого нет чем заполниться, давать `None` и
 разводить в проверке две ветки — «не считали» и «вот они».
-**Где:** `app/domain/tasks.py`, `check_no_open_blockers`, `check_children_closed_before_done`.
+**Где:** `app/domain/tasks.py`, `check_no_open_blockers`, `check_children_closed_before_closing`.
 
 ## Проверку цикла нельзя выразить в схеме, и на гонку она не рассчитана
 

@@ -538,7 +538,7 @@ async def _transition_facts(
     if to_status is TaskStatus.IN_PROGRESS:
         blockers = await links_service.open_blockers(session, task)
     children: list[str] | None = None
-    if to_status is TaskStatus.DONE:
+    if is_closed(to_status):
         children = await links_service.unclosed_children(session, task)
     return TransitionFacts(
         key=task.key,

@@ -318,7 +318,10 @@ class TaskBlockedError(ConflictError):
 
 
 class TaskHasUnclosedChildrenError(ConflictError):
-    """Переход в `done` при детях не в `done` и не в `cancelled`.
+    """Закрытие задачи при детях не в `done` и не в `cancelled`.
+
+    Закрытие — это и `done`, и `cancelled`: отменённый родитель оставил бы за собой
+    работу, чья причина существовать только что исчезла.
 
     Незакрытые дети перечислены в `details.children`. Статусы по связям не
     распространяются: трекер не закрывает детей сам, он только не даёт закрыть родителя.

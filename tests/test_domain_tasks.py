@@ -431,15 +431,28 @@ def test_unclosed_children_keep_the_parent_open() -> None:
     ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, children=()))
 
 
-def test_children_do_not_block_cancelling_the_parent() -> None:
-    """Правило названо для `done`: отменить родителя с живыми детьми можно."""
-    ensure_transition_allowed(
-        facts(
-            TaskStatus.IN_PROGRESS,
-            TaskStatus.CANCELLED,
-            reason="отказались",
-            children=("TRK-4",),
+def test_children_block_cancelling_the_parent_just_as_they_block_done() -> None:
+    """Правило говорит о закрытии, а не о `done`: отмена ждёт тех же детей.
+
+    До TRK-28 оно было названо для `done`, и отменить родителя с живыми детьми было
+    можно. Это был разрыв в самом определении: закрытая задача — это `done` **или**
+    `cancelled`, и отменённый родитель оставлял за собой работу, чья причина
+    существовать только что исчезла.
+    """
+    with pytest.raises(TaskHasUnclosedChildrenError) as error:
+        ensure_transition_allowed(
+            facts(
+                TaskStatus.IN_PROGRESS,
+                TaskStatus.CANCELLED,
+                reason="отказались",
+                children=("TRK-4",),
+            )
         )
+
+    assert error.value.details["children"] == ["TRK-4"]
+
+    ensure_transition_allowed(
+        facts(TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, reason="отказались", children=())
     )
 
 
