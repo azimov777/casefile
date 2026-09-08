@@ -10,8 +10,6 @@
 только через REST (`CONCEPT.md`, 5.2).
 """
 
-from typing import Any
-
 from app.domain.tokens import TokenScope
 from app.mcp import views
 from app.mcp.arguments import (
@@ -39,7 +37,7 @@ def register(tools: Toolset) -> None:
     settings = tools.settings
 
     @tools.tool()
-    async def get_queue(key: QueueKeyArg) -> dict[str, Any]:
+    async def get_queue(key: QueueKeyArg) -> views.QueueView:
         """Очередь с описанием — общим контекстом всех её задач.
 
         Там сказано, где лежит код, на какие документы смотреть и чего не делать. Читай
@@ -52,7 +50,7 @@ def register(tools: Toolset) -> None:
     async def list_queues(
         limit: LimitArg = None,
         cursor: CursorArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.PageView[views.QueueRefView]:
         """Все очереди установки: ключ и название. Отсюда начинают, не зная ключа.
 
         Описания здесь нет: у выбранной очереди его читают `get_queue`, а в списке оно
@@ -71,7 +69,7 @@ def register(tools: Toolset) -> None:
     async def list_participants(
         limit: LimitArg = None,
         cursor: CursorArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.PageView[views.ParticipantView]:
         """Реестр участников: кому можно адресовать вопрос.
 
         Люди и постоянные агенты одним списком. Временных агентов здесь нет и быть не
@@ -92,7 +90,7 @@ def register(tools: Toolset) -> None:
         title: QueueTitleArg,
         description: QueueDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.QueueView:
         """Заводит очередь. Требует набора `main`.
 
         Ключ хранится в верхнем регистре и дальше неизменяем: он идёт в ключ каждой
@@ -100,7 +98,7 @@ def register(tools: Toolset) -> None:
         """
         async with runtime.call() as (session, actor):
 
-            async def create() -> dict[str, Any]:
+            async def create() -> views.QueueView:
                 return views.queue(
                     await queues_service.create_queue(
                         session, actor=actor, key=key, title=title, description=description
@@ -108,6 +106,7 @@ def register(tools: Toolset) -> None:
                 )
 
             return await Once.of(create_queue, session, actor, idempotency_key).run(
+                result=views.QueueView,
                 request={"key": key, "title": title, "description": description},
                 build=create,
             )
@@ -117,7 +116,7 @@ def register(tools: Toolset) -> None:
         key: QueueKeyArg,
         title: QueueTitleChangeArg = None,
         description: QueueDescriptionChangeArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.QueueView:
         """Меняет название и описание очереди. Требует набора `main`.
 
         Ключ не меняется никогда: он вшит в ключ каждой задачи очереди. Непереданное
@@ -137,7 +136,7 @@ def register(tools: Toolset) -> None:
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.ParticipantView:
         """Регистрирует человека или постоянного агента. Требует набора `main`.
 
         Имя хранится в нижнем регистре и дальше неизменяемо: оно стоит подписью в уже
@@ -145,7 +144,7 @@ def register(tools: Toolset) -> None:
         """
         async with runtime.call() as (session, actor):
 
-            async def create() -> dict[str, Any]:
+            async def create() -> views.ParticipantView:
                 return views.participant(
                     await participants_service.register_participant(
                         session, actor=actor, kind=kind, name=name, description=description
@@ -153,6 +152,7 @@ def register(tools: Toolset) -> None:
                 )
 
             return await Once.of(register_participant, session, actor, idempotency_key).run(
+                result=views.ParticipantView,
                 request={"kind": kind, "name": name, "description": description},
                 build=create,
             )
@@ -161,7 +161,7 @@ def register(tools: Toolset) -> None:
     async def update_participant(
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg,
-    ) -> dict[str, Any]:
+    ) -> views.ParticipantView:
         """Меняет описание участника. Требует набора `main`.
 
         Имя и род неизменяемы: имя стоит подписью в записях дела, род объясняет

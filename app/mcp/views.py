@@ -1,19 +1,39 @@
 """Данные, которые инструмент отдаёт агенту.
 
-Инструмент возвращает обычный словарь, а SDK сворачивает его в результат вызова тем же
-сериализатором pydantic, каким FastAPI сворачивает ответ REST. Отсюда важное следствие,
-на котором стоит проверка 3 задачи: `datetime` не приводится к строке **здесь**, иначе
-формат разошёлся бы с REST (`2026-09-04T10:00:00Z` против `...+00:00`), и «поле в поле»
-перестало бы выполняться. Перечисления, наоборот, разворачиваются в значение явно: у
-`StrEnum` сериализация случайно совпадает со значением, и полагаться на совпадение
-нельзя.
+Каждое представление — модель pydantic, и она же объявляет форму ответа инструмента.
+SDK строит из возвращаемого типа `outputSchema`, кладёт её в `tools/list` и сам
+сворачивает результат в `structured_content`. Значит форму ответа модель читает **до**
+вызова, а не выводит из ответа задним числом, и опечатка в имени поля ловится там же,
+где живёт поле, а не сравнением с REST в конце прогона.
 
-## Почему это не переиспользование схем REST
+Из этого же следует, чего здесь делать не надо. `datetime` не приводится к строке
+руками: это сделает сериализатор pydantic, и сделает так же, как у REST
+(`2026-09-04T10:00:00Z`, а не `...+00:00`) — «поле в поле» держится именно на нём.
+Перечисления объявлены доменными типами, а не строками: значение на проводе то же
+самое, но в схеме появляется список допустимого, и агент видит его до вызова.
+
+## Почему модели живут здесь, а не берутся из `api`
 
 `mcp` не имеет права зависеть от `api` (`docs/CONVENTIONS.md`): расхождение интерфейсов
-проект ловит тем, что оба зовут одни сценарии, а не тем, что делят схемы ответов. Поэтому
-имена и смысл полей здесь повторяют `app/api/schemas/`, а удерживает их вместе тест
-`tests/test_mcp_tools.py`, сравнивающий пакет преемника из MCP с ответом REST.
+проект ловит тем, что оба зовут одни сценарии, а не тем, что делят схемы ответов. Общая
+модель ответа связала бы их сильнее, чем нужно, и правка ради интерфейса человека
+поехала бы к агенту сама. Поэтому имена и смысл полей здесь повторяют
+`app/api/schemas/`, а удерживает их вместе тест `tests/test_mcp_tools.py`, сравнивающий
+пакет преемника из MCP с ответом REST.
+
+Повторение при этом не бесплатно, и цена названа осознанно: два места правятся вместе, а
+несовпадение ловит тест. Обратное — одна схема на два интерфейса — стоило бы дороже:
+ответ REST длиннее (`id`, счётчики, времена правки), и агент платил бы за него контекстом
+на каждом вызове.
+
+## Почему для этого не нужен агентный фреймворк
+
+Соблазн взять `pydantic-ai` проверен и отвергнут (`TRK-17`). Он решает другую задачу:
+это агентный рантайм, и его часть про MCP — **клиент** (подключение чужих серверов как
+инструментов агента) плюс приём «агент внутри инструмента». Инструменты сервера в его
+примерах объявляются тем же SDK, а типы даёт pydantic — то есть ровно то, что здесь уже
+стоит. Тянуть его значило бы добавить рантайм для вызова моделей в бэкенд, который
+моделей не зовёт.
 
 ## Что совпадает с REST, а что нарочно короче
 
@@ -71,16 +91,21 @@ REST этого правила не знает и знать не должен: 
 """
 
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from typing import Any
+
+from pydantic import BaseModel, JsonValue, SerializerFunctionWrapHandler, model_serializer
 
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
-from app.domain.authors import Author
-from app.domain.case import EntryFacts, EntryHeading
+from app.domain.authors import Author, AuthorKind
+from app.domain.case import EntryFacts, EntryHeading, EntryType, RemarkOutcome, VerdictOutcome
+from app.domain.links import LinkKind
+from app.domain.participants import ParticipantKind
 from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD
-from app.domain.tasks import TaskFeatures
+from app.domain.tasks import TaskFeatures, TaskField, TaskPriority, TaskStatus
 from app.services.links import TaskLink
 from app.services.search import FoundTask
 from app.services.tasks import TaskMutation, TaskPackage
@@ -92,44 +117,89 @@ LONG_TEXT_FIELDS: frozenset[str] = frozenset(
 )
 
 
-def author(value: Author) -> dict[str, Any]:
+class AuthorView(BaseModel):
     """Кто сделал действие: род и подпись. У самого трекера подписи нет."""
-    return {"kind": value.kind.value, "signature": value.signature}
+
+    kind: AuthorKind
+    signature: str | None
 
 
-def queue_ref(queue: Queue) -> dict[str, Any]:
+def author(value: Author) -> AuthorView:
+    """Кто сделал действие: род и подпись. У самого трекера подписи нет."""
+    return AuthorView(kind=value.kind, signature=value.signature)
+
+
+class QueueRefView(BaseModel):
+    """Очередь одной строкой: ключ и название."""
+
+    key: str
+    title: str
+
+
+def queue_ref(queue: Queue) -> QueueRefView:
     """Очередь одной строкой: ключ и название. Описание запрашивают `get_queue`.
 
     Одно представление на карточку задачи и на выдачу `list_queues`: очередь, названная
     коротко, обязана выглядеть одинаково везде, где она не главный предмет ответа.
     """
-    return {"key": queue.key, "title": queue.title}
+    return QueueRefView(key=queue.key, title=queue.title)
 
 
-def task(item: Task) -> dict[str, Any]:
+class TaskView(BaseModel):
     """Карточка задачи — тот же набор полей, что у `TaskRead` в REST."""
-    return {
-        "id": str(item.id),
-        "key": item.key,
-        "queue": queue_ref(item.queue),
-        "title": item.title,
-        "description": item.description,
-        "goal": item.goal,
-        "context": item.context,
-        "constraints": item.constraints,
-        "output": item.output,
-        "checks": list(item.checks),
-        "status": item.status.value,
-        "assignee": item.assignee,
-        "priority": item.priority.value,
-        "version": item.version,
-        "created_by": author(item.created_by),
-        "created_at": item.created_at,
-        "updated_at": item.updated_at,
-    }
+
+    id: str
+    key: str
+    queue: QueueRefView
+    title: str
+    description: str
+    goal: str
+    context: str
+    constraints: str
+    output: str
+    checks: list[str]
+    status: TaskStatus
+    assignee: str | None
+    priority: TaskPriority
+    version: int
+    created_by: AuthorView
+    created_at: datetime
+    updated_at: datetime
 
 
-def mutation(value: TaskMutation) -> dict[str, Any]:
+def task(item: Task) -> TaskView:
+    """Карточка задачи — тот же набор полей, что у `TaskRead` в REST."""
+    return TaskView(
+        id=str(item.id),
+        key=item.key,
+        queue=queue_ref(item.queue),
+        title=item.title,
+        description=item.description,
+        goal=item.goal,
+        context=item.context,
+        constraints=item.constraints,
+        output=item.output,
+        checks=list(item.checks),
+        status=item.status,
+        assignee=item.assignee,
+        priority=item.priority,
+        version=item.version,
+        created_by=author(item.created_by),
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+class MutationView(BaseModel):
+    """Ответ изменяющего инструмента: что стало и чем это подшито, без карточки."""
+
+    key: str
+    status: TaskStatus
+    version: int
+    entries: list[int]
+
+
+def mutation(value: TaskMutation) -> MutationView:
     """Ответ изменяющего инструмента: что стало и чем это подшито, без карточки.
 
     Почему не карточка — в шапке модуля. Здесь важно, что `entries` бывает пустым, и
@@ -138,15 +208,97 @@ def mutation(value: TaskMutation) -> dict[str, Any]:
     поэтому отдельного поля `changed` рядом нет: два способа узнать один факт разошлись
     бы при первой же правке.
     """
-    return {
-        "key": value.task.key,
-        "status": value.task.status.value,
-        "version": value.task.version,
-        "entries": list(value.entries),
-    }
+    return MutationView(
+        key=value.task.key,
+        status=value.task.status,
+        version=value.task.version,
+        entries=list(value.entries),
+    )
 
 
-def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> dict[str, Any]:
+class FeaturesView(BaseModel):
+    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
+
+    blocked: bool
+    open_questions: int
+    open_blocking_questions: int
+    open_remarks: int
+    last_summary_at: datetime | None
+    last_entry_at: datetime | None
+
+
+def features(value: TaskFeatures) -> FeaturesView:
+    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
+    return FeaturesView(
+        blocked=value.blocked,
+        open_questions=value.open_questions,
+        open_blocking_questions=value.open_blocking_questions,
+        open_remarks=value.open_remarks,
+        last_summary_at=value.last_summary_at,
+        last_entry_at=value.last_entry_at,
+    )
+
+
+class FoundTaskView(BaseModel):
+    """Строка выдачи поиска: карточка задачи, у которой любое поле может отсутствовать.
+
+    Единственная модель слоя с необязательными полями, и это не послабление типизации, а
+    её предмет. Список умеет отдавать подмножество полей (`fields`), и схема обязана
+    честно это показывать — ровно так же, как `TaskSearchRead` в REST.
+
+    Отсюда же сериализатор ниже. SDK сворачивает результат вызовом
+    `model_dump(mode="json")` — **без** `exclude_unset`, — и незапрошенное поле приезжало
+    бы агенту как `null`. Это не то же самое, что «поля нет»: пакет обязан совпадать с
+    ответом REST поле в поле, а тот отдаётся с `response_model_exclude_unset`.
+
+    Схему сериализатор не портит, и это проверено: SDK строит `outputSchema` через
+    `TypeAdapter(...).json_schema()`, у которого режим по умолчанию — **валидация**, а
+    обёрточный сериализатор действует только на схему сериализации. У FastAPI режим
+    противоположный, поэтому предупреждение заметки `docs/notes/api.md` («Отбросить
+    пустые поля в ответе — значит потерять схему у клиента») сюда не переносится.
+    """
+
+    key: str
+    id: str | None = None
+    queue: QueueRefView | None = None
+    title: str | None = None
+    description: str | None = None
+    goal: str | None = None
+    context: str | None = None
+    constraints: str | None = None
+    output: str | None = None
+    checks: list[str] | None = None
+    status: TaskStatus | None = None
+    assignee: str | None = None
+    priority: TaskPriority | None = None
+    version: int | None = None
+    created_by: AuthorView | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    features: FeaturesView | None = None
+    # Обрезка объявляется рядом со значением, поэтому у каждого длинного поля своя пара
+    # признаков. Пять полей, десять имён — перечислены, а не собраны генератором:
+    # схему инструмента читает модель, и имя поля в ней должно быть видно как имя.
+    description_truncated: bool | None = None
+    description_length: int | None = None
+    goal_truncated: bool | None = None
+    goal_length: int | None = None
+    context_truncated: bool | None = None
+    context_length: int | None = None
+    constraints_truncated: bool | None = None
+    constraints_length: int | None = None
+    output_truncated: bool | None = None
+    output_length: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _only_what_was_asked(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Оставляет в ответе только заданные поля: «поля нет» — не то же, что `null`."""
+        return {
+            name: value for name, value in handler(self).items() if name in self.model_fields_set
+        }
+
+
+def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> FoundTaskView:
     """Строка выдачи поиска: только запрошенные поля, длинные тексты с потолком.
 
     Пустой набор полей означает «вся задача» — то же правило, что в REST. Ключ остаётся
@@ -156,8 +308,12 @@ def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> d
     Признаки идут вложенным объектом, тем же, что в пакете преемника: агент, выбирающий
     задачу из списка, видит `blocked` и открытые вопросы сразу, а не вызывает `get_task`
     на каждую строку. Их нет в ответе, если их не просили (`fields` без `features`).
+
+    Карточка разбирается на словарь через `dict()`, а не собирается вторым списком
+    полей: набор полей строки — это набор полей `TaskView`, и второе его перечисление
+    разъехалось бы с первым на первом же новом поле.
     """
-    payload = task(found.task)
+    payload: dict[str, Any] = dict(task(found.task))
     if found.features is not None:
         payload[FEATURES_FIELD] = features(found.features)
     if fields:
@@ -165,98 +321,179 @@ def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> d
         payload = {name: value for name, value in payload.items() if name in selected}
     for name in LONG_TEXT_FIELDS & payload.keys():
         _clip_into(payload, name, text_limit)
-    return payload
+    return FoundTaskView(**payload)
 
 
-def features(value: TaskFeatures) -> dict[str, Any]:
-    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
-    return {
-        "blocked": value.blocked,
-        "open_questions": value.open_questions,
-        "open_blocking_questions": value.open_blocking_questions,
-        "open_remarks": value.open_remarks,
-        "last_summary_at": value.last_summary_at,
-        "last_entry_at": value.last_entry_at,
-    }
+class LinkOtherView(BaseModel):
+    """Задача на другом конце связи."""
+
+    key: str
+    title: str
+    status: TaskStatus
 
 
-def link(value: TaskLink) -> dict[str, Any]:
+class LinkView(BaseModel):
+    """Связь со стороны своей задачи: вид назван ролью **этой** задачи."""
+
+    kind: LinkKind
+    other: LinkOtherView
+    author: AuthorView
+    created_at: datetime
+
+
+def link(value: TaskLink) -> LinkView:
     """Связь со стороны своей задачи: вид назван ролью **этой** задачи.
 
     В `other` лежит задача на **другом** конце — сторону вычислил сценарий, и определять
     её здесь во второй раз не нужно и неверно: канонизация могла записать связь в
     обратном порядке (`docs/notes/mcp.md`).
     """
-    return {
-        "kind": value.kind.value,
-        "other": {
-            "key": value.other.key,
-            "title": value.other.title,
-            "status": value.other.status.value,
-        },
-        "author": author(value.author),
-        "created_at": value.created_at,
-    }
+    return LinkView(
+        kind=value.kind,
+        other=LinkOtherView(
+            key=value.other.key, title=value.other.title, status=value.other.status
+        ),
+        author=author(value.author),
+        created_at=value.created_at,
+    )
 
 
-def facts(value: EntryFacts) -> dict[str, Any]:
+class UnlinkView(BaseModel):
+    """Ответ `unlink`: какая связь снята и с какой стороны её назвали."""
+
+    key: str
+    kind: LinkKind
+    other: str
+    removed: bool
+
+
+class FactsView(BaseModel):
+    """Факты записи для описи: те же поля и в том же порядке, что в схеме REST."""
+
+    from_status: TaskStatus | None
+    to_status: TaskStatus | None
+    has_reason: bool | None
+    field: TaskField | None
+    link_kind: LinkKind | None
+    other_key: str | None
+    assignee_from: str | None
+    assignee_to: str | None
+    addressees: list[str] | None
+    blocking: bool | None
+    question_no: int | None
+    check_no: int | None
+    outcome: VerdictOutcome | None
+    remark_no: int | None
+    remark_outcome: RemarkOutcome | None
+    continuation_key: str | None
+
+
+def facts(value: EntryFacts) -> FactsView:
     """Факты записи для описи: те же поля и в том же порядке, что в схеме REST.
 
     Пакет преемника обязан совпадать с ответом REST поле в поле (обзорная проверка
     задачи 03, `tests/test_mcp_tools.py`), поэтому «отдать факты только интерфейсу»
     нельзя: расхождение здесь означало бы два разных описания одного дела. Пустые части
-    едут вместе с остальными — по той же причине.
+    едут вместе с остальными — по той же причине, и `exclude_unset` здесь неуместен:
+    отсутствующий факт это `null`, а не отсутствующее поле.
     """
-    return {
-        "from_status": None if value.from_status is None else value.from_status.value,
-        "to_status": None if value.to_status is None else value.to_status.value,
-        "has_reason": value.has_reason,
-        "field": None if value.field is None else value.field.value,
-        "link_kind": None if value.link_kind is None else value.link_kind.value,
-        "other_key": value.other_key,
-        "assignee_from": value.assignee_from,
-        "assignee_to": value.assignee_to,
-        "addressees": None if value.addressees is None else list(value.addressees),
-        "blocking": value.blocking,
-        "question_no": value.question_no,
-        "check_no": value.check_no,
-        "outcome": None if value.outcome is None else value.outcome.value,
-        "remark_no": value.remark_no,
-        "remark_outcome": None if value.remark_outcome is None else value.remark_outcome.value,
-        "continuation_key": value.continuation_key,
-    }
+    return FactsView(
+        from_status=value.from_status,
+        to_status=value.to_status,
+        has_reason=value.has_reason,
+        field=value.field,
+        link_kind=value.link_kind,
+        other_key=value.other_key,
+        assignee_from=value.assignee_from,
+        assignee_to=value.assignee_to,
+        addressees=None if value.addressees is None else list(value.addressees),
+        blocking=value.blocking,
+        question_no=value.question_no,
+        check_no=value.check_no,
+        outcome=value.outcome,
+        remark_no=value.remark_no,
+        remark_outcome=value.remark_outcome,
+        continuation_key=value.continuation_key,
+    )
 
 
-def heading(value: EntryHeading) -> dict[str, Any]:
+class HeadingView(BaseModel):
     """Строка описи дела: то, что видно о записи, не читая её тела."""
-    return {
-        "no": value.no,
-        "type": value.type.value,
-        "author": author(value.author),
-        "created_at": value.created_at,
-        "title": value.title,
-        "facts": facts(value.facts),
-    }
+
+    no: int
+    type: EntryType
+    author: AuthorView
+    created_at: datetime
+    title: str
+    facts: FactsView
 
 
-def entry(value: Entry, *, task_key: str) -> dict[str, Any]:
+def heading(value: EntryHeading) -> HeadingView:
+    """Строка описи дела: то, что видно о записи, не читая её тела."""
+    return HeadingView(
+        no=value.no,
+        type=value.type,
+        author=author(value.author),
+        created_at=value.created_at,
+        title=value.title,
+        facts=facts(value.facts),
+    )
+
+
+class EntryView(BaseModel):
+    """Запись дела целиком.
+
+    `payload` — единственное поле слоя без объявленной формы, и это то же исключение,
+    что и в схеме REST (`docs/notes/api.md`, «`payload` записи дела — исключение из
+    типизации, названное по месту»): нагрузка своя у каждого типа записи, и типизирует
+    её отдельная задача — сразу в обоих интерфейсах, иначе они разойдутся. `JsonValue`,
+    а не `Any`: форма свободна, но значение обязано быть представимо в JSON.
+    """
+
+    id: str
+    seq: int
+    no: int
+    task_key: str
+    type: EntryType
+    author: AuthorView
+    title: str
+    body: str
+    payload: dict[str, JsonValue]
+    refs: list[str]
+    created_at: datetime
+
+
+def entry(value: Entry, *, task_key: str) -> EntryView:
     """Запись дела целиком. Ключ задачи приходит извне: у записи только `task_id`."""
-    return {
-        "id": str(value.id),
-        "seq": value.seq,
-        "no": value.no,
-        "task_key": task_key,
-        "type": value.type.value,
-        "author": author(value.author),
-        "title": value.title,
-        "body": value.body,
-        "payload": dict(value.payload),
-        "refs": list(value.refs),
-        "created_at": value.created_at,
-    }
+    return EntryView(
+        id=str(value.id),
+        seq=value.seq,
+        no=value.no,
+        task_key=task_key,
+        type=value.type,
+        author=author(value.author),
+        title=value.title,
+        body=value.body,
+        payload=dict(value.payload),
+        refs=list(value.refs),
+        created_at=value.created_at,
+    )
 
 
-def task_package(package: TaskPackage) -> dict[str, Any]:
+class TaskPackageView(BaseModel):
+    """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом."""
+
+    task: TaskView
+    links: list[LinkView]
+    features: FeaturesView
+    summary: EntryView | None
+    questions: list[EntryView]
+    remarks: list[EntryView]
+    transitions: list[TaskStatus]
+    index: list[HeadingView]
+
+
+def task_package(package: TaskPackage) -> TaskPackageView:
     """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 
     Совпадает с `GET /api/v1/tasks/{key}` поле в поле, и это проверяется тестом. Не
@@ -264,40 +501,66 @@ def task_package(package: TaskPackage) -> dict[str, Any]:
     «почему агент решил иначе, чем показывал интерфейс» упирается в два разных ответа.
     """
     key = package.task.key
-    return {
-        "task": task(package.task),
-        "links": [link(item) for item in package.links],
-        "features": features(package.features),
-        "summary": None if package.summary is None else entry(package.summary, task_key=key),
-        "questions": [entry(question, task_key=key) for question in package.questions],
-        "remarks": [entry(remark, task_key=key) for remark in package.remarks],
-        "transitions": [status.value for status in package.transitions],
-        "index": [heading(item) for item in package.index],
-    }
+    return TaskPackageView(
+        task=task(package.task),
+        links=[link(item) for item in package.links],
+        features=features(package.features),
+        summary=None if package.summary is None else entry(package.summary, task_key=key),
+        questions=[entry(question, task_key=key) for question in package.questions],
+        remarks=[entry(remark, task_key=key) for remark in package.remarks],
+        transitions=list(package.transitions),
+        index=[heading(item) for item in package.index],
+    )
 
 
-def queue(item: Queue) -> dict[str, Any]:
+class QueueView(BaseModel):
+    """Очередь с описанием — общим контекстом всех её задач."""
+
+    key: str
+    title: str
+    description: str
+
+
+def queue(item: Queue) -> QueueView:
     """Очередь с описанием — общим контекстом всех её задач.
 
     Короче ответа REST: `id`, счётчик номеров и времена правки интерфейсу нужны, а
     агенту — нет, и каждое лишнее поле здесь оплачено его контекстом.
     """
-    return {"key": item.key, "title": item.title, "description": item.description}
+    return QueueView(key=item.key, title=item.title, description=item.description)
 
 
-def participant(item: Participant) -> dict[str, Any]:
+class ParticipantView(BaseModel):
     """Участник реестра: кому можно адресовать вопрос и что о нём известно."""
-    return {"kind": item.kind.value, "name": item.name, "description": item.description}
+
+    kind: ParticipantKind
+    name: str
+    description: str
 
 
-def page(items: Iterable[dict[str, Any]], *, next_cursor: str | None) -> dict[str, Any]:
+def participant(item: Participant) -> ParticipantView:
+    """Участник реестра: кому можно адресовать вопрос и что о нём известно."""
+    return ParticipantView(kind=item.kind, name=item.name, description=item.description)
+
+
+class PageView[ItemT](BaseModel):
+    """Страница выдачи. Форма одна у всех инструментов, которые её отдают."""
+
+    items: list[ItemT]
+    next_cursor: str | None
+
+
+def page[ItemT](items: Iterable[ItemT], *, next_cursor: str | None) -> PageView[ItemT]:
     """Страница выдачи. Форма одна у всех инструментов, которые её отдают.
 
     `next_cursor` пуст — дальше ничего нет. Отдельного признака «есть ещё» здесь нет
     намеренно: два поля об одном и том же однажды разойдутся, а у REST он существует
     ради интерфейса, который рисует кнопку.
+
+    Чем страница наполнена, объявляет инструмент своим возвращаемым типом
+    (`PageView[EntryView]`), и по нему же SDK строит схему результата.
     """
-    return {"items": list(items), "next_cursor": next_cursor}
+    return PageView(items=list(items), next_cursor=next_cursor)
 
 
 def _clip_into(payload: dict[str, Any], name: str, limit: int) -> None:

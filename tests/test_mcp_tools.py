@@ -21,6 +21,7 @@ import json
 import uuid
 from typing import Any
 
+import jsonschema
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import update
@@ -228,6 +229,52 @@ async def test_get_task_returns_the_same_package_as_rest(
     response = await auth_client.get(f"/api/v1/tasks/{open_task.key}")
     assert response.status_code == 200, response.text
 
+    assert from_mcp == response.json()["data"]
+
+
+async def test_every_tool_declares_the_shape_of_its_answer(
+    mcp_session: Connect, main_secret: str
+) -> None:
+    """Обзорная проверка 2: у каждого инструмента есть `outputSchema`, и она не пустая.
+
+    Перебором всего `tools/list`, а не выборочно: форму ответа объявляет возвращаемый
+    тип функции, и инструмент, заведённый завтра без него, обязан провалить эту проверку
+    сам. Схема проверяется и по существу — объект со свойствами: `dict[str, Any]` в
+    возвращаемом типе дал бы «объект чего угодно», то есть объявление без содержания.
+    """
+    async with mcp_session(main_secret) as session:
+        listed = (await session.list_tools()).tools
+        assert listed, "список инструментов пуст: проверять нечего"
+
+    for tool in listed:
+        schema = tool.output_schema
+        assert schema is not None, f"{tool.name}: форма ответа не объявлена"
+        assert schema.get("type") == "object", f"{tool.name}: {schema}"
+        assert schema.get("properties"), f"{tool.name}: объявлен объект без полей"
+
+
+async def test_the_answer_of_get_task_matches_its_own_declared_schema(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    task_secret: str,
+    main_secret: str,
+    open_task: Task,
+) -> None:
+    """Обзорная проверка 3: ответ сходится со своей схемой и с REST поле в поле.
+
+    Схема берётся у самого инструмента, из `tools/list`, а не пишется здесь: проверка
+    обязана сверять ответ с тем, что объявлено агенту, а не с отдельным ожиданием,
+    которое разъедется с объявлением при первой же правке.
+    """
+    del main_secret
+    async with mcp_session(task_secret) as session:
+        declared = {tool.name: tool.output_schema for tool in (await session.list_tools()).tools}
+        from_mcp = await call(session, "get_task", key=open_task.key)
+
+    jsonschema.validate(from_mcp, declared["get_task"])
+
+    response = await auth_client.get(f"/api/v1/tasks/{open_task.key}")
+    assert response.status_code == 200, response.text
     assert from_mcp == response.json()["data"]
 
 
@@ -707,19 +754,21 @@ async def test_a_repeated_create_task_answers_with_the_first_task(
     assert set(first) == {"key", "status", "version", "entries"}
 
 
-async def test_a_repeat_of_a_call_made_before_the_answer_shrank_replays_the_old_answer(
+async def test_a_repeat_of_a_call_made_before_the_answer_shrank_is_refused_by_name(
     mcp_session: Connect, task_secret: str, db_session: AsyncSession, queue: Queue
 ) -> None:
-    """Обзорная проверка 4: сохранённый ответ старой формы повтор не роняет.
+    """Сохранённый ответ прежней формы не отдаётся дословно — и не роняет обработчик.
 
     Ключи идемпотентности живут сутки (`app/domain/idempotency.py`, `KEY_TTL`), поэтому
-    после правки в таблице сутки лежат ответы обеих форм. Повтор обязан отдать **тот
-    самый** ответ, который ушёл в первый раз, а не собрать новый: у выпуска токена в
-    ответе секрет, которого второй раз взять неоткуда, и правило одно на все операции.
+    после правки, изменившей форму ответа, в таблице сутки лежат ответы обеих форм.
+    Отдать вчерашнюю форму нельзя: инструмент объявляет форму результата, и клиент SDK
+    сверяет ответ с ней **у себя** — отданный мимо схемы, он будет отвергнут на той
+    стороне (`TRK-17`). Соседний REST в той же ситуации уже строг и падает пятисоткой.
 
-    Значит на повтор вызова, сделанного до правки, придёт карточка целиком — и это
-    правильно. Агент, начавший вызов вчера, получит то, что ожидал; новых длинных
-    ответов при этом не появляется, а старые кончатся сами.
+    Поэтому повтор получает названный отказ `stored_answer_outdated`, а сам сохранённый
+    ответ едет в его подробностях: работа сделана, и по ответу видно, что именно, — но
+    выдать его за нынешний контракт трекер не берётся. Второго объекта при этом не
+    появляется, и это главное, что здесь стережётся.
     """
     del queue
     key = str(uuid.uuid4())
@@ -741,10 +790,12 @@ async def test_a_repeat_of_a_call_made_before_the_answer_shrank_replays_the_old_
     await db_session.flush()
 
     async with mcp_session(task_secret) as session:
-        again = await call(session, "create_task", **arguments)
+        failure = await refuse(session, "create_task", **arguments)
         found = await call(session, "search_tasks", queue=["TRK"])
 
-    assert again == old_form, "повтор обязан отдать сохранённое, не пересобирая ответ"
+    assert "stored_answer_outdated" in failure, failure
+    assert "create_task" in failure, "отказ обязан назвать операцию, за которой закреплён ключ"
+    assert old_form["title"] in failure, "сохранённый ответ обязан уехать в подробностях"
     assert [item["key"] for item in found["items"]].count(short["key"]) == 1
 
 

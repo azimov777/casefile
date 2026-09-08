@@ -10,8 +10,6 @@
 ради того, что агент получает первым.
 """
 
-from typing import Any
-
 from app.mcp import views
 from app.mcp.arguments import (
     IdempotencyKeyArg,
@@ -35,7 +33,7 @@ def register(tools: Toolset) -> None:
         kind: LinkKindArg,
         other: OtherTaskKeyArg,
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.LinkView:
         """Связывает две задачи и подшивает `link_added` в дела обеих.
 
         Вид называет роль задачи из `key`: `kind="blocks"` означает «`key` блокирует
@@ -55,18 +53,21 @@ def register(tools: Toolset) -> None:
             task = await tasks_service.get_task(session, key)
             other_task = await tasks_service.get_task(session, other)
 
-            async def add() -> dict[str, Any]:
+            async def add() -> views.LinkView:
                 return views.link(
                     await links_service.add_link(session, task, other_task, actor=actor, kind=kind)
                 )
 
             return await Once.of(link, session, actor, idempotency_key).run(
+                result=views.LinkView,
                 request={"task": task.key, "kind": kind, "other": other_task.key},
                 build=add,
             )
 
     @tools.tool()
-    async def unlink(key: TaskKeyArg, kind: LinkKindArg, other: OtherTaskKeyArg) -> dict[str, Any]:
+    async def unlink(
+        key: TaskKeyArg, kind: LinkKindArg, other: OtherTaskKeyArg
+    ) -> views.UnlinkView:
         """Снимает связь и подшивает `link_removed` в дела обеих задач.
 
         Снять можно с любой стороны и любым её именем: «снять с `TRK-1` связь `blocks` с
@@ -77,4 +78,4 @@ def register(tools: Toolset) -> None:
             task = await tasks_service.get_task(session, key)
             other_task = await tasks_service.get_task(session, other)
             await links_service.remove_link(session, task, other_task, actor=actor, kind=kind)
-            return {"key": task.key, "kind": kind.value, "other": other_task.key, "removed": True}
+            return views.UnlinkView(key=task.key, kind=kind, other=other_task.key, removed=True)

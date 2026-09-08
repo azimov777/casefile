@@ -20,11 +20,11 @@
 - **не фиксировать транзакцию.** Промежуточный коммит опубликовал бы занятый ключ с
   пустым ответом, и одновременный повтор получил бы строку, отвечать по которой нечем.
   Границу держит `Runtime.call`, и инструменты своей транзакции не открывают;
-- **вернуть JSON-значение.** Оно ложится в базу и оттуда же достаётся повтору.
-  Представления (`app/mcp/views.py`) отдают обычные словари, но с `datetime` и `UUID`
-  внутри — их приводит к JSON сам `Once`, тем же сериализатором, каким это делает SDK на
-  выходе инструмента. Иначе первый вызов и повтор отвечали бы одним и тем же полем в двух
-  разных написаниях времени.
+- **вернуть значение объявленного типа.** Оно ложится в базу и оттуда же достаётся
+  повтору. Представления (`app/mcp/views.py`) отдают модели pydantic; в базу их приводит
+  к JSON сам `Once`, а обратно поднимает той же моделью. Оба конца проходит и **первый**
+  вызов, а не только повтор: иначе первый ответ отличался бы от повторного написанием
+  времени, и расхождение всплыло бы у агента, а не в тесте.
 
 И отдельно про порядок: всё, что может отказать (разрешение ключей задач, поиск очереди),
 делается **до** `Once`. Иначе отклонённый вызов потратил бы ключ, а повтор с тем же
@@ -35,9 +35,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel
+from pydantic import ValidationError as ModelValidationError
 from pydantic_core import to_jsonable_python
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.errors import StoredAnswerOutdatedError
 from app.services import idempotency as service
 from app.services.auth import Actor
 
@@ -63,17 +66,23 @@ class Once:
         """Идемпотентность вызова инструмента `tool`."""
         return cls(session=session, actor=actor, key=key, operation=tool.__name__)
 
-    async def run(
+    async def run[ResultT: BaseModel](
         self,
         *,
         request: Any,
-        build: Callable[[], Awaitable[dict[str, Any]]],
-    ) -> dict[str, Any]:
+        result: type[ResultT],
+        build: Callable[[], Awaitable[ResultT]],
+    ) -> ResultT:
         """Зовёт `build` или отдаёт результат первого вызова с этим ключом.
 
         `request` — то, что отличает этот вызов от другого. Значения передаются
         **разрешёнными** (`TRK-1`, а не `trk-1`): адресация в проекте мягкая, и иначе
         повтор того же вызова другим написанием ключа отвечал бы конфликтом.
+
+        `result` — модель ответа инструмента. Она нужна здесь потому, что хранилище
+        знает только JSON: сохранённый ответ поднимается обратно ею, и повтор отвечает
+        объектом того же типа, что и первый вызов. Вывести её из `build` нельзя —
+        аннотация замыкания до вызова не читается.
 
         И запрос, и результат проходят через сериализатор pydantic: отпечаток считается
         по каноническому JSON, а ответ хранится в базе. Тот же путь проходит **первый**
@@ -93,4 +102,9 @@ class Once:
             build=encoded,
         )
         assert isinstance(stored, dict)
-        return stored
+        try:
+            return result.model_validate(stored)
+        except ModelValidationError as exc:
+            raise StoredAnswerOutdatedError(
+                details={"operation": self.operation, "answer": stored}
+            ) from exc

@@ -10,8 +10,6 @@
 первой на первой же правке.
 """
 
-from typing import Any
-
 from app.mcp import views
 from app.mcp.arguments import (
     AddresseesArg,
@@ -58,7 +56,7 @@ def register(tools: Toolset) -> None:
         after_no: AfterNoArg = None,
         limit: LimitArg = None,
         cursor: CursorArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.PageView[views.EntryView]:
         """Тела записей дела с нагрузкой, в порядке номеров.
 
         Читай точечно: опись из `get_task` показывает заголовки, а сюда приходи за тем,
@@ -91,7 +89,7 @@ def register(tools: Toolset) -> None:
         blockers: SummaryBlockersArg,
         next_step: SummaryNextStepArg,
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.EntryView:
         """Подшивает сводку: справку при передаче дела.
 
         Пиши её после каждого значимого шага, а не только перед выходом: решение,
@@ -105,7 +103,7 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> dict[str, Any]:
+            async def append() -> views.EntryView:
                 entry = await case_service.add_summary(
                     session,
                     task,
@@ -118,6 +116,7 @@ def register(tools: Toolset) -> None:
                 return views.entry(entry, task_key=task.key)
 
             return await Once.of(add_summary, session, actor, idempotency_key).run(
+                result=views.EntryView,
                 request={
                     "task": task.key,
                     "done": done,
@@ -136,7 +135,7 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         refs: EntryRefsArg = None,
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.EntryView:
         """Подшивает запись без нагрузки: решение, попытку, находку, артефакт, заметку.
 
         Ошибочную запись не правь — записи неизменяемы. Подшей новую: «TRK-42#12
@@ -145,7 +144,7 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> dict[str, Any]:
+            async def append() -> views.EntryView:
                 entry = await case_service.add_entry(
                     session,
                     task,
@@ -158,6 +157,7 @@ def register(tools: Toolset) -> None:
                 return views.entry(entry, task_key=task.key)
 
             return await Once.of(add_entry, session, actor, idempotency_key).run(
+                result=views.EntryView,
                 request={
                     "task": task.key,
                     "type": type,
@@ -176,7 +176,7 @@ def register(tools: Toolset) -> None:
         blocking: BlockingArg,
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.EntryView:
         """Задаёт вопрос участникам реестра.
 
         Сначала собери контекст сам: дела родителя, соседей по родителю и решения в
@@ -188,7 +188,7 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> dict[str, Any]:
+            async def append() -> views.EntryView:
                 entry = await case_service.ask(
                     session,
                     task,
@@ -201,6 +201,7 @@ def register(tools: Toolset) -> None:
                 return views.entry(entry, task_key=task.key)
 
             return await Once.of(ask, session, actor, idempotency_key).run(
+                result=views.EntryView,
                 request={
                     "task": task.key,
                     "addressees": addressees,
@@ -217,7 +218,7 @@ def register(tools: Toolset) -> None:
         question_no: QuestionNoArg,
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.EntryView:
         """Отвечает на вопрос той же задачи.
 
         Ответить может кто угодно, в том числе в чужой задаче, если знаешь ответ. Первый
@@ -227,13 +228,14 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> dict[str, Any]:
+            async def append() -> views.EntryView:
                 entry = await case_service.answer(
                     session, task, actor=actor, question_no=question_no, body=body
                 )
                 return views.entry(entry, task_key=task.key)
 
             return await Once.of(answer, session, actor, idempotency_key).run(
+                result=views.EntryView,
                 request={"task": task.key, "question_no": question_no, "body": body},
                 build=append,
             )
@@ -246,7 +248,7 @@ def register(tools: Toolset) -> None:
         task: ContinuationKeyArg = None,
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.EntryView:
         """Разбирает замечание к задаче: чем кончилось и куда ушла работа.
 
         Неразобранные замечания приезжают в `get_task` целиком, рядом с открытыми
@@ -260,7 +262,7 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             entry_task = await tasks_service.get_task(session, key)
 
-            async def append() -> dict[str, Any]:
+            async def append() -> views.EntryView:
                 entry = await case_service.resolve(
                     session,
                     entry_task,
@@ -273,6 +275,7 @@ def register(tools: Toolset) -> None:
                 return views.entry(entry, task_key=entry_task.key)
 
             return await Once.of(resolve, session, actor, idempotency_key).run(
+                result=views.EntryView,
                 request={
                     "task": entry_task.key,
                     "remark_no": remark_no,
@@ -290,7 +293,7 @@ def register(tools: Toolset) -> None:
         outcome: VerdictOutcomeArg,
         evidence: EvidenceArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.EntryView:
         """Подшивает исход одной обзорной проверки.
 
         Раздел «обзорные проверки» — контракт: выполни ровно то, что в проверке
@@ -304,7 +307,7 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> dict[str, Any]:
+            async def append() -> views.EntryView:
                 entry = await case_service.add_verdict(
                     session,
                     task,
@@ -316,6 +319,7 @@ def register(tools: Toolset) -> None:
                 return views.entry(entry, task_key=task.key)
 
             return await Once.of(add_verdict, session, actor, idempotency_key).run(
+                result=views.EntryView,
                 request={
                     "task": task.key,
                     "check_no": check_no,

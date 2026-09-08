@@ -11,8 +11,6 @@
 `search_tasks`.
 """
 
-from typing import Any
-
 from app.domain.journal import JOURNAL_START
 from app.mcp import views
 from app.mcp.arguments import (
@@ -42,7 +40,7 @@ def register(tools: Toolset) -> None:
         timeout: TimeoutArg = 0,
         limit: LimitArg = None,
         cursor: CursorArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.PageView[views.EntryView]:
         """Записи журнала после номера `after`, с ожиданием новых.
 
         Так ждут ответа, не отпуская задачу: `wait_journal(after=<seq>, task=<ключ>,

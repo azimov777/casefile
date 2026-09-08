@@ -6,7 +6,6 @@
 """
 
 from collections.abc import Sequence
-from typing import Any
 
 from app.domain.links import LinkKind
 from app.domain.search import Operator
@@ -62,7 +61,7 @@ def register(tools: Toolset) -> None:
     settings = tools.settings
 
     @tools.tool()
-    async def get_task(key: TaskKeyArg) -> dict[str, Any]:
+    async def get_task(key: TaskKeyArg) -> views.TaskPackageView:
         """Всё о задаче одним вызовом: карточка, связи, признаки, последняя сводка,
         открытые вопросы, опись дела и переходы по таблице статусов.
 
@@ -97,7 +96,7 @@ def register(tools: Toolset) -> None:
         fields: FieldsArg = DEFAULT_SEARCH_FIELDS,
         limit: LimitArg = None,
         cursor: CursorArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.PageView[views.FoundTaskView]:
         """Ищет задачи строкой языка запросов, отдельными условиями или всем сразу.
 
         Условия из обоих источников складываются по «и» и дают тот же результат, что
@@ -151,7 +150,7 @@ def register(tools: Toolset) -> None:
         assignee: AssigneeArg = None,
         priority: PriorityArg = DEFAULT_PRIORITY,
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.MutationView:
         """Заводит задачу в `backlog`. Статус не принимается: новая задача рождается там.
 
         Заполни все пять разделов сразу, если можешь: без четырёх непустых разделов и
@@ -176,7 +175,7 @@ def register(tools: Toolset) -> None:
             parent_task = None if parent is None else await tasks_service.get_task(session, parent)
             parts = sections or TaskSections()
 
-            async def create() -> dict[str, Any]:
+            async def create() -> views.MutationView:
                 task = await tasks_service.create_task(
                     session,
                     actor=actor,
@@ -207,6 +206,7 @@ def register(tools: Toolset) -> None:
                 )
 
             return await Once.of(create_task, session, actor, idempotency_key).run(
+                result=views.MutationView,
                 request={
                     "queue": resolved_queue.key,
                     "title": title,
@@ -224,7 +224,7 @@ def register(tools: Toolset) -> None:
         key: TaskKeyArg,
         changes: TaskChanges,
         version: VersionArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.MutationView:
         """Меняет переданные поля задачи; непереданное не трогает.
 
         Название, описание и пять разделов правятся только в `backlog`. Выяснилось в
@@ -253,7 +253,7 @@ def register(tools: Toolset) -> None:
         key: TaskKeyArg,
         to: TaskStatusArg,
         reason: ReasonArg = None,
-    ) -> dict[str, Any]:
+    ) -> views.MutationView:
         """Переводит задачу в другой статус по зашитой таблице переходов.
 
         Трекер откажет, если переход портит журнал: выход из `in_progress` без сводки,
