@@ -1,24 +1,30 @@
 """Факты в описи дела: по ним запись называют строкой, не читая тела.
 
-Главное здесь — не «поле есть», а два свойства, ради которых оно заведено: по описи
+Главное здесь — не «поле есть», а три свойства, ради которых оно заведено: по описи
 можно построить строку на своём языке, не разбирая собранный трекером английский
-заголовок, и опись при этом остаётся дешёвой — её размер не зависит от длины разделов
-задачи, как бы их ни правили.
+заголовок; опись остаётся дешёвой — её размер не зависит от длины разделов задачи, как
+бы их ни правили; и состав фактов каждого типа записи **объявлен**, а не угадывается по
+тому, какие ключи пришли непустыми.
 """
 
 import json
+from dataclasses import asdict, fields
+from enum import Enum
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
+from pydantic import TypeAdapter
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.schemas.entries import EntryFactsRead
 from app.db.models.queue import Queue
 from app.db.models.task import Task
-from app.domain.case import EntryType
+from app.domain.case import FACTS_BY_ENTRY_TYPE, EntryType, NoFacts
 from app.domain.links import LinkKind
 from app.domain.tasks import MAX_CHECK_LENGTH, MAX_TEXT_LENGTH, TaskStatus
+from app.mcp.views import FactsView
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
@@ -30,7 +36,11 @@ pytestmark = pytest.mark.anyio
 #: Сколько байт на строку описи считается дешёвым. Проверяется не ради красоты числа:
 #: опись входит в каждый пакет задачи, и строка, выросшая в разы, означает, что в неё
 #: просочилось что-то свободное по длине.
-MAX_HEADING_BYTES = 450
+MAX_HEADING_BYTES = 200
+
+#: Сколько байт в строке описи весят сами факты. Прежняя плоская форма стоила 339 байт
+#: на любую запись — все поля всех типов, из них заполнены один-три.
+MAX_FACTS_BYTES = 100
 
 
 async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) -> Task:
@@ -200,7 +210,9 @@ async def test_entries_written_by_their_author_carry_no_facts(
     )
 
     facts = facts_of(await index_of(db_session, task_actor, task), EntryType.NOTE)
-    assert set(_as_json(facts).values()) == {None}
+    # Не «все поля пусты», а «полей нет»: форма фактов заметки состоит из одной разметки.
+    assert facts == NoFacts(type=EntryType.NOTE)
+    assert _as_json(facts) == {"type": "note"}
 
 
 # --- Чего в описи нет ------------------------------------------------------------------
@@ -296,6 +308,150 @@ async def test_the_index_does_not_grow_with_the_length_of_the_sections(
     )
 
 
+# --- Состав фактов объявлен, а не угадывается ------------------------------------------
+
+
+def test_every_entry_type_names_the_form_of_its_facts() -> None:
+    """Проверка 5: словарь форм сплошной по `EntryType`.
+
+    Типы здесь не перечисляются руками — сравниваются два множества целиком. Тип,
+    заведённый завтра без строки в словаре, роняет проверку сам; список в тесте молча
+    отстал бы.
+    """
+    assert set(FACTS_BY_ENTRY_TYPE) == set(EntryType)
+
+
+@pytest.mark.parametrize(
+    ("layer", "union"),
+    [("REST", EntryFactsRead), ("MCP", FactsView)],
+    ids=["rest", "mcp"],
+)
+def test_the_contract_declares_the_facts_of_every_entry_type(layer: str, union: Any) -> None:
+    """Проверка 5 и 7: состав фактов каждого типа объявлен схемой, и обоими слоями одинаково.
+
+    Сверяется не исходник, а собранная схема: её читает и генератор клиента, и агент —
+    в `outputSchema` инструмента. Разметка обязана покрыть `EntryType` целиком, а поля
+    каждой формы — совпасть с полями формы домена, имя в имя. Так набор полей перестаёт
+    выводиться из того, какие ключи пришли непустыми.
+    """
+    schema = TypeAdapter(union).json_schema()
+    mapping = schema["discriminator"]["mapping"]
+
+    assert set(mapping) == {entry_type.value for entry_type in EntryType}, layer
+
+    for value, ref in mapping.items():
+        declared = set(schema["$defs"][ref.rsplit("/", 1)[-1]]["properties"])
+        in_domain = {field.name for field in fields(FACTS_BY_ENTRY_TYPE[EntryType(value)])}
+        assert declared == in_domain, f"{layer}: {value}"
+
+
+async def test_the_index_carries_only_the_fields_of_its_own_type(
+    auth_client: AsyncClient, queue: Queue
+) -> None:
+    """Проверка 6: в деле со **всеми** типами записей у каждой строки ровно свои ключи.
+
+    Дело собирается через HTTP, то есть проверяется то, что приезжает клиенту, а не
+    внутреннее представление. Перебирается не список из теста, а то, что нашлось в
+    описи, и в конце сверяется, что нашлись все типы: пропущенный тип роняет проверку,
+    а не тихо выпадает из перебора.
+    """
+    key = await _case_with_every_entry_type(auth_client, queue)
+
+    package = await auth_client.get(f"/api/v1/tasks/{key}")
+    assert package.status_code == 200, package.text
+    index = package.json()["data"]["index"]
+
+    seen: set[str] = set()
+    for heading in index:
+        seen.add(heading["type"])
+        in_domain = {
+            field.name for field in fields(FACTS_BY_ENTRY_TYPE[EntryType(heading["type"])])
+        }
+        assert set(heading["facts"]) == in_domain, heading
+        assert heading["facts"]["type"] == heading["type"], heading
+
+    assert seen == {entry_type.value for entry_type in EntryType}, sorted(seen)
+
+
+async def _case_with_every_entry_type(client: AsyncClient, queue: Queue) -> str:
+    """Заводит задачу и подшивает в неё запись каждого типа `EntryType`. Возвращает ключ."""
+    created = await client.post(
+        "/api/v1/tasks",
+        json={
+            "queue": queue.key,
+            "title": "every entry type",
+            "description": "description",
+            "goal": "goal",
+            "context": "context",
+            "constraints": "constraints",
+            "output": "output",
+            "checks": ["check"],
+        },
+    )
+    assert created.status_code == 201, created.text
+    key = str(created.json()["data"]["key"])
+
+    other = await client.post(
+        "/api/v1/tasks",
+        json={"queue": queue.key, "title": "the other side", "description": "description"},
+    )
+    assert other.status_code == 201, other.text
+    other_key = other.json()["data"]["key"]
+
+    async def patch(**changes: Any) -> None:
+        response = await client.patch(f"/api/v1/tasks/{key}", json=changes)
+        assert response.status_code == 200, response.text
+
+    async def move(to: str) -> None:
+        response = await client.post(f"/api/v1/tasks/{key}/transition", json={"to": to})
+        assert response.status_code == 200, response.text
+
+    async def file(**entry: Any) -> int:
+        response = await client.post(f"/api/v1/tasks/{key}/entries", json=entry)
+        assert response.status_code == 201, response.text
+        return int(response.json()["data"]["no"])
+
+    # `section_changed` живёт только в `backlog`, обвязка правится в любом незакрытом
+    # статусе, поэтому обе правки идут отсюда.
+    await patch(goal="goal, reworded")
+    await patch(priority="high")
+    await patch(assignee="owner")
+
+    await move("open")
+    await move("in_progress")
+
+    # `link_added` и `link_removed` — одной парой на одной и той же связи.
+    linked = await client.post(
+        f"/api/v1/tasks/{key}/links", json={"kind": "relates", "other": other_key}
+    )
+    assert linked.status_code == 201, linked.text
+    unlinked = await client.delete(f"/api/v1/tasks/{key}/links/relates/{other_key}")
+    assert unlinked.status_code == 204, unlinked.text
+
+    for entry_type in ("decision", "attempt", "finding", "artifact", "note"):
+        await file(type=entry_type, title=f"a {entry_type}")
+
+    question_no = await file(
+        type="question",
+        title="a question",
+        payload={"addressees": ["owner"], "blocking": False},
+    )
+    await file(type="answer", payload={"question_no": question_no}, body="yes")
+    await file(type="verdict", payload={"check_no": 1, "outcome": "passed"}, body="green")
+    remark_no = await file(type="remark", title="a remark")
+    await file(type="resolution", payload={"remark_no": remark_no, "outcome": "fixed"})
+    await file(
+        type="summary",
+        payload={
+            "done": "done",
+            "remaining": "remaining",
+            "blockers": "none",
+            "next_step": "next",
+        },
+    )
+    return key
+
+
 # --- Цена пакета -----------------------------------------------------------------------
 
 
@@ -360,25 +516,20 @@ async def test_the_rest_answer_carries_the_facts(auth_client: AsyncClient, queue
 
 
 def _as_json(facts: Any) -> dict[str, Any]:
-    """Факты словарём: у домена это `dataclass` со `slots`, и `__dict__` у него нет."""
-    return {
-        name: getattr(facts, name)
-        for name in (
-            "from_status",
-            "to_status",
-            "has_reason",
-            "field",
-            "link_kind",
-            "other_key",
-            "assignee_from",
-            "assignee_to",
-            "addressees",
-            "blocking",
-            "question_no",
-            "check_no",
-            "outcome",
-        )
-    }
+    """Факты словарём так, как их отдаёт схема: перечисления — строками.
+
+    Состав полей здесь не перечисляется: он объявлен формой фактов, и список в тесте
+    разошёлся бы с ней молча — именно этим и была плоха прежняя плоская форма.
+    """
+    return {name: _plain(value) for name, value in asdict(facts).items()}
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, tuple):
+        return list(value)
+    return value
 
 
 def _index_bytes(index: list[Any]) -> int:
@@ -394,10 +545,7 @@ def _index_bytes(index: list[Any]) -> int:
                     "no": heading.no,
                     "type": heading.type.value,
                     "title": heading.title,
-                    "facts": {
-                        name: (value.value if hasattr(value, "value") else value)
-                        for name, value in _as_json(heading.facts).items()
-                    },
+                    "facts": _as_json(heading.facts),
                 }
                 for heading in index
             ],
@@ -409,16 +557,7 @@ def _index_bytes(index: list[Any]) -> int:
 def _facts_bytes(index: list[Any]) -> int:
     """Сколько в описи весят сами факты — без номеров, типов и заголовков."""
     return len(
-        json.dumps(
-            [
-                {
-                    name: (value.value if hasattr(value, "value") else value)
-                    for name, value in _as_json(heading.facts).items()
-                }
-                for heading in index
-            ],
-            ensure_ascii=False,
-        ).encode()
+        json.dumps([_as_json(heading.facts) for heading in index], ensure_ascii=False).encode()
     )
 
 
