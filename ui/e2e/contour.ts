@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -59,4 +59,47 @@ export function side(page: Page): Locator {
  */
 export async function shellReady(page: Page): Promise<void> {
   await expect(side(page).getByRole('link', { name: /Открытых вопросов/ })).toBeVisible();
+}
+
+/**
+ * Значения статуса — из контракта соседнего репозитория, а не перечнем в тесте.
+ *
+ * Перечисление уже менялось дважды (2026-09-05 из него убрали статус, 2026-09-07
+ * добавили `waiting`), и тест, выписавший его руками, проверял бы после такой правки
+ * не всё: пять форм из шести совпали бы попарно, и шестая осталась бы непроверенной,
+ * не уронив ни одного прогона.
+ */
+export function contractStatuses(): string[] {
+  const contract = JSON.parse(
+    readFileSync(resolve(process.cwd(), '../tracker/openapi.json'), 'utf8'),
+  ) as { components: { schemas: { TaskStatus: { enum: string[] } } } };
+  return contract.components.schemas.TaskStatus.enum;
+}
+
+/**
+ * Какие задачи демо в каком статусе — по правде бэкенда, а не по памяти теста.
+ *
+ * Состав демо меняется вместе с бэкендом: 2026-09-07 задача, ждавшая ответа владельца,
+ * ушла из `open` в `waiting` (TRK-15), и три сценария, помнившие её ключ и число строк,
+ * покраснели разом, ничего не сказав про интерфейс. Спрошенный состав такие правки
+ * переживает сам.
+ *
+ * `params` дописывает условия к отбору: `{ assignee: 'demo_agent' }` отвечает на
+ * вопрос «а что из этого его».
+ */
+export async function tasksByStatus(
+  request: APIRequestContext,
+  params: Record<string, string> = {},
+): Promise<Map<string, string[]>> {
+  const query = new URLSearchParams({ queue: 'DEMO', fields: 'status', limit: '100', ...params });
+  const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${readE2eToken()}` },
+  });
+  const body = (await response.json()) as { data: { key: string; status: string }[] };
+
+  const byStatus = new Map<string, string[]>();
+  for (const task of body.data) {
+    byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task.key]);
+  }
+  return byStatus;
 }

@@ -1,36 +1,14 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  contractStatuses,
+  fontsReady,
+  readE2eToken,
+  silenceJournal,
+  tasksByStatus,
+} from './contour';
 
 const token = readE2eToken();
-
-/**
- * Значения статуса берутся из контракта, а не перечисляются здесь: перечисление уже
- * менялось (2026-09-05 из него убрали статус) и может измениться снова, а доска обязана
- * пережить это без правок — в том числе в тестах.
- */
-function contractStatuses(): string[] {
-  const contract = JSON.parse(
-    readFileSync(resolve(process.cwd(), '../tracker/openapi.json'), 'utf8'),
-  ) as { components: { schemas: { TaskStatus: { enum: string[] } } } };
-  return contract.components.schemas.TaskStatus.enum;
-}
-
-/** Какие задачи демо в каком статусе — по правде бэкенда, а не по памяти теста. */
-async function tasksByStatus(request: APIRequestContext): Promise<Map<string, string[]>> {
-  const response = await request.get('/api/v1/tasks?queue=DEMO&fields=status&limit=100', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const body = (await response.json()) as { data: { key: string; status: string }[] };
-
-  const byStatus = new Map<string, string[]>();
-  for (const task of body.data) {
-    byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task.key]);
-  }
-  return byStatus;
-}
 
 test.beforeEach(async ({ context }) => {
   await context.addInitScript((value) => {
@@ -167,6 +145,34 @@ test('закрытые и отменённые свёрнуты, показыв�
   }
 });
 
+test('столбец ожидания развёрнут, а знак в его заголовке тот же, что в строке списка', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO&view=board');
+
+  // Свёрнуто по умолчанию то, что **уже не в работе**. Ждущее из работы не вышло:
+  // оно ждёт хода человека, и прятать от него единственный адресованный ему столбец
+  // доска не вправе (`DEFAULT_COLLAPSED`).
+  const toggle = column(page, 'waiting').getByRole('button');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(column(page, 'waiting').getByRole('article').first()).toBeVisible();
+
+  // Один словарь знаков на список, карточку и доску (решение Д20): рисунок в заголовке
+  // столбца и рисунок в строке таблицы совпадают до символа. Разойдясь, они дали бы
+  // человеку два разных знака для одного и того же статуса.
+  const head = await column(page, 'waiting')
+    .locator('[data-mark="status"] svg')
+    .first()
+    .innerHTML();
+
+  await page.goto('/tasks?queue=DEMO&status=waiting');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  const row = await page.locator('tbody [data-mark="status"] svg').first().innerHTML();
+
+  expect(row).toBe(head);
+});
+
 test('карточка ведёт в задачу, а «назад» возвращает на доску', async ({ page }) => {
   await page.goto('/tasks?queue=DEMO&view=board');
 
@@ -187,17 +193,25 @@ test('фильтр по исполнителю действует на доск�
   page,
   request,
 }) => {
-  const expected = await tasksByStatus(request);
+  const all = await tasksByStatus(request);
+  const mine = await tasksByStatus(request, { assignee: 'demo_agent' });
 
-  await page.goto('/tasks?queue=DEMO&view=board&assignee=demo_agent');
-  await expect(column(page, 'open')).toBeVisible();
+  // Столбец, где у исполнителя есть задачи, но не все задачи статуса: только на таком
+  // видно, что фильтр сузил выдачу, а не что он ничего не сделал. Какой это столбец,
+  // решает состав демо, а не память теста, — ключи здесь не выписаны намеренно.
+  const narrowed = [...mine].find(([status, keys]) => keys.length < (all.get(status) ?? []).length);
+  expect(narrowed, 'в демо нет статуса, где у demo_agent часть задач').toBeDefined();
+  const [status, keys] = narrowed as [string, string[]];
 
-  // В столбцах остались только задачи этого исполнителя: их меньше, чем всего в статусе.
-  const openKeys = expected.get('open') ?? [];
-  await expect(column(page, 'open').getByRole('article')).not.toHaveCount(openKeys.length);
-  await expect(
-    column(page, 'open').getByRole('article').filter({ hasText: 'DEMO-4' }),
-  ).toBeVisible();
+  // `collapsed=` — «ничего не свёрнуто»: столбцом сужения может оказаться и тот,
+  // что свёрнут по умолчанию, и тогда карточек в нём не видно намеренно.
+  await page.goto('/tasks?queue=DEMO&view=board&assignee=demo_agent&collapsed=');
+  await expect(column(page, status)).toBeVisible();
+
+  await expect(column(page, status).getByRole('article')).toHaveCount(keys.length);
+  for (const key of keys) {
+    await expect(column(page, status).getByRole('article').filter({ hasText: key })).toBeVisible();
+  }
 
   await page.getByRole('link', { name: 'Таблица' }).click();
 
@@ -205,7 +219,32 @@ test('фильтр по исполнителю действует на доск�
     'исполнитель demo_agent',
   );
   await expect(page.getByRole('table')).toBeVisible();
-  await expect(page.getByRole('rowheader', { name: 'DEMO-4' })).toBeVisible();
+  await expect(page.getByRole('rowheader', { name: keys[0] as string })).toBeVisible();
+});
+
+test('доска прокручивается внутри себя, а не уводит вбок страницу', async ({ page }) => {
+  await silenceJournal(page);
+
+  for (const width of [1440, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/tasks?queue=DEMO&view=board');
+    await expect(column(page, 'waiting')).toBeVisible();
+    await fontsReady(page);
+
+    const measured = await page.evaluate(() => {
+      const columns = document.querySelector('section[aria-label="backlog"]')?.parentElement;
+      return {
+        page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        board: (columns?.scrollWidth ?? 0) - (columns?.clientWidth ?? 0),
+      };
+    });
+
+    // Столбцы не влезли — это нормально и решается прокруткой самой доски. Ненормально,
+    // когда вбок уезжает страница: тогда вместе со столбцами уплывают панель и шапка,
+    // а вернуть их можно только обратной прокруткой.
+    expect(measured.board, `на ${width}px доске нечего прокручивать`).toBeGreaterThan(0);
+    expect(measured.page, `на ${width}px страница уехала вбок`).toBe(0);
+  }
 });
 
 test('доступность доски', async ({ page }) => {
@@ -250,13 +289,23 @@ test('столбцы одной ширины при любом сочетани�
 
 test('у карточек столбца подвал на одном месте, а название не длиннее двух строк', async ({
   page,
+  request,
 }) => {
+  // Самый населённый столбец демо: подвал и переносы имеет смысл мерить там, где
+  // карточек больше одной, а какой это столбец — знает бэкенд. Выписанный здесь
+  // `open` однажды остался с одной карточкой (TRK-15), и замер сравнивать стало не с чем.
+  const all = await tasksByStatus(request);
+  const fullest = [...all].sort(([, left], [, right]) => right.length - left.length)[0];
+  expect(fullest, 'в демо нет ни одной задачи').toBeDefined();
+  const [status, keys] = fullest as [string, string[]];
+  expect(keys.length).toBeGreaterThan(1);
+
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
-  await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
-  const measured = await column(page, 'open').evaluate((node) => {
+  const measured = await column(page, status).evaluate((node) => {
     const cards = Array.from(node.querySelectorAll('article'));
     return cards.map((card) => {
       const box = card.getBoundingClientRect();

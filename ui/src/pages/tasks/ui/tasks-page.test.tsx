@@ -179,6 +179,43 @@ describe('список задач', () => {
     expect(row).toHaveTextContent('приоритет critical');
   });
 
+  it('ожидание видно в строке своим знаком, а отбор по нему собирает очередь человека', async () => {
+    const user = userEvent.setup();
+    server.use(
+      listing(() =>
+        collection([
+          task('DEMO-5', { status: 'waiting' }),
+          task('DEMO-6', { status: 'in_progress' }),
+        ]),
+      ),
+    );
+
+    open('/tasks?queue=DEMO');
+
+    const waiting = await screen.findByRole('row', { name: /DEMO-5/ });
+    expect(waiting).toHaveTextContent('статус waiting');
+
+    // Форма, а не только цвет: ожидание не повторяет работу рисунком — на
+    // чёрно-белом экране рисунок остаётся единственным различием между ними.
+    const shapeOf = (row: HTMLElement) =>
+      row.querySelector('[data-mark="status"] svg')?.innerHTML ?? '';
+    const working = screen.getByRole('row', { name: /DEMO-6/ });
+    expect(shapeOf(waiting)).not.toBe(shapeOf(working));
+    expect(shapeOf(waiting)).not.toBe('');
+
+    // «Что ждёт меня» — одно действие: флажок уходит в адрес, в запрос и обратно чипом.
+    await expandFilters(user);
+    await user.click(screen.getByRole('checkbox', { name: 'waiting' }));
+
+    await waitFor(() => {
+      expect(lastRequest().searchParams.getAll('status')).toEqual(['waiting']);
+    });
+    expect(address.current).toContain('status=waiting');
+    expect(screen.getByRole('list', { name: 'Условия отбора' })).toHaveTextContent(
+      'статус waiting',
+    );
+  });
+
   it('в задачу ведёт вся строка: клик по ячейке без ссылок уходит в её задачу', async () => {
     const user = userEvent.setup();
     server.use(

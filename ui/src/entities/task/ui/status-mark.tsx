@@ -5,8 +5,10 @@ import type { TaskStatus } from '../api/tasks';
 /**
  * Форма статуса (решение Д1). Круг заполняется по мере продвижения: пунктирное кольцо
  * — ещё не взято, сплошное — взято, но пусто, половина — идёт работа, залитый круг
- * с галочкой — сделано. Пятая форма выпадает из шкалы намеренно: снятое не точка на
- * ней, а выход из неё, и перечёркивание говорит именно это.
+ * с галочкой — сделано. Две формы выпадают из шкалы намеренно: снятое не точка на
+ * ней, а выход из неё, и перечёркивание говорит именно это; ожидание — тоже выход,
+ * но временный, и пауза говорит именно это. Пауза, а не часы и не песочные часы:
+ * `waiting` означает «работа остановлена, ход не за агентом», а не «идёт время».
  *
  * Различие держится без цвета: на чёрно-белом экране и у человека, не различающего
  * цвета, — это проверяет сквозной тест с `filter: grayscale(1)`.
@@ -28,6 +30,16 @@ const STATUS_SHAPE = {
       <path d="m7.6 12.4 3.1 3.1 5.7-6.6" stroke="var(--color-surface)" strokeWidth="2.2" />
     </>
   ),
+  waiting: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      {/* Две черты, а не три точки и не стрелки часов: при 14px просвет между ними
+          выходит в полтора пикселя и переживает обесцвечивание, а точки диаметром
+          меньше пикселя слились бы в серую полосу. */}
+      <path d="M9.7 8.8v6.4" />
+      <path d="M14.3 8.8v6.4" />
+    </>
+  ),
   cancelled: (
     <>
       <circle cx="12" cy="12" r="9" />
@@ -44,6 +56,7 @@ const SHAPE_COLOR = {
   backlog: 'text-faint',
   open: 'text-muted',
   in_progress: 'text-progress',
+  waiting: 'text-attention',
   done: 'text-positive',
   cancelled: 'text-dropped',
 } satisfies Record<TaskStatus, string>;
@@ -57,6 +70,7 @@ const NAME_COLOR = {
   backlog: 'text-muted',
   open: 'text-muted',
   in_progress: 'text-progress',
+  waiting: 'text-attention',
   done: 'text-positive',
   cancelled: 'text-muted',
 } satisfies Record<TaskStatus, string>;

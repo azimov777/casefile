@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, side, silenceJournal } from './contour';
+import { readE2eToken, side, silenceJournal, tasksByStatus } from './contour';
 
 const token = readE2eToken();
 
@@ -25,12 +25,20 @@ function row(page: Page, key: string) {
 
 test('отбор по статусу open даёт ровно открытые задачи демо и переживает перезагрузку', async ({
   page,
+  request,
 }) => {
+  // Что открыто — по правде бэкенда, а не по памяти теста: выписанные здесь ключи
+  // проверяли бы свежесть этой памяти, а не отбор. Именно так и вышло, когда задача,
+  // ждавшая ответа владельца, ушла из `open` в `waiting` (TRK-15).
+  const open = (await tasksByStatus(request)).get('open') ?? [];
+  expect(open.length).toBeGreaterThan(0);
+
   await page.goto('/tasks?queue=DEMO&status=open');
 
-  await expect(rows(page)).toHaveCount(2);
-  await expect(page.getByRole('rowheader', { name: 'DEMO-3' })).toBeVisible();
-  await expect(page.getByRole('rowheader', { name: 'DEMO-4' })).toBeVisible();
+  await expect(rows(page)).toHaveCount(open.length);
+  for (const key of open) {
+    await expect(page.getByRole('rowheader', { name: key })).toBeVisible();
+  }
 
   await page.reload();
 
@@ -46,7 +54,7 @@ test('отбор по статусу open даёт ровно открытые �
 
   await page.getByRole('button', { name: 'Изменить отбор' }).click();
   await expect(page.getByRole('checkbox', { name: 'open' })).toBeChecked();
-  await expect(rows(page)).toHaveCount(2);
+  await expect(rows(page)).toHaveCount(open.length);
 });
 
 test('признаки строки берутся из выдачи списка, без запроса на задачу', async ({ page }) => {

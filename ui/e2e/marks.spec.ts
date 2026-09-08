@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
+import { contractStatuses, fontsReady, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
-/** Все пять статусов контракта разом видны в заголовках столбцов доски. */
-const STATUSES = ['backlog', 'open', 'in_progress', 'done', 'cancelled'];
+/** Все статусы контракта разом видны в заголовках столбцов доски. */
+const STATUSES = contractStatuses();
 
 test.beforeEach(async ({ context }) => {
   await context.addInitScript((value) => {
@@ -48,7 +48,7 @@ test('статусы различаются формой: разница дер�
     }
   }
 
-  // Десять пар: пять статусов, каждый с каждым.
+  // Каждый с каждым: при шести статусах контракта это пятнадцать пар.
   expect(same, 'формы этих статусов совпали').toEqual([]);
 });
 

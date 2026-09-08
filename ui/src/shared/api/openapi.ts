@@ -2531,7 +2531,7 @@ export interface components {
          * @description Зашитый список статусов (`CONCEPT.md`, 3.3).
          * @enum {string}
          */
-        TaskStatus: "backlog" | "open" | "in_progress" | "done" | "cancelled";
+        TaskStatus: "backlog" | "open" | "in_progress" | "waiting" | "done" | "cancelled";
         /**
          * TaskTransition
          * @description Перевод статуса по таблице переходов.

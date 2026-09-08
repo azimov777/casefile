@@ -23,6 +23,7 @@ const STATUS_SET = {
   backlog: true,
   open: true,
   in_progress: true,
+  waiting: true,
   done: true,
   cancelled: true,
 } satisfies Record<TaskStatus, true>;
