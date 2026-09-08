@@ -38,8 +38,19 @@ from app.domain.query_language import (
     QUERY_RIGHT_SHAPE,
     QUERY_WRONG_SHAPE,
 )
-from app.domain.search import FEATURES_FIELD, searchable_names, sortable_names
-from app.domain.tasks import FIRST_CHECK_NUMBER, MAX_CHECK_LENGTH, TaskPriority, TaskStatus
+from app.domain.search import (
+    FEATURES_FIELD,
+    searchable_names,
+    selectable_names,
+    sortable_names,
+)
+from app.domain.tasks import (
+    FIRST_CHECK_NUMBER,
+    MAX_CHECK_LENGTH,
+    TaskPriority,
+    TaskStatus,
+    feature_names,
+)
 
 # --- Адресация ------------------------------------------------------------------------
 
@@ -486,16 +497,20 @@ SortArg = Annotated[
         examples=[["-updated_at"]],
     ),
 ]
+# Домен значений называется целиком и собирается из домена, а не переписывается словами:
+# описание и `details.allowed` отказа обязаны быть одним списком в одном порядке, иначе
+# агент решит, что набор зависит от вызова. Место здесь дорогое — описание `search_tasks`
+# самое длинное в установке, — поэтому названы имена и ничего больше: ни примеров
+# применения, ни советов, когда это пригодится.
 FieldsArg = Annotated[
     list[str],
     Field(
         description=(
-            "Какие поля вернуть. Ключ приходит всегда. `features` отдаёт вычисляемые "
-            "признаки строки: `blocked`, `open_questions`, `open_blocking_questions`, "
-            "`open_remarks`, "
-            "`last_summary_at` и `last_entry_at`. Пустой список означает «задачу целиком» — "
-            "проси его, "
-            "только когда действительно нужны разделы: они длинные"
+            "Какие поля вернуть: "
+            + ", ".join(f"`{name}`" for name in selectable_names())
+            + ". Ключ приходит всегда, пустой список означает «задачу целиком»: разделы "
+            "длинные. `features` приносит вычисляемые признаки строки: "
+            + ", ".join(f"`{name}`" for name in feature_names())
         )
     ),
 ]

@@ -82,6 +82,7 @@ from app.domain.search import (
     is_empty_marker,
     search_field_spec,
     searchable_names,
+    selectable_names,
     sortable_names,
     split_names,
 )
@@ -599,7 +600,7 @@ def _resolve_fields(names: Sequence[str]) -> tuple[str, ...]:
                 details={
                     "field": candidate,
                     "reason": "not_selectable",
-                    "allowed": sorted(SELECTABLE_FIELDS),
+                    "allowed": selectable_names(),
                 },
             )
         if candidate not in selected:

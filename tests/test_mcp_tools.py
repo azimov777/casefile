@@ -31,9 +31,18 @@ from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
 from app.domain.query_language import QUERY_EXAMPLES, QUERY_WRONG_SHAPE, parse_query
-from app.domain.search import Condition, Node, Operator, SearchFilter, searchable_names
+from app.domain.search import (
+    Condition,
+    Node,
+    Operator,
+    SearchFilter,
+    searchable_names,
+    selectable_names,
+)
+from app.domain.tasks import feature_names
 from app.domain.tokens import TokenScope
-from app.mcp.arguments import DEFAULT_SEARCH_FIELDS, QueryArg
+from app.mcp.arguments import DEFAULT_SEARCH_FIELDS, FieldsArg, QueryArg
+from app.mcp.views import FeaturesView
 from app.services import case as case_service
 from app.services import queues as queues_service
 from app.services import tasks as tasks_service
@@ -441,6 +450,72 @@ async def test_search_tasks_clips_a_long_text_and_says_so(
     assert item["goal_truncated"] is True
     assert item["goal_length"] == 5000
     assert whole["task"]["goal"] == long_goal
+
+
+def _fields_description() -> str:
+    """Описание аргумента `fields`, как его увидит модель, — из самого объявления."""
+    return str(FieldsArg.__metadata__[0].description)
+
+
+async def test_search_tasks_returns_the_sections_it_was_asked_for(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Обзорная проверка 1 задачи 38: разделы просят по имени, как `title` и `status`.
+
+    Отдавать их поиск умел и раньше, но узнать об этом можно было только удачной
+    догадкой: описание перечисляло поля карточки и о разделах молчало. Тест держит обе
+    половины сразу — что разделы приезжают и что описание их называет; иначе возможность
+    снова станет фольклором.
+    """
+    described = _fields_description()
+
+    async with mcp_session(task_secret) as session:
+        found = await call(session, "search_tasks", queue=["TRK"], fields=["key", "checks", "goal"])
+
+    assert found["items"] == [{"key": task.key, "goal": task.goal, "checks": task.checks}]
+    for section in ("goal", "context", "constraints", "output", "checks"):
+        assert f"`{section}`" in described, f"раздел {section} не назван в описании `fields`"
+
+
+async def test_an_unknown_field_name_is_refused_with_the_allowed_ones(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Обзорная проверка 2 задачи 38: отказ называет и промах, и весь допустимый набор.
+
+    Отказ — динамический факт вызова: что прислали и что подошло бы. Перечень в нём тот
+    же и в том же порядке, что в описании аргумента, — иначе агент решил бы, что домен
+    зависит от вызова, и стал бы выяснять его перебором.
+    """
+    async with mcp_session(task_secret) as session:
+        text = await refuse(session, "search_tasks", queue=["TRK"], fields=["key", "чеклист"])
+
+    assert "search_field_unknown" in text
+    assert '"field": "чеклист"' in text
+    assert '"reason": "not_selectable"' in text
+    for name in selectable_names():
+        assert f'"{name}"' in text, f"допустимое имя {name} не названо в отказе"
+
+
+def test_the_fields_description_names_the_whole_domain_and_stays_short() -> None:
+    """Домен `fields` берётся из контракта, а не добывается заведомо сломанным вызовом.
+
+    Перечни собраны из домена и потому совпадают с `details.allowed` отказа буквой в
+    букву. Проверяется не только их наличие, но и объём слов вокруг: описание
+    `search_tasks` — самое длинное в установке, и каждая его строка оплачена контекстом
+    каждой сессии. Двух строк прозы хватает, чтобы сказать про ключ, пустой список и
+    признаки; на примеры применения и советы, когда это пригодится, места нет.
+    """
+    described = _fields_description()
+    listed = ", ".join(f"`{name}`" for name in selectable_names())
+    features = ", ".join(f"`{name}`" for name in feature_names())
+
+    assert listed in described, "домен значений не назван целиком"
+    assert features in described, "признаки, которые приносит `features`, не названы"
+    # Признаки описаны тем же перечнем, каким приезжают: разойтись им негде.
+    assert feature_names() == list(FeaturesView.model_fields)
+
+    prose = len(described) - len(listed) - len(features)
+    assert prose <= 200, f"вокруг имён {prose} символов слов — это больше двух строк"
 
 
 # --- Изменение задачи -----------------------------------------------------------------
