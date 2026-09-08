@@ -24,10 +24,8 @@ from typing import Any
 import jsonschema
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.idempotency import IdempotencyKey
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.case import EntryType
@@ -752,51 +750,6 @@ async def test_a_repeated_create_task_answers_with_the_first_task(
     assert [item["key"] for item in found["items"]].count(first["key"]) == 1
     # Ответ короткий уже здесь: повтор отдаёт ровно то, что ушло в первый раз.
     assert set(first) == {"key", "status", "version", "entries"}
-
-
-async def test_a_repeat_of_a_call_made_before_the_answer_shrank_is_refused_by_name(
-    mcp_session: Connect, task_secret: str, db_session: AsyncSession, queue: Queue
-) -> None:
-    """Сохранённый ответ прежней формы не отдаётся дословно — и не роняет обработчик.
-
-    Ключи идемпотентности живут сутки (`app/domain/idempotency.py`, `KEY_TTL`), поэтому
-    после правки, изменившей форму ответа, в таблице сутки лежат ответы обеих форм.
-    Отдать вчерашнюю форму нельзя: инструмент объявляет форму результата, и клиент SDK
-    сверяет ответ с ней **у себя** — отданный мимо схемы, он будет отвергнут на той
-    стороне (`TRK-17`). Соседний REST в той же ситуации уже строг и падает пятисоткой.
-
-    Поэтому повтор получает названный отказ `stored_answer_outdated`, а сам сохранённый
-    ответ едет в его подробностях: работа сделана, и по ответу видно, что именно, — но
-    выдать его за нынешний контракт трекер не берётся. Второго объекта при этом не
-    появляется, и это главное, что здесь стережётся.
-    """
-    del queue
-    key = str(uuid.uuid4())
-    arguments: dict[str, Any] = {
-        "queue": "TRK",
-        "title": "Починить выдачу ключей",
-        "description": "Ключ сгорает",
-        "idempotency_key": key,
-    }
-
-    async with mcp_session(task_secret) as session:
-        short = await call(session, "create_task", **arguments)
-
-    # Подменяем сохранённый ответ на форму, в которой его записал бы вчерашний вызов.
-    old_form = {"key": short["key"], "status": "backlog", "title": "Починить выдачу ключей"}
-    await db_session.execute(
-        update(IdempotencyKey).where(IdempotencyKey.key == key).values(response=old_form)
-    )
-    await db_session.flush()
-
-    async with mcp_session(task_secret) as session:
-        failure = await refuse(session, "create_task", **arguments)
-        found = await call(session, "search_tasks", queue=["TRK"])
-
-    assert "stored_answer_outdated" in failure, failure
-    assert "create_task" in failure, "отказ обязан назвать операцию, за которой закреплён ключ"
-    assert old_form["title"] in failure, "сохранённый ответ обязан уехать в подробностях"
-    assert [item["key"] for item in found["items"]].count(short["key"]) == 1
 
 
 # --- Дело -----------------------------------------------------------------------------

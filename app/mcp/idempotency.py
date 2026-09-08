@@ -36,11 +36,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
-from pydantic import ValidationError as ModelValidationError
 from pydantic_core import to_jsonable_python
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.errors import StoredAnswerOutdatedError
 from app.services import idempotency as service
 from app.services.auth import Actor
 
@@ -102,9 +100,4 @@ class Once:
             build=encoded,
         )
         assert isinstance(stored, dict)
-        try:
-            return result.model_validate(stored)
-        except ModelValidationError as exc:
-            raise StoredAnswerOutdatedError(
-                details={"operation": self.operation, "answer": stored}
-            ) from exc
+        return result.model_validate(stored)

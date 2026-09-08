@@ -428,23 +428,6 @@ class InvalidIdempotencyKeyError(ValidationError):
     message = "Idempotency key is invalid"
 
 
-class StoredAnswerOutdatedError(ConflictError):
-    """Сохранённый ответ старше нынешнего контракта и отдан быть не может.
-
-    Ключи живут сутки (`KEY_TTL`), поэтому после правки, изменившей форму ответа, в
-    таблице сутки лежат ответы обеих форм. Ответ прежней формы недоставим: инструмент
-    объявляет форму результата, и клиент сверяет ответ с ней у себя — отданный мимо
-    схемы, он будет отвергнут на той стороне (`TRK-17`).
-
-    Отказ, а не пересборка: работа уже сделана, и второй раз её делать нельзя. В
-    `details` едет сам сохранённый ответ — по нему видно, что именно было создано, и
-    ничего не теряется.
-    """
-
-    code = "stored_answer_outdated"
-    message = "Stored answer predates the current answer shape and cannot be replayed"
-
-
 class IdempotencyKeyReusedError(ConflictError):
     """Ключ идемпотентности уже использован другим запросом.
 

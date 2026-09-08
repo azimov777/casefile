@@ -72,7 +72,6 @@
 | `link_exists` | Link already exists | Такая связь между этими задачами уже есть. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
 | `queue_key_taken` | Queue key is already taken | Ключ очереди уже занят: ключи уникальны без учёта регистра. |
-| `stored_answer_outdated` | Stored answer predates the current answer shape and cannot be replayed | Сохранённый ответ старше нынешнего контракта и отдан быть не может. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
