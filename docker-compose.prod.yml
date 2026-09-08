@@ -57,9 +57,16 @@ services:
 
   api:
     <<: *app-service
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Срок остановки — последний рубеж, а не основной механизм: поток ленты кончается
+    # сам по сигналу (`app/core/shutdown.py`). Без него остановка ждала бы закрытия
+    # соединений **без срока**, и Docker снимал бы процесс `SIGKILL` вместе с запросом,
+    # который в этот момент писал в базу.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 10
     ports:
       - "${TRACKER_PORT:-8000}:8000"
+    # Больше срока uvicorn: за десять секунд он останавливается сам, и убивать его
+    # Docker не должен.
+    stop_grace_period: 20s
     healthcheck:
       # curl в прод-образе нет намеренно: проверка идёт средствами самого Python.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -91,6 +98,8 @@ services:
       retries: 5
       start_period: 10s
     # Вызов инструмента доводится до конца по сигналу остановки: он может писать в базу.
+    # Больше `GRACEFUL_SHUTDOWN_TIMEOUT` из `app/mcp/__main__.py` (20 с): процесс
+    # останавливается сам, и до `SIGKILL` дело не доходит.
     stop_grace_period: 30s
 
   migrate:

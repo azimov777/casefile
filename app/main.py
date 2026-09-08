@@ -15,6 +15,7 @@ from app.api.router import api_router, generate_operation_id
 from app.api.routes import health
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.shutdown import shutdown
 from app.db.session import dispose_engine
 from app.db.wakeup import journal_wakeup
 
@@ -33,11 +34,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     здесь, а не при первом ожидании: ленивый подъём оставлял бы за собой соединение,
     которое некому закрыть в разовом скрипте. Не подключился — в логе строка, ожидание
     переходит на контрольный опрос; ронять из-за этого API нельзя.
+
+    Подписка на сигнал остановки ставится **здесь**, а не в самом сигнале, и это
+    единственное место, где она может стоять: uvicorn ставит свои обработчики до запуска
+    жизненного цикла, и наш встаёт поверх, вызывая прежний следом (`app/core/shutdown.py`).
+    Без неё поток ленты не кончается никогда, и сервер не останавливается вовсе.
     """
     settings: Settings = app.state.settings
     logger.info("Starting tracker %s in %s environment", __version__, settings.environment)
     await journal_wakeup.start()
-    yield
+    with shutdown.listening(on_begin=journal_wakeup.wake_all):
+        yield
     await journal_wakeup.close()
     await dispose_engine()
     logger.info("Stopping tracker")

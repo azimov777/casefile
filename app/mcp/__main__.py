@@ -15,6 +15,17 @@
 при старте он не ходит вовсе, поэтому непромигрированную базу переживает без единой
 ошибки.
 
+## Почему uvicorn поднимается здесь руками, а не `run_streamable_http_async`
+
+Ради одного: у обёртки SDK нет `timeout_graceful_shutdown`, а без него остановка ждёт
+закрытия соединений **без срока**. Соединения у MCP долгие — сессия streamable HTTP
+живёт всё время работы агента, — и на практике это означало остановку убийством: Docker
+дожидался `stop_grace_period` и слал `SIGKILL`, обрывая заодно и вызов инструмента,
+который в этот момент писал в базу.
+
+Всё остальное берётся у SDK как есть: приложение собирает `streamable_http_app`, и
+своего транспорта здесь не заводится.
+
 ## Слушателя оповещений журнала поднимает процесс, и без него ожидание молча деградирует
 
 `journal_wakeup.start()` открывает соединение `LISTEN/NOTIFY`, из-за которого
@@ -35,13 +46,23 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import uvicorn
+from starlette.applications import Starlette
+
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.shutdown import shutdown
 from app.db.session import dispose_engine
 from app.db.wakeup import journal_wakeup
 from app.mcp.server import create_server
 
 logger = get_logger("mcp")
+
+#: Сколько остановка ждёт незавершённые вызовы, прежде чем снять их. Последний рубеж, а
+#: не основной механизм: ожидание ленты кончается само по сигналу, а вызов инструмента
+#: успевает дописать. Число меньше `stop_grace_period` сервиса `mcp` в Compose (30 с) —
+#: иначе Docker убил бы процесс раньше, чем uvicorn успел остановиться сам.
+GRACEFUL_SHUTDOWN_TIMEOUT = 20.0
 
 
 @asynccontextmanager
@@ -72,16 +93,48 @@ async def run() -> None:
         settings.mcp_port,
         settings.mcp_path,
     )
+    application = _watching_shutdown(
+        server.streamable_http_app(
+            streamable_http_path=settings.mcp_path,
+            host=settings.mcp_host,
+        )
+    )
     try:
         async with journal_listener():
-            await server.run_streamable_http_async(
-                host=settings.mcp_host,
-                port=settings.mcp_port,
-                streamable_http_path=settings.mcp_path,
-            )
+            await uvicorn.Server(
+                uvicorn.Config(
+                    application,
+                    host=settings.mcp_host,
+                    port=settings.mcp_port,
+                    timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_TIMEOUT,
+                )
+            ).serve()
     finally:
         await dispose_engine()
         logger.info("MCP server stopped")
+
+
+def _watching_shutdown(application: Starlette) -> Starlette:
+    """Дописывает подписку на сигнал остановки в жизненный цикл приложения SDK.
+
+    Именно в жизненный цикл, а не рядом с `serve()`: свои обработчики uvicorn ставит
+    внутри `serve()`, и подписка, поставленная раньше, была бы им затёрта. Жизненный
+    цикл запускается уже после — там наш обработчик встаёт поверх и зовёт прежний следом
+    (`app/core/shutdown.py`).
+
+    Даёт то же, что и API: ожидание ленты (`wait_journal`) возвращается сразу по
+    сигналу, а не досиживает свой таймаут.
+    """
+    inner = application.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(scope: Starlette) -> AsyncIterator[None]:
+        with shutdown.listening(on_begin=journal_wakeup.wake_all):
+            async with inner(scope):
+                yield
+
+    application.router.lifespan_context = lifespan
+    return application
 
 
 if __name__ == "__main__":

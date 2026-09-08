@@ -46,6 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.shutdown import shutdown
 from app.db.pagination import Page, decode_sort_cursor
 from app.db.repositories import EntryRepository
 from app.db.wakeup import journal_wakeup
@@ -224,6 +225,11 @@ async def wait_journal(
             # чего-то, чего не было.
             await session.commit()
             await _sleep_until_woken(woken, min(remaining, settings.journal_wait_poll_interval))
+            if shutdown.started:
+                # Процесс останавливается. Ждать дальше некому и незачем: пустой ответ —
+                # законный исход ожидания, и звавший повторит вызов с тем же `after`.
+                logger.debug("Journal wait stopped: the process is shutting down")
+                return Page(items=[], next_cursor=None)
             # После паузы, а не до: пока цикл спал, клиент мог уйти, и следующий круг
             # начинался бы с выборки ради ответа, который никто не прочитает.
             if client_gone is not None and await client_gone():
@@ -327,11 +333,17 @@ async def stream_journal(
     journal_filter: JournalFilter,
     after: int,
 ) -> AsyncIterator[JournalMessage]:
-    """Бесконечный поток сообщений: записи по мере появления, между ними тики.
+    """Поток сообщений: записи по мере появления, между ними тики.
 
-    Останавливается только тогда, когда его перестают читать, — то есть когда клиент
-    отключился и потребитель генератора закрыл его. Снятие регистрации у слушателя идёт
-    через контекстный менеджер, поэтому случается на любом способе закончить чтение.
+    Кончается двумя способами. Первый — его перестают читать: клиент отключился и
+    потребитель генератора закрыл его. Второй — **сигнал остановки процесса**: поток
+    выходит из цикла сам, и SSE-ответ завершается обычным концом, а не обрывом.
+
+    Второй способ существует затем, что без него сервер не останавливается вовсе:
+    uvicorn ждёт закрытия соединений, а бесконечный генератор не кончается никогда
+    (`app/core/shutdown.py`, `docs/notes/docker.md`). Потерь при этом нет и клиенту
+    ничего нового знать не надо: записи постоянны, `retry:` ему уже послан, и поток,
+    переоткрытый с `Last-Event-ID`, продолжает ровно с того же места.
 
     Регистрация идёт **до** первой выборки по той же причине, что и в ожидании: запись,
     подшитая между выборкой и подпиской, иначе никого не разбудила бы, и поток простоял
@@ -342,7 +354,7 @@ async def stream_journal(
     last_sent = loop.time()
 
     async with journal_wakeup.waiting() as woken:
-        while True:
+        while not shutdown.started:
             woken.clear()
             async with sessions() as session:
                 page = await EntryRepository(session).journal_page(
@@ -364,17 +376,27 @@ async def stream_journal(
                 continue
 
             await _sleep_until_woken(woken, settings.journal_wait_poll_interval)
+            if shutdown.started:
+                # Сигнал пришёл, пока поток спал: выходим, не послав прощального кадра.
+                # Своего кадра у конца потока нет намеренно — клиент переживает обрыв по
+                # `Last-Event-ID`, и это проверено сквозными тестами интерфейса.
+                logger.debug("Journal stream closing: the process is shutting down")
+                break
             if loop.time() - last_sent >= settings.journal_stream_heartbeat_interval:
                 last_sent = loop.time()
                 yield JournalMessage(comment="ping")
 
 
 async def _sleep_until_woken(woken: asyncio.Event, seconds: float) -> None:
-    """Пауза, которую прерывает оповещение о новой записи.
+    """Пауза, которую прерывает оповещение о новой записи или сигнал остановки.
 
     Таймаут здесь — контрольный опрос, а не основной механизм: он страхует от
     оборванного соединения слушателя, из-за которого ждущий иначе молчал бы при
     наполняющемся журнале.
+
+    Отдельного ожидания сигнала остановки тут нет: подписка будит ждущих тем же
+    механизмом, что и оповещение о записи (`app/db/wakeup.py`, `wake_all`). Спящий
+    просыпается сразу, а разбираться, что именно его разбудило, — дело звавшего.
     """
     with contextlib.suppress(TimeoutError):
         await asyncio.wait_for(woken.wait(), timeout=seconds)

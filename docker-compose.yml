@@ -69,9 +69,16 @@ services:
 
   api:
     <<: *app-service
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # `--timeout-graceful-shutdown` — последний рубеж, а не основной механизм: поток
+    # ленты кончается сам по сигналу (`app/core/shutdown.py`), и ждать обычно нечего.
+    # Без него остановка ждала бы **без срока**, а `--reload` при открытом потоке
+    # вешал контур намертво (`docs/notes/docker.md`).
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --timeout-graceful-shutdown 10
     ports:
       - "${TRACKER_PORT:-8000}:8000"
+    # Больше срока uvicorn: за десять секунд он останавливается сам, и убивать его
+    # Docker не должен — вместе с процессом оборвался бы и запрос, писавший в базу.
+    stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
       interval: 10s
@@ -107,6 +114,8 @@ services:
       start_period: 10s
     # Вызов инструмента доводится до конца по сигналу остановки: он может писать в
     # базу, а оборванная посреди работы транзакция хуже лишних секунд ожидания.
+    # Больше `GRACEFUL_SHUTDOWN_TIMEOUT` из `app/mcp/__main__.py` (20 с): процесс
+    # останавливается сам, и до `SIGKILL` дело не доходит.
     stop_grace_period: 30s
 
   # Миграции — явный шаг, а не часть старта приложения: несколько реплик, применяющих

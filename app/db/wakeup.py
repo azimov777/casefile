@@ -143,6 +143,17 @@ class JournalWakeup:
         )
         await session.execute(statement)
 
+    def wake_all(self) -> None:
+        """Будит всех ждущих, не дожидаясь записи.
+
+        Второй повод разбудить, кроме оповещения: сигнал остановки процесса
+        (`app/core/shutdown.py`). Спящий проснётся, увидит взведённый признак и выйдет —
+        иначе он заметил бы остановку только на следующем круге контрольного опроса, и
+        она затянулась бы ровно на столько же.
+        """
+        for event in self._waiters:
+            event.set()
+
     def _on_notify(
         self,
         connection: object,
@@ -156,8 +167,7 @@ class JournalWakeup:
         что фильтр у каждого свой. Он полезен в отладке и в тестах: по нему видно,
         какая именно запись разбудила процесс.
         """
-        for event in self._waiters:
-            event.set()
+        self.wake_all()
 
     def _on_termination(self, connection: object) -> None:
         logger.warning(
