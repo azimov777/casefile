@@ -1,6 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from '@/shared/ui';
-import styles from './error-boundary.module.css';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -36,9 +35,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (!this.state.failed) return this.props.children;
 
     return (
-      <div className={styles.screen} role="alert">
-        <h1 className={styles.title}>Интерфейс сломался на этом месте</h1>
-        <p className={styles.text}>
+      <div
+        role="alert"
+        className="mx-auto my-8 flex max-w-168 flex-col items-start gap-3 rounded-control border border-danger-line bg-danger-soft p-6"
+      >
+        <h1 className="text-title text-danger">Интерфейс сломался на этом месте</h1>
+        {/* Тоном отказа окрашен только заголовок: объяснение — обычный текст, и цвет
+            содержания на цветной заливке назван явно, чтобы он не унаследовал тон. */}
+        <p className="text-text">
           Экран не отрисовался из-за ошибки в самом интерфейсе — данные тут ни при чём. Подробности
           ошибки лежат в консоли браузера.
         </p>

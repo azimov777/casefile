@@ -2,7 +2,6 @@ import { useId, useState, type FormEvent } from 'react';
 import { errorMessage } from '@/shared/errors';
 import { Button, Callout, Input } from '@/shared/ui';
 import { useLogin } from '../model/use-login';
-import styles from './login-form.module.css';
 
 interface LoginFormProps {
   /** Куда идти после удачного входа — знает страница, а не форма. */
@@ -24,9 +23,9 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate>
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor={inputId}>
+    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+      <div className="flex flex-col gap-2">
+        <label className="font-semibold" htmlFor={inputId}>
           Токен участника
         </label>
         <Input
@@ -40,7 +39,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           aria-describedby={hintId}
           placeholder="trk_..."
         />
-        <span className={styles.hint} id={hintId}>
+        <span className="text-meta text-muted" id={hintId}>
           Токен печатает <code>docker compose run --rm init</code> в репозитории бэкенда. Он
           хранится только в этом браузере и уходит на сервер заголовком.
         </span>
