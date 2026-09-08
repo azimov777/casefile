@@ -81,9 +81,8 @@ export function QuestionNotice({
           <button
             className={cn(
               'absolute top-1 right-1 rounded-mark border border-transparent bg-transparent',
-              // Цвет не назван: сброс уже отдаёт кнопке `color: inherit`, а `text-inherit`
-              // рядом с `text-screen` стоить будет дорого — `tailwind-merge` не знает
-              // нашей шкалы кегля, считает `text-screen` цветом и выбрасывает его молча.
+              // Цвет не назван: сброс уже отдаёт кнопке `color: inherit`, и `text-inherit`
+              // повторил бы то, что и так есть.
               'px-2 py-0 text-screen leading-[1.4]',
               // Отклик на наведение: рамка проступает цветом текста карточки.
               'transition-[border-color] duration-(--motion-fast) ease-fast',

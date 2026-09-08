@@ -1,3 +1,4 @@
+import { cn } from '@/shared/lib';
 import type { LiveStatus as LiveStatusValue } from '../model/use-live-journal';
 
 /**
@@ -47,13 +48,7 @@ export function LiveStatus({ status }: { status: LiveStatusValue }) {
 
   return (
     <span
-      /*
-       * Склейка строкой, а не `cn`: `tailwind-merge` не знает нашей шкалы кегля и
-       * считает `text-label` цветом, поэтому рядом с `text-muted` он молча выбрасывал
-       * бы его — подпись набиралась бы 13px вместо 11px, и заметить это можно только
-       * замером. Конфликтующих классов здесь всё равно нет: перебивать нечего.
-       */
-      className={`${INDICATOR} ${state.alarming ? 'text-danger' : 'text-muted'}`}
+      className={cn(INDICATOR, state.alarming ? 'text-danger' : 'text-muted')}
       role="status"
       title={state.title}
     >

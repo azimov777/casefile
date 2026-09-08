@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { X } from 'lucide-react';
+import { cn } from '@/shared/lib';
 import { Button, Select } from '@/shared/ui';
 import { TASK_SORTS, type TaskFilters } from '../model/filters';
 import { useFiltersExpanded } from '../model/expanded';
@@ -395,18 +396,13 @@ function DraftField({
       <div className="relative block">
         <input
           id={inputId}
-          /*
-           * Строка собрана шаблоном, а не `cn`: `tailwind-merge` считает `text-body`
-           * и `text-text` спором за одно свойство и выкидывает первый из них — кегль
-           * поля молча стал бы наследуемым. Спорить здесь нечему и без него: цвет
-           * границы выбран ветвлением, а не наложением двух классов.
-           */
-          className={`w-full min-w-40 rounded-mark border bg-surface px-2 py-1 text-body text-text ${
+          className={cn(
+            'w-full min-w-40 rounded-mark border bg-surface px-2 py-1 text-body text-text',
             pending
               ? // Черновик поля: напечатано, но в адрес ещё не уехало.
                 'border-attention-line shadow-[inset_3px_0_0_var(--color-attention-line)]'
-              : 'border-line-strong'
-          }`}
+              : 'border-line-strong',
+          )}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
