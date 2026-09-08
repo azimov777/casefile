@@ -9,6 +9,7 @@ import {
   entryQueryOptions,
   type EntryHeading,
 } from '@/entities/entry';
+import { cn } from '@/shared/lib';
 import { Button, QueryState, RelativeTime, TaskText } from '@/shared/ui';
 
 interface TaskIndexProps {
@@ -45,9 +46,6 @@ const LONG_INDEX = 12;
  * Цвет назван стороной (`border-b-line`, а не `border-line`): `border-line` красит все
  * четыре стороны, и три из них перестали бы быть `currentColor`. Ширина у них нулевая,
  * на экране этого не видно — а в вычисленном стиле видно, и замер это ловит.
- *
- * Склеивается набор строкой, а не `cn`: `twMerge` считает `text-meta` и `text-muted`
- * одной группой и оставил бы из них последний — кегль служебной ячейки пропал бы молча.
  */
 const CELL = 'border-b border-b-line px-3 py-2 text-left align-top';
 
@@ -133,7 +131,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
                 <th
                   key={column}
                   scope="col"
-                  className={`${CELL} text-meta font-semibold whitespace-nowrap text-muted`}
+                  className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
                 >
                   {column}
                 </th>
@@ -173,7 +171,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
   const row = useRef<HTMLTableRowElement>(null);
   const headline = entryHeadline(heading.type, heading.facts, taskKey);
   /* Раскрытая строка утоплена заливкой и так читается вместе со своим телом ниже. */
-  const cell = open ? `${CELL} bg-sunken` : CELL;
+  const cell = open ? cn(CELL, 'bg-sunken') : CELL;
 
   useEffect(() => {
     if (!scrollTo) return;
@@ -186,7 +184,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
       <tr ref={row}>
         {/* Ширина в 1% сжимает колонку номера по содержимому: остаток ширины таблицы
             забирает заголовок, самая длинная ячейка строки. */}
-        <th scope="row" className={`${cell} w-[1%] font-mono text-muted`}>
+        <th scope="row" className={cn(cell, 'w-[1%] font-mono text-muted')}>
           {heading.no}
         </th>
         <td className={cell}>
@@ -197,7 +195,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
         <td className={cell}>
           <AuthorName author={heading.author} />
         </td>
-        <td className={`${cell} whitespace-nowrap text-muted`}>
+        <td className={cn(cell, 'whitespace-nowrap text-muted')}>
           <RelativeTime value={heading.created_at} />
         </td>
         <td className={cell}>
@@ -235,7 +233,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
 
       {open ? (
         <tr>
-          <td className={`${CELL} bg-sunken`} colSpan={5}>
+          <td className={cn(CELL, 'bg-sunken')} colSpan={5}>
             <EntryDetails taskKey={taskKey} no={heading.no} checks={checks} title={heading.title} />
           </td>
         </tr>
