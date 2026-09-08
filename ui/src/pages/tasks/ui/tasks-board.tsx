@@ -1,6 +1,6 @@
 import { StatusMark, TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
 import { Button } from '@/shared/ui';
-import styles from './tasks-board.module.css';
+import { cn } from '@/shared/lib';
 
 interface TasksBoardProps {
   tasks: Task[];
@@ -41,8 +41,8 @@ export function TasksBoard({
   }
 
   return (
-    <div className={styles.board}>
-      <div className={styles.columns}>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-start gap-3 overflow-x-auto pb-2">
         {TASK_STATUSES.map((status) => {
           const column = byStatus.get(status) ?? [];
           const open = !collapsed.includes(status);
@@ -50,22 +50,52 @@ export function TasksBoard({
           return (
             <section
               key={status}
-              className={`${styles.column} ${open ? '' : styles.collapsed} ${
-                column.length === 0 ? styles.dim : ''
-              }`}
+              /*
+               * `relative` — точка отсчёта для абсолютных потомков, прежде всего для
+               * `sr-only` спанов, которыми знак статуса называет свой род диктору.
+               * Абсолютного потомка обрезает прокручиваемый предок только тогда, когда
+               * тот стоит в его цепочке содержащих блоков; пока столбец позиционирован
+               * не был, содержащим блоком таких спанов оказывалось окно: доска их не
+               * обрезала, и они растягивали документ — с шестым столбцом (UI-40)
+               * страница на 1440 px поехала вбок на 103 px вместе с боковой панелью
+               * и шапкой. `contain: paint` чинит симптом, но заводит контекст наложения
+               * и обрезает тени, поэтому лечится цепочка.
+               *
+               * Ширина задана и не делится между столбцами: при `flex: 1 1 16rem`
+               * раскрытие одного столбца сужало все остальные (замерено: 265 → 190 px),
+               * и карточки в столбце, который человек в этот момент читал, переносили
+               * текст по-другому. Не влезли — ряд столбцов прокручивается вбок.
+               */
+              className={cn(
+                'relative flex w-(--ui-board-column) shrink-0 basis-(--ui-board-column) flex-col gap-2 rounded-control border border-line bg-sunken p-3',
+                /*
+                 * Свёрнутый и пустой столбец остаётся столбцом той же ширины (решение
+                 * Д19): раньше он превращался в пилюлю по ширине содержимого, и ряд
+                 * читался как набор разных вещей — `backlog 0`, `done 32`, `cancelled 0`.
+                 * Гаснет он не прозрачностью, а отсутствием заливки: `opacity` смешивает
+                 * текст с фоном и роняет контраст (`docs/notes/ui.md`).
+                 */
+                (!open || column.length === 0) && 'border-dashed bg-transparent',
+              )}
               aria-label={status}
             >
-              <h3 className={styles.head}>
+              <h3 className="text-body">
                 <button
                   type="button"
-                  className={styles.toggle}
+                  /*
+                   * Знак раскрытия рисуется псевдоэлементом, а не узлом разметки: это
+                   * оформление кнопки, и диктору его читать незачем — состояние он берёт
+                   * из `aria-expanded`. Границы и заливки у кнопки нет вовсе, но названы
+                   * они явно: без этого браузер рисует свои `ButtonBorder` и `ButtonFace`.
+                   */
+                  className="flex w-full items-baseline gap-2 border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▾'] aria-[expanded=false]:before:content-['▸']"
                   aria-expanded={open}
                   onClick={() => onToggle(status, !open)}
                 >
                   {/* Тот же знак, что в списке и на карточке: где бы человек ни
                       увидел `in_progress`, это один и тот же полукруг (решение Д20). */}
-                  <StatusMark status={status} className={styles.status} />
-                  <span className={styles.count}>
+                  <StatusMark status={status} className="font-mono" />
+                  <span className="text-meta whitespace-nowrap text-muted">
                     {/* «из ?»: сколько задач в статусе всего, знает только дочитанная
                         до конца выдача — врать точным числом до этого нельзя. */}
                     {hasMore ? `${column.length} из ?` : column.length}
@@ -75,9 +105,9 @@ export function TasksBoard({
 
               {open ? (
                 column.length === 0 ? (
-                  <p className={styles.empty}>Пусто</p>
+                  <p className="text-meta text-muted italic">Пусто</p>
                 ) : (
-                  <ul className={styles.cards}>
+                  <ul className="flex list-none flex-col gap-2 p-0">
                     {column.map((task) => (
                       <li key={task.key}>
                         <TaskCard task={task} />
@@ -91,18 +121,18 @@ export function TasksBoard({
         })}
       </div>
 
-      <div className={styles.paging}>
+      <div className="flex flex-wrap items-center gap-3">
         {hasMore ? (
           <>
             <Button onClick={onMore} disabled={loadingMore}>
               {loadingMore ? 'Читаем…' : 'Ещё'}
             </Button>
-            <span className={styles.note}>
+            <span className="text-label text-muted">
               Показаны не все задачи отбора: столбцы дочитываются по кнопке.
             </span>
           </>
         ) : (
-          <span className={styles.note}>Показаны все задачи отбора: {tasks.length}.</span>
+          <span className="text-label text-muted">Показаны все задачи отбора: {tasks.length}.</span>
         )}
       </div>
     </div>

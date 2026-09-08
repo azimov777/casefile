@@ -767,7 +767,7 @@ Preflight от Tailwind не подключается вовсе — у прое
 **Как правильно:** замерять не на глаз, а перечислением: элементы, у которых
 `getBoundingClientRect().right` больше `documentElement.clientWidth`. Затем каждому —
 `min-width: 0` и, если содержимое чужое, усечение.
-**Где:** `src/pages/tasks/ui/tasks-page.module.css` (`.filters`),
+**Где:** `src/pages/tasks/ui/tasks-page.tsx` (`min-w-0 grow basis-96` у колонки отбора),
 `src/app/layouts/app-topbar.tsx`, `src/shared/ui/select.tsx`.
 
 ## Высота полосы задаётся минимумом, а не значением
@@ -952,8 +952,8 @@ Preflight от Tailwind не подключается вовсе — у прое
 `position: relative`. Проверять не по элементам внутри, а по документу целиком:
 `document.documentElement.scrollWidth - clientWidth` должно быть нулём, пока сам
 прокручиваемый блок показывает ненулевую прокрутку.
-**Где:** `src/pages/tasks/ui/tasks-board.module.css`; проверка — «доска прокручивается
-внутри себя, а не уводит вбок страницу» в `e2e/board.spec.ts`.
+**Где:** `src/pages/tasks/ui/tasks-board.tsx` (`relative` у столбца); проверка — «доска
+прокручивается внутри себя, а не уводит вбок страницу» в `e2e/board.spec.ts`.
 
 ## Утилита размера на чужой иконке — не смешение слоёв
 
