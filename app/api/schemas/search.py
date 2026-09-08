@@ -48,9 +48,10 @@ from app.domain.search import (
     MAX_VALUES_PER_CONDITION,
     Operator,
     searchable_names,
+    selectable_names,
     sortable_names,
 )
-from app.domain.tasks import TaskPriority, TaskStatus
+from app.domain.tasks import TaskPriority, TaskStatus, feature_names
 from app.services.search import FoundTask, SearchOutcome, StructuredTerm
 
 _QUERY_DESCRIPTION = (
@@ -75,12 +76,13 @@ _SORT_DESCRIPTION = (
     "tie-broken by task id, so paging stays stable while tasks are being created"
 )
 _FIELDS_DESCRIPTION = (
-    "Fields to return, to keep the answer small. Omit for the whole task, computed "
-    "features included. The task key is always included. `features` is picked as a "
-    "whole and brings `blocked`, `open_questions`, `open_blocking_questions`, "
-    "`open_remarks` and `last_summary_at`; a single feature is not a field of the "
-    "answer, and asking for one answers 422 `search_field_unknown` with the selectable "
-    "names"
+    "Fields to return, to keep the answer small: "
+    + ", ".join(f"`{name}`" for name in selectable_names())
+    + ". Omit for the whole task, computed features included. The task key is always "
+    "included. `features` is picked as a whole and brings "
+    + ", ".join(f"`{name}`" for name in feature_names())
+    + "; a single feature is not a field of the answer, and asking for one answers 422 "
+    "`search_field_unknown` with the selectable names"
 )
 QueryParam = Annotated[
     str | None,

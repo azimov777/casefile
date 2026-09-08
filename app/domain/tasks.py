@@ -29,6 +29,7 @@ FastAPI, и правило, записанное только в схеме, д�
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -852,3 +853,13 @@ class TaskFeatures:
     #: с другой стороны, и задача, которой никто не касался, выглядела бы живой.
     #: Пусто, пока агент в дело ничего не писал — у свежей задачи там только `created`.
     last_entry_at: datetime | None
+
+
+def feature_names() -> list[str]:
+    """Что приносит с собой `features`: признаки выбираются целиком, одним именем.
+
+    Перечень выводится из полей самого датакласса, а не переписывается в описания
+    инструмента и параметра запроса: вписанный руками, он уже разошёлся — в описании
+    REST не хватало `last_entry_at`, и признак существовал, о котором нигде не сказано.
+    """
+    return [field.name for field in dataclass_fields(TaskFeatures)]
