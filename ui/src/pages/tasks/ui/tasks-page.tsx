@@ -13,7 +13,6 @@ import { type Page } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { TasksBoard } from './tasks-board';
 import { TasksTable } from './tasks-table';
-import styles from './tasks-page.module.css';
 
 /**
  * Список задач в двух режимах: таблицей и доской по столбцам статусов. Данные у них
@@ -62,7 +61,7 @@ export function TasksPage() {
     : (page?.items.length ?? null);
 
   return (
-    <main className={styles.screen}>
+    <main className="flex flex-col gap-3">
       {/*
        * Живой поток не перестраивает список сам: он копит изменения и предлагает их
        * полосой. Полоса стоит вне потока вёрстки — строки от её появления не двигаются.
@@ -73,9 +72,12 @@ export function TasksPage() {
        * Заголовок, отбор и переключатель режима — одной строкой. Тремя блоками друг
        * под другом они уводили первую строку таблицы на 415-й пиксель: из двадцати
        * одной задачи на экране оставалось семь.
+       *
+       * Выравнивание по верху, а не по центру: развёрнутая форма растёт вниз внутри
+       * своей колонки и не тянет за собой заголовок с переключателем.
        */}
-      <div className={styles.top}>
-        <h1 className={styles.heading}>
+      <div className="flex flex-wrap items-start gap-3">
+        <h1 className="flex items-baseline gap-2 text-screen leading-[1.9]">
           Задачи
           {/*
            * Число выдачи стоит здесь, а не полосой над таблицей. Из имени заголовка оно
@@ -83,12 +85,19 @@ export function TasksPage() {
            * а «Задачи 21» вместо «Задачи» ломало бы навигацию по заголовкам.
            */}
           {shown === null ? null : (
-            <span className={styles.count} aria-hidden="true">
+            <span className="text-label font-normal text-muted" aria-hidden="true">
               {shown}
             </span>
           )}
         </h1>
-        <div className={styles.filters}>
+        {/*
+         * Колонка отбора занимает всё, что осталось от заголовка, но не меньше 24rem
+         * (`basis-96`). `min-w-0` обязателен: без него элемент гибкой раскладки не
+         * сжимается меньше своего содержимого, и при увеличенном вдвое тексте основа
+         * в 24rem становится шире узкого экрана — строка условий расширяет документ
+         * вместо того, чтобы перенестись.
+         */}
+        <div className="min-w-0 grow basis-96">
           <TaskFiltersForm filters={filters} onApply={apply} onReset={reset} problem={problem} />
         </div>
       </div>
@@ -129,7 +138,7 @@ export function TasksPage() {
           />
         )
       ) : page === null ? null : page.items.length === 0 ? (
-        <div className={styles.empty}>
+        <div className="flex flex-wrap items-center gap-3">
           <Callout>Задач по этим условиям нет</Callout>
           <Button tone="quiet" onClick={reset} disabled={!hasConditions(filters)}>
             Сбросить фильтры
@@ -139,14 +148,16 @@ export function TasksPage() {
         <>
           <TasksTable tasks={page.items} stale={list.isFetching || problem !== null} />
 
-          <div className={styles.paging}>
+          <div className="flex items-center gap-3">
             {hasMore ? <Button onClick={() => goToPage(cursor)}>Ещё</Button> : null}
             {filters.cursor === '' ? null : (
               <Button tone="quiet" onClick={() => apply({})}>
                 В начало списка
               </Button>
             )}
-            {hasMore ? null : <span className={styles.end}>Это последняя страница.</span>}
+            {hasMore ? null : (
+              <span className="text-label text-muted">Это последняя страница.</span>
+            )}
           </div>
         </>
       )}
