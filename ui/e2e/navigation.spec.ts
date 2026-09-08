@@ -77,7 +77,7 @@ test('номер записи вне отбора по типу объясняе
 
   await page.getByRole('button', { name: 'Показать все типы' }).click();
   // Точное совпадение: `DEMO-1#1` иначе находит и `DEMO-1#10`, и остальные.
-  await expect(page.getByLabel('DEMO-1#1', { exact: true })).toHaveClass(/highlighted/);
+  await expect(page.getByLabel('DEMO-1#1', { exact: true })).toHaveAttribute('data-highlighted');
 });
 
 test('номер записи, которой в деле нет, объясняется по-русски', async ({ page }) => {

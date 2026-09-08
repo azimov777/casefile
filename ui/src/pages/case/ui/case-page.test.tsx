@@ -235,7 +235,7 @@ describe('дело лентой', () => {
     renderApp('/tasks/DEMO-1/case?entry=15');
 
     const target = await screen.findByLabelText('DEMO-1#15');
-    expect(target.className).toMatch(/highlighted/);
+    expect(target).toHaveAttribute('data-highlighted');
 
     // Двух запросов хватило: первая страница дела и окно, начатое за пять записей
     // до названной. Тел с шестой по десятую в этих ответах нет вовсе.
@@ -274,7 +274,7 @@ describe('дело лентой', () => {
     // Последняя запись всего дела известна из описи пакета задачи: ждать, пока лента
     // дочитается до конца, чтобы узнать её номер, не приходится.
     const last = await screen.findByLabelText(`DEMO-1#${all.length}`);
-    expect(last.className).toMatch(/highlighted/);
+    expect(last).toHaveAttribute('data-highlighted');
   });
 
   it('запись вне отбора по типу объясняется словами и отбор можно сбросить', async () => {
@@ -290,7 +290,7 @@ describe('дело лентой', () => {
     await user.click(screen.getByRole('button', { name: 'Показать все типы' }));
 
     const target = await screen.findByLabelText('DEMO-1#4');
-    expect(target.className).toMatch(/highlighted/);
+    expect(target).toHaveAttribute('data-highlighted');
     expect(screen.queryByText(/не попадает в отбор по типу/)).not.toBeInTheDocument();
   });
 
@@ -311,8 +311,8 @@ describe('дело лентой', () => {
     const questionCard = await screen.findByLabelText('DEMO-1#3');
     const answerCard = within(questionCard).getByLabelText('DEMO-1#4');
     // Помечен именно ответ, а не вопрос, внутри которого он показан.
-    expect(answerCard.className).toMatch(/highlighted/);
-    expect(questionCard.className).not.toMatch(/highlighted/);
+    expect(answerCard).toHaveAttribute('data-highlighted');
+    expect(questionCard).not.toHaveAttribute('data-highlighted');
   });
 
   it('адрес с номером записи подсвечивает названную запись', async () => {
@@ -323,7 +323,7 @@ describe('дело лентой', () => {
     renderApp('/tasks/DEMO-1/case?entry=4');
 
     const target = await screen.findByLabelText('DEMO-1#4');
-    expect(target.className).toMatch(/highlighted/);
-    expect(screen.getByLabelText('DEMO-1#5').className).not.toMatch(/highlighted/);
+    expect(target).toHaveAttribute('data-highlighted');
+    expect(screen.getByLabelText('DEMO-1#5')).not.toHaveAttribute('data-highlighted');
   });
 });
