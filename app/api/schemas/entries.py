@@ -12,6 +12,11 @@
 `finding`, `artifact`, `note` и служебной `created` нагрузки нет, и шесть одинаковых
 моделей отличались бы только строкой разметки.
 
+Тем же способом и по той же причине размечены **факты строки описи** (`EntryFactsRead`):
+форма зависит от типа записи, и один объект со всеми полями всех типов описывал бы не
+данные, а их объединение. Разница в том, где стоит разметка: у записи её несёт сама
+запись, у фактов — они сами, потому что `facts` путешествует отдельным значением.
+
 ## Что принимается в запросе
 
 Подшить можно только запись агента: служебные типы (`status_changed`, `link_added`,
@@ -56,108 +61,158 @@ _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the p
 _NO_DESCRIPTION = "Number inside the task, from 1; `TRK-42#12`"
 
 
-class EntryFactsRead(BaseModel):
-    """Факты записи, которыми её называют строкой, не читая тела.
+# --- Факты строки описи ---------------------------------------------------------------
 
-    Заполнены по типу записи, все части необязательны и все ограничены по длине самим
-    контрактом: значения перечислений, ключи, имена полей и участников, номера,
-    признаки да/нет. Свободного текста здесь нет — ни причины перехода, ни значений
-    разделов, ни тел записей; за ними идут в саму запись.
 
-    Нужны они там, где заголовок собирает трекер и собирает по-английски: клиент строит
-    свою строку по фактам, а не разбирает чужую фразу регуляркой. У записей агента и
-    человека заполненных фактов нет — их заголовок пишет автор.
-
-    Незаполненные части едут в ответе как `null`, хотя это и дороже: строка описи
-    весит 339 байт вместо 102. Причина в генерации клиента — `@model_serializer`,
-    отбрасывающий пустое, заменяет схему сериализации на «словарь чего угодно», и
-    `EntryFactsRead` приезжает во фронтенд как `Record<string, unknown>`. Типизированный
-    клиент — то, ради чего схема вообще выгружается, и двести байт на строку его не
-    стоят (`docs/notes/api.md`).
-    """
+class _EntryFactsBase(BaseModel):
+    """Общее у всех форм фактов: разбор из объекта домена. В OpenAPI не появляется."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    from_status: TaskStatus | None = Field(
-        default=None, description="`status_changed`: status before the move"
-    )
-    to_status: TaskStatus | None = Field(
-        default=None, description="`status_changed`: status after the move"
-    )
+
+class NoFactsRead(_EntryFactsBase):
+    """Фактов нет: заголовок записи пишет её автор, и он осмыслен сам по себе."""
+
+    type: Literal[
+        EntryType.SUMMARY,
+        EntryType.DECISION,
+        EntryType.ATTEMPT,
+        EntryType.FINDING,
+        EntryType.ARTIFACT,
+        EntryType.REMARK,
+        EntryType.NOTE,
+        EntryType.CREATED,
+    ]
+
+
+class StatusChangedFactsRead(_EntryFactsBase):
+    """Переход статуса: оба конца и был ли назван повод."""
+
+    type: Literal[EntryType.STATUS_CHANGED]
+    from_status: TaskStatus | None = Field(default=None, description="Status before the move")
+    to_status: TaskStatus | None = Field(default=None, description="Status after the move")
     has_reason: bool | None = Field(
         default=None,
         description=(
-            "`status_changed`: whether a reason was given. The reason itself is free "
-            "text and stays in the entry body"
+            "Whether a reason was given. The reason itself is free text and stays in the entry body"
         ),
     )
-    field: TaskField | None = Field(
-        default=None,
-        description=(
-            "`section_changed` and `field_changed`: which field was edited. Values are "
-            "not here: a section can be as long as the task itself"
-        ),
-    )
-    link_kind: LinkKind | None = Field(
-        default=None, description="`link_added` and `link_removed`: kind of the link"
-    )
-    other_key: str | None = Field(
-        default=None,
-        examples=["TRK-7"],
-        description="`link_added` and `link_removed`: the task on the other side",
-    )
-    assignee_from: str | None = Field(
-        default=None, description="`assignee_changed`: assignee before, null if there was none"
-    )
-    assignee_to: str | None = Field(
-        default=None, description="`assignee_changed`: assignee after, null if unassigned"
-    )
-    addressees: list[str] | None = Field(
-        default=None, description=f"`question`: who is asked, at most {MAX_ADDRESSEES} names"
-    )
-    blocking: bool | None = Field(
-        default=None, description="`question`: whether the question holds the work"
-    )
-    question_no: int | None = Field(
-        default=None, examples=[7], description="`answer`: number of the question answered"
-    )
+
+
+class SectionChangedFactsRead(_EntryFactsBase):
+    """Правка задания: какой раздел. Значения не здесь — раздел бывает длиннее задачи."""
+
+    type: Literal[EntryType.SECTION_CHANGED]
+    field: TaskField | None = Field(default=None, description="Which section was edited")
     check_no: int | None = Field(
         default=None,
         examples=[3],
         description=(
-            "`verdict`: number of the review check. `section_changed`: which check was "
-            "reworded, when the edit was a point one rather than a whole-list replacement"
+            "Which check was reworded, for a point edit of `checks`. Absent when the "
+            "whole list was replaced"
         ),
     )
-    remark_no: int | None = Field(
-        default=None, examples=[None], description="`resolution`: the remark it resolves"
+
+
+class FieldChangedFactsRead(_EntryFactsBase):
+    """Правка обвязки: какое поле. Значения не здесь, они в самой записи."""
+
+    type: Literal[EntryType.FIELD_CHANGED]
+    field: TaskField | None = Field(default=None, description="Which field was edited")
+
+
+class AssigneeChangedFactsRead(_EntryFactsBase):
+    """Смена исполнителя: имена участников коротки и видны прямо в описи."""
+
+    type: Literal[EntryType.ASSIGNEE_CHANGED]
+    assignee_from: str | None = Field(
+        default=None, description="Assignee before, null if there was none"
     )
-    remark_outcome: RemarkOutcome | None = Field(
-        default=None,
-        examples=[None],
-        description="`resolution`: how the remark was resolved",
+    assignee_to: str | None = Field(default=None, description="Assignee after, null if unassigned")
+
+
+class LinkFactsRead(_EntryFactsBase):
+    """Связь появилась или снята: её вид и вторая сторона."""
+
+    type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
+    link_kind: LinkKind | None = Field(default=None, description="Kind of the link")
+    other_key: str | None = Field(
+        default=None, examples=["TRK-7"], description="The task on the other side"
     )
-    continuation_key: str | None = Field(
-        default=None,
-        examples=[None],
-        description=(
-            "`resolution`: key of the task the work moved to; set only when the outcome "
-            "is `accepted`"
-        ),
+
+
+class QuestionFactsRead(_EntryFactsBase):
+    """Вопрос: кому адресован и держит ли работу."""
+
+    type: Literal[EntryType.QUESTION]
+    addressees: list[str] | None = Field(
+        default=None, description=f"Who is asked, at most {MAX_ADDRESSEES} names"
     )
-    outcome: VerdictOutcome | None = Field(
-        default=None, description="`verdict`: how the check ended"
+    blocking: bool | None = Field(default=None, description="Whether the question holds the work")
+
+
+class AnswerFactsRead(_EntryFactsBase):
+    """Ответ: на какой вопрос той же задачи."""
+
+    type: Literal[EntryType.ANSWER]
+    question_no: int | None = Field(
+        default=None, examples=[7], description="Number of the question answered"
     )
+
+
+class VerdictFactsRead(_EntryFactsBase):
+    """Вердикт: какая обзорная проверка, чем кончилась и не переписали ли её после."""
+
+    type: Literal[EntryType.VERDICT]
+    check_no: int | None = Field(
+        default=None, examples=[3], description="Number of the review check"
+    )
+    outcome: VerdictOutcome | None = Field(default=None, description="How the check ended")
     outdated: bool | None = Field(
         default=None,
         examples=[False],
         description=(
-            "`verdict`: whether the check was reworded after this verdict was filed. A "
-            "verdict points at a check by **number**, not by text, so an outdated one "
-            "reads as «check 3 passed» while what passed was its previous wording. The "
-            "record itself is never touched: this is computed when the case is read"
+            "Whether the check was reworded after this verdict was filed. A verdict "
+            "points at a check by **number**, not by text, so an outdated one reads as "
+            "«check 3 passed» while what passed was its previous wording. The record "
+            "itself is never touched: this is computed when the case is read"
         ),
     )
+
+
+class ResolutionFactsRead(_EntryFactsBase):
+    """Резолюция: какое замечание разобрано, чем и куда ушла работа."""
+
+    type: Literal[EntryType.RESOLUTION]
+    remark_no: int | None = Field(default=None, examples=[7], description="The remark it resolves")
+    outcome: RemarkOutcome | None = Field(default=None, description="How the remark was resolved")
+    continuation_key: str | None = Field(
+        default=None,
+        examples=[None],
+        description=("Key of the task the work moved to; set only when the outcome is `accepted`"),
+    )
+
+
+# Состав полей каждой формы объявлен схемой, а не угадывается по тому, какие ключи
+# пришли непустыми. Разметка повторяет `type` строки описи, и это осознанная плата за
+# то, чтобы `facts` читался сам по себе: клиент принимает его отдельным значением — и из
+# описи, и собранным из нагрузки записи ленты. Плата — от 17 до 28 байт на запись;
+# прежняя форма, один объект со всеми полями всех типов, стоила 339 байт на строку
+# вместо ста (`docs/notes/api.md`).
+type EntryFactsRead = Annotated[
+    NoFactsRead
+    | StatusChangedFactsRead
+    | SectionChangedFactsRead
+    | FieldChangedFactsRead
+    | AssigneeChangedFactsRead
+    | LinkFactsRead
+    | QuestionFactsRead
+    | AnswerFactsRead
+    | VerdictFactsRead
+    | ResolutionFactsRead,
+    Field(discriminator="type"),
+]
+"""Факты записи: размеченное по `type` объединение всех форм."""
 
 
 class EntryHeadingRead(BaseModel):
@@ -173,8 +228,9 @@ class EntryHeadingRead(BaseModel):
     facts: EntryFactsRead = Field(
         description=(
             "Length-bounded facts of the entry: enough to name it in any language "
-            "without reading the English title the tracker builds. Empty for entries "
-            "whose title is written by their author"
+            "without reading the English title the tracker builds. Which fields there "
+            "are follows from `type`; entries whose title is written by their author "
+            "have none"
         )
     )
 
@@ -339,20 +395,21 @@ class SectionChangedPayload(BaseModel):
 class FieldChangedPayload(BaseModel):
     """Правка обвязки задачи: «было» и «стало» целиком.
 
-    Отдельно от `SectionChangedPayload`, хотя поля те же: там правка задания и только
+    Отдельно от `SectionChangedPayload`, хотя поля похожи: там правка задания и только
     в `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на
     оба случая означала бы «section» у приоритета.
+
+    Значения — строки, а не «строка либо список»: список остался здесь от снятых меток
+    (TRK-18), ни одно сегодняшнее поле обвязки списком не является, и записей со списком
+    в базе нет ни одной. Пока объединение было плоским, оно только расширяло тип «на
+    всякий случай»; появится поле-список — у него будет своя форма, а не общая на всех.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     field: str = Field(examples=["priority"])
-    before: str | list[str] | None = Field(
-        default=None, description="Previous value; a list if the field holds a list"
-    )
-    after: str | list[str] | None = Field(
-        default=None, description="New value; a list if the field holds a list"
-    )
+    before: str | None = Field(default=None, description="Previous value")
+    after: str | None = Field(default=None, description="New value")
 
 
 class AssigneeChangedPayload(BaseModel):
@@ -468,12 +525,7 @@ class SectionChangedEntryRead(_EntryReadBase):
 
 
 class FieldChangedEntryRead(_EntryReadBase):
-    """Служебная запись о правке обвязки: сегодня это только `priority`.
-
-    Список в `before` и `after` при этом остаётся допустимым видом значения, хотя ни одно
-    сегодняшнее поле обвязки списком не является: записи дела неизменяемы и постоянны
-    (`CONCEPT.md`, 4.1), и сузить схему значило бы перестать читать то, что уже подшито.
-    """
+    """Служебная запись о правке обвязки: сегодня это только `priority`."""
 
     type: Literal[EntryType.FIELD_CHANGED]
     payload: FieldChangedPayload

@@ -45,7 +45,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from app.domain.authors import Author
 from app.domain.errors import EntryFieldsInvalidError, InvalidTaskKeyError
@@ -189,51 +189,181 @@ def format_entry_ref(task_key: str, no: int) -> str:
     return f"{task_key}{ENTRY_REF_SEPARATOR}{no}"
 
 
+# --- Факты записи ---------------------------------------------------------------------
+#
+# Факты — то, чем запись называют строкой, не читая тела: значения перечислений, ключи,
+# имена полей и участников, номера и признаки да/нет. Свободного текста тут не бывает и
+# быть не должно — ни причины перехода, ни значений разделов, ни тел. Опись входит в
+# каждый пакет задачи, и её дешевизна держится ровно на этом.
+#
+# Форма фактов зависит от типа записи, поэтому они объявлены **размеченным
+# объединением**, а не одним объектом со всеми полями всех типов. Одним объектом это и
+# было: шестнадцать полей, из которых у любой записи заполнено одно-три, а остальные
+# ехали как `null` — строка описи весила 339 байт вместо ста. Хуже цены было то, что
+# состав фактов каждого типа нигде не назывался: читающий узнавал его из того, какие
+# ключи пришли непустыми, то есть из побочного эффекта сериализации.
+#
+# Разметка — `type`, тот же тип записи. Он повторяет `type` строки описи, и это
+# осознанная плата: без него `facts` нельзя истолковать, не заглянув в соседнее поле, а
+# значение путешествует отдельно от строки — его отдельно принимает сборка заголовка в
+# интерфейсе. Варианты сгруппированы по форме, а не по типам: у восьми типов фактов нет
+# вовсе, и восемь одинаково пустых моделей отличались бы только строкой разметки.
+
+
 @dataclass(frozen=True, slots=True)
-class EntryFacts:
-    """Факты записи, которыми её можно назвать строкой, не читая тела.
+class NoFacts:
+    """Фактов нет: заголовок записи пишет её автор, и он осмыслен сам по себе.
 
-    Здесь только то, что ограничено по длине самим контрактом: значения перечислений,
-    ключи, имена полей и участников, номера и признаки да/нет. Свободного текста тут
-    не бывает и быть не должно — ни причины перехода, ни значений разделов, ни тел.
-    Опись входит в каждый пакет задачи, и её дешевизна держится ровно на этом.
-
-    Заполнена по типу записи: у `status_changed` своё, у ссылок своё, у записей агента
-    и человека — пусто, потому что их заголовок пишет автор и он осмыслен сам по себе.
+    Тип всё равно назван — иначе объединение не размечено, и «фактов нет» стало бы
+    неотличимо от «факты не приехали».
     """
 
-    #: `status_changed`: откуда, куда и была ли причина. Сама причина — в теле записи.
+    type: EntryType
+
+
+@dataclass(frozen=True, slots=True)
+class StatusChangedFacts:
+    """`status_changed`: откуда, куда и была ли причина. Сама причина — в теле записи."""
+
+    type: Literal[EntryType.STATUS_CHANGED] = EntryType.STATUS_CHANGED
     from_status: TaskStatus | None = None
     to_status: TaskStatus | None = None
     has_reason: bool | None = None
-    #: `section_changed` и `field_changed`: какое поле правили. Значения — в теле.
+
+
+@dataclass(frozen=True, slots=True)
+class SectionChangedFacts:
+    """`section_changed`: какой раздел правили. Значения — в записи, они бывают длинными.
+
+    `check_no` стоит у точечной правки проверки и отсутствует у правки списка целиком:
+    различать их надо именно здесь, они задевают разные вердикты
+    (`mark_outdated_verdicts`).
+    """
+
+    type: Literal[EntryType.SECTION_CHANGED] = EntryType.SECTION_CHANGED
     field: TaskField | None = None
-    #: `link_added` и `link_removed`: чем задача стала другой и какой.
-    link_kind: LinkKind | None = None
-    other_key: str | None = None
-    #: `assignee_changed`: имена участников коротки, поэтому их видно прямо в описи.
+    check_no: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FieldChangedFacts:
+    """`field_changed`: какое поле обвязки правили. Значения — в записи.
+
+    Без `check_no`: проверки — раздел задания, а обвязка правится в любом незакрытом
+    статусе, и точечной правки у неё не бывает.
+    """
+
+    type: Literal[EntryType.FIELD_CHANGED] = EntryType.FIELD_CHANGED
+    field: TaskField | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AssigneeChangedFacts:
+    """`assignee_changed`: имена участников коротки, поэтому их видно прямо в описи."""
+
+    type: Literal[EntryType.ASSIGNEE_CHANGED] = EntryType.ASSIGNEE_CHANGED
     assignee_from: str | None = None
     assignee_to: str | None = None
-    #: `question`: кому адресовано и держит ли работу.
+
+
+@dataclass(frozen=True, slots=True)
+class LinkFacts:
+    """`link_added` и `link_removed`: чем задача стала другой и какой.
+
+    Один вариант на два типа: форма у них одна, а разметка различает их сама — `type`
+    здесь без значения по умолчанию именно поэтому.
+    """
+
+    type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
+    link_kind: LinkKind | None = None
+    other_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class QuestionFacts:
+    """`question`: кому адресовано и держит ли работу."""
+
+    type: Literal[EntryType.QUESTION] = EntryType.QUESTION
     addressees: tuple[str, ...] | None = None
     blocking: bool | None = None
-    #: `answer`: на какой вопрос отвечено.
+
+
+@dataclass(frozen=True, slots=True)
+class AnswerFacts:
+    """`answer`: на какой вопрос отвечено."""
+
+    type: Literal[EntryType.ANSWER] = EntryType.ANSWER
     question_no: int | None = None
-    #: `verdict`: какая проверка и чем кончилась.
+
+
+@dataclass(frozen=True, slots=True)
+class VerdictFacts:
+    """`verdict`: какая проверка и чем кончилась.
+
+    `outdated` — относится ли вердикт к нынешней формулировке своей проверки. Считается
+    при чтении описи, в нагрузке записи его нет и быть не может: он о том, что случилось
+    **после** неё.
+    """
+
+    type: Literal[EntryType.VERDICT] = EntryType.VERDICT
     check_no: int | None = None
     outcome: VerdictOutcome | None = None
-    #: `resolution`: какое замечание разобрано, чем и куда ушла работа.
-    remark_no: int | None = None
-    remark_outcome: RemarkOutcome | None = None
-    continuation_key: str | None = None
-    #: `verdict`: относится ли он к нынешней формулировке своей проверки. Считается при
-    #: чтении описи, в нагрузке записи его нет и быть не может — он о том, что случилось
-    #: **после** неё.
     outdated: bool | None = None
 
 
-#: Пустые факты: у записи этого типа называть строкой нечего, кроме заголовка автора.
-NO_FACTS = EntryFacts()
+@dataclass(frozen=True, slots=True)
+class ResolutionFacts:
+    """`resolution`: какое замечание разобрано, чем и куда ушла работа.
+
+    Исход зовётся `outcome`, как и у вердикта: перечисления у них разные, но разметка
+    развела их по разным вариантам, и одно имя больше ни с чем не сливается.
+    """
+
+    type: Literal[EntryType.RESOLUTION] = EntryType.RESOLUTION
+    remark_no: int | None = None
+    outcome: RemarkOutcome | None = None
+    continuation_key: str | None = None
+
+
+type EntryFacts = (
+    NoFacts
+    | StatusChangedFacts
+    | SectionChangedFacts
+    | FieldChangedFacts
+    | AssigneeChangedFacts
+    | LinkFacts
+    | QuestionFacts
+    | AnswerFacts
+    | VerdictFacts
+    | ResolutionFacts
+)
+"""Факты записи: размеченное по `type` объединение всех форм."""
+
+
+#: Какой форме фактов отвечает какой тип записи. Словарь **сплошной** по `EntryType` и
+#: этим ценен: тип, заведённый завтра, обязан назвать здесь свою форму или сказать
+#: `NoFacts` вслух, и пока он этого не сделал, набор его фактов нигде не объявлен.
+#: Сплошность стережёт тест — перечислять типы руками в нём нельзя.
+FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
+    EntryType.SUMMARY: NoFacts,
+    EntryType.DECISION: NoFacts,
+    EntryType.ATTEMPT: NoFacts,
+    EntryType.FINDING: NoFacts,
+    EntryType.ARTIFACT: NoFacts,
+    EntryType.QUESTION: QuestionFacts,
+    EntryType.ANSWER: AnswerFacts,
+    EntryType.VERDICT: VerdictFacts,
+    EntryType.REMARK: NoFacts,
+    EntryType.RESOLUTION: ResolutionFacts,
+    EntryType.NOTE: NoFacts,
+    EntryType.CREATED: NoFacts,
+    EntryType.STATUS_CHANGED: StatusChangedFacts,
+    EntryType.SECTION_CHANGED: SectionChangedFacts,
+    EntryType.FIELD_CHANGED: FieldChangedFacts,
+    EntryType.ASSIGNEE_CHANGED: AssigneeChangedFacts,
+    EntryType.LINK_ADDED: LinkFacts,
+    EntryType.LINK_REMOVED: LinkFacts,
+}
 
 
 def mark_outdated_verdicts(index: Sequence[EntryHeading]) -> list[EntryHeading]:
@@ -256,12 +386,12 @@ def mark_outdated_verdicts(index: Sequence[EntryHeading]) -> list[EntryHeading]:
     marked: list[EntryHeading] = []
     for heading in reversed(index):
         facts = heading.facts
-        if heading.type is EntryType.SECTION_CHANGED and facts.field is TaskField.CHECKS:
+        if isinstance(facts, SectionChangedFacts) and facts.field is TaskField.CHECKS:
             if facts.check_no is None:
                 whole_list_rewritten = True
             else:
                 rewritten.add(facts.check_no)
-        elif heading.type is EntryType.VERDICT and facts.check_no is not None:
+        elif isinstance(facts, VerdictFacts) and facts.check_no is not None:
             outdated = whole_list_rewritten or facts.check_no in rewritten
             heading = replace(heading, facts=replace(facts, outdated=outdated))
         marked.append(heading)
@@ -277,6 +407,9 @@ class EntryHeading:
     ограниченный по длине набор, по которому ту же запись можно назвать строкой на
     любом языке, не разбирая собранный трекером английский заголовок. Тело и `payload`
     по-прежнему читаются точечно по номеру.
+
+    Значения по умолчанию у `facts` нет: форма фактов следует из типа записи, и «строка
+    описи без фактов» — это `NoFacts` с названным типом, а не пропущенный аргумент.
     """
 
     no: int
@@ -284,7 +417,7 @@ class EntryHeading:
     author: Author
     created_at: datetime
     title: str
-    facts: EntryFacts = NO_FACTS
+    facts: EntryFacts
 
 
 # --- Ссылки -------------------------------------------------------------------------

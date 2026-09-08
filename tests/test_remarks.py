@@ -210,7 +210,7 @@ async def test_a_resolution_closes_the_remark_and_names_where_the_work_went(
     assert package["features"]["open_remarks"] == 0
     heading = next(item for item in package["index"] if item["type"] == "resolution")
     assert heading["facts"]["remark_no"] == remark_no
-    assert heading["facts"]["remark_outcome"] == "accepted"
+    assert heading["facts"]["outcome"] == "accepted"
     assert heading["facts"]["continuation_key"] == continuation
 
 

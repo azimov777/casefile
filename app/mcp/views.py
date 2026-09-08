@@ -92,16 +92,38 @@ REST этого правила не знает и знать не должен: 
 
 from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, JsonValue, SerializerFunctionWrapHandler, model_serializer
+from pydantic import (
+    BaseModel,
+    Field,
+    JsonValue,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.authors import Author, AuthorKind
-from app.domain.case import EntryFacts, EntryHeading, EntryType, RemarkOutcome, VerdictOutcome
+from app.domain.case import (
+    AnswerFacts,
+    AssigneeChangedFacts,
+    EntryFacts,
+    EntryHeading,
+    EntryType,
+    FieldChangedFacts,
+    LinkFacts,
+    NoFacts,
+    QuestionFacts,
+    RemarkOutcome,
+    ResolutionFacts,
+    SectionChangedFacts,
+    StatusChangedFacts,
+    VerdictFacts,
+    VerdictOutcome,
+)
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD
@@ -367,56 +389,173 @@ class UnlinkView(BaseModel):
     removed: bool
 
 
-class FactsView(BaseModel):
-    """Факты записи для описи: те же поля и в том же порядке, что в схеме REST."""
+class NoFactsView(BaseModel):
+    """Фактов нет: заголовок записи пишет её автор."""
 
+    type: Literal[
+        EntryType.SUMMARY,
+        EntryType.DECISION,
+        EntryType.ATTEMPT,
+        EntryType.FINDING,
+        EntryType.ARTIFACT,
+        EntryType.REMARK,
+        EntryType.NOTE,
+        EntryType.CREATED,
+    ]
+
+
+class StatusChangedFactsView(BaseModel):
+    """Переход статуса: оба конца и был ли назван повод."""
+
+    type: Literal[EntryType.STATUS_CHANGED]
     from_status: TaskStatus | None
     to_status: TaskStatus | None
     has_reason: bool | None
+
+
+class SectionChangedFactsView(BaseModel):
+    """Правка задания: какой раздел, и какая проверка при точечной правке."""
+
+    type: Literal[EntryType.SECTION_CHANGED]
     field: TaskField | None
-    link_kind: LinkKind | None
-    other_key: str | None
+    check_no: int | None
+
+
+class FieldChangedFactsView(BaseModel):
+    """Правка обвязки: какое поле."""
+
+    type: Literal[EntryType.FIELD_CHANGED]
+    field: TaskField | None
+
+
+class AssigneeChangedFactsView(BaseModel):
+    """Смена исполнителя: оба имени."""
+
+    type: Literal[EntryType.ASSIGNEE_CHANGED]
     assignee_from: str | None
     assignee_to: str | None
+
+
+class LinkFactsView(BaseModel):
+    """Связь появилась или снята: её вид и вторая сторона."""
+
+    type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
+    link_kind: LinkKind | None
+    other_key: str | None
+
+
+class QuestionFactsView(BaseModel):
+    """Вопрос: кому адресован и держит ли работу."""
+
+    type: Literal[EntryType.QUESTION]
     addressees: list[str] | None
     blocking: bool | None
+
+
+class AnswerFactsView(BaseModel):
+    """Ответ: на какой вопрос той же задачи."""
+
+    type: Literal[EntryType.ANSWER]
     question_no: int | None
+
+
+class VerdictFactsView(BaseModel):
+    """Вердикт: какая проверка, чем кончилась и не переписали ли её после."""
+
+    type: Literal[EntryType.VERDICT]
     check_no: int | None
     outcome: VerdictOutcome | None
-    remark_no: int | None
-    remark_outcome: RemarkOutcome | None
-    continuation_key: str | None
     outdated: bool | None
 
 
+class ResolutionFactsView(BaseModel):
+    """Резолюция: какое замечание разобрано, чем и куда ушла работа."""
+
+    type: Literal[EntryType.RESOLUTION]
+    remark_no: int | None
+    outcome: RemarkOutcome | None
+    continuation_key: str | None
+
+
+type FactsView = Annotated[
+    NoFactsView
+    | StatusChangedFactsView
+    | SectionChangedFactsView
+    | FieldChangedFactsView
+    | AssigneeChangedFactsView
+    | LinkFactsView
+    | QuestionFactsView
+    | AnswerFactsView
+    | VerdictFactsView
+    | ResolutionFactsView,
+    Field(discriminator="type"),
+]
+"""Факты записи: те же формы и те же поля в том же порядке, что в схеме REST."""
+
+
 def facts(value: EntryFacts) -> FactsView:
-    """Факты записи для описи: те же поля и в том же порядке, что в схеме REST.
+    """Факты записи для описи: те же формы и поля, что в схеме REST.
 
     Пакет преемника обязан совпадать с ответом REST поле в поле (обзорная проверка
     задачи 03, `tests/test_mcp_tools.py`), поэтому «отдать факты только интерфейсу»
-    нельзя: расхождение здесь означало бы два разных описания одного дела. Пустые части
-    едут вместе с остальными — по той же причине, и `exclude_unset` здесь неуместен:
-    отсутствующий факт это `null`, а не отсутствующее поле.
+    нельзя: расхождение здесь означало бы два разных описания одного дела. Разметка по
+    `type` едет и сюда — по ней агент видит состав полей своей записи в `outputSchema`
+    инструмента, до вызова, а не по тому, какие ключи пришли непустыми.
+
+    Разбор — по форме факта, а не по типу записи: типов восемнадцать, а форм десять, и
+    сопоставление одного с другим живёт в одном месте, в домене.
     """
-    return FactsView(
-        from_status=value.from_status,
-        to_status=value.to_status,
-        has_reason=value.has_reason,
-        field=value.field,
-        link_kind=value.link_kind,
-        other_key=value.other_key,
-        assignee_from=value.assignee_from,
-        assignee_to=value.assignee_to,
-        addressees=None if value.addressees is None else list(value.addressees),
-        blocking=value.blocking,
-        question_no=value.question_no,
-        check_no=value.check_no,
-        outcome=value.outcome,
-        remark_no=value.remark_no,
-        remark_outcome=value.remark_outcome,
-        continuation_key=value.continuation_key,
-        outdated=value.outdated,
-    )
+    match value:
+        case NoFacts():
+            return NoFactsView(type=value.type)
+        case StatusChangedFacts():
+            return StatusChangedFactsView(
+                type=value.type,
+                from_status=value.from_status,
+                to_status=value.to_status,
+                has_reason=value.has_reason,
+            )
+        case SectionChangedFacts():
+            return SectionChangedFactsView(
+                type=value.type, field=value.field, check_no=value.check_no
+            )
+        case FieldChangedFacts():
+            return FieldChangedFactsView(type=value.type, field=value.field)
+        case AssigneeChangedFacts():
+            return AssigneeChangedFactsView(
+                type=value.type,
+                assignee_from=value.assignee_from,
+                assignee_to=value.assignee_to,
+            )
+        case LinkFacts():
+            return LinkFactsView(
+                type=value.type, link_kind=value.link_kind, other_key=value.other_key
+            )
+        case QuestionFacts():
+            return QuestionFactsView(
+                type=value.type,
+                addressees=None if value.addressees is None else list(value.addressees),
+                blocking=value.blocking,
+            )
+        case AnswerFacts():
+            return AnswerFactsView(type=value.type, question_no=value.question_no)
+        case VerdictFacts():
+            return VerdictFactsView(
+                type=value.type,
+                check_no=value.check_no,
+                outcome=value.outcome,
+                outdated=value.outdated,
+            )
+        case ResolutionFacts():
+            return ResolutionFactsView(
+                type=value.type,
+                remark_no=value.remark_no,
+                outcome=value.outcome,
+                continuation_key=value.continuation_key,
+            )
+    # Форма фактов, заведённая в домене без представления здесь, — дефект объединения, а
+    # не рабочее состояние: молча вернуть `None` значило бы отдать агенту опись без строки.
+    raise TypeError(f"форма фактов без представления MCP: {type(value).__name__}")
 
 
 class HeadingView(BaseModel):

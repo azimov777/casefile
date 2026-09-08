@@ -16,7 +16,7 @@ GIN-индекс по нагрузке вопросов (миграция `case 
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -37,12 +37,21 @@ from app.domain.authors import Author
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
     FIRST_ENTRY_NUMBER,
-    NO_FACTS,
     OUTCOME_WITH_CONTINUATION,
+    AnswerFacts,
+    AssigneeChangedFacts,
     EntryFacts,
     EntryHeading,
     EntryType,
+    FieldChangedFacts,
+    LinkFacts,
+    NoFacts,
+    QuestionFacts,
     RemarkOutcome,
+    ResolutionFacts,
+    SectionChangedFacts,
+    StatusChangedFacts,
+    VerdictFacts,
     VerdictOutcome,
 )
 from app.domain.links import LinkKind
@@ -195,7 +204,7 @@ class EntryRepository:
                 author=Author(kind=row.created_by_kind, signature=row.created_by_signature),
                 created_at=row.created_at,
                 title=row.title,
-                facts=_read_facts(row.facts),
+                facts=_read_facts(row.type, row.facts),
             )
             for row in rows
         ]
@@ -677,12 +686,18 @@ def _facts_json() -> ColumnElement[Any]:
             ),
         ),
         (
-            Entry.type.in_((EntryType.SECTION_CHANGED, EntryType.FIELD_CHANGED)),
-            # `check_no` есть только у точечной правки проверки; у прочих правок его в
-            # нагрузке нет, и в фактах он окажется пустым. Различать их надо именно
+            # `check_no` есть только у точечной правки проверки; у правки списка целиком
+            # его в нагрузке нет, и в фактах он окажется пустым. Различать их надо именно
             # здесь: «переписали третью проверку» и «переписали весь список» задевают
             # разные вердикты (`app/domain/case.py`, `mark_outdated_verdicts`).
+            Entry.type == EntryType.SECTION_CHANGED,
             func.jsonb_build_object("field", payload["field"], "check_no", payload["check_no"]),
+        ),
+        # Правка обвязки — только имя поля: проверки в обвязку не входят, и точечной
+        # правки у неё не бывает.
+        (
+            Entry.type == EntryType.FIELD_CHANGED,
+            func.jsonb_build_object("field", payload["field"]),
         ),
         (
             Entry.type == EntryType.ASSIGNEE_CHANGED,
@@ -708,15 +723,15 @@ def _facts_json() -> ColumnElement[Any]:
             Entry.type == EntryType.VERDICT,
             func.jsonb_build_object("check_no", payload["check_no"], "outcome", payload["outcome"]),
         ),
-        # Исход резолюции уезжает под своим именем, а не общим `outcome`: перечисления
-        # у вердикта и у разбора разные, и одно имя на два набора значений читалось бы
-        # неверно ровно в тот момент, когда значения совпадут по написанию.
+        # Исход резолюции уезжает под тем же именем, что и исход вердикта: перечисления
+        # у них разные, но разметка по `type` развела их по разным формам фактов, и одно
+        # имя больше не может слиться с чужим набором значений.
         (
             Entry.type == EntryType.RESOLUTION,
             func.jsonb_build_object(
                 "remark_no",
                 payload["remark_no"],
-                "remark_outcome",
+                "outcome",
                 payload["outcome"],
                 "continuation_key",
                 payload["task"],
@@ -728,31 +743,62 @@ def _facts_json() -> ColumnElement[Any]:
     )
 
 
-def _read_facts(raw: Any) -> EntryFacts:
-    """Разбирает вырезанное в типы домена. Чужого ключа тут быть не может: набор задан
-    выражением выше, а не тем, что кто-то положил в нагрузку."""
-    if not isinstance(raw, dict) or not raw:
-        return NO_FACTS
+def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
+    """Разбирает вырезанное в форму фактов этого типа записи.
 
-    addressees = raw.get("addressees")
-    return EntryFacts(
-        from_status=_as_enum(TaskStatus, raw.get("from_status")),
-        to_status=_as_enum(TaskStatus, raw.get("to_status")),
-        has_reason=raw.get("has_reason"),
-        field=_as_enum(TaskField, raw.get("field")),
-        link_kind=_as_enum(LinkKind, raw.get("link_kind")),
-        other_key=raw.get("other_key"),
-        assignee_from=raw.get("assignee_from"),
-        assignee_to=raw.get("assignee_to"),
-        addressees=None if addressees is None else tuple(str(name) for name in addressees),
-        blocking=raw.get("blocking"),
-        question_no=raw.get("question_no"),
-        check_no=raw.get("check_no"),
-        outcome=_as_enum(VerdictOutcome, raw.get("outcome")),
-        remark_no=raw.get("remark_no"),
-        remark_outcome=_as_enum(RemarkOutcome, raw.get("remark_outcome")),
-        continuation_key=raw.get("continuation_key"),
-    )
+    Форму выбирает тип, а не содержимое: чужого ключа в `raw` быть не может — набор
+    задан выражением выше, а не тем, что кто-то положил в нагрузку. Тип, у которого
+    ветви в выражении нет, попадает в `NoFacts`, и это не молчаливое «ничего не нашли»,
+    а объявленная форма: тот же ответ даёт словарь `FACTS_BY_ENTRY_TYPE`, сплошность
+    которого по `EntryType` стережёт тест.
+    """
+    values: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
+    match entry_type:
+        case EntryType.STATUS_CHANGED:
+            return StatusChangedFacts(
+                from_status=_as_enum(TaskStatus, values.get("from_status")),
+                to_status=_as_enum(TaskStatus, values.get("to_status")),
+                has_reason=values.get("has_reason"),
+            )
+        case EntryType.SECTION_CHANGED:
+            return SectionChangedFacts(
+                field=_as_enum(TaskField, values.get("field")),
+                check_no=values.get("check_no"),
+            )
+        case EntryType.FIELD_CHANGED:
+            return FieldChangedFacts(field=_as_enum(TaskField, values.get("field")))
+        case EntryType.ASSIGNEE_CHANGED:
+            return AssigneeChangedFacts(
+                assignee_from=values.get("assignee_from"),
+                assignee_to=values.get("assignee_to"),
+            )
+        case EntryType.LINK_ADDED | EntryType.LINK_REMOVED:
+            return LinkFacts(
+                type=entry_type,
+                link_kind=_as_enum(LinkKind, values.get("link_kind")),
+                other_key=values.get("other_key"),
+            )
+        case EntryType.QUESTION:
+            addressees = values.get("addressees")
+            return QuestionFacts(
+                addressees=None if addressees is None else tuple(str(n) for n in addressees),
+                blocking=values.get("blocking"),
+            )
+        case EntryType.ANSWER:
+            return AnswerFacts(question_no=values.get("question_no"))
+        case EntryType.VERDICT:
+            return VerdictFacts(
+                check_no=values.get("check_no"),
+                outcome=_as_enum(VerdictOutcome, values.get("outcome")),
+            )
+        case EntryType.RESOLUTION:
+            return ResolutionFacts(
+                remark_no=values.get("remark_no"),
+                outcome=_as_enum(RemarkOutcome, values.get("outcome")),
+                continuation_key=values.get("continuation_key"),
+            )
+        case _:
+            return NoFacts(type=entry_type)
 
 
 def _as_enum(enum: Any, value: Any) -> Any:

@@ -4569,6 +4569,36 @@
         "title": "AnswerEntryRead",
         "description": "Ответ на вопрос. Ответить может кто угодно; первый ответ закрывает вопрос."
       },
+      "AnswerFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "answer",
+            "title": "Type"
+          },
+          "question_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question No",
+            "description": "Number of the question answered",
+            "examples": [
+              7
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "AnswerFactsRead",
+        "description": "Ответ: на какой вопрос той же задачи."
+      },
       "AnswerPayload": {
         "properties": {
           "question_no": {
@@ -4681,6 +4711,45 @@
         ],
         "title": "AssigneeChangedEntryRead",
         "description": "Служебная запись о смене исполнителя."
+      },
+      "AssigneeChangedFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "assignee_changed",
+            "title": "Type"
+          },
+          "assignee_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee From",
+            "description": "Assignee before, null if there was none"
+          },
+          "assignee_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee To",
+            "description": "Assignee after, null if unassigned"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "AssigneeChangedFactsRead",
+        "description": "Смена исполнителя: имена участников коротки и видны прямо в описи."
       },
       "AssigneeChangedPayload": {
         "properties": {
@@ -5065,233 +5134,61 @@
         "description": "Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках."
       },
       "EntryFactsRead": {
-        "properties": {
-          "from_status": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TaskStatus"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`status_changed`: status before the move"
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/NoFactsRead"
           },
-          "to_status": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TaskStatus"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`status_changed`: status after the move"
+          {
+            "$ref": "#/components/schemas/StatusChangedFactsRead"
           },
-          "has_reason": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Has Reason",
-            "description": "`status_changed`: whether a reason was given. The reason itself is free text and stays in the entry body"
+          {
+            "$ref": "#/components/schemas/SectionChangedFactsRead"
           },
-          "field": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TaskField"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`section_changed` and `field_changed`: which field was edited. Values are not here: a section can be as long as the task itself"
+          {
+            "$ref": "#/components/schemas/FieldChangedFactsRead"
           },
-          "link_kind": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LinkKind"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`link_added` and `link_removed`: kind of the link"
+          {
+            "$ref": "#/components/schemas/AssigneeChangedFactsRead"
           },
-          "other_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Other Key",
-            "description": "`link_added` and `link_removed`: the task on the other side",
-            "examples": [
-              "TRK-7"
-            ]
+          {
+            "$ref": "#/components/schemas/LinkFactsRead"
           },
-          "assignee_from": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assignee From",
-            "description": "`assignee_changed`: assignee before, null if there was none"
+          {
+            "$ref": "#/components/schemas/QuestionFactsRead"
           },
-          "assignee_to": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assignee To",
-            "description": "`assignee_changed`: assignee after, null if unassigned"
+          {
+            "$ref": "#/components/schemas/AnswerFactsRead"
           },
-          "addressees": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Addressees",
-            "description": "`question`: who is asked, at most 20 names"
+          {
+            "$ref": "#/components/schemas/VerdictFactsRead"
           },
-          "blocking": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocking",
-            "description": "`question`: whether the question holds the work"
-          },
-          "question_no": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Question No",
-            "description": "`answer`: number of the question answered",
-            "examples": [
-              7
-            ]
-          },
-          "check_no": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Check No",
-            "description": "`verdict`: number of the review check. `section_changed`: which check was reworded, when the edit was a point one rather than a whole-list replacement",
-            "examples": [
-              3
-            ]
-          },
-          "remark_no": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Remark No",
-            "description": "`resolution`: the remark it resolves",
-            "examples": [
-              null
-            ]
-          },
-          "remark_outcome": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RemarkOutcome"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`resolution`: how the remark was resolved",
-            "examples": [
-              null
-            ]
-          },
-          "continuation_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Continuation Key",
-            "description": "`resolution`: key of the task the work moved to; set only when the outcome is `accepted`",
-            "examples": [
-              null
-            ]
-          },
-          "outcome": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VerdictOutcome"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`verdict`: how the check ended"
-          },
-          "outdated": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Outdated",
-            "description": "`verdict`: whether the check was reworded after this verdict was filed. A verdict points at a check by **number**, not by text, so an outdated one reads as «check 3 passed» while what passed was its previous wording. The record itself is never touched: this is computed when the case is read",
-            "examples": [
-              false
-            ]
+          {
+            "$ref": "#/components/schemas/ResolutionFactsRead"
           }
-        },
-        "type": "object",
-        "title": "EntryFactsRead",
-        "description": "Факты записи, которыми её называют строкой, не читая тела.\n\nЗаполнены по типу записи, все части необязательны и все ограничены по длине самим\nконтрактом: значения перечислений, ключи, имена полей и участников, номера,\nпризнаки да/нет. Свободного текста здесь нет — ни причины перехода, ни значений\nразделов, ни тел записей; за ними идут в саму запись.\n\nНужны они там, где заголовок собирает трекер и собирает по-английски: клиент строит\nсвою строку по фактам, а не разбирает чужую фразу регуляркой. У записей агента и\nчеловека заполненных фактов нет — их заголовок пишет автор.\n\nНезаполненные части едут в ответе как `null`, хотя это и дороже: строка описи\nвесит 339 байт вместо 102. Причина в генерации клиента — `@model_serializer`,\nотбрасывающий пустое, заменяет схему сериализации на «словарь чего угодно», и\n`EntryFactsRead` приезжает во фронтенд как `Record<string, unknown>`. Типизированный\nклиент — то, ради чего схема вообще выгружается, и двести байт на строку его не\nстоят (`docs/notes/api.md`)."
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "answer": "#/components/schemas/AnswerFactsRead",
+            "artifact": "#/components/schemas/NoFactsRead",
+            "assignee_changed": "#/components/schemas/AssigneeChangedFactsRead",
+            "attempt": "#/components/schemas/NoFactsRead",
+            "created": "#/components/schemas/NoFactsRead",
+            "decision": "#/components/schemas/NoFactsRead",
+            "field_changed": "#/components/schemas/FieldChangedFactsRead",
+            "finding": "#/components/schemas/NoFactsRead",
+            "link_added": "#/components/schemas/LinkFactsRead",
+            "link_removed": "#/components/schemas/LinkFactsRead",
+            "note": "#/components/schemas/NoFactsRead",
+            "question": "#/components/schemas/QuestionFactsRead",
+            "remark": "#/components/schemas/NoFactsRead",
+            "resolution": "#/components/schemas/ResolutionFactsRead",
+            "section_changed": "#/components/schemas/SectionChangedFactsRead",
+            "status_changed": "#/components/schemas/StatusChangedFactsRead",
+            "summary": "#/components/schemas/NoFactsRead",
+            "verdict": "#/components/schemas/VerdictFactsRead"
+          }
+        }
       },
       "EntryHeadingRead": {
         "properties": {
@@ -5326,7 +5223,7 @@
           },
           "facts": {
             "$ref": "#/components/schemas/EntryFactsRead",
-            "description": "Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Empty for entries whose title is written by their author"
+            "description": "Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none"
           }
         },
         "type": "object",
@@ -5563,7 +5460,33 @@
           "payload"
         ],
         "title": "FieldChangedEntryRead",
-        "description": "Служебная запись о правке обвязки: сегодня это только `priority`.\n\nСписок в `before` и `after` при этом остаётся допустимым видом значения, хотя ни одно\nсегодняшнее поле обвязки списком не является: записи дела неизменяемы и постоянны\n(`CONCEPT.md`, 4.1), и сузить схему значило бы перестать читать то, что уже подшито."
+        "description": "Служебная запись о правке обвязки: сегодня это только `priority`."
+      },
+      "FieldChangedFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "field_changed",
+            "title": "Type"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskField"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which field was edited"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "FieldChangedFactsRead",
+        "description": "Правка обвязки: какое поле. Значения не здесь, они в самой записи."
       },
       "FieldChangedPayload": {
         "properties": {
@@ -5580,17 +5503,11 @@
                 "type": "string"
               },
               {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
                 "type": "null"
               }
             ],
             "title": "Before",
-            "description": "Previous value; a list if the field holds a list"
+            "description": "Previous value"
           },
           "after": {
             "anyOf": [
@@ -5598,17 +5515,11 @@
                 "type": "string"
               },
               {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
                 "type": "null"
               }
             ],
             "title": "After",
-            "description": "New value; a list if the field holds a list"
+            "description": "New value"
           }
         },
         "additionalProperties": false,
@@ -5617,7 +5528,7 @@
           "field"
         ],
         "title": "FieldChangedPayload",
-        "description": "Правка обвязки задачи: «было» и «стало» целиком.\n\nОтдельно от `SectionChangedPayload`, хотя поля те же: там правка задания и только\nв `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на\nоба случая означала бы «section» у приоритета."
+        "description": "Правка обвязки задачи: «было» и «стало» целиком.\n\nОтдельно от `SectionChangedPayload`, хотя поля похожи: там правка задания и только\nв `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на\nоба случая означала бы «section» у приоритета.\n\nЗначения — строки, а не «строка либо список»: список остался здесь от снятых меток\n(TRK-18), ни одно сегодняшнее поле обвязки списком не является, и записей со списком\nв базе нет ни одной. Пока объединение было плоским, оно только расширяло тип «на\nвсякий случай»; появится поле-список — у него будет своя форма, а не общая на всех."
       },
       "HealthResponse": {
         "properties": {
@@ -5773,6 +5684,50 @@
         "title": "LinkEntryRead",
         "description": "Служебная запись о появлении или снятии связи."
       },
+      "LinkFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "link_added",
+              "link_removed"
+            ],
+            "title": "Type"
+          },
+          "link_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinkKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Kind of the link"
+          },
+          "other_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Key",
+            "description": "The task on the other side",
+            "examples": [
+              "TRK-7"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "LinkFactsRead",
+        "description": "Связь появилась или снята: её вид и вторая сторона."
+      },
       "LinkKind": {
         "type": "string",
         "enum": [
@@ -5844,6 +5799,30 @@
         ],
         "title": "LinkTaskRead",
         "description": "Задача на другой стороне связи: ключ, название и статус."
+      },
+      "NoFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "decision",
+              "attempt",
+              "finding",
+              "artifact",
+              "remark",
+              "note",
+              "created"
+            ],
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "NoFactsRead",
+        "description": "Фактов нет: заголовок записи пишет её автор, и он осмыслен сам по себе."
       },
       "PageMeta": {
         "properties": {
@@ -6276,6 +6255,48 @@
         ],
         "title": "QuestionEntryRead",
         "description": "Вопрос участникам. Открыт, пока в деле нет `answer` с его номером."
+      },
+      "QuestionFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question",
+            "title": "Type"
+          },
+          "addressees": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addressees",
+            "description": "Who is asked, at most 20 names"
+          },
+          "blocking": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocking",
+            "description": "Whether the question holds the work"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "QuestionFactsRead",
+        "description": "Вопрос: кому адресован и держит ли работу."
       },
       "QuestionPayload": {
         "properties": {
@@ -6722,6 +6743,62 @@
         "title": "ResolutionEntryRead",
         "description": "Резолюция по замечанию: чем разобрано и куда ушла работа."
       },
+      "ResolutionFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "resolution",
+            "title": "Type"
+          },
+          "remark_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remark No",
+            "description": "The remark it resolves",
+            "examples": [
+              7
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RemarkOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the remark was resolved"
+          },
+          "continuation_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Key",
+            "description": "Key of the task the work moved to; set only when the outcome is `accepted`",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "ResolutionFactsRead",
+        "description": "Резолюция: какое замечание разобрано, чем и куда ушла работа."
+      },
       "ResolutionPayload": {
         "properties": {
           "remark_no": {
@@ -6857,6 +6934,47 @@
         ],
         "title": "SectionChangedEntryRead",
         "description": "Служебная запись о правке названия, описания или раздела."
+      },
+      "SectionChangedFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "section_changed",
+            "title": "Type"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskField"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which section was edited"
+          },
+          "check_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check No",
+            "description": "Which check was reworded, for a point edit of `checks`. Absent when the whole list was replaced",
+            "examples": [
+              3
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "SectionChangedFactsRead",
+        "description": "Правка задания: какой раздел. Значения не здесь — раздел бывает длиннее задачи."
       },
       "SectionChangedPayload": {
         "properties": {
@@ -7019,6 +7137,55 @@
         ],
         "title": "StatusChangedEntryRead",
         "description": "Служебная запись о переходе статуса."
+      },
+      "StatusChangedFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "status_changed",
+            "title": "Type"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Status before the move"
+          },
+          "to_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Status after the move"
+          },
+          "has_reason": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Reason",
+            "description": "Whether a reason was given. The reason itself is free text and stays in the entry body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "StatusChangedFactsRead",
+        "description": "Переход статуса: оба конца и был ли назван повод."
       },
       "StatusChangedPayload": {
         "properties": {
@@ -8459,6 +8626,62 @@
         ],
         "title": "VerdictEntryRead",
         "description": "Вердикт по обзорной проверке. Тело записи — доказательство."
+      },
+      "VerdictFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "verdict",
+            "title": "Type"
+          },
+          "check_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check No",
+            "description": "Number of the review check",
+            "examples": [
+              3
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerdictOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the check ended"
+          },
+          "outdated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outdated",
+            "description": "Whether the check was reworded after this verdict was filed. A verdict points at a check by **number**, not by text, so an outdated one reads as «check 3 passed» while what passed was its previous wording. The record itself is never touched: this is computed when the case is read",
+            "examples": [
+              false
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "VerdictFactsRead",
+        "description": "Вердикт: какая обзорная проверка, чем кончилась и не переписали ли её после."
       },
       "VerdictOutcome": {
         "type": "string",
