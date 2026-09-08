@@ -46,11 +46,13 @@ from app.mcp.arguments import (
 )
 from app.mcp.idempotency import Once
 from app.mcp.toolset import Toolset
+from app.services import case as case_service
 from app.services import links as links_service
 from app.services import queues as queues_service
 from app.services import search as search_service
 from app.services import tasks as tasks_service
 from app.services.search import StructuredTerm
+from app.services.tasks import TaskMutation
 
 
 def register(tools: Toolset) -> None:
@@ -156,6 +158,12 @@ def register(tools: Toolset) -> None:
         `parent` делает задачу ребёнком названной — ребёнок рождается со ссылкой на
         родителя, это одно действие, а не два. Родитель не закроется в `done`, пока дети
         не закрыты.
+
+        Отвечает коротко: ключ новой задачи, статус, версия и номера подшитых записей.
+        Карточку не возвращает — всё, что в ней было бы, ты только что прислал сам.
+        Ключ здесь обязателен и приходит всегда: его выдал трекер, и заранее знать его
+        было неоткуда. Нужна карточка целиком — `get_task`, но сразу после создания она
+        не нужна.
         """
         async with runtime.call() as (session, actor):
             # Всё, что может отказать, — до занятия ключа: отклонённый вызов не должен
@@ -184,7 +192,16 @@ def register(tools: Toolset) -> None:
                     await links_service.add_link(
                         session, task, parent_task, actor=actor, kind=LinkKind.CHILD
                     )
-                return views.task(task)
+                # Номера подшитого читаются из дела, а не собираются по дороге:
+                # `create_task` отдаёт задачу, `add_link` — связь, и номерами не
+                # заведует ни один из них. У новой задачи в деле одна-две строки, и
+                # прочитать их дешевле, чем протаскивать номера через две подписи
+                # сценариев ради одного вызова MCP. Заодно ответ называет **всё**, что
+                # подшилось, — включая `link_added` у ребёнка.
+                filed = await case_service.case_index(session, task, actor=actor)
+                return views.mutation(
+                    TaskMutation(task=task, entries=tuple(item.no for item in filed))
+                )
 
             return await Once.of(create_task, session, actor, idempotency_key).run(
                 request={

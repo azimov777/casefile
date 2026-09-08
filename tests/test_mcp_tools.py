@@ -24,8 +24,10 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.idempotency import IdempotencyKey
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.case import EntryType
@@ -592,8 +594,22 @@ async def test_create_task_is_born_in_backlog_with_its_parent(
         package = await call(session, "get_task", key=child["key"])
         parent_package = await call(session, "get_task", key=parent_key)
 
+    # Ответ короткий, и карточки в нём нет: всё, что в ней было бы, вызывающий прислал
+    # сам. Остаётся то, чего он знать не мог, — ключ выдал трекер.
+    assert set(child) == {"key", "status", "version", "entries"}
     assert child["status"] == "backlog"
-    assert child["queue"] == {"key": "TRK", "title": "Трекер"}
+    assert child["version"] == 1
+
+    # Обзорная проверка 3: записей у этого вызова две — заведение и связь, — и короткий
+    # ответ называет обе. Назвать одну значило бы соврать про то, чем вызов кончился.
+    assert child["entries"] == [1, 2]
+    assert [item["no"] for item in package["index"]] == child["entries"]
+    assert [item["type"] for item in package["index"]] == ["created", "link_added"]
+
+    # Обзорная проверка 2: ключ из короткого ответа сразу адресует задачу — `get_task`
+    # выше вызван именно им, без промежуточного поиска.
+    assert package["task"]["key"] == child["key"]
+
     # Вид связи называет роль **своей** задачи: у ребёнка это `child`, у родителя `parent`.
     assert [(item["kind"], item["other"]["key"]) for item in package["links"]] == [
         ("child", parent_key)
@@ -625,6 +641,49 @@ async def test_a_repeated_create_task_answers_with_the_first_task(
     assert first == again
     assert "idempotency_key_reused" in conflict
     assert [item["key"] for item in found["items"]].count(first["key"]) == 1
+    # Ответ короткий уже здесь: повтор отдаёт ровно то, что ушло в первый раз.
+    assert set(first) == {"key", "status", "version", "entries"}
+
+
+async def test_a_repeat_of_a_call_made_before_the_answer_shrank_replays_the_old_answer(
+    mcp_session: Connect, task_secret: str, db_session: AsyncSession, queue: Queue
+) -> None:
+    """Обзорная проверка 4: сохранённый ответ старой формы повтор не роняет.
+
+    Ключи идемпотентности живут сутки (`app/domain/idempotency.py`, `KEY_TTL`), поэтому
+    после правки в таблице сутки лежат ответы обеих форм. Повтор обязан отдать **тот
+    самый** ответ, который ушёл в первый раз, а не собрать новый: у выпуска токена в
+    ответе секрет, которого второй раз взять неоткуда, и правило одно на все операции.
+
+    Значит на повтор вызова, сделанного до правки, придёт карточка целиком — и это
+    правильно. Агент, начавший вызов вчера, получит то, что ожидал; новых длинных
+    ответов при этом не появляется, а старые кончатся сами.
+    """
+    del queue
+    key = str(uuid.uuid4())
+    arguments: dict[str, Any] = {
+        "queue": "TRK",
+        "title": "Починить выдачу ключей",
+        "description": "Ключ сгорает",
+        "idempotency_key": key,
+    }
+
+    async with mcp_session(task_secret) as session:
+        short = await call(session, "create_task", **arguments)
+
+    # Подменяем сохранённый ответ на форму, в которой его записал бы вчерашний вызов.
+    old_form = {"key": short["key"], "status": "backlog", "title": "Починить выдачу ключей"}
+    await db_session.execute(
+        update(IdempotencyKey).where(IdempotencyKey.key == key).values(response=old_form)
+    )
+    await db_session.flush()
+
+    async with mcp_session(task_secret) as session:
+        again = await call(session, "create_task", **arguments)
+        found = await call(session, "search_tasks", queue=["TRK"])
+
+    assert again == old_form, "повтор обязан отдать сохранённое, не пересобирая ответ"
+    assert [item["key"] for item in found["items"]].count(short["key"]) == 1
 
 
 # --- Дело -----------------------------------------------------------------------------
