@@ -26,7 +26,7 @@ export const THEME_SCALES = {
   tracking: ['caps'],
   radius: ['mark', 'control', 'block', 'pill'],
   shadow: ['raised', 'sticky'],
-  ease: ['fast'],
+  ease: ['fast', 'exit'],
   animate: ['appear'],
 } as const;
 
