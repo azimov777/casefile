@@ -17,7 +17,6 @@ import {
 } from '@/features/answer-question';
 import { Badge, Button, Markdown, QueryState, RelativeTime } from '@/shared/ui';
 import { taskRefHref } from '@/shared/lib';
-import styles from './questions-page.module.css';
 
 /**
  * Входящая: две половины одной картины — вопросы, которых ждут от человека, и
@@ -86,21 +85,30 @@ export function QuestionsPage() {
   }
 
   return (
-    <main className={styles.screen}>
+    // Предела ширины у экрана нет намеренно: пока она резалась до 64rem, на 1440
+    // правая половина пустовала, а два списка шли друг под другом и выглядели
+    // продолжением одного (решение Д16). Ширину страницы держит оболочка.
+    <main className="flex flex-col gap-4">
       <div>
-        <h1 className={styles.heading}>Входящая</h1>
+        <h1 className="text-title">Входящая</h1>
         {/* Что здесь лежит — сказано словами: из названия раздела не видно, что
             половин две, а искать свои замечания человек приходит именно сюда. */}
-        <p className={styles.lede}>
+        <p className="mt-1 text-meta text-muted">
           Вопросы, которых агенты ждут от вас, и ваши замечания, которых ждёте вы.
         </p>
       </div>
 
-      <form className={styles.filters} aria-label="Отбор входящей">
-        <label className={styles.field}>
-          <span className={styles.label}>Очередь</span>
+      <form
+        className="flex flex-wrap items-end gap-4 rounded-control border border-line bg-surface px-4 py-3"
+        aria-label="Отбор входящей"
+      >
+        <label className="flex flex-col gap-1">
+          <span className="text-meta text-muted">Очередь</span>
+          {/* Фон и цвет названы у поля явно: у `select` есть системная палитра формы,
+              и без объявления цвет достаётся ему от браузера, а не от нашей темы
+              (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`»). */}
           <select
-            className={styles.select}
+            className="rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
             value={queue}
             onChange={(event) => apply({ queue: event.target.value })}
           >
@@ -115,17 +123,28 @@ export function QuestionsPage() {
 
         {/* Область действия названа рядом с полем: очередь отбирает обе половины,
             а «только блокирующие» стоит внутри вопросов и к замечаниям не относится. */}
-        <p className={styles.hint}>Очередь отбирает обе половины входящей.</p>
+        <p className="text-meta text-faint">Очередь отбирает обе половины входящей.</p>
       </form>
 
       {/*
        * Два списка рядом (решение Д16): на 1440 половина экрана перестаёт пустовать,
        * а вопросы и замечания перестают выглядеть продолжением друг друга. На узком
        * экране сетка складывается в одну колонку в порядке разметки — вопросы первыми.
+       *
+       * Точка остановки названа решением, а не размером экрана: `wide` — это «входящая
+       * встаёт в две колонки». `grid-cols-2` разворачивается в `repeat(2, minmax(0, 1fr))`,
+       * то есть половина вправе стать уже своего содержимого: без нижней границы `0`
+       * длинное тело вопроса раздвинуло бы колонку и увело страницу вбок.
+       *
+       * Выравнивание написано свойством, а не утилитой `items-start`: та даёт
+       * `align-items: flex-start`, а здесь сетка, и её значение — `start`. Рисуется
+       * это одинаково (в сеточном контексте `flex-start` ведёт себя как `start`), но
+       * вычисленный стиль расходится, а вместе с ним и слепок, которым доказывают,
+       * что вид не изменился.
        */}
-      <div className={styles.columns}>
-        <section aria-labelledby="questions-section" className={styles.section}>
-          <h2 className={styles.sectionTitle} id="questions-section">
+      <div className="grid gap-4 [align-items:start] wide:grid-cols-2">
+        <section aria-labelledby="questions-section" className="flex flex-col gap-3">
+          <h2 className="text-screen" id="questions-section">
             Вопросы ко мне
           </h2>
 
@@ -135,7 +154,7 @@ export function QuestionsPage() {
            * одной строке с ним: в строке он поднимал заголовок левой половины на два
            * пикселя относительно правой, и колонки переставали начинаться на одной линии.
            */}
-          <label className={styles.check}>
+          <label className="inline-flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               checked={blocking}
@@ -156,7 +175,7 @@ export function QuestionsPage() {
             }
           />
 
-          <ul className={styles.list}>
+          <ul className="flex list-none flex-col gap-3 p-0">
             {items.map((question, at) => (
               <li key={questionId(question)}>
                 <QuestionRow question={question} at={at} answering={answering} />
@@ -179,8 +198,8 @@ export function QuestionsPage() {
          * Здесь только чтение — замечание оставляют на карточке задачи, глядя на то,
          * о чём оно.
          */}
-        <section aria-labelledby="remarks-section" className={styles.section}>
-          <h2 className={styles.sectionTitle} id="remarks-section">
+        <section aria-labelledby="remarks-section" className="flex flex-col gap-3">
+          <h2 className="text-screen" id="remarks-section">
             Мои замечания без разбора
           </h2>
 
@@ -196,7 +215,7 @@ export function QuestionsPage() {
             }
           />
 
-          <ul className={styles.list}>
+          <ul className="flex list-none flex-col gap-3 p-0">
             {myRemarks.map((remark) => (
               <li key={`${remark.task_key}#${remark.no}`}>
                 <RemarkRow remark={remark} />
@@ -229,7 +248,14 @@ function emptyByFilter(conditions: string[], onReset: () => void) {
   return (
     <>
       По этому отбору ({conditions.join(', ')}) ничего не нашлось.{' '}
-      <button type="button" className={styles.reset} onClick={onReset}>
+      {/* Снятие отбора прямо из объяснения: человек уже читает, почему ничего не
+          нашлось. Набрано ссылкой, но осталось кнопкой — оно меняет отбор, а не ведёт
+          по адресу; фон назван явно, иначе кнопке достаётся системный. */}
+      <button
+        type="button"
+        className="border-none bg-transparent p-0 text-accent underline"
+        onClick={onReset}
+      >
         Сбросить отбор
       </button>
     </>
@@ -239,21 +265,21 @@ function emptyByFilter(conditions: string[], onReset: () => void) {
 /** Замечание во входящей: к какой задаче, когда оставлено и о чём. */
 function RemarkRow({ remark }: { remark: Remark }) {
   return (
-    <article className={styles.remark}>
-      <header className={styles.head}>
+    // Кромка тоном внимания, а не опасности: замечание ждёт ответа, но ничего не
+    // держит. Красное во входящей остаётся за блокирующим вопросом — тем, из-за
+    // которого работа действительно стоит.
+    <article className="flex flex-col gap-2 rounded-control border border-attention-line bg-surface p-3">
+      <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
         {/* Подпись `KEY#N` и адрес собираются одним правилом: ссылка, называющая
             запись, обязана её и открывать (`shared/lib`, `taskRefHref`). */}
-        <Link
-          className={styles.task}
-          to={taskRefHref({ key: remark.task_key, entryNo: remark.no })}
-        >
+        <Link className="font-mono" to={taskRefHref({ key: remark.task_key, entryNo: remark.no })}>
           {remark.task_key}#{remark.no}
         </Link>
         <Badge tone="attention">ждёт разбора</Badge>
         <RelativeTime value={remark.created_at} />
       </header>
 
-      <h3 className={styles.title}>{remark.title}</h3>
+      <h3 className="text-screen">{remark.title}</h3>
       <Markdown>{remark.body}</Markdown>
     </article>
   );
@@ -280,26 +306,38 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
   const blocking = question.payload.blocking;
 
   return (
+    /*
+     * Красной кромки у блокирующего вопроса (решение Д17) здесь нет — и на экране её
+     * не было: в модуле правило `.blocking` стояло **выше** `.question`, специфичность
+     * у них равная, и позднее правило перебивало кромку целиком. Замерено до перевода
+     * на живом контуре: `borderLeftWidth` 1px, `borderLeftColor` `rgb(231, 233, 239)`
+     * (`--color-line`) вместо 3px `--color-danger`. Переносится то, что видно, поэтому
+     * кромка здесь не воскрешена: это была бы правка вида, а не перевод оформления.
+     * Возвращать её — отдельным решением (замер и разбор — `UI-53#5`, `UI-53#6`).
+     *
+     * Смысл при этом не потерян и сегодня: его несут плашка «блокирующий» и признак
+     * в разметке, а цвет не был единственным носителем даже в замысле.
+     */
     <article
-      className={`${styles.question} ${blocking ? styles.blocking : ''}`}
+      className="flex flex-col gap-2 rounded-control border border-line bg-surface p-4"
       // Признак виден разметке, а не только глазу: сквозной тест ищет блокирующий
       // вопрос по нему, а не по цвету кромки и не по тексту плашки.
       data-blocking={blocking ? 'true' : undefined}
       aria-label={blocking ? `Блокирующий вопрос ${id}` : `Вопрос ${id}`}
     >
-      <header className={styles.head}>
+      <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
         <Link
-          className={styles.task}
+          className="font-mono"
           to={taskRefHref({ key: question.task_key, entryNo: question.no })}
         >
           {question.task_key}#{question.no}
         </Link>
-        {/* Плашка остаётся рядом с кромкой: цвет не единственный носитель смысла. */}
+        {/* Плашка остаётся рядом с признаком: цвет не единственный носитель смысла. */}
         {blocking ? <Badge tone="danger">блокирующий</Badge> : null}
         <RelativeTime value={question.created_at} />
       </header>
 
-      <h2 className={styles.title}>{question.title}</h2>
+      <h2 className="text-screen">{question.title}</h2>
 
       {/* Тело без обёртки записи: адресат здесь всегда один и тот же — тот, кто смотрит
           входящую, — и повторять «Кому: owner» у каждого вопроса незачем. */}
