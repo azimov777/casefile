@@ -36,7 +36,7 @@
 верхний отступ), чтобы содержимое росло только вниз. Проверяется замером
 `getBoundingClientRect().top` до и после отказа в живом браузере: в jsdom вёрстки нет,
 и страничный тест такое пропустит.
-**Где:** `src/pages/login/ui/login-page.module.css`, `src/features/auth/ui/login-form.tsx`.
+**Где:** `src/pages/login/ui/login-page.tsx`, `src/features/auth/ui/login-form.tsx`.
 
 ## Границу ошибок сбрасывает не кнопка, а смена ключа
 
