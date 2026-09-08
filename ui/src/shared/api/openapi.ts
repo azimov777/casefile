@@ -3857,7 +3857,7 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character */
+                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ ключ`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
@@ -3869,6 +3869,8 @@ export interface operations {
                 cursor?: string | null;
                 /** @description Queue keys; matching ignores case */
                 queue?: string[] | null;
+                /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a queue. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
+                parent?: string[] | null;
                 /** @description Task statuses */
                 status?: components["schemas"]["TaskStatus"][] | null;
                 /** @description Assignee names, matched exactly; `empty()` finds unassigned tasks */
