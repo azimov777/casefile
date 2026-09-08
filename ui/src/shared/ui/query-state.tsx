@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { errorMessage } from '../errors';
 import { Button } from './button';
 import { Callout } from './callout';
-import styles from './query-state.module.css';
 
 /**
  * Столько от результата `useQuery`, сколько нужно состоянию. Структурный тип, а не
@@ -33,6 +32,9 @@ interface QueryStateProps {
   compact?: boolean;
 }
 
+/** Приглушённая строка: загрузка и пустота там, где рамке негде развернуться. */
+const QUIET = 'text-meta text-muted';
+
 /**
  * Состояние запроса вместо данных: загрузка, отказ с повтором, честная пустота.
  * Когда показывать нечего — возвращает `null` и не занимает места.
@@ -43,9 +45,10 @@ interface QueryStateProps {
 export function QueryState({ query, loading, empty, compact = false }: QueryStateProps) {
   if (query.error !== null && query.error !== undefined) {
     return (
-      <div className={compact ? styles.compact : styles.failure}>
+      // Строкой: в шапке высота фиксирована, и рамка сообщения разъехалась бы с ней.
+      <div className={compact ? 'flex items-center gap-2' : 'flex flex-col items-start gap-2'}>
         {compact ? (
-          <span className={styles.problem} role="alert">
+          <span className="text-meta text-danger" role="alert">
             {errorMessage(query.error)}
           </span>
         ) : (
@@ -59,9 +62,9 @@ export function QueryState({ query, loading, empty, compact = false }: QueryStat
   }
 
   if (query.isPending) {
-    return compact ? <span className={styles.quiet}>{loading}</span> : <Callout>{loading}</Callout>;
+    return compact ? <span className={QUIET}>{loading}</span> : <Callout>{loading}</Callout>;
   }
 
   if (empty === undefined) return null;
-  return compact ? <span className={styles.quiet}>{empty}</span> : <Callout>{empty}</Callout>;
+  return compact ? <span className={QUIET}>{empty}</span> : <Callout>{empty}</Callout>;
 }
