@@ -3,7 +3,6 @@ import { EMPTY_DRAFT, clearDraft, readDraft, saveDraft, type Draft } from '@/sha
 import { Button } from './button';
 import { Callout } from './callout';
 import { Markdown } from './markdown';
-import styles from './composer.module.css';
 
 interface ComposerProps {
   /** Метка формы для программы чтения с экрана: «Ответ на DEMO-1#7», «Замечание к DEMO-1». */
@@ -34,6 +33,9 @@ interface ComposerProps {
    */
   onSubmit: (body: string, idempotencyKey: string) => Promise<boolean>;
 }
+
+/** Подпись поля и предпросмотра: она объясняет содержание, а не несёт его. */
+const LABEL = 'text-meta text-muted';
 
 /**
  * Форма записи в дело: поле markdown, предпросмотр, черновик и упрёк за пустоту.
@@ -115,14 +117,18 @@ export function Composer({
   const shown = emptyBody ? emptyProblem : problem;
 
   return (
-    <form className={styles.form} onSubmit={(event) => void submit(event)} aria-label={label}>
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor={bodyId}>
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={(event) => void submit(event)}
+      aria-label={label}
+    >
+      <div className="flex flex-col gap-1">
+        <label className={LABEL} htmlFor={bodyId}>
           {fieldLabel}
         </label>
         <textarea
           id={bodyId}
-          className={styles.textarea}
+          className="resize-y rounded-mark border border-line-strong bg-surface px-3 py-2 font-mono text-meta text-text aria-invalid:border-danger"
           value={draft.body}
           onChange={(event) => change({ body: event.target.value })}
           rows={5}
@@ -132,7 +138,7 @@ export function Composer({
         />
       </div>
 
-      <div className={styles.actions}>
+      <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={isPending}>
           {isPending ? pendingLabel : submitLabel}
         </Button>
@@ -142,16 +148,22 @@ export function Composer({
       </div>
 
       {/* Упрёк не отрывается от поля: связь держит `aria-describedby`, а глазами он
-          читается там, где человек только что нажал. */}
+          читается там, где человек только что нажал.
+
+          Места под него не резервируется: упрёк стоит под кнопками, его появление
+          растит форму вниз и ничего не сдвигает. Резервирование пробовалось и
+          оказалось хуже — строка, зарезервированная под одну строку текста, всё равно
+          двигала кнопку на 3 px (замерено сквозным тестом), а под две занимала бы
+          48 пикселей в форме, где обычно упрекать не за что. */}
       {shown === undefined ? null : (
-        <span className={styles.problem} id={`${bodyId}-problem`} role="alert">
+        <span className="text-meta text-danger" id={`${bodyId}-problem`} role="alert">
           {shown}
         </span>
       )}
 
       {showPreview && draft.body.trim() !== '' ? (
-        <div className={styles.preview}>
-          <span className={styles.label}>Как это увидит агент</span>
+        <div className="flex flex-col gap-1 rounded-mark border border-dashed border-line-strong p-3">
+          <span className={LABEL}>Как это увидит агент</span>
           <Markdown>{draft.body}</Markdown>
         </div>
       ) : null}

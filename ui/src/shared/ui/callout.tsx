@@ -1,5 +1,20 @@
+import { cva } from 'class-variance-authority';
 import type { ReactNode } from 'react';
-import styles from './callout.module.css';
+
+/*
+ * Тон меняет ту же тройку, что и у плашки: заливку, границу и текст. Склейки `cn`
+ * здесь нет намеренно — `twMerge` считает `text-body` и `text-danger` одной группой
+ * «text-*» и оставляет из них последний, то есть молча уносит кегль сообщения.
+ */
+const callout = cva('rounded-mark border px-4 py-3 text-body', {
+  variants: {
+    tone: {
+      neutral: 'border-line bg-sunken text-text',
+      danger: 'border-danger-line bg-danger-soft text-danger',
+    },
+  },
+  defaultVariants: { tone: 'neutral' },
+});
 
 interface CalloutProps {
   /** `danger` — отказ или ошибка: сообщение объявляется программе чтения с экрана. */
@@ -12,12 +27,8 @@ interface CalloutProps {
  * Спиннера без текста в интерфейсе нет (CONVENTIONS.md, «Интерфейс»).
  */
 export function Callout({ tone = 'neutral', children }: CalloutProps) {
-  const classes = [styles.callout, tone === 'danger' ? styles.danger : null]
-    .filter(Boolean)
-    .join(' ');
-
   return (
-    <p className={classes} role={tone === 'danger' ? 'alert' : undefined}>
+    <p className={callout({ tone })} role={tone === 'danger' ? 'alert' : undefined}>
       {children}
     </p>
   );
