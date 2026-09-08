@@ -119,21 +119,26 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
   };
 }
 
-/** Строка описи: заголовок записи без тела. */
+/**
+ * Строка описи: заголовок записи без тела.
+ *
+ * Тип строки берётся из фактов, а не задаётся рядом с ними: факты размечены по `type`,
+ * и строка, у которой `type` не совпал бы с разметкой фактов, — не тот ответ, который
+ * бэкенд умеет дать. У записей агента и человека факты состоят из одной разметки.
+ */
 export function heading(
   no: number,
-  type: EntryHeading['type'],
+  facts: EntryHeading['facts'],
   title: string,
   overrides: Partial<EntryHeading> = {},
 ): EntryHeading {
   return {
     no,
-    type,
+    type: facts.type,
     author: AGENT,
     created_at: '2026-09-01T10:00:00Z',
     title,
-    // Факты приходят у каждой строки описи; пустые — это «называть нечем, кроме типа».
-    facts: {},
+    facts,
     ...overrides,
   };
 }
@@ -248,21 +253,26 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
     remarks: [],
     transitions: ['done', 'open', 'cancelled'],
     index: [
-      heading(1, 'created', 'Task created'),
-      heading(2, 'status_changed', 'Status changed: backlog -> open', {
-        facts: { from_status: 'backlog', to_status: 'open', has_reason: false },
-      }),
-      heading(3, 'status_changed', 'Status changed: open -> in_progress', {
-        facts: { from_status: 'open', to_status: 'in_progress', has_reason: false },
-      }),
-      heading(4, 'decision', 'Список допустимого собирается по типу поля'),
-      heading(5, 'verdict', 'Verdict on check 1: passed', {
-        facts: { check_no: 1, outcome: 'passed' },
-      }),
-      heading(6, 'verdict', 'Verdict on check 2: failed', {
-        facts: { check_no: 2, outcome: 'failed' },
-      }),
-      heading(7, 'summary', 'Дособрать `details.allowed` и подшить новый вердикт'),
+      heading(1, { type: 'created' }, 'Task created'),
+      heading(
+        2,
+        { type: 'status_changed', from_status: 'backlog', to_status: 'open', has_reason: false },
+        'Status changed: backlog -> open',
+      ),
+      heading(
+        3,
+        {
+          type: 'status_changed',
+          from_status: 'open',
+          to_status: 'in_progress',
+          has_reason: false,
+        },
+        'Status changed: open -> in_progress',
+      ),
+      heading(4, { type: 'decision' }, 'Список допустимого собирается по типу поля'),
+      heading(5, { type: 'verdict', check_no: 1, outcome: 'passed' }, 'Verdict on check 1: passed'),
+      heading(6, { type: 'verdict', check_no: 2, outcome: 'failed' }, 'Verdict on check 2: failed'),
+      heading(7, { type: 'summary' }, 'Дособрать `details.allowed` и подшить новый вердикт'),
     ],
     ...overrides,
   };
