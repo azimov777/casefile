@@ -33,6 +33,7 @@ from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
 from app.domain.query_language import QUERY_WRONG_SHAPE, parse_query
+from app.domain.search import searchable_names
 from app.domain.tokens import TokenScope
 from app.mcp.arguments import DEFAULT_SEARCH_FIELDS, QueryArg
 from app.services import case as case_service
@@ -1066,6 +1067,31 @@ def test_every_query_example_of_the_tool_description_parses() -> None:
 
     # Хотя бы один пример показывает оператор в его настоящем месте — после двоеточия.
     assert any(re.search(r": (in|not in|>=|<=|>|<|~|!~|!=) ", example) for example in examples)
+
+
+async def test_every_search_field_is_reachable_from_the_tool_itself(
+    mcp_session: Connect, task_secret: str
+) -> None:
+    """Поле отбора названо там, где агент его ищет: в описании языка и в аргументах.
+
+    Поле, о котором сказано только в исходниках, для агента не существует: он выбирает
+    из того, что перечислено в описании инструмента. Проверка идёт по `searchable_names`,
+    поэтому следующее поле само потребует себе места, а не будет забыто молча.
+
+    Аргументов при этом меньше, чем полей: вычисляемые признаки со сравнением
+    (`open_questions: > 0`) структурным параметром не выражаются — у них точное число.
+    Здесь проверяется то, что выражается: поля-значения обязаны быть и там, и там.
+    """
+    described = _query_description()
+    async with mcp_session(task_secret) as session:
+        listed = {tool.name: tool for tool in (await session.list_tools()).tools}
+    arguments = set(listed["search_tasks"].input_schema["properties"])
+
+    for name in searchable_names():
+        assert f"`{name}`" in described, f"поле {name} не названо в описании языка"
+
+    for name in ("queue", "parent", "status", "assignee", "priority", "text"):
+        assert name in arguments, f"поле {name} не выражается структурным параметром"
 
 
 def test_the_description_names_the_wrong_shape_and_it_is_really_wrong() -> None:

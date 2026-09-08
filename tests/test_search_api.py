@@ -175,6 +175,9 @@ async def test_an_unknown_field_answers_with_the_list_of_allowed_ones(
     assert error["code"] == "search_field_unknown"
     assert error["details"]["field"] == "deadline"
     assert "open_blocking_questions" in error["details"]["allowed"]
+    # Список допустимого — единственное, что человек и агент увидят об этом наборе:
+    # поле, не попавшее сюда, для них не существует.
+    assert "parent" in error["details"]["allowed"]
 
 
 async def test_a_removed_search_field_answers_with_the_list_without_it(

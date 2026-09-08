@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.db.models.link import Link
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.pagination import Page, decode_sort_cursor, encode_sort_cursor, resolve_limit
@@ -57,6 +58,7 @@ from app.db.repositories.entries import (
 )
 from app.db.repositories.links import open_blockers_of
 from app.db.sql import ilike_contains
+from app.domain.links import LinkKind
 from app.domain.search import (
     FEATURES_FIELD,
     NEGATIVE_OPERATORS,
@@ -225,6 +227,8 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
     match term.kind:
         case SearchValueKind.QUEUE_KEY:
             return _scalar(Task.queue_id, term.operator, term.values)
+        case SearchValueKind.TASK_KEY:
+            return _parent(term.operator, term.values)
         case SearchValueKind.STATUS:
             return _scalar(Task.status, term.operator, term.values)
         case SearchValueKind.ASSIGNEE:
@@ -251,6 +255,11 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
     match term.kind:
         case SearchValueKind.ASSIGNEE:
             return Task.assignee.is_(None)
+        case SearchValueKind.TASK_KEY:
+            # «Родителя нет» — верхний уровень очереди: ни одной связи `parent`, где
+            # эта задача была бы ребёнком. Колонки под родителя нет, и `IS NULL` тут
+            # не о чем спросить.
+            return not_(_has_parent())
         case SearchValueKind.TIMESTAMP:
             # «В дело ещё ничего не подшивали»: учтённых записей нет, подзапрос пуст.
             return _last_entry_at_column().is_(None)
@@ -262,6 +271,31 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
 
 
 # --- Отдельные виды значений ---------------------------------------------------------
+
+
+def _has_parent(source_id: Any = None) -> ColumnElement[bool]:
+    """Есть ли у строки выдачи родитель — а с `source_id` ещё и назван ли им этот.
+
+    `EXISTS`, а не соединение: соединение размножило бы задачу по числу связей и
+    сломало бы и страницу, и порядок. Хранится связь одной строкой `source → target`
+    вида `parent`, где источник — родитель, а цель — ребёнок (`app/domain/links.py`,
+    `canonical_form`), поэтому ребёнок ищется по `target_id`.
+    """
+    conditions = [Link.kind == LinkKind.PARENT, Link.target_id == Task.id]
+    if source_id is not None:
+        conditions.append(Link.source_id == source_id)
+    return select(Link.id).where(*conditions).correlate(Task).exists()
+
+
+def _parent(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
+    """Дети названной задачи. Значение — идентификатор родителя, разрешённый сценарием.
+
+    Родство прямое и на одно колено: внуки сюда не попадают. Рекурсия потребовала бы
+    обхода графа на каждую строку выдачи, а вопрос, ради которого поле заведено, —
+    «все ли дети закрыты» — про прямых детей.
+    """
+    matching = or_(*(_has_parent(value) for value in values))
+    return not_(matching) if operator in NEGATIVE_OPERATORS else matching
 
 
 def _priority(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:

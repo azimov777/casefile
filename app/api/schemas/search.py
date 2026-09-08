@@ -124,6 +124,19 @@ class TaskFilters:
             description="Queue keys; matching ignores case",
         ),
     ] = None
+    parent: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["TRK-7"]],
+            description=(
+                "Parent task keys: the answer holds their direct children, one level "
+                "deep. `empty()` finds tasks with no parent — the top level of a queue. "
+                "An unknown key answers 422 instead of an empty page: emptiness here "
+                "reads as «no children» and would hide the typo"
+            ),
+        ),
+    ] = None
     status: Annotated[
         list[TaskStatus] | None, Query(examples=[[TaskStatus.OPEN]], description="Task statuses")
     ] = None
@@ -204,6 +217,7 @@ class TaskFilters:
             StructuredTerm(name=name, values=values)
             for name, values in (
                 ("queue", self.queue),
+                ("parent", self.parent),
                 ("status", None if self.status is None else [item.value for item in self.status]),
                 ("assignee", self.assignee),
                 (

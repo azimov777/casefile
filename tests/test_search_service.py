@@ -271,6 +271,110 @@ async def test_the_shape_from_the_hint_finds_what_the_structured_filter_finds(
     assert backlog.key not in by_query
 
 
+@pytest.fixture
+async def family(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> dict[str, Task]:
+    """Программа с тремя детьми: один открыт, два закрыты. Плюс чужая задача рядом.
+
+    Ровно та расстановка, на которой стоит вопрос «можно ли закрывать программу»:
+    закрытых больше, открытый один, и посторонняя задача обязана в выдачу не попасть.
+    """
+    program = await make(db_session, task_actor, queue, "программа")
+    program = await open_task(db_session, task_actor, program)
+
+    children: dict[str, Task] = {}
+    for name in ("живой", "первый закрытый", "второй закрытый"):
+        child = await make(db_session, task_actor, queue, name)
+        await links_service.add_link(
+            db_session, child, program, actor=task_actor, kind=LinkKind.CHILD
+        )
+        children[name] = await open_task(db_session, task_actor, child)
+
+    for name in ("первый закрытый", "второй закрытый"):
+        children[name] = (
+            await tasks_service.transition_task(
+                db_session, children[name], actor=task_actor, to=TaskStatus.CANCELLED, reason="не"
+            )
+        ).task
+
+    return {
+        "program": program,
+        "outsider": await make(db_session, task_actor, queue, "чужая"),
+        **children,
+    }
+
+
+async def test_children_are_selected_by_the_parent_field(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """Обзорная проверка 2: «что у детей этой задачи» — один отбор, а не чтение карточки.
+
+    И он складывается с остальными условиями языка: «открытые дети» — это то же поле
+    плюс `status`, а не отдельный вопрос и не отдельный инструмент.
+    """
+    program = family["program"].key
+
+    all_children = await keys(db_session, task_actor, query=f"parent: {program}")
+    assert set(all_children) == {
+        family["живой"].key,
+        family["первый закрытый"].key,
+        family["второй закрытый"].key,
+    }
+    assert program not in all_children, "родитель не попадает в список собственных детей"
+    assert family["outsider"].key not in all_children
+
+    alive = await keys(db_session, task_actor, query=f"parent: {program} and status: open")
+    assert alive == [family["живой"].key]
+
+    # Структурный параметр отвечает тем же самым — иначе у одного вопроса было бы два
+    # ответа в зависимости от того, как его задали.
+    by_filter = await keys(
+        db_session, task_actor, structured=[StructuredTerm(name="parent", values=[program])]
+    )
+    assert sorted(by_filter) == sorted(all_children)
+
+    by_filter_alive = await keys(
+        db_session,
+        task_actor,
+        structured=[
+            StructuredTerm(name="parent", values=[program]),
+            StructuredTerm(name="status", values=["open"]),
+        ],
+    )
+    assert by_filter_alive == alive
+
+
+async def test_parent_empty_gives_the_top_level_of_the_queue(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """Обзорная проверка 3: `parent: empty()` — верхний уровень, и ни одного ребёнка.
+
+    Это то, что человек и агент смотрят первым: список программ, а не всё вперемешку.
+    """
+    found = await keys(db_session, task_actor, query="parent: empty()")
+
+    assert set(found) == {family["program"].key, family["outsider"].key}
+    for name in ("живой", "первый закрытый", "второй закрытый"):
+        assert family[name].key not in found
+
+
+async def test_an_unknown_parent_key_is_refused_and_named(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Обзорная проверка 4: опечатка в ключе — отказ с ключом, а не пустая выдача.
+
+    Пустота на этот вопрос читается как «детей нет» — то есть как ответ. На таком
+    ответе программу закрывают, поэтому промах обязан быть назван.
+    """
+    del queue
+    with pytest.raises(SearchValueInvalidError) as error:
+        await keys(db_session, task_actor, query="parent: TRK-404")
+
+    details = error.value.details
+    assert details["field"] == "parent"
+    assert details["value"] == "TRK-404"
+    assert details["reason"] == "task_not_found"
+
+
 async def test_both_inputs_narrow_each_other_instead_of_replacing(
     db_session: AsyncSession, task_actor: Actor, board: dict[str, Task]
 ) -> None:

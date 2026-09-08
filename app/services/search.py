@@ -88,6 +88,7 @@ from app.domain.search import (
 from app.domain.tasks import TaskFeatures, TaskPriority, TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import queues as queues_service
+from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.permissions import ensure_scope
 
@@ -387,6 +388,8 @@ async def _resolve_value(
     match spec.kind:
         case SearchValueKind.QUEUE_KEY:
             return await _queue_id(session, condition, value)
+        case SearchValueKind.TASK_KEY:
+            return await _task_id(session, condition, value)
         case SearchValueKind.STATUS:
             return _enum_value(condition, value, TaskStatus)
         case SearchValueKind.PRIORITY:
@@ -414,6 +417,22 @@ async def _queue_id(session: AsyncSession, condition: Condition, value: SearchVa
     except AppError as exc:
         raise _value_rejected(condition, value, exc, key) from exc
     return queue.id
+
+
+async def _task_id(session: AsyncSession, condition: Condition, value: SearchValue) -> Any:
+    """Задача по ключу. Ненайденная задача — неверное значение фильтра, а не `404`.
+
+    Названный промах здесь важнее, чем у очереди: `parent: TKR-7` без проверки дал бы
+    пустую выдачу, а пустая выдача на вопрос «что у детей этой задачи» читается как
+    «детей нет» — то есть как ответ, а не как опечатка. На таком ответе программу
+    закрывают.
+    """
+    key = _text(condition, value)
+    try:
+        task = await tasks_service.get_task(session, key)
+    except AppError as exc:
+        raise _value_rejected(condition, value, exc, key) from exc
+    return task.id
 
 
 def _text(condition: Condition, value: SearchValue) -> str:

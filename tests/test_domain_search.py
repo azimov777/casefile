@@ -286,6 +286,7 @@ def test_every_concept_field_has_a_spec() -> None:
     """Поля отбора перечислены концепцией (4.4); описание должно быть у каждого."""
     for name in (
         "queue",
+        "parent",
         "status",
         "assignee",
         "priority",

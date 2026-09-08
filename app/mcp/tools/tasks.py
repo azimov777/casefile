@@ -24,6 +24,7 @@ from app.mcp.arguments import (
     OpenBlockingQuestionsArg,
     OpenQuestionsArg,
     OpenRemarksArg,
+    ParentFilterArg,
     ParentKeyArg,
     PrioritiesArg,
     PriorityArg,
@@ -82,6 +83,7 @@ def register(tools: Toolset) -> None:
     async def search_tasks(
         query: QueryArg = None,
         queue: QueuesArg = None,
+        parent: ParentFilterArg = None,
         status: StatusesArg = None,
         assignee: AssigneesArg = None,
         priority: PrioritiesArg = None,
@@ -111,6 +113,7 @@ def register(tools: Toolset) -> None:
                 query=query,
                 structured=_terms(
                     queue=queue,
+                    parent=parent,
                     status=status,
                     assignee=assignee,
                     priority=priority,
@@ -288,6 +291,7 @@ def register(tools: Toolset) -> None:
 def _terms(
     *,
     queue: Sequence[str] | None,
+    parent: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
     assignee: Sequence[str] | None,
     priority: Sequence[TaskPriority] | None,
@@ -313,6 +317,7 @@ def _terms(
         StructuredTerm(name=name, values=values)
         for name, values in (
             ("queue", queue),
+            ("parent", parent),
             ("status", None if status is None else [item.value for item in status]),
             ("assignee", assignee),
             ("priority", None if priority is None else [item.value for item in priority]),

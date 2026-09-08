@@ -486,6 +486,18 @@ AssigneesArg = Annotated[
         examples=[["release_bot"]],
     ),
 ]
+ParentFilterArg = Annotated[
+    list[str] | None,
+    Field(
+        description=(
+            "Ключи родительских задач: в выдаче их **прямые** дети, на одно колено. "
+            "`empty()` находит задачи без родителя — верхний уровень очереди. "
+            "Несуществующий ключ отвечает отказом, а не пустой выдачей: пустота здесь "
+            "читается как «детей нет», и опечатка спряталась бы за ответом"
+        ),
+        examples=[["TRK-7"]],
+    ),
+]
 PrioritiesArg = Annotated[
     list[TaskPriority] | None,
     Field(description="Приоритеты", examples=[[TaskPriority.HIGH]]),

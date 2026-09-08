@@ -260,6 +260,7 @@ class SearchField(StrEnum):
     """
 
     QUEUE = "queue"
+    PARENT = "parent"
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
@@ -276,6 +277,7 @@ class SearchValueKind(StrEnum):
     """Что означает значение поля: от этого зависят и проверка, и SQL."""
 
     QUEUE_KEY = "queue_key"
+    TASK_KEY = "task_key"
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
@@ -304,6 +306,14 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
     spec.field: spec
     for spec in (
         SearchFieldSpec(SearchField.QUEUE, SearchValueKind.QUEUE_KEY, EXACT_OPERATORS),
+        # Родство прямое и на одно колено: `parent: UI-10` — дети UI-10, а не всё
+        # поддерево. Рекурсия по внукам потребовала бы обхода графа на каждую строку
+        # выдачи, а вопрос, ради которого поле заведено, — «можно ли закрывать
+        # программу» — про прямых детей (`CONCEPT.md`, 3.5). Пустое состояние здесь
+        # есть и означает верхний уровень очереди: задачи, у которых родителя нет.
+        SearchFieldSpec(
+            SearchField.PARENT, SearchValueKind.TASK_KEY, EXACT_OPERATORS, is_nullable=True
+        ),
         SearchFieldSpec(SearchField.STATUS, SearchValueKind.STATUS, EXACT_OPERATORS),
         # Исполнитель — свободная строка, а не ссылка на участника (`CONCEPT.md`, 3.3),
         # поэтому вхождение подстроки здесь осмысленно: `assignee: ~ bot` находит и
