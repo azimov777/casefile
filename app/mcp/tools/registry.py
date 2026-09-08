@@ -38,10 +38,10 @@ def register(tools: Toolset) -> None:
 
     @tools.tool()
     async def get_queue(key: QueueKeyArg) -> views.QueueView:
-        """Очередь с описанием — общим контекстом всех её задач.
+        """Очередь с описанием — общим контекстом всех её задач: где лежит код, на какие
+        документы смотреть, чего не делать.
 
-        Там сказано, где лежит код, на какие документы смотреть и чего не делать. Читай
-        её, если очередь незнакома: в карточке задачи лежат только ключ и название.
+        В карточке задачи от очереди только ключ и название; описание отдаёт этот вызов.
         """
         async with runtime.call() as (session, actor):
             return views.queue(await queues_service.read_queue(session, key, actor=actor))
@@ -51,9 +51,9 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.QueueRefView]:
-        """Все очереди установки: ключ и название. Отсюда начинают, не зная ключа.
+        """Все очереди установки: ключ и название.
 
-        Описания здесь нет: у выбранной очереди его читают `get_queue`, а в списке оно
+        Описания здесь нет: у выбранной очереди его отдаёт `get_queue`, а в списке оно
         стоило бы контекста больше, чем сам выбор.
         """
         async with runtime.call() as (session, actor):
