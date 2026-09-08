@@ -40,6 +40,64 @@ test('входящая показывает адресованный вопро�
   await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toBeVisible();
 });
 
+/**
+ * Кромка блокирующего вопроса (решение Д17) проверяется замером, а не поиском класса.
+ *
+ * Класс в разметке стоял и тогда, когда кромки на экране не было: в модуле экрана
+ * сокращение `border` соседнего правила перебивало левую сторону при равной
+ * специфичности, и проигрыш был молчаливым — ни сборка, ни типы, ни разметка о нём
+ * не говорили, а поймал его только замер на живом контуре (UI-53#5).
+ *
+ * Сценарий идёт обоими проектами, светлым и тёмным: цвет сверяется не с числом, а со
+ * значением токена в текущей теме, поэтому ночной красный проверяется тем же кодом.
+ */
+test('блокирующий вопрос отмечен красной кромкой, а не только плашкой', async ({ page }) => {
+  await page.goto('/questions');
+
+  const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
+  await expect(question).toBeVisible();
+
+  const edge = await question.evaluate((node) => {
+    const styles = getComputedStyle(node);
+
+    // Токен доводится до `rgb(...)` тем же способом, что и в `foundation.spec.ts`:
+    // сравнивать `borderLeftColor` с текстом `var(--color-danger)` бессмысленно.
+    const probe = document.createElement('span');
+    document.body.append(probe);
+    const asRgb = (value: string): string => {
+      probe.style.color = value;
+      return getComputedStyle(probe).color;
+    };
+
+    const measured = {
+      leftWidth: styles.borderLeftWidth,
+      leftColor: styles.borderLeftColor,
+      topWidth: styles.borderTopWidth,
+      topColor: styles.borderTopColor,
+      danger: asRgb(styles.getPropertyValue('--color-danger')),
+      line: asRgb(styles.getPropertyValue('--color-line')),
+    };
+    probe.remove();
+    return measured;
+  });
+
+  // Сначала о самих токенах: если тон опасности сравняется с линией, проверка ниже
+  // пройдёт и на пропавшей кромке, ничего не заметив.
+  expect(edge.danger).not.toBe(edge.line);
+
+  expect(edge.leftWidth).toBe('3px');
+  expect(edge.leftColor).toBe(edge.danger);
+
+  // Меняется ровно одно место: остальные стороны — прежняя линия, красной рамки
+  // вокруг карточки нет.
+  expect(edge.topWidth).toBe('1px');
+  expect(edge.topColor).toBe(edge.line);
+
+  // Цвет не остаётся единственным носителем смысла: плашка рядом с кромкой обязана
+  // быть на месте, иначе признак пропадает для того, кто цвета не различает.
+  await expect(question.getByText('блокирующий')).toBeVisible();
+});
+
 test('ссылка вопроса ведёт в саму запись, а не только в задачу', async ({ page }) => {
   await page.goto('/questions');
 
