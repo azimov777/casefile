@@ -27,7 +27,7 @@ export const THEME_SCALES = {
   radius: ['mark', 'control', 'block', 'pill'],
   shadow: ['raised', 'sticky'],
   ease: ['fast', 'exit'],
-  animate: ['appear'],
+  animate: ['appear', 'sheet-in', 'sheet-out', 'overlay-in', 'overlay-out'],
 } as const;
 
 const twMerge = extendTailwindMerge({

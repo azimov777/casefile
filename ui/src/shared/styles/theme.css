@@ -186,6 +186,56 @@
       transform: translateY(calc(var(--spacing) * 4));
     }
   }
+
+  /*
+   * Вход и выход шторки (`shared/ui/sheet.tsx`, UI-60). Именами движения, а не
+   * переходом: узел до конца выхода держит Radix, а он ждёт `animationend`
+   * (`Presence`) — `transition` он не заметит и снимет узел в том же кадре
+   * (`UI-59#12`). Ставятся признаками, которые Radix сам печатает на узле:
+   * `data-[state=open]` и `data-[state=closed]`.
+   *
+   * Содержимое едет `transform` и гаснет `opacity`: шторка стоит вне потока вёрстки,
+   * места ни у кого не занимает, и двигать у неё нечего, кроме себя. Подложке —
+   * одна `opacity`: она во весь экран, сдвигать её некуда. Длительность и кривая
+   * у обеих одинаковы, потому что это одно событие, а не два.
+   *
+   * Четыре имени, а не два: вход и выход различаются кривой (`--ease-fast` против
+   * `--ease-exit`), а подложка и содержимое — тем, чем двигаются. Каждое имя занято
+   * ровно одним местом в разметке; «на будущее» здесь нет ни одного.
+   *
+   * `both` обоим концам: без него узел показался бы конечным кадром — до первого
+   * кадра входа и между концом выхода и снятием узла.
+   */
+  --animate-sheet-in: sheet-in var(--motion-fast) var(--ease-fast) both;
+  --animate-sheet-out: sheet-out var(--motion-fast) var(--ease-exit) both;
+  --animate-overlay-in: overlay-in var(--motion-fast) var(--ease-fast) both;
+  --animate-overlay-out: overlay-out var(--motion-fast) var(--ease-exit) both;
+
+  @keyframes sheet-in {
+    from {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes sheet-out {
+    to {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes overlay-out {
+    to {
+      opacity: 0;
+    }
+  }
 }
 
 /*
