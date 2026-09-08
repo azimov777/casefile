@@ -1,7 +1,7 @@
+import { cva } from 'class-variance-authority';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { caseHref, listReturnHref, taskRefHref } from '@/shared/lib';
-import styles from './task-nav.module.css';
 
 interface TaskNavProps {
   taskKey: string;
@@ -19,6 +19,26 @@ interface TaskNavProps {
 }
 
 /**
+ * Ссылка переключателя вида. Текущий вид взят вариантом, а не состоянием наведения:
+ * подсветка выигрывала у наведения и в модуле (`.view[aria-current]` стоял после
+ * `.view:hover`), то есть фон текущего вида под курсором не менялся никогда.
+ */
+const viewLink = cva(
+  // Отклик на наведение — единственное движение, которое строке позволено: оно
+  // отвечает на действие человека, а не начинается само.
+  'px-3 py-1 no-underline transition-[background-color] duration-(--motion-fast) ease-fast',
+  {
+    variants: {
+      current: {
+        true: 'bg-accent font-semibold text-accent-text',
+        false: 'text-text hover:bg-sunken',
+      },
+    },
+    defaultVariants: { current: false },
+  },
+);
+
+/**
  * Возврат в список и переключение «Карточка — Дело» одной строкой над задачей.
  *
  * Липкая: дело бывает в тысячи пикселей длиной, и «уйти отсюда» должно быть доступно
@@ -33,34 +53,51 @@ export function TaskNav({ taskKey, view, action }: TaskNavProps) {
   const back = listReturnHref(location.state);
 
   return (
-    <nav className={styles.nav} aria-label={`Навигация по задаче ${taskKey}`}>
+    /*
+     * Липнет к самому верху окна: с приходом боковой панели (UI-38) верхняя полоса
+     * оболочки прокручивается вместе со страницей, и смещение на её высоту оставляло бы
+     * под навигацией пустую щель, сквозь которую проезжало содержимое.
+     *
+     * Непрозрачный фон обязателен: под липкой строкой проезжает содержимое.
+     */
+    <nav
+      className="sticky top-0 z-5 flex flex-wrap items-center justify-between gap-3 border-b border-b-line bg-ground py-2 text-meta"
+      aria-label={`Навигация по задаче ${taskKey}`}
+    >
       {/*
        * Настоящая ссылка с адресом, а не `history.back()`: человек должен видеть,
        * куда попадёт, и мочь открыть это в новой вкладке. Когда отбора в памяти нет
        * — вход был прямой, — ссылка честно зовёт ко всем задачам и так и называется.
        */}
-      <Link className={styles.back} to={back ?? '/tasks'}>
+      <Link className="whitespace-nowrap" to={back ?? '/tasks'}>
         {back === null ? '← Ко всем задачам' : '← К списку с отбором'}
       </Link>
 
-      <span className={styles.right}>
+      {/* Действие и переключатель вида — одной группой справа. */}
+      <span className="inline-flex flex-wrap items-center gap-3">
         {action}
 
-        <span className={styles.views}>
+        <span className="inline-flex overflow-hidden rounded-mark border border-line-strong">
           {/*
            * Состояние перехода передаётся дальше: уйдя в дело и вернувшись, человек
            * не должен терять отбор, с которым пришёл из списка.
            */}
           <Link
-            className={styles.view}
+            className={viewLink({ current: view === 'card' })}
             to={taskRefHref({ key: taskKey, entryNo: null })}
             state={location.state}
             aria-current={view === 'card' ? 'page' : undefined}
           >
             Карточка
           </Link>
+          {/* Разделитель нарисован левой границей второй ссылки: у пары он один,
+              и рисовать его правой границей первой значило бы вынести его за
+              скруглённую рамку группы. */}
           <Link
-            className={styles.view}
+            className={viewLink({
+              current: view === 'case',
+              class: 'border-l border-l-line-strong',
+            })}
             to={caseHref(taskKey)}
             state={location.state}
             aria-current={view === 'case' ? 'page' : undefined}
