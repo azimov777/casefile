@@ -39,6 +39,7 @@ from app.api.schemas.tasks import (
 )
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.case import EntryType
+from app.domain.tasks import CheckEdit
 from app.services import case as case_service
 from app.services import queues as queues_service
 from app.services import search as search_service
@@ -215,18 +216,26 @@ async def update_task(
     """Меняет только переданные поля.
 
     Название, описание и пять разделов — только в `backlog` (иначе `409
-    task_field_locked`); исполнитель, теги и приоритет — в любом незакрытом статусе; в
+    task_field_locked`); исполнитель и приоритет — в любом незакрытом статусе; в
     `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение
     подшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,
-    теги и приоритет — `field_changed`. Поля без записи не бывает: изменение, не
+    приоритет — `field_changed`. Поля без записи не бывает: изменение, не
     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
+
+    Проверку правят двумя способами: `check` меняет текст одной на месте, `checks`
+    заменяет список целиком и годится, когда меняется сам состав. Вместе они не
+    принимаются — это два разных ответа на один вопрос.
     """
     task = await service.get_task(session, task_key)
     # `exclude_unset` — единственный фильтр: у `assignee` явный `null` осмыслен и обязан
     # дожить до сценария, у остальных полей его уже отвергла схема.
     changes = payload.model_dump(exclude_unset=True)
     version = changes.pop("version", None)
+    if "check" in changes:
+        # Схема отдаёт вложенную модель словарём, а сценарий ждёт значение домена:
+        # перевод стоит здесь, где кончается транспорт.
+        changes["check"] = CheckEdit(**changes["check"])
     mutation = await service.update_task(
         session,
         task,

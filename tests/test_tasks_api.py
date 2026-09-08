@@ -198,7 +198,15 @@ async def test_sections_are_locked_outside_backlog(auth_client: AsyncClient, que
     assert changed.json()["data"]["version"] == 2
     last = (await case(auth_client, "TRK-1"))[-1]
     assert last["type"] == "section_changed"
-    assert last["payload"] == {"field": "goal", "before": "Ключи не сгорают", "after": "Новая цель"}
+    # `check_no` пуст у всякой правки, кроме точечной правки проверки: в хранимой
+    # нагрузке его тогда нет вовсе, а в ответе он приезжает `null` — пустые поля в
+    # ответе едут вместе с остальными, иначе клиент теряет схему (`docs/notes/api.md`).
+    assert last["payload"] == {
+        "field": "goal",
+        "before": "Ключи не сгорают",
+        "after": "Новая цель",
+        "check_no": None,
+    }
 
     await move(auth_client, "TRK-1", "open")
     refused = await auth_client.patch("/api/v1/tasks/TRK-1", json={"goal": "Ещё"})

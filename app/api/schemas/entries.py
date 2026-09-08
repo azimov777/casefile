@@ -122,7 +122,12 @@ class EntryFactsRead(BaseModel):
         default=None, examples=[7], description="`answer`: number of the question answered"
     )
     check_no: int | None = Field(
-        default=None, examples=[3], description="`verdict`: number of the review check"
+        default=None,
+        examples=[3],
+        description=(
+            "`verdict`: number of the review check. `section_changed`: which check was "
+            "reworded, when the edit was a point one rather than a whole-list replacement"
+        ),
     )
     remark_no: int | None = Field(
         default=None, examples=[None], description="`resolution`: the remark it resolves"
@@ -142,6 +147,16 @@ class EntryFactsRead(BaseModel):
     )
     outcome: VerdictOutcome | None = Field(
         default=None, description="`verdict`: how the check ended"
+    )
+    outdated: bool | None = Field(
+        default=None,
+        examples=[False],
+        description=(
+            "`verdict`: whether the check was reworded after this verdict was filed. A "
+            "verdict points at a check by **number**, not by text, so an outdated one "
+            "reads as «check 3 passed» while what passed was its previous wording. The "
+            "record itself is never touched: this is computed when the case is read"
+        ),
     )
 
 
@@ -292,11 +307,24 @@ class StatusChangedPayload(BaseModel):
 
 
 class SectionChangedPayload(BaseModel):
-    """Правка названия, описания или раздела в `backlog`: «было» и «стало» целиком."""
+    """Правка названия, описания или раздела в `backlog`: «было» и «стало» целиком.
+
+    У точечной правки проверки «целиком» — это тексты самой проверки, а не всего
+    списка, и её номер стоит в `check_no`.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     field: str = Field(examples=["goal"])
+    check_no: int | None = Field(
+        default=None,
+        examples=[None],
+        description=(
+            "Which check was reworded, for a point edit of `checks`. Absent when the "
+            "whole list was replaced: then the set could have changed and the numbers "
+            "could have shifted"
+        ),
+    )
     before: str | list[str] | None = Field(
         default=None, description="Previous value; a list for `checks`"
     )

@@ -57,6 +57,7 @@ from app.domain.case import (
     continuation_key,
     format_entry_ref,
     is_blocking_question,
+    mark_outdated_verdicts,
 )
 from app.domain.errors import (
     ActorNotAddressableError,
@@ -127,9 +128,15 @@ async def read_entry(session: AsyncSession, task: Task, no: int, *, actor: Actor
 
 
 async def case_index(session: AsyncSession, task: Task, *, actor: Actor) -> list[EntryHeading]:
-    """Опись дела: заголовки всех записей без тел. Часть пакета преемника."""
+    """Опись дела: заголовки всех записей без тел. Часть пакета преемника.
+
+    Устаревшие вердикты помечаются здесь, а не в запросе: признак считается по порядку
+    записей — «вердикт подшит до того, как его проверку переписали», — и это правило
+    домена, а не выборка из базы (`app/domain/case.py`, `mark_outdated_verdicts`).
+    Опись и так приходит целиком и упорядоченной, второго запроса пометка не стоит.
+    """
     ensure_scope(actor, TokenScope.TASK, action="case.read")
-    return await EntryRepository(session).headings(task.id)
+    return mark_outdated_verdicts(await EntryRepository(session).headings(task.id))
 
 
 async def last_summary(session: AsyncSession, task: Task, *, actor: Actor) -> Entry | None:
@@ -525,19 +532,31 @@ async def record_section_changed(
     field: TaskField,
     before: Any,
     after: Any,
+    check_no: int | None = None,
 ) -> Entry:
     """Правка названия, описания или раздела в `backlog`: «было / стало» целиком.
 
     Целиком, а не разницей: преемник читает запись, а не собирает текст из патчей, и
     тела разделов ограничены потолком, при котором копия не страшна.
+
+    `check_no` заполнен у точечной правки проверки, и тогда «целиком» — это тексты самой
+    проверки, а не всего списка. Он же попадает в заголовок и в опись: «раздел `checks`
+    изменён» не говорит читающему, какой из вердиктов после этого перестал относиться к
+    делу, а номер — говорит.
     """
+    named = field.value if check_no is None else f"{field.value}[{check_no}]"
+    payload: dict[str, Any] = {"field": field.value, "before": before, "after": after}
+    if check_no is not None:
+        # Только у точечной правки: `check_no: null` у правки названия или цели был бы
+        # полем без смысла в каждой второй записи дела, и стоил бы места в каждой.
+        payload["check_no"] = check_no
     return await _append(
         session,
         task,
         actor=actor,
         type=EntryType.SECTION_CHANGED,
-        title=f"Section changed: {field.value}",
-        payload={"field": field.value, "before": before, "after": after},
+        title=f"Section changed: {named}",
+        payload=payload,
     )
 
 

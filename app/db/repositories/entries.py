@@ -678,7 +678,11 @@ def _facts_json() -> ColumnElement[Any]:
         ),
         (
             Entry.type.in_((EntryType.SECTION_CHANGED, EntryType.FIELD_CHANGED)),
-            func.jsonb_build_object("field", payload["field"]),
+            # `check_no` есть только у точечной правки проверки; у прочих правок его в
+            # нагрузке нет, и в фактах он окажется пустым. Различать их надо именно
+            # здесь: «переписали третью проверку» и «переписали весь список» задевают
+            # разные вердикты (`app/domain/case.py`, `mark_outdated_verdicts`).
+            func.jsonb_build_object("field", payload["field"], "check_no", payload["check_no"]),
         ),
         (
             Entry.type == EntryType.ASSIGNEE_CHANGED,

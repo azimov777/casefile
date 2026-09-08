@@ -386,6 +386,7 @@ class FactsView(BaseModel):
     remark_no: int | None
     remark_outcome: RemarkOutcome | None
     continuation_key: str | None
+    outdated: bool | None
 
 
 def facts(value: EntryFacts) -> FactsView:
@@ -414,6 +415,7 @@ def facts(value: EntryFacts) -> FactsView:
         remark_no=value.remark_no,
         remark_outcome=value.remark_outcome,
         continuation_key=value.continuation_key,
+        outdated=value.outdated,
     )
 
 

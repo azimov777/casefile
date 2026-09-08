@@ -381,6 +381,51 @@ def _normalize_checks(value: Any) -> list[str]:
 FIRST_CHECK_NUMBER = 1
 
 
+@dataclass(frozen=True, slots=True)
+class CheckEdit:
+    """Правка одной проверки: её номер и новый текст.
+
+    Заведена затем, что список правился только целиком: чтобы поменять третью строку из
+    восьми, приходилось переслать все восемь, и опечатка в неизменённых семи проходила
+    молча (`TRK-14`). Пересылка списка при этом никуда не делась и лишней не стала — она
+    единственный способ изменить **состав**: добавить проверку, снять или переставить.
+    Точечная правка меняет текст на месте и состава не трогает, поэтому она и главный
+    путь: она отвечает на частый вопрос «эту проверку выполнить нельзя, перепишем».
+    """
+
+    no: int
+    text: str
+
+
+def apply_check_edit(checks: Sequence[str], edit: CheckEdit) -> list[str]:
+    """Список проверок с заменённым текстом одной из них.
+
+    Номер проверяется по нынешнему списку: он адрес, и адрес за его пределами — не
+    «нечего менять», а ошибка вызывающего. Текст проходит ту же нормализацию, что и при
+    пересылке списка целиком, — второго набора правил у проверки нет.
+
+    Замечания собираются как у остальных полей и приходят под именем `check`: клиент
+    прислал именно его, и назвать в отказе `checks` значило бы указать не на тот аргумент.
+    """
+    problems = FieldProblems()
+    with problems.field(CHECK_EDIT_FIELD):
+        last = FIRST_CHECK_NUMBER + len(checks) - 1
+        if not checks or not FIRST_CHECK_NUMBER <= edit.no <= last:
+            raise FieldProblem(
+                "no_such_check", check_no=edit.no, first=FIRST_CHECK_NUMBER, last=last
+            )
+        updated = list(checks)
+        updated[edit.no - FIRST_CHECK_NUMBER] = edit.text
+        checked = _normalize_checks(updated)
+    problems.raise_as(TaskFieldsInvalidError)
+    return checked
+
+
+#: Имя точечной правки в отказе. Не `checks`: клиент прислал `check`, и указывать надо
+#: на присланное.
+CHECK_EDIT_FIELD = "check"
+
+
 def _normalize_assignee(value: Any) -> str | None:
     """Свободная строка: имя участника или метка. Трекер её не проверяет по реестру.
 

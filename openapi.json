@@ -2351,7 +2351,7 @@
           "tasks"
         ],
         "summary": "Update a task",
-        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, теги и приоритет — в любом незакрытом статусе; в\n`done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение\nподшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,\nтеги и приоритет — `field_changed`. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.",
+        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель и приоритет — в любом незакрытом статусе; в\n`done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение\nподшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,\nприоритет — `field_changed`. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.\n\nПроверку правят двумя способами: `check` меняет текст одной на месте, `checks`\nзаменяет список целиком и годится, когда меняется сам состав. Вместе они не\nпринимаются — это два разных ответа на один вопрос.",
         "operationId": "update_task",
         "security": [
           {
@@ -4797,6 +4797,37 @@
         "title": "BootstrapRead",
         "description": "Всё, что нужно интерфейсу до первой отрисовки, и ничего сверх этого."
       },
+      "CheckUpdate": {
+        "properties": {
+          "no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "No",
+            "description": "Position in the current `checks` list, numbered from 1",
+            "examples": [
+              3
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "description": "New wording of that check; the rest of the list stays byte for byte",
+            "examples": [
+              "`docker compose run --rm test`: the whole suite is green"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "no",
+          "text"
+        ],
+        "title": "CheckUpdate",
+        "description": "Правка одной проверки: её номер и новый текст.\n\nЗаведена затем, что список правился только целиком: чтобы поменять третью строку из\nвосьми, приходилось переслать все восемь, и опечатка в неизменённых семи проходила\nмолча. Пересылка списка осталась и лишней не стала — она единственный способ\nизменить **состав**: добавить проверку, снять или переставить."
+      },
       "CollectionResponse_EntryRead_": {
         "properties": {
           "data": {
@@ -5182,7 +5213,7 @@
               }
             ],
             "title": "Check No",
-            "description": "`verdict`: number of the review check",
+            "description": "`verdict`: number of the review check. `section_changed`: which check was reworded, when the edit was a point one rather than a whole-list replacement",
             "examples": [
               3
             ]
@@ -5241,6 +5272,21 @@
               }
             ],
             "description": "`verdict`: how the check ended"
+          },
+          "outdated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outdated",
+            "description": "`verdict`: whether the check was reworded after this verdict was filed. A verdict points at a check by **number**, not by text, so an outdated one reads as «check 3 passed» while what passed was its previous wording. The record itself is never touched: this is computed when the case is read",
+            "examples": [
+              false
+            ]
           }
         },
         "type": "object",
@@ -6821,6 +6867,21 @@
               "goal"
             ]
           },
+          "check_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check No",
+            "description": "Which check was reworded, for a point edit of `checks`. Absent when the whole list was replaced: then the set could have changed and the numbers could have shifted",
+            "examples": [
+              null
+            ]
+          },
           "before": {
             "anyOf": [
               {
@@ -6864,7 +6925,7 @@
           "field"
         ],
         "title": "SectionChangedPayload",
-        "description": "Правка названия, описания или раздела в `backlog`: «было» и «стало» целиком."
+        "description": "Правка названия, описания или раздела в `backlog`: «было» и «стало» целиком.\n\nУ точечной правки проверки «целиком» — это тексты самой проверки, а не всего\nсписка, и её номер стоит в `check_no`."
       },
       "StatusChangedEntryRead": {
         "properties": {
@@ -7987,12 +8048,16 @@
             "type": "array",
             "maxItems": 100,
             "title": "Checks",
-            "description": "Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`. Replaces the whole list",
+            "description": "Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`. Replaces the whole list: use it to change the **set** of checks — add one, drop one, reorder. To reword one check in place send `check` instead",
             "examples": [
               [
                 "docker compose run --rm test: the whole suite is green"
               ]
             ]
+          },
+          "check": {
+            "$ref": "#/components/schemas/CheckUpdate",
+            "description": "Rewords one check in place, leaving the rest of the list byte for byte. The main way to edit a check: rewording is what happens in practice, and sending the whole list back for it lets a typo into the lines nobody meant to touch. Not accepted together with `checks`: the two would answer the same question differently"
           },
           "assignee": {
             "anyOf": [

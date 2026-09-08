@@ -32,7 +32,7 @@
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -212,10 +212,47 @@ class EntryFacts:
     remark_no: int | None = None
     remark_outcome: RemarkOutcome | None = None
     continuation_key: str | None = None
+    #: `verdict`: относится ли он к нынешней формулировке своей проверки. Считается при
+    #: чтении описи, в нагрузке записи его нет и быть не может — он о том, что случилось
+    #: **после** неё.
+    outdated: bool | None = None
 
 
 #: Пустые факты: у записи этого типа называть строкой нечего, кроме заголовка автора.
 NO_FACTS = EntryFacts()
+
+
+def mark_outdated_verdicts(index: Sequence[EntryHeading]) -> list[EntryHeading]:
+    """Помечает вердикты, чью проверку переписали после них.
+
+    Записи неизменяемы, и подшитый вердикт не правится и не исчезает — меняется то, как
+    его читают (`CONCEPT.md`, 4.4). Без пометки дело становится тихо неверным: вердикт
+    ссылается на **номер**, а не на текст, и читающий уверен, что проверка 3 пройдена,
+    хотя пройдена была её прежняя формулировка.
+
+    Считается одним проходом с конца: правка проверки помечает всё, что подшито до неё.
+    Правка списка целиком (`check_no` у записи нет) задевает любой номер — состав мог
+    измениться, и номера могли сдвинуться.
+
+    Опись приходит упорядоченной по номеру записи, и порядок здесь существенен: он и
+    есть «до» и «после».
+    """
+    rewritten: set[int] = set()
+    whole_list_rewritten = False
+    marked: list[EntryHeading] = []
+    for heading in reversed(index):
+        facts = heading.facts
+        if heading.type is EntryType.SECTION_CHANGED and facts.field is TaskField.CHECKS:
+            if facts.check_no is None:
+                whole_list_rewritten = True
+            else:
+                rewritten.add(facts.check_no)
+        elif heading.type is EntryType.VERDICT and facts.check_no is not None:
+            outdated = whole_list_rewritten or facts.check_no in rewritten
+            heading = replace(heading, facts=replace(facts, outdated=outdated))
+        marked.append(heading)
+    marked.reverse()
+    return marked
 
 
 @dataclass(frozen=True, slots=True)

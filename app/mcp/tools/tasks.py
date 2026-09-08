@@ -9,7 +9,7 @@ from collections.abc import Sequence
 
 from app.domain.links import LinkKind
 from app.domain.search import Operator
-from app.domain.tasks import DEFAULT_PRIORITY, TaskPriority, TaskStatus
+from app.domain.tasks import DEFAULT_PRIORITY, CheckEdit, TaskPriority, TaskStatus
 from app.mcp import views
 from app.mcp.arguments import (
     DEFAULT_SEARCH_FIELDS,
@@ -232,6 +232,12 @@ def register(tools: Toolset) -> None:
         `transition(key, "backlog", reason=...)`, потом правка: изменённый контракт
         заслуживает страницы в деле, поэтому путь намеренно не короткий.
 
+        Проверку переписывают точечно: `check={"no": 3, "text": "..."}`. Остальные
+        остаются теми же байтами, а служебная запись называет номер — по нему видно,
+        какой из подшитых вердиктов перестал относиться к нынешней формулировке.
+        Присылать `checks` списком нужно только когда меняется **состав**: проверка
+        добавляется, снимается или переставляется. Вместе они не принимаются.
+
         Отвечает коротко: ключ, статус, новая версия и номера подшитых записей. Пустой
         `entries` означает «прислано то, что уже стоит» — версия тогда не выросла.
         Карточку целиком не возвращает: ты её только что прислал. Нужна она вся —
@@ -239,11 +245,16 @@ def register(tools: Toolset) -> None:
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
+            given = changes.model_dump(exclude_unset=True)
+            if "check" in given:
+                # Аргумент приезжает словарём, а сценарий ждёт значение домена: перевод
+                # стоит здесь, где кончается транспорт.
+                given["check"] = CheckEdit(**given["check"])
             mutation = await tasks_service.update_task(
                 session,
                 task,
                 actor=actor,
-                changes=tasks_service.TaskChanges(**changes.model_dump(exclude_unset=True)),
+                changes=tasks_service.TaskChanges(**given),
                 expected_version=version,
             )
             return views.mutation(mutation)

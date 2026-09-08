@@ -39,7 +39,7 @@ from app.domain.query_language import (
     QUERY_WRONG_SHAPE,
 )
 from app.domain.search import FEATURES_FIELD, searchable_names, sortable_names
-from app.domain.tasks import TaskPriority, TaskStatus
+from app.domain.tasks import FIRST_CHECK_NUMBER, MAX_CHECK_LENGTH, TaskPriority, TaskStatus
 
 # --- Адресация ------------------------------------------------------------------------
 
@@ -376,6 +376,24 @@ SectionsArg = Annotated[
 ]
 
 
+class CheckEditArg(BaseModel):
+    """Правка одной проверки: её номер и новый текст."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    no: int = Field(
+        ge=FIRST_CHECK_NUMBER,
+        description="Номер проверки в нынешнем списке задачи, с 1",
+        examples=[3],
+    )
+    text: str = Field(
+        min_length=1,
+        max_length=MAX_CHECK_LENGTH,
+        description="Новая формулировка этой проверки; остальные остаются теми же байтами",
+        examples=["`docker compose run --rm test` зелёный целиком"],
+    )
+
+
 class TaskChanges(BaseModel):
     """Что поменять в задаче. Непереданное поле не трогается.
 
@@ -393,7 +411,20 @@ class TaskChanges(BaseModel):
     constraints: str = unset_field(description="Раздел «ограничения»; только в `backlog`")
     output: str = unset_field(description="Раздел «выход»; только в `backlog`")
     checks: list[str] = unset_field(
-        description="Обзорные проверки целиком, списком; только в `backlog`"
+        description=(
+            "Обзорные проверки целиком, списком; только в `backlog`. Этим меняют "
+            "**состав**: добавляют проверку, снимают, переставляют. Переписать одну — "
+            "`check`: пересылка восьми строк ради третьей пропускает опечатку в "
+            "остальных семи молча"
+        )
+    )
+    check: CheckEditArg = unset_field(
+        description=(
+            "Переписывает одну проверку на месте, не трогая остальные; только в "
+            "`backlog`. Главный способ правки: переписывают обычно одну — «эту проверку "
+            "выполнить нельзя», — а состав меняют редко. Вместе с `checks` не "
+            "принимается: это два разных ответа на один вопрос"
+        )
     )
     assignee: str | None = unset_field(
         description="Имя участника или метка временного агента; `null` снимает исполнителя",

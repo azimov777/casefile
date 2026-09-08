@@ -57,13 +57,17 @@ from app.domain.case import EntryHeading
 from app.domain.errors import (
     TaskClosedError,
     TaskFieldLockedError,
+    TaskFieldsInvalidError,
     TaskNotFoundError,
     TaskVersionConflictError,
 )
 from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
+    CHECK_EDIT_FIELD,
     DEFAULT_PRIORITY,
+    FIRST_CHECK_NUMBER,
     INITIAL_STATUS,
+    CheckEdit,
     CheckGap,
     TaskFeatures,
     TaskField,
@@ -71,6 +75,7 @@ from app.domain.tasks import (
     TaskStatus,
     TransitionFacts,
     allowed_transitions,
+    apply_check_edit,
     editable_fields,
     ensure_transition_allowed,
     format_task_key,
@@ -107,15 +112,19 @@ class TaskChanges:
     constraints: str = UNSET
     output: str = UNSET
     checks: Sequence[str] = UNSET
+    check: CheckEdit = UNSET
     assignee: str | None = UNSET
     priority: TaskPriority | str = UNSET
 
+    #: Поля, у которых нет одноимённого поля задачи: они разбираются отдельно.
+    _NOT_TASK_FIELDS = frozenset({"check"})
+
     def given(self) -> dict[TaskField, Any]:
-        """Только переданные поля, по именам домена."""
+        """Только переданные поля, по именам домена. Точечной правки здесь нет."""
         return {
             TaskField(item.name): getattr(self, item.name)
             for item in fields(self)
-            if is_set(getattr(self, item.name))
+            if item.name not in self._NOT_TASK_FIELDS and is_set(getattr(self, item.name))
         }
 
 
@@ -129,11 +138,18 @@ class Transition:
 
 @dataclass(frozen=True, slots=True)
 class TaskChange:
-    """Одно фактическое изменение: какое поле, что было, что стало — уже в JSON-виде."""
+    """Одно фактическое изменение: какое поле, что было, что стало — уже в JSON-виде.
+
+    `check_no` заполнен у точечной правки проверки, и тогда `before` и `after` — тексты
+    самой проверки, а не всего списка. Номер уезжает в служебную запись: «раздел
+    `checks` изменён» не говорит читающему, какой вердикт после этого перестал
+    относиться к делу.
+    """
 
     field: str
     before: Any
     after: Any
+    check_no: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,6 +393,21 @@ async def apply_task_changes(
     _ensure_version(task, expected_version)
 
     given = changes.given()
+    edit = changes.check if is_set(changes.check) else None
+    if edit is not None:
+        # Список и точечная правка в одном вызове — это два ответа на вопрос «каким
+        # стал раздел», и выбрать между ними трекеру нечем.
+        if TaskField.CHECKS in given:
+            raise TaskFieldsInvalidError(
+                details={
+                    "fields": [
+                        {"field": CHECK_EDIT_FIELD, "reason": "conflicts_with", "other": "checks"}
+                    ]
+                }
+            )
+        # Номер проверяется по нынешнему списку задачи — значит, **под очередью**, где
+        # список уже перечитан и больше никем не меняется.
+        given[TaskField.CHECKS] = apply_check_edit(task.checks, edit)
     if given:
         _ensure_editable(task, given)
     recorded: list[TaskChange] = []
@@ -384,7 +415,7 @@ async def apply_task_changes(
         before = getattr(task, field.value)
         if _same(before, after):
             continue
-        recorded.append(TaskChange(field=field.value, before=_json(before), after=_json(after)))
+        recorded.append(_change(field, before, after, edit))
         # JSONB-колонку нельзя менять на месте: SQLAlchemy не отслеживает мутации внутри
         # значения. `normalize_fields` всегда отдаёт новый список, поэтому присваивание
         # безопасно и для `checks`.
@@ -436,7 +467,13 @@ async def apply_task_changes(
             )
         elif field in BACKLOG_ONLY_FIELDS:
             entry = await case_service.record_section_changed(
-                session, task, actor=actor, field=field, before=change.before, after=change.after
+                session,
+                task,
+                actor=actor,
+                field=field,
+                before=change.before,
+                after=change.after,
+                check_no=change.check_no,
             )
         else:
             # Обвязка: сегодня это только `priority`. Ветка без условия намеренно —
@@ -449,6 +486,24 @@ async def apply_task_changes(
 
 
 # --- Внутреннее -----------------------------------------------------------------------
+
+
+def _change(field: TaskField, before: Any, after: Any, edit: CheckEdit | None) -> TaskChange:
+    """Одно изменение в виде для записи в дело.
+
+    У точечной правки «было / стало» — это тексты самой проверки: списки целиком тут
+    были бы копией того, что и так лежит в задаче, а разошедшимся с нею оказался бы
+    именно нужный текст.
+    """
+    if field is not TaskField.CHECKS or edit is None:
+        return TaskChange(field=field.value, before=_json(before), after=_json(after))
+    position = edit.no - FIRST_CHECK_NUMBER
+    return TaskChange(
+        field=field.value,
+        before=_json(before[position]),
+        after=_json(after[position]),
+        check_no=edit.no,
+    )
 
 
 async def _transition_facts(

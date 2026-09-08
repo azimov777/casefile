@@ -22,7 +22,9 @@ from app.api.schemas.entries import (
 )
 from app.api.schemas.links import TaskLinkRead
 from app.domain.tasks import (
+    FIRST_CHECK_NUMBER,
     MAX_ASSIGNEE_LENGTH,
+    MAX_CHECK_LENGTH,
     MAX_CHECKS,
     MAX_TEXT_LENGTH,
     MAX_TITLE_LENGTH,
@@ -201,6 +203,30 @@ class TaskCreate(BaseModel):
     priority: TaskPriority = Field(default=TaskPriority.NORMAL)
 
 
+class CheckUpdate(BaseModel):
+    """Правка одной проверки: её номер и новый текст.
+
+    Заведена затем, что список правился только целиком: чтобы поменять третью строку из
+    восьми, приходилось переслать все восемь, и опечатка в неизменённых семи проходила
+    молча. Пересылка списка осталась и лишней не стала — она единственный способ
+    изменить **состав**: добавить проверку, снять или переставить.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    no: int = Field(
+        ge=FIRST_CHECK_NUMBER,
+        examples=[3],
+        description="Position in the current `checks` list, numbered from 1",
+    )
+    text: str = Field(
+        min_length=1,
+        max_length=MAX_CHECK_LENGTH,
+        examples=["`docker compose run --rm test`: the whole suite is green"],
+        description="New wording of that check; the rest of the list stays byte for byte",
+    )
+
+
 class TaskUpdate(BaseModel):
     """Частичное обновление: применяется только переданное.
 
@@ -223,7 +249,20 @@ class TaskUpdate(BaseModel):
     checks: list[str] = unset_field(
         max_length=MAX_CHECKS,
         examples=[_CHECKS_EXAMPLE],
-        description=f"{_CHECKS_DESCRIPTION}. Replaces the whole list",
+        description=(
+            f"{_CHECKS_DESCRIPTION}. Replaces the whole list: use it to change the **set** "
+            "of checks — add one, drop one, reorder. To reword one check in place send "
+            "`check` instead"
+        ),
+    )
+    check: CheckUpdate = unset_field(
+        description=(
+            "Rewords one check in place, leaving the rest of the list byte for byte. The "
+            "main way to edit a check: rewording is what happens in practice, and sending "
+            "the whole list back for it lets a typo into the lines nobody meant to touch. "
+            "Not accepted together with `checks`: the two would answer the same question "
+            "differently"
+        ),
     )
     assignee: str | None = unset_field(
         max_length=MAX_ASSIGNEE_LENGTH,
