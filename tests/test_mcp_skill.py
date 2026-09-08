@@ -11,14 +11,24 @@
 «неизвестный инструмент» и начнёт искать обход — то есть сломается не сервер, а работа.
 Обратная сторона так же важна: инструмент, ни разу не названный в скиле, агент, скорее
 всего, не найдёт вовсе.
+
+## Почему по именам проверка не заканчивается
+
+Имена — не единственное, чем описание инструмента расходится со скилом. Один и тот же
+факт дисциплины записан в двух каналах: в скиле и в описании, которое приезжает агенту в
+`tools/list`. Правка домена доходит до скила и не доходит до описания — и агент, до
+которого скил не доехал (промпт клиент показывает по своему усмотрению, а в харнессе
+скила может не быть), читает единственную инструкцию, и неверную. Так `wait_journal` звал
+в `open` ожидать ответа четыре дня после того, как ожидание стало `waiting` (`TRK-31`).
 """
 
 import re
 
 import pytest
 from mcp.server.mcpserver import MCPServer
-from mcp_types import TextContent
+from mcp_types import TextContent, Tool
 
+from app.domain.tasks import TaskStatus
 from app.mcp.skill import PROMPT_NAME, SKILL_PATH, SUMMARY_HEADING
 from conftest import Connect
 
@@ -174,3 +184,103 @@ def test_closing_puts_the_final_summary_after_the_verdicts(skill_text: str) -> N
 
     assert verdicts < summary < done, "порядок закрытия в разделе «Завершение» разъехался"
     assert "next_step" in closing, "не сказано, что писать в `next_step` закрываемой задачи"
+
+
+# --- Описания инструментов против скила -----------------------------------------------
+
+#: Абзац описания говорит про ожидание ответа, если в нём есть и ответ, и ожидание.
+#: Двух признаков сразу, а не одного: «ответ» без ожидания — это форма результата вызова,
+#: а ожидание без ответа — другая задача или событие вне трекера, и ход там свой
+#: (`CONCEPT.md`, 4.6).
+ABOUT_AN_ANSWER = re.compile("ответ", re.IGNORECASE)
+ABOUT_WAITING = re.compile("жд|ожид", re.IGNORECASE)
+
+#: Ход дисциплины, как он записан в скиле: `transition(key, "waiting", reason=...)`.
+#: Перенос строки между аргументами законен — файл свёрстан по ширине.
+TRANSITION_IN_SKILL = re.compile(r'transition\(\s*key,\s*"([a-z_]+)"')
+
+
+def statuses_named(text: str) -> set[str]:
+    """Статусы, названные в тексте.
+
+    Границы обязательны: без них `open` находился бы внутри `open_remarks`, и абзац про
+    признаки карточки читался бы как совет уйти в очередь.
+    """
+    return {
+        status.value
+        for status in TaskStatus
+        if re.search(rf"(?<![a-z_]){status.value}(?![a-z_])", text, re.IGNORECASE)
+    }
+
+
+def paragraphs(text: str) -> list[str]:
+    """Абзацы текста: ими свёрстано описание инструмента, описание аргумента — один абзац.
+
+    Абзац, а не предложение: ход дисциплины редко умещается в одно. «Годится, когда ответ
+    ожидается скоро» и «если нет — уходи туда-то» стоят рядом, и разрезанные по точке они
+    перестают быть разговором про ожидание ответа — то есть проверка молча перестала бы
+    смотреть ровно туда, ради чего написана.
+    """
+    return [block for block in re.split(r"\n\s*\n", text) if block.strip()]
+
+
+def model_reads(tool: Tool) -> list[tuple[str, str]]:
+    """Всё, что модель читает у инструмента: его описание и описания его аргументов.
+
+    Аргументы наравне с описанием: они приезжают тем же `tools/list`, и `BlockingArg`
+    показывает, что расходится с доменом там ничуть не реже.
+    """
+    texts = [(tool.name, tool.description or "")]
+    for name, schema in (tool.input_schema.get("properties") or {}).items():
+        texts.append((f"{tool.name}.{name}", schema.get("description") or ""))
+    return texts
+
+
+@pytest.fixture
+def waiting_status(skill_text: str) -> str:
+    """Статус ожидания ответа — тот, который называет раздел «Вопросы» скила.
+
+    Берётся из скила, а не пишется здесь константой: тест сверяет два текста, и своя
+    копия ответа превратила бы его в сверку теста с самим собой.
+    """
+    named = set(TRANSITION_IN_SKILL.findall(section(skill_text, "Вопросы")))
+
+    assert len(named) == 1, f"раздел «Вопросы» называет ходов не один: {sorted(named)}"
+    status = named.pop()
+    assert status in set(TaskStatus), f"раздел «Вопросы» зовёт в `{status}` — такого статуса нет"
+    return status
+
+
+async def test_no_tool_description_names_another_status_for_waiting_for_an_answer(
+    mcp_session: Connect, main_secret: str, waiting_status: str
+) -> None:
+    """Дисциплина TRK-31: описание не зовёт ожидать ответа не там, где скил.
+
+    Скил здесь главный, а описание производное: `waiting` — решение владельца
+    (`CONCEPT.md`, 3.3), и расходится с ним всегда описание. Поэтому статус берётся из
+    скила, а описания сверяются с ним, а не наоборот.
+
+    Проверка отрицательная намеренно. Она не требует, чтобы ход дисциплины в описаниях
+    вообще был: где живёт текст дисциплины, решает не этот тест (`TRK-33`). Она требует
+    ровно одного — чтобы названный в описании статус ожидания совпадал со скилом.
+
+    Список берётся токеном `main`: описание читает каждый, кому инструмент виден, и
+    расхождение прячется в наборе `main` не хуже, чем в рабочем цикле.
+    """
+    async with mcp_session(main_secret) as session:
+        listed = (await session.list_tools()).tools
+
+    assert listed, "список инструментов пуст: проверять нечего"
+
+    diverged: list[str] = []
+    for tool in listed:
+        for where, text in model_reads(tool):
+            for paragraph in paragraphs(text):
+                if not (ABOUT_AN_ANSWER.search(paragraph) and ABOUT_WAITING.search(paragraph)):
+                    continue
+                wrong = statuses_named(paragraph) - {waiting_status}
+                if wrong:
+                    said = " ".join(paragraph.split())
+                    diverged.append(f"{where}: {sorted(wrong)} вместо `{waiting_status}` — {said}")
+
+    assert not diverged, "описание зовёт ожидать ответа не там, где скил:\n" + "\n".join(diverged)
