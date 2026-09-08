@@ -310,12 +310,16 @@ export interface paths {
          * @description Меняет только переданные поля.
          *
          *     Название, описание и пять разделов — только в `backlog` (иначе `409
-         *     task_field_locked`); исполнитель, теги и приоритет — в любом незакрытом статусе; в
+         *     task_field_locked`); исполнитель и приоритет — в любом незакрытом статусе; в
          *     `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение
          *     подшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,
-         *     теги и приоритет — `field_changed`. Поля без записи не бывает: изменение, не
+         *     приоритет — `field_changed`. Поля без записи не бывает: изменение, не
          *     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
          *     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
+         *
+         *     Проверку правят двумя способами: `check` меняет текст одной на месте, `checks`
+         *     заменяет список целиком и годится, когда меняется сам состав. Вместе они не
+         *     принимаются — это два разных ответа на один вопрос.
          */
         patch: operations["update_task"];
         trace?: never;
@@ -827,6 +831,29 @@ export interface components {
              */
             open_questions: number;
         };
+        /**
+         * CheckUpdate
+         * @description Правка одной проверки: её номер и новый текст.
+         *
+         *     Заведена затем, что список правился только целиком: чтобы поменять третью строку из
+         *     восьми, приходилось переслать все восемь, и опечатка в неизменённых семи проходила
+         *     молча. Пересылка списка осталась и лишней не стала — она единственный способ
+         *     изменить **состав**: добавить проверку, снять или переставить.
+         */
+        CheckUpdate: {
+            /**
+             * No
+             * @description Position in the current `checks` list, numbered from 1
+             * @example 3
+             */
+            no: number;
+            /**
+             * Text
+             * @description New wording of that check; the rest of the list stays byte for byte
+             * @example `docker compose run --rm test`: the whole suite is green
+             */
+            text: string;
+        };
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -974,7 +1001,7 @@ export interface components {
             question_no?: number | null;
             /**
              * Check No
-             * @description `verdict`: number of the review check
+             * @description `verdict`: number of the review check. `section_changed`: which check was reworded, when the edit was a point one rather than a whole-list replacement
              * @example 3
              */
             check_no?: number | null;
@@ -997,6 +1024,12 @@ export interface components {
             continuation_key?: string | null;
             /** @description `verdict`: how the check ended */
             outcome?: components["schemas"]["VerdictOutcome"] | null;
+            /**
+             * Outdated
+             * @description `verdict`: whether the check was reworded after this verdict was filed. A verdict points at a check by **number**, not by text, so an outdated one reads as «check 3 passed» while what passed was its previous wording. The record itself is never touched: this is computed when the case is read
+             * @example false
+             */
+            outdated?: boolean | null;
         };
         /**
          * EntryHeadingRead
@@ -1967,6 +2000,9 @@ export interface components {
         /**
          * SectionChangedPayload
          * @description Правка названия, описания или раздела в `backlog`: «было» и «стало» целиком.
+         *
+         *     У точечной правки проверки «целиком» — это тексты самой проверки, а не всего
+         *     списка, и её номер стоит в `check_no`.
          */
         SectionChangedPayload: {
             /**
@@ -1974,6 +2010,12 @@ export interface components {
              * @example goal
              */
             field: string;
+            /**
+             * Check No
+             * @description Which check was reworded, for a point edit of `checks`. Absent when the whole list was replaced: then the set could have changed and the numbers could have shifted
+             * @example null
+             */
+            check_no?: number | null;
             /**
              * Before
              * @description Previous value; a list for `checks`
@@ -2583,12 +2625,14 @@ export interface components {
             output?: string;
             /**
              * Checks
-             * @description Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`. Replaces the whole list
+             * @description Ordered list of checks, numbered from 1 by position; each one must be written so that it can fail. The assignee runs them and records a verdict per check before `done`. Editable only in `backlog`. Replaces the whole list: use it to change the **set** of checks — add one, drop one, reorder. To reword one check in place send `check` instead
              * @example [
              *       "docker compose run --rm test: the whole suite is green"
              *     ]
              */
             checks?: string[];
+            /** @description Rewords one check in place, leaving the rest of the list byte for byte. The main way to edit a check: rewording is what happens in practice, and sending the whole list back for it lets a typo into the lines nobody meant to touch. Not accepted together with `checks`: the two would answer the same question differently */
+            check?: components["schemas"]["CheckUpdate"];
             /**
              * Assignee
              * @description Participant name or temporary agent label; free text the tracker never validates against the registry. Pass null to unassign
