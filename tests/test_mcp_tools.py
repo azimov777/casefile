@@ -18,6 +18,7 @@
 """
 
 import json
+import re
 import uuid
 from typing import Any
 
@@ -28,8 +29,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.case import EntryType
+from app.domain.errors import InvalidSearchQueryError
+from app.domain.query_language import QUERY_WRONG_SHAPE, parse_query
 from app.domain.tokens import TokenScope
-from app.mcp.arguments import DEFAULT_SEARCH_FIELDS
+from app.mcp.arguments import DEFAULT_SEARCH_FIELDS, QueryArg
 from app.services import case as case_service
 from app.services import queues as queues_service
 from app.services import tasks as tasks_service
@@ -974,3 +977,46 @@ async def test_a_shared_token_signs_its_entries_with_the_label(
         )
 
     assert entry["author"] == {"kind": "agent", "signature": "nightly_agent"}
+
+
+# --- Описание поиска: примеры оттуда обязаны работать ---------------------------------
+
+
+def _query_description() -> str:
+    """Описание поля `query`, как его увидит модель, — из самого объявления аргумента."""
+    return str(QueryArg.__metadata__[0].description)
+
+
+def _examples_of(description: str) -> list[str]:
+    """Примеры из списка описания: строки вида «- `запрос`»."""
+    return re.findall(r"^- `(.+)`$", description, flags=re.MULTILINE)
+
+
+def test_every_query_example_of_the_tool_description_parses() -> None:
+    """Обзорная проверка 3: примеры берутся из текста описания, а не из копии рядом.
+
+    Копия в тесте проверяла бы саму себя: разойтись с описанием ей ничто не мешает, и
+    первым это заметил бы агент, скопировавший пример из описания и получивший отказ.
+    """
+    description = _query_description()
+    examples = _examples_of(description)
+
+    assert len(examples) >= 3, "описание обязано показывать язык примерами, не одними словами"
+    for example in examples:
+        assert parse_query(example).root is not None, example
+
+    # Хотя бы один пример показывает оператор в его настоящем месте — после двоеточия.
+    assert any(re.search(r": (in|not in|>=|<=|>|<|~|!~|!=) ", example) for example in examples)
+
+
+def test_the_description_names_the_wrong_shape_and_it_is_really_wrong() -> None:
+    """Ошибочная форма названа в описании прямо — и остаётся ошибочной в разборе.
+
+    Названа она потому, что её приносят из SQL раз за разом. А проверяется потому, что
+    описание, объявившее ошибкой то, что на самом деле работает, — хуже молчания.
+    """
+    description = _query_description()
+
+    assert QUERY_WRONG_SHAPE in description
+    with pytest.raises(InvalidSearchQueryError):
+        parse_query(QUERY_WRONG_SHAPE)

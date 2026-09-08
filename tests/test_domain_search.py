@@ -8,7 +8,14 @@
 import pytest
 
 from app.domain.errors import InvalidSearchQueryError
-from app.domain.query_language import parse_query, parse_sort_terms, parse_value_expression
+from app.domain.query_language import (
+    QUERY_EXAMPLES,
+    QUERY_RIGHT_SHAPE,
+    QUERY_WRONG_SHAPE,
+    parse_query,
+    parse_sort_terms,
+    parse_value_expression,
+)
 from app.domain.search import (
     MAX_CONDITIONS,
     MAX_GROUP_DEPTH,
@@ -336,3 +343,104 @@ def test_plural_operator_only_touches_equality() -> None:
     assert plural_operator(Operator.NE, 2) is Operator.NOT_IN
     assert plural_operator(Operator.GT, 2) is Operator.GT
     assert plural_operator(Operator.EQ, 1) is Operator.EQ
+
+
+# --- Форма условия: чему учит отказ ---------------------------------------------------
+
+
+def test_the_sql_shape_is_refused_with_the_right_shape_in_the_details() -> None:
+    """Обзорная проверка 2: `status in (...)` отвечает не только «нет двоеточия».
+
+    Форма из SQL — самая частая ошибка агента: в перечне операторов есть `in`, а где он
+    пишется, перечень не говорит. Отказ обязан сказать это сам, иначе следующий ход
+    уходит на угадывание.
+    """
+    with pytest.raises(InvalidSearchQueryError) as error:
+        parse_query(QUERY_WRONG_SHAPE)
+
+    details = error.value.details
+    assert details["reason"] == "expected_colon"
+    assert details["field"] == "status"
+    # Подсказка показывает форму с тем же полем и тем же оператором, что написали.
+    assert details["hint"] == (
+        "the operator goes after the colon, values need no parentheses: status: in value, value"
+    )
+
+
+def test_the_hint_filled_with_the_values_parses_into_the_intended_condition() -> None:
+    """Подсказка не просто читается — по ней чинится запрос, и это проверяется разбором.
+
+    Подставляем в форму из подсказки те значения, которые стояли в скобках, и требуем,
+    чтобы вышло ровно то условие, которое имелось в виду: вхождение статуса в набор.
+    """
+    with pytest.raises(InvalidSearchQueryError) as error:
+        parse_query(QUERY_WRONG_SHAPE)
+
+    shape = str(error.value.details["hint"]).split(": ", 1)[1]
+    values = iter(["open", "in_progress"])
+    repaired = " ".join(
+        next(values) + word.removeprefix("value") if word.startswith("value") else word
+        for word in shape.split(" ")
+    )
+
+    assert repaired == QUERY_RIGHT_SHAPE
+    condition = only(repaired)
+    assert condition.name == "status"
+    assert condition.operator is Operator.IN
+    assert [value.text for value in condition.values] == ["open", "in_progress"]  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("query", "hint_tail"),
+    [
+        ("queue = UI", "queue: value"),
+        ("priority >= high", "priority: >= value"),
+        ("status not in open, done", "status: not in value, value"),
+        ("text ~ ключ", "text: ~ value"),
+    ],
+)
+def test_the_hint_repeats_the_operator_that_was_written(query: str, hint_tail: str) -> None:
+    """Подсказка идёт от написанного, а не от одного заученного примера.
+
+    Равенство при этом показывается без оператора: `=` — умолчание языка, и писать его
+    незачем. Остальные операторы повторяются как есть, включая двусложный `not in`.
+    """
+    with pytest.raises(InvalidSearchQueryError) as error:
+        parse_query(query)
+
+    assert str(error.value.details["hint"]).endswith(hint_tail)
+
+
+def test_an_ordinary_typo_gets_no_invented_hint() -> None:
+    """Подсказка появляется только там, где верная форма выводима из места ошибки.
+
+    После имени поля стоит не оператор, а значение — что человек имел в виду, отсюда
+    не видно, и выдумывать нечего. Подсказка «на всякий случай» хуже её отсутствия:
+    её пробуют, она не помогает, и доверие к следующей теряется.
+    """
+    with pytest.raises(InvalidSearchQueryError) as error:
+        parse_query("status open")
+
+    details = error.value.details
+    assert details["reason"] == "expected_colon"
+    assert "hint" not in details
+
+
+def test_every_example_of_the_description_parses() -> None:
+    """Обзорная проверка 3: примеры из описания — рабочие запросы, а не иллюстрации.
+
+    Пример, который не разбирается, хуже отсутствующего: по нему учатся, и ошибка
+    расходится по всем задачам, где агент его скопировал.
+    """
+    for example in QUERY_EXAMPLES:
+        assert parse_query(example).root is not None, example
+
+    # Хотя бы один показывает оператор: из перечня «есть `in`» без примера и вырастает
+    # форма из SQL, ради которой заведена подсказка выше.
+    assert any(
+        " in " in example or ": >" in example or ": ~" in example for example in QUERY_EXAMPLES
+    )
+
+    # А ошибочная форма остаётся ошибочной: она названа в описании именно такой.
+    with pytest.raises(InvalidSearchQueryError):
+        parse_query(QUERY_WRONG_SHAPE)

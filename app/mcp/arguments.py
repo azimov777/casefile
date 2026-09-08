@@ -33,6 +33,11 @@ from app.domain.idempotency import KEY_TTL
 from app.domain.journal import JOURNAL_START, MAX_WAIT_SECONDS
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
+from app.domain.query_language import (
+    QUERY_EXAMPLES,
+    QUERY_RIGHT_SHAPE,
+    QUERY_WRONG_SHAPE,
+)
 from app.domain.search import FEATURES_FIELD, searchable_names, sortable_names
 from app.domain.tasks import TaskPriority, TaskStatus
 
@@ -419,14 +424,23 @@ QueryArg = Annotated[
     str | None,
     Field(
         description=(
-            "Строка языка запросов: `queue: TRK and status: open and blocked: false and "
-            "open_blocking_questions: 0`. Поля: "
-            + ", ".join(f"`{name}`" for name in searchable_names())
-            + ". Операторы `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (вхождение), `!~`, `in`, "
-            "`not in`; `empty()` находит задачи без значения. Условия связываются `and`, "
-            "`or` и скобками. Ошибка разбора приходит с позицией символа"
+            "Строка языка запросов. Условие пишется `имя: [оператор] значения` — оператор "
+            "стоит **после** двоеточия, и это главное, чем язык отличается от SQL: "
+            f"`{QUERY_RIGHT_SHAPE}`, а не `{QUERY_WRONG_SHAPE}`. Скобки в языке есть, но "
+            "группируют они условия, а не значения.\n\n"
+            "Без оператора условие означает равенство, а несколько значений через запятую "
+            "— вхождение в набор: `status: open, in_progress` то же самое, что "
+            f"`{QUERY_RIGHT_SHAPE}`.\n\n"
+            "Поля: " + ", ".join(f"`{name}`" for name in searchable_names()) + ". "
+            "Операторы: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (вхождение подстроки), `!~`, "
+            "`in`, `not in`; `empty()` находит задачи без значения. Условия связываются "
+            "`and` и `or`.\n\n"
+            "Примеры:\n"
+            + "\n".join(f"- `{example}`" for example in QUERY_EXAMPLES)
+            + "\n\nОшибка разбора приходит с позицией символа, а там, где верная форма "
+            "выводима из места ошибки, — и с ней самой в `details.hint`"
         ),
-        examples=["queue: TRK and status: open and blocked: false"],
+        examples=list(QUERY_EXAMPLES),
     ),
 ]
 SortArg = Annotated[

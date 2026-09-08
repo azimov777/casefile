@@ -31,6 +31,18 @@
 значения. Без неё «задачи без исполнителя» не выражались бы вовсе — пустая строка
 исполнителем быть не может, а `assignee: ""` молча не нашло бы ничего.
 
+## Оператор стоит после двоеточия, и это самая частая ошибка
+
+`status in (open, in_progress)` — форма из SQL и из чужих трекеров, и агенты приносят её
+раз за разом: в перечне операторов есть `in`, а где он пишется, перечень не говорит.
+Верно `status: in open, in_progress` либо просто `status: open, in_progress` — несколько
+значений через запятую и без оператора уже означают вхождение в набор.
+
+Лечится это подсказкой в отказе (`QUERY_SHAPE_HINT` и `_condition_shape_hint`), а не
+второй формой записи. Вторая форма — это второй разбор: проверяться будет один, а
+расходиться они начнут на краевых случаях, которые никто не пишет нарочно. Скобки в
+языке есть, но группируют они **условия**, а не значения: `(a: 1 or b: 2) and c: 3`.
+
 ## Слова языка нельзя использовать как имена полей без кавычек
 
 `and`, `or`, `in`, `not` разбираются как слова языка везде, где их можно так понять.
@@ -76,6 +88,28 @@ KEYWORDS = frozenset({"and", "or", "in", "not"})
 #: Единственная функция языка. Именем, а не перечислением из одного члена: перечисление
 #: обещало бы, что функций будет больше, а их не будет (см. докстринг модуля).
 EMPTY_FUNCTION = "empty"
+
+#: Примеры запросов, которые видит агент и человек: из них собраны описания поля `query`
+#: в MCP и в REST, и они же прогоняются разбором в тесте. Список, а не текст в двух
+#: описаниях: пример, который не разбирается, хуже отсутствующего — по нему учатся.
+#:
+#: Первый показывает связку условий, второй — оператор после двоеточия, третий —
+#: сравнение и вхождение подстроки, четвёртый — `empty()` и `or`. Оператор обязан быть
+#: хотя бы в одном: из перечня «есть `in`» без примера вырастает `status in (...)`.
+QUERY_EXAMPLES: tuple[str, ...] = (
+    "queue: TRK and status: open and blocked: false",
+    "status: in open, in_progress",
+    "priority: >= high and text: ~ ключ",
+    "assignee: empty() or open_questions: > 0",
+)
+
+#: Форма из SQL и чужих трекеров, которую агенты приносят чаще всего. Названа в описаниях
+#: ошибкой прямо: перечислить операторы и не сказать, где они пишутся, — и есть ловушка.
+QUERY_WRONG_SHAPE = "status in (open, in_progress)"
+
+#: Как то же самое пишется на этом языке. Стоит рядом с ошибочной формой везде, где та
+#: упомянута: «так нельзя» без «а как можно» стоит агенту ещё одного хода.
+QUERY_RIGHT_SHAPE = "status: in open, in_progress"
 
 #: Тело слова — `\w` в юникодном смысле плюс точка и дефис. Не латиница: значениями
 #: здесь бывают пользовательские данные — метки и куски названий, — и они по-русски.
@@ -305,7 +339,13 @@ class _Parser:
 
         colon = self._peek()
         if colon.type is not TokenType.COLON:
-            raise self._error(colon, "expected_colon", expected=[":"], field=token.text)
+            raise self._error(
+                colon,
+                "expected_colon",
+                expected=[":"],
+                field=token.text,
+                **self._condition_shape_hint(token),
+            )
         self._advance()
 
         operator = self._parse_operator()
@@ -321,6 +361,48 @@ class _Parser:
             values=values,
             position=token.position,
         )
+
+    def _condition_shape_hint(self, field: Token) -> dict[str, str]:
+        """Подсказка «как надо» там, где вместо двоеточия стоит оператор.
+
+        Двоеточия нет, а следом идёт оператор — значит написана форма из другого языка
+        (`status in (...)`, `queue = UI`), и мы знаем и поле, и оператор, которые человек
+        или агент имел в виду. Ошибка без такой подсказки стоит хода: `expected_colon`
+        говорит, чего не хватает, но не говорит, куда это поставить.
+
+        Подсказка показывает **форму**, а не восстановленное условие целиком: значения
+        пришлось бы собирать обратно из лексем, разбирая заодно скобки, а форма и есть
+        то, чего не хватает — значения писавший помнит.
+
+        Пусто, когда следом не оператор: тогда это просто опечатка, и выдумывать по ней
+        нечего.
+        """
+        operator = self._operator_ahead()
+        if operator is None:
+            return {}
+        if operator is Operator.EQ:
+            # Равенство — оператор по умолчанию, и писать его незачем.
+            shape = f"{field.text}: value"
+        elif operator in {Operator.IN, Operator.NOT_IN}:
+            shape = f"{field.text}: {operator.value} value, value"
+        else:
+            shape = f"{field.text}: {operator.value} value"
+        return {"hint": f"the operator goes after the colon, values need no parentheses: {shape}"}
+
+    def _operator_ahead(self) -> Operator | None:
+        """Оператор на текущем месте, не сдвигая разбор. `not in` — две лексемы."""
+        token = self._peek()
+        if token.type is TokenType.OPERATOR:
+            return Operator(token.text)
+        if token.type is not TokenType.WORD:
+            return None
+        if token.text.lower() == "in":
+            return Operator.IN
+        if token.text.lower() == "not":
+            following = self._tokens[min(self._index + 1, len(self._tokens) - 1)]
+            if following.type is TokenType.WORD and following.text.lower() == "in":
+                return Operator.NOT_IN
+        return None
 
     def _parse_operator(self) -> Operator:
         token = self._peek()

@@ -17,6 +17,7 @@ from app.domain.errors import (
     SearchValueInvalidError,
 )
 from app.domain.links import LinkKind
+from app.domain.query_language import QUERY_RIGHT_SHAPE
 from app.domain.search import Operator
 from app.domain.tasks import TaskFeatures, TaskPriority, TaskStatus
 from app.services import case as case_service
@@ -234,6 +235,40 @@ async def test_empty_still_means_no_value_on_both_inputs(
 
     assert by_filter == [nobody.key]
     assert by_query == by_filter
+
+
+async def test_the_shape_from_the_hint_finds_what_the_structured_filter_finds(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Обзорная проверка 2 TRK-13: подсказка чинит запрос, а не просто утешает.
+
+    Агент пишет `status in (open, in_progress)` — форму из SQL, — получает отказ с верной
+    формой в `details.hint`, подставляет свои значения и повторяет. Здесь проверяется
+    последний шаг: починенный запрос находит ровно то же, что структурный отбор по двум
+    статусам. Без этого подсказка была бы обещанием, которое никто не проверял.
+    """
+    backlog = await make(db_session, task_actor, queue, "черновик")
+    opened = await open_task(
+        db_session, task_actor, await make(db_session, task_actor, queue, "открытая")
+    )
+    working = await make(db_session, task_actor, queue, "в работе")
+    working = await open_task(db_session, task_actor, working)
+    working = (
+        await tasks_service.transition_task(
+            db_session, working, actor=task_actor, to=TaskStatus.IN_PROGRESS
+        )
+    ).task
+
+    by_query = await keys(db_session, task_actor, query=QUERY_RIGHT_SHAPE)
+    by_filter = await keys(
+        db_session,
+        task_actor,
+        structured=[StructuredTerm(name="status", values=["open", "in_progress"])],
+    )
+
+    assert by_query == by_filter
+    assert set(by_query) == {opened.key, working.key}
+    assert backlog.key not in by_query
 
 
 async def test_both_inputs_narrow_each_other_instead_of_replacing(

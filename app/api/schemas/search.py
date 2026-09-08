@@ -36,6 +36,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse
 from app.api.schemas.tasks import TaskFeaturesRead, TaskQueueRead
+from app.domain.query_language import (
+    QUERY_EXAMPLES,
+    QUERY_RIGHT_SHAPE,
+    QUERY_WRONG_SHAPE,
+)
 from app.domain.search import (
     FEATURES_FIELD,
     MAX_QUERY_LENGTH,
@@ -53,9 +58,15 @@ _QUERY_DESCRIPTION = (
     "and open_blocking_questions: 0`. Fields: "
     + ", ".join(f"`{name}`" for name in searchable_names())
     + ". Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, "
-    "`not in`; `empty()` matches tasks with no value in the field. Combine with `and`, "
-    "`or` and parentheses. Values with spaces or a leading language word go in quotes. "
-    "A parse error answers 422 with the position of the offending character"
+    "`not in`; `empty()` matches tasks with no value in the field. The operator goes "
+    f"**after** the colon — `{QUERY_RIGHT_SHAPE}`, not `{QUERY_WRONG_SHAPE}`: "
+    "parentheses group conditions, not values. Without an operator a condition means "
+    "equality, and several comma-separated values already mean set membership. Combine "
+    "with `and`, `or` and parentheses. Values with spaces or a leading language word go "
+    "in quotes. Examples: "
+    + "; ".join(f"`{example}`" for example in QUERY_EXAMPLES)
+    + ". A parse error answers 422 with the position of the offending character and, "
+    "where the right shape follows from it, with that shape in `details.hint`"
 )
 _SORT_DESCRIPTION = (
     "Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. "
