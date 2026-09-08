@@ -108,7 +108,6 @@ async def create_task(
             output=payload.output,
             checks=payload.checks,
             assignee=payload.assignee,
-            tags=payload.tags,
             priority=payload.priority,
         )
         return DataResponse[TaskRead](data=TaskRead.model_validate(task))

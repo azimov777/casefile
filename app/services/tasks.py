@@ -108,7 +108,6 @@ class TaskChanges:
     output: str = UNSET
     checks: Sequence[str] = UNSET
     assignee: str | None = UNSET
-    tags: Sequence[str] = UNSET
     priority: TaskPriority | str = UNSET
 
     def given(self) -> dict[TaskField, Any]:
@@ -254,7 +253,6 @@ async def create_task(
     output: str = "",
     checks: Sequence[str] = (),
     assignee: str | None = None,
-    tags: Sequence[str] = (),
     priority: TaskPriority | str = DEFAULT_PRIORITY,
 ) -> Task:
     """Заводит задачу в `backlog`. Статус не принимается: новая задача рождается только там.
@@ -280,7 +278,6 @@ async def create_task(
             TaskField.OUTPUT: output,
             TaskField.CHECKS: checks,
             TaskField.ASSIGNEE: assignee,
-            TaskField.TAGS: tags,
             TaskField.PRIORITY: priority,
         }
     )
@@ -390,7 +387,7 @@ async def apply_task_changes(
         recorded.append(TaskChange(field=field.value, before=_json(before), after=_json(after)))
         # JSONB-колонку нельзя менять на месте: SQLAlchemy не отслеживает мутации внутри
         # значения. `normalize_fields` всегда отдаёт новый список, поэтому присваивание
-        # безопасно и для `checks`, и для `tags`.
+        # безопасно и для `checks`.
         setattr(task, field.value, after)
 
     status_change: tuple[TaskStatus, TaskStatus, str | None] | None = None
@@ -442,8 +439,8 @@ async def apply_task_changes(
                 session, task, actor=actor, field=field, before=change.before, after=change.after
             )
         else:
-            # Обвязка: `tags` и `priority`. Ветка без условия намеренно — новое поле
-            # карточки получит запись само, а не окажется тихо немым в ленте.
+            # Обвязка: сегодня это только `priority`. Ветка без условия намеренно —
+            # новое поле карточки получит запись само, а не окажется тихо немым в ленте.
             entry = await case_service.record_field_changed(
                 session, task, actor=actor, field=field, before=change.before, after=change.after
             )

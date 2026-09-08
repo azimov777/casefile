@@ -353,19 +353,19 @@ async def test_update_task_touches_only_what_was_passed(
             session, "update_task", key=task.key, changes={"assignee": "release_bot"}
         )
         after_assign = await card()
-        tagged = await call(session, "update_task", key=task.key, changes={"tags": ["x"]})
-        after_tag = await card()
+        raised = await call(session, "update_task", key=task.key, changes={"priority": "high"})
+        after_raise = await card()
         cleared = await call(session, "update_task", key=task.key, changes={"assignee": None})
         after_clear = await card()
 
     # Каждая правка что-то подшила: пустой `entries` означал бы «прислано то, что уже
     # стоит», и тогда проверка ниже прошла бы по чужой причине.
-    assert assigned["entries"] and tagged["entries"] and cleared["entries"]
+    assert assigned["entries"] and raised["entries"] and cleared["entries"]
     assert after_assign["assignee"] == "release_bot"
-    assert after_tag["assignee"] == "release_bot", "правка тегов сняла исполнителя"
-    assert after_tag["tags"] == ["x"]
+    assert after_raise["assignee"] == "release_bot", "правка приоритета сняла исполнителя"
+    assert after_raise["priority"] == "high"
     assert after_clear["assignee"] is None
-    assert after_clear["tags"] == ["x"], "снятие исполнителя стёрло теги"
+    assert after_clear["priority"] == "high", "снятие исполнителя вернуло приоритет"
 
 
 async def test_the_short_answer_carries_enough_for_the_next_move(
@@ -384,7 +384,7 @@ async def test_the_short_answer_carries_enough_for_the_next_move(
     async with mcp_session(task_secret) as session:
         moved = await call(session, "transition", key=key, to="in_progress")
         updated = await call(
-            session, "update_task", key=key, changes={"tags": ["x"]}, version=moved["version"]
+            session, "update_task", key=key, changes={"priority": "high"}, version=moved["version"]
         )
         card = (await call(session, "get_task", key=key))["task"]
 
@@ -397,7 +397,7 @@ async def test_the_short_answer_carries_enough_for_the_next_move(
 
     assert updated["version"] == moved["version"] + 1
     assert updated["entries"] == [moved["entries"][0] + 1]
-    assert card["tags"] == ["x"]
+    assert card["priority"] == "high"
 
 
 async def test_an_update_that_changes_nothing_files_nothing(
@@ -410,8 +410,8 @@ async def test_an_update_that_changes_nothing_files_nothing(
     приходить именно тогда, когда версия не выросла, — это и проверяется.
     """
     async with mcp_session(task_secret) as session:
-        first = await call(session, "update_task", key=task.key, changes={"tags": ["x"]})
-        again = await call(session, "update_task", key=task.key, changes={"tags": ["x"]})
+        first = await call(session, "update_task", key=task.key, changes={"priority": "high"})
+        again = await call(session, "update_task", key=task.key, changes={"priority": "high"})
 
     assert first["entries"]
     assert again["entries"] == []
@@ -498,7 +498,7 @@ async def test_update_task_refuses_a_stale_version(
     """Устаревшая версия — отказ, а не тихая перезапись чужого изменения."""
     async with mcp_session(task_secret) as session:
         failure = await refuse(
-            session, "update_task", key=task.key, changes={"tags": ["x"]}, version=99
+            session, "update_task", key=task.key, changes={"priority": "high"}, version=99
         )
 
     assert "version_conflict" in failure

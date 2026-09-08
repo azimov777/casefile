@@ -60,7 +60,7 @@ async def listed_keys(client: AsyncClient, **params: Any) -> list[str]:
 @pytest.fixture
 async def board(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> dict[str, Task]:
     """Обычная открытая задача, заблокированная и открытая с блокирующим вопросом."""
-    plain = await make(db_session, task_actor, queue, "обычная", tags=["backend", "ui"])
+    plain = await make(db_session, task_actor, queue, "обычная")
     plain = (
         await tasks_service.transition_task(db_session, plain, actor=task_actor, to=TaskStatus.OPEN)
     ).task
@@ -177,12 +177,23 @@ async def test_an_unknown_field_answers_with_the_list_of_allowed_ones(
     assert "open_blocking_questions" in error["details"]["allowed"]
 
 
-async def test_a_tag_is_found_among_several(
-    auth_client: AsyncClient, board: dict[str, Task]
+async def test_a_removed_search_field_answers_with_the_list_without_it(
+    auth_client: AsyncClient,
 ) -> None:
-    """Проверка 7: метка находится в задаче с несколькими метками."""
-    assert await listed_keys(auth_client, tags="backend") == [board["plain"].key]
-    assert await listed_keys(auth_client, query="tags: ui") == [board["plain"].key]
+    """Отбор по снятому полю отказывает так же, как по выдуманному, и это важно.
+
+    `tags: release` — запрос, который агент напишет по памяти. Ответ обязан сказать не
+    только «нет такого поля», но и какие есть: иначе снятие механики читается как поломка
+    поиска, и следующий ход — вопрос владельцу вместо чтения списка.
+    """
+    response = await auth_client.get("/api/v1/tasks", params={"query": "tags: release"})
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "search_field_unknown"
+    assert error["details"]["field"] == "tags"
+    assert "tags" not in error["details"]["allowed"]
+    assert {"assignee", "priority", "status", "text"} <= set(error["details"]["allowed"])
 
 
 # --- Прочее ------------------------------------------------------------------------------

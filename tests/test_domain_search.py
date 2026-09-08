@@ -87,10 +87,10 @@ def test_every_operator_of_the_grammar_is_parsed(text: str, operator: Operator) 
 
 
 def test_a_hyphen_stays_inside_a_value() -> None:
-    """Метка `ui-kit` — одно значение: дефис входит в тело слова, а не разделяет его."""
-    condition = only("tags: ui-kit")
+    """Имя `release-bot` — одно значение: дефис входит в тело слова, а не разделяет его."""
+    condition = only("assignee: release-bot")
 
-    assert condition.values == (Literal(text="ui-kit", position=6),)
+    assert condition.values == (Literal(text="release-bot", position=10),)
 
 
 def test_a_quoted_value_keeps_spaces_and_is_marked_quoted() -> None:
@@ -100,9 +100,11 @@ def test_a_quoted_value_keeps_spaces_and_is_marked_quoted() -> None:
 
 
 def test_empty_is_a_marker_and_not_a_literal() -> None:
-    """`empty()` — признак отсутствия значения; тег с таким именем адресуется кавычками."""
+    """`empty()` — признак отсутствия значения; такое имя адресуется кавычками."""
     assert only("assignee: empty()").values == (EmptyValue(position=10),)
-    assert only('tags: "empty()"').values == (Literal(text="empty()", position=6, quoted=True),)
+    assert only('assignee: "empty()"').values == (
+        Literal(text="empty()", position=10, quoted=True),
+    )
 
 
 # --- Связки и группы -------------------------------------------------------------------
@@ -279,7 +281,6 @@ def test_every_concept_field_has_a_spec() -> None:
         "queue",
         "status",
         "assignee",
-        "tags",
         "priority",
         "blocked",
         "open_questions",

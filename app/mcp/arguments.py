@@ -95,10 +95,6 @@ AssigneeArg = Annotated[
         examples=["release_bot"],
     ),
 ]
-TagsArg = Annotated[
-    list[str] | None,
-    Field(description="Свободные метки для отбора", examples=[["backend"]]),
-]
 PriorityArg = Annotated[
     TaskPriority,
     Field(description="Приоритет задачи", examples=[TaskPriority.NORMAL]),
@@ -398,7 +394,6 @@ class TaskChanges(BaseModel):
         description="Имя участника или метка временного агента; `null` снимает исполнителя",
         examples=["release_bot"],
     )
-    tags: list[str] = unset_field(description="Метки целиком, списком", examples=[["backend"]])
     priority: TaskPriority = unset_field(description="Приоритет", examples=[TaskPriority.HIGH])
 
 
@@ -476,10 +471,6 @@ AssigneesArg = Annotated[
         description="Исполнители, точным совпадением; `empty()` находит задачи без исполнителя",
         examples=[["release_bot"]],
     ),
-]
-TagFilterArg = Annotated[
-    list[str] | None,
-    Field(description="Метки, точным совпадением с учётом регистра", examples=[["backend"]]),
 ]
 PrioritiesArg = Annotated[
     list[TaskPriority] | None,

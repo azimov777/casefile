@@ -212,8 +212,7 @@ async def _done_task(
             "Создание задачи без названия оставляет `last_task_number` прежним",
             "Полный набор тестов зелёный",
         ],
-        tags=["backend", "queues"],
-        priority=TaskPriority.HIGH,
+        priority=TaskPriority.NORMAL,
     )
     # Правка раздела в `backlog` — единственный статус, где содержание задачи меняется.
     await tasks_service.update_task(
@@ -228,11 +227,12 @@ async def _done_task(
         session, task, actor=agent, changes=TaskChanges(assignee=DEMO_AGENT_NAME)
     )
     # Правка обвязки: она оставляет `field_changed` — запись, без которой изменение
-    # не дошло бы до ленты и до открытого экрана (`CONCEPT.md`, 4.1). Приоритет здесь
-    # не трогается намеренно: он `high`, и в наборе должны быть представлены все
-    # четыре значения, а `critical` получает соседняя задача.
+    # не дошло бы до ленты и до открытого экрана (`CONCEPT.md`, 4.1). После снятия меток
+    # обвязка осталась одна, поэтому задача заводится с `normal` и поднимается до `high`
+    # здесь: значение в наборе то же, что и было, но теперь у него есть история. Причина
+    # правдоподобная — поняли, что горит; `critical` получает соседняя задача.
     await tasks_service.update_task(
-        session, task, actor=agent, changes=TaskChanges(tags=["backend", "queues", "hot"])
+        session, task, actor=agent, changes=TaskChanges(priority=TaskPriority.HIGH)
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
@@ -399,7 +399,6 @@ async def _in_progress_task(
         output="Тест на разрыв посреди потока и исправленная выборка хвоста",
         checks=["Разрыв после записи N и переподключение с `Last-Event-ID: N` отдаёт N+1"],
         assignee=DEMO_AGENT_NAME,
-        tags=["backend", "journal"],
     )
     # Поднятый приоритет: в наборе должны быть все четыре значения, иначе различимость
     # `critical` и `normal` нечем проверить на живом контуре. Заодно это вторая запись
@@ -450,7 +449,6 @@ async def _candidate_task(session: AsyncSession, queue: Queue, *, agent: Actor) 
         constraints="Описание в карточку задачи не добавлять: оно длинное и съест контекст",
         output="Строка в тексте скила о том, когда звать `get_queue`",
         checks=["Скил называет `get_queue` в разделе о начале работы"],
-        tags=["docs"],
         priority=TaskPriority.LOW,
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
@@ -479,7 +477,6 @@ async def _waiting_task(
         output="Решение в деле и, если нужно, задача на реализацию",
         checks=["В деле есть запись `decision` с выбранным вариантом и отвергнутыми"],
         assignee=DEMO_AGENT_NAME,
-        tags=["retention"],
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
@@ -528,7 +525,6 @@ async def _child_task(session: AsyncSession, queue: Queue, *, agent: Actor, pare
         description="Отдельная задача: тест требует своего стенда с обрывом соединения.",
         goal="Разрыв потока покрыт тестом",
         context="Родительская задача нашла причину; тест выделен, чтобы не смешивать правки",
-        tags=["tests", "journal"],
     )
     await links_service.add_link(session, task, parent, actor=agent, kind=LinkKind.PARENT)
     return task
@@ -561,7 +557,6 @@ async def _checking_task(
             "Неприменимый оператор отвечает `search_operator_not_supported` со списком",
         ],
         assignee=DEMO_LABEL,
-        tags=["backend", "search"],
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
@@ -612,7 +607,6 @@ async def _cancelled_task(session: AsyncSession, queue: Queue, *, agent: Actor) 
         constraints="Доставка гарантированной быть не может: получатель бывает недоступен",
         output="Реестр подписок и отправка с повторами",
         checks=["Закрытие задачи доставляется подписчику"],
-        tags=["rejected"],
     )
     await tasks_service.transition_task(
         session,

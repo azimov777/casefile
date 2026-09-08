@@ -262,7 +262,6 @@ class SearchField(StrEnum):
     QUEUE = "queue"
     STATUS = "status"
     ASSIGNEE = "assignee"
-    TAGS = "tags"
     PRIORITY = "priority"
     BLOCKED = "blocked"
     OPEN_QUESTIONS = "open_questions"
@@ -279,7 +278,6 @@ class SearchValueKind(StrEnum):
     QUEUE_KEY = "queue_key"
     STATUS = "status"
     ASSIGNEE = "assignee"
-    TAG = "tag"
     PRIORITY = "priority"
     FLAG = "flag"
     COUNT = "count"
@@ -313,7 +311,6 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         SearchFieldSpec(
             SearchField.ASSIGNEE, SearchValueKind.ASSIGNEE, TEXT_OPERATORS, is_nullable=True
         ),
-        SearchFieldSpec(SearchField.TAGS, SearchValueKind.TAG, TEXT_OPERATORS, is_nullable=True),
         # Приоритет упорядочен: члены `TaskPriority` идут от низшего к высшему, и
         # `priority: >= high` опирается именно на этот порядок, а не на алфавит.
         SearchFieldSpec(SearchField.PRIORITY, SearchValueKind.PRIORITY, ORDERED_OPERATORS),
@@ -424,7 +421,6 @@ SELECTABLE_FIELDS: tuple[str, ...] = (
     "checks",
     "status",
     "assignee",
-    "tags",
     "priority",
     "version",
     "created_by",

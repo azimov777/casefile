@@ -108,7 +108,6 @@ def task(item: Task) -> dict[str, Any]:
         "checks": list(item.checks),
         "status": item.status.value,
         "assignee": item.assignee,
-        "tags": list(item.tags),
         "priority": item.priority.value,
         "version": item.version,
         "created_by": author(item.created_by),

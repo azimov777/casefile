@@ -319,7 +319,6 @@ def test_normalisation_strips_and_keeps_order() -> None:
         {
             TaskField.TITLE: "  Починить  ",
             TaskField.CHECKS: [" первая ", "вторая"],
-            TaskField.TAGS: ["Релиз", "релиз", "", "backend"],
             TaskField.PRIORITY: "high",
             TaskField.ASSIGNEE: None,
         }
@@ -328,7 +327,6 @@ def test_normalisation_strips_and_keeps_order() -> None:
     assert normalized == {
         TaskField.TITLE: "Починить",
         TaskField.CHECKS: ["первая", "вторая"],
-        TaskField.TAGS: ["Релиз", "backend"],
         TaskField.PRIORITY: TaskPriority.HIGH,
         TaskField.ASSIGNEE: None,
     }

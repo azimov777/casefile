@@ -59,35 +59,35 @@ async def opened(session: AsyncSession, task: Task, actor: Actor) -> Task:
 # --- Каждая правка оставляет ровно одно событие ---------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("changes", "field", "after_value"),
-    [
-        (TaskChanges(priority=TaskPriority.CRITICAL), "priority", "critical"),
-        (TaskChanges(tags=["backend", "queues"]), "tags", ["backend", "queues"]),
-    ],
-)
 async def test_a_change_of_the_trim_reaches_the_journal_once(
     db_session: AsyncSession,
     auth_client: AsyncClient,
     task_actor: Actor,
     task: Task,
-    changes: TaskChanges,
-    field: str,
-    after_value: object,
 ) -> None:
-    """Смена приоритета и смена тегов каждая дают одно событие с ключом и полем."""
+    """Смена приоритета даёт одно событие с ключом и полем.
+
+    Параметризации здесь больше нет: обвязка после снятия меток состоит из одного поля.
+    Второй параметр вернётся вместе со вторым полем обвязки — и тогда же проверит, что
+    новое поле не осталось немым в ленте.
+    """
     await opened(db_session, task, task_actor)
     start = await latest(db_session)
 
-    await tasks_service.update_task(db_session, task, actor=task_actor, changes=changes)
+    await tasks_service.update_task(
+        db_session,
+        task,
+        actor=task_actor,
+        changes=TaskChanges(priority=TaskPriority.CRITICAL),
+    )
 
     events = await tail(auth_client, start)
     assert len(events) == 1, "одно изменение — одно событие"
     event = events[0]
     assert event["type"] == EntryType.FIELD_CHANGED.value
     assert event["task_key"] == task.key, "потребителю нужен ключ задачи, не только номер"
-    assert event["payload"]["field"] == field
-    assert event["payload"]["after"] == after_value
+    assert event["payload"]["field"] == "priority"
+    assert event["payload"]["after"] == "critical"
 
 
 async def test_a_mixed_change_gives_both_facts_in_order_and_once(

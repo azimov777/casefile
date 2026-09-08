@@ -1784,13 +1784,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character",
+              "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character",
               "examples": [
                 "queue: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `tags`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character"
+            "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. A parse error answers 422 with the position of the offending character"
           },
           {
             "name": "sort",
@@ -1957,33 +1957,6 @@
               "title": "Assignee"
             },
             "description": "Assignee names, matched exactly; `empty()` finds unassigned tasks"
-          },
-          {
-            "name": "tags",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "maxItems": 100
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Tags, matched exactly and case-sensitively. Pass the parameter more than once to accept any of several tags",
-              "examples": [
-                [
-                  "backend"
-                ]
-              ],
-              "title": "Tags"
-            },
-            "description": "Tags, matched exactly and case-sensitively. Pass the parameter more than once to accept any of several tags"
           },
           {
             "name": "priority",
@@ -5517,7 +5490,7 @@
           "payload"
         ],
         "title": "FieldChangedEntryRead",
-        "description": "Служебная запись о правке обвязки: сегодня это `tags` и `priority`."
+        "description": "Служебная запись о правке обвязки: сегодня это только `priority`.\n\nСписок в `before` и `after` при этом остаётся допустимым видом значения, хотя ни одно\nсегодняшнее поле обвязки списком не является: записи дела неизменяемы и постоянны\n(`CONCEPT.md`, 4.1), и сузить схему значило бы перестать читать то, что уже подшито."
       },
       "FieldChangedPayload": {
         "properties": {
@@ -5544,7 +5517,7 @@
               }
             ],
             "title": "Before",
-            "description": "Previous value; a list for `tags`"
+            "description": "Previous value; a list if the field holds a list"
           },
           "after": {
             "anyOf": [
@@ -5562,7 +5535,7 @@
               }
             ],
             "title": "After",
-            "description": "New value; a list for `tags`"
+            "description": "New value; a list if the field holds a list"
           }
         },
         "additionalProperties": false,
@@ -7271,20 +7244,6 @@
               "release_bot"
             ]
           },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "maxItems": 50,
-            "title": "Tags",
-            "description": "Flat labels; order is kept, duplicates are dropped case-insensitively",
-            "examples": [
-              [
-                "backend"
-              ]
-            ]
-          },
           "priority": {
             "$ref": "#/components/schemas/TaskPriority",
             "default": "normal"
@@ -7383,7 +7342,6 @@
           "checks",
           "status",
           "assignee",
-          "tags",
           "priority"
         ],
         "title": "TaskField",
@@ -7629,19 +7587,6 @@
               "release_bot"
             ]
           },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Tags",
-            "description": "Flat labels; order is kept, duplicates are dropped case-insensitively",
-            "examples": [
-              [
-                "backend"
-              ]
-            ]
-          },
           "priority": {
             "$ref": "#/components/schemas/TaskPriority",
             "examples": [
@@ -7684,7 +7629,6 @@
           "checks",
           "status",
           "assignee",
-          "tags",
           "priority",
           "version",
           "created_by",
@@ -7826,20 +7770,6 @@
               }
             ],
             "title": "Assignee"
-          },
-          "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tags"
           },
           "priority": {
             "anyOf": [
@@ -8050,20 +7980,6 @@
             "description": "Participant name or temporary agent label; free text the tracker never validates against the registry. Pass null to unassign",
             "examples": [
               "release_bot"
-            ]
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "maxItems": 50,
-            "title": "Tags",
-            "description": "Flat labels; order is kept, duplicates are dropped case-insensitively. Replaces the whole set",
-            "examples": [
-              [
-                "backend"
-              ]
             ]
           },
           "priority": {

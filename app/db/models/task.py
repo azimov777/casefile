@@ -52,9 +52,6 @@ class Task(BaseModel, CreatedByMixin):
         # Курсорная пагинация проекта идёт по паре `(created_at, id)`; без индекса
         # каждая страница означала бы сортировку всей таблицы.
         Index("ix_tasks_created_at_id", "created_at", "id"),
-        # GIN по `tags`: фильтр `tags @> '["release"]'` — основной запрос поиска по
-        # меткам, и без индекса он читал бы всю таблицу.
-        Index("ix_tasks_tags", "tags", postgresql_using="gin"),
         # Порядок списка задач по умолчанию — «очередь, номер». Номер вынут из ключа
         # выражением: строковое сравнение поставило бы `TRK-10` перед `TRK-2`, а
         # отдельной колонки под номер нет — ключ и есть его хранилище.
@@ -118,14 +115,6 @@ class Task(BaseModel, CreatedByMixin):
     # временного агента строки в реестре нет (`CONCEPT.md`, 3.3).
     assignee: Mapped[str | None] = mapped_column(
         String(MAX_ASSIGNEE_LENGTH), default=None, nullable=True
-    )
-    # Плоский список строк в JSONB: тег — не объект, на него не ссылаются. Порядок
-    # значим — он виден в карточке.
-    tags: Mapped[list[str]] = mapped_column(
-        JSONB,
-        default=list,
-        server_default=text("'[]'::jsonb"),
-        nullable=False,
     )
     priority: Mapped[TaskPriority] = mapped_column(
         string_enum(TaskPriority, name="task_priority", length=16),

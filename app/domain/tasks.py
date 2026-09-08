@@ -248,7 +248,6 @@ class TaskField(StrEnum):
     CHECKS = "checks"
     STATUS = "status"
     ASSIGNEE = "assignee"
-    TAGS = "tags"
     PRIORITY = "priority"
 
 
@@ -268,9 +267,7 @@ BACKLOG_ONLY_FIELDS: frozenset[TaskField] = frozenset(
 )
 
 #: Меняются в любом незакрытом статусе: это не содержание задачи, а её обвязка.
-OPEN_FIELDS: frozenset[TaskField] = frozenset(
-    {TaskField.ASSIGNEE, TaskField.TAGS, TaskField.PRIORITY}
-)
+OPEN_FIELDS: frozenset[TaskField] = frozenset({TaskField.ASSIGNEE, TaskField.PRIORITY})
 
 
 def editable_fields(status: TaskStatus) -> frozenset[TaskField]:
@@ -299,10 +296,6 @@ MAX_CHECK_LENGTH = 2_000
 
 #: Исполнитель — имя участника или метка, и то и другое не длиннее 64 символов.
 MAX_ASSIGNEE_LENGTH = 64
-
-#: Теги — плоские метки, а не иерархия: длинный тег означает, что нужно поле.
-MAX_TAG_LENGTH = 64
-MAX_TAGS = 50
 
 
 def normalize_fields(values: Mapping[TaskField, Any]) -> dict[TaskField, Any]:
@@ -406,39 +399,6 @@ def _normalize_assignee(value: Any) -> str | None:
     return assignee
 
 
-def _normalize_tags(value: Any) -> list[str]:
-    """Приводит набор тегов к каноническому виду, сохраняя порядок.
-
-    Повторы отбрасываются без учёта регистра, а сам регистр сохраняется: тег —
-    пользовательские данные, и «Релиз» не должен превращаться в «релиз». Первое
-    написание побеждает. Пустой тег выбрасывается молча (это опечатка вида `["a", ""]`),
-    а слишком длинный или многострочный отвергается: молча обрезать значение, которое
-    потом станет фильтром, нельзя.
-    """
-    if not isinstance(value, Sequence) or isinstance(value, str):
-        raise FieldProblem("not_a_list")
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for item in value:
-        if not isinstance(item, str):
-            raise FieldProblem("not_a_string", tag=item)
-        tag = item.strip()
-        if not tag:
-            continue
-        if "\n" in tag or "\r" in tag:
-            raise FieldProblem("multiline_not_allowed", tag=tag)
-        if len(tag) > MAX_TAG_LENGTH:
-            raise FieldProblem("too_long", tag=tag, max=MAX_TAG_LENGTH, got=len(tag))
-        folded = tag.casefold()
-        if folded in seen:
-            continue
-        seen.add(folded)
-        normalized.append(tag)
-    if len(normalized) > MAX_TAGS:
-        raise FieldProblem("too_many", max=MAX_TAGS, got=len(normalized))
-    return normalized
-
-
 def _normalize_priority(value: Any) -> TaskPriority:
     """Строка из MCP и член перечисления из REST приводятся к одному значению."""
     try:
@@ -458,7 +418,6 @@ _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.OUTPUT: _normalize_section,
     TaskField.CHECKS: _normalize_checks,
     TaskField.ASSIGNEE: _normalize_assignee,
-    TaskField.TAGS: _normalize_tags,
     TaskField.PRIORITY: _normalize_priority,
 }
 

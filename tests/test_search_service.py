@@ -35,7 +35,6 @@ async def make(
     *,
     description: str = "описание",
     assignee: str | None = None,
-    tags: list[str] | None = None,
     priority: TaskPriority = TaskPriority.NORMAL,
 ) -> Task:
     """Задача в `backlog` с заполненными разделами: готова идти по цепочке статусов."""
@@ -51,7 +50,6 @@ async def make(
         output="выход",
         checks=["проверка"],
         assignee=assignee,
-        tags=tags or [],
         priority=priority,
     )
 
@@ -292,29 +290,6 @@ async def test_a_non_blocking_question_counts_only_in_the_wider_counter(
 # --- Поля отбора ------------------------------------------------------------------------
 
 
-async def test_a_tag_is_found_among_several(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
-) -> None:
-    """Обзорная проверка 7: метка находится в задаче с несколькими метками."""
-    task = await make(
-        db_session, task_actor, queue, "много меток", tags=["ui", "backend", "release"]
-    )
-    await make(db_session, task_actor, queue, "без меток")
-
-    assert await keys(db_session, task_actor, query="tags: backend") == [task.key]
-
-
-async def test_a_tag_is_matched_exactly_and_case_sensitively(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
-) -> None:
-    """Регистр метки значим — это решение ради индекса, а не недоработка."""
-    task = await make(db_session, task_actor, queue, "одна метка", tags=["Backend"])
-
-    assert await keys(db_session, task_actor, query="tags: backend") == []
-    assert await keys(db_session, task_actor, query="tags: ~ backend") == [task.key]
-    assert await keys(db_session, task_actor, query="tags: Backend") == [task.key]
-
-
 async def test_negation_keeps_the_tasks_without_a_value(
     db_session: AsyncSession, task_actor: Actor, queue: Queue
 ) -> None:
@@ -332,11 +307,10 @@ async def test_negation_keeps_the_tasks_without_a_value(
 async def test_empty_finds_the_tasks_without_a_value(
     db_session: AsyncSession, task_actor: Actor, queue: Queue
 ) -> None:
-    await make(db_session, task_actor, queue, "задача Алисы", assignee="alice", tags=["ui"])
+    await make(db_session, task_actor, queue, "задача Алисы", assignee="alice")
     nobody = await make(db_session, task_actor, queue, "ничей")
 
     assert await keys(db_session, task_actor, query="assignee: empty()") == [nobody.key]
-    assert await keys(db_session, task_actor, query="tags: empty()") == [nobody.key]
 
 
 async def test_empty_combines_with_values_by_or(

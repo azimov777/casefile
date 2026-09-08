@@ -230,14 +230,14 @@ async def test_the_assignee_changes_in_progress_but_not_in_done(
 async def test_null_unassigns_and_an_omitted_field_stays(
     auth_client: AsyncClient, queue: Queue
 ) -> None:
-    await create(auth_client, assignee="release_bot", tags=["backend"])
+    await create(auth_client, assignee="release_bot", priority="high")
 
     response = await auth_client.patch("/api/v1/tasks/TRK-1", json={"assignee": None})
 
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["assignee"] is None
-    assert data["tags"] == ["backend"], "an omitted field must stay as it was"
+    assert data["priority"] == "high", "an omitted field must stay as it was"
 
 
 async def test_a_stale_version_is_a_version_conflict(
@@ -303,6 +303,26 @@ def test_entries_have_no_patch_or_delete_routes(app: FastAPI) -> None:
         assert not {"patch", "delete", "put"} & set(methods), f"{path}: {sorted(methods)}"
 
 
+async def test_a_removed_field_is_refused_and_not_silently_dropped(
+    auth_client: AsyncClient, queue: Queue, task: Task
+) -> None:
+    """Метки сняты (`CONCEPT.md`, 6), и запрос с ними обязан отказать, а не промолчать.
+
+    Тихое игнорирование — худший исход снятия поля: агент, писавший `tags`, получил бы
+    `201` и был бы уверен, что метка сохранена. `extra="forbid"` в схемах превращает это
+    в отказ с именем поля.
+    """
+    created = await auth_client.post("/api/v1/tasks", json={**READY, "tags": ["release"]})
+    updated = await auth_client.patch(f"/api/v1/tasks/{task.key}", json={"tags": ["release"]})
+
+    for response in (created, updated):
+        assert response.status_code == 422, response.text
+        problem = response.json()["error"]
+        assert problem["code"] == "validation_error"
+        assert [item["loc"] for item in problem["details"]["errors"]] == [["body", "tags"]]
+        assert problem["details"]["errors"][0]["type"] == "extra_forbidden"
+
+
 async def test_an_unknown_key_and_a_malformed_key_answer_differently(
     auth_client: AsyncClient, queue: Queue
 ) -> None:
@@ -321,7 +341,7 @@ async def test_the_task_scope_runs_the_cycle(
     """Рабочий цикл агента открыт набору `task`."""
     client.headers["Authorization"] = f"Bearer {task_secret}"
 
-    changed = await client.patch(f"/api/v1/tasks/{task.key}", json={"tags": ["agent"]})
+    changed = await client.patch(f"/api/v1/tasks/{task.key}", json={"priority": "high"})
     assert changed.status_code == 200, changed.text
     await move(client, task.key, "open", "in_progress")
 

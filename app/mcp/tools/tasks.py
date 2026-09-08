@@ -35,8 +35,6 @@ from app.mcp.arguments import (
     SectionsArg,
     SortArg,
     StatusesArg,
-    TagFilterArg,
-    TagsArg,
     TaskChanges,
     TaskDescriptionArg,
     TaskKeyArg,
@@ -84,7 +82,6 @@ def register(tools: Toolset) -> None:
         queue: QueuesArg = None,
         status: StatusesArg = None,
         assignee: AssigneesArg = None,
-        tags: TagFilterArg = None,
         priority: PrioritiesArg = None,
         blocked: BlockedArg = None,
         open_questions: OpenQuestionsArg = None,
@@ -114,7 +111,6 @@ def register(tools: Toolset) -> None:
                     queue=queue,
                     status=status,
                     assignee=assignee,
-                    tags=tags,
                     priority=priority,
                     blocked=blocked,
                     open_questions=open_questions,
@@ -148,7 +144,6 @@ def register(tools: Toolset) -> None:
         sections: SectionsArg = None,
         parent: ParentKeyArg = None,
         assignee: AssigneeArg = None,
-        tags: TagsArg = None,
         priority: PriorityArg = DEFAULT_PRIORITY,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> dict[str, Any]:
@@ -183,7 +178,6 @@ def register(tools: Toolset) -> None:
                     output=parts.output,
                     checks=parts.checks,
                     assignee=assignee,
-                    tags=tags or (),
                     priority=priority,
                 )
                 if parent_task is not None:
@@ -200,7 +194,6 @@ def register(tools: Toolset) -> None:
                     "sections": parts,
                     "parent": None if parent_task is None else parent_task.key,
                     "assignee": assignee,
-                    "tags": tags,
                     "priority": priority,
                 },
                 build=create,
@@ -280,7 +273,6 @@ def _terms(
     queue: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
     assignee: Sequence[str] | None,
-    tags: Sequence[str] | None,
     priority: Sequence[TaskPriority] | None,
     blocked: bool | None,
     open_questions: int | None,
@@ -306,7 +298,6 @@ def _terms(
             ("queue", queue),
             ("status", None if status is None else [item.value for item in status]),
             ("assignee", assignee),
-            ("tags", tags),
             ("priority", None if priority is None else [item.value for item in priority]),
         )
         if values

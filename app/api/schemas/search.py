@@ -71,11 +71,6 @@ _FIELDS_DESCRIPTION = (
     "answer, and asking for one answers 422 `search_field_unknown` with the selectable "
     "names"
 )
-_TAGS_DESCRIPTION = (
-    "Tags, matched exactly and case-sensitively. Pass the parameter more than once to "
-    "accept any of several tags"
-)
-
 QueryParam = Annotated[
     str | None,
     Query(
@@ -127,14 +122,6 @@ class TaskFilters:
             max_length=MAX_VALUES_PER_CONDITION,
             examples=[["release_bot"]],
             description="Assignee names, matched exactly; `empty()` finds unassigned tasks",
-        ),
-    ] = None
-    tags: Annotated[
-        list[str] | None,
-        Query(
-            max_length=MAX_VALUES_PER_CONDITION,
-            examples=[["backend"]],
-            description=_TAGS_DESCRIPTION,
         ),
     ] = None
     priority: Annotated[
@@ -208,7 +195,6 @@ class TaskFilters:
                 ("queue", self.queue),
                 ("status", None if self.status is None else [item.value for item in self.status]),
                 ("assignee", self.assignee),
-                ("tags", self.tags),
                 (
                     "priority",
                     None if self.priority is None else [item.value for item in self.priority],
@@ -258,7 +244,6 @@ class TaskSearchRead(BaseModel):
     checks: list[str] | None = None
     status: TaskStatus | None = None
     assignee: str | None = None
-    tags: list[str] | None = None
     priority: TaskPriority | None = None
     version: int | None = None
     created_by: AuthorRead | None = None
@@ -294,7 +279,6 @@ class TaskSearchRead(BaseModel):
             "checks": list(task.checks),
             "status": task.status,
             "assignee": task.assignee,
-            "tags": list(task.tags),
             "priority": task.priority,
             "version": task.version,
             "created_by": AuthorRead.model_validate(task.created_by, from_attributes=True),

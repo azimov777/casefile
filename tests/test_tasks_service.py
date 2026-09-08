@@ -403,17 +403,21 @@ async def test_the_assignee_changes_in_any_open_status_but_not_in_a_closed_one(
     assert error.value.code == "task_closed"
 
 
-async def test_tags_and_priority_leave_a_field_changed_entry_each(
+async def test_the_trim_and_the_assignee_leave_an_entry_each(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
     """Правка обвязки оставляет по записи на поле — иначе она не дошла бы до ленты.
 
-    Раньше здесь стояло обратное: теги и приоритет версию поднимали, а записи не
-    оставляли. Довод был верный — дело не про перекладывание меток, — но у него
-    оказалась цена: лента журнала это лента записей дела, и изменение без записи
+    Раньше здесь стояло обратное: приоритет — а тогда ещё и метки — версию поднимали,
+    а записи не оставляли. Довод был верный — дело не про перекладывание меток, — но у
+    него оказалась цена: лента журнала это лента записей дела, и изменение без записи
     не доходит до открытого экрана вовсе (`CONCEPT.md`, 4.1). Правило снято, а
     «дело не про метки» держится тем, что записи служебные: они сжимаются в ленте,
     отбираются по типу и не входят в `last_entry_at`.
+
+    Полей обвязки после снятия меток осталось одно, поэтому «по записи на поле»
+    проверяется парой «исполнитель и приоритет»: записи у них разных типов, и слипание
+    двух фактов в один было бы видно здесь же.
     """
     await move(db_session, task, task_actor, TaskStatus.OPEN)
     before = len(await entries(db_session, task))
@@ -422,18 +426,17 @@ async def test_tags_and_priority_leave_a_field_changed_entry_each(
         db_session,
         task,
         actor=task_actor,
-        changes=TaskChanges(tags=["backend"], priority="high"),
+        changes=TaskChanges(assignee="release_bot", priority="high"),
     )
 
-    assert {change.field for change in mutation.changes} == {"tags", "priority"}
+    assert {change.field for change in mutation.changes} == {"assignee", "priority"}
     assert task.version == 3
     assert task.priority is TaskPriority.HIGH
 
     filed = await entries(db_session, task)
     assert len(filed) == before + 2, "по записи на каждое изменённое поле"
     added = filed[before:]
-    assert {entry.type for entry in added} == {EntryType.FIELD_CHANGED}
-    assert {entry.payload["field"] for entry in added} == {"tags", "priority"}
+    assert {entry.type for entry in added} == {EntryType.ASSIGNEE_CHANGED, EntryType.FIELD_CHANGED}
 
 
 async def test_sending_the_current_values_changes_nothing(
@@ -478,7 +481,9 @@ async def test_a_task_scope_token_runs_the_whole_cycle(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
     """Рабочий цикл не требует `main`: создание, правка и переходы открыты набору `task`."""
-    await service.update_task(db_session, task, actor=task_actor, changes=TaskChanges(tags=["a"]))
+    await service.update_task(
+        db_session, task, actor=task_actor, changes=TaskChanges(priority="high")
+    )
     await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
 
     assert task.status is TaskStatus.IN_PROGRESS

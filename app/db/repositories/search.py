@@ -229,8 +229,6 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
             return _scalar(Task.status, term.operator, term.values)
         case SearchValueKind.ASSIGNEE:
             return _text(Task.assignee, term.operator, term.values)
-        case SearchValueKind.TAG:
-            return _tags(term.operator, term.values)
         case SearchValueKind.PRIORITY:
             return _priority(term.operator, term.values)
         case SearchValueKind.FLAG:
@@ -246,14 +244,13 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
 def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
     """Что значит «значения нет» у поля.
 
-    У исполнителя это NULL, у меток — пустой массив. Один общий `IS NULL` дал бы неверный
-    ответ ровно там, где пустое значение выражено иначе: `tags` в базе никогда не NULL.
+    У исполнителя это NULL, у времени последней записи — пустой подзапрос. Один общий
+    `IS NULL` по колонке подошёл бы не всякому полю: пустое состояние выражается тем, чем
+    оно выражено в базе, и у считаемого поля колонки нет вовсе.
     """
     match term.kind:
         case SearchValueKind.ASSIGNEE:
             return Task.assignee.is_(None)
-        case SearchValueKind.TAG:
-            return func.jsonb_array_length(Task.tags) == 0
         case SearchValueKind.TIMESTAMP:
             # «В дело ещё ничего не подшивали»: учтённых записей нет, подзапрос пуст.
             return _last_entry_at_column().is_(None)
@@ -265,30 +262,6 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
 
 
 # --- Отдельные виды значений ---------------------------------------------------------
-
-
-def _tags(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
-    """Метки задачи: вхождение в массив JSONB.
-
-    Точное совпадение, а не регистронезависимое: `tags @> '["backend"]'` ложится на
-    GIN-индекс `ix_tasks_tags`, а `lower()` по элементам массива не ложится ни на какой,
-    и регистронезависимый фильтр означал бы чтение всей таблицы на каждый запрос. Нужна
-    нечёткость — есть оператор вхождения: `tags: ~ back`.
-    """
-    if operator in {Operator.CONTAINS, Operator.NOT_CONTAINS}:
-        elements = func.jsonb_array_elements_text(Task.tags).table_valued("value").lateral()
-        matching = or_(
-            *(
-                select(elements.c.value)
-                .where(ilike_contains(elements.c.value, value))
-                .correlate(Task)
-                .exists()
-                for value in values
-            )
-        )
-    else:
-        matching = or_(*(Task.tags.contains([value]) for value in values))
-    return not_(matching) if operator in NEGATIVE_OPERATORS else matching
 
 
 def _priority(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:

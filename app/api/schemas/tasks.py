@@ -24,7 +24,6 @@ from app.api.schemas.links import TaskLinkRead
 from app.domain.tasks import (
     MAX_ASSIGNEE_LENGTH,
     MAX_CHECKS,
-    MAX_TAGS,
     MAX_TEXT_LENGTH,
     MAX_TITLE_LENGTH,
     TaskPriority,
@@ -43,7 +42,6 @@ _ASSIGNEE_DESCRIPTION = (
     "Participant name or temporary agent label; free text the tracker never validates "
     "against the registry"
 )
-_TAGS_DESCRIPTION = "Flat labels; order is kept, duplicates are dropped case-insensitively"
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
 
 
@@ -73,7 +71,6 @@ class TaskRead(BaseModel):
     checks: list[str] = Field(examples=[_CHECKS_EXAMPLE], description=_CHECKS_DESCRIPTION)
     status: TaskStatus = Field(examples=[TaskStatus.BACKLOG])
     assignee: str | None = Field(examples=["release_bot"], description=_ASSIGNEE_DESCRIPTION)
-    tags: list[str] = Field(examples=[["backend"]], description=_TAGS_DESCRIPTION)
     priority: TaskPriority = Field(examples=[TaskPriority.NORMAL])
     version: int = Field(
         examples=[3],
@@ -201,12 +198,6 @@ class TaskCreate(BaseModel):
         examples=["release_bot"],
         description=_ASSIGNEE_DESCRIPTION,
     )
-    tags: list[str] = Field(
-        default_factory=list,
-        max_length=MAX_TAGS,
-        examples=[["backend"]],
-        description=_TAGS_DESCRIPTION,
-    )
     priority: TaskPriority = Field(default=TaskPriority.NORMAL)
 
 
@@ -238,11 +229,6 @@ class TaskUpdate(BaseModel):
         max_length=MAX_ASSIGNEE_LENGTH,
         examples=["release_bot"],
         description=f"{_ASSIGNEE_DESCRIPTION}. Pass null to unassign",
-    )
-    tags: list[str] = unset_field(
-        max_length=MAX_TAGS,
-        examples=[["backend"]],
-        description=f"{_TAGS_DESCRIPTION}. Replaces the whole set",
     )
     priority: TaskPriority = unset_field(examples=[TaskPriority.HIGH])
     version: int | None = Field(

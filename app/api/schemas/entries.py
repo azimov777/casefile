@@ -315,9 +315,11 @@ class FieldChangedPayload(BaseModel):
 
     field: str = Field(examples=["priority"])
     before: str | list[str] | None = Field(
-        default=None, description="Previous value; a list for `tags`"
+        default=None, description="Previous value; a list if the field holds a list"
     )
-    after: str | list[str] | None = Field(default=None, description="New value; a list for `tags`")
+    after: str | list[str] | None = Field(
+        default=None, description="New value; a list if the field holds a list"
+    )
 
 
 class AssigneeChangedPayload(BaseModel):
@@ -433,7 +435,12 @@ class SectionChangedEntryRead(_EntryReadBase):
 
 
 class FieldChangedEntryRead(_EntryReadBase):
-    """Служебная запись о правке обвязки: сегодня это `tags` и `priority`."""
+    """Служебная запись о правке обвязки: сегодня это только `priority`.
+
+    Список в `before` и `after` при этом остаётся допустимым видом значения, хотя ни одно
+    сегодняшнее поле обвязки списком не является: записи дела неизменяемы и постоянны
+    (`CONCEPT.md`, 4.1), и сузить схему значило бы перестать читать то, что уже подшито.
+    """
 
     type: Literal[EntryType.FIELD_CHANGED]
     payload: FieldChangedPayload
