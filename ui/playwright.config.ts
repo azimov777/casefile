@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.UI_PORT ?? '8080'}`;
+// Порт тот же, что у контура сквозных тестов в `docker-compose.yml`, и по той же
+// причине не 8080: его держит постоянный контур интерфейса. Два умолчания обязаны
+// двигаться вместе — адрес, разошедшийся с публикацией, дал бы прогон в пустоту.
+const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.UI_PORT ?? '8081'}`;
 
 /**
  * Сквозные тесты идут против настоящего бэкенда с демо-данными, поднятого
