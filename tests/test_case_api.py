@@ -23,10 +23,10 @@ READY = {
 }
 
 SUMMARY = {
-    "done": "Разобрался, где сгорает номер",
+    "done": "Разобрался, где сгорает номер\nи пересчитал места вызова",
     "remaining": "Перенести выдачу номера",
     "blockers": "нет",
-    "next_step": "Перенести вызов в конец create_task\nи дописать тест",
+    "next_step": "Перенести вызов в конец create_task",
 }
 
 
@@ -67,10 +67,10 @@ async def package(client: AsyncClient, key: str) -> dict[str, Any]:
 # --- Сводка ---------------------------------------------------------------------------
 
 
-async def test_a_summary_needs_four_parts_and_is_titled_by_its_next_step(
+async def test_a_summary_needs_four_parts_and_is_titled_by_what_was_done(
     auth_client: AsyncClient, queue: Queue
 ) -> None:
-    """Обзорная проверка 1."""
+    """Обзорная проверка 1. Заголовок — первая строка `done`, и это видно в описи."""
     await create(auth_client)
 
     refused = await auth_client.post(
@@ -83,9 +83,10 @@ async def test_a_summary_needs_four_parts_and_is_titled_by_its_next_step(
 
     assert entry["type"] == "summary"
     assert entry["payload"] == SUMMARY
-    assert entry["title"] == "Перенести вызов в конец create_task"
+    assert entry["title"] == "Разобрался, где сгорает номер"
+    assert entry["title"] != SUMMARY["next_step"]
     index = (await package(auth_client, "TRK-1"))["index"]
-    assert index[-1]["title"] == "Перенести вызов в конец create_task"
+    assert index[-1]["title"] == "Разобрался, где сгорает номер"
 
 
 async def test_leaving_in_progress_without_a_summary_is_refused(
@@ -352,7 +353,7 @@ async def test_a_service_type_cannot_be_filed_through_the_endpoint(
 async def test_a_derived_title_is_not_accepted_from_the_client(
     auth_client: AsyncClient, queue: Queue
 ) -> None:
-    """У сводки заголовок равен первой строке `next_step`, и второго способа задать его нет."""
+    """У сводки заголовок равен первой строке `done`, и второго способа задать его нет."""
     await create(auth_client)
 
     response = await auth_client.post(

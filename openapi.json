@@ -2619,7 +2619,7 @@
           "tasks"
         ],
         "summary": "Append a case entry",
-        "description": "Подшивает запись агента: сводку, решение, попытку, находку, артефакт, вопрос,\nответ, вердикт или заметку.\n\nФорма нагрузки зависит от типа: тело запроса — размеченное по `type` объединение.\nЗаголовок принимается только там, где его нечем вывести: у `summary` он равен\nпервой строке `next_step`, у `answer` и `verdict` собирается из нагрузки.\nСлужебные типы (`status_changed`, `created`, ...) подшивает сам трекер, и в запросе\nони не принимаются. Замечания к форме приходят разом в `422 entry_fields_invalid`,\nсписком `details.fields`. Записи неизменяемы, а в закрытую задачу подшиваются.\n\nПовтор с тем же `Idempotency-Key` отвечает первой записью: агент, упавший до ответа,\nне подшивает вторую копию своей сводки.",
+        "description": "Подшивает запись агента: сводку, решение, попытку, находку, артефакт, вопрос,\nответ, вердикт или заметку.\n\nФорма нагрузки зависит от типа: тело запроса — размеченное по `type` объединение.\nЗаголовок принимается только там, где его нечем вывести: у `summary` он равен\nпервой строке `done`, у `answer` и `verdict` собирается из нагрузки.\nСлужебные типы (`status_changed`, `created`, ...) подшивает сам трекер, и в запросе\nони не принимаются. Замечания к форме приходят разом в `422 entry_fields_invalid`,\nсписком `details.fields`. Записи неизменяемы, а в закрытую задачу подшиваются.\n\nПовтор с тем же `Idempotency-Key` отвечает первой записью: агент, упавший до ответа,\nне подшивает вторую копию своей сводки.",
         "operationId": "create_task_entry",
         "security": [
           {
@@ -7098,7 +7098,7 @@
           "payload"
         ],
         "title": "SummaryEntryCreate",
-        "description": "Сводка. Заголовок не принимается: он равен первой строке `next_step`."
+        "description": "Сводка. Заголовок не принимается: он равен первой строке `done`."
       },
       "SummaryEntryRead": {
         "properties": {
@@ -7200,7 +7200,7 @@
             "maxLength": 16384,
             "minLength": 1,
             "title": "Done",
-            "description": "What has been done",
+            "description": "What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary",
             "examples": [
               "Разобрался, где сгорает номер"
             ]
@@ -7230,7 +7230,7 @@
             "maxLength": 16384,
             "minLength": 1,
             "title": "Next Step",
-            "description": "The next step; its first line becomes the entry title",
+            "description": "The next step: one concrete action for whoever picks the case up",
             "examples": [
               "Перенести вызов next_task_number в конец create_task"
             ]
