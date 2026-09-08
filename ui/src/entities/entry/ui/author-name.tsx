@@ -1,5 +1,4 @@
 import type { Author } from '../api/entries';
-import styles from './author-name.module.css';
 
 /**
  * Кто говорит. Подпись пуста только у самого трекера: у человека и агента это имя
@@ -10,9 +9,10 @@ export function AuthorName({ author }: { author: Author }) {
   const signature = author.signature ?? null;
 
   return (
-    <span className={styles.author}>
-      <span className={styles.signature}>{signature ?? 'трекер'}</span>
-      {signature === null ? null : <span className={styles.kind}>{author.kind}</span>}
+    <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
+      {/* Подпись — идентификатор контракта, и набрана она тем же, чем ключ задачи. */}
+      <span className="font-mono">{signature ?? 'трекер'}</span>
+      {signature === null ? null : <span className="text-label text-muted">{author.kind}</span>}
     </span>
   );
 }

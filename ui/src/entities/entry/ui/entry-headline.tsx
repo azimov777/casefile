@@ -1,7 +1,6 @@
 import { Link } from 'react-router';
 import { taskRefHref } from '@/shared/lib';
 import type { Headline, HeadlinePart } from '../model/headline';
-import styles from './entry-headline.module.css';
 
 /**
  * Собранная строка заголовка: слова по-русски, идентификаторы контракта как есть.
@@ -13,7 +12,7 @@ export function EntryHeadline({ headline, linked = true }: EntryHeadlineProps) {
   if (headline.kind !== 'built') return null;
 
   return (
-    <span className={styles.line}>
+    <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
       {headline.parts.map((part, index) => (
         <Piece key={index} part={part} linked={linked} />
       ))}
@@ -31,27 +30,34 @@ interface EntryHeadlineProps {
   linked?: boolean;
 }
 
+/**
+ * Идентификатор контракта: не переводится и выглядит так же, как в адресе и у агента.
+ * Кегль назван явно — сброс набирает `<code>` долей от окружающего текста, а здесь
+ * идентификатор стоит и в шапке служебной записи, и в заголовке карточки.
+ */
+const IDENTIFIER = 'font-mono text-meta';
+
 function Piece({ part, linked }: { part: HeadlinePart; linked: boolean }) {
   switch (part.kind) {
     case 'words':
       return <span>{part.text}</span>;
     case 'id':
-      return <code className={styles.id}>{part.text}</code>;
+      return <code className={IDENTIFIER}>{part.text}</code>;
     case 'task':
       return linked ? (
-        <Link className={styles.ref} to={`/tasks/${part.key}`}>
+        <Link className={IDENTIFIER} to={`/tasks/${part.key}`}>
           {part.key}
         </Link>
       ) : (
-        <code className={styles.ref}>{part.key}</code>
+        <code className={IDENTIFIER}>{part.key}</code>
       );
     case 'entry':
       return linked ? (
-        <Link className={styles.ref} to={taskRefHref({ key: part.key, entryNo: part.no })}>
+        <Link className={IDENTIFIER} to={taskRefHref({ key: part.key, entryNo: part.no })}>
           {part.key}#{part.no}
         </Link>
       ) : (
-        <code className={styles.ref}>
+        <code className={IDENTIFIER}>
           {part.key}#{part.no}
         </code>
       );

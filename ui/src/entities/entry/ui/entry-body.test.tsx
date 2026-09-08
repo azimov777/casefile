@@ -116,7 +116,7 @@ describe('сравнение раздела', () => {
   it('стороны различаются тоном и подписью, а порядок чтения остаётся прежним', () => {
     const { container } = show('section_changed');
 
-    const sides = Array.from(container.querySelectorAll('[class*="side"]'));
+    const sides = Array.from(container.querySelectorAll('[data-side]'));
     expect(sides).toHaveLength(2);
 
     // Тон исхода: у «было» и «стало» разные классы, то есть разные цвета (решение Д14).

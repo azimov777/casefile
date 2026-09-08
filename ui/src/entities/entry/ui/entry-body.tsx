@@ -1,6 +1,7 @@
+import { cva } from 'class-variance-authority';
+import type { ReactNode } from 'react';
 import { Badge, Markdown, TaskText } from '@/shared/ui';
 import type { Entry } from '../api/entries';
-import styles from './entry-body.module.css';
 
 interface EntryBodyProps {
   entry: Entry;
@@ -10,6 +11,21 @@ interface EntryBodyProps {
    */
   checks?: string[];
 }
+
+/** Тело записи, у которой оно одно: текст, а под ним указатели. */
+const BLOCK = 'flex flex-col gap-2';
+
+/** Служебная приписка к телу: кому задан вопрос, куда ведут указатели. */
+const META = 'flex flex-wrap items-center gap-2 text-meta text-muted';
+
+/**
+ * Надстрочная подпись части. Набрана заглавными, поэтому с разрядкой: без неё буквы
+ * слипаются. Цвет подписи задаёт место — он называет либо уровень, либо исход стороны.
+ */
+const PART_TITLE = 'text-label font-semibold tracking-caps uppercase';
+
+/** Идентификаторы записи: ключи и адреса в указателях. */
+const REF = 'font-mono text-meta';
 
 /**
  * Тело записи в том виде, какого требует её тип (`CONCEPT.md`, 4).
@@ -22,7 +38,13 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
   switch (entry.type) {
     case 'summary':
       return (
-        <dl className={styles.parts}>
+        /*
+         * Подписи частей сводки стоят над текстом, а не колонкой слева (решение Д8).
+         * Колонка занимала не меньше 8rem: на узком экране текст ужимался до 190 px,
+         * и сводка из четырёх абзацев растягивалась за 1000 px в высоту. Надстрочная
+         * метка отдаёт тексту всю ширину в обеих раскладках.
+         */
+        <dl className="grid gap-3">
           <Part title="Сделано" value={entry.payload.done} />
           <Part title="Осталось" value={entry.payload.remaining} />
           <Part title="Что мешает" value={entry.payload.blockers} />
@@ -32,8 +54,8 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
 
     case 'question':
       return (
-        <div className={styles.block}>
-          <p className={styles.meta}>
+        <div className={BLOCK}>
+          <p className={META}>
             <span>Кому: </span>
             {entry.payload.addressees.map((name) => (
               <Badge key={name} mono>
@@ -49,7 +71,7 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     // На какой вопрос отвечено — сказано заголовком, со ссылкой на сам вопрос.
     case 'answer':
       return (
-        <div className={styles.block}>
+        <div className={BLOCK}>
           <Text body={entry.body} />
         </div>
       );
@@ -57,9 +79,9 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'verdict': {
       const check = checks[entry.payload.check_no - 1];
       return (
-        <div className={styles.block}>
+        <div className={BLOCK}>
           {check === undefined ? null : (
-            <div className={styles.check}>
+            <div className="border-l-2 border-line-strong pl-3">
               {/* Тем же markdown, что и в разделе «Обзорные проверки»: это одна и та же
                   строка, и показывать её двумя разными способами — врать глазу. */}
               <Markdown>{check}</Markdown>
@@ -78,17 +100,17 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'status_changed':
       if (entry.payload.reason == null || entry.payload.reason === '') return null;
       return (
-        <p className={styles.block}>
+        <p className={BLOCK}>
           <TaskText>{entry.payload.reason}</TaskText>
         </p>
       );
 
     case 'section_changed':
       return (
-        <div className={styles.diff}>
+        <Diff>
           <Side title="Было" value={entry.payload.before} tone="was" />
           <Side title="Стало" value={entry.payload.after} tone="now" />
-        </div>
+        </Diff>
       );
 
     /*
@@ -99,10 +121,10 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
      */
     case 'field_changed':
       return (
-        <div className={styles.diff}>
+        <Diff>
           <Side title="Было" value={entry.payload.before} tone="was" />
           <Side title="Стало" value={entry.payload.after} tone="now" />
-        </div>
+        </Diff>
       );
 
     // Смена исполнителя и связь целиком умещаются в заголовке: имена участников,
@@ -121,7 +143,7 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
      */
     case 'resolution':
       return (
-        <div className={styles.block}>
+        <div className={BLOCK}>
           <Text body={entry.body} />
           <Refs refs={entry.refs ?? []} />
         </div>
@@ -136,7 +158,7 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'remark':
     case 'note':
       return (
-        <div className={styles.block}>
+        <div className={BLOCK}>
           <Text body={entry.body} />
           <Refs refs={entry.refs ?? []} />
         </div>
@@ -149,18 +171,27 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
 
 function Part({ title, value }: { title: string; value: string }) {
   return (
-    <div className={styles.part}>
-      <dt className={styles.partTitle}>{title}</dt>
-      <dd className={styles.partValue}>
+    <div className="grid gap-1">
+      <dt className={`${PART_TITLE} text-faint`}>{title}</dt>
+      <dd>
         <Markdown>{value}</Markdown>
       </dd>
     </div>
   );
 }
 
+/**
+ * Пара сторон сравнения. Складывается в одну колонку на точке `compare` (48rem):
+ * порог у неё свой, не общий с `fold`, — на `fold` сторона получила бы 195 px ширины,
+ * а текст в ней 171 px, то есть ровно то, от чего уходило решение Д8 (UI-48#6).
+ */
+function Diff({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-1 gap-4 compare:grid-cols-2">{children}</div>;
+}
+
 /** Пустое тело — не ошибка: у служебных записей содержание лежит в нагрузке. */
 function Text({ body }: { body: string }) {
-  if (body.trim() === '') return <p className={styles.absent}>Тела у этой записи нет.</p>;
+  if (body.trim() === '') return <p className="text-muted italic">Тела у этой записи нет.</p>;
   return <Markdown>{body}</Markdown>;
 }
 
@@ -169,10 +200,10 @@ function Refs({ refs }: { refs: string[] }) {
   if (refs.length === 0) return null;
 
   return (
-    <p className={styles.meta}>
+    <p className={META}>
       <span>Указатели: </span>
       {refs.map((ref) => (
-        <span key={ref} className={styles.ref}>
+        <span key={ref} className={REF}>
           {/^https?:\/\//.test(ref) ? (
             <a href={ref} target="_blank" rel="noreferrer noopener">
               {ref}
@@ -186,13 +217,30 @@ function Refs({ refs }: { refs: string[] }) {
   );
 }
 
+/*
+ * Стороны сравнения красятся тоном исхода (решение Д14): было — снятое, стало —
+ * удачное. Тон берётся из тех же шести, седьмого ради сравнения не заводится.
+ * Подпись при этом остаётся: цвет никогда не единственный носитель смысла.
+ *
+ * `min-w-0` держит сторону в своей колонке: без него элемент сетки не сжимается
+ * меньше своего содержимого, и длинная строка `<pre>` внутри markdown растянула бы
+ * колонку за край карточки.
+ */
+const side = cva('flex min-w-0 flex-col gap-1 rounded-mark border px-3 py-2', {
+  variants: {
+    tone: {
+      was: 'border-dashed border-dropped-line bg-transparent',
+      now: 'border-positive-line bg-positive-soft',
+    },
+  },
+});
+
+const sideTitle = cva(PART_TITLE, {
+  variants: { tone: { was: 'text-dropped', now: 'text-positive' } },
+});
+
 /**
  * Сторона сравнения: `checks` приходит списком, остальные разделы — строкой.
- *
- * Тон исхода, а не две серые колонки (решение Д14): «было» получает тон снятого,
- * «стало» — тон удачного. Тонов при этом не прибавилось — берутся те же шесть, что
- * у статусов. Цвет не единственный носитель: подписи «Было» и «Стало» остаются
- * на месте и читаются диктором в том же порядке.
  */
 function Side({
   title,
@@ -204,12 +252,15 @@ function Side({
   tone: 'was' | 'now';
 }) {
   return (
-    <div className={`${styles.side} ${tone === 'was' ? styles.was : styles.now}`}>
-      <span className={styles.partTitle}>{title}</span>
+    // Исход стороны назван разметкой, а не только цветом: проверка спрашивает, что
+    // сторон две и они разного тона, а искать их по имени утилиты значило бы
+    // проверять цвет вместо того, что он значит.
+    <div data-side={tone} className={side({ tone })}>
+      <span className={sideTitle({ tone })}>{title}</span>
       {value === null || value === undefined || value === '' ? (
-        <p className={styles.absent}>пусто</p>
+        <p className="text-muted italic">пусто</p>
       ) : Array.isArray(value) ? (
-        <ol className={styles.list}>
+        <ol className="pl-6">
           {value.map((item, index) => (
             <li key={index}>{item}</li>
           ))}

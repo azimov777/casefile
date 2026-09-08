@@ -121,7 +121,7 @@ test('запись с последней страницы дела дочиты�
   // Лента дочитывается сама, пока названная запись не найдётся.
   const target = page.getByLabel(`${key}#${lastNo}`, { exact: true });
   await expect(target).toBeVisible({ timeout: 15_000 });
-  await expect(target).toHaveClass(/highlighted/);
+  await expect(target).toHaveAttribute('data-highlighted');
 });
 
 /**
@@ -160,6 +160,6 @@ test('ссылка на ответ ведёт внутрь вопроса и п�
   const question = page.getByLabel(`DEMO-3#${questionNo}`, { exact: true });
   const answer = question.getByLabel(`DEMO-3#${answerNo}`, { exact: true });
   await expect(answer).toBeVisible();
-  await expect(answer).toHaveClass(/highlighted/);
-  await expect(question).not.toHaveClass(/highlighted/);
+  await expect(answer).toHaveAttribute('data-highlighted');
+  await expect(question).not.toHaveAttribute('data-highlighted');
 });
