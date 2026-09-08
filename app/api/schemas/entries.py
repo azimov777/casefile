@@ -252,6 +252,8 @@ class VerdictPayload(BaseModel):
 class ResolutionPayload(BaseModel):
     """Нагрузка резолюции: какое замечание разобрано, чем и куда ушла работа."""
 
+    model_config = ConfigDict(extra="forbid")
+
     remark_no: int = Field(
         ge=1,
         examples=[7],

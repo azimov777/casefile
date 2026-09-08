@@ -19,7 +19,7 @@
 from fastapi import APIRouter, Depends
 from fastapi.routing import APIRoute
 
-from app.api.deps import get_actor
+from app.api.deps import get_actor, reject_unknown_query_params
 from app.api.routes import (
     bootstrap,
     journal,
@@ -60,9 +60,12 @@ def generate_operation_id(route: APIRoute) -> str:
     return route.name
 
 
+# Порядок зависимостей — порядок отказов: сначала «кто ты», потом «что ты прислал».
+# Сторож параметров стоит на роутере, а не на маршруте, по той же причине, что и
+# аутентификация: маршрут, заведённый завтра, обязан получить правило сам.
 api_router = APIRouter(
     prefix="/api/v1",
-    dependencies=[Depends(get_actor)],
+    dependencies=[Depends(get_actor), Depends(reject_unknown_query_params)],
     responses=ERROR_RESPONSES,
 )
 

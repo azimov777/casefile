@@ -141,6 +141,68 @@ async def test_an_unknown_token_is_refused_before_the_list_is_built(
     assert "unauthorized" in str(failure.value)
 
 
+# --- Лишний аргумент ------------------------------------------------------------------
+
+#: Имя, которого нет и не будет ни у одного инструмента.
+NOT_AN_ARGUMENT = "not_an_argument"
+
+
+async def test_every_tool_refuses_an_argument_it_does_not_declare(
+    mcp_session: Connect, main_secret: str
+) -> None:
+    """Обзорная проверка 2: лишний аргумент — отказ с его именем, у **каждого** инструмента.
+
+    Список берётся из `tools/list`, а не перечисляется здесь: запрет объявлен один раз, на
+    базовой модели аргументов (`app/mcp/toolset.py`), и инструмент, заведённый завтра,
+    обязан попасть под проверку сам. Перечень имён в тесте отменил бы это свойство ровно
+    в тот день, когда оно понадобится.
+
+    Схема проверяется вместе с поведением: агент выбирает аргументы **до** вызова, и
+    объявленный `additionalProperties: false` — единственное, из чего он узнаёт о запрете
+    заранее.
+    """
+    async with mcp_session(main_secret) as session:
+        listed = (await session.list_tools()).tools
+        assert listed, "список инструментов пуст: проверять нечего"
+
+        for tool in listed:
+            assert tool.input_schema.get("additionalProperties") is False, (
+                f"{tool.name}: схема не объявляет запрета лишнего"
+            )
+            failure = await refuse(session, tool.name, **{NOT_AN_ARGUMENT: "x"})
+            assert NOT_AN_ARGUMENT in failure, f"{tool.name}: отказ не называет аргумент: {failure}"
+            assert "extra_forbidden" in failure, f"{tool.name}: {failure}"
+
+
+async def test_create_task_with_a_section_at_the_top_level_files_nothing(
+    mcp_session: Connect, main_secret: str, queue: Queue
+) -> None:
+    """Тот самый случай: разделы присланы верхним уровнем вместо вложенного `sections`.
+
+    Ловилось живьём (`TRK-22`): вызов отвечал успехом и заводил задачу с пятью **пустыми**
+    разделами. Поэтому здесь проверяется не только текст отказа, но и то, что задачи не
+    появилось: молчаливо заведённая пустая задача — и есть цена этой ошибки.
+    """
+    key = queue.key
+    async with mcp_session(main_secret) as session:
+        before = await call(session, "search_tasks", queue=[key], fields=["key"])
+
+        failure = await refuse(
+            session,
+            "create_task",
+            queue=key,
+            title="Разделы верхним уровнем",
+            description="Проверка отказа",
+            goal="Цель, присланная мимо sections",
+        )
+
+        after = await call(session, "search_tasks", queue=[key], fields=["key"])
+
+    assert "goal" in failure, failure
+    assert "extra_forbidden" in failure, failure
+    assert [item["key"] for item in after["items"]] == [item["key"] for item in before["items"]]
+
+
 # --- Чтение задачи --------------------------------------------------------------------
 
 

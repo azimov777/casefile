@@ -213,6 +213,91 @@ async def test_a_structured_value_with_a_space_reaches_the_search(
     assert response.status_code == 200, response.text
 
 
+# --- Неизвестный параметр -----------------------------------------------------------------
+
+
+async def test_a_typo_in_a_filter_name_is_refused_and_does_not_cancel_the_filter(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Обзорная проверка 4: `?stauts=open` отвечает отказом, а не выдачей целиком.
+
+    До правки FastAPI незнакомый параметр игнорировал: запрос отвечал `200` и отдавал все
+    задачи установки, а ответ выглядел как «под условие подошло всё» (`TRK-22`). Отказ
+    называет и присланное имя, и список допустимых — по нему опечатка чинится с первой
+    попытки, без похода в схему.
+    """
+    del board
+    response = await auth_client.get("/api/v1/tasks", params={"stauts": "open"})
+
+    assert response.status_code == 422, response.text
+    problem = response.json()["error"]
+    assert problem["code"] == "validation_error"
+    assert [item["loc"] for item in problem["details"]["errors"]] == [["query", "stauts"]]
+    assert problem["details"]["errors"][0]["type"] == "extra_forbidden"
+    assert "status" in problem["details"]["allowed"]
+
+
+async def test_every_declared_parameter_still_passes(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Закрытая дверь не задела законных: все параметры отбора вместе отвечают выдачей.
+
+    Перечислены именно все, включая повторяющиеся и служебные (`query`, `sort`, `fields`,
+    `limit`, `cursor`): сторож сверяет имена с деревом зависимостей маршрута, и параметр,
+    приехавший из вложенного `Depends()`, легко оказался бы вне этого дерева.
+    """
+    del board
+    everything: dict[str, Any] = {
+        "queue": ["TRK"],
+        "parent": ["empty()"],
+        "status": ["open", "backlog"],
+        "assignee": ["empty()"],
+        "priority": ["normal"],
+        "blocked": "false",
+        "open_questions": 0,
+        "open_blocking_questions": 0,
+        "open_remarks": 0,
+        "remarks_in_work": 0,
+        "text": "задача",
+        "query": "queue: TRK",
+        "sort": ["-updated_at", "key"],
+        "fields": ["key", "status"],
+        "limit": 10,
+    }
+    response = await auth_client.get("/api/v1/tasks", params=everything)
+    assert response.status_code == 200, response.text
+
+    # `cursor` отдельным запросом: под отбор выше подходит меньше страницы, следующей
+    # страницы у него нет, и курсор пришлось бы выдумывать. Он берётся у настоящей
+    # страницы — курсор несёт в себе ключи сортировки, и чужой отверг бы сам обход.
+    first = await auth_client.get("/api/v1/tasks", params={"limit": 1})
+    assert first.status_code == 200, first.text
+    paged = await auth_client.get(
+        "/api/v1/tasks",
+        params={"limit": 1, "cursor": first.json()["meta"]["next_cursor"]},
+    )
+
+    assert paged.status_code == 200, paged.text
+
+
+async def test_the_guard_covers_the_whole_api_and_not_the_task_list_alone(
+    auth_client: AsyncClient, task: Task
+) -> None:
+    """Правило общее: сторож объявлен на роутере `/api/v1`, а не на одном маршруте.
+
+    Маршрут дела берётся вторым входом намеренно — у него свои параметры, и молчаливое
+    игнорирование опечатки в них стоило бы ровно столько же, сколько в отборе задач.
+    """
+    response = await auth_client.get(
+        f"/api/v1/tasks/{task.key}/entries", params={"typez": "summary"}
+    )
+
+    assert response.status_code == 422, response.text
+    problem = response.json()["error"]
+    assert [item["loc"] for item in problem["details"]["errors"]] == [["query", "typez"]]
+    assert "types" in problem["details"]["allowed"]
+
+
 # --- Прочее ------------------------------------------------------------------------------
 
 

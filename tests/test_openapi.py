@@ -100,6 +100,57 @@ def test_no_objects_of_unknown_shape(schema: dict) -> None:
     assert not unknown, f"fields of unknown shape: {unknown}"
 
 
+def test_every_request_body_refuses_a_field_it_does_not_declare(schema: dict) -> None:
+    """Лишнее поле в теле — отказ, а не тихо отброшенное значение (`TRK-22`).
+
+    Схема здесь надёжнее `grep` по исходникам: она собрана тем же кодом, который отдаёт
+    `/openapi.json`, и видит модель по её месту в контракте, а не по тому, как записан
+    её конфиг. Модель тела, у которой запрета нет, приходит сюда без
+    `additionalProperties: false` — и вложенная тоже, потому что обход идёт по ссылкам.
+
+    Проверяются именно тела запросов: у **ответов** запрет не нужен и вреден — он
+    запретил бы серверу дополнить ответ полем, о котором старый клиент не знает.
+    """
+    schemas = schema["components"]["schemas"]
+
+    def referenced(node: object) -> set[str]:
+        """Имена моделей, на которые ссылается кусок схемы, на любой глубине."""
+        if isinstance(node, dict):
+            found: set[str] = set()
+            reference = node.get("$ref")
+            if isinstance(reference, str) and reference.startswith("#/components/schemas/"):
+                found.add(reference.rsplit("/", 1)[1])
+            for value in node.values():
+                found |= referenced(value)
+            return found
+        if isinstance(node, list):
+            return {name for item in node for name in referenced(item)}
+        return set()
+
+    bodies: set[str] = set()
+    for methods in schema["paths"].values():
+        for operation in methods.values():
+            bodies |= referenced(operation.get("requestBody", {}))
+    # Вложенные модели тела — того же контракта: `TaskChanges` внутри `TaskUpdate`
+    # молча проглотила бы снятое поле ровно так же, как это делал сам `TaskUpdate`.
+    seen: set[str] = set()
+    while bodies - seen:
+        name = (bodies - seen).pop()
+        seen.add(name)
+        bodies |= referenced(schemas[name])
+
+    assert seen, "в схеме не нашлось ни одной модели тела запроса: проверять нечего"
+    # Перечисления по дороге попадаются, но объектами не являются: `additionalProperties`
+    # у них не бывает, и требовать его значило бы требовать невозможного.
+    permissive = sorted(
+        name
+        for name in seen
+        if "properties" in schemas[name] and schemas[name].get("additionalProperties") is not False
+    )
+
+    assert not permissive, f"request body models that silently drop unknown fields: {permissive}"
+
+
 def test_patch_field_is_not_nullable_when_null_has_no_meaning(schema: dict) -> None:
     """Схемы `PATCH` не должны разрешать `null`: сгенерированный клиент обязан это знать.
 

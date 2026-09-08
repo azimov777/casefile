@@ -2,11 +2,13 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Header, Path, Query
+from fastapi import Depends, Header, Path, Query, Request, params
+from fastapi.dependencies.utils import get_flat_params
+from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import UnauthorizedError
+from app.core.errors import UnauthorizedError, ValidationError
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.db.session import get_session, session_scope
 from app.domain.authors import ACTOR_LABEL_HEADER
@@ -120,3 +122,51 @@ TaskKeyPath = Annotated[
     str,
     Path(description="Task key `QUEUE-number`; matching ignores case", examples=["TRK-42"]),
 ]
+
+
+def reject_unknown_query_params(request: Request) -> None:
+    """Неизвестный параметр запроса — отказ с его именем, а не выдача без отбора.
+
+    Опечатка в имени отбора иначе отменяет сам отбор: `?stauts=open` отвечал `200` и
+    отдавал **все** задачи установки — FastAPI незнакомый параметр игнорирует, условие не
+    применяется, и ответ выглядит как «под условие подошло всё» (`TRK-22`). Это тот же
+    молчаливый сбой, что и лишнее поле в теле, и лечится он тем же: отказом с именем
+    присланного.
+
+    Список допустимого берётся из дерева зависимостей самого маршрута — из той же схемы,
+    по которой FastAPI разбирает параметры. Второго перечня имён в проекте нет: он
+    разъехался бы с первым на первом же новом параметре.
+
+    Объявлена на всём `/api/v1` (`app/api/router.py`), а не на одном маршруте: правило
+    здесь общее, и маршрут, заведённый завтра, обязан получить его сам.
+
+    Отказ распространяется и на служебные имена — `utm_*` и метки переходов исключений не
+    получают. Они ездят на переходах браузера по страницам, а сюда ходят кодом: интерфейс
+    собирает параметры явно, агент — по схеме. Исключение под них было бы дырой, которой
+    никто не пользуется.
+    """
+    route = request.scope.get("route")
+    if not isinstance(route, APIRoute):
+        return
+    allowed = {
+        field.alias
+        for field in get_flat_params(route.dependant)
+        if isinstance(field.field_info, params.Query)
+    }
+    unknown = sorted(set(request.query_params) - allowed)
+    if not unknown:
+        return
+    raise ValidationError(
+        "Unknown query parameters",
+        details={
+            "errors": [
+                {
+                    "loc": ["query", name],
+                    "msg": "Extra inputs are not permitted",
+                    "type": "extra_forbidden",
+                }
+                for name in unknown
+            ],
+            "allowed": sorted(allowed),
+        },
+    )
