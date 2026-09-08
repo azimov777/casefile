@@ -1,5 +1,4 @@
 import type { LiveStatus as LiveStatusValue } from '../model/use-live-journal';
-import styles from './live-status.module.css';
 
 /**
  * Как называется каждое состояние потока и что оно значит для человека.
@@ -26,6 +25,17 @@ const STATES = {
 } satisfies Record<LiveStatusValue, { label: string; title: string; alarming: boolean }>;
 
 /**
+ * Точка соединения — псевдоэлемент, а не узел разметки: она не содержание, а знак при
+ * подписи, и диктору читать в ней нечего. Заливка берётся от текста (`bg-current`),
+ * поэтому тревога красит подпись и точку разом.
+ *
+ * `rounded-pill` — то же «скруглить целиком», что у точки счётчика в верхней полосе:
+ * на квадрате 8×8 999px обрезаются до 4px, то есть до той же окружности, что давали 50%.
+ */
+const INDICATOR =
+  "inline-flex items-center gap-1 text-label before:size-2 before:rounded-pill before:bg-current before:content-['']";
+
+/**
  * Состояние живого потока в шапке: свежесть того, на что человек смотрит
  * (`CONCEPT.md`, 5).
  *
@@ -37,7 +47,13 @@ export function LiveStatus({ status }: { status: LiveStatusValue }) {
 
   return (
     <span
-      className={state.alarming ? styles.lost : styles.connected}
+      /*
+       * Склейка строкой, а не `cn`: `tailwind-merge` не знает нашей шкалы кегля и
+       * считает `text-label` цветом, поэтому рядом с `text-muted` он молча выбрасывал
+       * бы его — подпись набиралась бы 13px вместо 11px, и заметить это можно только
+       * замером. Конфликтующих классов здесь всё равно нет: перебивать нечего.
+       */
+      className={`${INDICATOR} ${state.alarming ? 'text-danger' : 'text-muted'}`}
       role="status"
       title={state.title}
     >

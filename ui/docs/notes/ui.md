@@ -201,7 +201,11 @@
 **Как правильно:** появление показывать движением (`transform`), а не проявлением.
 Элемент непрозрачен с первого кадра, контраст держится всегда, а не в среднем;
 признак события при этом сохраняется, и `prefers-reduced-motion` гасит его так же.
-**Где:** `src/features/live-journal/ui/question-notice.module.css`, `@keyframes appear`.
+**Где:** `src/shared/styles/theme.css`, `--animate-appear`, `@keyframes appear`;
+`src/features/live-journal/ui/question-notice.tsx`, `animate-appear`. Модуля
+`question-notice.module.css` больше нет: движение переехало в токены темы вместе
+с переводом уведомления на утилиты (UI-50), а причина, по которой в нём нет
+`opacity`, — вместе с ним.
 
 ## Форма не может показать исход собственной отправки
 
@@ -396,7 +400,7 @@
 второстепенное — кеглем и гарнитурой. Появление показывать движением, а не
 проявлением.
 **Где:** `src/shared/ui/badge.module.css`, `.kind`;
-`src/features/live-journal/ui/question-notice.module.css`, `@keyframes appear`.
+`src/shared/styles/theme.css`, `--animate-appear`, `@keyframes appear`.
 
 ## Первый экран карточки: место находится устройством, а не сжатием текста
 

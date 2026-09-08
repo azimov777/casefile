@@ -1,6 +1,6 @@
+import { cn } from '@/shared/lib';
 import { Button } from '@/shared/ui';
 import { useDeferredList } from '../model/use-deferred-list';
-import styles from './updates-bar.module.css';
 
 /**
  * Полоса «изменилось столько-то · показать».
@@ -21,10 +21,26 @@ export function UpdatesBar() {
   if (count === 0 && !vague) return null;
 
   return (
-    // Имя, а не только роль: `role="status"` носит и индикатор связи в шапке, и без
-    // имени их не различить ни программе чтения с экрана, ни сквозному тесту.
-    <div className={styles.bar} role="status" aria-label="Обновления списка">
-      <span className={styles.text}>
+    /*
+     * Полоса стоит вне потока вёрстки: обновление, о котором человек ещё не просил,
+     * не вправе сдвинуть строки, которые он читает. Место — левый нижний угол: правый
+     * занят стопкой уведомлений о вопросах, и спорить за него им незачем.
+     *
+     * Предел ширины общий со стопкой (`--ui-float-max`): и то и другое висит над
+     * содержанием в углу, и на узком экране обоим нужны поля по обе стороны.
+     */
+    <div
+      className={cn(
+        'fixed bottom-4 left-4 z-10 flex max-w-(--ui-float-max) items-center gap-3',
+        'rounded-control border border-progress-line bg-progress-soft px-3 py-2',
+        'text-progress shadow-raised',
+      )}
+      role="status"
+      // Имя, а не только роль: `role="status"` носит и индикатор связи в шапке, и без
+      // имени их не различить ни программе чтения с экрана, ни сквозному тесту.
+      aria-label="Обновления списка"
+    >
+      <span className="text-body">
         {count > 0 ? `Изменилось задач: ${count}` : 'Пока не было связи, список мог измениться'}
       </span>
       <Button onClick={show}>Показать</Button>
