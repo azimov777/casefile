@@ -18,7 +18,6 @@
 """
 
 import json
-import re
 import uuid
 from typing import Any
 
@@ -32,8 +31,8 @@ from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
-from app.domain.query_language import QUERY_WRONG_SHAPE, parse_query
-from app.domain.search import searchable_names
+from app.domain.query_language import QUERY_EXAMPLES, QUERY_WRONG_SHAPE, parse_query
+from app.domain.search import Condition, Node, Operator, SearchFilter, searchable_names
 from app.domain.tokens import TokenScope
 from app.mcp.arguments import DEFAULT_SEARCH_FIELDS, QueryArg
 from app.services import case as case_service
@@ -1047,26 +1046,44 @@ def _query_description() -> str:
     return str(QueryArg.__metadata__[0].description)
 
 
-def _examples_of(description: str) -> list[str]:
-    """Примеры из списка описания: строки вида «- `запрос`»."""
-    return re.findall(r"^- `(.+)`$", description, flags=re.MULTILINE)
-
-
 def test_every_query_example_of_the_tool_description_parses() -> None:
-    """Обзорная проверка 3: примеры берутся из текста описания, а не из копии рядом.
+    """Обзорная проверка 3: примеры описания — рабочие запросы, а не иллюстрации.
 
-    Копия в тесте проверяла бы саму себя: разойтись с описанием ей ничто не мешает, и
-    первым это заметил бы агент, скопировавший пример из описания и получивший отказ.
+    Примеры и описание не две копии, а одна: описание собрано из `QUERY_EXAMPLES`.
+    Поэтому тест берёт список у домена и требует двух вещей сразу — что каждый пример
+    разбирается и что он дошёл до текста, который прочтёт модель. Разойтись им негде.
+
+    Разбирать текст описания обратно — регуляркой по строкам списка — было бы хуже, чем
+    бесполезно: проверка зависела бы от вёрстки абзаца, а не от того, что в нём сказано,
+    и молча перестала бы что-либо проверять от смены дефиса на звёздочку.
     """
-    description = _query_description()
-    examples = _examples_of(description)
+    described = _query_description()
 
-    assert len(examples) >= 3, "описание обязано показывать язык примерами, не одними словами"
-    for example in examples:
+    assert len(QUERY_EXAMPLES) >= 3, "описание обязано показывать язык примерами, не одними словами"
+    for example in QUERY_EXAMPLES:
         assert parse_query(example).root is not None, example
+        assert f"`{example}`" in described, f"пример {example} не дошёл до описания"
 
-    # Хотя бы один пример показывает оператор в его настоящем месте — после двоеточия.
-    assert any(re.search(r": (in|not in|>=|<=|>|<|~|!~|!=) ", example) for example in examples)
+    # Хотя бы один показывает оператор в его настоящем месте — после двоеточия. Ищется
+    # он по разбору, а не по виду строки: у разобранного условия оператор — поле.
+    assert any(
+        condition.operator is not Operator.EQ
+        for example in QUERY_EXAMPLES
+        for condition in _conditions_of(parse_query(example))
+    )
+
+
+def _conditions_of(parsed: SearchFilter) -> list[Condition]:
+    """Все условия разобранного запроса, вглубь по группам."""
+
+    def walk(node: Node | None) -> list[Condition]:
+        if node is None:
+            return []
+        if isinstance(node, Condition):
+            return [node]
+        return [item for child in node.nodes for item in walk(child)]
+
+    return walk(parsed.root)
 
 
 async def test_every_search_field_is_reachable_from_the_tool_itself(
