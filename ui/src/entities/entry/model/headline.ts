@@ -1,8 +1,25 @@
 import type { components } from '@/shared/api';
 import type { Entry, EntryType } from '../api/entries';
 
-/** Факты записи из описи дела: то, чем её называют, не читая тела. */
+/**
+ * Факты записи из описи дела: то, чем её называют, не читая тела.
+ *
+ * Размеченное по `type` объединение десяти форм, а не объект из шестнадцати полей с
+ * `null` в пятнадцати (`../tracker/docs/FRONTEND.md`, «Строку описи не надо
+ * разбирать»). Состав полей сужается сам — `switch (facts.type)`, — и внешний тип
+ * записи для этого не нужен.
+ */
 export type EntryFacts = components['schemas']['EntryFactsRead'];
+
+/**
+ * Отдельные формы объединения: ими индексируются типы значений там, где нагрузку
+ * записи приходится приводить к факту. Само объединение индексировать нечем — общих
+ * ключей у форм нет, кроме разметки.
+ */
+type StatusChangedFacts = components['schemas']['StatusChangedFactsRead'];
+type SectionChangedFacts = components['schemas']['SectionChangedFactsRead'];
+type FieldChangedFacts = components['schemas']['FieldChangedFactsRead'];
+type LinkFacts = components['schemas']['LinkFactsRead'];
 
 /** Чем разобрано замечание: значение из контракта, показывается словами. */
 export type RemarkOutcome = components['schemas']['RemarkOutcome'];
@@ -79,16 +96,20 @@ const words = (text: string): HeadlinePart => ({ kind: 'words', text });
 const id = (text: string): HeadlinePart => ({ kind: 'id', text });
 
 /**
- * Заголовок записи по её типу и фактам.
+ * Заголовок записи по её фактам.
  *
  * Строится из структурных полей, а не из готового `title`: тот приходит по-английски
  * и его формат — служебный слой бэкенда, а не контракт для клиента.
  *
- * `taskKey` нужен ответу: он ссылается на вопрос в той же задаче, а в фактах описи
- * лежит только номер записи.
+ * Тип записи отдельным доводом не нужен: он лежит в самих фактах и разметкой их
+ * сужает. Внешний `type` этого не умел — TypeScript про его связь с плоским объектом
+ * не знал, и каждое поле приходилось проверять на `null` заново.
+ *
+ * `taskKey` нужен ответу и разбору замечания: они ссылаются на запись в той же
+ * задаче, а в фактах описи лежит только её номер.
  */
-export function entryHeadline(type: EntryType, facts: EntryFacts, taskKey: string): Headline {
-  switch (type) {
+export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
+  switch (facts.type) {
     case 'created':
       return { kind: 'built', parts: [words('Задача заведена')] };
 
@@ -104,6 +125,11 @@ export function entryHeadline(type: EntryType, facts: EntryFacts, taskKey: strin
         ],
       };
 
+    /*
+     * Номер проверки (`check_no`) в фактах правки раздела есть, но в строке не
+     * называется: это перевод на другую форму данных, а не редизайн строки описи
+     * (UI-64#6).
+     */
     case 'section_changed':
       return {
         kind: 'built',
@@ -127,7 +153,7 @@ export function entryHeadline(type: EntryType, facts: EntryFacts, taskKey: strin
       return {
         kind: 'built',
         parts: [
-          words(type === 'link_added' ? 'Связь' : 'Связь снята'),
+          words(facts.type === 'link_added' ? 'Связь' : 'Связь снята'),
           ...(facts.link_kind == null ? [] : [id(facts.link_kind)]),
           ...(facts.other_key == null ? [] : [{ kind: 'task' as const, key: facts.other_key }]),
         ],
@@ -166,9 +192,7 @@ export function entryHeadline(type: EntryType, facts: EntryFacts, taskKey: strin
           ...(facts.remark_no == null
             ? []
             : [{ kind: 'entry' as const, key: taskKey, no: facts.remark_no }]),
-          ...(facts.remark_outcome == null
-            ? []
-            : [words(`· ${REMARK_OUTCOME_NAMES[facts.remark_outcome]}`)]),
+          ...(facts.outcome == null ? [] : [words(`· ${REMARK_OUTCOME_NAMES[facts.outcome]}`)]),
           ...(facts.continuation_key == null
             ? []
             : [words('→'), { kind: 'task' as const, key: facts.continuation_key }]),
@@ -180,9 +204,27 @@ export function entryHeadline(type: EntryType, facts: EntryFacts, taskKey: strin
     case 'summary':
       return { kind: 'derived' };
 
-    // Вопрос, решение, попытка, находка, артефакт, заметка: заголовок пишет автор.
-    default:
+    // Вопрос, решение, попытка, находка, артефакт, замечание, заметка: заголовок
+    // пишет автор. У вопроса факты есть (`addressees`, `blocking`), но они уже
+    // показаны бейджами карточки, а не заголовком.
+    case 'question':
+    case 'decision':
+    case 'attempt':
+    case 'finding':
+    case 'artifact':
+    case 'remark':
+    case 'note':
       return { kind: 'author' };
+
+    /*
+     * Ветка недостижима, и это проверяет компилятор: разметка перебрана целиком, так
+     * что здесь `facts` сузился до `never`. Форма, добавленная в контракт, уронит
+     * сборку тут — а не покажется на экране «неизвестным типом».
+     */
+    default: {
+      const unreachable: never = facts;
+      return unreachable;
+    }
   }
 }
 
@@ -199,6 +241,10 @@ function pair(before: string | null | undefined, after: string | null | undefine
  * Факты записи ленты: там приходит `payload` целиком, а описи бэкенд отдаёт уже
  * вырезанное. Приведение здесь, чтобы строку собирало одно место для обоих.
  *
+ * Каждая ветка называет разметку: без неё это не факты, а объект, который нечем
+ * истолковать. Ветка по умолчанию отдаёт одну разметку — у записей агента и человека
+ * фактов нет вовсе, и форма контракта говорит ровно это.
+ *
  * Значения перечислений приходится приводить: в нагрузке записи контракт объявляет
  * статус, имя поля и вид связи строками, а в фактах описи — перечислениями. Значение
  * то же самое и приходит из одной строки базы; расхождение — в ширине типа на стороне
@@ -209,35 +255,58 @@ export function factsOfEntry(entry: Entry): EntryFacts {
   switch (entry.type) {
     case 'status_changed':
       return {
-        from_status: entry.payload.from as EntryFacts['from_status'],
-        to_status: entry.payload.to as EntryFacts['to_status'],
+        type: 'status_changed',
+        from_status: entry.payload.from as StatusChangedFacts['from_status'],
+        to_status: entry.payload.to as StatusChangedFacts['to_status'],
         has_reason: entry.payload.reason != null && entry.payload.reason !== '',
       };
     case 'section_changed':
+      return {
+        type: 'section_changed',
+        field: entry.payload.field as SectionChangedFacts['field'],
+        check_no: entry.payload.check_no,
+      };
     case 'field_changed':
-      return { field: entry.payload.field as EntryFacts['field'] };
+      return {
+        type: 'field_changed',
+        field: entry.payload.field as FieldChangedFacts['field'],
+      };
     case 'assignee_changed':
-      return { assignee_from: entry.payload.before, assignee_to: entry.payload.after };
+      return {
+        type: 'assignee_changed',
+        assignee_from: entry.payload.before,
+        assignee_to: entry.payload.after,
+      };
     case 'link_added':
     case 'link_removed':
       return {
-        link_kind: entry.payload.kind as EntryFacts['link_kind'],
+        type: entry.type,
+        link_kind: entry.payload.kind as LinkFacts['link_kind'],
         other_key: entry.payload.other,
       };
     case 'question':
-      return { addressees: entry.payload.addressees, blocking: entry.payload.blocking };
+      return {
+        type: 'question',
+        addressees: entry.payload.addressees,
+        blocking: entry.payload.blocking,
+      };
     case 'answer':
-      return { question_no: entry.payload.question_no };
+      return { type: 'answer', question_no: entry.payload.question_no };
     case 'verdict':
-      return { check_no: entry.payload.check_no, outcome: entry.payload.outcome };
+      /*
+       * `outdated` в нагрузке записи нет: он не хранится, а вычисляется при чтении
+       * дела — в ленте его просто неоткуда взять, и поле остаётся незаполненным.
+       */
+      return { type: 'verdict', check_no: entry.payload.check_no, outcome: entry.payload.outcome };
     case 'resolution':
       return {
+        type: 'resolution',
         remark_no: entry.payload.remark_no,
-        remark_outcome: entry.payload.outcome,
+        outcome: entry.payload.outcome,
         continuation_key: entry.payload.task,
       };
     default:
-      return {};
+      return { type: entry.type };
   }
 }
 

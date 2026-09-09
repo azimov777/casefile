@@ -27,7 +27,7 @@ interface EntryCardProps {
  */
 export function EntryCard({ entry, checks, highlighted = false, children }: EntryCardProps) {
   const reference = `${entry.task_key}#${entry.no}`;
-  const headline = entryHeadline(entry.type, factsOfEntry(entry), entry.task_key);
+  const headline = entryHeadline(factsOfEntry(entry), entry.task_key);
   // Служебная запись несёт один факт и получает столько места, сколько в ней смысла:
   // строка вместо карточки. Прятать её нельзя — дело обязано быть полным.
   const service = isServiceEntry(entry.type);

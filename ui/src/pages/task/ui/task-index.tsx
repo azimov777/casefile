@@ -177,7 +177,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
    * ключ запроса тот же, и ответ берётся из кэша.
    */
   const details = useExitHold(open);
-  const headline = entryHeadline(heading.type, heading.facts, taskKey);
+  const headline = entryHeadline(heading.facts, taskKey);
   /* Раскрытая строка утоплена заливкой и так читается вместе со своим телом ниже. */
   const cell = open ? cn(CELL, 'bg-sunken') : CELL;
 

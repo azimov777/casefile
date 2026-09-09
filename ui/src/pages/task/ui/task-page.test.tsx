@@ -274,7 +274,7 @@ describe('карточка задачи', () => {
   it('в длинной описи «К свежей записи» раскрывает последнюю и читает только её', async () => {
     // Опись из двадцати записей: короткая видна целиком, и прыгать по ней незачем.
     const long = Array.from({ length: 20 }, (_, at) =>
-      heading(at + 1, 'decision', `Решение номер ${at + 1}`),
+      heading(at + 1, { type: 'decision' }, `Решение номер ${at + 1}`),
     );
     server.use(packageOf('DEMO-4', { index: long }), entries('DEMO-4'));
     const user = userEvent.setup();
