@@ -1,5 +1,12 @@
 export { cn } from './cn';
 export {
+  exitDurationMs,
+  useExitHold,
+  useExitHoldList,
+  type ExitHold,
+  type Held,
+} from './exit-hold';
+export {
   caseHref,
   queueOfKey,
   readEntryNo,

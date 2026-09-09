@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { X } from 'lucide-react';
-import { cn } from '@/shared/lib';
-import { Button, Select } from '@/shared/ui';
+import { cn, useExitHold } from '@/shared/lib';
+import { Button, Reveal, Select } from '@/shared/ui';
 import { TASK_SORTS, type TaskFilters } from '../model/filters';
 import { useFiltersExpanded } from '../model/expanded';
 import { caretLine, type QueryProblem } from '../model/query-problem';
@@ -77,6 +77,11 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
    * то есть человек, снявший условие с клавиатуры, терял бы место.
    */
   const toggleRef = useRef<HTMLButtonElement>(null);
+  /*
+   * Форма доживает выход: без этого сворачивание убрало бы её в том же кадре,
+   * и показывать было бы нечего (`useExitHold`).
+   */
+  const reveal = useExitHold(expanded);
 
   // Отбор меняется и мимо формы: «сбросить», кнопка «назад», открытая ссылка.
   useEffect(() => {
@@ -111,7 +116,13 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   }
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Отбор задач">
+    /*
+     * Промежуток между строкой отбора и формой стоит на самой форме (`mt-2`), а не
+     * `gap-2` на разделе: промежуток между соседями держится, пока стоит сосед, и
+     * свёртывание кончалось бы скачком в восемь пикселей — тем самым рывком, только
+     * поменьше. Внутри обёртки он уезжает вместе с местом и доходит до нуля.
+     */
+    <section className="flex flex-col" aria-label="Отбор задач">
       {/*
        * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
        * что первый экран списка платит за отбор, — всё остальное принадлежит задачам.
@@ -201,131 +212,135 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
         )}
       </div>
 
-      {expanded ? (
-        <form
-          id={formId}
-          className="flex flex-col gap-3 rounded-control border border-line bg-surface px-4 py-3"
-          aria-label="Условия отбора задач"
-          onSubmit={submit}
-        >
-          <div className={LINE}>
-            {/*
-             * Очереди здесь нет и не должно быть: она стала местом в интерфейсе и живёт
-             * в боковой панели (UI-38, решение Д25). В форме остались условия, которые
-             * действительно отбор.
-             */}
-            {board ? null : (
+      {reveal.held ? (
+        <Reveal leaving={reveal.leaving} entering={reveal.entering}>
+          <form
+            id={formId}
+            className="mt-2 flex flex-col gap-3 rounded-control border border-line bg-surface px-4 py-3"
+            aria-label="Условия отбора задач"
+            onSubmit={submit}
+          >
+            <div className={LINE}>
+              {/*
+               * Очереди здесь нет и не должно быть: она стала местом в интерфейсе и живёт
+               * в боковой панели (UI-38, решение Д25). В форме остались условия, которые
+               * действительно отбор.
+               */}
+              {board ? null : (
+                <fieldset className={GROUP}>
+                  <legend className={LABEL}>Статус</legend>
+                  {TASK_STATUSES.map((status) => (
+                    <label key={status} className={CHECK}>
+                      <input
+                        type="checkbox"
+                        checked={filters.status.includes(status)}
+                        onChange={(event) =>
+                          applyWith({
+                            status: toggle(filters.status, status, event.target.checked),
+                          })
+                        }
+                      />
+                      <code className={CODE}>{status}</code>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+
               <fieldset className={GROUP}>
-                <legend className={LABEL}>Статус</legend>
-                {TASK_STATUSES.map((status) => (
-                  <label key={status} className={CHECK}>
+                <legend className={LABEL}>Приоритет</legend>
+                {TASK_PRIORITIES.map((priority) => (
+                  <label key={priority} className={CHECK}>
                     <input
                       type="checkbox"
-                      checked={filters.status.includes(status)}
+                      checked={filters.priority.includes(priority)}
                       onChange={(event) =>
-                        applyWith({ status: toggle(filters.status, status, event.target.checked) })
+                        applyWith({
+                          priority: toggle(filters.priority, priority, event.target.checked),
+                        })
                       }
                     />
-                    <code className={CODE}>{status}</code>
+                    <code className={CODE}>{priority}</code>
                   </label>
                 ))}
               </fieldset>
-            )}
+            </div>
 
-            <fieldset className={GROUP}>
-              <legend className={LABEL}>Приоритет</legend>
-              {TASK_PRIORITIES.map((priority) => (
-                <label key={priority} className={CHECK}>
-                  <input
-                    type="checkbox"
-                    checked={filters.priority.includes(priority)}
-                    onChange={(event) =>
-                      applyWith({
-                        priority: toggle(filters.priority, priority, event.target.checked),
-                      })
-                    }
-                  />
-                  <code className={CODE}>{priority}</code>
-                </label>
-              ))}
-            </fieldset>
-          </div>
+            {board ? (
+              <p className={NOTE}>На доске показаны все статусы: каждый своим столбцом.</p>
+            ) : null}
 
-          {board ? (
-            <p className={NOTE}>На доске показаны все статусы: каждый своим столбцом.</p>
-          ) : null}
-
-          <div className={LINE}>
-            <DraftField
-              label="Исполнитель"
-              value={draft.assignee}
-              pending={pending.assignee}
-              placeholder="имя целиком"
-              onChange={(value) => setDraft({ ...draft, assignee: value })}
-            />
-
-            <DraftField
-              label="Текст"
-              value={draft.text}
-              pending={pending.text}
-              placeholder="в названии или описании"
-              onChange={(value) => setDraft({ ...draft, text: value })}
-            />
-
-            <label className={CHECK}>
-              <input
-                type="checkbox"
-                checked={filters.blocked}
-                onChange={(event) => applyWith({ blocked: event.target.checked })}
+            <div className={LINE}>
+              <DraftField
+                label="Исполнитель"
+                value={draft.assignee}
+                pending={pending.assignee}
+                placeholder="имя целиком"
+                onChange={(value) => setDraft({ ...draft, assignee: value })}
               />
-              заблокирована
-            </label>
 
-            <label className={CHECK}>
-              <input
-                type="checkbox"
-                checked={filters.withQuestions}
-                onChange={(event) => applyWith({ withQuestions: event.target.checked })}
+              <DraftField
+                label="Текст"
+                value={draft.text}
+                pending={pending.text}
+                placeholder="в названии или описании"
+                onChange={(value) => setDraft({ ...draft, text: value })}
               />
-              есть открытые вопросы
-            </label>
 
-            <label className={CHECK}>
-              <input
-                type="checkbox"
-                checked={filters.withRemarks}
-                onChange={(event) => applyWith({ withRemarks: event.target.checked })}
-              />
-              есть неразобранные замечания
-            </label>
-          </div>
+              <label className={CHECK}>
+                <input
+                  type="checkbox"
+                  checked={filters.blocked}
+                  onChange={(event) => applyWith({ blocked: event.target.checked })}
+                />
+                заблокирована
+              </label>
 
-          <div className={LINE}>
-            <DraftField
-              label="Запрос на языке бэкенда"
-              note="отменяет остальной отбор"
-              value={draft.query}
-              pending={pending.query}
-              placeholder="queue: DEMO and status: open and blocked: false"
-              wide
-              invalid={problem !== null}
-              describedBy={problem === null ? undefined : problemId}
-              onChange={(value) => setDraft({ ...draft, query: value })}
-            >
-              {/* Объяснение отказа наложено на страницу, а не встроено в поток: иначе
-                  две сотни пикселей объяснения уводят таблицу вниз ровно тогда, когда
-                  человек хочет сравнить её с тем, что было до опечатки. */}
-              {problem === null ? null : <QueryProblemHint id={problemId} problem={problem} />}
-            </DraftField>
+              <label className={CHECK}>
+                <input
+                  type="checkbox"
+                  checked={filters.withQuestions}
+                  onChange={(event) => applyWith({ withQuestions: event.target.checked })}
+                />
+                есть открытые вопросы
+              </label>
 
-            {/* Кнопка стоит при поле запроса — самом частом черновике — и включается
-                только тогда, когда есть что применять. Флажки и списки применяются
-                мгновенно и её не ждут. */}
-            <Button type="submit" disabled={!hasDraft}>
-              Применить
-            </Button>
-          </div>
-        </form>
+              <label className={CHECK}>
+                <input
+                  type="checkbox"
+                  checked={filters.withRemarks}
+                  onChange={(event) => applyWith({ withRemarks: event.target.checked })}
+                />
+                есть неразобранные замечания
+              </label>
+            </div>
+
+            <div className={LINE}>
+              <DraftField
+                label="Запрос на языке бэкенда"
+                note="отменяет остальной отбор"
+                value={draft.query}
+                pending={pending.query}
+                placeholder="queue: DEMO and status: open and blocked: false"
+                wide
+                invalid={problem !== null}
+                describedBy={problem === null ? undefined : problemId}
+                onChange={(value) => setDraft({ ...draft, query: value })}
+              >
+                {/* Объяснение отказа наложено на страницу, а не встроено в поток: иначе
+                    две сотни пикселей объяснения уводят таблицу вниз ровно тогда, когда
+                    человек хочет сравнить её с тем, что было до опечатки. */}
+                {problem === null ? null : <QueryProblemHint id={problemId} problem={problem} />}
+              </DraftField>
+
+              {/* Кнопка стоит при поле запроса — самом частом черновике — и включается
+                  только тогда, когда есть что применять. Флажки и списки применяются
+                  мгновенно и её не ждут. */}
+              <Button type="submit" disabled={!hasDraft}>
+                Применить
+              </Button>
+            </div>
+          </form>
+        </Reveal>
       ) : null}
     </section>
   );

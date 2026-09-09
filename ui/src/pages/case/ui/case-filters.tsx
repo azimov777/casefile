@@ -1,7 +1,8 @@
 import { useId, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { ENTRY_TYPES, isServiceEntry, type EntryType } from '@/entities/entry';
-import { Button } from '@/shared/ui';
+import { useExitHold } from '@/shared/lib';
+import { Button, Reveal } from '@/shared/ui';
 
 interface CaseFiltersProps {
   selected: EntryType[];
@@ -29,6 +30,8 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
    * и фокус улетел бы на `body`. Тот же приём, что в отборе задач.
    */
   const toggleRef = useRef<HTMLButtonElement>(null);
+  /* Перечень доживает выход: свёртывание иначе убрало бы его в том же кадре. */
+  const reveal = useExitHold(expanded);
 
   const agentTypes = ENTRY_TYPES.filter((type) => !isServiceEntry(type));
   const serviceTypes = ENTRY_TYPES.filter(isServiceEntry);
@@ -50,7 +53,13 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
   }
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Отбор записей">
+    /*
+     * Промежуток между строкой отбора и перечнем стоит на самом перечне (`mt-2`),
+     * а не `gap-2` на разделе: промежуток между соседями держится, пока стоит сосед,
+     * и свёртывание кончалось бы скачком в восемь пикселей. Внутри обёртки он уезжает
+     * вместе с местом и доходит до нуля. Тот же приём, что в отборе задач.
+     */
+    <section className="flex flex-col" aria-label="Отбор записей">
       {/*
        * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
        * что дело платит за отбор, — всё остальное принадлежит записям. Тот же язык, что
@@ -129,23 +138,25 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
         )}
       </div>
 
-      {expanded ? (
-        <fieldset
-          id={typesId}
-          className="flex flex-wrap gap-x-3 gap-y-2 rounded-control border border-line bg-surface px-4 py-3"
-        >
-          <legend className="text-meta text-muted">Типы записей</legend>
-          {ENTRY_TYPES.map((type) => (
-            <label key={type} className="inline-flex cursor-pointer items-center gap-1 text-meta">
-              <input
-                type="checkbox"
-                checked={selected.includes(type)}
-                onChange={(event) => toggle(type, event.target.checked)}
-              />
-              <code>{type}</code>
-            </label>
-          ))}
-        </fieldset>
+      {reveal.held ? (
+        <Reveal leaving={reveal.leaving} entering={reveal.entering}>
+          <fieldset
+            id={typesId}
+            className="mt-2 flex flex-wrap gap-x-3 gap-y-2 rounded-control border border-line bg-surface px-4 py-3"
+          >
+            <legend className="text-meta text-muted">Типы записей</legend>
+            {ENTRY_TYPES.map((type) => (
+              <label key={type} className="inline-flex cursor-pointer items-center gap-1 text-meta">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(type)}
+                  onChange={(event) => toggle(type, event.target.checked)}
+                />
+                <code>{type}</code>
+              </label>
+            ))}
+          </fieldset>
+        </Reveal>
       ) : null}
     </section>
   );

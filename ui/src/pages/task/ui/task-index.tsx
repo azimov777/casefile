@@ -9,8 +9,8 @@ import {
   entryQueryOptions,
   type EntryHeading,
 } from '@/entities/entry';
-import { cn } from '@/shared/lib';
-import { Button, QueryState, RelativeTime, TaskText } from '@/shared/ui';
+import { cn, useExitHold } from '@/shared/lib';
+import { Button, QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
 
 interface TaskIndexProps {
   taskKey: string;
@@ -169,6 +169,14 @@ interface IndexRowProps {
 
 function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexRowProps) {
   const row = useRef<HTMLTableRowElement>(null);
+  /*
+   * Тело записи доживает выход: без этого сворачивание убирало бы строку в том же
+   * кадре. Держится строка целиком, а не её содержимое: пустая строка таблицы стояла
+   * бы под каждой записью описи и добавляла бы каждой лишнюю линию и лишний ряд
+   * для программы чтения с экрана. Второго запроса доживающий узел не делает —
+   * ключ запроса тот же, и ответ берётся из кэша.
+   */
+  const details = useExitHold(open);
   const headline = entryHeadline(heading.type, heading.facts, taskKey);
   /* Раскрытая строка утоплена заливкой и так читается вместе со своим телом ниже. */
   const cell = open ? cn(CELL, 'bg-sunken') : CELL;
@@ -231,10 +239,25 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
         </td>
       </tr>
 
-      {open ? (
+      {details.held ? (
         <tr>
-          <td className={cn(CELL, 'bg-sunken')} colSpan={5}>
-            <EntryDetails taskKey={taskKey} no={heading.no} checks={checks} title={heading.title} />
+          {/*
+           * Поля ячейки переехали внутрь обёртки (`p-0` снаружи, `px-3 py-2` внутри):
+           * снаружи они держали бы высоту и свёрнутое состояние нулём бы не стало.
+           * Линия под строкой и заливка остаются на ячейке — они видны и на нулевой
+           * высоте ровно один кадр, пока строка уходит.
+           */}
+          <td className={cn(CELL, 'bg-sunken p-0')} colSpan={5}>
+            <Reveal leaving={details.leaving} entering={details.entering}>
+              <div className="px-3 py-2">
+                <EntryDetails
+                  taskKey={taskKey}
+                  no={heading.no}
+                  checks={checks}
+                  title={heading.title}
+                />
+              </div>
+            </Reveal>
           </td>
         </tr>
       ) : null}
