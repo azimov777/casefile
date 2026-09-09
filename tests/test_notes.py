@@ -1,17 +1,23 @@
-"""Формат записей в `docs/notes/`: у находки есть все четыре поля, и в своём порядке.
+"""Заметки `docs/notes/` держатся тестом, а не вычиткой: состав полей и имена в тексте.
 
 Заметки — единственное место, где знание переживает сессию агента: файлы задач
-удаляются, отчёты исчезают вместе с контекстом. Правило формата описано в
-`docs/CONVENTIONS.md`, разделе «Заметки», но описанное прозой правило никто не
-исполняет: к задаче 33 шестьдесят записей из трёхсот шестнадцати остались без «Как
-правильно» — то есть называли грабли и не говорили, как их обойти.
+удаляются, отчёты исчезают вместе с контекстом. Правила описаны в `docs/CONVENTIONS.md`,
+разделе «Заметки», но описанное прозой правило никто не исполняет: к задаче 33
+шестьдесят записей из трёхсот шестнадцати остались без «Как правильно» — то есть
+называли грабли и не говорили, как их обойти.
 
-Проверка стережёт именно состав полей, а не длину текста: «что» и «почему важно»
-пишутся сами собой, а «как правильно» требует решить, что же делать, — и пропускается
-первым.
+Стерегутся три разных свойства, и каждое своей проверкой:
+
+- состав и порядок четырёх полей — именно состав, а не длина текста: «что» и «почему
+  важно» пишутся сами собой, а «как правильно» требует решить, что же делать, — и
+  пропускается первым;
+- указатель «Где:» ведёт в существующий файл, и названный символ в этом файле есть;
+- имя из кода, названное где угодно в записи, в коде проекта существует (TRK-43).
 """
 
+import os
 import re
+from functools import cache
 from pathlib import Path
 
 NOTES_DIR = Path(__file__).resolve().parents[1] / "docs" / "notes"
@@ -143,5 +149,185 @@ def test_every_where_pointer_leads_to_living_code() -> None:
             for symbol in symbols
             if not any(symbol in text for text in texts)
         ]
+
+    assert not problems, problems
+
+
+# --- Имена во всём тексте записи ------------------------------------------------------
+
+#: Папки, в которых исходников проекта нет: чужой код и кеши инструментов.
+SKIP_DIRS = frozenset(
+    {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", "node_modules"}
+)
+
+#: Идентификатор и цепочка идентификаторов через точку: `get_actor`, `LinkView.other`.
+IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+DOTTED_NAME = re.compile(rf"^{IDENT}(?:\.{IDENT})*$")
+
+#: Чем имя из кода отличается от слова прозы: подчёркивание рядом с буквой или цифрой
+#: (`get_actor`) либо смена регистра внутри слова (`LinkView`). Одиночное слово —
+#: `null`, `open`, `SELECT` — под это не подходит и не проверяется: отличить имя от
+#: прозы там нечем, а ложное срабатывание здесь дороже пропуска.
+NAME_SHAPE = re.compile(r"_[A-Za-z0-9]|[A-Za-z0-9]_|[a-z0-9][A-Z]")
+
+#: Имя объекта базы: ограничение, индекс, ключ. Их собирает соглашение об именах
+#: (`app/db/base.py`, `NAMING_CONVENTION`), и в исходниках такого имени может не быть
+#: вовсе — оно живёт в схеме. Соседняя заметка про `alembic check` прямо говорит, что
+#: перечислять эти имена где-либо бессмысленно: список устареет к следующей миграции.
+DATABASE_OBJECT = re.compile(r"^(?:ck|fk|ix|pk|uq)_")
+
+#: Имена из чужого кода: у записи о поведении библиотеки нет другого способа назвать то,
+#: о чём она написана. Каждое проверено вручную на задаче TRK-43.
+OUTSIDE_NAMES = frozenset(
+    {
+        "get_route_handler",  # FastAPI, метод APIRoute
+        "request_response",  # FastAPI, fastapi/routing.py
+        "response_model_exclude_none",  # параметр маршрута FastAPI, которым не пользуемся
+        "_get_flat_fields_from_params",  # внутренность разбора параметров FastAPI
+        "ServerMiddleware",  # SDK MCP, промежуточный слой сервера
+        "_handle_list_tools",  # SDK MCP, обработчик tools/list
+        "num_nonnulls",  # функция PostgreSQL
+        "pg_stat_activity",  # представление PostgreSQL
+        "remove_constraint",  # строка вывода `alembic check`
+        "__anext__",  # протокол асинхронного итератора, сам язык
+    }
+)
+
+#: Имена, которых у нас нет намеренно: снесённое, помянутое как «раньше было», и
+#: варианты, названные для контраста с принятым. Освобождать имя списком, а не молча по
+#: форме токена, — требование задачи TRK-43: пропуск обязан быть виден на ревизии.
+RETIRED_NAMES = frozenset(
+    {
+        "outbox_events",  # таблица прежнего потока событий
+        "stream_replay_limit",  # настройка прежнего потока событий
+        "too_far_behind",  # код отказа прежнего потока событий
+        "lock_journal",  # прежнее имя `lock_changes`, названо как прежнее
+        "structured_filter",  # колонка снесённых сохранённых фильтров
+        "question_not_found",  # кода в трекере не было: пример вранья в чужом документе
+        "question_already_answered",  # там же
+        "is_filterable",  # отвергнутый вариант устройства отбора
+        "is_sortable",  # он же
+    }
+)
+
+FREED_NAMES = OUTSIDE_NAMES | RETIRED_NAMES
+
+
+@cache
+def _names_by_file() -> tuple[tuple[Path, frozenset[str]], ...]:
+    """Идентификаторы исходников проекта, по файлам.
+
+    Заметки в стог не входят: запись, подтверждающая сама себя, не стережёт ничего.
+    Двоичное и нечитаемое пропускается молча — прочиталось текстом, значит годится.
+    """
+    found: list[tuple[Path, frozenset[str]]] = []
+    for root, dirs, files in os.walk(PROJECT_ROOT):
+        dirs[:] = [name for name in dirs if name not in SKIP_DIRS]
+        if Path(root) == NOTES_DIR:
+            dirs[:] = []
+            continue
+        for name in files:
+            path = Path(root) / name
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError, UnicodeDecodeError:
+                continue
+            found.append((path, frozenset(re.findall(IDENT, text))))
+    return tuple(found)
+
+
+def _names_in_the_code() -> frozenset[str]:
+    """Имена кода проекта — все, кроме имён этого файла.
+
+    Свой файл исключён намеренно: в нём лежат списки имён, которых в коде нет, и разобранные
+    примеры мёртвых имён. Без исключения они подтверждали бы сами себя — вернувшееся в код
+    имя осталось бы освобождённым, а мёртвое имя в докстроке открывало бы его всем заметкам.
+    Цена исключения: имя, объявленное только здесь, заметке цитировать нечем.
+    """
+    here = Path(__file__).resolve()
+    return frozenset().union(*(names for path, names in _names_by_file() if path != here))
+
+
+def _named_in_the_notes() -> list[tuple[str, str, str, str]]:
+    """Имена, названные записями: файл, заголовок, токен целиком, само имя.
+
+    Узел pytest (`путь::имя`) разбирается на части: путь проверяет соседняя проверка
+    указателей, имя — эта. Цепочка через точку разбирается на звенья: заметка пишет
+    выражение (`obj.updated_at`), которого целиком в коде и не бывает, а гниль сидит в
+    звене — `IssueLinkView.issue` неверен именно классом.
+    """
+    found: list[tuple[str, str, str, str]] = []
+    for path in sorted(NOTES_DIR.glob("*.md")):
+        if path.name == FOLDER_MAP:
+            continue
+        chunks = re.split(r"^(?=## )", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
+        for chunk in chunks:
+            heading = ENTRY_HEADING.match(chunk)
+            if heading is None:
+                continue
+            for token in QUOTED.findall(chunk):
+                for part in token.split("::"):
+                    if "/" in part or not DOTTED_NAME.match(part):
+                        continue
+                    found += [
+                        (path.name, heading.group(1), part, name)
+                        for name in part.split(".")
+                        if NAME_SHAPE.search(name) and not DATABASE_OBJECT.match(name)
+                    ]
+    return found
+
+
+def test_the_code_and_the_notes_are_read_for_names_at_all() -> None:
+    """Промахнулся разбор — проверка ниже зеленеет на пустом множестве."""
+    assert len(_names_in_the_code()) > 1000, "исходники проекта не разобраны на имена"
+    assert len(_named_in_the_notes()) > 300, "имена записей не разобраны"
+
+
+def test_every_name_a_note_says_is_a_name_the_code_has() -> None:
+    """Имя из кода, названное где угодно в записи, обязано в коде существовать.
+
+    Область — вся запись, а не одно поле «Где:» (TRK-43). Указатель «Где:» сверялся с
+    кодом с самого начала, и разошлись не указатели: вся гниль ревизии 2026-09-09
+    сидела в «Что», «Почему важно» и «Как правильно», где имя не проверял никто.
+    Переименование символа ломало текст заметки молча — набор оставался зелёным, а
+    следующий агент читал заметку до кода и верил ей.
+
+    Ищется имя по всему коду проекта, а не в файлах, которые называет запись: запись
+    законно поминает соседний модуль, библиотеку и SQL, и требование «имя обязано быть
+    в названном файле» дало бы 55 ложных падений на 196 живых записях (TRK-43#6). Здесь
+    проверяется то, что в файле не спрячешь: имени нет **нигде** — значит, его
+    переименовали или не было никогда.
+
+    Падение чинится в заметке, а не здесь: имя правится на живое, запись сносится как
+    мёртвая, а законно помянутое чужое или снесённое имя вносится в `OUTSIDE_NAMES` или
+    `RETIRED_NAMES` со строкой причины.
+    """
+    known = _names_in_the_code()
+    problems = [
+        f"{file}, «{heading}»: имени {name!r} нет в коде проекта"
+        + (f", токен `{token}`" if token != name else "")
+        for file, heading, token, name in _named_in_the_notes()
+        if name not in known and name not in FREED_NAMES
+    ]
+
+    assert not problems, problems
+
+
+def test_the_freed_names_are_still_absent_and_still_named() -> None:
+    """Список освобождённых имён гниёт ровно так же, как заметка.
+
+    Вернувшееся в код имя осталось бы освобождённым молча, а имя, выпавшее из всех
+    записей, копит в списке мусор, который следующий уже не решится тронуть.
+    """
+    known = _names_in_the_code()
+    named = {name for _, _, _, name in _named_in_the_notes()}
+    problems = [
+        f"{name}: имя вернулось в код, освобождать больше нечего"
+        for name in sorted(FREED_NAMES & known)
+    ]
+    problems += [
+        f"{name}: имени нет ни в одной записи, строка в списке лишняя"
+        for name in sorted(FREED_NAMES - named)
+    ]
 
     assert not problems, problems
