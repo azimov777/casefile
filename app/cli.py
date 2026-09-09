@@ -7,6 +7,9 @@
   свежая установка оставалась бы запертой снаружи;
 - `issue-token` — выпустить токен напрямую. Это способ вернуть себе доступ, потеряв
   секрет: `init` на уже работающей установке ничего не создаёт;
+- `local-token` — положить действующий ключ набора `task` в файл, откуда его берёт
+  интерфейс локальной установки. Ключ добывает сама установка, а не человек, поэтому
+  секрет не печатается никогда: команда стоит в журнале подъёма контура;
 - `demo` — наполнить установку демонстрационными данными: очередь `DEMO`, задачи во всех
   статусах и дела со всеми типами записей. Через API это были бы десятки запросов
   в нужном порядке;
@@ -16,17 +19,26 @@
 Запуск в контуре разработки:
 
     docker compose run --rm init
+    docker compose run --rm local-token
     docker compose run --rm demo
     docker compose run --rm schema
     docker compose run --rm --entrypoint python api -m app.cli issue-token --scope main
 
 Команды идут через `session_scope`: транзакцию фиксирует та же граница, что и у
 HTTP-запроса, отдельной логики коммита здесь нет.
+
+## Кто печатает секрет, а кто нет
+
+`init` и `issue-token` печатают: секрет читает человек, и другого способа его получить
+нет. `local-token` не печатает никогда — её вывод уезжает в журнал подъёма контура, а
+секрет в журнале это тот же секрет на виду, от которого весь этот путь и уходит.
+Секрет попадает **только** в файл `--output`, и права на нём `0600`.
 """
 
 import argparse
 import asyncio
 import json
+import os
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -39,11 +51,20 @@ from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
 from app.services.setup import (
+    DEFAULT_LOCAL_TOKEN_NAME,
     DEFAULT_OWNER_DESCRIPTION,
     DEFAULT_OWNER_NAME,
     DEFAULT_TOKEN_NAME,
+    LocalToken,
+    LocalTokenOutcome,
+    ensure_local_token,
     initialize_installation,
 )
+
+#: Права файла с ключом: читает и пишет только владелец. Файл лежит на машине человека
+#: рядом с репозиторием, и `0644` означал бы, что рабочий доступ к трекеру читает любой
+#: процесс любого пользователя этой машины.
+SECRET_FILE_MODE = 0o600
 
 
 async def _init(args: argparse.Namespace) -> int:
@@ -108,6 +129,85 @@ async def _issue_token(args: argparse.Namespace) -> int:
             print()
             print("Shared token: every request must carry the X-Actor-Label header.")
     return 0
+
+
+async def _local_token(args: argparse.Namespace) -> int:
+    """Кладёт в файл действующий ключ интерфейса локальной установки.
+
+    Идемпотентна по файлу, а не по базе, и иначе быть не может: в базе лежит хеш, и
+    секрет уже выпущенного токена не восстановить. Поэтому файл здесь — единственная
+    постоянная копия, и повторный подъём контура видит в нём годный ключ и не трогает
+    ничего.
+
+    Файл пишется **до** коммита, внутри границы транзакции. Обратный порядок при упавшей
+    записи оставил бы в базе действующий секрет, которого никто не знает; при этом —
+    мёртвый секрет в файле, который следующий запуск просто заменит.
+    """
+    path = Path(args.output)
+    async with session_scope() as session:
+        result = await ensure_local_token(
+            session,
+            known_secret=_read_secret(path),
+            participant_name=args.participant,
+            token_name=args.name,
+        )
+        if result.secret is not None:
+            _write_secret(path, result.secret)
+        _report_local_token(result, path)
+    return 0
+
+
+def _read_secret(path: Path) -> str | None:
+    """Секрет из прежнего файла или `None`, если файла нет.
+
+    Испорченное содержимое читается как обычная строка и `None` не даёт: годность
+    решает база, найдя (или не найдя) такой хеш, а не разбор файла здесь. Ошибки доступа
+    (каталог вместо файла, нет прав) намеренно не глушатся — это не «файла нет», а
+    неверно настроенный контур, и молчать о нём хуже, чем упасть.
+    """
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").strip() or None
+    except FileNotFoundError:
+        return None
+
+
+def _write_secret(path: Path, secret: str) -> None:
+    """Пишет секрет в файл, доступный только владельцу, без перевода строки в конце.
+
+    Права выставляются при создании, а не после записи: между `open` и `chmod` файл с
+    рабочим доступом был бы читаем всей машиной. `chmod` следом всё же нужен — он
+    приводит к тем же правам уже существующий файл, которому `os.open` режим не меняет.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, SECRET_FILE_MODE)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(secret)
+    os.chmod(path, SECRET_FILE_MODE)
+
+
+def _report_local_token(result: LocalToken, path: Path) -> None:
+    """Печатает, что случилось и куда лёг ключ. Секрета в этом выводе нет никогда."""
+    participant = result.token.participant
+    assert participant is not None  # выпущен именной токен, участник у него есть
+    print(
+        {
+            LocalTokenOutcome.KEPT: "The installation already has a working local token.",
+            LocalTokenOutcome.INITIALIZED: (
+                "The installation was empty: the owner is in place and the first token is issued."
+            ),
+            LocalTokenOutcome.REISSUED: "No working local token was found, a new one is issued.",
+        }[result.outcome]
+    )
+    if result.revoked:
+        print(f"revoked:     {result.revoked} previous token(s) with the same name")
+    print(f"participant: {participant.name} ({participant.kind.value})")
+    print(f"token name:  {result.token.name}")
+    print(f"token scope: {result.token.scope.value}")
+    print(f"file:        {path} (mode 0600, the secret and nothing else)")
+    print()
+    print("Check it without printing the secret:")
+    print(f'  curl -H "Authorization: Bearer $(cat {path})" \\')
+    print("       http://localhost:8000/api/v1/bootstrap")
 
 
 async def _demo(args: argparse.Namespace) -> int:
@@ -202,6 +302,25 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     issue.add_argument("--name", default="cli", help="Name for the issued token")
     issue.set_defaults(handler=_issue_token)
+
+    local = commands.add_parser(
+        "local-token",
+        help="Keep a working task-scope token in a file for the local UI; never prints it",
+    )
+    # Путь обязателен: умолчание пути к файлу с рабочим секретом — ровно то неявное
+    # поведение, из-за которого секрет однажды оказывается там, где его не искали.
+    local.add_argument("--output", required=True, help="File to keep the secret in, mode 0600")
+    local.add_argument(
+        "--participant",
+        default=DEFAULT_OWNER_NAME,
+        help="Participant to issue the token to; registered only on an empty installation",
+    )
+    local.add_argument(
+        "--name",
+        default=DEFAULT_LOCAL_TOKEN_NAME,
+        help="Name for the issued token; a live token with the same name is revoked",
+    )
+    local.set_defaults(handler=_local_token)
 
     demo = commands.add_parser(
         "demo",

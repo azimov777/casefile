@@ -12,3 +12,4 @@ __pycache__
 docs
 README.md
 .env
+.secrets

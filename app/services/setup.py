@@ -1,26 +1,47 @@
-"""Первичная инициализация установки.
+"""Первичная настройка установки: первый доступ человеку и ключ локальному интерфейсу.
 
 Свежая база заперта снаружи: каждый маршрут `/api/v1` требует токена, а выпустить
 первый токен через API нельзя — для этого уже нужен токен. Разомкнуть круг может только
-код, работающий с базой напрямую, поэтому сценарий живёт здесь, а команда
-`python -m app.cli init` — тонкая обёртка над ним (и её же зовёт сервис `init` в Compose).
+код, работающий с базой напрямую, поэтому сценарии живут здесь, а команды
+`python -m app.cli init` и `python -m app.cli local-token` — тонкие обёртки над ними
+(их же зовут сервисы `init` и `local-token` в Compose).
+
+Сценариев два, и разница между ними — в том, кто хранит секрет.
+
+| Сценарий | Кому доступ | Набор | Где живёт секрет |
+|---|---|---|---|
+| `initialize_installation` | человеку, руками | `main` | у человека, показан один раз |
+| `ensure_local_token` | интерфейсу установки | `task` | в файле, который держит установка |
+
+Повтор не выпускает ничего ни у того, ни у другого, но признаки «уже сделано» разные:
+у первого это наличие любого токена в базе, у второго — годный секрет в своём файле.
 
 Автор всего заведённого — сам трекер (`TRACKER_ACTOR`): участника, который завёл бы
 первого участника, в этот момент ещё не существует.
 """
 
+from dataclasses import dataclass
+from enum import StrEnum
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.repositories import TokenRepository
-from app.domain.participants import ParticipantKind
-from app.domain.tokens import TokenScope
+from app.db.models.token import Token
+from app.db.repositories import ParticipantRepository, TokenRepository
+from app.domain.errors import ParticipantNotFoundError
+from app.domain.participants import ParticipantKind, normalize_participant_name
+from app.domain.tokens import TokenScope, hash_token
 from app.services.auth import TRACKER_ACTOR
 from app.services.participants import register_participant
-from app.services.tokens import IssuedToken, issue_token
+from app.services.tokens import IssuedToken, issue_token, revoke_token
 
 DEFAULT_OWNER_NAME = "owner"
 DEFAULT_OWNER_DESCRIPTION = "Владелец установки"
 DEFAULT_TOKEN_NAME = "bootstrap"
+
+#: Имя токена, который установка выпускает своему интерфейсу. По нему же находится
+#: прежний токен, чтобы отозвать его при выпуске замены, — поэтому имя постоянное, а не
+#: собранное из времени или случайного хвоста.
+DEFAULT_LOCAL_TOKEN_NAME = "local-ui"
 
 
 async def initialize_installation(
@@ -57,4 +78,115 @@ async def initialize_installation(
         participant=owner,
         scope=TokenScope.MAIN,
         name=token_name,
+    )
+
+
+class LocalTokenOutcome(StrEnum):
+    """Что случилось с ключом локальной установки за один вызов `ensure_local_token`.
+
+    Значений три, и они покрывают все состояния пары «файл — база»: годный секрет,
+    пустая установка, всё остальное. Четвёртого исхода — «участника нет» — здесь нет
+    намеренно: это не исход, а отказ, и уходит он исключением.
+    """
+
+    #: Секрет из файла действует: не выпущено ничего.
+    KEPT = "kept"
+    #: Установка была пуста: выпущен первый токен, владелец заведён, если его не было.
+    INITIALIZED = "initialized"
+    #: Установка работает, а годного секрета не было: выпущена замена прежнему.
+    REISSUED = "reissued"
+
+
+@dataclass(frozen=True, slots=True)
+class LocalToken:
+    """Итог сверки файла с установкой.
+
+    `secret` заполнен тогда и только тогда, когда исход не `KEPT`: секрет существует
+    один раз, и отдавать его вызывающему, когда выпускать было нечего, значит выдумать
+    значение, которого нет. Вызывающему поэтому не нужно разбирать исход, чтобы понять,
+    надо ли перезаписывать файл, — достаточно `secret is not None`.
+    """
+
+    outcome: LocalTokenOutcome
+    token: Token
+    secret: str | None
+    #: Сколько прежних токенов с тем же именем отозвано этим же действием.
+    revoked: int
+
+
+async def ensure_local_token(
+    session: AsyncSession,
+    *,
+    known_secret: str | None,
+    participant_name: str = DEFAULT_OWNER_NAME,
+    token_name: str = DEFAULT_LOCAL_TOKEN_NAME,
+) -> LocalToken:
+    """Приводит установку к состоянию «у интерфейса есть действующий ключ набора `task`».
+
+    `known_secret` — то, что вызывающий нашёл в своей постоянной копии (для команды это
+    файл; `None` — копии нет). Про файлы сценарий не знает ничего: он отвечает, что с
+    найденным секретом делать, а хранит его вызывающий. Иначе слой сценариев пришлось
+    бы учить путям на диске ради одной команды.
+
+    Почему постоянная копия вообще нужна и почему ею не может быть база: в базе лежит
+    хеш (`app/domain/tokens.py`), и «показать выданный токен» невозможно ни при каких
+    условиях. Значит идемпотентность подъёма строится вокруг файла, а база только
+    отвечает, годен ли его секрет.
+
+    Годным секрет считается ровно тогда, когда он найден по хешу, не отозван и за ним
+    стоит участник. Ни набор, ни имя участника здесь не сверяются намеренно: файл —
+    собственная копия установки, и лишние условия превращали бы «повторный подъём
+    ничего не перевыпускает» в перевыпуск на ровном месте.
+
+    Выпуская замену, сценарий тем же действием отзывает прежние неотозванные токены с
+    тем же именем. Без этого потерянный файл оставлял бы на установке действующий
+    секрет, которого не знает никто, — и с каждым подъёмом их становилось бы больше.
+
+    Отказ один: названного участника нет, а установка не пуста (`participant_not_found`).
+    Заводить второго участника на работающей установке команда не станет — опечатка в
+    имени иначе тихо превращалась бы в нового человека с полным доступом к задачам.
+    """
+    tokens = TokenRepository(session)
+    name = token_name.strip()
+
+    if known_secret:
+        known = await tokens.get_by_hash(hash_token(known_secret))
+        if known is not None and not known.is_revoked and known.participant is not None:
+            return LocalToken(outcome=LocalTokenOutcome.KEPT, token=known, secret=None, revoked=0)
+
+    # Признак «установка пуста» тот же, что у `initialize_installation`, и по той же
+    # причине: участник без токена доступа не даёт. Считается он до выпуска — после
+    # него любая установка непуста.
+    empty = not await tokens.any_exists()
+
+    participant = await ParticipantRepository(session).get_by_name(
+        normalize_participant_name(participant_name)
+    )
+    if participant is None:
+        if not empty:
+            raise ParticipantNotFoundError(details={"name": participant_name})
+        participant = await register_participant(
+            session,
+            actor=TRACKER_ACTOR,
+            kind=ParticipantKind.HUMAN,
+            name=participant_name,
+            description=DEFAULT_OWNER_DESCRIPTION,
+        )
+
+    stale = await tokens.list_live_named(participant.id, name)
+    for token in stale:
+        await revoke_token(session, token.id, actor=TRACKER_ACTOR)
+
+    issued = await issue_token(
+        session,
+        actor=TRACKER_ACTOR,
+        participant=participant,
+        scope=TokenScope.TASK,
+        name=name,
+    )
+    return LocalToken(
+        outcome=LocalTokenOutcome.INITIALIZED if empty else LocalTokenOutcome.REISSUED,
+        token=issued.token,
+        secret=issued.secret,
+        revoked=len(stale),
     )
