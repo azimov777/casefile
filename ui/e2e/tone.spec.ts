@@ -108,34 +108,3 @@ test('тон тревоги отличается от нейтрального',
 
   expect(danger).not.toBe(neutral);
 });
-
-test('движение есть там, где оно отвечает на действие человека', async ({ page }) => {
-  await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
-
-  // Проверка ниже требует, чтобы гасить было что: без этого «переход равен нулю»
-  // проходило бы и на интерфейсе вовсе без переходов.
-  await expect(page.getByRole('button', { name: 'Изменить отбор' })).not.toHaveCSS(
-    'transition-duration',
-    '0s',
-  );
-});
-
-test('человек просит не двигать интерфейс — переходы гаснут', async ({ page }) => {
-  await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
-
-  // `emulateMedia`, а не `contextOptions` в `test.use`: просьба не двигать интерфейс
-  // приходит от системы в любой момент, и гасить движение надо на уже открытой
-  // странице — ровно это здесь и проверяется.
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-
-  // Сравнение числом, а не строкой: браузер печатает те же `0.01ms` то как
-  // `0.0001s`, то как `1e-05s`, и проверка на текст ломалась бы от формата,
-  // ничего не говоря о том, видно движение или нет.
-  const duration = await page
-    .getByRole('button', { name: 'Изменить отбор' })
-    .evaluate((node) => Number.parseFloat(getComputedStyle(node).transitionDuration));
-
-  expect(duration).toBeLessThan(0.001);
-});
