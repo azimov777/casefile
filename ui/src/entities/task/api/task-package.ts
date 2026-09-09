@@ -13,7 +13,7 @@ export const taskPackageKeys = {
 
 /**
  * Один запрос на открытие карточки: карточка, связи, признаки, последняя сводка,
- * открытые вопросы, опись и переходы (`../tracker/docs/FRONTEND.md`, «Карточка задачи
+ * открытые вопросы, опись и переходы (`docs/FRONTEND.md`, «Карточка задачи
  * одним запросом»). Тела остальных записей подгружаются по клику, в `entities/entry`.
  */
 export function taskPackageQueryOptions(key: string) {

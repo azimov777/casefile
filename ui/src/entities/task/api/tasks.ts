@@ -41,7 +41,7 @@ export const TASK_PRIORITIES = Object.keys(PRIORITY_SET) as TaskPriority[];
 /**
  * Что просить в строке. Полная задача тащит пять разделов и `checks`; таблице они не
  * нужны, а весят больше всего остального вместе взятого. `features` выбирается целиком
- * одним именем — иначе `422 search_field_unknown` (`../tracker/docs/FRONTEND.md`).
+ * одним именем — иначе `422 search_field_unknown` (`docs/FRONTEND.md`).
  */
 export const TASK_LIST_FIELDS = ['title', 'status', 'assignee', 'priority', 'features'];
 
