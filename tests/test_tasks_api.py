@@ -27,19 +27,19 @@ async def create(client: AsyncClient, **overrides: Any) -> dict[str, Any]:
     return response.json()["data"]
 
 
+SUMMARY = {
+    "done": "Разобрался",
+    "remaining": "Дописать",
+    "blockers": "нет",
+    "next_step": "Дописать проверку",
+}
+
+
 async def summary(client: AsyncClient, key: str) -> dict[str, Any]:
     """Сводка ради перехода: без неё из `in_progress` не выйти (задача 23)."""
     response = await client.post(
         f"/api/v1/tasks/{key}/entries",
-        json={
-            "type": "summary",
-            "payload": {
-                "done": "Разобрался",
-                "remaining": "Дописать",
-                "blockers": "нет",
-                "next_step": "Дописать проверку",
-            },
-        },
+        json={"type": "summary", "payload": SUMMARY},
     )
     assert response.status_code == 201, response.text
     return response.json()["data"]
@@ -50,22 +50,26 @@ async def move(client: AsyncClient, key: str, *statuses: str, reason: str | None
 
     Сводка перед выходом из `in_progress` и вердикты перед `done` — правила перехода,
     а не предмет здешних тестов: без них до `done` не добраться вовсе. Сами правила
-    проверяются в `tests/test_case_api.py`.
+    проверяются в `tests/test_case_api.py`. В `done` ведёт закрытие, а не переход, и
+    сводку с вердиктами оно подшивает само.
     """
     for status in statuses:
         current = (await client.get(f"/api/v1/tasks/{key}")).json()["data"]["task"]
+        if status == "done":
+            closed = await client.post(
+                f"/api/v1/tasks/{key}/close",
+                json={
+                    "summary": SUMMARY,
+                    "verdicts": [
+                        {"check_no": check_no, "outcome": "passed"}
+                        for check_no in range(1, len(current["checks"]) + 1)
+                    ],
+                },
+            )
+            assert closed.status_code == 200, closed.text
+            continue
         if current["status"] == "in_progress":
             await summary(client, key)
-        if current["status"] == "in_progress" and status == "done":
-            for check_no in range(1, len(current["checks"]) + 1):
-                verdict = await client.post(
-                    f"/api/v1/tasks/{key}/entries",
-                    json={
-                        "type": "verdict",
-                        "payload": {"check_no": check_no, "outcome": "passed"},
-                    },
-                )
-                assert verdict.status_code == 201, verdict.text
         response = await client.post(
             f"/api/v1/tasks/{key}/transition", json={"to": status, "reason": reason}
         )

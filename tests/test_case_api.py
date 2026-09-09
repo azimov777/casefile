@@ -52,6 +52,11 @@ async def transition(client: AsyncClient, key: str, to: str, **body: Any) -> Any
     return await client.post(f"/api/v1/tasks/{key}/transition", json={"to": to, **body})
 
 
+async def close(client: AsyncClient, key: str, **body: Any) -> Any:
+    """Закрытие: сводка обязательна, вердикты и записи — по желанию вызывающего."""
+    return await client.post(f"/api/v1/tasks/{key}/close", json={"summary": SUMMARY, **body})
+
+
 async def move(client: AsyncClient, key: str, *statuses: str, reason: str | None = None) -> None:
     for status in statuses:
         response = await transition(client, key, status, reason=reason)
@@ -184,34 +189,31 @@ async def test_a_verdict_outside_the_check_range_names_the_range(
 async def test_closing_needs_a_passing_verdict_on_every_check(
     auth_client: AsyncClient, queue: Queue
 ) -> None:
-    """Обзорная проверка 7: полный цикл до `done` через REST."""
+    """Обзорная проверка 7: полный цикл до `done` через REST.
+
+    Вердикт по первой проверке подшивается по ходу работы, по второй — приезжает в
+    самом закрытии: засчитываются оба, и правило смотрит на дело, а не на запрос.
+    """
     await create(auth_client, checks=["первая", "вторая"])
     await move(auth_client, "TRK-1", "open", "in_progress")
-    await append(auth_client, "TRK-1", type="summary", payload=SUMMARY)
 
     await append(auth_client, "TRK-1", type="verdict", payload={"check_no": 1, "outcome": "passed"})
-    await append(
+
+    refused = await close(
         auth_client,
         "TRK-1",
-        type="verdict",
-        body="Прогон красный",
-        payload={"check_no": 2, "outcome": "failed"},
+        verdicts=[{"check_no": 2, "outcome": "failed", "evidence": "Прогон красный"}],
     )
-
-    refused = await transition(auth_client, "TRK-1", "done")
     assert refused.status_code == 409, refused.text
     error = refused.json()["error"]
     assert error["code"] == "checks_not_passed"
     assert error["details"]["checks"] == [{"check_no": 2, "reason": "failed"}]
 
-    await append(
+    passed = await close(
         auth_client,
         "TRK-1",
-        type="verdict",
-        body="Прогон зелёный",
-        payload={"check_no": 2, "outcome": "passed"},
+        verdicts=[{"check_no": 2, "outcome": "passed", "evidence": "Прогон зелёный"}],
     )
-    passed = await transition(auth_client, "TRK-1", "done")
     assert passed.status_code == 200, passed.text
     assert passed.json()["data"]["status"] == "done"
 

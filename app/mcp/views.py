@@ -90,6 +90,12 @@ in_progress → done`, карточка приезжала четыре раза
 описи. Там, где заголовок прислал агент, в ответе стоит `null`: строка описи — та самая,
 что ушла в аргументах.
 
+Ответ закрытия (`close_task`) собран из этих же двух правил и ничего к ним не
+добавляет: короткая мутация задачи — ключ, новый статус, новая версия — плюс строка на
+каждую подшитую запись тем же `AppendedEntryView`. Записей в нём столько, сколько
+подшил вызов, и весь разброс его размера сидит в одном месте — в заголовке сводки,
+который трекер вывел из `done` (`docs/notes/mcp.md`).
+
 Второго, полного режима у этих инструментов нет намеренно: параметр вроде `fields` дал бы
 два поведения, из которых проверяется одно. Кому нужна карточка целиком — зовёт
 `get_task`, запись целиком — `read_entries`, и это сказано в описании каждого инструмента,
@@ -158,7 +164,7 @@ from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD
 from app.domain.tasks import TaskFeatures, TaskField, TaskPriority, TaskStatus
 from app.services.links import TaskLink
 from app.services.search import FoundTask
-from app.services.tasks import TaskMutation, TaskPackage
+from app.services.tasks import TaskClosure, TaskMutation, TaskPackage
 
 #: Поля задачи, которые бывают длинными: описание и пять разделов. Обрезаются только они
 #: и только в выдаче поиска.
@@ -679,6 +685,40 @@ def appended_entry(value: Entry, *, task_key: str) -> AppendedEntryView:
         author=author(value.author),
         title=None if value.type in TITLED_ENTRY_TYPES else value.title,
         created_at=value.created_at,
+    )
+
+
+class ClosedTaskView(BaseModel):
+    """Ответ закрытия: чем стала задача и чем это подшито, без карточки и без записей.
+
+    Элемент списка — то же `AppendedEntryView`, каким отвечает подшивающий инструмент,
+    поэтому ключ задачи повторяется в каждом: восьмое представление ради двадцати
+    сэкономленных байт развело бы две формы одной и той же записи, которые разойдутся
+    при первой правке.
+
+    Поле, добавленное сюда позже, обязано иметь значение по умолчанию: ответ создающего
+    инструмента живёт сутки в ключах идемпотентности, и вчерашнее тело без нового поля
+    не поднимется (`docs/notes/mcp.md`, «Сузить форму ответа создающего инструмента
+    можно, расширить — нельзя»).
+    """
+
+    key: str
+    status: TaskStatus
+    version: int
+    entries: list[AppendedEntryView] = Field(default_factory=list)
+
+
+def closed_task(closure: TaskClosure) -> ClosedTaskView:
+    """Ответ закрытия: чем стала задача и чем это подшито, без карточки и без записей.
+
+    Записи идут в порядке подшивки и кончаются `status_changed`: то, что задача закрыта,
+    — такая же страница дела, как вердикт, и её номер приезжает тем же списком.
+    """
+    return ClosedTaskView(
+        key=closure.task.key,
+        status=closure.task.status,
+        version=closure.task.version,
+        entries=[appended_entry(item, task_key=closure.task.key) for item in closure.entries],
     )
 
 

@@ -46,6 +46,7 @@ from app.domain.authors import TRACKER
 from app.domain.case import EntryType
 from app.domain.links import LinkKind
 from app.domain.tasks import TaskStatus
+from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
 from app.services.auth import TRACKER_ACTOR
@@ -77,12 +78,12 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
     """Закоммиченные задачи и уборка за собой.
 
     Задачи собираются прямо моделями, а не полным циклом через сценарии: переводимая
-    нужна в `in_progress` и без проверок (тогда `in_progress → done` не упирается в
-    вердикты), а проверяется здесь не таблица переходов, а гонка. Две записи ей всё же
-    подшиваются руками: без записи о входе в работу и сводки после неё переход в `done`
-    отказал бы раньше, чем дошёл до фактов гонки. Уборка записей идёт с выключенным
-    триггером неизменяемости — единственное законное место, где его выключают
-    (`docs/notes/db.md`).
+    нужна в `in_progress` и без проверок (тогда закрытие не упирается в вердикты), а
+    проверяется здесь не таблица переходов, а гонка. Одну запись ей всё же подшивают
+    руками: без записи о входе в работу закрытие отказало бы раньше, чем дошло до
+    фактов гонки — граница «этого захода» считается от неё. Сводку подшивает само
+    закрытие. Уборка записей идёт с выключенным триггером неизменяемости — единственное
+    законное место, где его выключают (`docs/notes/db.md`).
     """
     async with committing_sessions() as session:
         queue = Queue(key=QUEUE_KEY, title="Гонка изменений", **created_by_columns(TRACKER))
@@ -122,19 +123,6 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
                     type=EntryType.STATUS_CHANGED,
                     title="Status changed: open -> in_progress",
                     payload={"from": "open", "to": "in_progress", "reason": None},
-                    **created_by_columns(TRACKER),
-                ),
-                Entry(
-                    task_id=subject.id,
-                    no=2,
-                    type=EntryType.SUMMARY,
-                    title="Закрыть задачу",
-                    payload={
-                        "done": "Выход готов",
-                        "remaining": "Ничего",
-                        "blockers": "Нет",
-                        "next_step": "Закрыть задачу",
-                    },
                     **created_by_columns(TRACKER),
                 ),
             ]
@@ -204,6 +192,29 @@ async def _transition(
         return None
 
 
+async def _close(sessions: async_sessionmaker[AsyncSession], task_id: uuid.UUID) -> str | None:
+    """Закрытие в своей транзакции. Возвращает код отказа или `None`, если прошло."""
+    async with sessions() as session:
+        task = await session.get(Task, task_id)
+        assert task is not None
+        try:
+            await tasks_service.close_task(
+                session,
+                task,
+                actor=TRACKER_ACTOR,
+                summary=case_service.SummaryFiling(
+                    done="Выход готов",
+                    remaining="Ничего",
+                    blockers="Нет",
+                    next_step="Шагов нет, задача закрыта",
+                ),
+            )
+        except AppError as error:
+            return error.code
+        await session.commit()
+        return None
+
+
 async def _add_link(
     sessions: async_sessionmaker[AsyncSession],
     task_id: uuid.UUID,
@@ -267,7 +278,7 @@ async def test_closing_a_parent_and_giving_it_a_child_cannot_interleave(
     resume = asyncio.Event()
     pause_after(monkeypatch, "unclosed_children", read=read, resume=resume)
 
-    closing = asyncio.create_task(_transition(committing_sessions, trio.subject, TaskStatus.DONE))
+    closing = asyncio.create_task(_close(committing_sessions, trio.subject))
     await asyncio.wait_for(read.wait(), timeout=10)
     linking = asyncio.create_task(
         _add_link(committing_sessions, trio.child, trio.subject, LinkKind.CHILD)

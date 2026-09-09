@@ -16,6 +16,9 @@ from app.mcp.arguments import (
     AssigneeArg,
     AssigneesArg,
     BlockedArg,
+    ClosingEntriesArg,
+    ClosingSummaryArg,
+    ClosingVerdictsArg,
     CursorArg,
     FieldsArg,
     IdempotencyKeyArg,
@@ -283,6 +286,80 @@ def register(tools: Toolset) -> None:
                 session, task, actor=actor, to=to, reason=reason
             )
             return views.mutation(mutation)
+
+    @tools.tool(creating=True)
+    async def close_task(
+        key: TaskKeyArg,
+        summary: ClosingSummaryArg,
+        verdicts: ClosingVerdictsArg = None,
+        entries: ClosingEntriesArg = None,
+        idempotency_key: IdempotencyKeyArg = None,
+    ) -> views.ClosedTaskView:
+        """Подшивает записи, вердикты и финальную сводку и переводит задачу в `done` —
+        всё одним вызовом и одной транзакцией.
+
+        Единственная дверь в `done`: у `transition` эта цель отвечает
+        `closing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части
+        не оставляет в деле ни одной записи и статуса не меняет.
+
+        Каждая запись получает свой номер в описи. Записи немедленно видны в ленте и
+        человеку в интерфейсе; будят ждущих `wait_journal`. Порядок подшивки: присланные
+        записи, вердикты, сводка.
+
+        Требования выхода прежние и проверяются после подшивки: положительный последний
+        вердикт по каждой обзорной проверке среди подшитых после последнего входа в
+        `in_progress` (`checks_not_passed`), закрытые дети
+        (`task_has_unclosed_children`), задача в `in_progress` (`transition_not_allowed`).
+        Вердикты этого вызова в счёт входят наравне с подшитыми раньше по ходу работы.
+
+        Ответ короткий: ключ, новый статус, новая версия и строка на каждую подшитую
+        запись — `no`, `seq`, автор, время и заголовок там, где его собрал трекер.
+        Присланное обратно не едет; записи целиком — в `read_entries`.
+        """
+        async with runtime.call() as (session, actor):
+            task = await tasks_service.get_task(session, key)
+
+            async def close() -> views.ClosedTaskView:
+                closure = await tasks_service.close_task(
+                    session,
+                    task,
+                    actor=actor,
+                    summary=case_service.SummaryFiling(
+                        done=summary.done,
+                        remaining=summary.remaining,
+                        blockers=summary.blockers,
+                        next_step=summary.next_step,
+                    ),
+                    verdicts=[
+                        case_service.VerdictFiling(
+                            check_no=item.check_no,
+                            outcome=item.outcome,
+                            evidence=item.evidence,
+                        )
+                        for item in verdicts or ()
+                    ],
+                    entries=[
+                        case_service.EntryFiling(
+                            type=item.type,
+                            title=item.title,
+                            body=item.body,
+                            refs=item.refs or (),
+                        )
+                        for item in entries or ()
+                    ],
+                )
+                return views.closed_task(closure)
+
+            return await Once.of(close_task, session, actor, idempotency_key).run(
+                result=views.ClosedTaskView,
+                request={
+                    "task": task.key,
+                    "summary": summary,
+                    "verdicts": verdicts,
+                    "entries": entries,
+                },
+                build=close,
+            )
 
 
 def _terms(

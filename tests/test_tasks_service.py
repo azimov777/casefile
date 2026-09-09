@@ -65,16 +65,26 @@ async def move(
 
     Сводка перед выходом из `in_progress` и вердикты перед `done` — правила перехода,
     а не предмет здешних тестов: без них до `done` не добраться вовсе. Сами правила
-    проверяются в `tests/test_case_service.py`.
+    проверяются в `tests/test_case_service.py`. В `done` ведёт закрытие, а не переход, и
+    сводку с вердиктами оно подшивает само.
     """
     for status in statuses:
+        if status is TaskStatus.DONE:
+            await service.close_task(
+                session,
+                task,
+                actor=actor,
+                verdicts=[
+                    case_service.VerdictFiling(check_no=check_no, outcome="passed")
+                    for check_no in range(1, len(task.checks) + 1)
+                ],
+                summary=case_service.SummaryFiling(
+                    done="сделано", remaining="осталось", blockers="нет", next_step="дальше"
+                ),
+            )
+            continue
         if task.status is TaskStatus.IN_PROGRESS:
             await summary(session, task, actor)
-            if status is TaskStatus.DONE:
-                for check_no in range(1, len(task.checks) + 1):
-                    await case_service.add_verdict(
-                        session, task, actor=actor, check_no=check_no, outcome="passed"
-                    )
         await service.transition_task(session, task, actor=actor, to=status, reason=reason)
     return task
 

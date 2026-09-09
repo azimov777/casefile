@@ -78,6 +78,7 @@
 | `version_conflict` | Задача изменилась с момента чтения; перечитать и повторить |
 | `task_field_locked` | Раздел правится только в `backlog` |
 | `transition_not_allowed`, `transition_reason_required` | Перехода нет в таблице либо он требует причины |
+| `closing_not_a_transition` | В `done` ведёт не переход, а закрытие: `POST /api/v1/tasks/{task_key}/close` |
 
 Отдельно про ответ на вопрос: своего кода у него нет. `question_no`, указывающий на
 несуществующую запись или на запись не того типа, приходит как `entry_fields_invalid`

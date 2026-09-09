@@ -297,15 +297,8 @@ async def _done_task(
         blockers="Нет",
         next_step="Подшить вердикты по обеим проверкам и перевести в `done`",
     )
-    await case_service.add_verdict(
-        session,
-        task,
-        actor=agent,
-        check_no=1,
-        outcome=VerdictOutcome.PASSED,
-        evidence="Создание без названия отвечает 422, `last_task_number` остался 7",
-    )
-    # Вердикт человека: обзорные проверки закрывает не только тот, кто вёл задачу.
+    # Вердикт человека: обзорные проверки закрывает не только тот, кто вёл задачу, и
+    # подшитый по ходу работы он засчитывается наравне с приехавшими в закрытии.
     await case_service.add_verdict(
         session,
         task,
@@ -314,7 +307,26 @@ async def _done_task(
         outcome=VerdictOutcome.PASSED,
         evidence="`docker compose run --rm test` — 214 passed",
     )
-    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.DONE)
+    # Закрытие: оставшийся вердикт и финальная сводка ложатся одной транзакцией вместе
+    # со сменой статуса. Отдельного перевода в `done` в трекере нет.
+    await tasks_service.close_task(
+        session,
+        task,
+        actor=agent,
+        verdicts=[
+            case_service.VerdictFiling(
+                check_no=1,
+                outcome=VerdictOutcome.PASSED,
+                evidence="Создание без названия отвечает 422, `last_task_number` остался 7",
+            )
+        ],
+        summary=case_service.SummaryFiling(
+            done="Обе обзорные проверки пройдены, номер задачи больше не сгорает",
+            remaining="Ничего",
+            blockers="Нет",
+            next_step="Шагов нет, задача закрыта",
+        ),
+    )
     return task
 
 

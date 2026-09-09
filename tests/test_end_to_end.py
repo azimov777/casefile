@@ -42,10 +42,33 @@ FULL_CYCLE_INDEX = [
     EntryType.STATUS_CHANGED,  # open → in_progress
     EntryType.DECISION,
     EntryType.ATTEMPT,
-    EntryType.SUMMARY,
+    # Последние четыре страницы подшивает одно закрытие, и порядок в нём задан формой
+    # вызова: присланные записи, вердикты, сводка, переход. Сводка после вердиктов —
+    # дисциплина, которую теперь держит не только скил (`CONCEPT.md`, 5.3).
+    EntryType.ARTIFACT,
     EntryType.VERDICT,
+    EntryType.SUMMARY,
     EntryType.STATUS_CHANGED,  # in_progress → done
 ]
+
+#: Что закрытие подшивает сверх сводки: артефакт с указателем на результат и вердикт по
+#: единственной проверке.
+CLOSING: dict[str, Any] = {
+    "entries": [
+        {
+            "type": "artifact",
+            "title": "Правка в `app/services/tasks.py`",
+            "body": "Коммит `a1b2c3d`",
+        }
+    ],
+    "verdicts": [
+        {
+            "check_no": 1,
+            "outcome": "passed",
+            "evidence": "Создание без названия отвечает 422, номер не потрачен",
+        }
+    ],
+}
 
 #: Разделы задачи цикла. Одна проверка — один вердикт: `in_progress → done` требует
 #: положительного последнего вердикта по **каждой** проверке.
@@ -102,31 +125,19 @@ async def test_a_task_goes_the_whole_way_through_rest(
         appended = await auth_client.post(f"/api/v1/tasks/{key}/entries", json=entry)
         assert appended.status_code == 201, appended.text
 
-    summarized = await auth_client.post(
-        f"/api/v1/tasks/{key}/entries", json={"type": "summary", "payload": SUMMARY}
+    # Перевод в `done` закрытием не является: у закрытия свой маршрут.
+    by_hand = await auth_client.post(f"/api/v1/tasks/{key}/transition", json={"to": "done"})
+    assert by_hand.status_code == 409, by_hand.text
+    assert by_hand.json()["error"]["code"] == "closing_not_a_transition"
+
+    # Отказ закрытия без вердикта проверяется в `tests/test_case_api.py`, а его
+    # всё-или-ничего — в `tests/test_mcp_tools.py`: здесь запрос идёт в транзакции
+    # теста, и откатывать ей нечего, поэтому неудачное закрытие оставило бы сводку в
+    # описи и цикл проверял бы не то.
+
+    closed = await auth_client.post(
+        f"/api/v1/tasks/{key}/close", json={"summary": SUMMARY, **CLOSING}
     )
-    assert summarized.status_code == 201, summarized.text
-    # Заголовок сводки не принимается, а выводится из `done`: это и есть то, что
-    # преемник видит в описи, не читая тела, — и это случившееся, а не следующий шаг.
-    assert summarized.json()["data"]["title"] == SUMMARY["done"]
-
-    # Закрыть без вердикта нельзя — проверка стоит здесь, а не в тесте на переходы,
-    # потому что в цикле её легко обойти порядком вызовов и не заметить.
-    too_early = await auth_client.post(f"/api/v1/tasks/{key}/transition", json={"to": "done"})
-    assert too_early.status_code == 409, too_early.text
-    assert too_early.json()["error"]["code"] == "checks_not_passed"
-
-    verdict = await auth_client.post(
-        f"/api/v1/tasks/{key}/entries",
-        json={
-            "type": "verdict",
-            "body": "Создание без названия отвечает 422, номер не потрачен",
-            "payload": {"check_no": 1, "outcome": "passed"},
-        },
-    )
-    assert verdict.status_code == 201, verdict.text
-
-    closed = await auth_client.post(f"/api/v1/tasks/{key}/transition", json={"to": "done"})
     assert closed.status_code == 200, closed.text
     assert closed.json()["data"]["status"] == "done"
 
@@ -135,14 +146,17 @@ async def test_a_task_goes_the_whole_way_through_rest(
     assert [item["type"] for item in package["index"]] == [item.value for item in FULL_CYCLE_INDEX]
     assert package["transitions"] == [], "закрытая задача никуда не переводится"
     assert package["summary"]["payload"] == SUMMARY
-    # Последняя запись агента — вердикт: после него в деле только служебная запись
-    # о переходе в `done`, а служебные признак не двигают.
+    # Последняя запись агента — сводка: после неё в деле только служебная запись о
+    # переходе в `done`, а служебные признак не двигают. Заголовок сводки не
+    # принимается, а выводится из `done`: это и есть то, что преемник видит в описи,
+    # не читая тела, — и это случившееся, а не следующий шаг.
     last_agent = [
         heading
         for heading in package["index"]
         if heading["type"] not in {item.value for item in SERVICE_ENTRY_TYPES}
     ][-1]
-    assert last_agent["type"] == "verdict"
+    assert last_agent["type"] == "summary"
+    assert last_agent["title"] == SUMMARY["done"]
     assert package["features"] == {
         "blocked": False,
         "open_questions": 0,
@@ -198,19 +212,16 @@ async def test_a_task_goes_the_whole_way_through_mcp(
             title="Возврат номера при откате не работает",
             body="Гонка",
         )
-        summarized = await call(session, "add_summary", key=key, **SUMMARY)
-        assert summarized["title"] == SUMMARY["done"]
-
-        await call(
-            session,
-            "add_verdict",
-            key=key,
-            check_no=1,
-            outcome="passed",
-            evidence="Создание без названия отвечает 422, номер не потрачен",
-        )
-        closed = await call(session, "transition", key=key, to="done")
+        closed = await call(session, "close_task", key=key, summary=SUMMARY, **CLOSING)
         assert closed["status"] == "done"
+        # Ответ называет каждую подшитую страницу и говорит, чей заголовок вывел трекер:
+        # у артефакта он прислан вызовом и обратно не едет.
+        assert [item["title"] for item in closed["entries"]] == [
+            None,
+            "Verdict on check 1: passed",
+            SUMMARY["done"],
+            "Status changed: in_progress -> done",
+        ]
 
         package = await call(session, "get_task", key=key)
 

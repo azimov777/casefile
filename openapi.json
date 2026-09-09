@@ -2485,7 +2485,7 @@
           "tasks"
         ],
         "summary": "Move a task to another status",
-        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nположительного последнего вердикта по каждой проверке, подшитого после последнего\nвхода в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в\n`in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.",
+        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nположительного последнего вердикта по каждой проверке, подшитого после последнего\nвхода в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в\n`in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.\n\nЦель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу\nодной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.",
         "operationId": "transition_task",
         "security": [
           {
@@ -2535,6 +2535,161 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TaskTransition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_TaskRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{task_key}/close": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Close a task",
+        "description": "Подшивает записи, вердикты и финальную сводку и переводит задачу в `done` — всё\nодним запросом и одной транзакцией.\n\nЕдинственный путь в `done`: у перехода эта цель отвечает `409\nclosing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части не\nоставляет в деле ни одной записи и статуса не меняет.\n\nПорядок подшивки: присланные записи, вердикты, сводка. Требования выхода прежние и\nпроверяются после подшивки: положительный последний вердикт по каждой проверке\nсреди подшитых после последнего входа в `in_progress` (`409 checks_not_passed`),\nзакрытые дети (`409 task_has_unclosed_children`), задача в `in_progress` (`409\ntransition_not_allowed`). Вердикты этого запроса засчитываются наравне с подшитыми\nраньше по ходу работы, поэтому список может быть пуст.\n\nПовтор с тем же `Idempotency-Key` отвечает первым результатом и второго закрытия не\nзаводит. В ответе — карточка задачи; подшитые записи читаются `GET\n/tasks/{task_key}/entries`.",
+        "operationId": "close_task",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Task key `QUEUE-number`; matching ignores case",
+              "examples": [
+                "TRK-42"
+              ],
+              "title": "Task Key"
+            },
+            "description": "Task key `QUEUE-number`; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskClosing"
               }
             }
           }
@@ -4896,6 +5051,27 @@
         ],
         "title": "CheckUpdate",
         "description": "Правка одной проверки: её номер и новый текст.\n\nЗаведена затем, что список правился только целиком: чтобы поменять третью строку из\nвосьми, приходилось переслать все восемь, и опечатка в неизменённых семи проходила\nмолча. Пересылка списка осталась и лишней не стала — она единственный способ\nизменить **состав**: добавить проверку, снять или переставить."
+      },
+      "ClosingEntryCreate": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PlainEntryCreate"
+          },
+          {
+            "$ref": "#/components/schemas/RemarkEntryCreate"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "artifact": "#/components/schemas/PlainEntryCreate",
+            "attempt": "#/components/schemas/PlainEntryCreate",
+            "decision": "#/components/schemas/PlainEntryCreate",
+            "finding": "#/components/schemas/PlainEntryCreate",
+            "note": "#/components/schemas/PlainEntryCreate",
+            "remark": "#/components/schemas/RemarkEntryCreate"
+          }
+        }
       },
       "CollectionResponse_EntryRead_": {
         "properties": {
@@ -7413,6 +7589,96 @@
         ],
         "title": "SummaryPayload",
         "description": "Справка при передаче. Четыре части, все непустые."
+      },
+      "TaskClosing": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/SummaryPayload",
+            "description": "The closing summary. Filed last, after the entries and the verdicts, so that it speaks of their outcome"
+          },
+          "verdicts": {
+            "items": {
+              "$ref": "#/components/schemas/TaskClosingVerdict"
+            },
+            "type": "array",
+            "title": "Verdicts",
+            "description": "Verdicts filed by this call. May be empty: verdicts filed earlier during the work count as well, and the transition checks the case, not the request",
+            "examples": [
+              []
+            ]
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ClosingEntryCreate"
+            },
+            "type": "array",
+            "title": "Entries",
+            "description": "Entries filed before the verdicts, usually an `artifact` pointing at the result",
+            "examples": [
+              []
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Version the client last saw; omit it to skip the check",
+            "examples": [
+              3
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "title": "TaskClosing",
+        "description": "Чем закрывают задачу: записи, вердикты и финальная сводка одного вызова."
+      },
+      "TaskClosingVerdict": {
+        "properties": {
+          "check_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Check No",
+            "description": "Position in the task `checks` list, numbered from 1",
+            "examples": [
+              3
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/VerdictOutcome",
+            "examples": [
+              "passed"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Evidence",
+            "description": "Proof of the outcome; it becomes the body of the verdict entry",
+            "default": "",
+            "examples": [
+              "docker compose run --rm test: 214 passed"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "check_no",
+          "outcome"
+        ],
+        "title": "TaskClosingVerdict",
+        "description": "Исход одной обзорной проверки с доказательством."
       },
       "TaskCreate": {
         "properties": {

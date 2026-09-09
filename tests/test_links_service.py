@@ -49,15 +49,32 @@ async def move(
 ) -> Task:
     """Проводит задачу по цепочке, подшивая то, без чего переход не пройдёт."""
     for status in statuses:
+        if status is TaskStatus.DONE:
+            await close(session, task, actor)
+            continue
         if task.status is TaskStatus.IN_PROGRESS:
             await summary(session, task, actor)
-        if task.status is TaskStatus.IN_PROGRESS and status is TaskStatus.DONE:
-            for check_no in range(1, len(task.checks) + 1):
-                await case_service.add_verdict(
-                    session, task, actor=actor, check_no=check_no, outcome="passed"
-                )
         await tasks_service.transition_task(session, task, actor=actor, to=status, reason=reason)
     return task
+
+
+async def close(session: AsyncSession, task: Task, actor: Actor) -> None:
+    """Закрытие: вердикты по всем проверкам и финальная сводка одним вызовом.
+
+    Перевода статуса в `done` в трекере нет — это единственный путь туда.
+    """
+    await tasks_service.close_task(
+        session,
+        task,
+        actor=actor,
+        verdicts=[
+            case_service.VerdictFiling(check_no=check_no, outcome="passed")
+            for check_no in range(1, len(task.checks) + 1)
+        ],
+        summary=case_service.SummaryFiling(
+            done="сделано", remaining="осталось", blockers="нет", next_step="дальше"
+        ),
+    )
 
 
 async def summary(session: AsyncSession, task: Task, actor: Actor) -> None:
@@ -510,22 +527,14 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
         TaskStatus.OPEN,
         TaskStatus.IN_PROGRESS,
     )
-    await summary(db_session, parent, task_actor)
-    for check_no in range(1, len(parent.checks) + 1):
-        await case_service.add_verdict(
-            db_session, parent, actor=task_actor, check_no=check_no, outcome="passed"
-        )
-
     with pytest.raises(TaskHasUnclosedChildrenError) as error:
-        await tasks_service.transition_task(
-            db_session, parent, actor=task_actor, to=TaskStatus.DONE
-        )
+        await close(db_session, parent, task_actor)
     assert error.value.details["children"] == ["TRK-2"]
 
     await tasks_service.transition_task(
         db_session, child, actor=task_actor, to=TaskStatus.CANCELLED, reason="не понадобился"
     )
-    await tasks_service.transition_task(db_session, parent, actor=task_actor, to=TaskStatus.DONE)
+    await close(db_session, parent, task_actor)
 
     assert parent.status is TaskStatus.DONE
 
@@ -550,14 +559,6 @@ async def test_a_waiting_child_keeps_the_parent_from_closing(
         db_session, child, actor=task_actor, to=TaskStatus.WAITING, reason="Жду ответа человека"
     )
     await move(db_session, parent, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
-    await summary(db_session, parent, task_actor)
-    for check_no in range(1, len(parent.checks) + 1):
-        await case_service.add_verdict(
-            db_session, parent, actor=task_actor, check_no=check_no, outcome="passed"
-        )
-
     with pytest.raises(TaskHasUnclosedChildrenError) as error:
-        await tasks_service.transition_task(
-            db_session, parent, actor=task_actor, to=TaskStatus.DONE
-        )
+        await close(db_session, parent, task_actor)
     assert error.value.details["children"] == [child.key]

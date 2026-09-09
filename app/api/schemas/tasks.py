@@ -15,12 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
 from app.api.schemas.entries import (
+    ClosingEntryCreate,
     EntryHeadingRead,
     QuestionEntryRead,
     RemarkEntryRead,
     SummaryEntryRead,
+    SummaryPayload,
 )
 from app.api.schemas.links import TaskLinkRead
+from app.domain.case import MAX_ENTRY_BODY_LENGTH, VerdictOutcome
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     MAX_ASSIGNEE_LENGTH,
@@ -278,6 +281,59 @@ class TaskUpdate(BaseModel):
             "Version the client last saw. Sent back it turns a lost update into a "
             "`version_conflict` instead of a silent overwrite; omit it to skip the check"
         ),
+    )
+
+
+class TaskClosingVerdict(BaseModel):
+    """Исход одной обзорной проверки с доказательством."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    check_no: int = Field(
+        ge=FIRST_CHECK_NUMBER,
+        examples=[3],
+        description="Position in the task `checks` list, numbered from 1",
+    )
+    outcome: VerdictOutcome = Field(examples=[VerdictOutcome.PASSED])
+    evidence: str = Field(
+        default="",
+        max_length=MAX_ENTRY_BODY_LENGTH,
+        examples=["docker compose run --rm test: 214 passed"],
+        description="Proof of the outcome; it becomes the body of the verdict entry",
+    )
+
+
+class TaskClosing(BaseModel):
+    """Чем закрывают задачу: записи, вердикты и финальная сводка одного вызова."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: SummaryPayload = Field(
+        description=(
+            "The closing summary. Filed last, after the entries and the verdicts, so "
+            "that it speaks of their outcome"
+        )
+    )
+    verdicts: list[TaskClosingVerdict] = Field(
+        default_factory=list,
+        examples=[[]],
+        description=(
+            "Verdicts filed by this call. May be empty: verdicts filed earlier during "
+            "the work count as well, and the transition checks the case, not the request"
+        ),
+    )
+    entries: list[ClosingEntryCreate] = Field(
+        default_factory=list,
+        examples=[[]],
+        description=(
+            "Entries filed before the verdicts, usually an `artifact` pointing at the result"
+        ),
+    )
+    version: int | None = Field(
+        default=None,
+        ge=1,
+        examples=[3],
+        description="Version the client last saw; omit it to skip the check",
     )
 
 
