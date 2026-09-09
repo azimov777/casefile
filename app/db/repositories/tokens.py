@@ -1,6 +1,7 @@
 """Выборки и вставки по токенам доступа."""
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +44,24 @@ class TokenRepository:
         участник без токена доступа не даёт, и запертая установка осталась бы запертой.
         """
         return await self._session.scalar(select(Token.id).limit(1)) is not None
+
+    async def list_live_named(self, participant_id: uuid.UUID, name: str) -> Sequence[Token]:
+        """Неотозванные токены участника с этим именем.
+
+        Нужны выдаче ключа локальной установке (`app/services/setup.py`,
+        `ensure_local_token`): она выпускает замену и обязана тем же действием отозвать
+        прежнюю. Иначе на машине копились бы действующие секреты, которых никто не
+        знает, — а секрет выпущенного токена не показывается второй раз даже владельцу.
+
+        Имя здесь — обычная колонка без уникальности: у участника может быть сколько
+        угодно токенов с одним именем, и выборка возвращает все.
+        """
+        statement = select(Token).where(
+            Token.participant_id == participant_id,
+            Token.name == name,
+            Token.revoked_at.is_(None),
+        )
+        return (await self._session.scalars(statement)).unique().all()
 
     async def add(self, token: Token) -> Token:
         self._session.add(token)
