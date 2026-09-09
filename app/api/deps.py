@@ -9,7 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import UnauthorizedError, ValidationError
-from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
+from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_OFFSET, MIN_PAGE_SIZE
 from app.db.session import get_session, session_scope
 from app.domain.authors import ACTOR_LABEL_HEADER
 from app.services.auth import Actor, authenticate
@@ -110,6 +110,22 @@ StreamSessionsDep = Annotated[SessionFactory, Depends(get_session_factory)]
 LimitQuery = Annotated[int, Query(ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE, description="Page size")]
 CursorQuery = Annotated[
     str | None, Query(description="Cursor from `meta.next_cursor` of a previous page")
+]
+
+# Смещение объявлено рядом с курсором, но принимает его **только** список задач: это
+# единственная коллекция, которую показывают человеку страницами с номерами. Остальные
+# листаются курсором, и объявление здесь не делает их адресуемыми — оно лишь не даёт
+# описанию параметра разъехаться, если смещение однажды понадобится второму списку.
+OffsetQuery = Annotated[
+    int | None,
+    Query(
+        ge=MIN_PAGE_OFFSET,
+        description=(
+            "Rows to skip before the page, an alternative address to `cursor`: page N of "
+            "size L starts at `(N - 1) * L`. Sending both is refused (`cursor_with_offset`)"
+        ),
+        examples=[100],
+    ),
 ]
 
 

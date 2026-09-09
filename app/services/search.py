@@ -150,12 +150,24 @@ async def search_tasks(
     fields: Sequence[str] = (),
     limit: int | None = None,
     cursor: str | None = None,
+    offset: int | None = None,
+    with_total: bool = False,
 ) -> SearchOutcome:
     """Находит задачи по любому сочетанию источников фильтра.
 
     Источники складываются по `and`: пустой набор источников означает «все задачи», а
     не ошибку — иначе перечисление задач и поиск без условий пришлось бы звать
     по-разному.
+
+    Страницу адресует либо `cursor`, либо `offset`, и это выбор вызывающего, а не
+    умолчание: курсор обходит выдачу целиком и не теряет строк на вставках, смещение
+    попадает на любую страницу и платит за это чтением пропускаемых строк и сдвигом
+    границ при вставке между запросами. Вместе они — отказ `cursor_with_offset`.
+
+    `with_total` добавляет к странице число задач по тому же отбору **вторым запросом**.
+    Его просит тот, кто рисует «страница 3 из 7, всего 98», и не просит тот, кто читает
+    выдачу подряд: без него `page.total is None` — «не считали», а не «ноль»
+    (задача TRK-41).
     """
     resolved = await resolve_task_filter(
         session,
@@ -165,11 +177,18 @@ async def search_tasks(
         sort=sort,
         fields=fields,
     )
-    page = await TaskSearchRepository(session).search_page(resolved, limit=limit, cursor=cursor)
+    page = await TaskSearchRepository(session).search_page(
+        resolved,
+        limit=limit,
+        cursor=cursor,
+        offset=offset,
+        with_total=with_total,
+    )
     return SearchOutcome(
         page=Page(
             items=[FoundTask(task=task, features=features) for task, features in page.items],
             next_cursor=page.next_cursor,
+            total=page.total,
         ),
         resolved=resolved,
     )

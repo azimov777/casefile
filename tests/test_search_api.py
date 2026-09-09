@@ -17,7 +17,7 @@ from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.links import LinkKind
 from app.domain.search import FEATURES_FIELD, SELECTABLE_FIELDS
-from app.domain.tasks import TaskStatus
+from app.domain.tasks import TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
@@ -49,7 +49,7 @@ async def listed(client: AsyncClient, **params: Any) -> list[dict[str, Any]]:
     assert response.status_code == 200, response.text
     body = response.json()
     assert set(body) == {"data", "meta"}
-    assert set(body["meta"]) == {"next_cursor", "has_more"}
+    assert set(body["meta"]) == {"next_cursor", "has_more", "total"}
     return body["data"]
 
 
@@ -263,6 +263,7 @@ async def test_every_declared_parameter_still_passes(
         "sort": ["-updated_at", "key"],
         "fields": ["key", "status"],
         "limit": 10,
+        "offset": 0,
     }
     response = await auth_client.get("/api/v1/tasks", params=everything)
     assert response.status_code == 200, response.text
@@ -460,3 +461,217 @@ async def test_a_narrow_field_set_leaves_the_features_out_entirely(
     items = await listed(auth_client, fields="title")
 
     assert items == [{"key": task.key, "title": task.title}]
+
+
+# --- Страницами: общее число выдачи и адрес страницы --------------------------------------
+
+
+async def test_the_total_counts_the_selection_and_not_the_page(
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Из `meta.total` и `limit` собирается «страница 1 из 3, всего 7».
+
+    Число считается по отбору, а не по странице: строк в ответе три, задач — семь, и
+    без второго числа интерфейсу неоткуда узнать, сколько страниц он рисует.
+    """
+    for number in range(7):
+        await make(db_session, task_actor, queue, f"задача {number}")
+
+    response = await auth_client.get("/api/v1/tasks", params={"limit": 3})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["data"]) == 3
+    assert body["meta"]["total"] == 7
+    assert body["meta"]["has_more"] is True
+
+
+async def test_the_total_follows_the_filter(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Число — это длина **отобранной** выдачи, а не всех задач установки."""
+    response = await auth_client.get("/api/v1/tasks", params={"status": "open"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["meta"]["total"] == len(body["data"]) == 3
+    assert {item["key"] for item in body["data"]} == {
+        board["plain"].key,
+        board["blocked"].key,
+        board["asking"].key,
+    }
+
+
+async def test_an_empty_selection_counts_zero_and_not_null(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """У посчитанной пустой выдачи стоит `0`: `null` означал бы «не считали»."""
+    del board
+    response = await auth_client.get("/api/v1/tasks", params={"text": "такой задачи нет"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["data"] == []
+    assert body["meta"] == {"next_cursor": None, "has_more": False, "total": 0}
+
+
+async def test_the_offset_addresses_the_same_page_the_cursor_leads_to(
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Обзорная проверка 1: страница по адресу — та же, что и по курсору.
+
+    Оба адреса ведут в одно место, пока между запросами ничего не менялось: смещение
+    отличается не результатом, а тем, что не требует пройти предыдущие страницы.
+    """
+    for number in range(7):
+        await make(db_session, task_actor, queue, f"задача {number}")
+
+    first = await auth_client.get("/api/v1/tasks", params={"limit": 3})
+    assert first.status_code == 200, first.text
+    by_cursor = await auth_client.get(
+        "/api/v1/tasks", params={"limit": 3, "cursor": first.json()["meta"]["next_cursor"]}
+    )
+    by_offset = await auth_client.get("/api/v1/tasks", params={"limit": 3, "offset": 3})
+
+    assert by_cursor.status_code == by_offset.status_code == 200, by_offset.text
+    assert by_offset.json()["data"] == by_cursor.json()["data"]
+    assert by_offset.json()["meta"]["total"] == 7
+
+
+async def test_the_pages_of_any_order_are_addressable_and_counted_the_same(
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Обзорная проверка 4: и число, и адрес работают при любом `sort`, а не при умолчании.
+
+    Порядок берётся тот же, что и у обхода курсором, поэтому проверяется главное: третья
+    страница по смещению — это ровно то, что даёт обход тем же порядком с начала.
+    """
+    for number in range(7):
+        await make(
+            db_session,
+            task_actor,
+            queue,
+            f"задача {number}",
+            priority=TaskPriority.HIGH if number % 2 else TaskPriority.LOW,
+        )
+
+    for order in (None, "-updated_at", "priority", "key"):
+        params: dict[str, Any] = {"limit": 2}
+        if order is not None:
+            params["sort"] = order
+
+        whole = await auth_client.get("/api/v1/tasks", params={**params, "limit": 100})
+        third = await auth_client.get("/api/v1/tasks", params={**params, "offset": 4})
+
+        assert whole.status_code == third.status_code == 200, third.text
+        assert whole.json()["meta"]["total"] == third.json()["meta"]["total"] == 7, order
+        expected = [item["key"] for item in whole.json()["data"][4:6]]
+        assert [item["key"] for item in third.json()["data"]] == expected, order
+
+
+async def test_a_page_beyond_the_end_is_empty_and_still_knows_the_total(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Смещение за концом выдачи — законный запрос, а не отказ.
+
+    Страницы с таким номером нет: отбор мог сузиться между двумя нажатиями, и ссылка на
+    седьмую страницу пережила выдачу, в которой их две. Ответ говорит об этом честно —
+    строк нет, `has_more` ложен, а `total` на месте, и по нему интерфейс поймёт, куда
+    вернуться.
+    """
+    del board
+    response = await auth_client.get("/api/v1/tasks", params={"limit": 2, "offset": 100})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["data"] == []
+    assert body["meta"] == {"next_cursor": None, "has_more": False, "total": 4}
+
+
+async def test_an_insertion_shifts_the_page_addressed_by_offset(
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Цена смещения, записанная тестом: вставка между запросами сдвигает границу.
+
+    Порядок убывающий, поэтому новая задача встаёт **перед** прочитанной страницей и
+    двигает всю выдачу на строку: страница по смещению показывает задачу, которую
+    человек уже видел. Курсор в том же месте отдаёт продолжение без повторов — он
+    адресует позицию в порядке, а не номер строки. Обе выдачи законны, и разница между
+    ними — то, за что платит выбор смещения (`docs/notes/api.md`).
+    """
+    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(6)]
+
+    first = await auth_client.get("/api/v1/tasks", params={"limit": 3, "sort": "-key"})
+    assert first.status_code == 200, first.text
+    seen = [item["key"] for item in first.json()["data"]]
+    await make(db_session, task_actor, queue, "вставленная посреди обхода")
+
+    by_offset = await auth_client.get(
+        "/api/v1/tasks", params={"limit": 3, "sort": "-key", "offset": 3}
+    )
+    by_cursor = await auth_client.get(
+        "/api/v1/tasks",
+        params={"limit": 3, "sort": "-key", "cursor": first.json()["meta"]["next_cursor"]},
+    )
+
+    assert seen == [task.key for task in reversed(made[3:])]
+    assert by_offset.json()["data"][0]["key"] == seen[-1]
+    assert [item["key"] for item in by_cursor.json()["data"]] == [
+        task.key for task in reversed(made[:3])
+    ]
+    assert by_offset.json()["meta"]["total"] == by_cursor.json()["meta"]["total"] == 7
+
+
+async def test_a_cursor_and_an_offset_together_are_refused(
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Два адреса одной страницы в одном запросе — отказ, а не выбор за клиента."""
+    for number in range(4):
+        await make(db_session, task_actor, queue, f"задача {number}")
+    first = await auth_client.get("/api/v1/tasks", params={"limit": 2})
+
+    response = await auth_client.get(
+        "/api/v1/tasks",
+        params={"limit": 2, "offset": 2, "cursor": first.json()["meta"]["next_cursor"]},
+    )
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "cursor_with_offset"
+    assert error["details"]["offset"] == 2
+
+
+async def test_a_negative_offset_is_refused_by_the_parameter(auth_client: AsyncClient) -> None:
+    """Границу смещения объявляет параметр запроса — как и границу размера страницы."""
+    response = await auth_client.get("/api/v1/tasks", params={"offset": -1})
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+async def test_the_answer_without_the_new_parameters_is_the_former_one(
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Обзорная проверка 3: прежний вызов отвечает прежним, а `total` только дописан.
+
+    Страница, её порядок, курсор и `has_more` — те же, что и до задачи; из нового в
+    ответе одно поле `meta`, и старый клиент, читающий два прежних, ничего не заметил.
+    """
+    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(4)]
+
+    response = await auth_client.get("/api/v1/tasks", params={"limit": 2, "fields": "key"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["data"] == [{"key": made[0].key}, {"key": made[1].key}]
+    assert body["meta"]["has_more"] is True
+    assert body["meta"]["next_cursor"] is not None
+    assert body["meta"]["total"] == 4
+
+    tail = await auth_client.get(
+        "/api/v1/tasks",
+        params={"limit": 2, "fields": "key", "cursor": body["meta"]["next_cursor"]},
+    )
+
+    assert tail.json()["data"] == [{"key": made[2].key}, {"key": made[3].key}]
+    assert tail.json()["meta"]["has_more"] is False

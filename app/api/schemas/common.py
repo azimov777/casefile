@@ -51,6 +51,18 @@ class PageMeta(BaseModel):
         default=False,
         description="Whether another page exists",
     )
+    # Поле необязательное, и это решение, а не забывчивость: подсчёт — второй запрос по
+    # тому же отбору, и платит за него только та коллекция, которую показывают
+    # страницами (сегодня одна — список задач). `null` означает «не считали»; у
+    # посчитанной пустой выдачи стоит `0`. Решение и его цена — задача TRK-41.
+    total: int | None = Field(
+        default=None,
+        description=(
+            "Total number of rows matching the filter, across all pages; null means this "
+            "collection does not count them. Only `GET /api/v1/tasks` fills it in"
+        ),
+        examples=[98],
+    )
 
 
 class DataResponse[ItemT](BaseModel):
@@ -74,8 +86,19 @@ class CollectionResponse[ItemT](BaseModel):
         items: list[ItemT],
         *,
         next_cursor: str | None = None,
+        total: int | None = None,
     ) -> CollectionResponse[ItemT]:
-        """Собирает страницу: `has_more` выводится из курсора, а не задаётся руками."""
+        """Собирает страницу: `has_more` выводится из курсора, а не задаётся руками.
+
+        `total` приходит от того, кто его посчитал, и по умолчанию его нет: коллекция,
+        не платившая за подсчёт, обязана отдать `null`, а не `0` — «ноль» означал бы,
+        что по отбору не нашлось ничего.
+        """
         return cls(
-            data=items, meta=PageMeta(next_cursor=next_cursor, has_more=next_cursor is not None)
+            data=items,
+            meta=PageMeta(
+                next_cursor=next_cursor,
+                has_more=next_cursor is not None,
+                total=total,
+            ),
         )

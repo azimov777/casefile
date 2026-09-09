@@ -154,7 +154,10 @@ async def test_the_end_of_the_journal_is_an_empty_collection(
     response = await auth_client.get(JOURNAL, params={"after": written.other_question.seq + 100})
 
     assert response.status_code == 200
-    assert response.json() == {"data": [], "meta": {"next_cursor": None, "has_more": False}}
+    assert response.json() == {
+        "data": [],
+        "meta": {"next_cursor": None, "has_more": False, "total": None},
+    }
 
 
 async def test_every_entry_carries_the_key_of_its_task(

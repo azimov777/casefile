@@ -379,4 +379,4 @@ async def test_entries_are_paged_by_number(auth_client: AsyncClient, queue: Queu
         params={"limit": 3, "cursor": payload["meta"]["next_cursor"]},
     )
     assert [entry["no"] for entry in second.json()["data"]] == [4]
-    assert second.json()["meta"] == {"next_cursor": None, "has_more": False}
+    assert second.json()["meta"] == {"next_cursor": None, "has_more": False, "total": None}

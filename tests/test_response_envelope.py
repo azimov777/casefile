@@ -26,11 +26,14 @@ def test_collection_puts_pagination_into_meta() -> None:
 
     assert response.model_dump() == {
         "data": [{"key": "TRK-1"}],
-        "meta": {"next_cursor": "eyJpZCI6...", "has_more": True},
+        "meta": {"next_cursor": "eyJpZCI6...", "has_more": True, "total": None},
     }
 
 
 def test_empty_collection_is_an_empty_list_not_an_empty_body() -> None:
     response = CollectionResponse[Sample].of([])
 
-    assert response.model_dump() == {"data": [], "meta": {"next_cursor": None, "has_more": False}}
+    assert response.model_dump() == {
+        "data": [],
+        "meta": {"next_cursor": None, "has_more": False, "total": None},
+    }

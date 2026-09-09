@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.queue import Queue
 from app.db.models.task import Task
+from app.db.pagination import CursorWithOffsetError, InvalidPageOffsetError
 from app.domain.errors import (
     SearchFieldUnknownError,
     SearchOperatorNotSupportedError,
@@ -825,3 +826,89 @@ async def test_a_queue_narrows_the_answer_to_its_own_tasks(
 
     assert await keys(db_session, task_actor, query="queue: TRK") == [mine.key]
     assert await keys(db_session, task_actor, query="queue: ops") == [theirs.key]
+
+
+# --- Общее число выдачи и адрес страницы -------------------------------------------------
+
+
+async def test_the_total_is_not_counted_unless_it_was_asked_for(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Подсчёт — второй запрос, и по умолчанию его нет: агент за него не платит.
+
+    `None` здесь означает «не считали», а не «ноль»: обход выдачи курсором работает без
+    подсчёта, и инструмент MCP просит страницу ровно так же, как до задачи TRK-41.
+    """
+    for number in range(5):
+        await make(db_session, task_actor, queue, f"задача {number}")
+
+    silent = await service.search_tasks(db_session, actor=task_actor, limit=2)
+    counted = await service.search_tasks(db_session, actor=task_actor, limit=2, with_total=True)
+
+    assert silent.page.total is None
+    assert counted.page.total == 5
+    assert [found.task.key for found in silent.page.items] == [
+        found.task.key for found in counted.page.items
+    ]
+
+
+async def test_the_total_counts_the_filtered_selection_in_any_order(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Число зависит от отбора и не зависит от порядка: сортировка строк не добавляет."""
+    for number in range(4):
+        task = await make(db_session, task_actor, queue, f"задача {number}")
+        if number % 2:
+            await open_task(db_session, task_actor, task)
+
+    for sort in ((), ("-updated_at",), ("priority",), ("key",)):
+        outcome = await service.search_tasks(
+            db_session,
+            actor=task_actor,
+            structured=[StructuredTerm(name="status", values=[TaskStatus.OPEN])],
+            sort=sort,
+            limit=1,
+            with_total=True,
+        )
+
+        assert outcome.page.total == 2, sort
+        assert len(outcome.page.items) == 1, sort
+
+
+async def test_the_offset_lands_on_the_same_rows_the_walk_reaches(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Смещение — второй адрес той же страницы: порядок один, отбор один, строки те же."""
+    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(7)]
+
+    outcome = await service.search_tasks(db_session, actor=task_actor, limit=3, offset=3)
+
+    assert [found.task.key for found in outcome.page.items] == [task.key for task in made[3:6]]
+    assert outcome.page.next_cursor is not None
+
+
+async def test_a_cursor_and_an_offset_together_are_refused_in_the_scenario(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Отказ живёт в пагинации, а не в параметре запроса: MCP идёт мимо схем FastAPI."""
+    for number in range(4):
+        await make(db_session, task_actor, queue, f"задача {number}")
+    first = await service.search_tasks(db_session, actor=task_actor, limit=2)
+
+    with pytest.raises(CursorWithOffsetError) as raised:
+        await service.search_tasks(
+            db_session, actor=task_actor, limit=2, offset=2, cursor=first.page.next_cursor
+        )
+
+    assert raised.value.code == "cursor_with_offset"
+    assert raised.value.details["offset"] == 2
+
+
+async def test_a_negative_offset_is_refused_in_the_scenario_too(
+    db_session: AsyncSession, task_actor: Actor
+) -> None:
+    """Границы смещения проверяются и здесь — по той же причине, что и границы `limit`."""
+    with pytest.raises(InvalidPageOffsetError) as raised:
+        await service.search_tasks(db_session, actor=task_actor, offset=-1)
+
+    assert raised.value.details == {"offset": -1, "min": 0}

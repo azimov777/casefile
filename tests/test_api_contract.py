@@ -219,7 +219,12 @@ async def test_every_readable_route_answers_with_the_data_envelope(
         expected = ["data", "meta"] if "meta" in declared.get("properties", {}) else ["data"]
         assert sorted(payload) == expected, f"GET {path}: {sorted(payload)}"
         if "meta" in expected:
-            assert sorted(payload["meta"]) == ["has_more", "next_cursor"], f"GET {path}"
+            assert sorted(payload["meta"]) == ["has_more", "next_cursor", "total"], f"GET {path}"
+            # `total` есть в оболочке у всех, а считает его один список задач. Остальные
+            # отдают `null` — «не считали»; `0` здесь означал бы «по отбору не нашлось
+            # ничего», и на демо-данных это было бы враньём (задача TRK-41).
+            counted = path == "/api/v1/tasks"
+            assert (payload["meta"]["total"] is not None) is counted, f"GET {path}"
         checked += 1
 
     assert checked >= 3, f"the sweep covered only {checked} readable routes"

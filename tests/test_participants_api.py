@@ -66,7 +66,7 @@ async def test_the_list_is_a_collection_with_meta(
     assert response.status_code == 200
     payload = response.json()
     assert [item["name"] for item in payload["data"]] == ["owner"]
-    assert payload["meta"] == {"next_cursor": None, "has_more": False}
+    assert payload["meta"] == {"next_cursor": None, "has_more": False, "total": None}
 
 
 async def test_patch_changes_the_description(auth_client: AsyncClient, owner: Participant) -> None:
