@@ -62,6 +62,37 @@ export async function shellReady(page: Page): Promise<void> {
 }
 
 /**
+ * Кадр движения, снятый в браузере: чем движение названо, сколько идёт и какой кривой.
+ *
+ * Разбирается снаружи — внутрь уезжает только чтение вычисленных стилей. Функция
+ * уходит в браузер целиком (`locator.evaluate(readFrame)`), поэтому она обязана
+ * оставаться без внешних ссылок.
+ */
+export function readFrame(node: Element): { name: string; duration: string; easing: string } {
+  const style = getComputedStyle(node);
+  return {
+    name: style.animationName,
+    duration: style.animationDuration,
+    easing: style.animationTimingFunction,
+  };
+}
+
+/** Длительность в миллисекундах: токен написан в `ms`, вычисленный стиль печатает `s`. */
+export function ms(value: string): number {
+  const number = Number.parseFloat(value);
+  return value.trim().endsWith('ms') ? number : number * 1000;
+}
+
+/**
+ * Кривая четырьмя числами: сравнивать её строками нельзя. Вычисленный стиль печатает
+ * `cubic-bezier(0.2, 0, 0.2, 1)`, а значение токена возвращается таким, каким его
+ * оставила сборка, — Lightning CSS срезает ведущий ноль и отдаёт `cubic-bezier(.2,0,.2,1)`.
+ */
+export function curve(value: string): string {
+  return (value.match(/-?\d*\.?\d+/g) ?? []).map(Number).join(',');
+}
+
+/**
  * Значения статуса — из контракта соседнего репозитория, а не перечнем в тесте.
  *
  * Перечисление уже менялось дважды (2026-09-05 из него убрали статус, 2026-09-07
