@@ -478,31 +478,14 @@ open_blocking_questions: 0`.
 
 ### 5.2 MCP-сервер
 
-Набор `task`, инструменты рабочего цикла:
+Набор `task` открывает рабочий цикл, набор `main` добавляет к нему очереди и
+участников (`create_queue`, `update_queue`, `register_participant`,
+`update_participant`). Токены выпускаются только через REST: выдача доступов остаётся
+за человеком.
 
-| Инструмент | Что делает | Что проверяет трекер |
-|---|---|---|
-| `get_task(key)` | Пакет преемника. | |
-| `read_entries(key, nos, types, after_no, limit, cursor)` | Тела записей. | |
-| `search_tasks(query, queue, status, assignee, priority, blocked, open_questions, open_blocking_questions, open_remarks, remarks_in_work, text, sort, fields, limit, cursor)` | Поиск языком запросов или структурными условиями. | |
-| `create_task(queue, title, description, sections, parent, assignee, priority)` | Новая задача в `backlog`. | Название и описание непустые. |
-| `update_task(key, changes, version)` | Правка полей. | Разделы только в `backlog`. |
-| `transition(key, to, reason)` | Перевод статуса, кроме `done`. | Таблица и валидации из 3.3. |
-| `close_task(key, summary, verdicts, entries)` | Закрытие: подшить и перевести в `done` одной транзакцией. | Всё из 3.3 для `in_progress → done`. Отказ любой части не подшивает ничего. |
-| `add_summary(key, done, remaining, blockers, next_step)` | Сводка. | Четыре части непустые. |
-| `add_entry(key, type, title, body, refs)` | `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`. | Тип из списка, заголовок непустой, ссылки существуют. |
-| `ask(key, addressees, title, blocking, body)` | Вопрос. | Адресаты из реестра. |
-| `answer(key, question_no, body)` | Ответ. | Вопрос существует в этой задаче. |
-| `add_verdict(key, check_no, outcome, evidence)` | Вердикт проверки. | Номер существует, исход из двух. |
-| `resolve(key, remark_no, outcome, task, body)` | Резолюция по замечанию. | Замечание существует в этой задаче, исход из четырёх, `task` существует и только при `accepted`. |
-| `link(key, kind, other)`, `unlink(key, kind, other)` | Связи. | Виды из 3.5, без циклов. |
-| `get_queue(key)` | Описание очереди. | |
-| `list_queues(limit, cursor)` | Ключи и названия очередей: вход, когда ключ неизвестен. | |
-| `list_participants(limit, cursor)` | Кому можно адресовать вопрос. | |
-| `wait_journal(after, task, queue, types, timeout, limit, cursor)` | Хвост ленты с ожиданием. | |
-
-Набор `main` добавляет `create_queue`, `update_queue`, `register_participant`,
-`update_participant`. Токены выпускаются только через REST.
+Перечня инструментов здесь нет намеренно: его отдаёт сам `tools/list`, а описание
+каждого вызова приезжает модели вместе с ним. Список, переписанный сюда прозой,
+расходится с кодом молча — и уже расходился.
 
 Один инструмент это один вид действия; составных инструментов нет. Исключение одно —
 закрытие: подшивка и перевод в `done` обязаны быть атомарными, и это один сценарий с
