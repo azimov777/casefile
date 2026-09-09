@@ -1,6 +1,6 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, collection, data, taskPackage } from '@testing/msw/responses';
 import { liveJournal } from '@testing/live-journal';
@@ -178,6 +178,38 @@ describe('живой поток', () => {
 
     expect(await screen.findByRole('link', { name: 'DEMO-4#9' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'DEMO-3#4' })).toBeVisible();
+  });
+
+  it('закрытое среднее уведомление уходит одно, соседи остаются на своих местах', async () => {
+    renderApp('/tasks');
+    await screen.findByText('на связи');
+
+    act(() => {
+      for (const no of [20, 21, 22]) {
+        liveJournal.send(
+          entry(1050 + no, 'DEMO-4', {
+            type: 'question',
+            no,
+            payload: { addressees: ['owner'], blocking: false },
+          }),
+        );
+      }
+    });
+
+    await screen.findByRole('link', { name: 'DEMO-4#22' });
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Закрыть уведомление о вопросе DEMO-4#21' }));
+
+    // Стопка редеет по одному: закрытая карточка уходит, соседи остаются на своих
+    // местах и в прежнем порядке — уходящий не перепрыгивает в конец выдачи.
+    const notice = screen.getByRole('complementary', { name: 'Вопросы ко мне' });
+    expect(
+      within(notice)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['DEMO-4#20', 'DEMO-4#22']);
   });
 
   it('тот же кадр, приехавший второй раз, второго уведомления не даёт', async () => {

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { curve, ms, readE2eToken, readFrame, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -13,19 +13,6 @@ test.beforeEach(async ({ context }) => {
 /** Боковая панель на широком экране; на узком та же панель живёт в шторке. */
 function side(page: Page) {
   return page.getByRole('complementary', { name: 'Разделы трекера' });
-}
-
-/**
- * Кадр движения, снятый в браузере: чем движение названо, сколько идёт и какой кривой.
- * Разбирается снаружи — внутрь уезжает только чтение вычисленных стилей.
- */
-function readFrame(node: Element) {
-  const style = getComputedStyle(node);
-  return {
-    name: style.animationName,
-    duration: style.animationDuration,
-    easing: style.animationTimingFunction,
-  };
 }
 
 /**
@@ -92,21 +79,6 @@ function closeWhileEntering(): Promise<number> {
     };
     requestAnimationFrame(tick);
   });
-}
-
-/** Длительность в миллисекундах: токен написан в `ms`, вычисленный стиль печатает `s`. */
-function ms(value: string): number {
-  const number = Number.parseFloat(value);
-  return value.trim().endsWith('ms') ? number : number * 1000;
-}
-
-/**
- * Кривая четырьмя числами: сравнивать её строками нельзя. Вычисленный стиль печатает
- * `cubic-bezier(0.2, 0, 0.2, 1)`, а значение токена возвращается таким, каким его
- * оставила сборка, — Lightning CSS срезает ведущий ноль и отдаёт `cubic-bezier(.2,0,.2,1)`.
- */
-function curve(value: string): string {
-  return (value.match(/-?\d*\.?\d+/g) ?? []).map(Number).join(',');
 }
 
 test('переход в другую очередь меняет только очередь', async ({ page }) => {
