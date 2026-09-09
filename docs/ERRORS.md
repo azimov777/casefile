@@ -86,12 +86,14 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `actor_not_addressable` | A temporary agent cannot be an addressee; pass an explicit addressee | Временный агент спрашивает свои вопросы, а адресовать его нельзя. |
+| `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
 | `invalid_idempotency_key` | Idempotency key is invalid | Ключ идемпотентности пуст или длиннее допустимого. |
 | `invalid_journal_cursor` | Last-Event-ID is not a journal sequence number | `Last-Event-ID` потока не разбирается как сквозной номер записи. |
 | `invalid_link_kind` | Link kind is invalid | Такого вида связи нет; допустимые перечислены в `details.allowed`. |
+| `invalid_page_offset` | Page offset is negative | Смещение страницы отрицательное. |
 | `invalid_page_size` | Page size is out of range | Запрошен размер страницы вне допустимых границ. |
 | `invalid_participant_name` | Participant name is invalid | Имя участника не соответствует шаблону. |
 | `invalid_queue_key` | Queue key is invalid | Ключ очереди не соответствует шаблону. |

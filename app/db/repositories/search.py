@@ -48,7 +48,13 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.db.models.link import Link
 from app.db.models.queue import Queue
 from app.db.models.task import Task
-from app.db.pagination import Page, decode_sort_cursor, encode_sort_cursor, resolve_limit
+from app.db.pagination import (
+    Page,
+    decode_sort_cursor,
+    encode_sort_cursor,
+    resolve_limit,
+    resolve_offset,
+)
 from app.db.repositories.entries import (
     last_entry_at,
     last_summary_at,
@@ -109,6 +115,8 @@ class TaskSearchRepository:
         *,
         limit: int | None = None,
         cursor: str | None = None,
+        offset: int | None = None,
+        with_total: bool = False,
     ) -> Page[TaskRow]:
         """Страница задач по фильтру, в заданном порядке, с признаками каждой строки.
 
@@ -125,8 +133,16 @@ class TaskSearchRepository:
         Признаки — четыре подзапроса на строку, и добавляются они только когда их
         просили (`fields`): выдача из одного столбца ключей не должна платить за то,
         чего в ней нет. Стоимость измерена и записана в `docs/notes/search.md`.
+
+        `offset` и `with_total` — платные и потому необязательные, а решение платить
+        принимает вызывающий: смещение читает и выбрасывает пропускаемые строки и
+        сдвигает страницу на вставке, а `with_total` — второй запрос по тому же отбору.
+        Обе цены осмысленны только там, где выдачу показывают страницами человеку
+        (`GET /api/v1/tasks`); обход выдачи агентом идёт курсором и не платит ни за что
+        (задача TRK-41, `app/db/pagination.py`).
         """
         size = resolve_limit(limit)
+        start = resolve_offset(offset, cursor=cursor)
         keys = sort_keys(resolved.sort)
         wanted = field_requested(FEATURES_FIELD, resolved.fields)
         statement: Select[Any] = select(Task).join(Task.queue).options(contains_eager(Task.queue))
@@ -145,17 +161,39 @@ class TaskSearchRepository:
             statement = statement.where(_after_cursor(keys, values, item_id))
 
         statement = statement.order_by(*_order_by(keys)).limit(size + 1)
+        if start is not None:
+            statement = statement.offset(start)
         rows = list(await self._session.execute(statement))
+        total = await self._count(condition) if with_total else None
 
         page = rows[:size]
         items: list[TaskRow] = [(row[0], _features_of(row) if wanted else None) for row in page]
         if len(rows) <= size:
-            return Page(items=items, next_cursor=None)
+            return Page(items=items, next_cursor=None, total=total)
         last = page[-1]
         return Page(
             items=items,
             next_cursor=encode_sort_cursor(list(last[1 : 1 + len(keys)]), last[0].id),
+            total=total,
         )
+
+    async def _count(self, condition: ColumnElement[bool] | None) -> int:
+        """Сколько задач нашлось по отбору — без страницы, порядка и признаков.
+
+        Условие берётся то же самое, что и у страницы, а не пишется вторым текстом:
+        разошлись бы они молча, и «всего 98» рядом с двумя страницами по 50 не удивило
+        бы никого. Порядок и признаки на число строк не влияют и в счёт не идут:
+        сортировать то, что тут же схлопывается в одно число, — работа в никуда.
+
+        Соединение с очередью остаётся: по ней отбирают (`queue: TRK`), а внешний ключ
+        обязателен и соединение внутреннее, поэтому число строк от него не меняется.
+        """
+        statement = select(func.count()).select_from(Task).join(Task.queue)
+        if condition is not None:
+            statement = statement.where(condition)
+        # `COUNT(*)` отдаёт строку всегда, в том числе `0` на пустой выдаче: `None`
+        # здесь недостижим и подставлен ради типа.
+        return await self._session.scalar(statement) or 0
 
 
 def feature_columns() -> tuple[ColumnElement[Any], ...]:

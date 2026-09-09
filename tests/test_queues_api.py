@@ -57,7 +57,7 @@ async def test_the_list_is_a_collection_with_meta(auth_client: AsyncClient, queu
     assert response.status_code == 200
     payload = response.json()
     assert [item["key"] for item in payload["data"]] == ["TRK"]
-    assert payload["meta"] == {"next_cursor": None, "has_more": False}
+    assert payload["meta"] == {"next_cursor": None, "has_more": False, "total": None}
 
 
 async def test_patch_refuses_the_key_and_accepts_the_description(

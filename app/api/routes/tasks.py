@@ -11,7 +11,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Query, status
 
-from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep, TaskKeyPath
+from app.api.deps import (
+    ActorDep,
+    CursorQuery,
+    LimitQuery,
+    OffsetQuery,
+    SessionDep,
+    TaskKeyPath,
+)
 from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.entries import (
@@ -131,6 +138,7 @@ async def list_tasks(
     fields: FieldsParam = None,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
+    offset: OffsetQuery = None,
 ) -> CollectionResponse[TaskSearchRead]:
     """Задачи по строке запроса, по структурному фильтру или по обоим сразу.
 
@@ -159,6 +167,23 @@ async def list_tasks(
     пятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки
     выбираются целиком именем `features`; отдельный признак именем поля выдачи не
     выбирается — `blocked` остаётся именем условия отбора.
+
+    **Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на
+    странице: из него и `limit` собирается «страница 3 из 7, всего 98». Это
+    единственная коллекция API, которая его считает, и считает всегда — вторым запросом
+    по тому же отбору.
+
+    Страницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо
+    `offset` — номер первой строки от начала выдачи: страница N размера L начинается с
+    `(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных
+    адреса одной страницы, и выбрать за клиента значило бы отдать не ту.
+
+    Цена смещения названа честно: база читает и выбрасывает пропускаемые строки, а
+    страница сдвигается, если между двумя запросами задачу завели или подняли наверх
+    (`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от
+    этого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.
+    Смещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и
+    прежний `total`.
     """
     outcome = await search_service.search_tasks(
         session,
@@ -169,6 +194,12 @@ async def list_tasks(
         fields=fields or (),
         limit=limit,
         cursor=cursor,
+        offset=offset,
+        # Число выдачи здесь считают всегда: этот список рисует человеку номера страниц,
+        # а «попроси, и посчитаю» дало бы интерфейсу способ забыть попросить — и пустое
+        # место вместо «всего 98». Агенты ходят сюда не этим маршрутом, а инструментом
+        # MCP `search_tasks`, и за подсчёт не платят.
+        with_total=True,
     )
     return search_page(outcome)
 

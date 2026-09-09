@@ -331,4 +331,5 @@ def search_page(outcome: SearchOutcome) -> CollectionResponse[TaskSearchRead]:
     return CollectionResponse[TaskSearchRead].of(
         [TaskSearchRead.of(found, fields=outcome.resolved.fields) for found in outcome.page.items],
         next_cursor=outcome.page.next_cursor,
+        total=outcome.page.total,
     )
