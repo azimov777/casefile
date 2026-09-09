@@ -1,10 +1,11 @@
-"""Поставляемые артефакты: схема, документ фронтенду и пример окружения.
+"""Поставляемые артефакты: схема и пример окружения.
 
 Артефакт, который отстал от кода, хуже отсутствующего: по нему генерируют клиент и
 поднимают установку, не перепроверяя. Свежесть `docs/ERRORS.md` стережёт
-`tests/test_api_contract.py`; здесь — свежесть `openapi.json`, то, что документ
-фронтенду не обещает маршрутов, которых нет, и то, что `.env.example` описывает ровно
-те переменные, которые кто-то читает.
+`tests/test_api_contract.py`; здесь — свежесть `openapi.json` и то, что `.env.example`
+описывает ровно те переменные, которые кто-то читает. Карта контракта для интерфейса
+уехала в репозиторий `tracker-ui` вместе со своей проверкой: она сверяет документ
+с этими же двумя выгрузками, читая их по `../tracker`.
 
 Почему схема вообще лежит в репозитории. До задачи 29 её намеренно не хранили: вторая
 копия отстаёт от первой. Отставание сняли тестом ниже, а взамен фронтенд — отдельный
@@ -28,7 +29,6 @@ from conftest import Connect, refuse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OPENAPI_FILE = PROJECT_ROOT / "openapi.json"
-FRONTEND_DOC = PROJECT_ROOT / "docs" / "FRONTEND.md"
 ENV_EXAMPLE = PROJECT_ROOT / ".env.example"
 COMPOSE_FILES = (
     PROJECT_ROOT / "docker-compose.yml",
@@ -39,11 +39,6 @@ COMPOSE_FILES = (
 #: часть сравнения: файл, отличающийся только отступами, всё равно расходится с
 #: выгрузкой, и «пересобрать» будет непонятно зачем.
 DUMP_KWARGS: dict[str, Any] = {"ensure_ascii": False, "indent": 2}
-
-#: Путь API в тексте документа. Строка обрывается на первом символе, которого в пути
-#: быть не может: `?` начинает параметры запроса, а обратная кавычка и пробел —
-#: окружающий текст.
-API_PATH_PATTERN = re.compile(r"/api/v1[A-Za-z0-9_/{}-]*")
 
 
 @pytest.fixture
@@ -77,24 +72,6 @@ def test_the_first_screen_is_in_the_schema(schema: dict[str, Any]) -> None:
     assert operation["operationId"] == "read_bootstrap"
     body = operation["responses"]["200"]["content"]["application/json"]["schema"]
     assert body["$ref"].endswith("/DataResponse_BootstrapRead_")
-
-
-# --- Документ фронтенду ------------------------------------------------------------
-
-
-def test_every_path_the_frontend_doc_names_exists(schema: dict[str, Any]) -> None:
-    """Обзорная проверка 2: каждый путь из `FRONTEND.md` есть в схеме.
-
-    Документ читают до того, как поднимут бэкенд, и путь из него уезжает прямо в код
-    интерфейса. Опечатка или переименованный маршрут стоят разработчику фронтенда
-    получаса на `404`, из которых двадцать девять минут уходят на подозрение своей
-    авторизации.
-    """
-    named = set(API_PATH_PATTERN.findall(FRONTEND_DOC.read_text(encoding="utf-8")))
-    declared = set(schema["paths"])
-
-    assert named, "документ не называет ни одного пути — регулярное выражение промахнулось"
-    assert named <= declared, sorted(named - declared)
 
 
 # --- Справочник ошибок и слой MCP ---------------------------------------------------
@@ -148,38 +125,6 @@ async def test_a_refused_tool_call_names_a_code_from_the_reference(
 
     named = [code for code, message in catalog.items() if f"{code}: {message}" in text]
     assert named == ["task_not_found"], text
-
-
-#: Заголовок таблицы кодов ошибок в `FRONTEND.md`. Проверка отталкивается от него, а не
-#: от всех обратных кавычек документа: в тексте есть и имена полей, и значения
-#: перечислений, и «код», найденный среди них, был бы ложным срабатыванием.
-ERROR_TABLE_HEADER = "| Код | Когда |"
-
-
-def _codes_named_in_the_frontend_doc() -> set[str]:
-    """Коды из таблицы частых ошибок `FRONTEND.md`."""
-    lines = FRONTEND_DOC.read_text(encoding="utf-8").splitlines()
-    start = lines.index(ERROR_TABLE_HEADER) + 2  # заголовок и строка-разделитель
-    codes: set[str] = set()
-    for line in lines[start:]:
-        if not line.startswith("|"):
-            break
-        codes.update(re.findall(r"`([a-z][a-z0-9_]*)`", line.split("|")[1]))
-    return codes
-
-
-def test_every_error_code_the_frontend_doc_names_exists() -> None:
-    """Код, которого нет, интерфейс будет ждать вечно — и покажет по нему свой текст.
-
-    Ловится только сравнением со справочником: в документе такой код выглядит ровно
-    так же, как настоящий, а в ответе не появляется никогда. Так в этом файле дожили до
-    задачи 29 `question_not_found` и `question_already_answered`, которых в трекере нет.
-    """
-    named = _codes_named_in_the_frontend_doc()
-    known = {entry.code for entry in error_catalog()}
-
-    assert named, "таблица кодов не разобрана — проверка ничего не стережёт"
-    assert named <= known, sorted(named - known)
 
 
 # --- Пример окружения ---------------------------------------------------------------
