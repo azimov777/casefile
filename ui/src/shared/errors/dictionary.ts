@@ -31,6 +31,7 @@ export const errorDictionary: Record<string, string> = {
 
   // 409
   checks_not_passed: 'Не по каждой обзорной проверке есть положительный вердикт.',
+  closing_not_a_transition: 'Задача закрывается отдельным действием, а не переводом статуса.',
   conflict: 'Состояние объекта не позволяет выполнить действие.',
   idempotency_key_reused: 'Ключ повтора уже использован другим запросом.',
   link_cycle_detected: 'Связь замкнула бы кольцо.',

@@ -349,8 +349,47 @@ export interface paths {
          *     `details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и
          *     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
          *     Переход подшивает `status_changed` с `from`, `to` и `reason`.
+         *
+         *     Цель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу
+         *     одной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.
          */
         post: operations["transition_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_key}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a task
+         * @description Подшивает записи, вердикты и финальную сводку и переводит задачу в `done` — всё
+         *     одним запросом и одной транзакцией.
+         *
+         *     Единственный путь в `done`: у перехода эта цель отвечает `409
+         *     closing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части не
+         *     оставляет в деле ни одной записи и статуса не меняет.
+         *
+         *     Порядок подшивки: присланные записи, вердикты, сводка. Требования выхода прежние и
+         *     проверяются после подшивки: положительный последний вердикт по каждой проверке
+         *     среди подшитых после последнего входа в `in_progress` (`409 checks_not_passed`),
+         *     закрытые дети (`409 task_has_unclosed_children`), задача в `in_progress` (`409
+         *     transition_not_allowed`). Вердикты этого запроса засчитываются наравне с подшитыми
+         *     раньше по ходу работы, поэтому список может быть пуст.
+         *
+         *     Повтор с тем же `Idempotency-Key` отвечает первым результатом и второго закрытия не
+         *     заводит. В ответе — карточка задачи; подшитые записи читаются `GET
+         *     /tasks/{task_key}/entries`.
+         */
+        post: operations["close_task"];
         delete?: never;
         options?: never;
         head?: never;
@@ -892,6 +931,7 @@ export interface components {
              */
             text: string;
         };
+        ClosingEntryCreate: components["schemas"]["PlainEntryCreate"] | components["schemas"]["RemarkEntryCreate"];
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -2294,6 +2334,53 @@ export interface components {
              * @example Перенести вызов next_task_number в конец create_task
              */
             next_step: string;
+        };
+        /**
+         * TaskClosing
+         * @description Чем закрывают задачу: записи, вердикты и финальная сводка одного вызова.
+         */
+        TaskClosing: {
+            /** @description The closing summary. Filed last, after the entries and the verdicts, so that it speaks of their outcome */
+            summary: components["schemas"]["SummaryPayload"];
+            /**
+             * Verdicts
+             * @description Verdicts filed by this call. May be empty: verdicts filed earlier during the work count as well, and the transition checks the case, not the request
+             * @example []
+             */
+            verdicts?: components["schemas"]["TaskClosingVerdict"][];
+            /**
+             * Entries
+             * @description Entries filed before the verdicts, usually an `artifact` pointing at the result
+             * @example []
+             */
+            entries?: components["schemas"]["ClosingEntryCreate"][];
+            /**
+             * Version
+             * @description Version the client last saw; omit it to skip the check
+             * @example 3
+             */
+            version?: number | null;
+        };
+        /**
+         * TaskClosingVerdict
+         * @description Исход одной обзорной проверки с доказательством.
+         */
+        TaskClosingVerdict: {
+            /**
+             * Check No
+             * @description Position in the task `checks` list, numbered from 1
+             * @example 3
+             */
+            check_no: number;
+            /** @example passed */
+            outcome: components["schemas"]["VerdictOutcome"];
+            /**
+             * Evidence
+             * @description Proof of the outcome; it becomes the body of the verdict entry
+             * @default
+             * @example docker compose run --rm test: 214 passed
+             */
+            evidence: string;
         };
         /**
          * TaskCreate
@@ -4366,6 +4453,92 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TaskTransition"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_TaskRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    close_task: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Task key `QUEUE-number`; matching ignores case */
+                task_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskClosing"];
             };
         };
         responses: {
