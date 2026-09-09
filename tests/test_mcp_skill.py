@@ -151,8 +151,8 @@ def test_closing_names_the_outcome_of_every_remark(skill_text: str) -> None:
     closing = section(skill_text, "Завершение")
 
     assert "resolve" in closing, "завершение не требует исхода по замечаниям"
-    assert closing.index("resolve") < closing.index("add_summary"), (
-        "резолюции обязаны идти до финальной сводки: иначе сводка не знает их исхода"
+    assert closing.index("resolve") < closing.index("close_task"), (
+        "резолюции обязаны идти до закрытия: иначе сводка закрытия не знает их исхода"
     )
 
 
@@ -168,21 +168,25 @@ def test_the_skill_promises_no_delivery(skill_text: str) -> None:
     assert "не следит, жив ли ты" in lowered or "ничего не делает сам" in lowered
 
 
-def test_closing_puts_the_final_summary_after_the_verdicts(skill_text: str) -> None:
-    """Дисциплина TRK-3: финальная сводка — последнее действие перед `done`.
+def test_closing_is_one_call_and_not_a_status_move(skill_text: str) -> None:
+    """Дисциплина TRK-3 и `TRK-32`: закрытие — один вызов, порядок внутри него задан формой.
 
-    Трекер требует на `in_progress → done` сводку этого захода и положительный последний
-    вердикт по каждой проверке, но не их очерёдность (`CONCEPT.md`, 5.3). Порядок
-    «сводка, потом вердикты» валидацию проходит и оставляет преемнику план вместо исхода
-    проверок — ровно случай UI-1. Единственное место, где порядок закреплён, — этот
-    раздел, и переставленные пункты иначе никто не заметит.
+    Раньше порядок «вердикты, потом сводка» держал только этот раздел: трекер требовал и
+    то и другое, но не их очерёдность (`CONCEPT.md`, 5.3), и сводка раньше вердиктов
+    проходила валидацию, оставляя преемнику план вместо исхода проверок — случай UI-1.
+    Теперь порядок задаёт `close_task`, который подшивает сводку последней, и от раздела
+    требуется другое: звать закрывать закрытием, а не переводом статуса, и называть, что
+    писать в сводке закрываемой задачи.
     """
     closing = section(skill_text, "Завершение")
-    verdicts = closing.rindex("add_verdict")
-    summary = closing.index("add_summary")
-    done = closing.index('transition(key, "done")')
 
-    assert verdicts < summary < done, "порядок закрытия в разделе «Завершение» разъехался"
+    assert "close_task(" in closing, "завершение перестало звать закрытие"
+    assert 'transition(key, "done")' not in closing, (
+        "перевода статуса в `done` больше нет: трекер отвечает на него `closing_not_a_transition`"
+    )
+    assert "verdicts" in closing and "summary" in closing, (
+        "не сказано, что вердикты и сводка едут в самом закрытии"
+    )
     assert "next_step" in closing, "не сказано, что писать в `next_step` закрываемой задачи"
 
 
@@ -421,7 +425,19 @@ NEXT_MOVE = re.compile(r"\b(" + "|".join(NEXT_MOVE_WORDS) + r")\b", re.IGNORECAS
 #: половина контракта: запись уходит в общий журнал (`CONCEPT.md`, 4.1), будит ждущих
 #: `wait_journal` через `LISTEN/NOTIFY` (`app/db/wakeup.py`) и немедленно видна человеку
 #: в интерфейсе. Остальные подшивают запись попутно и называют, какую именно.
-FILING_TOOLS = ("add_entry", "add_summary", "ask", "answer", "resolve", "add_verdict")
+#:
+#: `close_task` здесь же, хотя он ещё и переводит статус: записей он подшивает больше
+#: всех сразу, и агент, не знающий, что они в ту же секунду стоят у человека на экране,
+#: пишет закрытие в стол.
+FILING_TOOLS = (
+    "add_entry",
+    "add_summary",
+    "ask",
+    "answer",
+    "resolve",
+    "add_verdict",
+    "close_task",
+)
 
 
 async def test_no_tool_description_tells_the_agent_what_to_do_next(

@@ -80,6 +80,16 @@ async def ready(session: AsyncSession, actor: Actor, queue: Queue, *, checks: li
     return task
 
 
+async def close(session: AsyncSession, task: Task, actor: Actor) -> None:
+    """Закрытие: единственный путь в `done`. Сводку подшивает оно само."""
+    await tasks_service.close_task(
+        session,
+        task,
+        actor=actor,
+        summary=service.SummaryFiling(**SUMMARY),
+    )
+
+
 async def pass_all(session: AsyncSession, task: Task, actor: Actor) -> None:
     """Положительный вердикт по каждой проверке задачи."""
     for check_no in range(1, len(task.checks) + 1):
@@ -276,14 +286,14 @@ async def test_closing_needs_the_last_verdict_of_every_check_to_be_passed(
     await service.add_verdict(db_session, task, actor=task_actor, check_no=2, outcome="failed")
 
     with pytest.raises(ChecksNotPassedError) as error:
-        await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+        await close(db_session, task, task_actor)
     # В отказе только незасчитанная проверка и причина: пройденные в нём не упоминаются.
     assert error.value.details["checks"] == [{"check_no": 2, "reason": "failed"}]
 
     await service.add_verdict(
         db_session, task, actor=task_actor, check_no=2, outcome="passed", evidence="Прогон зелёный"
     )
-    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+    await close(db_session, task, task_actor)
     assert task.status is TaskStatus.DONE
 
 
@@ -307,7 +317,7 @@ async def test_verdicts_of_the_previous_stint_do_not_close_the_new_one(
     await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
 
     with pytest.raises(ChecksNotPassedError) as error:
-        await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+        await close(db_session, task, task_actor)
     assert error.value.details["checks"] == [
         {"check_no": 1, "reason": "no_verdict"},
         {"check_no": 2, "reason": "no_verdict"},
@@ -315,7 +325,7 @@ async def test_verdicts_of_the_previous_stint_do_not_close_the_new_one(
     assert len(await entries(db_session, task, types=[EntryType.VERDICT])) == 2, "история цела"
 
     await pass_all(db_session, task, task_actor)
-    await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+    await close(db_session, task, task_actor)
     assert task.status is TaskStatus.DONE
 
 
@@ -346,7 +356,7 @@ async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
     await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
 
     with pytest.raises(ChecksNotPassedError) as error:
-        await tasks_service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
+        await close(db_session, task, task_actor)
     assert error.value.details["checks"] == [
         {"check_no": 1, "reason": "no_verdict"},
         {"check_no": 2, "reason": "no_verdict"},

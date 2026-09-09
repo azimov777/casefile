@@ -265,17 +265,17 @@ async def test_a_task_with_an_outdated_verdict_does_not_close(
         await call(session, "update_task", key=key, changes={"check": {"no": 3, "text": REWRITTEN}})
         await call(session, "transition", key=key, to="open")
         await call(session, "transition", key=key, to="in_progress")
-        await call(
+        failure = await refuse(
             session,
-            "add_summary",
+            "close_task",
             key=key,
-            done="Проверка переписана",
-            remaining="Проверить заново",
-            blockers="Ничего",
-            next_step="Подшить вердикты по нынешним формулировкам",
+            summary={
+                "done": "Проверка переписана",
+                "remaining": "Проверить заново",
+                "blockers": "Ничего",
+                "next_step": "Подшить вердикты по нынешним формулировкам",
+            },
         )
-
-        failure = await refuse(session, "transition", key=key, to="done")
 
     assert "checks_not_passed" in failure, failure
     assert '"check_no": 3' in failure, failure

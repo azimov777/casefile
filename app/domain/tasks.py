@@ -36,6 +36,7 @@ from typing import Any
 
 from app.domain.errors import (
     ChecksNotPassedError,
+    ClosingNotATransitionError,
     InvalidQueueKeyError,
     InvalidTaskKeyError,
     SummaryRequiredError,
@@ -550,6 +551,11 @@ class TransitionFacts:
     #: Ключи детей не в `done` и не в `cancelled`. `None` читается так же, как у
     #: блокеров, и по той же причине.
     unclosed_children: Sequence[str] | None = None
+    #: Ход пришёл из сценария закрытия — того, который подшивает вердикты и сводку и
+    #: переводит задачу одной транзакцией (`app/services/tasks.py`, `close_task`).
+    #: `False` по умолчанию — незаполненный факт запрещает переход в `done`, а не
+    #: пропускает его: перевод статуса отдельным ходом закрытием не является.
+    closing: bool = False
 
 
 #: Одна проверка перехода: молчит, если всё в порядке, иначе бросает доменную ошибку со
@@ -634,6 +640,28 @@ def check_summary_before_leaving_in_progress(facts: TransitionFacts) -> None:
             "from": facts.from_status.value,
             "to": facts.to_status.value,
             "entry_type": "summary",
+        },
+    )
+
+
+def check_done_is_reached_by_closing(facts: TransitionFacts) -> None:
+    """`* → done`: ход пришёл из сценария закрытия, а не из перевода статуса.
+
+    Закрытие — одно действие: вердикты, сводка и смена статуса ложатся одной
+    транзакцией, и частичного закрытия не бывает (`CONCEPT.md`, 3.3). Перевод статуса
+    отдельным ходом оставлял бы вторую дверь в `done`, а два пути в один статус — это
+    два поведения, из которых проверяется одно.
+
+    Проверка стоит перед вердиктами намеренно: отказ называет дверь, а не перечисляет,
+    чего в деле не хватает, — иначе вызывающий чинил бы дело вместо вызова.
+    """
+    if facts.to_status is not TaskStatus.DONE or facts.closing:
+        return
+    raise ClosingNotATransitionError(
+        details={
+            "key": facts.key,
+            "from": facts.from_status.value,
+            "to": facts.to_status.value,
         },
     )
 
@@ -763,6 +791,10 @@ def check_children_closed_before_closing(facts: TransitionFacts) -> None:
 #: `TRANSITIONS` при этом не трогать — она описывает, какие ходы существуют, а не при
 #: каких условиях они проходят.
 TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
+    # Первой: она отвечает не «чего не хватает в деле», а «этот ход не той дверью», и
+    # вперёд неё отказ про недостающую сводку отправил бы вызывающего чинить дело
+    # вместо вызова.
+    check_done_is_reached_by_closing,
     check_reason_for_step_back_cancel_or_wait,
     check_sections_filled_before_open,
     check_summary_before_leaving_in_progress,

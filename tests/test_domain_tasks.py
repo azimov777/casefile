@@ -7,6 +7,7 @@ import pytest
 
 from app.domain.errors import (
     ChecksNotPassedError,
+    ClosingNotATransitionError,
     InvalidTaskKeyError,
     SummaryRequiredError,
     TaskBlockedError,
@@ -59,6 +60,7 @@ def facts(
     pending_checks: tuple[CheckGap, ...] | None = (),
     blockers: tuple[str, ...] | None = (),
     children: tuple[str, ...] | None = (),
+    closing: bool = True,
 ) -> TransitionFacts:
     """Факты перехода, у которых по умолчанию сошлось всё, кроме проверяемого.
 
@@ -78,6 +80,7 @@ def facts(
         checks_without_passed_verdict=pending_checks,
         open_blockers=blockers,
         unclosed_children=children,
+        closing=closing,
     )
 
 
@@ -278,7 +281,7 @@ def test_the_section_check_only_guards_the_move_into_open() -> None:
 
 def test_the_check_list_is_the_extension_point() -> None:
     """Следующие задачи добавляют проверки в список, а не в таблицу."""
-    assert len(TRANSITION_CHECKS) == 6
+    assert len(TRANSITION_CHECKS) == 7
     assert all(callable(check) for check in TRANSITION_CHECKS)
 
 
@@ -382,6 +385,52 @@ def test_closing_lists_the_checks_without_a_passing_verdict() -> None:
     ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, pending_checks=()))
 
 
+def test_done_is_reached_by_closing_and_not_by_a_status_move() -> None:
+    """Единственная дверь в `done` — сценарий закрытия, и отказ говорит именно это.
+
+    Проверка стоит **первой** в списке: у задачи без сводки и без вердиктов перевод
+    статуса обязан услышать «не той дверью», а не список того, чего не хватает в деле.
+    """
+    with pytest.raises(ClosingNotATransitionError) as error:
+        ensure_transition_allowed(
+            facts(
+                TaskStatus.IN_PROGRESS,
+                TaskStatus.DONE,
+                has_summary=False,
+                pending_checks=None,
+                closing=False,
+            )
+        )
+
+    assert error.value.code == "closing_not_a_transition"
+    assert error.value.details["to"] == TaskStatus.DONE.value
+
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, closing=True))
+
+
+def test_closing_does_not_excuse_the_other_checks() -> None:
+    """Признак закрытия открывает дверь, но ничего не отменяет за ней."""
+    with pytest.raises(SummaryRequiredError):
+        ensure_transition_allowed(
+            facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, has_summary=False, closing=True)
+        )
+
+    with pytest.raises(ChecksNotPassedError):
+        ensure_transition_allowed(
+            facts(
+                TaskStatus.IN_PROGRESS,
+                TaskStatus.DONE,
+                pending_checks=(CheckGap(check_no=1, reason=CheckGapReason.NO_VERDICT),),
+                closing=True,
+            )
+        )
+
+    with pytest.raises(TaskHasUnclosedChildrenError):
+        ensure_transition_allowed(
+            facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, children=("TRK-4",), closing=True)
+        )
+
+
 def test_the_verdict_check_only_guards_the_way_into_done() -> None:
     """Шаг назад и отмена вердиктов не требуют: правило привязано к паре статусов."""
     ensure_transition_allowed(
@@ -472,8 +521,21 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
         checks=("первая", "вторая"),
     )
 
-    with pytest.raises(SummaryRequiredError):
+    with pytest.raises(ClosingNotATransitionError):
         ensure_transition_allowed(unfilled)
+
+    with pytest.raises(SummaryRequiredError):
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.IN_PROGRESS,
+                to_status=TaskStatus.DONE,
+                reason=None,
+                sections=FILLED,
+                checks=("первая", "вторая"),
+                closing=True,
+            )
+        )
 
     with pytest.raises(ChecksNotPassedError) as error:
         ensure_transition_allowed(
@@ -485,6 +547,7 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
                 sections=FILLED,
                 checks=("первая", "вторая"),
                 has_summary_since_in_progress=True,
+                closing=True,
             )
         )
 
@@ -521,6 +584,7 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
                 checks=(),
                 has_summary_since_in_progress=True,
                 checks_without_passed_verdict=(),
+                closing=True,
             )
         )
 

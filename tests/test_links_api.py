@@ -39,17 +39,25 @@ async def move(client: AsyncClient, key: str, to: str, **body: Any) -> Any:
     return await client.post(f"/api/v1/tasks/{key}/transition", json={"to": to, **body})
 
 
+async def closing(client: AsyncClient, key: str) -> Any:
+    """Закрывает задачу: сводка и вердикт по каждой проверке одним запросом."""
+    return await client.post(
+        f"/api/v1/tasks/{key}/close",
+        json={
+            "summary": SUMMARY,
+            "verdicts": [
+                {"check_no": check_no, "outcome": "passed"}
+                for check_no in range(1, len(READY["checks"]) + 1)
+            ],
+        },
+    )
+
+
 async def close(client: AsyncClient, key: str) -> None:
-    """Проводит задачу до `done`, подшивая сводку и вердикт по каждой проверке."""
+    """Проводит задачу до `done`: в работу, потом закрытием."""
     assert (await move(client, key, "open")).status_code == 200
     assert (await move(client, key, "in_progress")).status_code == 200
-    await client.post(f"/api/v1/tasks/{key}/entries", json={"type": "summary", "payload": SUMMARY})
-    for check_no in range(1, len(READY["checks"]) + 1):
-        await client.post(
-            f"/api/v1/tasks/{key}/entries",
-            json={"type": "verdict", "payload": {"check_no": check_no, "outcome": "passed"}},
-        )
-    assert (await move(client, key, "done")).status_code == 200, key
+    assert (await closing(client, key)).status_code == 200, key
 
 
 async def link(client: AsyncClient, key: str, kind: str, other: str) -> Any:
@@ -288,22 +296,15 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
 
     assert (await move(auth_client, parent, "open")).status_code == 200
     assert (await move(auth_client, parent, "in_progress")).status_code == 200
-    await auth_client.post(
-        f"/api/v1/tasks/{parent}/entries", json={"type": "summary", "payload": SUMMARY}
-    )
-    await auth_client.post(
-        f"/api/v1/tasks/{parent}/entries",
-        json={"type": "verdict", "payload": {"check_no": 1, "outcome": "passed"}},
-    )
 
-    refused = await move(auth_client, parent, "done")
+    refused = await closing(auth_client, parent)
 
     assert refused.status_code == 409
     assert refused.json()["error"]["code"] == "task_has_unclosed_children"
     assert refused.json()["error"]["details"]["children"] == [child]
 
     assert (await move(auth_client, child, "cancelled", reason="не понадобился")).status_code == 200
-    assert (await move(auth_client, parent, "done")).status_code == 200
+    assert (await closing(auth_client, parent)).status_code == 200
 
 
 async def test_a_parent_is_not_cancelled_while_a_child_is_open(
@@ -350,19 +351,19 @@ async def test_a_waiting_child_holds_both_ways_of_closing_a_parent(
 
     assert (await move(auth_client, parent, "open")).status_code == 200
     assert (await move(auth_client, parent, "in_progress")).status_code == 200
+    # Сводка нужна отмене: её закрытие не подшивает, а требование выхода из работы
+    # осталось прежним.
     await auth_client.post(
         f"/api/v1/tasks/{parent}/entries", json={"type": "summary", "payload": SUMMARY}
     )
-    await auth_client.post(
-        f"/api/v1/tasks/{parent}/entries",
-        json={"type": "verdict", "payload": {"check_no": 1, "outcome": "passed"}},
-    )
 
-    for to, body in (("done", {}), ("cancelled", {"reason": "передумали"})):
-        refused = await move(auth_client, parent, to, **body)
-        assert refused.status_code == 409, to
-        assert refused.json()["error"]["code"] == "task_has_unclosed_children", to
-        assert refused.json()["error"]["details"]["children"] == [child], to
+    for where, refused in (
+        ("done", await closing(auth_client, parent)),
+        ("cancelled", await move(auth_client, parent, "cancelled", reason="передумали")),
+    ):
+        assert refused.status_code == 409, where
+        assert refused.json()["error"]["code"] == "task_has_unclosed_children", where
+        assert refused.json()["error"]["details"]["children"] == [child], where
 
 
 # --- Записи о связях --------------------------------------------------------------------

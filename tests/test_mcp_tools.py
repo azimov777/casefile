@@ -57,6 +57,7 @@ TASK_TOOLS = {
     "create_task",
     "update_task",
     "transition",
+    "close_task",
     "add_summary",
     "add_entry",
     "ask",
@@ -83,6 +84,14 @@ DONE_LINES = ("Нашёл, где сгорает номер", "вторая ст
 #: и ничего из присланного им.
 APPENDED_FIELDS = {"no", "seq", "task_key", "author", "title", "created_at"}
 
+#: Сводка, которой закрывают задачу в тестах закрытия.
+CLOSING_SUMMARY = {
+    "done": "Проверки прогнаны, выход готов",
+    "remaining": "Ничего",
+    "blockers": "Нет",
+    "next_step": "Шагов нет, задача закрыта",
+}
+
 #: Аргументы, с которыми инструмент набора `main` доходит до проверки прав. Значения
 #: намеренно осмысленные: отказ должен приходить из прав, а не из разбора аргументов.
 MAIN_TOOL_CALLS: dict[str, dict[str, Any]] = {
@@ -106,7 +115,7 @@ async def open_task(db_session: AsyncSession, task_actor: Actor, task: Task) -> 
 async def test_a_task_token_sees_exactly_the_working_cycle(
     mcp_session: Connect, task_secret: str
 ) -> None:
-    """Обзорная проверка 1: восемнадцать инструментов рабочего цикла и ни одного лишнего."""
+    """Обзорная проверка 1: девятнадцать инструментов рабочего цикла и ни одного лишнего."""
     async with mcp_session(task_secret) as session:
         listed = {tool.name for tool in (await session.list_tools()).tools}
 
@@ -1041,10 +1050,15 @@ async def test_asking_an_unknown_participant_is_refused(
 async def test_a_verdict_gates_the_move_to_done(
     mcp_session: Connect, task_secret: str, queue: Queue
 ) -> None:
-    """`in_progress → done` требует по каждой проверке последний вердикт `passed`.
+    """Закрытие требует по каждой проверке последний вердикт `passed`.
 
     Отказ обязан объяснять, **почему** проверка не засчитана: пройденная в нём не
     упоминается вовсе, непройденная приходит с причиной — `no_verdict` или `failed`.
+
+    Вердикт по первой проверке подшит по ходу работы, по второй приезжает в самом
+    закрытии: требование смотрит на дело, а не на состав вызова. Провальный вердикт,
+    приехавший закрытием, в деле не остаётся — отказ откатывает вызов целиком; провал
+    подшивают `add_verdict` по ходу работы, там он и остаётся историей.
     """
     del queue
     async with mcp_session(task_secret) as session:
@@ -1082,31 +1096,201 @@ async def test_a_verdict_gates_the_move_to_done(
             outcome="passed",
             evidence="Прогон зелёный",
         )
-        without_verdict = await refuse(session, "transition", key=key, to="done")
-        await call(
+        without_verdict = await refuse(session, "close_task", key=key, summary=CLOSING_SUMMARY)
+        failed = await refuse(
             session,
-            "add_verdict",
+            "close_task",
             key=key,
-            check_no=2,
-            outcome="failed",
-            evidence="Прогон красный",
+            summary=CLOSING_SUMMARY,
+            verdicts=[{"check_no": 2, "outcome": "failed", "evidence": "Прогон красный"}],
         )
-        failed = await refuse(session, "transition", key=key, to="done")
-        await call(
+        closed = await call(
             session,
-            "add_verdict",
+            "close_task",
             key=key,
-            check_no=2,
-            outcome="passed",
-            evidence="Прогон зелёный",
+            summary=CLOSING_SUMMARY,
+            verdicts=[{"check_no": 2, "outcome": "passed", "evidence": "Прогон зелёный"}],
         )
-        closed = await call(session, "transition", key=key, to="done")
 
     assert "checks_not_passed" in without_verdict
     assert '"checks": [{"check_no": 2, "reason": "no_verdict"}]' in without_verdict
     assert '"check_no": 1' not in without_verdict
     assert '"checks": [{"check_no": 2, "reason": "failed"}]' in failed
     assert closed["status"] == "done"
+
+
+# --- Закрытие -------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def closing_task(mcp_session: Connect, task_secret: str, queue: Queue) -> str:
+    """Задача с двумя проверками, взятая в работу: остаётся только закрыть.
+
+    Ключ строкой: сессия MCP коммитит на входе, и обращение к полю ORM-объекта после
+    этого ушло бы в базу мимо цикла событий (`tests/conftest.py`).
+    """
+    del queue
+    async with mcp_session(task_secret) as session:
+        created = await call(
+            session,
+            "create_task",
+            queue="TRK",
+            title="Задача под закрытие",
+            description="Две проверки, артефакт и сводка",
+            sections={
+                "goal": "Цель",
+                "context": "Контекст",
+                "constraints": "Ограничения",
+                "output": "Выход",
+                "checks": ["первая", "вторая"],
+            },
+        )
+        key = str(created["key"])
+        await call(session, "transition", key=key, to="open")
+        await call(session, "transition", key=key, to="in_progress")
+    return key
+
+
+async def test_closing_files_the_whole_package_in_one_call(
+    mcp_session: Connect, task_secret: str, closing_task: str
+) -> None:
+    """`TRK-32`: артефакт, два вердикта, сводка и переход — один вызов вместо пяти.
+
+    Проверяется и то, что пакет остаётся **пакетом записей**, а не одной склеенной:
+    номера в ответе идут подряд и совпадают с описью дела.
+    """
+    key = closing_task
+    async with mcp_session(task_secret) as session:
+        closed = await call(
+            session,
+            "close_task",
+            key=key,
+            summary=CLOSING_SUMMARY,
+            verdicts=[
+                {"check_no": 1, "outcome": "passed", "evidence": "Прогон зелёный"},
+                {"check_no": 2, "outcome": "passed", "evidence": "Линтер чист"},
+            ],
+            entries=[
+                {"type": "artifact", "title": "Коммит `a1b2c3d`", "body": "Ветка `task/trk-32`"}
+            ],
+        )
+        package = await call(session, "get_task", key=key)
+
+    assert closed["status"] == "done"
+    assert set(closed) == {"key", "status", "version", "entries"}
+    assert all(set(item) == APPENDED_FIELDS for item in closed["entries"])
+    filed = package["index"][-5:]
+    assert [item["type"] for item in filed] == [
+        "artifact",
+        "verdict",
+        "verdict",
+        "summary",
+        "status_changed",
+    ]
+    assert [item["no"] for item in closed["entries"]] == [item["no"] for item in filed]
+    assert package["transitions"] == [], "закрытая задача никуда не переводится"
+
+
+async def test_a_refused_closing_files_nothing_at_all(
+    mcp_session: Connect, task_secret: str, closing_task: str
+) -> None:
+    """`TRK-32`, обзорная проверка 2: частичного закрытия не бывает.
+
+    Вердикт ссылается на проверку, которой в задаче нет. Отказ приходит на нём — то
+    есть после того, как артефакт и первый вердикт уже подшиты, — и обязан унести с
+    собой всё: и записи, и сводку, и статус. Три вердикта из четырёх и не подшитая
+    сводка хуже, чем нетронутое дело: преемник читает такое дело как законченную работу.
+    """
+    key = closing_task
+    async with mcp_session(task_secret) as session:
+        before = await call(session, "get_task", key=key)
+        failure = await refuse(
+            session,
+            "close_task",
+            key=key,
+            summary=CLOSING_SUMMARY,
+            verdicts=[
+                {"check_no": 1, "outcome": "passed", "evidence": "Прогон зелёный"},
+                {"check_no": 7, "outcome": "passed", "evidence": "Такой проверки в задаче нет"},
+            ],
+            entries=[{"type": "artifact", "title": "Коммит `a1b2c3d`"}],
+        )
+        after = await call(session, "get_task", key=key)
+
+    assert "entry_fields_invalid" in failure, failure
+    assert after["index"] == before["index"], "отказ оставил в деле записи"
+    assert after["task"]["status"] == "in_progress"
+    assert after["task"]["version"] == before["task"]["version"]
+
+
+async def test_a_status_move_does_not_close_a_task(
+    mcp_session: Connect, task_secret: str, closing_task: str
+) -> None:
+    """`TRK-32`, обзорная проверка 3: снятый путь закрытия отвечает отказом, а не работой."""
+    key = closing_task
+    async with mcp_session(task_secret) as session:
+        failure = await refuse(session, "transition", key=key, to="done")
+        package = await call(session, "get_task", key=key)
+
+    assert "closing_not_a_transition" in failure, failure
+    assert package["task"]["status"] == "in_progress"
+
+
+async def test_closing_without_a_summary_is_refused_by_the_shape(
+    mcp_session: Connect, task_secret: str, closing_task: str
+) -> None:
+    """`TRK-32`: сводка — обязательный аргумент закрытия, а не пожелание.
+
+    Требование «сводка после последнего входа в `in_progress`» никуда не делось, но
+    теперь оно ещё и в форме вызова: закрыть задачу, не написав справку преемнику,
+    нечем.
+    """
+    key = closing_task
+    async with mcp_session(task_secret) as session:
+        result = await session.call_tool(
+            "close_task",
+            {
+                "key": key,
+                "verdicts": [{"check_no": 1, "outcome": "passed"}],
+            },
+        )
+
+    assert result.is_error, tool_text(result)
+
+
+async def test_a_repeated_closing_answers_with_the_first_result(
+    mcp_session: Connect, task_secret: str, closing_task: str
+) -> None:
+    """Повтор по ключу идемпотентности не закрывает задачу второй раз.
+
+    Случай не надуманный: закрытие — последний вызов агента, и оборваться между
+    отправкой и ответом он может ровно на нём. Повтор обязан ответить первым
+    результатом, а не отказом «переход не из таблицы» с уже закрытой задачей.
+    """
+    key = closing_task
+    arguments: dict[str, Any] = {
+        "key": key,
+        "summary": CLOSING_SUMMARY,
+        "verdicts": [
+            {"check_no": 1, "outcome": "passed", "evidence": "Прогон зелёный"},
+            {"check_no": 2, "outcome": "passed", "evidence": "Линтер чист"},
+        ],
+        "idempotency_key": str(uuid.uuid4()),
+    }
+
+    async with mcp_session(task_secret) as session:
+        first = await call(session, "close_task", **arguments)
+        again = await call(session, "close_task", **arguments)
+        conflict = await refuse(
+            session,
+            "close_task",
+            **{**arguments, "summary": {**CLOSING_SUMMARY, "done": "Совсем другое"}},
+        )
+        package = await call(session, "get_task", key=key)
+
+    assert first == again
+    assert "idempotency_key_reused" in conflict
+    assert [item["type"] for item in package["index"]].count("summary") == 1
 
 
 # --- Связи ----------------------------------------------------------------------------

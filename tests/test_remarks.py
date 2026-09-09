@@ -87,16 +87,20 @@ async def file_entry(client: AsyncClient, key: str, **body: Any) -> Any:
 
 
 async def close(client: AsyncClient, key: str) -> None:
-    """Проводит задачу до `done`, подшивая сводку и вердикт по каждой проверке."""
+    """Проводит задачу до `done`: в работу, потом закрытием со сводкой и вердиктами."""
     for to in ("open", "in_progress"):
         moved = await client.post(f"/api/v1/tasks/{key}/transition", json={"to": to})
         assert moved.status_code == 200, moved.text
-    await file_entry(client, key, type="summary", payload=SUMMARY)
-    for check_no in range(1, len(READY["checks"]) + 1):
-        await file_entry(
-            client, key, type="verdict", payload={"check_no": check_no, "outcome": "passed"}
-        )
-    done = await client.post(f"/api/v1/tasks/{key}/transition", json={"to": "done"})
+    done = await client.post(
+        f"/api/v1/tasks/{key}/close",
+        json={
+            "summary": SUMMARY,
+            "verdicts": [
+                {"check_no": check_no, "outcome": "passed"}
+                for check_no in range(1, len(READY["checks"]) + 1)
+            ],
+        },
+    )
     assert done.status_code == 200, done.text
 
 

@@ -300,6 +300,44 @@ async def count_open_questions(session: AsyncSession, *, participant: Participan
     return await EntryRepository(session).count_questions(addressee=participant.name)
 
 
+# --- Что подшивают одним вызовом ------------------------------------------------------
+#
+# Формы входа, а не записи: значения лежат здесь такими, какими их прислал клиент, и
+# проверяет их домен в `build_entry` — как и у одиночных обёрток ниже. Нужны они
+# закрытию (`app/services/tasks.py`, `close_task`): оно подшивает несколько записей и
+# переводит статус одной транзакцией, и оба интерфейса собирают его вход из этих трёх
+# форм, а не каждый из своих.
+
+
+@dataclass(frozen=True, slots=True)
+class EntryFiling:
+    """Запись без нагрузки: тип, заголовок, тело и ссылки."""
+
+    type: Any
+    title: Any
+    body: Any = ""
+    refs: Sequence[Any] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class VerdictFiling:
+    """Исход одной обзорной проверки и доказательство к нему."""
+
+    check_no: Any
+    outcome: Any
+    evidence: Any = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryFiling:
+    """Четыре части сводки. Заголовка нет: его выводит домен из `done`."""
+
+    done: Any
+    remaining: Any
+    blockers: Any
+    next_step: Any
+
+
 # --- Записи агента --------------------------------------------------------------------
 
 

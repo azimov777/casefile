@@ -438,6 +438,76 @@ class TaskChanges(BaseModel):
     priority: TaskPriority = unset_field(description="Приоритет", examples=[TaskPriority.HIGH])
 
 
+# --- Закрытие -------------------------------------------------------------------------
+#
+# Поля вложенных моделей объявлены **теми же** аннотациями, что и одиночные аргументы
+# подшивающих инструментов: описание у части сводки одно на весь сервер, и второй его
+# копии, которая разойдётся с первой, здесь нет.
+
+
+class ClosingSummary(BaseModel):
+    """Финальная сводка. Заголовка не принимает: им становится первая строка `done`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    done: SummaryDoneArg
+    remaining: SummaryRemainingArg
+    blockers: SummaryBlockersArg
+    next_step: SummaryNextStepArg
+
+
+class ClosingVerdict(BaseModel):
+    """Исход одной обзорной проверки с доказательством."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    check_no: CheckNoArg
+    outcome: VerdictOutcomeArg
+    evidence: EvidenceArg = ""
+
+
+class ClosingEntry(BaseModel):
+    """Запись без нагрузки: та же форма, что у `add_entry`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: EntryTypeArg
+    title: EntryTitleArg
+    body: EntryBodyArg = ""
+    refs: EntryRefsArg = None
+
+
+ClosingSummaryArg = Annotated[
+    ClosingSummary,
+    Field(
+        description=(
+            "Сводка, которой задача закрывается. Подшивается последней, после присланных "
+            "записей и вердиктов, поэтому в описи она стоит ниже их и говорит об их исходе"
+        )
+    ),
+]
+ClosingVerdictsArg = Annotated[
+    list[ClosingVerdict] | None,
+    Field(
+        description=(
+            "Вердикты, которые подшиваются этим же вызовом. Список может быть пуст: "
+            "вердикты, подшитые раньше по ходу работы, засчитываются наравне, а "
+            "требование «положительный последний вердикт по каждой проверке» проверяет "
+            "сам переход"
+        )
+    ),
+]
+ClosingEntriesArg = Annotated[
+    list[ClosingEntry] | None,
+    Field(
+        description=(
+            "Записи, которые подшиваются перед вердиктами: обычно `artifact` с "
+            "указателями на результат"
+        )
+    ),
+]
+
+
 # --- Отбор задач ----------------------------------------------------------------------
 
 #: Что `search_tasks` просит по умолчанию. Узкий набор не оптимизация, а требование:

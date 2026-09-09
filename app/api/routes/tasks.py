@@ -30,6 +30,7 @@ from app.api.schemas.search import (
     search_page,
 )
 from app.api.schemas.tasks import (
+    TaskClosing,
     TaskCreate,
     TaskFeaturesRead,
     TaskPackageRead,
@@ -267,6 +268,9 @@ async def transition_task(
     `details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и
     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
     Переход подшивает `status_changed` с `from`, `to` и `reason`.
+
+    Цель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу
+    одной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.
     """
     task = await service.get_task(session, task_key)
     mutation = await service.transition_task(
@@ -278,6 +282,62 @@ async def transition_task(
         expected_version=payload.version,
     )
     return DataResponse[TaskRead](data=TaskRead.model_validate(mutation.task))
+
+
+@router.post("/{task_key}/close", summary="Close a task")
+async def close_task(
+    task_key: TaskKeyPath,
+    payload: TaskClosing,
+    session: SessionDep,
+    actor: ActorDep,
+    once: OnceDep,
+) -> DataResponse[TaskRead]:
+    """Подшивает записи, вердикты и финальную сводку и переводит задачу в `done` — всё
+    одним запросом и одной транзакцией.
+
+    Единственный путь в `done`: у перехода эта цель отвечает `409
+    closing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части не
+    оставляет в деле ни одной записи и статуса не меняет.
+
+    Порядок подшивки: присланные записи, вердикты, сводка. Требования выхода прежние и
+    проверяются после подшивки: положительный последний вердикт по каждой проверке
+    среди подшитых после последнего входа в `in_progress` (`409 checks_not_passed`),
+    закрытые дети (`409 task_has_unclosed_children`), задача в `in_progress` (`409
+    transition_not_allowed`). Вердикты этого запроса засчитываются наравне с подшитыми
+    раньше по ходу работы, поэтому список может быть пуст.
+
+    Повтор с тем же `Idempotency-Key` отвечает первым результатом и второго закрытия не
+    заводит. В ответе — карточка задачи; подшитые записи читаются `GET
+    /tasks/{task_key}/entries`.
+    """
+    task = await service.get_task(session, task_key)
+    given = payload.model_dump(mode="json")
+
+    async def close() -> DataResponse[TaskRead]:
+        closure = await service.close_task(
+            session,
+            task,
+            actor=actor,
+            summary=case_service.SummaryFiling(**given["summary"]),
+            verdicts=[case_service.VerdictFiling(**item) for item in given["verdicts"]],
+            entries=[
+                case_service.EntryFiling(
+                    type=item["type"],
+                    title=item["title"],
+                    body=item["body"],
+                    refs=item["refs"],
+                )
+                for item in given["entries"]
+            ],
+            expected_version=payload.version,
+        )
+        return DataResponse[TaskRead](data=TaskRead.model_validate(closure.task))
+
+    return await once.run(
+        DataResponse[TaskRead],
+        request={"task": task.key, "closing": given},
+        build=close,
+    )
 
 
 @router.post(

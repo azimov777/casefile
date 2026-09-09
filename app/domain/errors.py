@@ -178,6 +178,21 @@ class TransitionReasonRequiredError(ValidationError):
     message = "Transition requires a reason"
 
 
+class ClosingNotATransitionError(ConflictError):
+    """`done` достигается только сценарием закрытия, а не переводом статуса.
+
+    Закрытие подшивает вердикты и сводку и переводит задачу одной транзакцией: у него
+    свой вызов (`close_task` в MCP, `POST /tasks/{task_key}/close` в REST). Перевод
+    статуса в `done` отдельным ходом отклоняется — двумя дверями в `done` были бы два
+    поведения, из которых проверялось бы одно.
+
+    Конфликт состояния, а не ошибка формы: сам ход существует, у него другая дверь.
+    """
+
+    code = "closing_not_a_transition"
+    message = "Closing a task is a separate call, not a status transition"
+
+
 class TaskSectionsIncompleteError(ValidationError):
     """Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст.
 

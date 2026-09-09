@@ -134,6 +134,10 @@ class Transition:
 
     to: TaskStatus | str
     reason: str | None = None
+    #: Ход пришёл из закрытия (`close_task`), а не из перевода статуса. Только с этим
+    #: признаком домен пропускает переход в `done`; значение по умолчанию его запрещает,
+    #: поэтому вторая дверь в `done` не открывается по забывчивости.
+    closing: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +179,20 @@ class TaskMutation:
     @property
     def changed(self) -> bool:
         return bool(self.changes)
+
+
+@dataclass(frozen=True, slots=True)
+class TaskClosure:
+    """Результат закрытия: задача и всё, что подшил этот вызов, в порядке подшивки.
+
+    Записи целиком, а не номера, как у `TaskMutation`: короткий ответ закрытия называет
+    каждую подшитую запись тем же составом, каким её называет подшивающий инструмент
+    (`no`, `seq`, автор, время, выведенный заголовок), и собрать это из номеров было бы
+    нечем. Список кончается записью `status_changed`: закрытие — тоже страница дела.
+    """
+
+    task: Task
+    entries: tuple[Entry, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -365,6 +383,92 @@ async def transition_task(
     )
 
 
+async def close_task(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    summary: case_service.SummaryFiling,
+    verdicts: Sequence[case_service.VerdictFiling] = (),
+    entries: Sequence[case_service.EntryFiling] = (),
+    expected_version: int | None = None,
+) -> TaskClosure:
+    """Подшивает присланное и переводит задачу в `done` — одной транзакцией.
+
+    Единственная дверь в `done`: перевод статуса отдельным ходом домен отклоняет
+    (`check_done_is_reached_by_closing`). Транзакция здесь не своя — её держит вход
+    приложения, — и именно поэтому закрытие либо случается целиком, либо не оставляет
+    следа: отказ на любой записи, на любом вердикте или на самом переходе откатывает
+    всё вместе, включая занятый ключ идемпотентности.
+
+    Порядок подшивки — записи, вердикты, сводка — задаёт не удобство, а дисциплина
+    (`CONCEPT.md`, 5.3): сводка идёт последней, потому что она пересказывает исход
+    проверок, а не план. Требования выхода при этом никто не подменяет: их считает та же
+    проверка перехода, и считает **после** подшивки, поэтому вердикты этого вызова в
+    неё попадают наравне с подшитыми раньше по ходу работы. Задача, у которой проверка
+    осталась без положительного вердикта, не закроется и с полным пакетом.
+
+    Очередь изменений занимается первой, до подшивки: под ней задача перечитывается, и
+    дальше и номера записей, и факты перехода относятся к одному моменту.
+    """
+    ensure_scope(actor, TokenScope.TASK, action="task.close")
+    await lock_changes(session, task)
+    _ensure_version(task, expected_version)
+
+    filed: list[Entry] = []
+    for item in entries:
+        filed.append(
+            await case_service.add_entry(
+                session,
+                task,
+                actor=actor,
+                type=item.type,
+                title=item.title,
+                body=item.body,
+                refs=item.refs,
+            )
+        )
+    for verdict in verdicts:
+        filed.append(
+            await case_service.add_verdict(
+                session,
+                task,
+                actor=actor,
+                check_no=verdict.check_no,
+                outcome=verdict.outcome,
+                evidence=verdict.evidence,
+            )
+        )
+    filed.append(
+        await case_service.add_summary(
+            session,
+            task,
+            actor=actor,
+            done=summary.done,
+            remaining=summary.remaining,
+            blockers=summary.blockers,
+            next_step=summary.next_step,
+        )
+    )
+
+    mutation = await apply_task_changes(
+        session,
+        task,
+        actor=actor,
+        changes=TaskChanges(),
+        transition=Transition(to=TaskStatus.DONE, closing=True),
+        expected_version=expected_version,
+        action="task.close",
+    )
+    # Запись о переходе подшил переход, и наружу он отдаёт её номер, а не саму запись.
+    # Дочитывается она здесь, одним запросом по адресу «задача и номер»: ответ закрытия
+    # называет **всё**, что подшилось, и пропуск последней страницы читался бы как дыра
+    # в нумерации.
+    for no in mutation.entries:
+        filed.append(await case_service.read_entry(session, task, no, actor=actor))
+    return TaskClosure(task=task, entries=tuple(filed))
+
+
 async def apply_task_changes(
     session: AsyncSession,
     task: Task,
@@ -425,7 +529,9 @@ async def apply_task_changes(
     if transition is not None:
         to_status = parse_status(transition.to)
         reason = normalize_reason(transition.reason)
-        ensure_transition_allowed(await _transition_facts(session, task, to_status, reason))
+        ensure_transition_allowed(
+            await _transition_facts(session, task, to_status, reason, closing=transition.closing)
+        )
         status_change = (task.status, to_status, reason)
         recorded.append(
             TaskChange(
@@ -511,6 +617,8 @@ async def _transition_facts(
     task: Task,
     to_status: TaskStatus,
     reason: str | None,
+    *,
+    closing: bool = False,
 ) -> TransitionFacts:
     """Собирает факты для проверок перехода из состояния задачи, дела и связей.
 
@@ -558,6 +666,7 @@ async def _transition_facts(
         checks_without_passed_verdict=pending_checks,
         open_blockers=blockers,
         unclosed_children=children,
+        closing=closing,
     )
 
 
