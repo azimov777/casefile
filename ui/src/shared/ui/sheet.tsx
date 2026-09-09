@@ -12,6 +12,15 @@ import { cn } from '../lib';
  * фон под шторкой скрыт от программы чтения с экрана, прокрутка страницы под ней
  * заблокирована. Своими руками это тот же объём, что и меню из UI-36.
  *
+ * Движение шторки описано признаками, которые Radix печатает на узле сам:
+ * `data-[state=open]` и `data-[state=closed]`. Отсюда же требование к его виду —
+ * `@keyframes`, а не `transition`: узел до конца выхода держит `Presence`, а он ждёт
+ * `animationend` и переход не заметит. Имена движения объявлены в `theme.css`
+ * (`--animate-sheet-*`, `--animate-overlay-*`) вместе с длительностью и кривой из
+ * словаря UI-59: своё число здесь вывело бы шторку из-под `prefers-reduced-motion`.
+ * Подложка гаснет и появляется теми же длительностью и кривой — она часть того же
+ * события, а не отдельная жизнь.
+ *
  * Полный `Sidebar` из shadcn/ui сюда не взят намеренно: он держит свёрнутость
  * в cookie, а состояние в этом приложении живёт в адресе (`CONVENTIONS.md`,
  * «Состояние»). На широком экране панель стоит всегда и сворачиваться не должна —
@@ -40,7 +49,12 @@ export function Sheet({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ground/70" />
+        <DialogPrimitive.Overlay
+          className={cn(
+            'fixed inset-0 z-40 bg-ground/70',
+            'data-[state=open]:animate-overlay-in data-[state=closed]:animate-overlay-out',
+          )}
+        />
         <DialogPrimitive.Content
           onCloseAutoFocus={(event) => {
             if (returnFocusTo?.current == null) return;
@@ -51,6 +65,7 @@ export function Sheet({
             'fixed inset-y-0 left-0 z-50 flex w-(--ui-side) flex-col',
             'border-r border-line bg-surface shadow-raised',
             'focus-visible:outline-none',
+            'data-[state=open]:animate-sheet-in data-[state=closed]:animate-sheet-out',
           )}
         >
           <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
