@@ -89,20 +89,12 @@ QUOTED = re.compile(r"`([^`]+)`")
 #: Похоже на путь в репозитории: расширение из тех, что в проекте есть, либо косая черта.
 LOOKS_LIKE_PATH = re.compile(r"^[\w./-]+\.(py|md|yml|yaml|json|toml|ini|cfg|txt|sh|example)$")
 
-#: Файлы-история: механика снесена, файл оставлен целиком как материал для возможного
-#: возврата и помечен баннером в первых строках. Их «Где:» ведут в код, которого нет, и
-#: это честно ровно потому, что баннер стоит на всём файле, а не потерян среди живых
-#: записей. Список именно списком, а не поиском баннера в тексте: приписать себе
-#: освобождение от проверки одной строкой в шапке не должно быть возможно — файл
-#: попадает сюда правкой теста, которую видно на ревизии.
-HISTORY_ONLY = {"webhooks.md"}
-
 
 def _where_pointers() -> list[tuple[str, str, str]]:
     """Все указатели «Где:» живых заметок: файл, заголовок записи, текст поля."""
     found: list[tuple[str, str, str]] = []
     for path in sorted(NOTES_DIR.glob("*.md")):
-        if path.name in (FOLDER_MAP, *HISTORY_ONLY):
+        if path.name == FOLDER_MAP:
             continue
         chunks = re.split(r"^(?=## )", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
         for chunk in chunks:
@@ -111,22 +103,6 @@ def _where_pointers() -> list[tuple[str, str, str]]:
             if heading is not None and field is not None:
                 found.append((path.name, heading.group(1), field.group(1)))
     return found
-
-
-def test_every_history_only_note_carries_its_banner() -> None:
-    """Освобождение от проверки ниже стоит на баннере — значит, баннер обязан быть.
-
-    Без этой проверки файл из `HISTORY_ONLY` однажды окажется без пометки, и читатель
-    примет историю за описание текущего кода — ровно то, от чего освобождение и
-    отделяет его.
-    """
-    missing = [
-        name
-        for name in sorted(HISTORY_ONLY)
-        if "снесена задачей" not in (NOTES_DIR / name).read_text(encoding="utf-8")[:600]
-    ]
-
-    assert not missing, missing
 
 
 def test_every_where_pointer_leads_to_living_code() -> None:
