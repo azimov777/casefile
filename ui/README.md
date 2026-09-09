@@ -4,10 +4,11 @@
 и отвечает на вопросы; задачи создают и двигают агенты через MCP бэкенда.
 
 Бэкенд: репозиторий `tracker` рядом (`../tracker`), контракт в его `openapi.json`,
-карта для фронтенда в его `docs/FRONTEND.md`.
+коды ошибок в его `docs/ERRORS.md`; карта контракта для интерфейса — здесь,
+`docs/FRONTEND.md`.
 
-Что и зачем строим: `docs/CONCEPT.md`. Как строим: `docs/CONVENTIONS.md`. Порядок
-работ: `docs/ROADMAP.md`, задания в `docs/tasks/`.
+Что и зачем строим: `docs/CONCEPT.md`. Как строим: `docs/CONVENTIONS.md`. Задания
+приходят задачами трекера, очередь `UI`.
 
 Стек: React 19 и Vite, маршруты React Router, серверное состояние TanStack Query,
 клиент API из `openapi-typescript` и `openapi-fetch`. Оформление — Tailwind CSS 4
