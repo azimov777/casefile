@@ -6,6 +6,7 @@ export { Composer } from './composer';
 export { Markdown } from './markdown';
 export { QueryState, type QueryLike } from './query-state';
 export { Receipt } from './receipt';
+export { Reveal } from './reveal';
 export { Select } from './select';
 export { Sheet } from './sheet';
 export { RelativeTime } from './relative-time';
