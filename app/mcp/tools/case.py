@@ -88,7 +88,7 @@ def register(tools: Toolset) -> None:
         blockers: SummaryBlockersArg,
         next_step: SummaryNextStepArg,
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.EntryView:
+    ) -> views.AppendedEntryView:
         """Подшивает сводку: справку при передаче дела.
 
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
@@ -96,11 +96,15 @@ def register(tools: Toolset) -> None:
 
         Заголовок не принимается: им становится первая строка `done`. В описи сводка
         говорит о случившемся, как и все соседние строки.
+
+        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
+        трекером заголовок. Присланное обратно не едет; запись целиком — в
+        `read_entries`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> views.EntryView:
+            async def append() -> views.AppendedEntryView:
                 entry = await case_service.add_summary(
                     session,
                     task,
@@ -110,10 +114,10 @@ def register(tools: Toolset) -> None:
                     blockers=blockers,
                     next_step=next_step,
                 )
-                return views.entry(entry, task_key=task.key)
+                return views.appended_entry(entry, task_key=task.key)
 
             return await Once.of(add_summary, session, actor, idempotency_key).run(
-                result=views.EntryView,
+                result=views.AppendedEntryView,
                 request={
                     "task": task.key,
                     "done": done,
@@ -132,7 +136,7 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         refs: EntryRefsArg = None,
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.EntryView:
+    ) -> views.AppendedEntryView:
         """Подшивает запись без нагрузки: решение, попытку, находку, артефакт,
         замечание, заметку.
 
@@ -142,11 +146,15 @@ def register(tools: Toolset) -> None:
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
         `wait_journal`. Отказ: тип не из списка, пустой заголовок, ссылка в никуда —
         `entry_fields_invalid` со списком полей.
+
+        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор и время; `title` в нём
+        пуст — в описи стоит присланный заголовок. Присланное обратно не едет; запись
+        целиком — в `read_entries`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> views.EntryView:
+            async def append() -> views.AppendedEntryView:
                 entry = await case_service.add_entry(
                     session,
                     task,
@@ -156,10 +164,10 @@ def register(tools: Toolset) -> None:
                     body=body,
                     refs=refs or (),
                 )
-                return views.entry(entry, task_key=task.key)
+                return views.appended_entry(entry, task_key=task.key)
 
             return await Once.of(add_entry, session, actor, idempotency_key).run(
-                result=views.EntryView,
+                result=views.AppendedEntryView,
                 request={
                     "task": task.key,
                     "type": type,
@@ -178,7 +186,7 @@ def register(tools: Toolset) -> None:
         blocking: BlockingArg,
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.EntryView:
+    ) -> views.AppendedEntryView:
         """Задаёт вопрос участникам реестра. Доставки в трекере нет: адресат увидит
         вопрос, читая ленту или свою входящую.
 
@@ -188,11 +196,15 @@ def register(tools: Toolset) -> None:
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
         `wait_journal`. Отказ: адресата нет в реестре — `entry_fields_invalid`,
         `reason: unknown_participant`.
+
+        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор и время; `title` в нём
+        пуст — в описи стоит присланный заголовок. Присланное обратно не едет; запись
+        целиком — в `read_entries`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> views.EntryView:
+            async def append() -> views.AppendedEntryView:
                 entry = await case_service.ask(
                     session,
                     task,
@@ -202,10 +214,10 @@ def register(tools: Toolset) -> None:
                     body=body,
                     blocking=blocking,
                 )
-                return views.entry(entry, task_key=task.key)
+                return views.appended_entry(entry, task_key=task.key)
 
             return await Once.of(ask, session, actor, idempotency_key).run(
-                result=views.EntryView,
+                result=views.AppendedEntryView,
                 request={
                     "task": task.key,
                     "addressees": addressees,
@@ -222,7 +234,7 @@ def register(tools: Toolset) -> None:
         question_no: QuestionNoArg,
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.EntryView:
+    ) -> views.AppendedEntryView:
         """Отвечает на вопрос той же задачи. Отвечает любой держатель токена `task`, в
         том числе в чужой задаче.
 
@@ -232,18 +244,22 @@ def register(tools: Toolset) -> None:
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
         `wait_journal`. Отказ: номер не указывает на `question` этой задачи —
         `entry_fields_invalid`, `reason: unknown_entry` или `not_a_question`.
+
+        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
+        трекером заголовок. Присланное обратно не едет; запись целиком — в
+        `read_entries`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> views.EntryView:
+            async def append() -> views.AppendedEntryView:
                 entry = await case_service.answer(
                     session, task, actor=actor, question_no=question_no, body=body
                 )
-                return views.entry(entry, task_key=task.key)
+                return views.appended_entry(entry, task_key=task.key)
 
             return await Once.of(answer, session, actor, idempotency_key).run(
-                result=views.EntryView,
+                result=views.AppendedEntryView,
                 request={"task": task.key, "question_no": question_no, "body": body},
                 build=append,
             )
@@ -256,7 +272,7 @@ def register(tools: Toolset) -> None:
         task: ContinuationKeyArg = None,
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.EntryView:
+    ) -> views.AppendedEntryView:
         """Разбирает замечание к задаче: чем кончилось и куда ушла работа.
 
         Разбирает замечание любой исход, в том числе `needs_detail`: резолюция снимает
@@ -267,11 +283,15 @@ def register(tools: Toolset) -> None:
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
         `wait_journal`. Отказ: номер не указывает на `remark` этой задачи, `accepted`
         без `task` или `task` при другом исходе — `entry_fields_invalid`.
+
+        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
+        трекером заголовок. Присланное обратно не едет; запись целиком — в
+        `read_entries`.
         """
         async with runtime.call() as (session, actor):
             entry_task = await tasks_service.get_task(session, key)
 
-            async def append() -> views.EntryView:
+            async def append() -> views.AppendedEntryView:
                 entry = await case_service.resolve(
                     session,
                     entry_task,
@@ -281,10 +301,10 @@ def register(tools: Toolset) -> None:
                     continuation=task,
                     body=body,
                 )
-                return views.entry(entry, task_key=entry_task.key)
+                return views.appended_entry(entry, task_key=entry_task.key)
 
             return await Once.of(resolve, session, actor, idempotency_key).run(
-                result=views.EntryView,
+                result=views.AppendedEntryView,
                 request={
                     "task": entry_task.key,
                     "remark_no": remark_no,
@@ -302,7 +322,7 @@ def register(tools: Toolset) -> None:
         outcome: VerdictOutcomeArg,
         evidence: EvidenceArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.EntryView:
+    ) -> views.AppendedEntryView:
         """Подшивает исход одной обзорной проверки.
 
         `in_progress → done` смотрит на последний вердикт по каждой проверке и считает
@@ -312,11 +332,15 @@ def register(tools: Toolset) -> None:
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
         `wait_journal`. Отказ: проверки с таким номером в задаче нет —
         `entry_fields_invalid`.
+
+        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
+        трекером заголовок. Присланное обратно не едет; запись целиком — в
+        `read_entries`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
 
-            async def append() -> views.EntryView:
+            async def append() -> views.AppendedEntryView:
                 entry = await case_service.add_verdict(
                     session,
                     task,
@@ -325,10 +349,10 @@ def register(tools: Toolset) -> None:
                     outcome=outcome,
                     evidence=evidence,
                 )
-                return views.entry(entry, task_key=task.key)
+                return views.appended_entry(entry, task_key=task.key)
 
             return await Once.of(add_verdict, session, actor, idempotency_key).run(
-                result=views.EntryView,
+                result=views.AppendedEntryView,
                 request={
                     "task": task.key,
                     "check_no": check_no,
