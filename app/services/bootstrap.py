@@ -43,7 +43,7 @@ async def read_bootstrap(session: AsyncSession, *, actor: Actor) -> Bootstrap:
     уровень группировки, и установка, у которой их больше двух сотен, первым экраном
     всё равно не описывается. Такой установке нужен `GET /api/v1/queues` с курсором;
     поле `queues_total` здесь не заводится, потому что объём первого экрана закрыт
-    (`docs/tasks`, задача 29): текущий участник, очереди, число вопросов.
+    (`TRK-29`): текущий участник, очереди, число вопросов.
     """
     page = await queues_service.list_queues(session, actor=actor, limit=MAX_PAGE_SIZE)
     open_questions = (
