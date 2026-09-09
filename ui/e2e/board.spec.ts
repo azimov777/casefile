@@ -287,6 +287,47 @@ test('столбцы одной ширины при любом сочетани�
   expect(opened).toEqual(mixed);
 });
 
+test('столбцы одной высоты при резко разной длине', async ({ page, request }) => {
+  // Столбец и есть отбор по статусу: если длинный и короткий стоят рядом одной
+  // высоты по числу карточек, короткий гаснет пустотой, неотличимой от соседа
+  // (UI-67). Какой статус самый длинный и какой самый короткий, решает состав
+  // демо, а не память теста, — числа здесь не выписаны намеренно.
+  const all = await tasksByStatus(request);
+  const byLength = [...all.entries()].sort(([, left], [, right]) => right.length - left.length);
+  const longest = byLength[0];
+  const shortest = byLength[byLength.length - 1];
+  expect(longest, 'в демо нет ни одной задачи').toBeDefined();
+  expect(shortest, 'в демо нет ни одного статуса').toBeDefined();
+  const [longStatus, longKeys] = longest as [string, string[]];
+  const [shortStatus, shortKeys] = shortest as [string, string[]];
+
+  await silenceJournal(page);
+  // `collapsed=` — все столбцы развёрнуты, включая обычно свёрнутые `done` и `cancelled`.
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, longStatus).getByRole('article')).toHaveCount(longKeys.length);
+  await fontsReady(page);
+
+  const heights = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('section[aria-label]'))
+      .filter((node) => node.getAttribute('aria-label') !== 'Отбор задач')
+      .map((node) => Math.round(node.getBoundingClientRect().height * 10) / 10),
+  );
+
+  expect(heights.length).toBeGreaterThanOrEqual(5);
+  // Расхождение нулевое: столбец растянут по самому длинному (`items-stretch`
+  // на ряду), а не по числу собственных карточек.
+  expect(
+    Math.max(...heights) - Math.min(...heights),
+    JSON.stringify({
+      longStatus,
+      longKeys: longKeys.length,
+      shortStatus,
+      shortKeys: shortKeys.length,
+      heights,
+    }),
+  ).toBe(0);
+});
+
 test('у карточек столбца подвал на одном месте, а название не длиннее двух строк', async ({
   page,
   request,
