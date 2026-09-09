@@ -16,7 +16,13 @@ import {
 } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
-import { ENTRY_TYPES, isServiceEntry, type Entry, type EntryType } from '@/entities/entry';
+import {
+  ENTRY_TYPES,
+  factsOfEntry,
+  isServiceEntry,
+  type Entry,
+  type EntryType,
+} from '@/entities/entry';
 import { setToken } from '@/shared/api';
 
 let seen: URL[] = [];
@@ -66,7 +72,7 @@ function longCase(entries: Entry[]) {
   return http.get(`${API}/api/v1/tasks/DEMO-1`, () =>
     data(
       taskPackage('DEMO-1', {
-        index: entries.map((entry) => heading(entry.no, entry.type, entry.title)),
+        index: entries.map((entry) => heading(entry.no, factsOfEntry(entry), entry.title)),
       }),
     ),
   );
