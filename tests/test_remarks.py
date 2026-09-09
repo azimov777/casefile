@@ -674,11 +674,17 @@ async def test_resolve_refuses_a_continuation_with_a_wrong_outcome_in_mcp(
             outcome="declined",
             body="Так и задумано",
         )
+        stored = await call(session, "read_entries", key=key, nos=[resolved["no"]])
         package = await call(session, "get_task", key=key)
 
     assert "entry_fields_invalid" in failure
     # Ключ продолжения приезжает пустым, а не отсутствует: форма нагрузки одна и та же
     # в REST и в MCP, и «поля нет» против «поле пустое» читалось бы как два контракта.
-    assert resolved["payload"] == {"remark_no": filed["no"], "outcome": "declined", "task": None}
+    # Нагрузку смотрит `read_entries`: сам `resolve` отвечает коротко (TRK-35).
+    assert stored["items"][0]["payload"] == {
+        "remark_no": filed["no"],
+        "outcome": "declined",
+        "task": None,
+    }
     assert package["remarks"] == []
     assert package["features"]["open_remarks"] == 0

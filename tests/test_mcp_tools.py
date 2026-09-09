@@ -79,6 +79,10 @@ MAIN_TOOLS = {"create_queue", "update_queue", "register_participant", "update_pa
 #: читается хуже, чем список строк.
 DONE_LINES = ("Нашёл, где сгорает номер", "вторая строка")
 
+#: Поля короткого ответа подшивающего инструмента (TRK-35): всё, чего агент не знал,
+#: и ничего из присланного им.
+APPENDED_FIELDS = {"no", "seq", "task_key", "author", "title", "created_at"}
+
 #: Аргументы, с которыми инструмент набора `main` доходит до проверки прав. Значения
 #: намеренно осмысленные: отказ должен приходить из прав, а не из разбора аргументов.
 MAIN_TOOL_CALLS: dict[str, dict[str, Any]] = {
@@ -860,6 +864,9 @@ async def test_a_summary_takes_its_title_from_what_was_done(
 
     Источник — `done`: строка описи говорит о случившемся (TRK-34). Следующий шаг здесь
     непустой и другой, поэтому возврат источника к нему тест не пропустит.
+
+    Собранный заголовок приходит прямо в ответе, а части сводки — нет (TRK-35): их
+    читает `read_entries`, и он же показывает, что подшито ровно присланное.
     """
     async with mcp_session(task_secret) as session:
         summary = await call(
@@ -871,10 +878,108 @@ async def test_a_summary_takes_its_title_from_what_was_done(
             blockers="Ничего",
             next_step="Перенести вызов последним шагом",
         )
+        stored = await call(session, "read_entries", key=task.key, nos=[summary["no"]])
 
     assert summary["title"] == DONE_LINES[0]
-    assert summary["title"] != summary["payload"]["next_step"]
-    assert summary["payload"]["blockers"] == "Ничего"
+    payload = stored["items"][0]["payload"]
+    assert summary["title"] != payload["next_step"]
+    assert payload["blockers"] == "Ничего"
+    assert payload["done"] == "\n".join(DONE_LINES)
+
+
+async def test_filing_an_entry_returns_only_what_the_agent_did_not_send(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Обзорная проверка 5 TRK-35: ответ подшивки короткий, а тело отдаёт `read_entries`.
+
+    Проверяется в паре, потому что осмысленны эти два факта только вместе: убрать из
+    ответа тело можно, лишь если взять его есть где. Заголовок здесь прислал агент, и в
+    ответе он `null` — эхом присланное не возвращается.
+    """
+    line = "Вызов `next_task_number` стоит первым и тратит номер на отказе"
+    body = "\n".join([line] * 20)
+    async with mcp_session(task_secret) as session:
+        filed = await call(
+            session,
+            "add_entry",
+            key=task.key,
+            type="finding",
+            title="Номер выдаётся до валидации",
+            body=body,
+            refs=[task.key],
+        )
+        stored = await call(session, "read_entries", key=task.key, nos=[filed["no"]])
+
+    assert set(filed) == APPENDED_FIELDS
+    assert filed["title"] is None
+    assert filed["task_key"] == task.key
+    assert filed["author"] == {"kind": "human", "signature": "owner"}
+    assert body not in json.dumps(filed, ensure_ascii=False)
+
+    entry = stored["items"][0]
+    assert entry["body"] == body
+    assert entry["title"] == "Номер выдаётся до валидации"
+    assert entry["refs"] == [task.key]
+
+
+async def test_the_short_answer_carries_the_next_move(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Обзорная проверка 3 TRK-35: `no` адресует ответ, `seq` продолжает ленту.
+
+    Оба хода делаются **из самого ответа**, без промежуточного чтения: иначе экономия
+    была бы мнимой — вместо возвращённой записи агент платил бы за `get_task`.
+    """
+    async with mcp_session(task_secret) as session:
+        question = await call(
+            session,
+            "ask",
+            key=task.key,
+            addressees=["owner"],
+            title="Какой ключ канонический?",
+            blocking=False,
+        )
+        answered = await call(
+            session, "answer", key=task.key, question_no=question["no"], body="Верхний"
+        )
+        tail = await call(session, "wait_journal", after=question["seq"], task=task.key)
+
+    assert question["title"] is None, "заголовок вопроса прислал агент"
+    assert answered["title"] == f"Answer to {task.key}#{question['no']}"
+    assert [item["no"] for item in tail["items"]] == [answered["no"]]
+    assert tail["items"][0]["body"] == "Верхний"
+
+
+async def test_a_repeated_filing_answers_with_the_first_entry(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Обзорная проверка 4 TRK-35: повтор отдаёт тот же короткий ответ и одну запись.
+
+    Ответ лежит в ключе повтора сутки (`KEY_TTL`), поэтому форму ответа тест сверяет и
+    на повторе: сохранено должно быть короткое, а не запись целиком.
+    """
+    # Ключ задачи снят с модели заранее: отказ по чужому отпечатку откатывает
+    # транзакцию, после чего чтение поля ORM ушло бы в базу мимо цикла событий.
+    key = task.key
+    arguments: dict[str, Any] = {
+        "key": key,
+        "done": "Разобрался, где сгорает номер",
+        "remaining": "Перенести вызов",
+        "blockers": "Ничего",
+        "next_step": "Перенести вызов последним шагом",
+        "idempotency_key": str(uuid.uuid4()),
+    }
+
+    async with mcp_session(task_secret) as session:
+        first = await call(session, "add_summary", **arguments)
+        again = await call(session, "add_summary", **arguments)
+        conflict = await refuse(session, "add_summary", **{**arguments, "done": "Совсем другое"})
+        filed = await call(session, "read_entries", key=key, types=["summary"])
+
+    assert first == again
+    assert set(again) == APPENDED_FIELDS
+    assert "idempotency_key_reused" in conflict
+    assert [item["no"] for item in filed["items"]] == [first["no"]]
 
 
 async def test_add_entry_refuses_a_service_type(
