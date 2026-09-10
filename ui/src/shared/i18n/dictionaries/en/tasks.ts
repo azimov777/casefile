@@ -8,22 +8,22 @@ export const tasks = {
   // Сколько нашлось по отбору (таблица) и сколько прочитано (доска): это разные числа,
   // и называть их одним словом нельзя.
   found_zero: 'Nothing found',
-  found_one: '{{count}} task found',
-  found_other: '{{count}} tasks found',
+  found_one: '{{count, number}} task found',
+  found_other: '{{count, number}} tasks found',
   shown_zero: 'Nothing shown',
-  shown_one: '{{count}} task shown',
-  shown_other: '{{count}} tasks shown',
+  shown_one: '{{count, number}} task shown',
+  shown_other: '{{count, number}} tasks shown',
   empty: 'No tasks match these conditions',
   resetFilters: 'Reset the filters',
   beyond_one:
-    'There are no tasks on this page: {{count}} task matches these conditions, and it is on an earlier page',
+    'There are no tasks on this page: {{count, number}} task matches these conditions, and it is on an earlier page',
   beyond_other:
-    'There are no tasks on this page: {{count}} tasks match these conditions, and they are all on earlier pages',
+    'There are no tasks on this page: {{count, number}} tasks match these conditions, and they are all on earlier pages',
 
   table: {
     label: 'Tasks, the table scrolls sideways',
-    caption_one: '{{count}} task on this page',
-    caption_other: '{{count}} tasks on this page',
+    caption_one: '{{count, number}} task on this page',
+    caption_other: '{{count, number}} tasks on this page',
   },
 
   paging: {
@@ -31,19 +31,19 @@ export const tasks = {
     previous: 'Previous page',
     next: 'Next page',
     page: 'Page {{page}}',
-    pageOf: 'Page {{page}} of {{pages}}',
-    total_one: '{{count}} page',
-    total_other: '{{count}} pages',
+    pageOf: 'Page {{page}} of {{pages, number}}',
+    total_one: '{{count, number}} page',
+    total_other: '{{count, number}} pages',
   },
 
   board: {
     more: 'More',
     loadingMore: 'Reading…',
     partial: 'Not all tasks of the selection are shown: the columns are read on demand.',
-    all_one: 'All tasks of the selection are shown, {{count}} task in total.',
-    all_other: 'All tasks of the selection are shown, {{count}} tasks in total.',
+    all_one: 'All tasks of the selection are shown, {{count, number}} task in total.',
+    all_other: 'All tasks of the selection are shown, {{count, number}} tasks in total.',
     // «сколько-то из ?»: общее число знает только дочитанная до конца выдача.
-    ofUnknown: '{{count}} of ?',
+    ofUnknown: '{{count, number}} of ?',
     empty: 'Empty',
   },
 

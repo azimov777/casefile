@@ -21,10 +21,10 @@ export const caseScreen = {
       'There is no entry {{reference}} in the case: the number may be mistyped, or the link points at another task.',
   },
 
-  end_one: 'That is the whole case, {{count}} entry.',
-  end_other: 'That is the whole case, {{count}} entries.',
-  endOfWindow_one: 'That is the end of the case, {{count}} entry shown.',
-  endOfWindow_other: 'That is the end of the case, {{count}} entries shown.',
+  end_one: 'That is the whole case, {{count, number}} entry.',
+  end_other: 'That is the whole case, {{count, number}} entries.',
+  endOfWindow_one: 'That is the end of the case, {{count, number}} entry shown.',
+  endOfWindow_other: 'That is the end of the case, {{count, number}} entries shown.',
 
   filters: {
     label: 'Entry selection',

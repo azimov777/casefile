@@ -1,5 +1,7 @@
 import { CircleHelp, Flag, Lock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useLanguage } from '@/shared/i18n';
+import { formatNumber } from '@/shared/lib';
 import type { TaskFeatures } from '../api/tasks';
 
 /**
@@ -25,8 +27,11 @@ function Mark({
   icon: typeof Lock;
   label: string;
   tone: string;
-  /** `null` — признак без числа: он либо есть, либо нет. */
-  count: number | null;
+  /**
+   * `null` — признак без числа: он либо есть, либо нет. Число приходит уже собранным
+   * на языке интерфейса: разделитель разрядов у языков разный.
+   */
+  count: string | null;
 }) {
   return (
     <span
@@ -44,6 +49,7 @@ function Mark({
 export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
   const blocking = features.open_blocking_questions;
   const { t } = useTranslation('ui');
+  const { language } = useLanguage();
 
   return (
     <>
@@ -68,7 +74,7 @@ export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
               : t('task.features.questions', { count: features.open_questions })
           }
           tone={blocking > 0 ? 'text-danger' : 'text-attention'}
-          count={features.open_questions}
+          count={formatNumber(features.open_questions, language)}
         />
       ) : null}
 
@@ -81,7 +87,7 @@ export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
           icon={Flag}
           label={t('task.features.remarks', { count: features.open_remarks })}
           tone="text-accent"
-          count={features.open_remarks}
+          count={formatNumber(features.open_remarks, language)}
         />
       ) : null}
     </>
