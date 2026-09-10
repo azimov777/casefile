@@ -4,6 +4,8 @@ import { MemoryRouter, useLocation, useRoutes } from 'react-router';
 import { render } from '@testing-library/react';
 import { AppProviders, routes } from '@/app';
 import { i18n, type Language } from '@/shared/i18n';
+// Точечно, минуя вход сегмента: подсев конфигурации — дверь оснастки, а не приложения.
+import { installConfigState, seedInstallConfig } from '@/shared/api/install-config';
 
 function Routed() {
   return useRoutes(routes);
@@ -47,6 +49,17 @@ export function renderApp(initialPath = '/', { language = 'en' }: { language?: L
    * Смена синхронна: словари вшиты в сборку (`initAsync: false`), грузить нечего.
    */
   void i18n.changeLanguage(language);
+
+  /*
+   * Конфигурация установки по умолчанию «прочитана, и ключа в ней не было»: это
+   * установка, где людей несколько, и на ней стоит подавляющее большинство тестов.
+   * Подсев синхронный — иначе каждый из них ждал бы лишний кадр, пока страж маршрутов
+   * держит экран пустым.
+   *
+   * Тест про сам путь ключа начинает настоящее чтение (`loadInstallToken`) до вызова —
+   * тогда состояние уже не `unread`, и оснастка в него не вмешивается.
+   */
+  if (installConfigState() === 'unread') seedInstallConfig(null);
 
   const queryClient = new QueryClient({
     defaultOptions: {

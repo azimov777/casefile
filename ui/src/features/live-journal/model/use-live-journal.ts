@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { markSessionExpired, sessionKeys, type Bootstrap } from '@/entities/session';
-import { clearToken, getToken } from '@/shared/api';
+import {
+  markSessionExpired,
+  sessionKeys,
+  useSessionToken,
+  type Bootstrap,
+} from '@/entities/session';
+import { clearToken, getToken, refreshInstallToken } from '@/shared/api';
 import { holdForRequest, holdWhileHidden, releaseHidden } from './deferred';
 import { parseFrame, type JournalFrame } from './frames';
 import { keysAfterReconnect, keysToInvalidate, type Invalidation } from './invalidation';
@@ -46,6 +51,13 @@ export interface LiveJournal {
  */
 export function useLiveJournal(): LiveJournal {
   const queryClient = useQueryClient();
+  /*
+   * Ключ берётся подпиской, а не разовым `getToken()`: у него два источника, и ключ
+   * от установки может смениться прямо посреди работы вкладки — контур переподняли.
+   * Смена значения пересобирает эффект, то есть закрывает поток и открывает новый
+   * тем ключом, которым уже ходят запросы.
+   */
+  const token = useSessionToken();
   const [status, setStatus] = useState<LiveStatus>('connecting');
   const [incomingQuestions, setIncomingQuestions] = useState<IncomingQuestion[]>([]);
 
@@ -64,8 +76,13 @@ export function useLiveJournal(): LiveJournal {
   const announced = useRef(new Set<string>());
 
   useEffect(() => {
-    const token = getToken();
-    if (token === null) return;
+    /*
+     * Ключ мог пропасть между отрисовкой и эффектом: испорченное значение сбрасывает
+     * перехватчик прямо на первом запросе экрана, и происходит это раньше, чем сюда
+     * доходит очередь. Поток, открытый снимком с отрисовки, был бы открыт тем, чего
+     * уже нет; эффект перезапустится со свежим значением сам.
+     */
+    if (token === null || getToken() !== token) return;
 
     /**
      * Раскладывает устаревшее по двум срокам.
@@ -148,10 +165,20 @@ export function useLiveJournal(): LiveJournal {
       },
 
       onUnauthorized: () => {
-        // Токен перестал годиться: дальше работает общая обработка входа
-        // (`SessionWatcher` снимет кэш, страж маршрутов уведёт на вход).
-        clearToken();
-        markSessionExpired();
+        /*
+         * Токен перестал годиться. Если он от установки, её сначала переспрашивают —
+         * ровно один раз, той же дверью, что и запросы: контур могли переподнять, и
+         * тогда поток переоткроется свежим ключом сменой зависимости эффекта.
+         * Ключ, введённый человеком, отвечает `null` сразу.
+         *
+         * Дальше работает общая обработка входа: `SessionWatcher` снимет кэш, страж
+         * маршрутов уведёт на вход.
+         */
+        void refreshInstallToken(token).then((fresh) => {
+          if (fresh !== null) return;
+          clearToken();
+          markSessionExpired();
+        });
       },
     });
 
@@ -159,7 +186,7 @@ export function useLiveJournal(): LiveJournal {
       document.removeEventListener('visibilitychange', applyPending);
       close();
     };
-  }, [queryClient]);
+  }, [queryClient, token]);
 
   return {
     status,
