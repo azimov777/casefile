@@ -173,15 +173,31 @@ test('запись с последней страницы дела дочиты�
       },
     }),
   );
-  const last = (await Promise.all(notes)).at(-1);
-  expect(last?.status()).toBe(201);
-  const lastNo = ((await last?.json()) as { data: { no: number } }).data.no;
-  expect(lastNo).toBeGreaterThan(ENTRY_PAGE_SIZE);
+  const responses = await Promise.all(notes);
+  for (const response of responses) {
+    expect(response.status()).toBe(201);
+  }
 
-  await page.goto(`/tasks/${key}/case?entry=${lastNo}`);
+  /*
+   * Номер дальней записи считается из **всех** ответов, а не берётся у последнего
+   * обещания в массиве. `Promise.all` возвращает ответы в порядке запросов, но номера
+   * выдаёт сервер в порядке, в котором он их обработал, и эти два порядка не связаны:
+   * под нагрузкой последний отправленный POST регулярно получает не самый большой `no`
+   * (UI-82, `docs/notes/testing.md`). Наибольший номер лежит за первой страницей при
+   * любом порядке ответов, потому что записей заведено больше, чем в неё помещается.
+   */
+  const numbers = await Promise.all(
+    responses.map(
+      async (response) => ((await response.json()) as { data: { no: number } }).data.no,
+    ),
+  );
+  const targetNo = Math.max(...numbers);
+  expect(targetNo).toBeGreaterThan(ENTRY_PAGE_SIZE);
+
+  await page.goto(`/tasks/${key}/case?entry=${targetNo}`);
 
   // Лента дочитывается сама, пока названная запись не найдётся.
-  const target = page.getByLabel(`${key}#${lastNo}`, { exact: true });
+  const target = page.getByLabel(`${key}#${targetNo}`, { exact: true });
   await expect(target).toBeVisible({ timeout: 15_000 });
   await expect(target).toHaveAttribute('data-highlighted');
 });
