@@ -48,12 +48,14 @@ export const errorDictionary: Record<string, string> = {
 
   // 422
   actor_not_addressable: 'Временного агента нельзя адресовать вопросом.',
+  cursor_with_offset: 'Страница адресована сразу двумя способами: и курсором, и смещением.',
   entry_fields_invalid: 'Запись не прошла проверку.',
   invalid_actor_label: 'Метка временного агента не соответствует шаблону.',
   invalid_cursor: 'Курсор страницы не разбирается.',
   invalid_idempotency_key: 'Ключ повтора пуст или слишком длинный.',
   invalid_journal_cursor: 'Позиция в ленте журнала не разбирается.',
   invalid_link_kind: 'Такого вида связи нет.',
+  invalid_page_offset: 'Смещение страницы отрицательное.',
   invalid_page_size: 'Размер страницы вне допустимых границ.',
   invalid_participant_name: 'Имя участника не соответствует шаблону.',
   invalid_queue_key: 'Ключ очереди не соответствует шаблону.',
