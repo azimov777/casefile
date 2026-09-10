@@ -45,6 +45,12 @@ packages = ["app"]
 line-length = 100
 target-version = "py314"
 src = ["app", "tests"]
+# Кеш живёт вне репозитория намеренно. Линтер гоняется в контейнере, а репозиторий
+# смонтирован туда целиком: `.ruff_cache` в рабочем каталоге появлялся бы на хосте
+# от root — на Linux хозяин установки не может такой каталог даже удалить
+# (`docs/notes/docker.md`). Файлам, которых репозиторию не нужно, проще там не
+# заводиться, чем возвращаться хозяину.
+cache-dir = "/tmp/ruff-cache"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
@@ -79,6 +85,9 @@ known-first-party = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Тот же случай, что у `cache-dir` линтера выше: `.pytest_cache` в смонтированном
+# репозитории — это каталог от root на машине хозяина.
+cache_dir = "/tmp/pytest-cache"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
