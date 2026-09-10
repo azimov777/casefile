@@ -67,8 +67,8 @@ SQLAlchemy 1.4 параметр `create_constraint` по умолчанию `Fal
 `character varying(16)`, всё выглядит правильно — а записать в неё можно любую строку.
 Обнаруживается это тогда, когда в колонке `type` уже лежит мусор.
 **Как правильно:** заводить перечисления только через `string_enum` из `app/db/base.py` — там
-флаг выставлен. После миграции проверять глазами: `\d actors` должен показать блок
-`Check constraints` с именем вида `ck_actors_actor_type`.
+флаг выставлен. После миграции проверять глазами: `\d participants` должен показать блок
+`Check constraints` с именем вида `ck_participants_author_kind`.
 **Где:** `app/db/base.py`, `string_enum`.
 
 ## Перечисления хранятся как VARCHAR, а не как тип PostgreSQL
