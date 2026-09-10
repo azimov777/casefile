@@ -156,6 +156,68 @@ test('таблица прокручивается вбок внутри рамк
   await expect.poll(() => scroller.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
 });
 
+/**
+ * Полоса ширин, на которой боковая панель уже стоит, а места таблице ещё не хватает:
+ * от `fold` (44rem) до `wide` (64rem). Ровно здесь колонка названия схлопывалась
+ * в многоточие без всякого выхода (UI-66) — потому что ветку выбирала ширина окна,
+ * а место отнимала панель.
+ *
+ * Края взяты обе штуки, а не только они: 1016 и 1017 стоят под самым порогом, где
+ * прежняя арифметика давала названию 182 px, а 1024 — сразу за ним.
+ */
+const BAND = [704, 768, 800, 900, 960, 1000, 1016, 1017, 1024];
+
+/**
+ * Наименьшая ширина колонки названия. Это остаток от `min-w-list` после заданных ширин
+ * остальных колонок; ниже него таблица не сжимается, а прокручивается.
+ */
+const TITLE_MIN = 184;
+
+test('в полосе от 44rem до 64rem название не схлопывается ни на одной ширине', async ({ page }) => {
+  await silenceJournal(page);
+
+  for (const width of BAND) {
+    await page.setViewportSize({ width, height: 720 });
+    await page.goto('/tasks?queue=DEMO');
+    await expect(page.getByRole('table')).toBeVisible();
+    await fontsReady(page);
+
+    const scroller = page.getByRole('region', { name: /таблица прокручивается вбок/ });
+    const title = await page.getByRole('columnheader', { name: 'Название' }).boundingBox();
+
+    // Место названию отмерено, а не отобрано: 66 px на 900 px и ноль на 704 px — это
+    // то, что было до UI-66.
+    expect(Math.round(title?.width ?? 0), `название на ${width} px`).toBeGreaterThanOrEqual(
+      TITLE_MIN,
+    );
+
+    // Всё, что не поместилось, достижимо прокруткой внутри рамки: последняя колонка
+    // приезжает в рамку целиком, а страница вширь не едет.
+    const hidden = await scroller.evaluate((node) => node.scrollWidth - node.clientWidth);
+    const last = page.getByRole('columnheader', { name: 'Активность' });
+    if (hidden > 0) {
+      await scroller.evaluate((node) => {
+        node.scrollLeft = node.scrollWidth;
+      });
+      await expect
+        .poll(
+          async () => {
+            const frame = await scroller.boundingBox();
+            const box = await last.boundingBox();
+            return (frame?.x ?? 0) + (frame?.width ?? 0) - ((box?.x ?? 0) + (box?.width ?? 0));
+          },
+          { message: `последняя колонка на ${width} px` },
+        )
+        .toBeGreaterThanOrEqual(-1);
+    } else {
+      // Не поместиться нечему: таблица кончается внутри рамки, и обрезать её незачем.
+      await expect(last).toBeInViewport();
+    }
+
+    expect(await overflow(page), `документ на ${width} px`).toBeLessThanOrEqual(0);
+  }
+});
+
 test('на широком экране таблица не прокручивается, а шапка липнет к верху', async ({ page }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 1440, height: 900 });

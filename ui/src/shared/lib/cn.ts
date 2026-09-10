@@ -28,6 +28,14 @@ export const THEME_SCALES = {
   shadow: ['raised', 'sticky'],
   ease: ['fast', 'exit'],
   animate: ['appear', 'disappear', 'sheet-in', 'sheet-out', 'overlay-in', 'overlay-out'],
+  /*
+   * Размеры контейнера. Умолчание библиотеки здесь — `container: [isTshirtSize]`, то
+   * есть она узнаёт `min-w-sm` и `max-w-3xl`, а наше имя роли под размер футболки не
+   * подходит и остаётся ей неизвестным: `cn('min-w-list', 'min-w-0')` вернул бы оба
+   * класса, и спор двух минимумов решил бы порядок в собранном CSS. Та же ловушка,
+   * что была с кеглем, только по другому свойству.
+   */
+  container: ['list'],
 } as const;
 
 const twMerge = extendTailwindMerge({
