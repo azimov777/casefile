@@ -203,7 +203,7 @@ test.describe('дело длиннее страницы', () => {
     const feed = watchFeed(page);
     await page.goto(`/tasks/${key}`);
 
-    await expect(page.getByRole('table', { name: /Записей в деле/ })).toBeVisible();
+    await expect(page.getByRole('table', { name: /^В деле \d+ запис/ })).toBeVisible();
     await page.getByRole('button', { name: 'К свежей записи' }).click();
 
     const row = page.getByRole('button', { name: `Заметка номер ${ENTRIES}` });

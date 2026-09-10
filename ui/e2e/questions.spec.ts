@@ -25,7 +25,9 @@ test('входящая показывает адресованный вопро�
   await page.goto('/questions');
 
   // Счётчик переехал из шапки в боковую панель (UI-38) и подписан там числом.
-  await expect(side(page).getByText(/^Открытых вопросов: \d+$/)).toBeVisible();
+  await expect(
+    side(page).getByText(/^\d+ открыт(ый вопрос|ых вопроса|ых вопросов)$/),
+  ).toBeVisible();
 
   const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
   await expect(question).toBeVisible();

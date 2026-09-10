@@ -107,7 +107,7 @@ test('запись, подшитая через API, доходит до отк�
   // Кадр дошёл, но список сам не перечитывается: он ждёт просьбы (UI-13). Что кадр
   // именно дошёл, видно по полосе.
   await expect(page.getByRole('status', { name: 'Обновления списка' })).toContainText(
-    'Изменилось задач',
+    'Изменилась 1 задача',
   );
   await settled(() => listings.length);
   expect(listings.length).toBe(before);
@@ -197,7 +197,9 @@ test('вопрос ко мне объявляется уведомлением �
   await expect(notice.getByText('блокирующий')).toBeVisible();
 
   // Счётчик в шапке тоже ожил и стал ссылкой во входящую.
-  const counter = side(page).getByRole('link', { name: /Открытых вопросов: [1-9]/ });
+  const counter = side(page).getByRole('link', {
+    name: /[1-9]\d* открыт(ый вопрос|ых вопроса|ых вопросов)/,
+  });
   await expect(counter).toHaveAttribute('href', '/questions');
 
   expect(await geometry(watched)).toEqual(before);

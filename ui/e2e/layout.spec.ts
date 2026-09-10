@@ -95,7 +95,7 @@ test.describe('карточка задачи на широком экране', 
     // Раньше опись лежала за пятью разделами задания, на 1300-м пикселе.
     await expect(page.getByRole('heading', { name: 'Последняя сводка' })).toBeInViewport();
     await expect(page.getByRole('heading', { name: 'Открытые вопросы' })).toBeInViewport();
-    await expect(page.getByText(/Записей в деле:/)).toBeInViewport();
+    await expect(page.getByText(/^В деле \d+ запис/)).toBeInViewport();
     await expect(page.locator('tbody tr').first()).toBeInViewport();
   });
 

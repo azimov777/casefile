@@ -56,9 +56,14 @@ export function side(page: Page): Locator {
 /**
  * Ждёт, пока оболочка договорит: участник и счётчик вопросов приходят `bootstrap`ом
  * уже после первой отрисовки. Замер геометрии до этого ведёт мимо.
+ *
+ * Ссылка ищется по адресу, а не по подписи: подпись счётчика склоняется по числу
+ * («вопросов нет», «1 открытый вопрос», «5 открытых вопросов»), и любая её форма
+ * в строке ожидания сделала бы готовность оболочки зависящей от того, сколько
+ * вопросов в демо-данных.
  */
 export async function shellReady(page: Page): Promise<void> {
-  await expect(side(page).getByRole('link', { name: /Открытых вопросов/ })).toBeVisible();
+  await expect(side(page).locator('a[href="/questions"] .sr-only')).toBeVisible();
 }
 
 /**
