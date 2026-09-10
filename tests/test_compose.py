@@ -16,7 +16,7 @@
 
 import re
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,6 +43,15 @@ MCP_SERVICE = "mcp"
 
 #: Подстановка порта MCP. Одно выражение на все места, где порт называется.
 MCP_PORT = "${TRACKER_MCP_PORT:-8100}"
+
+#: Разовый сервис, выпускающий ключ интерфейса. Его результат — файл, а не вывод.
+LOCAL_TOKEN_SERVICE = "local-token"
+
+#: Ключ команды, называющий файл с секретом.
+OUTPUT_OPTION = "--output"
+
+#: Рабочий каталог обоих образов: относительный путь команды считается от него.
+WORKDIR = "/app"
 
 
 def _indent(line: str) -> int:
@@ -185,3 +194,66 @@ def test_the_mcp_port_reaches_the_process_and_not_only_the_publication() -> None
         assert f'"{MCP_PORT}:{MCP_PORT}"' in "\n".join(service), f"{contour}: {service}"
         assert health, f"{contour}: проверка здоровья {MCP_SERVICE} не разобрана"
         assert all(MCP_PORT in line for line in health), health
+
+
+def _mount_targets(lines: list[str]) -> set[str]:
+    """Куда описание монтирует каталоги хоста: правые половины строк блока `volumes:`.
+
+    Именованные и анонимные тома отсеиваются: `pgdata:/var/lib/postgresql/data` и
+    `/app/.venv` живут внутри Docker, и файл, попавший туда, хосту не виден. Источник с
+    хоста в обоих контурах записан относительным путём — с него и начинается строка.
+    """
+    targets: set[str] = set()
+    inside, base = False, 0
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "volumes:":
+            inside, base = True, _indent(line)
+            continue
+        if inside and _indent(line) <= base:
+            inside = False
+        if inside and stripped.startswith("- ./"):
+            _, _, target = stripped[2:].partition(":")
+            targets.add(target.split(":")[0])
+    return targets
+
+
+def test_both_contours_hand_the_ui_key_to_the_host() -> None:
+    """Ключ интерфейса оба контура кладут в каталог, видимый хосту.
+
+    Результат `local-token` — файл, а не вывод: секрет команда не печатает никогда, и
+    ничем, кроме файла, она не полезна. Оттуда его берёт контур интерфейса — и человек,
+    когда проверяет выданный ключ.
+
+    Стоит пути указать мимо смонтированного каталога, и команда отработает с кодом 0,
+    напечатает, что ключ выдан, и унесёт файл вместе с разовым контейнером. Установка при
+    этом останется с действующим токеном, которого никто не знает, — то есть молчаливым
+    отказом, каких у выдачи ключа быть не должно. У дев-контура каталог приходит общим
+    якорем (репозиторий смонтирован целиком), у прод-контура — своей строкой сервиса:
+    кода в образе там уже нет.
+    """
+    for contour, path in COMPOSE_FILES.items():
+        text = path.read_text(encoding="utf-8")
+        services = _services(text)
+
+        assert LOCAL_TOKEN_SERVICE in services, (
+            f"{contour}: сервиса {LOCAL_TOKEN_SERVICE} нет — установке нечем выдать ключ "
+            f"своему интерфейсу"
+        )
+
+        service = services[LOCAL_TOKEN_SERVICE]
+        command = [line for line in service if OUTPUT_OPTION in line]
+
+        assert len(command) == 1, f"{contour}: {OUTPUT_OPTION} в сервисе не разобран: {service}"
+
+        output = PurePosixPath(command[0].split(OUTPUT_OPTION, 1)[1].split()[0])
+        if not output.is_absolute():
+            output = PurePosixPath(WORKDIR) / output
+        mounted = _mount_targets(_block(text, "x-app-service:")) | _mount_targets(service)
+
+        # Сторожевой проверки на пустоту здесь нет намеренно: промах разбора даёт пустое
+        # множество, а пустое множество валит саму проверку — зеленить ей нечего.
+        assert any(str(parent) in mounted for parent in output.parents), (
+            f"{contour}: {output} лежит вне каталогов хоста {sorted(mounted)} — "
+            f"файл ключа не переживёт разовый контейнер, причём молча"
+        )
