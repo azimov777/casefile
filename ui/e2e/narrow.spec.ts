@@ -1,9 +1,18 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { fontsReady, side, signedInByHand, silenceJournal } from './contour';
 
 /** Экраны, на которых оболочка обязана держаться одинаково. */
 const SCREENS = ['/tasks?queue=DEMO', '/tasks/DEMO-6', '/tasks/DEMO-1/case', '/questions'];
+
+/**
+ * Рамка таблицы списка. Ищется от таблицы, а не по имени: имя и роль области у рамки
+ * есть не на всякой ширине — она объявляет себя прокручиваемой ровно там, где
+ * прокручивается, и это проверяют сценарии «рамка таблицы на … экране» (UI-91).
+ */
+function frame(page: Page): Locator {
+  return page.getByRole('table').locator('xpath=..');
+}
 
 /** Насколько документ шире окна. Больше нуля — страница разъехалась вширь. */
 async function overflow(page: Page): Promise<number> {
@@ -177,7 +186,7 @@ test('в полосе от 44rem до 64rem название не схлопыв
     await expect(page.getByRole('table')).toBeVisible();
     await fontsReady(page);
 
-    const scroller = page.getByRole('region', { name: /таблица прокручивается вбок/ });
+    const scroller = frame(page);
     const title = await page.getByRole('columnheader', { name: 'Название' }).boundingBox();
 
     // Место названию отмерено, а не отобрано: 66 px на 900 px и ноль на 704 px — это
@@ -220,7 +229,7 @@ test('на широком экране таблица не прокручива�
   await expect(page.getByRole('table')).toBeVisible();
   await fontsReady(page);
 
-  const scroller = page.getByRole('region', { name: /таблица прокручивается вбок/ });
+  const scroller = frame(page);
   // Прокручивать нечего: колонки помещаются, и обёртка остаётся `clip` — без этого
   // липкая шапка прилипала бы к ней вместо окна (требование UI-12).
   const overflowX = await scroller.evaluate((node) => node.scrollWidth - node.clientWidth);
@@ -229,6 +238,102 @@ test('на широком экране таблица не прокручива�
   await page.mouse.wheel(0, 600);
   const head = page.getByRole('columnheader', { name: 'Активность' });
   await expect(head).toBeInViewport();
+});
+
+/**
+ * Состояние рамки, снятое у браузера, а не у разметки: ветку выбирает запрос
+ * к контейнеру, и в разметке её не видно.
+ */
+async function frameState(page: Page): Promise<{
+  overflowX: string;
+  hidden: number;
+  role: string | null;
+  label: string | null;
+  tabindex: string | null;
+}> {
+  return frame(page).evaluate((node) => ({
+    overflowX: getComputedStyle(node).overflowX,
+    hidden: node.scrollWidth - node.clientWidth,
+    role: node.getAttribute('role'),
+    label: node.getAttribute('aria-label'),
+    tabindex: node.getAttribute('tabindex'),
+  }));
+}
+
+/*
+ * Подпись рамки обязана говорить правду на обоих краях развилки, и ширина здесь —
+ * условие сценария, а не шаг внутри него: поэтому `test.use({ viewport })`, а не
+ * `setViewportSize` (`docs/notes/tooling.md`, «Вьюпорт для замеров вёрстки задаёт
+ * Playwright»).
+ */
+test.describe('рамка таблицы на широком экране', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('прокрутки нет — и про прокрутку не сказано ничего', async ({ page }) => {
+    await silenceJournal(page);
+    await page.goto('/tasks?queue=DEMO');
+    await expect(page.getByRole('table')).toBeVisible();
+    await fontsReady(page);
+
+    const state = await frameState(page);
+    // Ветка `clip`, и прокручивать нечего: стрелки в этой рамке дают ноль.
+    expect(state.overflowX).toBe('clip');
+    expect(state.hidden).toBeLessThanOrEqual(0);
+
+    // Ни имени, ни роли, ни остановки табом. Раньше здесь стояло имя «Задачи, таблица
+    // прокручивается вбок» — обещание, которое человек проверял стрелками и не получал
+    // ничего (UI-91).
+    expect(state.role).toBeNull();
+    expect(state.label).toBeNull();
+    expect(state.tabindex).toBeNull();
+    await expect(page.getByRole('region', { name: /прокручивается вбок/ })).toHaveCount(0);
+
+    // Взамен таблицу диктору представляет её `caption`: роль таблицы, подписанные
+    // колонки и число строк на месте.
+    await expect(page.getByRole('table')).toHaveAccessibleName(/На этой странице \d+ задач/);
+  });
+});
+
+test.describe('рамка таблицы на узком экране', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('прокрутка есть — и рамка называет себя прокручиваемой', async ({ page }) => {
+    await silenceJournal(page);
+    await page.goto('/tasks?queue=DEMO');
+    await expect(page.getByRole('table')).toBeVisible();
+    await fontsReady(page);
+
+    const state = await frameState(page);
+    expect(state.overflowX).toBe('auto');
+    expect(state.hidden).toBeGreaterThan(0);
+    expect(state.label).toBe('Задачи, таблица прокручивается вбок');
+
+    // Названное областью обязано быть достижимо с клавиатуры: иначе имя обещает то,
+    // до чего не добраться ничем, кроме мыши.
+    const scroller = page.getByRole('region', { name: 'Задачи, таблица прокручивается вбок' });
+    await scroller.focus();
+    await expect(scroller).toBeFocused();
+  });
+});
+
+test('имя рамки следует за шириной места, а не за загрузкой страницы', async ({ page }) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.getByRole('table')).toBeVisible();
+  await fontsReady(page);
+
+  const named = page.getByRole('region', { name: /таблица прокручивается вбок/ });
+  await expect(named).toHaveCount(0);
+
+  // Ширина меняется без перезагрузки: имя обязано появиться от наблюдателя размеров,
+  // а не от нового кадра страницы. Замер, снятый один раз при загрузке, эту проверку
+  // не проходит — а именно им подпись и была.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(named).toHaveCount(1);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(named).toHaveCount(0);
 });
 
 test('на карточке замечание доступно до описи и одним действием из навигации', async ({ page }) => {

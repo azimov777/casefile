@@ -1,3 +1,4 @@
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TASK_COLUMNS, TaskRow, type Task } from '@/entities/task';
 
@@ -22,6 +23,55 @@ const WIDTHS = [
   'w-24', // Признаки — 96 px: знаки с числами
   'w-26', // Активность — 104 px
 ];
+
+/**
+ * Прокручивается ли рамка вбок прямо сейчас.
+ *
+ * Ветку раскладки выбирает запрос к контейнеру, и разметка о своей ветке не знает
+ * ничего: спросить состояние можно только у браузера. Условие взято дословно у `axe`
+ * (`getScroll` в `axe-core`): область прокручиваема, когда `overflow-x` разрешает
+ * прокрутку **и** содержимое шире места. Одного `scrollWidth > clientWidth` мало —
+ * в ветке `clip` содержимое тоже бывает шире места (длинное имя исполнителя не
+ * переносится и вылезает из своей ячейки), но прокрутить его нельзя, и обещание
+ * прокрутки было бы тем же враньём, ради которого затевалась правка. Заодно наше
+ * условие строго шире того, с которым придирается сам `axe` (он даёт допуск в 13 px):
+ * случая «проверка требует фокусируемости, а мы её сняли» не бывает по построению.
+ *
+ * Замер зовётся дважды, и оба раза по делу. На каждую отрисовку — потому что ширину
+ * содержимого меняет выдача, а рамка при этом остаётся прежней. На изменение размеров
+ * рамки — потому что место меняется и без всякой перерисовки: окно, боковая панель,
+ * увеличенный кегль. На прокрутку не подписан никто: наблюдателю размеров её положение
+ * не событие, и работы на кадр прокрутки эта механика не даёт.
+ */
+function useSideScroll(frame: RefObject<HTMLDivElement | null>): boolean {
+  const [scrollable, setScrollable] = useState(false);
+
+  const measure = useCallback(() => {
+    const node = frame.current;
+    if (node === null) return;
+
+    const overflow = getComputedStyle(node).overflowX;
+    const scrolls = overflow === 'auto' || overflow === 'scroll';
+    setScrollable(scrolls && node.scrollWidth > node.clientWidth);
+  }, [frame]);
+
+  // Без массива зависимостей: замер идёт после каждой отрисовки, до кадра. Повтор
+  // безвреден — `setState` тем же значением React гасит сам, и второго прохода не будет.
+  useLayoutEffect(measure);
+
+  useLayoutEffect(() => {
+    const node = frame.current;
+    if (node === null) return;
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+    };
+  }, [frame, measure]);
+
+  return scrollable;
+}
 
 /**
  * Таблица списка. Заголовки берутся у представления строки: порядок ячеек и порядок
@@ -50,10 +100,19 @@ const WIDTHS = [
  * Прокручиваемая область обязана быть достижима с клавиатуры: без `tabIndex` до её
  * содержимого не добраться ничем, кроме мыши, и это нарушение ловит `axe`
  * (`scrollable-region-focusable`).
+ *
+ * **Прокручиваемой рамка называет себя только там, где прокручивается.** Роль, подпись
+ * и остановка табом заведены одной причиной и живут одной жизнью: пока содержимое шире
+ * места, рамка — область с именем «Задачи, таблица прокручивается вбок»; как только
+ * прокручивать нечего, она обычная обёртка, а таблицу диктору представляет `caption`.
+ * Постоянная подпись обещала прокрутку и в ветке `clip`, где стрелки дают ноль, — и
+ * человек, поверивший ей, решал, что сломалась его программа чтения с экрана (UI-91).
  */
 export function TasksTable({ tasks, stale }: TasksTableProps) {
   const { t } = useTranslation('tasks');
   const { t: brick } = useTranslation('ui');
+  const frame = useRef<HTMLDivElement>(null);
+  const scrollable = useSideScroll(frame);
 
   return (
     /*
@@ -70,9 +129,16 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
      */
     <div className="@container rounded-block border border-line bg-surface">
       <div
-        role="region"
-        aria-label={t('table.label')}
-        tabIndex={0}
+        ref={frame}
+        /*
+         * Роль, подпись и остановка табом стоят ровно тогда, когда рамке есть что
+         * прокручивать, и снимаются все три разом. Половина механики, оставленная
+         * стоять на широком экране, — это ориентир, повторяющий заголовок страницы,
+         * и остановка табом, на которой стрелки не делают ничего.
+         */
+        role={scrollable ? 'region' : undefined}
+        aria-label={scrollable ? t('table.scrollable') : undefined}
+        tabIndex={scrollable ? 0 : undefined}
         /*
          * `relative` здесь не украшение и не задел на будущее: без позиционированной
          * рамки прокрутка вбок остаётся внутри, а **ширина документа** всё равно растёт
@@ -106,7 +172,9 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
           {/*
            * Подпись таблицы читается программой чтения с экрана, но места на экране не
            * занимает: то же число человек видит в строке управления, рядом с заголовком
-           * страницы.
+           * страницы. Там, где рамка не объявляет себя областью, это единственное, чем
+           * таблица представляется диктору, — и этого довольно: роль таблицы, подписанные
+           * колонки и число строк на месте.
            */}
           <caption className="sr-only">{t('table.caption', { count: tasks.length })}</caption>
           <thead>
