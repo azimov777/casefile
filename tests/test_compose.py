@@ -220,14 +220,20 @@ def _output_paths(body: list[str]) -> list[PurePosixPath]:
     return paths
 
 
-def _mount_targets(lines: list[str]) -> set[str]:
-    """Куда описание монтирует каталоги хоста: правые половины строк блока `volumes:`.
+def _under(target: str, root: str) -> bool:
+    """Лежит ли точка монтирования внутри каталога `root`."""
+    return PurePosixPath(target).is_relative_to(PurePosixPath(root))
 
-    Именованные и анонимные тома отсеиваются: `pgdata:/var/lib/postgresql/data` и
-    `/app/.venv` живут внутри Docker, и файл, попавший туда, хосту не виден. Источник с
-    хоста в обоих контурах записан относительным путём — с него и начинается строка.
+
+def _mounts(lines: list[str]) -> list[tuple[str, str]]:
+    """Тома блока `volumes:` парами «источник, точка монтирования в контейнере».
+
+    У анонимного тома источника нет: строка состоит из одной точки монтирования, и
+    источник выходит пустым — `- /app/.venv` даёт `("", "/app/.venv")`. Права доступа
+    третьей частью (`- ./.secrets:/app/.secrets:ro`) отбрасываются: точка монтирования
+    от них не зависит.
     """
-    targets: set[str] = set()
+    mounts: list[tuple[str, str]] = []
     inside, base = False, 0
     for line in lines:
         stripped = line.strip()
@@ -236,10 +242,53 @@ def _mount_targets(lines: list[str]) -> set[str]:
             continue
         if inside and _indent(line) <= base:
             inside = False
-        if inside and stripped.startswith("- ./"):
-            _, _, target = stripped[2:].partition(":")
-            targets.add(target.split(":")[0])
-    return targets
+        if inside and stripped.startswith("- "):
+            parts = stripped[2:].split(":")
+            mounts.append(("", parts[0]) if len(parts) == 1 else (parts[0], parts[1]))
+    return mounts
+
+
+def _mount_targets(lines: list[str]) -> set[str]:
+    """Куда описание монтирует каталоги хоста: точки монтирования у источников с хоста.
+
+    Именованные и анонимные тома отсеиваются: `pgdata:/var/lib/postgresql/data` живёт
+    внутри Docker, и файл, попавший туда, хосту не виден. Источник с хоста в обоих
+    контурах записан относительным путём — с него и начинается строка.
+    """
+    return {target for source, target in _mounts(lines) if source.startswith("./")}
+
+
+def test_no_contour_mounts_anything_inside_a_directory_taken_from_the_host() -> None:
+    """Внутри каталога, приехавшего с хоста, контур ничего больше не монтирует.
+
+    Чтобы смонтировать что-нибудь в `/app/.venv`, Docker обязан иметь там каталог, и
+    недостающий заводит сам — **в источнике монтирования, то есть прямо в репозитории на
+    машине хозяина**, а на Linux от root. Хозяин получает каталог, в который не может
+    писать, и появляется тот до всякой команды: возврат владельца, которым лечатся
+    записанные файлы (`test_the_written_file_ends_up_owned_by_the_one_who_reads_it`),
+    здесь не работает — писать туда некому.
+
+    Правило поэтому не про `.venv`, а про вложенность: анонимный том `- /app/.venv`
+    прятал окружение хоста и был снят задачей 53, когда замер показал, что прятать нечего
+    (`sys.path` его не видит, набор тестов и линтер туда не заходят). Следующий
+    `- /app/node_modules` стоил бы того же — и ловится этой проверкой, а не пересмотром
+    решения.
+    """
+    for contour, path in COMPOSE_FILES.items():
+        mounts = _mounts(_meaningful_lines(path.read_text(encoding="utf-8")))
+        from_host = [target for source, target in mounts if source.startswith("./")]
+
+        # Сторожевое условие: без каталогов с хоста проверке не с чем сравнивать, и
+        # промах разбора зеленил бы её молча — оба контура такой каталог объявляют.
+        assert from_host, f"{contour}: каталогов хоста не разобрано: {mounts}"
+
+        for source, target in mounts:
+            nested = [host for host in from_host if host != target and _under(target, host)]
+            assert not nested, (
+                f"{contour}: том `{source or 'анонимный'}` монтируется в {target} — "
+                f"внутрь каталога {nested[0]}, приехавшего из репозитория хозяина. Docker "
+                f"заведёт там каталог на машине хозяина, и хозяин не сможет в него писать"
+            )
 
 
 def test_both_contours_hand_the_ui_key_to_the_host() -> None:
