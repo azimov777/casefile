@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { TASK_COLUMNS, TaskRow, type Task } from '@/entities/task';
 
 interface TasksTableProps {
@@ -42,10 +43,13 @@ const WIDTHS = [
  * (`scrollable-region-focusable`).
  */
 export function TasksTable({ tasks, stale }: TasksTableProps) {
+  const { t } = useTranslation('tasks');
+  const { t: brick } = useTranslation('ui');
+
   return (
     <div
       role="region"
-      aria-label="Задачи, таблица прокручивается вбок"
+      aria-label={t('table.label')}
       tabIndex={0}
       /*
        * `relative` здесь не украшение и не задел на будущее: без позиционированной
@@ -73,7 +77,7 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
          * занимает: то же число человек видит в строке управления, рядом с заголовком
          * страницы.
          */}
-        <caption className="sr-only">Задач на этой странице: {tasks.length}</caption>
+        <caption className="sr-only">{t('table.caption', { count: tasks.length })}</caption>
         <thead>
           <tr>
             {TASK_COLUMNS.map((column, index) => (
@@ -89,7 +93,7 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
                  */
                 className={`sticky top-0 z-1 h-(--ui-row-head) bg-surface px-3 text-left align-middle text-label font-semibold tracking-caps text-faint uppercase shadow-sticky ${WIDTHS[index] ?? ''} ${index === TASK_COLUMNS.length - 1 ? 'text-right' : ''}`}
               >
-                {column}
+                {brick(`task.columns.${column}`)}
               </th>
             ))}
           </tr>

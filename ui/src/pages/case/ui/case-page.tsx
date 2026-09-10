@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router';
 import {
@@ -51,6 +52,7 @@ const CONTEXT_BEFORE = 5;
 export function CasePage() {
   const { key = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation('case');
 
   const types = useMemo(() => readTypes(searchParams.getAll('type')), [searchParams]);
 
@@ -157,9 +159,9 @@ export function CasePage() {
   if (task.error instanceof ApiError && task.error.code === 'task_not_found') {
     return (
       <main className={SCREEN}>
-        <h1 className="text-title">Дела {key} нет</h1>
-        <Callout>Задачи с таким ключом нет, а значит нет и дела.</Callout>
-        <Link to="/tasks">Вернуться к списку задач</Link>
+        <h1 className="text-title">{t('missingTitle', { key })}</h1>
+        <Callout>{t('missingText')}</Callout>
+        <Link to="/tasks">{t('backToList')}</Link>
       </main>
     );
   }
@@ -174,7 +176,7 @@ export function CasePage() {
        * разрешён — на узком экране кнопка встаёт под заголовком.
        */}
       <div className="flex flex-wrap items-baseline gap-3">
-        <h1 className="text-title">Дело {key}</h1>
+        <h1 className="text-title">{t('title', { key })}</h1>
         {/*
          * Переход к свежему — действие человека, а не поведение экрана: живой поток
          * ленту не прокручивает и никогда не прокрутит (UI-13). Кнопка стоит у
@@ -182,7 +184,7 @@ export function CasePage() {
          */}
         {lastNo === null ? null : (
           <Button tone="quiet" onClick={goToLatest}>
-            К свежей записи
+            {t('toLatest')}
           </Button>
         )}
       </div>
@@ -200,9 +202,10 @@ export function CasePage() {
       {/* Окно названо вслух: человек обязан видеть, что перед ним не всё дело. */}
       {from === null ? null : (
         <Callout>
-          Показаны записи после {key}#{from}.{' '}
+          {/* Фраза и действие — две вещи подряд, а не одна разрезанная надвое. */}
+          {t('window.shown', { reference: `${key}#${from}` })}{' '}
           <button type="button" className={INLINE_RESET} onClick={readFromStart}>
-            Читать дело сначала
+            {t('fromStart')}
           </button>
         </Callout>
       )}
@@ -211,7 +214,7 @@ export function CasePage() {
         <Callout tone={types.length > 0 ? 'neutral' : 'danger'}>
           {types.length > 0 ? (
             <>
-              Записи {key}#{wanted} не видно: она не попадает в отбор по типу.{' '}
+              {t('window.hiddenByType', { reference: `${key}#${wanted}` })}{' '}
               <button
                 type="button"
                 className={INLINE_RESET}
@@ -221,22 +224,19 @@ export function CasePage() {
                   setSearchParams(updated, { replace: true });
                 }}
               >
-                Показать все типы
+                {t('window.showAllTypes')}
               </button>
             </>
           ) : (
-            <>
-              Записи {key}#{wanted} в деле нет: возможно, номер набран с опечаткой или ссылка ведёт
-              в другую задачу.
-            </>
+            t('window.missing', { reference: `${key}#${wanted}` })
           )}
         </Callout>
       ) : null}
 
       <QueryState
         query={feed}
-        loading="Читаем дело…"
-        empty={entries.length === 0 ? 'По этим типам записей в деле нет.' : undefined}
+        loading={t('loading')}
+        empty={entries.length === 0 ? t('emptyByTypes') : undefined}
       />
 
       {/*
@@ -266,7 +266,7 @@ export function CasePage() {
               {entry.type === 'question' || entry.type === 'remark' ? (
                 <RepliesUnder
                   replies={replies.get(entry.no) ?? []}
-                  waiting={entry.type === 'question' ? 'Ответа пока нет.' : 'Разбора пока нет.'}
+                  waiting={entry.type === 'question' ? t('noAnswerYet') : t('noResolutionYet')}
                   highlighted={wanted}
                 />
               ) : null}
@@ -278,18 +278,18 @@ export function CasePage() {
       <div className="flex items-center gap-3">
         {feed.hasNextPage ? (
           <Button onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
-            {feed.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+            {feed.isFetchingNextPage ? t('loadingMore') : t('more')}
           </Button>
         ) : entries.length === 0 ? null : (
           <span className="text-label text-muted">
             {from === null
-              ? `Это всё дело: записей ${entries.length}.`
-              : `Это конец дела: показано записей ${entries.length}.`}
+              ? t('end', { count: entries.length })
+              : t('endOfWindow', { count: entries.length })}
           </span>
         )}
         {from === null ? null : (
           <Button tone="quiet" onClick={readFromStart}>
-            Читать дело сначала
+            {t('fromStart')}
           </Button>
         )}
       </div>

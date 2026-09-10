@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import {
   PriorityMark,
   StatusMark,
@@ -21,6 +22,8 @@ const EMPTY = 'text-muted italic';
 
 /** Шапка карточки: где задача стоит и чья она. */
 export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
+  const { t } = useTranslation('task');
+
   return (
     <header className="flex flex-col gap-2">
       <p className="text-meta">
@@ -50,9 +53,9 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
          * в доступном имени.
          */}
         <span className="inline-flex items-center gap-1.5 text-meta text-muted">
-          <span className="sr-only">исполнитель </span>
+          <span className="sr-only">{t('header.assignee')} </span>
           {task.assignee === null ? (
-            <span className={EMPTY}>не назначен</span>
+            <span className={EMPTY}>{t('header.unassigned')}</span>
           ) : (
             <>
               {/* Аватар из двух букв: круг с границей, а не заливкой цвета участника —
@@ -75,23 +78,20 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
 
       <dl className="flex flex-wrap gap-x-6 gap-y-2 text-meta">
         <div className="flex items-baseline gap-2">
-          <dt className="text-muted">Обновлена</dt>
+          <dt className="text-muted">{t('header.updated')}</dt>
           <dd>
             <RelativeTime value={task.updated_at} />
           </dd>
         </div>
         <div className="flex items-baseline gap-2">
-          <dt className="text-muted">Заведена</dt>
+          <dt className="text-muted">{t('header.created')}</dt>
           <dd>
             <RelativeTime value={task.created_at} />
           </dd>
         </div>
         <div className="flex items-baseline gap-2">
-          <dt
-            className="text-muted"
-            title="Куда задача может уйти по таблице статусов. Проверки перехода считаются в момент перехода"
-          >
-            Возможные переходы
+          <dt className="text-muted" title={t('header.transitionsTitle')}>
+            {t('header.transitions')}
           </dt>
           {/*
            * Возможные переходы — справка, и выглядеть должны справкой. Плашками они
@@ -101,7 +101,7 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
            */}
           <dd className="font-mono text-muted">
             {transitions.length === 0 ? (
-              <span className={EMPTY}>никуда: статус конечный</span>
+              <span className={EMPTY}>{t('header.noTransitions')}</span>
             ) : (
               transitions.join(', ')
             )}

@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import type { LinkKind, TaskLink } from '@/entities/task';
 import { Badge } from '@/shared/ui';
 
@@ -7,7 +8,9 @@ import { Badge } from '@/shared/ui';
  * конце: именно из `blocked_by` на незакрытую задачу бэкенд считает признак «заблокирована».
  */
 export function TaskLinks({ links }: { links: TaskLink[] }) {
-  if (links.length === 0) return <p className="text-muted italic">Связей нет.</p>;
+  const { t } = useTranslation('task');
+
+  if (links.length === 0) return <p className="text-muted italic">{t('noLinks')}</p>;
 
   const byKind = new Map<LinkKind, TaskLink[]>();
   for (const link of links) {

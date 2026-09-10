@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { StatusMark, TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
 import { Button, Reveal } from '@/shared/ui';
 import { cn, useExitHold } from '@/shared/lib';
@@ -33,6 +34,7 @@ export function TasksBoard({
   collapsed,
   onToggle,
 }: TasksBoardProps) {
+  const { t } = useTranslation('tasks');
   const byStatus = new Map<TaskStatus, Task[]>(TASK_STATUSES.map((status) => [status, []]));
   for (const task of tasks) {
     const status = task.status;
@@ -71,14 +73,12 @@ export function TasksBoard({
         {hasMore ? (
           <>
             <Button onClick={onMore} disabled={loadingMore}>
-              {loadingMore ? 'Читаем…' : 'Ещё'}
+              {loadingMore ? t('board.loadingMore') : t('board.more')}
             </Button>
-            <span className="text-label text-muted">
-              Показаны не все задачи отбора: столбцы дочитываются по кнопке.
-            </span>
+            <span className="text-label text-muted">{t('board.partial')}</span>
           </>
         ) : (
-          <span className="text-label text-muted">Показаны все задачи отбора: {tasks.length}.</span>
+          <span className="text-label text-muted">{t('board.all', { count: tasks.length })}</span>
         )}
       </div>
     </div>
@@ -101,6 +101,7 @@ interface BoardColumnProps {
  */
 function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnProps) {
   const reveal = useExitHold(open);
+  const { t } = useTranslation('tasks');
 
   return (
     <section
@@ -168,7 +169,7 @@ function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnPro
           <span className="text-meta whitespace-nowrap text-muted">
             {/* «из ?»: сколько задач в статусе всего, знает только дочитанная
                 до конца выдача — врать точным числом до этого нельзя. */}
-            {hasMore ? `${column.length} из ?` : column.length}
+            {hasMore ? t('board.ofUnknown', { count: column.length }) : column.length}
           </span>
         </button>
       </h3>
@@ -176,7 +177,7 @@ function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnPro
       {reveal.held ? (
         <Reveal leaving={reveal.leaving} entering={reveal.entering}>
           {column.length === 0 ? (
-            <p className="mt-2 text-meta text-muted italic">Пусто</p>
+            <p className="mt-2 text-meta text-muted italic">{t('board.empty')}</p>
           ) : (
             <ul className="mt-2 flex list-none flex-col gap-2 p-0">
               {column.map((task) => (

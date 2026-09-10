@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { tasksBoardQueryOptions, tasksQueryOptions, type Task } from '@/entities/task';
 import {
@@ -24,6 +25,7 @@ import { TasksTable } from './tasks-table';
  */
 export function TasksPage() {
   const { filters, apply, reset } = useTaskFilters();
+  const { t } = useTranslation('tasks');
   const board = filters.view === 'board';
   const params = useMemo(() => filtersToListParams(filters), [filters]);
 
@@ -99,7 +101,7 @@ export function TasksPage() {
        */}
       <div className="flex flex-wrap items-start gap-3">
         <h1 className="flex items-baseline gap-2 text-screen leading-[1.9]">
-          Задачи
+          {t('title')}
           {/*
            * Число выдачи стоит здесь, а не полосой над таблицей. Из имени заголовка оно
            * скрыто: то же число программа чтения с экрана берёт из области ниже
@@ -132,7 +134,7 @@ export function TasksPage() {
        * то, что появилось внутри уже существующего контейнера.
        */}
       <p aria-live="polite" className="sr-only">
-        {found === null ? '' : board ? `Показано задач: ${found}` : `Найдено задач: ${found}`}
+        {found === null ? '' : board ? t('shown', { count: found }) : t('found', { count: found })}
       </p>
 
       {/*
@@ -141,7 +143,7 @@ export function TasksPage() {
        * намеренно — она сдвигала бы строки вниз ровно тогда, когда человек правит
        * запрос и сверяется с ними. Всё остальное — общее состояние запроса с повтором.
        */}
-      {problem === null ? <QueryState query={active} loading="Загружаем задачи…" /> : null}
+      {problem === null ? <QueryState query={active} loading={t('loading')} /> : null}
 
       {board ? (
         pages.data === undefined ? null : (
@@ -170,15 +172,12 @@ export function TasksPage() {
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             {beyond ? (
-              <Callout>
-                На этой странице задач нет: по этим условиям их {total}, и все они на предыдущих
-                страницах
-              </Callout>
+              <Callout>{t('beyond', { count: total ?? 0 })}</Callout>
             ) : (
               <>
-                <Callout>Задач по этим условиям нет</Callout>
+                <Callout>{t('empty')}</Callout>
                 <Button tone="quiet" onClick={reset} disabled={!hasConditions(filters)}>
-                  Сбросить фильтры
+                  {t('resetFilters')}
                 </Button>
               </>
             )}

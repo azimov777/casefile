@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, collection, data, task } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
+import { say } from '@testing/say';
 import { TASK_STATUSES } from '@/entities/task';
 import { setToken } from '@/shared/api';
 
@@ -46,12 +47,12 @@ describe('доска', () => {
 
     // Тот же словарь форм, что в списке и на карточке (решение Д20).
     const open = await screen.findByRole('region', { name: 'open' });
-    expect(open).toHaveTextContent('статус open');
+    expect(open).toHaveTextContent(`${say.ui('task.statusLabel')} open`);
 
     // На карточке подписи для приоритета нет — места нет, — но значение не пропало:
     // оно ушло в доступное имя.
     const card = within(open).getByRole('article');
-    expect(card).toHaveTextContent('приоритет critical');
+    expect(card).toHaveTextContent(`${say.ui('task.priorityLabel')} critical`);
   });
 
   it('раскладывает задачи по столбцу на каждое значение статуса из контракта', async () => {
@@ -119,18 +120,18 @@ describe('доска', () => {
     await screen.findByRole('region', { name: 'open' });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('link', { name: 'Таблица' }));
+    await user.click(screen.getByRole('link', { name: say.tasks('view.table') }));
 
     expect(await screen.findByRole('table')).toBeInTheDocument();
     const request = seen.at(-1) as URL;
     expect(request.searchParams.getAll('assignee')).toEqual(['owner']);
 
     // Отбор пережил смену режима: свёрнутая строка называет его, а форма — хранит.
-    expect(screen.getByRole('list', { name: 'Условия отбора' })).toHaveTextContent(
-      'исполнитель owner',
+    expect(screen.getByRole('list', { name: say.tasks('filters.conditions') })).toHaveTextContent(
+      say.tasks('filters.condition.assignee', { value: 'owner' }),
     );
-    await user.click(screen.getByRole('button', { name: 'Изменить отбор' }));
-    expect(screen.getByLabelText('Исполнитель')).toHaveValue('owner');
+    await user.click(screen.getByRole('button', { name: say.tasks('filters.expand') }));
+    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toHaveValue('owner');
   });
 
   it('недочитанная выдача помечает столбцы «из ?» и дочитывается кнопкой', async () => {
@@ -152,9 +153,11 @@ describe('доска', () => {
     renderApp('/tasks?queue=DEMO&view=board');
 
     const open = await screen.findByRole('region', { name: 'open' });
-    expect(within(open).getByRole('button')).toHaveTextContent('1 из ?');
+    expect(within(open).getByRole('button')).toHaveTextContent(
+      say.tasks('board.ofUnknown', { count: 1 }),
+    );
 
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Ещё' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: say.tasks('board.more') }));
 
     expect(await within(open).findByRole('link', { name: 'Задача DEMO-2' })).toBeInTheDocument();
     expect(within(open).getByRole('button')).toHaveTextContent('2');

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { TaskDetails } from '@/entities/task';
 import { Markdown } from '@/shared/ui';
 
@@ -18,18 +19,20 @@ const SECTION_TITLE = 'text-meta font-bold tracking-[0.04em] text-muted uppercas
  * вердикт называет проверку (`check_no`). Своей нумерации у списка быть не может.
  */
 export function TaskSections({ task }: { task: TaskDetails }) {
+  const { t } = useTranslation('task');
+
   return (
     <div className="flex flex-col gap-4">
-      <Section title="Описание" value={task.description} />
-      <Section title="Цель" value={task.goal} />
-      <Section title="Контекст" value={task.context} />
-      <Section title="Ограничения" value={task.constraints} />
-      <Section title="Выход" value={task.output} />
+      <Section title={t('sections.description')} value={task.description} />
+      <Section title={t('sections.goal')} value={task.goal} />
+      <Section title={t('sections.context')} value={task.context} />
+      <Section title={t('sections.constraints')} value={task.constraints} />
+      <Section title={t('sections.output')} value={task.output} />
 
       <section className="flex flex-col gap-2">
-        <h3 className={SECTION_TITLE}>Обзорные проверки</h3>
+        <h3 className={SECTION_TITLE}>{t('sections.checks')}</h3>
         {task.checks.length === 0 ? (
-          <p className="text-muted italic">Проверок нет.</p>
+          <p className="text-muted italic">{t('sections.noChecks')}</p>
         ) : (
           /* Отступ слева — место под номера: маркер нумерованного списка стоит
              снаружи строки, и без него номера ушли бы за край блока. */
@@ -47,11 +50,13 @@ export function TaskSections({ task }: { task: TaskDetails }) {
 }
 
 function Section({ title, value }: { title: string; value: string }) {
+  const { t } = useTranslation('task');
+
   return (
     <section className="flex flex-col gap-2">
       <h3 className={SECTION_TITLE}>{title}</h3>
       {value.trim() === '' ? (
-        <p className="text-muted italic">Раздел пуст.</p>
+        <p className="text-muted italic">{t('sections.empty')}</p>
       ) : (
         <Markdown>{value}</Markdown>
       )}
