@@ -25,7 +25,7 @@ export const THEME_SCALES = {
   text: ['title', 'screen', 'body', 'meta', 'mark', 'label'],
   tracking: ['caps'],
   radius: ['mark', 'control', 'block', 'pill'],
-  shadow: ['raised', 'sticky'],
+  shadow: ['edge', 'raised', 'sticky'],
   ease: ['fast', 'exit'],
   animate: ['appear', 'disappear', 'sheet-in', 'sheet-out', 'overlay-in', 'overlay-out'],
   /*
