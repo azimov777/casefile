@@ -28,6 +28,13 @@ FROM nginx:1.27-alpine AS serve
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Ключ установки доносится до браузера файлом, который рождается при старте контейнера,
+# а не при сборке: в слоях образа секрета нет и быть не должно. Образ выполняет
+# `/docker-entrypoint.d/*.sh` по порядку имён до запуска nginx; номер 40 ставит наш шаг
+# после развёртывания шаблона конфигурации.
+COPY docker/config-json.sh /docker-entrypoint.d/40-tracker-config-json.sh
+RUN chmod +x /docker-entrypoint.d/40-tracker-config-json.sh
+
 # Куда проксировать `/api`. Умолчание — сервис `api` контура сквозных тестов.
 ENV TRACKER_API_URL=http://api:8000
 
