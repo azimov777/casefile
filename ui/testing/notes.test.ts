@@ -97,6 +97,7 @@ const NOT_IN_CODE: Record<string, string> = {
   DropdownMenuCheckboxItem: 'компонент shadcn/ui из эталона, который мы не взяли',
   Popover: 'Radix: у нас взят только `Select`, родня названа как таковая',
   elementFromPoint: 'API браузера',
+  cacheInBuiltFormats: 'поле i18next, названное как его умолчание: своего значения мы не ставим',
   onlyBuiltDependencies: 'поле pnpm 10, названное как отменённое',
   resize_window: 'инструмент браузерного расширения, не код репозитория',
   '10-listen-on-ipv6-by-default.sh': 'скрипт внутри образа nginx, а не наш файл',
