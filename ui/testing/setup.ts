@@ -2,6 +2,9 @@ import '@testing-library/jest-dom/vitest';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { resetSessionExpiry } from '@/entities/session';
 import { clearToken } from '@/shared/api';
+// Точечно, минуя вход сегмента: снаружи этой двери нет — прочитанная конфигурация
+// установки живёт в модуле и переживает тест, а «забыть» её нужно только оснастке.
+import { resetInstallConfig } from '@/shared/api/install-config';
 // Импортируется после подмены потока и точечно, минуя вход среза: вход тянет за собой
 // клиент SSE, а он в этот момент ещё не подменён — и настоящий в jsdom не работает.
 import { liveJournal } from './live-journal';
@@ -54,6 +57,7 @@ afterEach(() => {
   // Токен и признак просроченного сеанса живут в модулях, а не в React: чистить
   // одно хранилище мало — копия в памяти пережила бы тест.
   clearToken();
+  resetInstallConfig();
   resetSessionExpiry();
   // Черновики ответов живут в `sessionStorage` и переживают перерисовку намеренно —
   // а значит переживут и тест: без уборки следующий тест начинается с чужим текстом

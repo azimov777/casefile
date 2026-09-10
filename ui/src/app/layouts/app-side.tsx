@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { Inbox } from 'lucide-react';
-import { bootstrapQueryOptions } from '@/entities/session';
+import { bootstrapQueryOptions, useInstallKey } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
 import { Button, QueryState } from '@/shared/ui';
@@ -17,11 +17,14 @@ import { readPlace } from './place';
  * обратно; при этом очередь — первое, чем он делит работу.
  *
  * Действий, меняющих данные, здесь нет и не будет: человек наблюдает и отвечает,
- * остальное делают агенты (`CONCEPT.md`, 1 и 7). Единственная кнопка — выход.
+ * остальное делают агенты (`CONCEPT.md`, 1 и 7). Единственная кнопка — выход, и та
+ * стоит только там, где человек входил сам: ключ от установки отзывать нечем.
  */
 export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const bootstrap = useQuery(bootstrapQueryOptions());
   const logout = useLogout();
+  // Ключ отдала установка — выходить некуда: см. кнопку в самом низу панели.
+  const fromInstall = useInstallKey();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { t } = useTranslation('ui');
@@ -130,9 +133,17 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
           </span>
         )}
 
-        <Button tone="quiet" className="px-2 py-1 text-meta" onClick={logout}>
-          {t('app.signOut')}
-        </Button>
+        {/*
+         * Выхода нет там, где выйти некуда. Ключ от установки человек не вводил
+         * и ввести не сможет: нажатие вернуло бы его на тот же экран через секунду —
+         * конфигурацию читают заново при каждой загрузке вкладки. Там, где людей
+         * несколько, конфигурации с ключом нет, и кнопка стоит как стояла.
+         */}
+        {fromInstall ? null : (
+          <Button tone="quiet" className="px-2 py-1 text-meta" onClick={logout}>
+            {t('app.signOut')}
+          </Button>
+        )}
       </div>
     </div>
   );

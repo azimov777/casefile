@@ -8,19 +8,19 @@ export const tasks = {
   // Сколько нашлось по отбору — и у таблицы, и у доски: числа по статусам стоят
   // в заголовках столбцов, а это про всю выдачу.
   found_zero: 'Nothing found',
-  found_one: '{{count}} task found',
-  found_other: '{{count}} tasks found',
+  found_one: '{{count, number}} task found',
+  found_other: '{{count, number}} tasks found',
   empty: 'No tasks match these conditions',
   resetFilters: 'Reset the filters',
   beyond_one:
-    'There are no tasks on this page: {{count}} task matches these conditions, and it is on an earlier page',
+    'There are no tasks on this page: {{count, number}} task matches these conditions, and it is on an earlier page',
   beyond_other:
-    'There are no tasks on this page: {{count}} tasks match these conditions, and they are all on earlier pages',
+    'There are no tasks on this page: {{count, number}} tasks match these conditions, and they are all on earlier pages',
 
   table: {
     label: 'Tasks, the table scrolls sideways',
-    caption_one: '{{count}} task on this page',
-    caption_other: '{{count}} tasks on this page',
+    caption_one: '{{count, number}} task on this page',
+    caption_other: '{{count, number}} tasks on this page',
   },
 
   paging: {
@@ -28,16 +28,16 @@ export const tasks = {
     previous: 'Previous page',
     next: 'Next page',
     page: 'Page {{page}}',
-    pageOf: 'Page {{page}} of {{pages}}',
-    total_one: '{{count}} page',
-    total_other: '{{count}} pages',
+    pageOf: 'Page {{page}} of {{pages, number}}',
+    total_one: '{{count, number}} page',
+    total_other: '{{count, number}} pages',
   },
 
   board: {
     reading: 'Reading the column…',
     readingMore: 'Reading more…',
     // «сколько-то из ?»: числа выдачи бэкенд не назвал, и точным его не заменить.
-    ofUnknown: '{{count}} of ?',
+    ofUnknown: '{{count, number}} of ?',
     // Свёрнутый столбец не читал ничего: без числа от бэкенда сказать ему нечего.
     unknown: '?',
     empty: 'Empty',

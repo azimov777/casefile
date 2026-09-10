@@ -11,6 +11,8 @@ import {
 } from '@/features/task-filters';
 import { UpdatesBar } from '@/features/live-journal';
 import { type Page } from '@/shared/api';
+import { useLanguage } from '@/shared/i18n';
+import { formatNumber } from '@/shared/lib';
 import { Button, Callout, QueryState, type QueryLike } from '@/shared/ui';
 import { TasksBoard } from './tasks-board';
 import { TasksPagination } from './tasks-pagination';
@@ -28,6 +30,7 @@ import { TasksTable } from './tasks-table';
 export function TasksPage() {
   const { filters, apply, reset } = useTaskFilters();
   const { t } = useTranslation('tasks');
+  const { language } = useLanguage();
   const board = filters.view === 'board';
   const params = useMemo(() => filtersToListParams(filters), [filters]);
 
@@ -130,7 +133,7 @@ export function TasksPage() {
            */}
           {found === null ? null : (
             <span className="text-label font-normal text-muted" aria-hidden="true">
-              {found}
+              {formatNumber(found, language)}
             </span>
           )}
         </h1>

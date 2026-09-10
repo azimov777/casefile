@@ -11,7 +11,8 @@ import {
   type TaskStatus,
 } from '@/entities/task';
 import { QueryState, Reveal, type QueryLike } from '@/shared/ui';
-import { cn, useExitHold } from '@/shared/lib';
+import { useLanguage } from '@/shared/i18n';
+import { cn, formatNumber, useExitHold } from '@/shared/lib';
 import { useEndReach } from '../model/end-reach';
 
 interface TasksBoardProps {
@@ -149,6 +150,8 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
   const reveal = useExitHold(open);
   const { t } = useTranslation('tasks');
   const area = useRef<HTMLElement>(null);
+  // Число в заголовке идёт за языком, как и всякое число в интерфейсе (UI-79).
+  const { language } = useLanguage();
 
   /*
    * Раскрытый столбец читает карточки страницами, свёрнутый — только своё число.
@@ -273,7 +276,11 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
             {/* Сколько задач в статусе, говорит бэкенд. Пока не сказал, врать нечем:
                 раскрытый столбец говорит «столько-то из ?» о прочитанном, свёрнутый
                 не говорит и этого — он не читал ничего. */}
-            {total ?? (open ? t('board.ofUnknown', { count: tasks.length }) : t('board.unknown'))}
+            {total === null
+              ? open
+                ? t('board.ofUnknown', { count: tasks.length })
+                : t('board.unknown')
+              : formatNumber(total, language)}
           </span>
         </button>
       </h3>

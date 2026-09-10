@@ -25,6 +25,15 @@ export const ui = {
     withCode: '{{message}} ({{code}})',
   },
 
+  /**
+   * Время для человека. Обо всём остальном во времени говорит `Intl` на языке
+   * интерфейса (`shared/lib/locale/time.ts`); словами сказана одна ступень — та, которой
+   * в `Intl.RelativeTimeFormat` нет вовсе.
+   */
+  time: {
+    justNow: 'just now',
+  },
+
   /** Оболочка: боковая панель, верхняя полоса, границы ошибок и несуществующий адрес. */
   app: {
     // Буква значка — не сокращение слова «Tracker», а первая буква названия на языке
@@ -36,15 +45,15 @@ export const ui = {
     closeSections: 'Close sections',
     // Нулевая форма — обычная подпись кнопки: спрашивать не о чем, и говорить не о чем.
     showSections_zero: 'Show sections',
-    showSections_one: 'Show sections, {{count}} question waiting',
-    showSections_other: 'Show sections, {{count}} questions waiting',
+    showSections_one: 'Show sections, {{count, number}} question waiting',
+    showSections_other: 'Show sections, {{count, number}} questions waiting',
     queues: 'Queues',
     allTasks: 'All tasks',
     mine: 'Mine',
     inbox: 'Inbox',
     openQuestions_zero: 'No open questions',
-    openQuestions_one: '{{count}} open question',
-    openQuestions_other: '{{count}} open questions',
+    openQuestions_one: '{{count, number}} open question',
+    openQuestions_other: '{{count, number}} open questions',
     loadingParticipant: 'Loading the participant…',
     noParticipant: 'no participant',
     signOut: 'Sign out',
@@ -97,16 +106,16 @@ export const ui = {
     cardUnassigned: 'not assigned',
     features: {
       blocked: 'blocked: there is a blocked_by link to an unclosed task',
-      questions_one: '{{count}} question without an answer',
-      questions_other: '{{count}} questions without an answer',
+      questions_one: '{{count, number}} question without an answer',
+      questions_other: '{{count, number}} questions without an answer',
       // Два числа в одной фразе: второе приходит уже собранной фразой (`blockingOf`),
       // потому что склонять его надо отдельно от первого.
-      questionsBlocking_one: '{{count}} question without an answer, {{blocking}}',
-      questionsBlocking_other: '{{count}} questions without an answer, {{blocking}}',
-      blockingOf_one: '{{count}} of them blocking',
-      blockingOf_other: '{{count}} of them blocking',
-      remarks_one: '{{count}} remark not yet resolved',
-      remarks_other: '{{count}} remarks not yet resolved',
+      questionsBlocking_one: '{{count, number}} question without an answer, {{blocking}}',
+      questionsBlocking_other: '{{count, number}} questions without an answer, {{blocking}}',
+      blockingOf_one: '{{count, number}} of them blocking',
+      blockingOf_other: '{{count, number}} of them blocking',
+      remarks_one: '{{count, number}} remark not yet resolved',
+      remarks_other: '{{count, number}} remarks not yet resolved',
     },
     nav: {
       label: 'Navigation for task {{key}}',
@@ -193,8 +202,8 @@ export const ui = {
     offline: 'no connection',
     offlineTitle: 'The connection to the journal stream is lost, reconnecting',
     updates: 'List updates',
-    changed_one: '{{count}} task changed',
-    changed_other: '{{count}} tasks changed',
+    changed_one: '{{count, number}} task changed',
+    changed_other: '{{count, number}} tasks changed',
     changedUnknown: 'There was no connection for a while, the list may have changed',
     show: 'Show',
     questionsToMe: 'Questions for me',

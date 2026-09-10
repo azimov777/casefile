@@ -18,5 +18,5 @@ export {
 export { clearDraft, readDraft, saveDraft, EMPTY_DRAFT, type Draft } from './draft';
 export { listReturnHref, listReturnState } from './list-return';
 export { PAGE_GAP, pageCount, pageWindow, type PageSlot } from './paging';
-export { exactTime, relativeTime } from './time';
+export { exactTime, formatNumber, relativeTime, type RelativeTimeOptions } from './locale';
 export { skipClickWhileSelecting } from './selection';

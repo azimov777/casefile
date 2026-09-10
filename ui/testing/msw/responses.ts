@@ -4,6 +4,13 @@ import type { components } from '@/shared/api';
 /** Источник, на который ходит приложение в тестах (см. `env` в vite.config.ts). */
 export const API = 'http://localhost:3000';
 
+/**
+ * Конфигурация установки. Тот же источник, что и у API, не случайно: и статику,
+ * и `/api` приложение спрашивает у своего источника, а в jsdom им служит адрес
+ * страницы.
+ */
+export const CONFIG = `${API}/config.json`;
+
 type Bootstrap = components['schemas']['BootstrapRead'];
 type Task = components['schemas']['TaskSearchRead'];
 type PageMeta = components['schemas']['PageMeta'];

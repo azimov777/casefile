@@ -216,3 +216,40 @@ describe('множественное число', () => {
     ]);
   });
 });
+
+describe('разряды числа', () => {
+  afterAll(() => {
+    void i18n.changeLanguage('en');
+  });
+
+  /*
+   * Разделитель разрядов — свойство языка, как и форма слова: у английского запятая,
+   * у русского пробел. Считает его `Intl` внутри `i18next` (`{{count, number}}`
+   * в словаре), поэтому своей таблицы разделителей здесь нет — как нет и таблицы
+   * окончаний. Четырёхзначное число — первое, на котором это видно.
+   */
+  const BIG = 1234;
+
+  it.each(LANGUAGES)('в словаре %s счётная фраза разделяет разряды по-своему', (language) => {
+    const expected = new Intl.NumberFormat(language).format(BIG);
+    expect(expected).not.toBe(String(BIG));
+
+    for (const { ns, key } of pluralKeys()) {
+      const where = `${language}:${ns}.${key}`;
+      const text = said(language, ns, key, BIG);
+
+      expect(text, where).toContain(expected);
+      // Голое `1234` во фразе означало бы подстановку мимо `Intl`.
+      expect(text, where).not.toContain(String(BIG));
+    }
+  });
+
+  it('у языков разделитель разный, и фразы поэтому не совпадают', () => {
+    expect(said('en', 'tasks', 'found', BIG)).not.toContain(
+      new Intl.NumberFormat('ru').format(BIG),
+    );
+    expect(said('ru', 'tasks', 'found', BIG)).not.toContain(
+      new Intl.NumberFormat('en').format(BIG),
+    );
+  });
+});
