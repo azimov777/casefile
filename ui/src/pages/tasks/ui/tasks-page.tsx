@@ -12,6 +12,7 @@ import { UpdatesBar } from '@/features/live-journal';
 import { type Page } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { TasksBoard } from './tasks-board';
+import { TasksPagination } from './tasks-pagination';
 import { TasksTable } from './tasks-table';
 
 /**
@@ -19,10 +20,10 @@ import { TasksTable } from './tasks-table';
  * одни и те же — один запрос `GET /api/v1/tasks` с признаками прямо в строке
  * (`../tracker/docs/FRONTEND.md`, «Строка списка»).
  *
- * Своего состояния у экрана нет: отбор, режим и курсор живут в адресе.
+ * Своего состояния у экрана нет: отбор, режим и номер страницы живут в адресе.
  */
 export function TasksPage() {
-  const { filters, apply, goToPage, reset } = useTaskFilters();
+  const { filters, apply, reset } = useTaskFilters();
   const board = filters.view === 'board';
   const params = useMemo(() => filtersToListParams(filters), [filters]);
 
@@ -39,7 +40,7 @@ export function TasksPage() {
    */
   const lastLoaded = useRef<Page<Task> | null>(null);
   if (list.data !== undefined) lastLoaded.current = list.data;
-  const page = list.data ?? lastLoaded.current;
+  const loaded = list.data ?? lastLoaded.current;
 
   const active = board ? pages : list;
 
@@ -48,17 +49,37 @@ export function TasksPage() {
   const problem =
     filters.query.trim() === '' ? null : readQueryProblem(active.error, filters.query);
 
-  const cursor = page?.meta?.next_cursor ?? null;
-  const hasMore = page?.meta?.has_more === true && cursor !== null;
+  /**
+   * Сколько задач нашлось по отбору. Список задач заполняет `meta.total` всегда
+   * (TRK-41); `null` значит «не считали» — тогда ни числа выдачи, ни номеров страниц
+   * не показывается, остаётся честное «есть ещё» по `has_more`.
+   */
+  const total = loaded?.meta?.total ?? null;
+  const hasMore = loaded?.meta?.has_more === true;
 
   const boardTasks = pages.data?.pages.flatMap((chunk) => chunk.items) ?? [];
 
-  // Сколько строк показано сейчас: у доски это всё прочитанное, у таблицы — страница.
-  const shown = board
+  // Сколько строк прочитано сейчас: у доски это всё прочитанное, у таблицы — страница.
+  const read = board
     ? pages.data === undefined
       ? null
       : boardTasks.length
-    : (page?.items.length ?? null);
+    : (loaded?.items.length ?? null);
+
+  /*
+   * Что за число стоит у заголовка. У таблицы это вся выдача: страница под ним —
+   * пятьдесят строк из скольких-то, и «50» рядом со словом «Задачи» читалось бы как
+   * «задач всего пятьдесят». У доски выдача копится страницами, общего числа у неё
+   * нет, и число там по-прежнему про прочитанное.
+   */
+  const found = board ? read : (total ?? read);
+
+  /**
+   * Страница за концом выдачи: пересланная ссылка пережила сузившийся отбор. Бэкенд
+   * отвечает на неё пустой страницей и прежним `total` — по нему и видно, что задачи
+   * есть, просто не здесь.
+   */
+  const beyond = loaded?.items.length === 0 && total !== null && total > 0;
 
   return (
     <main className="flex flex-col gap-3">
@@ -81,12 +102,14 @@ export function TasksPage() {
           Задачи
           {/*
            * Число выдачи стоит здесь, а не полосой над таблицей. Из имени заголовка оно
-           * скрыто: то же число программа чтения с экрана берёт из подписи таблицы,
-           * а «Задачи 21» вместо «Задачи» ломало бы навигацию по заголовкам.
+           * скрыто: то же число программа чтения с экрана берёт из области ниже
+           * («Найдено задач: 98»), а «Задачи 98» вместо «Задачи» ломало бы навигацию
+           * по заголовкам. Подпись таблицы говорит своё и другое — сколько строк
+           * на этой странице.
            */}
-          {shown === null ? null : (
+          {found === null ? null : (
             <span className="text-label font-normal text-muted" aria-hidden="true">
-              {shown}
+              {found}
             </span>
           )}
         </h1>
@@ -109,7 +132,7 @@ export function TasksPage() {
        * то, что появилось внутри уже существующего контейнера.
        */}
       <p aria-live="polite" className="sr-only">
-        {shown === null ? '' : `Показано задач: ${shown}`}
+        {found === null ? '' : board ? `Показано задач: ${found}` : `Найдено задач: ${found}`}
       </p>
 
       {/*
@@ -137,28 +160,36 @@ export function TasksPage() {
             }
           />
         )
-      ) : page === null ? null : page.items.length === 0 ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <Callout>Задач по этим условиям нет</Callout>
-          <Button tone="quiet" onClick={reset} disabled={!hasConditions(filters)}>
-            Сбросить фильтры
-          </Button>
+      ) : loaded === null ? null : loaded.items.length === 0 ? (
+        /*
+         * Пустая страница бывает двух разных бед, и путать их нельзя: по этим условиям
+         * задач нет вовсе — или они есть, но кончились раньше этой страницы. Второе
+         * лечится не сбросом отбора, а возвратом на существующую страницу, и ряд
+         * страниц под сообщением как раз туда и ведёт.
+         */
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {beyond ? (
+              <Callout>
+                На этой странице задач нет: по этим условиям их {total}, и все они на предыдущих
+                страницах
+              </Callout>
+            ) : (
+              <>
+                <Callout>Задач по этим условиям нет</Callout>
+                <Button tone="quiet" onClick={reset} disabled={!hasConditions(filters)}>
+                  Сбросить фильтры
+                </Button>
+              </>
+            )}
+          </div>
+          <TasksPagination page={filters.page} total={total} hasMore={hasMore} />
         </div>
       ) : (
         <>
-          <TasksTable tasks={page.items} stale={list.isFetching || problem !== null} />
+          <TasksTable tasks={loaded.items} stale={list.isFetching || problem !== null} />
 
-          <div className="flex items-center gap-3">
-            {hasMore ? <Button onClick={() => goToPage(cursor)}>Ещё</Button> : null}
-            {filters.cursor === '' ? null : (
-              <Button tone="quiet" onClick={() => apply({})}>
-                В начало списка
-              </Button>
-            )}
-            {hasMore ? null : (
-              <span className="text-label text-muted">Это последняя страница.</span>
-            )}
-          </div>
+          <TasksPagination page={filters.page} total={total} hasMore={hasMore} />
         </>
       )}
     </main>

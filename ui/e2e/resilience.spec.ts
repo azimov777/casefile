@@ -58,16 +58,31 @@ test('отказ списка объясняется по коду и повто
     if (request.url().includes('/api/v1/tasks?')) attempts.push(request.url());
   });
 
-  // Негодный курсор — отказ по существу: 4xx не повторяется молча, и человек
-  // видит объяснение сразу.
-  await page.goto('/tasks?queue=DEMO&cursor=nonsense');
+  /*
+   * Отказ подменяется в браузере, как и у шапки выше. Раньше он добывался негодным
+   * курсором прямо из адреса, но курсор из адреса таблицы ушёл вместе с кнопкой «Ещё»
+   * (UI-65), а негодный номер страницы читается как первая — выжать 4xx из адреса
+   * списка больше нечем. Код взят настоящий: так отвечает разбор отбора.
+   */
+  await page.route('**/api/v1/tasks?*', async (route) => {
+    await route.fulfill({
+      status: 422,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: { code: 'search_field_unknown', message: 'Search field is unknown', details: {} },
+      }),
+    });
+  });
+
+  // 4xx не повторяется молча: человек видит объяснение сразу.
+  await page.goto('/tasks?queue=DEMO');
 
   const failure = page.getByRole('main').getByRole('alert');
-  await expect(failure).toHaveText('Курсор страницы не разбирается.');
+  await expect(failure).toHaveText('Такого поля отбора нет.');
 
   const before = attempts.length;
   await page.getByRole('main').getByRole('button', { name: 'Повторить' }).click();
 
   await expect.poll(() => attempts.length).toBeGreaterThan(before);
-  await expect(failure).toHaveText('Курсор страницы не разбирается.');
+  await expect(failure).toHaveText('Такого поля отбора нет.');
 });

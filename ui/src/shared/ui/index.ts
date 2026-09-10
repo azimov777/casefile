@@ -4,6 +4,15 @@ export { Callout } from './callout';
 export { Input } from './input';
 export { Composer } from './composer';
 export { Markdown } from './markdown';
+export {
+  Pagination,
+  PaginationGap,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationStub,
+} from './pagination';
 export { QueryState, type QueryLike } from './query-state';
 export { Receipt } from './receipt';
 export { Reveal } from './reveal';
