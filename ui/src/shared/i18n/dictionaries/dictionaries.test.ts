@@ -22,11 +22,13 @@ import { dictionaries } from './index';
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 
 /** Плоский список ключей словаря: `login.submit`, `errors.unauthorized`. */
-function keysOf(node: unknown, prefix = ''): string[] {
-  if (typeof node !== 'object' || node === null) return [prefix.replace(PLURAL_SUFFIX, '')];
+function keysOf(node: unknown, prefix = '', stripForm = true): string[] {
+  if (typeof node !== 'object' || node === null) {
+    return [stripForm ? prefix.replace(PLURAL_SUFFIX, '') : prefix];
+  }
 
   return Object.entries(node).flatMap(([key, value]) =>
-    keysOf(value, prefix === '' ? key : `${prefix}.${key}`),
+    keysOf(value, prefix === '' ? key : `${prefix}.${key}`, stripForm),
   );
 }
 
@@ -49,18 +51,36 @@ describe('словари языков', () => {
   });
 
   it('ни одна подпись не осталась непереведённой копией английской', () => {
-    // Совпадение текста законно там, где переводить нечего: подсказка формата токена
-    // и подстановка кода ошибки одинаковы на любом языке.
-    const sameOnPurpose = new Set(['login.tokenPlaceholder', 'ui.error.withCode']);
+    // Совпадение текста законно там, где переводить нечего: подсказка формата токена,
+    // пример на языке запросов бэкенда, подстановка кода ошибки и приписка к заголовку
+    // разбора — знак и подстановка, без единого слова.
+    const sameOnPurpose = new Set([
+      'login.tokenPlaceholder',
+      'tasks.filters.query.placeholder',
+      'ui.error.withCode',
+      'ui.entry.headline.resolutionOutcome',
+    ]);
 
-    const copied = sortedKeys('en').filter((key) => {
-      if (sameOnPurpose.has(key)) return false;
-      return phrase('en', key) === phrase('ru', key);
+    /*
+     * Сравниваются полные ключи, вместе с формой множественного числа: у стёртой формы
+     * (`tasks.found`) значения нет ни в одном языке, и два `undefined` прошли бы за
+     * непереведённую копию. Формы, которых в английском нет вовсе (`_few`, `_many`),
+     * сравнивать не с чем — они пропускаются.
+     */
+    const copied = fullKeys('en').filter((key) => {
+      if (sameOnPurpose.has(key.replace(PLURAL_SUFFIX, ''))) return false;
+      const russian = phrase('ru', key);
+      return russian !== undefined && phrase('en', key) === russian;
     });
 
     expect(copied).toEqual([]);
   });
 });
+
+/** Плоский список ключей вместе с формой множественного числа. */
+function fullKeys(language: keyof typeof dictionaries): string[] {
+  return keysOf(dictionaries[language], '', false).sort();
+}
 
 function phrase(language: keyof typeof dictionaries, key: string): unknown {
   return key
