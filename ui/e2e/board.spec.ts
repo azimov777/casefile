@@ -35,6 +35,19 @@ test('доска показывает по столбцу на каждый ст
 
   await page.goto('/tasks?queue=DEMO&view=board');
   await expect(column(page, statuses[0] as string)).toBeVisible();
+  await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
+
+  /*
+   * По запросу на столбец и один на число выдачи (UI-70). Раскрытый столбец читает
+   * свою первую страницу, свёрнутый — только своё число: сотню закрытых задач ради
+   * счётчика в заголовке никто не читает. Число выдачи спрашивается отдельно, потому
+   * что сложить его из шести столбцов нельзя — свёрнутые не читают вовсе.
+   */
+  await expect
+    .poll(() => calls.length, { message: 'запросов на отрисовку доски' })
+    .toBe(statuses.length + 1);
+  const counting = calls.filter((url) => new URL(url).searchParams.get('limit') === '1');
+  expect(counting, 'число выдачи и числа свёрнутых столбцов').toHaveLength(3);
 
   for (const status of statuses) {
     const section = column(page, status);
@@ -51,10 +64,11 @@ test('доска показывает по столбцу на каждый ст
     for (const key of keys) {
       await expect(section.getByRole('article').filter({ hasText: key })).toBeVisible();
     }
-  }
 
-  // Один запрос списка на отрисовку доски.
-  expect(calls).toHaveLength(1);
+    // Число в заголовке — от бэкенда и точное: «из ?» после UI-70 остаётся только
+    // на случай, когда выдачу не посчитали вовсе.
+    await expect(toggle).toContainText(String(keys.length));
+  }
 });
 
 test('раскрытие столбца не сужает соседей и не двигает карточки, которые читают', async ({

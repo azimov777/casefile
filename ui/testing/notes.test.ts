@@ -99,6 +99,7 @@ const NOT_IN_CODE: Record<string, string> = {
   bodyUsed: 'поле `Request` в браузере: им объяснено, почему повтор снимает клон заранее',
   elementFromPoint: 'API браузера',
   cacheInBuiltFormats: 'поле i18next, названное как его умолчание: своего значения мы не ставим',
+  maxPages: 'настройка бесконечного запроса TanStack Query, названная как невзятая',
   onlyBuiltDependencies: 'поле pnpm 10, названное как отменённое',
   resize_window: 'инструмент браузерного расширения, не код репозитория',
   '10-listen-on-ipv6-by-default.sh': 'скрипт внутри образа nginx, а не наш файл',

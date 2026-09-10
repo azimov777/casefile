@@ -2,7 +2,16 @@ import { delay, http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, data, failure, task, taskPackage, taskPage } from '@testing/msw/responses';
+import {
+  API,
+  bootstrap,
+  data,
+  failure,
+  task,
+  taskListing,
+  taskPackage,
+  taskPage,
+} from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
@@ -620,13 +629,11 @@ describe('порядок и страницы', () => {
     expect(screen.getByRole('link', { name: say.tasks('paging.next') })).toBeInTheDocument();
   });
 
-  it('кнопки «Ещё» в табличном пути нет: способ листать один', async () => {
+  it('второго способа листать в табличном пути нет', async () => {
     server.use(paged(120));
 
     open('/tasks');
     await screen.findByText('DEMO-1');
-
-    expect(screen.queryByRole('button', { name: say.tasks('board.more') })).toBeNull();
 
     /*
      * Второго способа листать нет и в самом ряду: там только ссылки на страницы да
@@ -771,7 +778,7 @@ describe('отбор по замечаниям', () => {
 describe('переключение вида', () => {
   it('переносит на доску весь отбор, а не только адрес раздела', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => taskPage([task('DEMO-3')])));
+    server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&priority=high&assignee=owner&sort=key');
     await screen.findByText('DEMO-3');
@@ -793,7 +800,7 @@ describe('переключение вида', () => {
 
   it('возврат в таблицу отдаёт тот же отбор обратно', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => taskPage([task('DEMO-3')])));
+    server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
     open('/tasks?view=board&queue=DEMO&priority=high');
     await screen.findByText('DEMO-3');
@@ -804,7 +811,7 @@ describe('переключение вида', () => {
   });
 
   it('текущий вид назван текущим, и переключатель на странице один', async () => {
-    server.use(listing(() => taskPage([task('DEMO-3')])));
+    server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
     open('/tasks?view=board&queue=DEMO');
     await screen.findByText('DEMO-3');
@@ -821,7 +828,7 @@ describe('переключение вида', () => {
   });
 
   it('верхняя полоса называет место: очередь и раздел', async () => {
-    server.use(listing(() => taskPage([task('DEMO-3')])));
+    server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
     open('/tasks?view=board&queue=DEMO&priority=high');
     await screen.findByText('DEMO-3');
@@ -833,7 +840,7 @@ describe('переключение вида', () => {
 
   it('внутри задачи место называет её очередь и ключ, а вида не показывает', async () => {
     server.use(
-      listing(() => taskPage([task('DEMO-3')])),
+      listing((url) => taskListing(url, [task('DEMO-3')])),
       http.get(`${API}/api/v1/tasks/DEMO-3`, () => data(taskPackage('DEMO-3'))),
     );
 

@@ -10,11 +10,6 @@ export const tasks = {
   found_few: 'Нашлось {{count, number}} задачи',
   found_many: 'Нашлось {{count, number}} задач',
   found_other: 'Нашлось {{count, number}} задачи',
-  shown_zero: 'Ничего не показано',
-  shown_one: 'Показана {{count, number}} задача',
-  shown_few: 'Показано {{count, number}} задачи',
-  shown_many: 'Показано {{count, number}} задач',
-  shown_other: 'Показано {{count, number}} задачи',
   empty: 'Задач по этим условиям нет',
   resetFilters: 'Сбросить фильтры',
   beyond_one:
@@ -47,14 +42,12 @@ export const tasks = {
   },
 
   board: {
-    more: 'Ещё',
-    loadingMore: 'Читаем…',
-    partial: 'Показаны не все задачи отбора: столбцы дочитываются по кнопке.',
-    all_one: 'Показаны все задачи отбора, всего {{count, number}} задача.',
-    all_few: 'Показаны все задачи отбора, всего {{count, number}} задачи.',
-    all_many: 'Показаны все задачи отбора, всего {{count, number}} задач.',
-    all_other: 'Показаны все задачи отбора, всего {{count, number}} задачи.',
+    reading: 'Читаем задачи столбца…',
+    readingMore: 'Читаем ещё…',
+    // «сколько-то из ?»: числа выдачи бэкенд не назвал, и точным его не заменить.
     ofUnknown: '{{count, number}} из ?',
+    // Свёрнутый столбец не читал ничего: без числа от бэкенда сказать ему нечего.
+    unknown: '?',
     empty: 'Пусто',
   },
 

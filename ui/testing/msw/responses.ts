@@ -90,6 +90,31 @@ export function taskPage(items: Task[], meta: Partial<PageMeta> = {}) {
 }
 
 /**
+ * Ответ списка задач по параметрам самого запроса: отбор по статусу, размер страницы
+ * и курсор.
+ *
+ * Нужен там, где выдачу читают столбцами доски: шесть запросов одного прогона
+ * различаются только `status`, и общий ответ на все шесть показал бы одну и ту же
+ * задачу в каждом столбце. Курсор здесь — смещение строкой: тесту важно, что второй
+ * запрос приносит продолжение, а не то, как курсор устроен у бэкенда.
+ */
+export function taskListing(url: URL, items: Task[]) {
+  const wanted = url.searchParams.getAll('status');
+  const matched =
+    wanted.length === 0 ? items : items.filter((row) => wanted.includes(row.status ?? ''));
+
+  const from = Number(url.searchParams.get('cursor') ?? 0);
+  const limit = Number(url.searchParams.get('limit') ?? matched.length);
+  const next = from + limit;
+
+  return collection(matched.slice(from, next), {
+    total: matched.length,
+    has_more: next < matched.length,
+    next_cursor: next < matched.length ? String(next) : null,
+  });
+}
+
+/**
  * Строка выдачи со всеми полями, которые просит список. Признаки заданы явно:
  * ради них строка и приходит целиком, без запроса на задачу.
  */

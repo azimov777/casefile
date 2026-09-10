@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { tasksBoardQueryOptions, tasksQueryOptions, type Task } from '@/entities/task';
+import { useQuery } from '@tanstack/react-query';
+import { tasksQueryOptions, tasksTotalQueryOptions, type Task } from '@/entities/task';
 import {
   TaskFiltersForm,
   filtersToListParams,
@@ -13,15 +13,17 @@ import { UpdatesBar } from '@/features/live-journal';
 import { type Page } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
 import { formatNumber } from '@/shared/lib';
-import { Button, Callout, QueryState } from '@/shared/ui';
+import { Button, Callout, QueryState, type QueryLike } from '@/shared/ui';
 import { TasksBoard } from './tasks-board';
 import { TasksPagination } from './tasks-pagination';
 import { TasksTable } from './tasks-table';
 
 /**
- * Список задач в двух режимах: таблицей и доской по столбцам статусов. Данные у них
- * одни и те же — один запрос `GET /api/v1/tasks` с признаками прямо в строке
- * (`../tracker/docs/FRONTEND.md`, «Строка списка»).
+ * Список задач в двух режимах: таблицей и доской по столбцам статусов. Строка выдачи
+ * у них одна и та же, с признаками прямо в ней (`../tracker/docs/FRONTEND.md`,
+ * «Строка списка»), а вот читают они по-разному: таблица берёт страницу целиком,
+ * а на доске каждый столбец читает свой отбор сам (UI-70). Экран поэтому держит для
+ * доски только её число — сколько задач нашлось по отбору.
  *
  * Своего состояния у экрана нет: отбор, режим и номер страницы живут в адресе.
  */
@@ -32,10 +34,18 @@ export function TasksPage() {
   const board = filters.view === 'board';
   const params = useMemo(() => filtersToListParams(filters), [filters]);
 
-  // Запроса всегда два, работает ровно один: хук нельзя позвать условно, а лишний
-  // запрос в отключённом режиме означал бы два обращения к списку на одну отрисовку.
+  /*
+   * Запроса всегда два, работает ровно один: хук нельзя позвать условно, а лишний
+   * запрос в отключённом режиме означал бы два обращения к списку на одну отрисовку.
+   *
+   * У доски это запрос без задач — одна строка ради `meta.total`. Он отвечает на два
+   * вопроса разом: сколько задач нашлось по отбору (ни один столбец этого не знает —
+   * свёрнутый не читает вовсе) и разобрал ли бэкенд запрос, написанный человеком.
+   * Второе объясняет форма отбора, и место, по которому она это делает, обязано быть
+   * одно: шесть столбцов объяснили бы один и тот же отказ шесть раз.
+   */
   const list = useQuery({ ...tasksQueryOptions(params), enabled: !board });
-  const pages = useInfiniteQuery({ ...tasksBoardQueryOptions(params), enabled: board });
+  const counted = useQuery({ ...tasksTotalQueryOptions(params), enabled: board });
 
   /**
    * Последняя удачная страница таблицы. Отказ разбора запроса не должен опустошать
@@ -47,7 +57,24 @@ export function TasksPage() {
   if (list.data !== undefined) lastLoaded.current = list.data;
   const loaded = list.data ?? lastLoaded.current;
 
-  const active = board ? pages : list;
+  const active = board ? counted : list;
+
+  /*
+   * Состояние запроса над содержимым. У таблицы это её запрос целиком, у доски —
+   * запрос числа выдачи, но **без ожидания**: полоса «Загружаем задачи…», появившаяся
+   * над доской и пропавшая через мгновение, сдвигает карточки в тот самый кадр,
+   * в который человек в них смотрит (замерено: первая карточка `open` уезжала
+   * на 58 px вверх). Своё ожидание каждый столбец рисует у себя, а отказ остаётся
+   * здесь: он редок, и подвинуть ради него доску честно.
+   */
+  const state: QueryLike = board
+    ? {
+        isPending: false,
+        isFetching: counted.isFetching,
+        error: counted.error,
+        refetch: () => void counted.refetch(),
+      }
+    : list;
 
   // Отказ разбора относится к полю запроса только тогда, когда запрос отправляли мы
   // из этого поля; негодное значение в адресе — беда всей страницы, а не поля.
@@ -62,22 +89,14 @@ export function TasksPage() {
   const total = loaded?.meta?.total ?? null;
   const hasMore = loaded?.meta?.has_more === true;
 
-  const boardTasks = pages.data?.pages.flatMap((chunk) => chunk.items) ?? [];
-
-  // Сколько строк прочитано сейчас: у доски это всё прочитанное, у таблицы — страница.
-  const read = board
-    ? pages.data === undefined
-      ? null
-      : boardTasks.length
-    : (loaded?.items.length ?? null);
-
   /*
-   * Что за число стоит у заголовка. У таблицы это вся выдача: страница под ним —
-   * пятьдесят строк из скольких-то, и «50» рядом со словом «Задачи» читалось бы как
-   * «задач всего пятьдесят». У доски выдача копится страницами, общего числа у неё
-   * нет, и число там по-прежнему про прочитанное.
+   * Что за число стоит у заголовка — одно и то же в обоих режимах: сколько задач
+   * нашлось по отбору. У доски оно раньше говорило про прочитанное и росло от нажатий
+   * «Ещё»; теперь столбцы читают по мере прокрутки, и число прочитанного меняется
+   * от того, куда человек доехал, — про выдачу оно не сказало бы ничего. Числа
+   * по статусам стоят там, где им место: в заголовках столбцов.
    */
-  const found = board ? read : (total ?? read);
+  const found = board ? (counted.data ?? null) : (total ?? loaded?.items.length ?? null);
 
   /**
    * Страница за концом выдачи: пересланная ссылка пережила сузившийся отбор. Бэкенд
@@ -137,7 +156,7 @@ export function TasksPage() {
        * то, что появилось внутри уже существующего контейнера.
        */}
       <p aria-live="polite" className="sr-only">
-        {found === null ? '' : board ? t('shown', { count: found }) : t('found', { count: found })}
+        {found === null ? '' : t('found', { count: found })}
       </p>
 
       {/*
@@ -146,25 +165,21 @@ export function TasksPage() {
        * намеренно — она сдвигала бы строки вниз ровно тогда, когда человек правит
        * запрос и сверяется с ними. Всё остальное — общее состояние запроса с повтором.
        */}
-      {problem === null ? <QueryState query={active} loading={t('loading')} /> : null}
+      {problem === null ? <QueryState query={state} loading={t('loading')} /> : null}
 
       {board ? (
-        pages.data === undefined ? null : (
-          <TasksBoard
-            tasks={boardTasks}
-            hasMore={pages.hasNextPage}
-            loadingMore={pages.isFetchingNextPage}
-            onMore={() => void pages.fetchNextPage()}
-            collapsed={filters.collapsed}
-            onToggle={(status, open) =>
-              apply({
-                collapsed: open
-                  ? filters.collapsed.filter((value) => value !== status)
-                  : [...filters.collapsed, status],
-              })
-            }
-          />
-        )
+        <TasksBoard
+          params={params}
+          explained={problem !== null}
+          collapsed={filters.collapsed}
+          onToggle={(status, open) =>
+            apply({
+              collapsed: open
+                ? filters.collapsed.filter((value) => value !== status)
+                : [...filters.collapsed, status],
+            })
+          }
+        />
       ) : loaded === null ? null : loaded.items.length === 0 ? (
         /*
          * Пустая страница бывает двух разных бед, и путать их нельзя: по этим условиям

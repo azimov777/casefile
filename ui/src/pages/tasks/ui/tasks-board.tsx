@@ -1,16 +1,29 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StatusMark, TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
-import { Button, Reveal } from '@/shared/ui';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  StatusMark,
+  TASK_STATUSES,
+  TaskCard,
+  tasksColumnQueryOptions,
+  tasksTotalQueryOptions,
+  type TaskListParams,
+  type TaskStatus,
+} from '@/entities/task';
+import { QueryState, Reveal, type QueryLike } from '@/shared/ui';
 import { useLanguage } from '@/shared/i18n';
 import { cn, formatNumber, useExitHold } from '@/shared/lib';
+import { useEndReach } from '../model/end-reach';
 
 interface TasksBoardProps {
-  tasks: Task[];
-  /** Прочитано не всё: столбцы честно говорят, что за ними может быть ещё. */
-  hasMore: boolean;
-  loadingMore: boolean;
-  onMore: () => void;
+  /** Отбор человека без статуса: свой статус дописывает к нему сам столбец. */
+  params: TaskListParams;
+  /**
+   * Отказ уже объяснён формой отбора — столбцы о нём молчат. Иначе один и тот же
+   * разбор запроса объяснялся бы разом в шести местах: непрочитанный столбец
+   * не знает, что он такой не один.
+   */
+  explained: boolean;
   /**
    * Свёрнутые столбцы. Приходят из адреса, а не из своего `useState`: свёрнутое
    * состояние — это то, что человек увидит по пересланной ссылке, и терять его на
@@ -27,23 +40,12 @@ interface TasksBoardProps {
  * (`TASK_STATUSES`), а не из своего списка: перечисление уже менялось и может измениться
  * снова — доска обязана пережить это перегенерацией клиента, без правки кода
  * (`../tracker/docs/FRONTEND.md`, «Доска без доски»).
+ *
+ * Задач доска не получает и не раздаёт: каждый столбец читает свой отбор сам и своим
+ * курсором (UI-70). Общего дочитывания под доской поэтому нет вовсе — способ дочитать
+ * столбец ровно один, и это его прокрутка.
  */
-export function TasksBoard({
-  tasks,
-  hasMore,
-  loadingMore,
-  onMore,
-  collapsed,
-  onToggle,
-}: TasksBoardProps) {
-  const { t } = useTranslation('tasks');
-  const byStatus = new Map<TaskStatus, Task[]>(TASK_STATUSES.map((status) => [status, []]));
-  for (const task of tasks) {
-    const status = task.status;
-    if (status === null || status === undefined) continue;
-    byStatus.get(status)?.push(task);
-  }
-
+export function TasksBoard({ params, explained, collapsed, onToggle }: TasksBoardProps) {
   /*
    * Доска высотой в остаток окна: столбец прокручивается внутри себя, а страница
    * под ним не двигается вовсе (UI-68).
@@ -54,7 +56,7 @@ export function TasksBoard({
    * раскрывается по нажатию. Замеряется только отступ доски от верха документа —
    * своя высота доски в него не входит, поэтому обратной связи «выросла — пересчитали —
    * снова выросла» здесь нет. Всё, что ниже ряда столбцов, раздаёт уже флексбокс:
-   * подвал занимает своё, ряд забирает остаток (`flex-1` при `min-h-0`).
+   * ряд забирает остаток (`flex-1` при `min-h-0`).
    */
   const boardRef = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0);
@@ -94,7 +96,7 @@ export function TasksBoard({
       style={
         { '--ui-board-height': `calc(100dvh - ${top}px - var(--ui-page-tail))` } as CSSProperties
       }
-      className="flex flex-col gap-4 fold:h-(--ui-board-height)"
+      className="flex flex-col fold:h-(--ui-board-height)"
     >
       {/*
        * `items-stretch`, а не Tailwind по умолчанию (`items-start` стояло здесь до
@@ -118,25 +120,12 @@ export function TasksBoard({
           <BoardColumn
             key={status}
             status={status}
-            column={byStatus.get(status) ?? []}
-            hasMore={hasMore}
+            params={params}
+            explained={explained}
             open={!collapsed.includes(status)}
             onToggle={onToggle}
           />
         ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        {hasMore ? (
-          <>
-            <Button onClick={onMore} disabled={loadingMore}>
-              {loadingMore ? t('board.loadingMore') : t('board.more')}
-            </Button>
-            <span className="text-label text-muted">{t('board.partial')}</span>
-          </>
-        ) : (
-          <span className="text-label text-muted">{t('board.all', { count: tasks.length })}</span>
-        )}
       </div>
     </div>
   );
@@ -144,8 +133,8 @@ export function TasksBoard({
 
 interface BoardColumnProps {
   status: TaskStatus;
-  column: Task[];
-  hasMore: boolean;
+  params: TaskListParams;
+  explained: boolean;
   open: boolean;
   onToggle: (status: TaskStatus, open: boolean) => void;
 }
@@ -153,16 +142,67 @@ interface BoardColumnProps {
 /**
  * Столбец доски: заголовок со счётчиком и карточки под ним.
  *
- * Свой компонент, а не кусок перебора, потому что раскрытие держит свои карточки
- * до конца выхода (`useExitHold`), а хук в теле перебора не живёт.
+ * Свой компонент, а не кусок перебора, потому что читает он сам: свой отбор, свой
+ * курсор, своё число. Здесь же живёт раскрытие, которое держит карточки до конца
+ * выхода (`useExitHold`), — хук в теле перебора не живёт.
  */
-function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnProps) {
+function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnProps) {
   const reveal = useExitHold(open);
   const { t } = useTranslation('tasks');
+  const area = useRef<HTMLElement>(null);
+  // Число в заголовке идёт за языком, как и всякое число в интерфейсе (UI-79).
   const { language } = useLanguage();
+
+  /*
+   * Раскрытый столбец читает карточки страницами, свёрнутый — только своё число.
+   * Свёрнуты по умолчанию двое (`done`, `cancelled`), и вычитывать их выдачу ради
+   * одного числа в заголовке значило бы читать сотню строк, которых никто не просил.
+   */
+  const pages = useInfiniteQuery({ ...tasksColumnQueryOptions(status, params), enabled: open });
+  const counted = useQuery({
+    ...tasksTotalQueryOptions({ ...params, status: [status] }),
+    enabled: !open,
+  });
+
+  const tasks = pages.data?.pages.flatMap((page) => page.items) ?? [];
+  /*
+   * Число в заголовке — от бэкенда, а не от длины прочитанного: `meta.total` считает
+   * всю выдачу по отбору (TRK-41). Раскрытому столбцу оно приезжает вместе с первой
+   * страницей, свёрнутому — отдельным запросом; прочитанное остаётся в кэше, поэтому
+   * свёртывание уже читанного столбца числа не роняет.
+   */
+  const total = pages.data?.pages[0]?.meta?.total ?? counted.data ?? null;
+  const empty = total === 0 || (pages.data !== undefined && tasks.length === 0);
+
+  const failed = pages.error !== null && pages.error !== undefined;
+
+  /*
+   * Сторож в конце столбца зовёт следующую страницу. Он снимается на время запроса
+   * и после отказа: оставленный, он позвал бы снова в том же кадре, в котором вернулся
+   * отказ, — и это был бы цикл запросов, которого задача запрещает. Возвращает сторожа
+   * удачный повтор по кнопке.
+   */
+  const end = useEndReach({
+    area,
+    enabled: open && pages.hasNextPage && !pages.isFetchingNextPage && !failed,
+    onReach: () => void pages.fetchNextPage(),
+  });
+
+  /**
+   * Состояние дочитывания. Отдельно от состояния столбца: «читаем» здесь значит
+   * «читаем следующую страницу», а повтор после отказа зовёт её же, а не перечитывает
+   * весь столбец с начала.
+   */
+  const more: QueryLike = {
+    isPending: pages.isFetchingNextPage,
+    isFetching: pages.isFetchingNextPage,
+    error: explained || pages.data === undefined ? null : pages.error,
+    refetch: () => void pages.fetchNextPage(),
+  };
 
   return (
     <section
+      ref={area}
       /*
        * `relative` — точка отсчёта для абсолютных потомков, прежде всего для
        * `sr-only` спанов, которыми знак статуса называет свой род диктору.
@@ -185,12 +225,12 @@ function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnPro
        * скачком в восемь пикселей.
        *
        * `fold:overflow-y-auto` — своя прокрутка столбца (UI-68): карточки уезжают
-       * внутри него, соседние столбцы и страница при этом стоят. Отдельного
-       * `tabIndex` под это не нужно — кнопка свёртывания стоит внутри самого
-       * прокручиваемого столбца, и с фокусом на ней он ходит стрелками и `PageDown`.
-       * Ниже точки остановки прокрутки у столбца нет вовсе: там доске остаётся
-       * полторы карточки, и страница отдаёт столбцу весь экран (`docs/notes/ui.md`,
-       * «Две прокрутки уживаются ровно тогда, когда у страницы прокрутки не остаётся»).
+       * внутри него, соседние столбцы и страница при этом стоят. Она же корень
+       * наблюдателя, который дочитывает столбец по мере прокрутки: ниже точки
+       * остановки прокрутки у столбца нет вовсе, и корнем там становится окно
+       * (`useEndReach`, `scrollingArea`). Отдельного `tabIndex` под прокрутку
+       * не нужно — кнопка свёртывания стоит внутри самого прокручиваемого столбца,
+       * и с фокусом на ней он ходит стрелками и `PageDown`.
        */
       className={cn(
         'relative flex w-(--ui-board-column) shrink-0 basis-(--ui-board-column) flex-col rounded-control border border-line bg-sunken p-3 fold:min-h-0 fold:overflow-y-auto',
@@ -212,7 +252,7 @@ function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnPro
          * ничего, кроме случайного совпадения на коротких столбцах; теперь она
          * не даёт и его.
          */
-        (!reveal.held || column.length === 0) && 'border-dashed bg-transparent',
+        (!reveal.held || empty) && 'border-dashed bg-transparent',
       )}
       aria-label={status}
     >
@@ -233,27 +273,62 @@ function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnPro
               увидел `in_progress`, это один и тот же полукруг (решение Д20). */}
           <StatusMark status={status} className="font-mono" />
           <span className="text-meta whitespace-nowrap text-muted">
-            {/* «из ?»: сколько задач в статусе всего, знает только дочитанная
-                до конца выдача — врать точным числом до этого нельзя. */}
-            {hasMore
-              ? t('board.ofUnknown', { count: column.length })
-              : formatNumber(column.length, language)}
+            {/* Сколько задач в статусе, говорит бэкенд. Пока не сказал, врать нечем:
+                раскрытый столбец говорит «столько-то из ?» о прочитанном, свёрнутый
+                не говорит и этого — он не читал ничего. */}
+            {total === null
+              ? open
+                ? t('board.ofUnknown', { count: tasks.length })
+                : t('board.unknown')
+              : formatNumber(total, language)}
           </span>
         </button>
       </h3>
 
       {reveal.held ? (
         <Reveal leaving={reveal.leaving} entering={reveal.entering}>
-          {column.length === 0 ? (
+          {pages.data === undefined ? (
+            /*
+             * Первого ответа ещё нет — или не будет вовсе. И то и другое сказано
+             * словами, а отказ ещё и с кнопкой повтора: молчащий столбец неотличим
+             * от пустого. Молчит он ровно в одном случае — когда тот же отказ уже
+             * объяснён формой отбора у поля запроса.
+             */
+            <div className="mt-2">
+              {explained ? null : <QueryState query={pages} loading={t('board.reading')} />}
+            </div>
+          ) : tasks.length === 0 ? (
             <p className="mt-2 text-meta text-muted italic">{t('board.empty')}</p>
           ) : (
-            <ul className="mt-2 flex list-none flex-col gap-2 p-0">
-              {column.map((task) => (
-                <li key={task.key}>
-                  <TaskCard task={task} />
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="mt-2 flex list-none flex-col gap-2 p-0">
+                {tasks.map((task) => (
+                  <li key={task.key}>
+                    <TaskCard task={task} />
+                  </li>
+                ))}
+              </ul>
+
+              {/*
+               * Сторож конца: узел под последней карточкой. Дочитывание начинается,
+               * когда до него остаётся четверть высоты столбца, — то есть по мере
+               * прокрутки, а не по нажатию. Диктору узел не нужен: то же самое ему
+               * скажет состояние под ним.
+               *
+               * `h-px`, а не пустая высота: узел нулевой высоты наблюдатель считает
+               * видимым и внутри обрезанного места, поэтому раскрытие столбца читало
+               * страницу за страницей, пока едет движение (замерено: 30 карточек
+               * вместо 10). У узла с высотой обрезание отнимает всё пересечение,
+               * и движение остаётся движением, а не поводом читать.
+               */}
+              <div ref={end} className="h-px" aria-hidden="true" />
+
+              {more.isPending || more.error !== null ? (
+                <div className="mt-2">
+                  <QueryState query={more} loading={t('board.readingMore')} compact />
+                </div>
+              ) : null}
+            </>
           )}
         </Reveal>
       ) : null}
