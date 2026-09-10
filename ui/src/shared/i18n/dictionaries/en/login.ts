@@ -2,8 +2,9 @@
 export const login = {
   title: 'Tracker',
   intro: 'Watching over the tasks that agents run, and answering their questions.',
-  expired:
-    'The session is over: the server no longer accepts the saved token. Enter the token again.',
+  // «Этот», а не «сохранённый»: сюда приводит и отказ по ключу, который отдала сама
+  // установка, а его никто не сохранял и не вводил.
+  expired: 'The session is over: the server no longer accepts this token. Enter the token again.',
   tokenLabel: 'Participant token',
   // Подсказка формата, а не перевод: `trk_` — начало настоящего токена на любом языке.
   tokenPlaceholder: 'trk_...',

@@ -1,11 +1,11 @@
-import { http } from 'msw';
+import { HttpResponse, http } from 'msw';
 import { screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { API, bootstrap, data } from '@testing/msw/responses';
+import { API, CONFIG, bootstrap, data } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
 import { say } from '@testing/say';
-import { setToken } from '@/shared/api';
+import { loadInstallToken, setToken } from '@/shared/api';
 
 /**
  * Страница, падающая при отрисовке. Подменяется целый модуль страницы, а не заводится
@@ -41,6 +41,21 @@ describe('граница ошибок', () => {
     // Шапка жива: человек уходит со сломанной страницы ссылкой, а не перезагрузкой.
     expect(screen.getByRole('link', { name: say.ui('app.allTasks') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: say.ui('app.signOut') })).toBeInTheDocument();
+  });
+
+  it('при ключе от установки выхода нет и здесь: он один на оба экрана', async () => {
+    // Вторая кнопка выхода в этой ветке — то, о чём легко забыть. Её нет: сломанную
+    // страницу подменяет собой внутренняя граница, а оболочка вокруг остаётся та же
+    // самая, и кнопка в ней ровно одна.
+    setToken('trk_test');
+    server.use(http.get(CONFIG, () => HttpResponse.json({ token: 'trk_from_the_installation' })));
+    await loadInstallToken();
+    renderApp('/tasks');
+
+    await screen.findByRole('heading', { name: say.ui('app.broken.title') });
+
+    expect(screen.getByRole('link', { name: say.ui('app.allTasks') })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.ui('app.signOut') })).not.toBeInTheDocument();
   });
 
   it('технический текст исключения уходит в консоль, а не на страницу', async () => {
