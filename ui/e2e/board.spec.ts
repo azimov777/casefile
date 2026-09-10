@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { contractStatuses, fontsReady, silenceJournal, tasksByStatus } from './contour';
 
 function column(page: Page, status: string) {
@@ -465,4 +465,361 @@ test('ниже точки остановки доска остаётся на п
   expect(measured.pageOver).toBeGreaterThan(0);
   // И это не повод странице поехать вбок.
   expect(measured.sideways).toBe(0);
+});
+
+/**
+ * Самый длинный столбец демо: его решает состав демо, а не память сценария. Прокрутка
+ * меряется там, где ей есть куда ехать, и выписанный здесь статус устарел бы вместе
+ * с бэкендом (так уже было с `open` — TRK-15).
+ */
+async function longestColumn(request: APIRequestContext): Promise<string> {
+  const all = await tasksByStatus(request);
+  const longest = [...all.entries()].sort(([, left], [, right]) => right.length - left.length)[0];
+  expect(longest, 'в демо нет ни одной задачи').toBeDefined();
+  return (longest as [string, string[]])[0];
+}
+
+/** Заголовки всех шести столбцов и сами столбцы, снятые одним кадром. */
+function heads(page: Page) {
+  return page.evaluate(() => {
+    const sections = Array.from(document.querySelectorAll('section[aria-label]')).filter(
+      (node) => node.getAttribute('aria-label') !== 'Отбор задач',
+    );
+    const rect = (node: Element) => {
+      const box = node.getBoundingClientRect();
+      return {
+        top: Math.round(box.top),
+        bottom: Math.round(box.bottom),
+        left: Math.round(box.left),
+        right: Math.round(box.right),
+      };
+    };
+    return {
+      window: { width: window.innerWidth, height: window.innerHeight },
+      columns: sections.map((node) => ({
+        status: node.getAttribute('aria-label') as string,
+        head: rect(node.querySelector('h3') as Element),
+        column: rect(node),
+        scrolled: Math.round(node.scrollTop),
+        sideways: node.scrollWidth - node.clientWidth,
+      })),
+    };
+  });
+}
+
+/** Докручивает столбец до конца прочитанного — тем же движением, что и человек колесом. */
+async function scrollColumn(page: Page, status: string): Promise<void> {
+  await column(page, status).evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await expect
+    .poll(() => column(page, status).evaluate((node) => Math.round(node.scrollTop)), {
+      message: `столбец ${status} не прокрутился`,
+    })
+    .toBeGreaterThan(0);
+}
+
+/**
+ * Отношение контраста по WCAG для двух цветов вычисленного стиля — то же число,
+ * которое считает `axe`. Токены сверяет `theme.test.ts`, а здесь меряется то, что
+ * действительно нарисовано: прилипшая шапка обязана иметь свой фон, и контраст к нему
+ * считается по нему, а не по поверхности под ней.
+ */
+function contrast(front: string, back: string): number {
+  const channel = (part: number) => {
+    const value = part / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (color: string) => {
+    const [r, g, b] = (color.match(/[\d.]+/g) ?? []).map(Number) as [number, number, number];
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+  const first = luminance(front);
+  const second = luminance(back);
+  return (
+    Math.round(((Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)) * 100) / 100
+  );
+}
+
+test('на любой глубине прокрутки видно, какой столбец перед глазами', async ({ page, request }) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  await scrollColumn(page, status);
+
+  const measured = await heads(page);
+  expect(measured.columns).toHaveLength(contractStatuses().length);
+
+  const report = JSON.stringify(measured);
+  for (const seen of measured.columns) {
+    // По вертикали заголовок обязан быть на экране целиком: за этим задача и делалась.
+    expect(seen.head.top, report).toBeGreaterThanOrEqual(0);
+    expect(seen.head.bottom, report).toBeLessThanOrEqual(measured.window.height);
+    /*
+     * И стоять он обязан у верхней рамки **своего** столбца, а не в двенадцати
+     * пикселях под ней: поле столбца лежит внутри его области прокрутки, и щель
+     * над прилипшим заголовком была бы окном, сквозь которое едут карточки.
+     * Единица — рамка столбца.
+     */
+    expect(seen.head.top - seen.column.top, report).toBeLessThanOrEqual(2);
+    expect(seen.head.top - seen.column.top, report).toBeGreaterThanOrEqual(0);
+    // Отрицательные поля заголовка не имеют права развести столбец вбок.
+    expect(seen.sideways, report).toBe(0);
+  }
+
+  const scrolled = measured.columns.find((seen) => seen.status === status);
+  expect(scrolled?.scrolled, `столбцу ${status} нечего прокручивать`).toBeGreaterThan(0);
+});
+
+test('прилипшая шапка не просвечивает карточками и читается в своей теме', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  await scrollColumn(page, status);
+
+  const measured = await column(page, status).evaluate((node) => {
+    const head = node.querySelector('h3') as HTMLElement;
+    const box = head.getBoundingClientRect();
+    const cards = Array.from(node.querySelectorAll('article'));
+    /*
+     * Кто нарисован в полосе шапки: она обязана перекрывать карточку целиком, а не
+     * пустить её поверх себя. Точек много и по всей ширине: карточка позиционирована,
+     * а её название и исполнитель подняты ещё и `z-1` над растяжкой ссылки — одна
+     * точка посередине прошла бы мимо них.
+     */
+    const points = [0.1, 0.3, 0.5, 0.7, 0.9].flatMap((across) =>
+      [0.3, 0.7].map((down) => ({
+        x: box.left + box.width * across,
+        y: box.top + box.height * down,
+      })),
+    );
+    return {
+      background: getComputedStyle(head).backgroundColor,
+      column: getComputedStyle(node).backgroundColor,
+      // Все цвета, которыми в шапке что-то написано: знак статуса, название статуса
+      // и счётчик набраны разными уровнями текста, и контраст меряется у каждого.
+      colors: [
+        ...new Set(
+          [head, ...Array.from(head.querySelectorAll('button, span'))].map(
+            (text) => getComputedStyle(text).color,
+          ),
+        ),
+      ],
+      onTop: points.filter((point) => head.contains(document.elementFromPoint(point.x, point.y)))
+        .length,
+      points: points.length,
+      // И карточка в этот момент действительно проезжает под шапкой.
+      under: cards.filter((card) => {
+        const rect = card.getBoundingClientRect();
+        return rect.top < box.bottom && rect.bottom > box.top;
+      }).length,
+    };
+  });
+
+  await test.info().attach(`шапка на проезжающей карточке (${status})`, {
+    body: await column(page, status).screenshot(),
+    contentType: 'image/png',
+  });
+
+  const report = JSON.stringify(measured);
+  expect(measured.under, `под шапкой ${status} нет ни одной карточки: ${report}`).toBeGreaterThan(
+    0,
+  );
+  expect(measured.onTop, report).toBe(measured.points);
+  // Свой фон, и он непрозрачный: `rgba(…, 0)` пустил бы карточки сквозь шапку.
+  expect(measured.background, report).not.toMatch(/, ?0\)$/);
+  expect(measured.background, report).toBe(measured.column);
+  // Контраст считается к фону самой шапки — той поверхности, на которой лежит текст.
+  const ratios = measured.colors.map((color) => contrast(color, measured.background));
+  expect(Math.min(...ratios), `${report} ${JSON.stringify(ratios)}`).toBeGreaterThanOrEqual(4.5);
+
+  // `axe` смотрит на доску в том же прокрученном состоянии: контраст прилипшей шапки
+  // он считает сам и по нарисованному.
+  const result = await new AxeBuilder({ page }).analyze();
+  const serious = result.violations
+    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
+    .map((violation) => violation.id);
+  expect(serious).toEqual([]);
+});
+
+test('кнопка прилипшей шапки работает с глубины прокрутки: мышью и клавиатурой', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  const cards = column(page, status).getByRole('article');
+  const toggle = column(page, status).getByRole('button');
+  await expect(cards.first()).toBeVisible();
+  await fontsReady(page);
+
+  // Мышью: нажатие идёт по тому месту, где кнопка нарисована сейчас, — то есть
+  // по прилипшей шапке, а не по её месту в потоке.
+  await scrollColumn(page, status);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(cards).toHaveCount(0);
+  await toggle.click();
+  await expect(cards.first()).toBeVisible();
+
+  // Клавиатурой: до кнопки доходят табуляцией, ею же столбец и прокручивают —
+  // своего `tabIndex` у прокручиваемого столбца нет (UI-68).
+  // Фокус после нажатия мышью остался на кнопке, а мышиный фокус обводки не рисует:
+  // путь клавиатурой начинается с начала страницы, как у человека.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  const focused = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      return {
+        tag: active?.tagName ?? '',
+        column: active?.closest('section[aria-label]')?.getAttribute('aria-label') ?? '',
+        ring: active === null ? false : active.matches(':focus-visible'),
+        outline: active === null ? '0px' : getComputedStyle(active).outlineWidth,
+      };
+    });
+
+  let stops = 0;
+  let at = await focused();
+  while (stops < 100 && !(at.tag === 'BUTTON' && at.column === status)) {
+    await page.keyboard.press('Tab');
+    stops += 1;
+    at = await focused();
+  }
+  expect(at, `остановок Tab до кнопки столбца ${status}: ${stops}`).toMatchObject({
+    tag: 'BUTTON',
+    column: status,
+  });
+  // Фокус видно: обводка рисуется `:focus-visible` (`shared/styles/reset.css`).
+  expect(at.ring, JSON.stringify(at)).toBe(true);
+  expect(Number.parseFloat(at.outline), JSON.stringify(at)).toBeGreaterThan(0);
+
+  // Столбец прокручивается с той же кнопки: `End` и `PageDown` двигают ближайшую
+  // прокручиваемую область, а это он сам.
+  await page.keyboard.press('End');
+  await page.keyboard.press('PageDown');
+  await page.keyboard.press('PageDown');
+  await expect
+    .poll(() => column(page, status).evaluate((node) => Math.round(node.scrollTop)))
+    .toBeGreaterThan(0);
+
+  // С этой глубины шапка по-прежнему у верхней рамки столбца, а фокус — на ней.
+  const deep = await heads(page);
+  const mine = deep.columns.find((seen) => seen.status === status);
+  expect(mine?.head.top ?? -1, JSON.stringify(deep)).toBeGreaterThanOrEqual(
+    mine?.column.top ?? Number.NaN,
+  );
+  expect((mine?.head.top ?? 0) - (mine?.column.top ?? 0), JSON.stringify(deep)).toBeLessThanOrEqual(
+    2,
+  );
+
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(cards).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(cards.first()).toBeVisible();
+});
+
+test('при прокрутке ряда вбок заголовок едет вместе со своим столбцом', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  await scrollColumn(page, status);
+
+  // Ряд уезжает вбок до упора: шесть столбцов на этой ширине не помещаются.
+  const shifted = await page.evaluate(() => {
+    const row = document.querySelector('section[aria-label="backlog"]')
+      ?.parentElement as HTMLElement;
+    row.scrollLeft = row.scrollWidth;
+    return { over: row.scrollWidth - row.clientWidth, left: Math.round(row.scrollLeft) };
+  });
+  expect(shifted.over, 'ряду нечего прокручивать вбок').toBeGreaterThan(0);
+  expect(shifted.left, 'ряд не уехал вбок').toBeGreaterThan(0);
+
+  const measured = await heads(page);
+  const report = JSON.stringify({ shifted, ...measured });
+  for (const seen of measured.columns) {
+    // Заголовок принадлежит своему столбцу и стоит ровно над ним — не над соседним
+    // и не отдельной полосой поверх ряда.
+    expect(Math.abs(seen.head.left - seen.column.left), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.column.right - seen.head.right), report).toBeLessThanOrEqual(2);
+    expect(seen.head.top - seen.column.top, report).toBeLessThanOrEqual(2);
+  }
+});
+
+test('ниже точки остановки липкость снята: липнуть там не к чему', async ({ page, request }) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  /*
+   * Ниже `fold` своей прокрутки у столбца нет, а порт прокрутки заголовка — всё равно
+   * не окно: ряд столбцов ходит вбок (`overflow-x-auto`), и по спецификации это делает
+   * его прокручиваемым по обеим осям. По вертикали ряду прокручивать нечего, поэтому
+   * липкое там не двигается вовсе — а страница тем временем уезжает. Липкость снята
+   * (`fold:sticky`), и сценарий стережёт именно это: обещать человеку неработающее
+   * поведение хуже, чем не обещать.
+   *
+   * Окно ниже обычного: столбцы демо коротки, и на 420 px доска помещается целиком —
+   * прокручивать было бы нечего.
+   */
+  await page.setViewportSize({ width: 320, height: 320 });
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const DEEPER = 24;
+  const room = await page.evaluate((deeper) => {
+    const board = document.querySelector('section[aria-label="backlog"]') as HTMLElement;
+    const row = board.parentElement as HTMLElement;
+    const top = board.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo(0, Math.round(top) + deeper);
+    return {
+      over: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+      asked: Math.round(top) + deeper,
+      position: getComputedStyle(board.querySelector('h3') as Element).position,
+      rowOver: row.scrollHeight - row.clientHeight,
+    };
+  }, DEEPER);
+  expect(room.over, 'странице нечего прокручивать').toBeGreaterThanOrEqual(room.asked);
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(room.asked);
+
+  // Липкости здесь нет, и причина названа числом: ряду по вертикали прокручивать нечего.
+  expect(room.position, JSON.stringify(room)).toBe('static');
+  expect(room.rowOver, JSON.stringify(room)).toBe(0);
+
+  const measured = await heads(page);
+  const report = JSON.stringify({ room, ...measured });
+  for (const seen of measured.columns) {
+    // Заголовок уезжает вместе со своим столбцом — как и было до задачи.
+    expect(seen.column.top, report).toBeLessThan(0);
+    expect(seen.head.top - seen.column.top, report).toBe(1);
+    // И столбец при этом прокручиваемой областью не стал: ниже точки остановки едет
+    // страница.
+    expect(seen.scrolled, report).toBe(0);
+  }
 });
