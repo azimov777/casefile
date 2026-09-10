@@ -1,17 +1,20 @@
 import { expect, test, type ConsoleMessage, type Page } from '@playwright/test';
 import { installWithoutKey } from './contour';
 
-/**
- * Экран входа проверяется на установке, которая ключа не выдаёт, — иначе человек
- * попадал бы сразу на задачи и экрана входа не увидел (`e2e/login.spec.ts`).
- */
-test.beforeEach(async ({ page }) => {
-  await installWithoutKey(page);
-});
-
 /*
- * Механизм языка на экране входа: откуда берётся язык, что его меняет и что при этом
- * не теряется (UI-77).
+ * Механизм языка: откуда он берётся, что его меняет и что при этом не теряется
+ * (UI-77, UI-80).
+ *
+ * Порядок выбора проверяется четырьмя переходами: язык браузера — английский,
+ * русский, неподдержанный (немецкий), и поверх всего — выбор человека, сделанный
+ * раньше. Первые три задаются `locale` контекста, четвёртый — записью в
+ * `localStorage` до загрузки страницы. Третьего способа нет: параметра `?lang=`
+ * у интерфейса не заводится ни для человека, ни ради удобства теста (UI-76).
+ *
+ * Стадий две. Три перехода проверяются на `/login`: он не требует ни ключа,
+ * ни демо-данных, и человек, не понимающий языка интерфейса, видит его первым.
+ * Четвёртый — на настоящих экранах: выбор обязан держаться не на одной карточке
+ * входа, а во всей оболочке и после перезагрузки.
  *
  * Фразы вписаны сюда руками, а не взяты из словаря: тест, берущий подпись оттуда же,
  * откуда её берёт код, проверяет связь ключа с элементом, но не то, что человек видит
@@ -33,6 +36,16 @@ const RUSSIAN = {
 };
 
 const LANGUAGE_STORAGE_KEY = 'tracker.language';
+
+/**
+ * Открывает экран входа на установке, которая ключа не выдаёт: контур выдаёт ключ всем,
+ * и без этой подмены человек попадал бы сразу на задачи, экрана входа не увидев
+ * (`e2e/login.spec.ts`).
+ */
+async function openLogin(page: Page): Promise<void> {
+  await installWithoutKey(page);
+  await page.goto('/login');
+}
 
 /** Жалобы `i18next`: пропавший ключ он не роняет, а пишет в журнал. */
 function i18nComplaints(messages: ConsoleMessage[]): string[] {
@@ -57,7 +70,7 @@ test.describe('язык браузера — английский', () => {
     page.on('console', (message) => messages.push(message));
     page.on('request', (request) => requests.push(request.url()));
 
-    await page.goto('/login');
+    await openLogin(page);
 
     await expect(page.getByRole('heading', { name: ENGLISH.heading })).toBeVisible();
     await expect(page.getByLabel(ENGLISH.tokenLabel)).toBeVisible();
@@ -89,7 +102,7 @@ test.describe('язык браузера — русский', () => {
   test.use({ locale: 'ru-RU' });
 
   test('чистое хранилище: экран входа русский', async ({ page }) => {
-    await page.goto('/login');
+    await openLogin(page);
 
     await expect(page.getByRole('heading', { name: RUSSIAN.heading })).toBeVisible();
     await expect(page.getByLabel(RUSSIAN.tokenLabel)).toBeVisible();
@@ -103,20 +116,20 @@ test.describe('язык браузера не поддержан', () => {
   test.use({ locale: 'de-DE' });
 
   test('немецкий браузер получает английский, а не русский', async ({ page }) => {
-    await page.goto('/login');
+    await openLogin(page);
 
     await expect(page.getByRole('heading', { name: ENGLISH.heading })).toBeVisible();
     await expect(page.getByRole('button', { name: ENGLISH.submit })).toBeVisible();
   });
 });
 
-test.describe('выбор человека', () => {
+test.describe('выбор человека на экране входа', () => {
   test.use({ locale: 'en-US' });
 
   test('меняет подписи на месте, не теряя набранного, и переживает перезагрузку', async ({
     page,
   }) => {
-    await page.goto('/login');
+    await openLogin(page);
 
     const field = page.getByLabel(ENGLISH.tokenLabel);
     await field.fill('trk_half_typed');
@@ -137,5 +150,66 @@ test.describe('выбор человека', () => {
     await page.reload();
     await expect(page.getByRole('heading', { name: RUSSIAN.heading })).toBeVisible();
     await expect(page.getByRole('button', { name: RUSSIAN.submit })).toBeVisible();
+  });
+});
+
+test.describe('выбор человека против языка браузера', () => {
+  // Браузер русский, а выбор — английский: проверяется, что побеждает выбор.
+  test.use({ locale: 'ru-RU' });
+
+  /**
+   * Подписи оболочки, а не карточки входа: она стоит на каждом экране, и именно по ней
+   * видно, что язык — свойство всего интерфейса, а не одного компонента.
+   */
+  const SHELL = { sections: 'Tracker sections', queues: 'Queues', inbox: 'Inbox' };
+
+  test('английский из хранилища держится на всех экранах и переживает перезагрузку', async ({
+    page,
+  }) => {
+    /*
+     * Выбор сделан раньше — до первой загрузки страницы, как у человека, который
+     * однажды нажал на переключатель. Значение ставится только там, где его нет:
+     * иначе сценарий переписывал бы хранилище на каждом переходе и не отличил бы
+     * «выбор пережил переход» от «его подставили заново».
+     */
+    await page.addInitScript(
+      ([key, value]) => {
+        if (window.localStorage.getItem(key) === null) window.localStorage.setItem(key, value);
+      },
+      [LANGUAGE_STORAGE_KEY, 'en'],
+    );
+
+    await page.goto('/tasks?queue=DEMO');
+
+    const shell = page.getByRole('complementary', { name: SHELL.sections });
+    await expect(shell).toContainText(SHELL.queues);
+    await expect(shell).toContainText(SHELL.inbox);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+    // Карточка задачи и её дело — те же английские подписи, тот же выбор.
+    await page.goto('/tasks/DEMO-1');
+    await expect(page.getByRole('heading', { name: 'Assignment' })).toBeVisible();
+
+    await page.goto('/tasks/DEMO-1/case');
+    await expect(page.getByRole('heading', { name: 'Case DEMO-1' })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Case DEMO-1' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+    // Язык остался в хранилище и в адрес не уехал ни на одном из переходов.
+    expect(await page.evaluate((key) => localStorage.getItem(key), LANGUAGE_STORAGE_KEY)).toBe(
+      'en',
+    );
+    expect(page.url()).not.toContain('lang');
+
+    /*
+     * И переключатель оболочки уводит обратно на русский: он тот же самый, что и на
+     * входе, и стоит на том же месте экрана (UI-77#12).
+     */
+    await page.getByRole('combobox', { name: 'Interface language' }).click();
+    await page.getByRole('option', { name: 'Русский' }).click();
+    await expect(page.getByRole('heading', { name: 'Дело DEMO-1' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
   });
 });

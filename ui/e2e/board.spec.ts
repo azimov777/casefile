@@ -823,3 +823,402 @@ test('ниже точки остановки липкость снята: лип
     expect(seen.scrolled, report).toBe(0);
   }
 });
+
+/**
+ * Столбцы одним кадром глазами знака края: есть ли что прокручивать, стоит ли знак
+ * и где именно он стоит. `over` — то же самое условие, по которому знак обязан быть
+ * нарисован, снятое у браузера, а не у скрипта страницы.
+ */
+function edges(page: Page) {
+  return page.evaluate(() => {
+    const sections = Array.from(document.querySelectorAll('section[aria-label]')).filter(
+      (node) => node.getAttribute('aria-label') !== 'Отбор задач',
+    );
+    return sections.map((node) => {
+      const sign = node.querySelector('[data-edge]');
+      const box = node.getBoundingClientRect();
+      const mark = sign?.getBoundingClientRect() ?? null;
+      return {
+        status: node.getAttribute('aria-label') as string,
+        // Есть ли что прокручивать — и сколько.
+        over: node.scrollHeight - node.clientHeight,
+        room: node.clientHeight,
+        content: node.scrollHeight,
+        scrolled: Math.round(node.scrollTop),
+        cards: node.querySelectorAll('article').length,
+        sign: sign !== null,
+        // Знак стоит у нижней рамки столбца: единица — сама рамка.
+        gap: mark === null ? null : Math.round(box.bottom - mark.bottom),
+        height: mark === null ? null : Math.round(mark.height),
+        width: mark === null ? null : Math.round(box.width - mark.width),
+      };
+    });
+  });
+}
+
+/**
+ * Ждёт, пока знак сойдётся с прокруткой во всех столбцах, и отдаёт снятый после этого
+ * кадр. Ждать приходится: знак ставит наблюдатель пересечения, и его слово приходит
+ * через кадр после того, как содержимое или окно изменились.
+ */
+async function settledEdges(page: Page, message: string) {
+  await expect
+    .poll(
+      async () =>
+        (await edges(page))
+          .filter((seen) => seen.sign !== seen.over > 0)
+          .map((seen) => `${seen.status}: знак ${String(seen.sign)} при запасе ${seen.over}`),
+      { message },
+    )
+    .toEqual([]);
+  return edges(page);
+}
+
+/** Окно, в котором столбцы демо помещаются целиком: прокручивать в них нечего. */
+const TALL_WINDOW = { width: 1024, height: 1400 };
+
+test('знак края есть у переполненного столбца и его нет там, где прокручивать нечего', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const low = await settledEdges(page, 'на низком окне знак разошёлся с прокруткой');
+  await test.info().attach('знак края на низком окне', {
+    body: JSON.stringify(low, null, 2),
+    contentType: 'application/json',
+  });
+  const crowded = low.filter((seen) => seen.over > 0);
+  const report = JSON.stringify(low);
+  expect(
+    crowded.length,
+    `на окне ${SHORT_WINDOW.height} никому нечего прокручивать: ${report}`,
+  ).toBeGreaterThan(0);
+
+  for (const seen of crowded) {
+    // Знак прижат к нижней рамке своего столбца и достаёт до боковых: между ним
+    // и рамкой не должно оставаться щели, сквозь которую видно уезжающую карточку.
+    expect(seen.gap, report).toBeLessThanOrEqual(2);
+    expect(seen.gap, report).toBeGreaterThanOrEqual(0);
+    expect(seen.width, report).toBeLessThanOrEqual(2);
+    // Высота знака — нижнее поле столбца: место, где содержимое бывает только
+    // на прокрутке.
+    expect(seen.height, report).toBe(12);
+  }
+
+  /*
+   * Высокое окно: столбцы демо помещаются целиком, и знака нет ни у одного — то же
+   * обещание, которое чинили рамке таблицы (UI-91). Проверяется именно столбец
+   * с карточками, а не пустой: пустому и обещать нечего.
+   */
+  await page.setViewportSize(TALL_WINDOW);
+  const tall = await settledEdges(page, 'на высоком окне знак разошёлся с прокруткой');
+  await test.info().attach('знак края на высоком окне', {
+    body: JSON.stringify(tall, null, 2),
+    contentType: 'application/json',
+  });
+  const roomy = tall.filter((seen) => seen.over === 0 && seen.cards > 0);
+  expect(
+    roomy.length,
+    `на окне ${TALL_WINDOW.height} ни один столбец не поместился целиком: ${JSON.stringify(tall)}`,
+  ).toBeGreaterThan(0);
+  for (const seen of roomy) expect(seen.sign, JSON.stringify(seen)).toBe(false);
+
+  /*
+   * И то же самое на обычном рабочем окне — том, на котором мерили пробу прокрутки
+   * (UI-68#10): видимая высота столбца там 674 px, и знак её не трогает.
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const usual = await settledEdges(page, 'на рабочем окне знак разошёлся с прокруткой');
+  await test.info().attach('видимая высота столбца и знак на 1440×900', {
+    body: JSON.stringify(usual, null, 2),
+    contentType: 'application/json',
+  });
+});
+
+test('докрутили до конца — знак снят: столбец кончился, и это видно', async ({ page, request }) => {
+  const longest = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, longest).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const start = await settledEdges(page, 'знак разошёлся с прокруткой до первого жеста');
+  const crowded = start
+    .filter((seen) => seen.over > 0)
+    .sort((left, right) => left.content - right.content);
+  const shortest = crowded[0];
+  expect(shortest, `нечего прокручивать: ${JSON.stringify(start)}`).toBeDefined();
+  const status = (shortest as { status: string }).status;
+
+  /*
+   * Докручиваем, пока столбец не кончится. Не одним жестом: прокрутка до конца зовёт
+   * следующую страницу (UI-70), и конец наступает тогда, когда приводить больше нечего.
+   * Знак при этом гаснет сам — по тому же наблюдателю, что и зажёгся.
+   */
+  await expect
+    .poll(
+      async () => {
+        await column(page, status).evaluate((node) => {
+          node.scrollTop = node.scrollHeight;
+        });
+        return (await edges(page)).find((seen) => seen.status === status)?.sign ?? true;
+      },
+      { message: `столбец ${status} не кончается`, timeout: 20_000 },
+    )
+    .toBe(false);
+
+  const ended = (await edges(page)).find((seen) => seen.status === status);
+  const at = JSON.stringify(ended);
+  // Столбец действительно докручен до дна, а не остановился где-то посередине.
+  expect((ended?.scrolled ?? 0) + (ended?.room ?? 0), at).toBeGreaterThanOrEqual(
+    (ended?.content ?? 0) - 1,
+  );
+
+  // Назад к началу — знак вернулся: он говорит о содержимом за краем, а не о том,
+  // трогали ли столбец.
+  await column(page, status).evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await expect
+    .poll(async () => (await edges(page)).find((seen) => seen.status === status)?.sign, {
+      message: `столбец ${status} вернулся в начало, а знак не вернулся`,
+    })
+    .toBe(true);
+
+  /*
+   * И высоты знак не занимает: со знаком и без него у столбца та же видимая высота
+   * и то же содержимое. Замер снят на одном и том же столбце в двух состояниях —
+   * ничего, кроме знака, между ними не менялось.
+   */
+  const back = (await edges(page)).find((seen) => seen.status === status);
+  const both = JSON.stringify({ ended, back });
+  await test.info().attach(`столбец ${status} со знаком и без него`, {
+    body: JSON.stringify({ ended, back }, null, 2),
+    contentType: 'application/json',
+  });
+  expect(back?.room, both).toBe(ended?.room);
+  expect(back?.content, both).toBe(ended?.content);
+});
+
+test('знак края читается в своей теме и не съедает нажатие по карточке под ним', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+  await settledEdges(page, 'знак разошёлся с прокруткой');
+
+  const measured = await column(page, status).evaluate((node) => {
+    const sign = node.querySelector('[data-edge]') as HTMLElement;
+    const box = sign.getBoundingClientRect();
+    const cards = Array.from(node.querySelectorAll('article'));
+    const points = [0.1, 0.3, 0.5, 0.7, 0.9].map((across) => ({
+      x: box.left + box.width * across,
+      y: box.top + box.height * 0.5,
+    }));
+    return {
+      background: getComputedStyle(sign).backgroundColor,
+      column: getComputedStyle(node).backgroundColor,
+      card: getComputedStyle(cards[0] as Element).backgroundColor,
+      shadow: getComputedStyle(sign).boxShadow,
+      position: getComputedStyle(sign).position,
+      raised: Number(getComputedStyle(sign).zIndex),
+      /*
+       * Выше ли знак всего, что поднимает над собой карточка: она позиционирована ради
+       * растянутой ссылки, а название и исполнитель стоят в ней `relative z-1` — при
+       * равном `z-index` победил бы тот, кто ниже в разметке, то есть карточка (UI-69).
+       */
+      inCard: Math.max(
+        ...Array.from((cards[0] as Element).querySelectorAll('*')).map(
+          (inner) => Number(getComputedStyle(inner).zIndex) || 0,
+        ),
+      ),
+      // Под знаком в этот момент действительно проезжает карточка.
+      under: cards.filter((card) => {
+        const rect = card.getBoundingClientRect();
+        return rect.top < box.bottom && rect.bottom > box.top;
+      }).length,
+      // Нажатие сквозь знак проходит: под ним лежат последние пиксели карточки-ссылки.
+      through: points.filter((point) => {
+        const hit = document.elementFromPoint(point.x, point.y);
+        return hit !== null && hit.closest('article') !== null;
+      }).length,
+      points: points.length,
+    };
+  });
+
+  await test.info().attach(`знак края у столбца ${status}`, {
+    body: await column(page, status).screenshot(),
+    contentType: 'image/png',
+  });
+
+  const report = JSON.stringify(measured);
+  expect(measured.under, `под знаком ${status} нет ни одной карточки: ${report}`).toBeGreaterThan(
+    0,
+  );
+  expect(measured.position, report).toBe('sticky');
+  expect(measured.raised, report).toBeGreaterThan(measured.inCard);
+  expect(measured.through, report).toBe(measured.points);
+  // Заливка своя и непрозрачная: сквозь `rgba(…, 0)` карточка просвечивала бы, и знак
+  // читался бы «кончилось» ровно там, где не кончилось.
+  expect(measured.background, report).not.toMatch(/, ?0\)$/);
+  expect(measured.background, report).toBe(measured.column);
+
+  /*
+   * Знак нарисован цветом дважды: линией у своего верхнего края и тенью над ней.
+   * Контраст считается у линии и к обеим поверхностям, на которые она ложится: к
+   * карточке, которая уходит под край, и к заливке столбца — в промежутке между
+   * карточками. Второе и есть худший случай: карточка кончилась у самого края, и под
+   * линией нет ничего, кроме заливки.
+   */
+  const colors = (measured.shadow.match(/rgba?\([^)]*\)/g) ?? []).filter(
+    // Tailwind собирает `box-shadow` из своих пустых слоёв (кольцо, внутренняя тень)
+    // и нашего: прозрачные слои — не цвет, которым что-то нарисовано.
+    (color) => !/, ?0\)$/.test(color),
+  );
+  expect(colors.length, report).toBe(2);
+  const ratios = {
+    card: contrast(colors[0] as string, measured.card),
+    column: contrast(colors[0] as string, measured.column),
+  };
+  await test.info().attach(`контраст линии знака (${status})`, {
+    body: JSON.stringify(
+      { line: colors[0], card: measured.card, column: measured.column, ratios },
+      null,
+      2,
+    ),
+    contentType: 'application/json',
+  });
+  /*
+   * Порог — не AA для текста: знак не текст и не элемент управления, а оформление
+   * границы, и держится он на тех же линиях, что и все границы в проекте. Порог
+   * стережёт другое: линия `--t-line` давала поверх заливки 1.06 в светлой теме
+   * и 1.10 в тёмной и не была видна вовсе, а сильная линия даёт не меньше 1.29.
+   */
+  expect(
+    Math.min(ratios.card, ratios.column),
+    `${report} ${JSON.stringify(ratios)}`,
+  ).toBeGreaterThanOrEqual(1.25);
+
+  // `axe` смотрит на доску со знаком: он декоративный и в дереве доступности его нет.
+  const result = await new AxeBuilder({ page }).analyze();
+  const serious = result.violations
+    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
+    .map((violation) => violation.id);
+  expect(serious).toEqual([]);
+});
+
+test('знак края не добавляет остановок Tab: до первой карточки их столько же, сколько без него', async ({
+  page,
+  request,
+}) => {
+  const longest = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, longest).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  /*
+   * Остановки от начала страницы до ссылки первой карточки. Знак стоит внутри столбца,
+   * и появись у него остановка — она попала бы ровно на этот путь.
+   */
+  const stops = async () => {
+    /*
+     * Точка, с которой браузер продолжает обход, живёт отдельно от фокуса, и `blur()`
+     * её не двигает: второй проход считал бы шаги от той ссылки, на которой кончился
+     * первый (замерено: 2 вместо 9). Сбрасывает её фокус на теле страницы.
+     */
+    await page.evaluate(() => {
+      document.body.setAttribute('tabindex', '-1');
+      document.body.focus();
+      document.body.removeAttribute('tabindex');
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+
+    let count = 0;
+    let at = { card: false, edge: false };
+    while (count < 100 && !at.card) {
+      await page.keyboard.press('Tab');
+      count += 1;
+      at = await page.evaluate(() => {
+        const active = document.activeElement;
+        return {
+          card: active?.closest('article') != null,
+          // Знак фокуса не принимает вовсе: у него нет ни роли, ни `tabindex`.
+          edge: active?.hasAttribute('data-edge') ?? false,
+        };
+      });
+      expect(at.edge, 'фокус встал на знак края').toBe(false);
+    }
+    expect(at.card, `до карточки не дошли за ${count} остановок`).toBe(true);
+    return count;
+  };
+
+  const low = await settledEdges(page, 'знак разошёлся с прокруткой на низком окне');
+  expect(
+    low.filter((seen) => seen.sign).length,
+    `знака нет ни у одного столбца, сравнивать не с чем: ${JSON.stringify(low)}`,
+  ).toBeGreaterThan(0);
+  const withSign = await stops();
+
+  /*
+   * Тот же путь на том же экране без знака: в высоком окне столбцы помещаются целиком,
+   * и знака нет ни у одного. Разметка при этом та же самая — меняется только окно.
+   */
+  await page.setViewportSize(TALL_WINDOW);
+  const tall = await settledEdges(page, 'знак разошёлся с прокруткой на высоком окне');
+  expect(
+    tall.filter((seen) => seen.sign).length,
+    `в высоком окне знак остался: ${JSON.stringify(tall)}`,
+  ).toBe(0);
+  const withoutSign = await stops();
+
+  await test.info().attach('остановки Tab до первой карточки', {
+    body: JSON.stringify({ withSign, withoutSign }),
+    contentType: 'application/json',
+  });
+  expect(withSign, `остановок со знаком ${withSign}, без знака ${withoutSign}`).toBe(withoutSign);
+});
+
+test('ниже точки остановки знака края нет: своей прокрутки у столбца там нет', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  // То же окно, что у проверки липкости: ниже `fold` прокручивается страница, а столбец
+  // прокручиваемой областью не является вовсе (UI-68).
+  await page.setViewportSize({ width: 320, height: 320 });
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const measured = await edges(page);
+  const report = JSON.stringify(measured);
+  for (const seen of measured) {
+    expect(seen.over, report).toBe(0);
+    expect(seen.sign, report).toBe(false);
+  }
+  // И это не потому, что прокручивать нечего вовсе: страница длиннее окна.
+  const room = await page.evaluate(
+    () => document.documentElement.scrollHeight - document.documentElement.clientHeight,
+  );
+  expect(room, report).toBeGreaterThan(0);
+});

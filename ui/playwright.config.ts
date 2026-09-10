@@ -44,14 +44,37 @@ export default defineConfig({
     {
       name: 'светлая',
       testIgnore:
-        /(answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
+        /(answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
       testIgnore:
-        /(answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
+        /(answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
+    },
+    {
+      /*
+       * Английский интерфейс проверяется прогоном, а не тем, что кто-то один раз
+       * переключил язык (UI-80).
+       *
+       * Язык задан `locale` контекста, потому что так его получает и человек: при
+       * чистом хранилище определитель берёт язык браузера. Параметра `?lang=` у
+       * интерфейса нет — ни для человека, ни ради удобства теста (UI-76).
+       *
+       * Сценариев здесь три, и это осознанная граница. `language` и `language-formats`
+       * проверяют сам язык — порядок выбора, `lang` у документа, форматы времени
+       * и чисел; в светлой и тёмной они гонялись дважды, хотя темы не касаются, и
+       * потому переехали сюда целиком. `english` — дымовой прогон главных экранов.
+       *
+       * Остальных сценариев здесь нет намеренно: они ищут элементы по подписям, а
+       * проверяют поведение, геометрию и тему, а не язык. Перенесённые сюда, они
+       * удвоили бы и время прогона, и число мест, где подпись написана дважды —
+       * в словаре и в ожидании теста.
+       */
+      name: 'английская',
+      testMatch: /(language|language-formats|english)\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], colorScheme: 'light', locale: 'en-US' },
     },
     {
       name: 'запись',
@@ -61,7 +84,8 @@ export default defineConfig({
       // и параллельно каждый видел бы следы соседа.
       fullyParallel: false,
       workers: 1,
-      dependencies: ['светлая', 'тёмная'],
+      // Английский проект читающий, и он тоже обязан увидеть демо-данные до правок.
+      dependencies: ['светлая', 'тёмная', 'английская'],
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
   ],
