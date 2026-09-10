@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
   AuthorName,
@@ -55,7 +56,12 @@ const CELL = 'border-b border-b-line px-3 py-2 text-left align-top';
  * Так дело и задумано читать (`CONCEPT.md`, 4): полное дело весит столько, что карточка
  * открывалась бы секундами, а нужны из него обычно две-три записи.
  */
+/** Столбцы описи по порядку: подписи к ним живут в словаре (`task.index.columns`). */
+const INDEX_COLUMNS = ['no', 'type', 'author', 'when', 'headline'] as const;
+
 export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: TaskIndexProps) {
+  const { t } = useTranslation('task');
+
   // Раскрытых может быть несколько — сравнивают соседние записи. В адрес уходит
   // последняя раскрытая: адрес называет запись, ради которой человек здесь, и
   // перезагрузка возвращает её раскрытой.
@@ -92,7 +98,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
     [expanded, onOpenChange, openAt],
   );
 
-  if (index.length === 0) return <p className="text-muted italic">Дело пусто: записей ещё нет.</p>;
+  if (index.length === 0) return <p className="text-muted italic">{t('index.empty')}</p>;
 
   // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
   // именно последняя, а не последняя из подгруженных (`../tracker/docs/FRONTEND.md`).
@@ -109,13 +115,13 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
          */
         <div className="flex flex-wrap gap-2">
           <Button tone="quiet" onClick={() => onOpenChange(lastNo)}>
-            К свежей записи
+            {t('index.toLatest')}
           </Button>
           <Button
             tone="quiet"
             onClick={() => scroller.current?.scrollIntoView?.({ block: 'start' })}
           >
-            В начало описи
+            {t('index.toTop')}
           </Button>
         </div>
       ) : null}
@@ -123,17 +129,17 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
       <div className="overflow-x-auto" ref={scroller}>
         <table className="w-full border-collapse text-body">
           <caption className="px-3 pt-2 text-left text-meta text-muted">
-            Записей в деле: {index.length}
+            {t('index.count', { count: index.length })}
           </caption>
           <thead>
             <tr>
-              {['№', 'Тип', 'Автор', 'Когда', 'Заголовок'].map((column) => (
+              {INDEX_COLUMNS.map((column) => (
                 <th
                   key={column}
                   scope="col"
                   className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
                 >
-                  {column}
+                  {t(`index.columns.${column}`)}
                 </th>
               ))}
             </tr>
@@ -168,6 +174,9 @@ interface IndexRowProps {
 }
 
 function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexRowProps) {
+  // Заголовок описи собирается из фактов записи подписями пространства `ui`: одна
+  // и та же строка стоит и здесь, и в ленте дела.
+  const { t: brick } = useTranslation('ui');
   const row = useRef<HTMLTableRowElement>(null);
   /*
    * Тело записи доживает выход: без этого сворачивание убирало бы строку в том же
@@ -177,7 +186,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
    * ключ запроса тот же, и ответ берётся из кэша.
    */
   const details = useExitHold(open);
-  const headline = entryHeadline(heading.facts, taskKey);
+  const headline = entryHeadline(heading.facts, taskKey, brick);
   /* Раскрытая строка утоплена заливкой и так читается вместе со своим телом ниже. */
   const cell = open ? cn(CELL, 'bg-sunken') : CELL;
 
@@ -283,6 +292,7 @@ function EntryDetails({
   title: string;
 }) {
   const entry = useQuery(entryQueryOptions(taskKey, no));
+  const { t } = useTranslation('task');
 
   return (
     /*
@@ -293,7 +303,7 @@ function EntryDetails({
       <p className="font-semibold">
         <TaskText>{title}</TaskText>
       </p>
-      <QueryState query={entry} loading="Читаем запись…" />
+      <QueryState query={entry} loading={t('index.loadingEntry')} />
       {entry.data == null ? null : <EntryBody entry={entry.data} checks={checks} />}
     </div>
   );

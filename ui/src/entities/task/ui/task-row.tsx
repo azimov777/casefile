@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { RelativeTime } from '@/shared/ui';
 import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
@@ -31,6 +32,7 @@ export function TaskRow({ task }: { task: Task }) {
   // Адрес списка целиком, вместе с отбором: он поедет в задачу состоянием перехода.
   const { search } = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation('ui');
   const features = task.features ?? null;
   const activity = features?.last_entry_at ?? null;
   const title = task.title ?? '';
@@ -128,7 +130,7 @@ export function TaskRow({ task }: { task: Task }) {
           не мог сказать, чем два относительных времени в соседних ячейках различаются. */}
       <td className="px-3 text-right text-mark text-faint whitespace-nowrap">
         {activity === null ? (
-          <span aria-hidden="true">в деле пусто</span>
+          <span aria-hidden="true">{t('task.emptyCase')}</span>
         ) : (
           <RelativeTime value={activity} />
         )}

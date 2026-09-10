@@ -16,6 +16,7 @@ import {
 } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
+import { say } from '@testing/say';
 import {
   ENTRY_TYPES,
   factsOfEntry,
@@ -102,7 +103,7 @@ describe('дело лентой', () => {
 
     renderApp('/tasks/DEMO-1/case');
 
-    await screen.findByText(`Это всё дело: записей ${ENTRY_TYPES.length}.`);
+    await screen.findByText(say.case('end', { count: ENTRY_TYPES.length }));
     const numbers = cards().map((card) => card.getAttribute('aria-label'));
     expect(numbers[0]).toBe('DEMO-1#1');
     expect(numbers.at(-1)).toBe(`DEMO-1#${ENTRY_TYPES.length}`);
@@ -114,12 +115,14 @@ describe('дело лентой', () => {
   it('отбор «служебные» оставляет только записи трекера', async () => {
     server.use(feed());
     renderApp('/tasks/DEMO-1/case');
-    await screen.findByText(/Это всё дело/);
+    await screen.findByText(say.case('end', { count: ENTRY_TYPES.length }));
 
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Служебные' }));
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: say.case('filters.serviceEntries') }));
 
     const service = ENTRY_TYPES.filter(isServiceEntry);
-    expect(await screen.findByText(`Это всё дело: записей ${service.length}.`)).toBeInTheDocument();
+    expect(await screen.findByText(say.case('end', { count: service.length }))).toBeInTheDocument();
     expect(seen.at(-1)?.searchParams.getAll('types').sort()).toEqual([...service].sort());
   });
 
@@ -128,19 +131,19 @@ describe('дело лентой', () => {
     server.use(feed());
 
     renderApp('/tasks/DEMO-1/case?type=summary&type=decision');
-    await screen.findByText(/Это всё дело/);
+    await screen.findByText(say.case('end', { count: 2 }));
 
     // Восемнадцати флажков на первом экране дела нет: они занимали место до первой
     // записи, а дело открывают читать.
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     // Но что отобрано — видно словами, а не счётчиком «выбрано 2».
-    const chosen = screen.getByRole('list', { name: 'Отобранные типы записей' });
+    const chosen = screen.getByRole('list', { name: say.case('filters.chosen') });
     expect(within(chosen).getAllByRole('listitem')).toHaveLength(2);
     expect(chosen).toHaveTextContent('decision');
     expect(chosen).toHaveTextContent('summary');
 
     // Раскрытие даёт все типы контракта, каждый — обычный флажок с подписью.
-    await user.click(screen.getByRole('button', { name: 'Выбрать типы' }));
+    await user.click(screen.getByRole('button', { name: say.case('filters.expand') }));
     expect(screen.getAllByRole('checkbox')).toHaveLength(ENTRY_TYPES.length);
     expect(screen.getByRole('checkbox', { name: 'summary' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'attempt' })).not.toBeChecked();
@@ -151,9 +154,11 @@ describe('дело лентой', () => {
     server.use(feed());
 
     renderApp('/tasks/DEMO-1/case?type=summary&type=decision');
-    await screen.findByText(/Это всё дело/);
+    await screen.findByText(say.case('end', { count: 2 }));
 
-    await user.click(screen.getByRole('button', { name: 'Убрать тип: summary' }));
+    await user.click(
+      screen.getByRole('button', { name: say.case('filters.remove', { type: 'summary' }) }),
+    );
 
     expect(address.current).toContain('type=decision');
     expect(address.current).not.toContain('type=summary');
@@ -163,10 +168,10 @@ describe('дело лентой', () => {
   it('«было / стало» и причина перехода видны прямо в ленте', async () => {
     server.use(feed());
     renderApp('/tasks/DEMO-1/case');
-    await screen.findByText(/Это всё дело/);
+    await screen.findByText(say.case('end', { count: ENTRY_TYPES.length }));
 
     const section = screen.getByLabelText(`DEMO-1#${noOf('section_changed')}`);
-    expect(within(section).getByText('Было')).toBeInTheDocument();
+    expect(within(section).getByText(say.ui('entry.was'))).toBeInTheDocument();
     expect(within(section).getByText('Старая цель')).toBeInTheDocument();
     expect(within(section).getByText('Новая цель')).toBeInTheDocument();
 
@@ -179,13 +184,15 @@ describe('дело лентой', () => {
     const resolution = resolutionEntry(4, 'DEMO-1', 3);
     server.use(feed([remark, resolution]));
     renderApp('/tasks/DEMO-1/case');
-    await screen.findByText(/Это всё дело/);
+    await screen.findByText(say.case('end', { count: 2 }));
 
     const card = screen.getByLabelText('DEMO-1#3');
     // Разбор вложен в замечание — как ответ в вопрос: для читателя это одно событие.
     const inner = within(card).getByLabelText('DEMO-1#4');
-    // Регуляркой: заголовок собран из частей, и исход стоит в строке «· принято в работу».
-    expect(within(inner).getByText(/принято в работу/)).toBeInTheDocument();
+    // Регуляркой: заголовок собран из частей, и исход стоит в строке «· taken into work».
+    expect(
+      within(inner).getByText(new RegExp(say.ui('entry.remarkOutcome.accepted'))),
+    ).toBeInTheDocument();
     // Ключ продолжения остаётся ссылкой: по нему человек и переходит смотреть работу.
     expect(within(inner).getByRole('link', { name: 'DEMO-2' })).toHaveAttribute(
       'href',
@@ -198,10 +205,10 @@ describe('дело лентой', () => {
   it('неразобранное замечание честно говорит, что разбора ещё нет', async () => {
     server.use(feed([remarkEntry(3, 'DEMO-1')]));
     renderApp('/tasks/DEMO-1/case');
-    await screen.findByText(/Это всё дело/);
+    await screen.findByText(say.case('end', { count: 1 }));
 
     expect(
-      within(screen.getByLabelText('DEMO-1#3')).getByText('Разбора пока нет.'),
+      within(screen.getByLabelText('DEMO-1#3')).getByText(say.case('noResolutionYet')),
     ).toBeInTheDocument();
   });
 
@@ -257,14 +264,15 @@ describe('дело лентой', () => {
 
     renderApp('/tasks/DEMO-1/case?from=10');
 
-    expect(await screen.findByText(/Показаны записи после DEMO-1#10/)).toBeInTheDocument();
+    const windowShown = say.case('window.shown', { reference: 'DEMO-1#10' });
+    expect(await screen.findByText(windowShown)).toBeInTheDocument();
     // Первой записи дела в окне нет — и это сказано, а не оставлено на догадку.
     expect(screen.queryByLabelText('DEMO-1#1')).not.toBeInTheDocument();
 
-    await user.click(screen.getAllByRole('button', { name: 'Читать дело сначала' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: say.case('fromStart') })[0]!);
 
     expect(await screen.findByLabelText('DEMO-1#1')).toBeInTheDocument();
-    expect(screen.queryByText(/Показаны записи после/)).not.toBeInTheDocument();
+    expect(screen.queryByText(windowShown)).not.toBeInTheDocument();
   });
 
   it('«К свежей записи» ведёт к последней записи описи, а не последней загруженной', async () => {
@@ -275,7 +283,7 @@ describe('дело лентой', () => {
     renderApp('/tasks/DEMO-1/case');
     await screen.findByLabelText('DEMO-1#1');
 
-    await user.click(screen.getByRole('button', { name: 'К свежей записи' }));
+    await user.click(screen.getByRole('button', { name: say.case('toLatest') }));
 
     // Последняя запись всего дела известна из описи пакета задачи: ждать, пока лента
     // дочитается до конца, чтобы узнать её номер, не приходится.
@@ -290,21 +298,24 @@ describe('дело лентой', () => {
     // Отбор оставляет в ленте только сводки, а названа запись другого типа.
     renderApp('/tasks/DEMO-1/case?type=summary&entry=4');
 
-    expect(await screen.findByText(/не попадает в отбор по типу/)).toBeInTheDocument();
+    const hiddenByType = say.case('window.hiddenByType', { reference: 'DEMO-1#4' });
+    expect(await screen.findByText(hiddenByType)).toBeInTheDocument();
     expect(screen.queryByLabelText('DEMO-1#4')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Показать все типы' }));
+    await user.click(screen.getByRole('button', { name: say.case('window.showAllTypes') }));
 
     const target = await screen.findByLabelText('DEMO-1#4');
     expect(target).toHaveAttribute('data-highlighted');
-    expect(screen.queryByText(/не попадает в отбор по типу/)).not.toBeInTheDocument();
+    expect(screen.queryByText(hiddenByType)).not.toBeInTheDocument();
   });
 
   it('номер записи, которой в деле нет, объясняется, а не оставляет пустой экран', async () => {
     server.use(feed());
     renderApp('/tasks/DEMO-1/case?entry=99');
 
-    expect(await screen.findByText(/в деле нет/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(say.case('window.missing', { reference: 'DEMO-1#99' })),
+    ).toBeInTheDocument();
   });
 
   it('ссылка на ответ ведёт к нему туда, где он показан — внутрь вопроса', async () => {

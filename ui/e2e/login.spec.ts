@@ -14,7 +14,7 @@ test('вход с токеном демо показывает участник�
 
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByText('owner')).toBeVisible();
-  await expect(page.getByText(/^Открытых вопросов: \d+$/)).toBeVisible();
+  await expect(page.getByText(/^\d+ открыт(ый вопрос|ых вопроса|ых вопросов)$/)).toBeVisible();
 
   // Токен только в заголовке: ни в адресе, ни в параметрах запросов его быть не должно.
   expect(page.url()).not.toContain(token);

@@ -1,5 +1,6 @@
+import type { TFunction } from 'i18next';
 import type { components } from '@/shared/api';
-import type { Entry, EntryType } from '../api/entries';
+import type { Entry } from '../api/entries';
 
 /**
  * Факты записи из описи дела: то, чем её называют, не читая тела.
@@ -54,43 +55,11 @@ export type Headline =
   { kind: 'built'; parts: HeadlinePart[] } | { kind: 'author' } | { kind: 'derived' };
 
 /**
- * Русское название типа записи. Перечислено ключами объекта: тип, добавленный в
- * контракт, роняет сборку, а не остаётся без подписи на экране.
+ * Подписи типа записи и исхода разбора живут в словаре языков
+ * (`shared/i18n`, `ui.entry.type` и `ui.entry.remarkOutcome`), а полноту их наборов
+ * держит там же `satisfies Record<EntryType, string>`: тип, добавленный в контракт,
+ * роняет сборку словаря, а не остаётся без подписи на экране.
  */
-export const ENTRY_TYPE_NAMES = {
-  summary: 'сводка',
-  decision: 'решение',
-  attempt: 'попытка',
-  finding: 'находка',
-  artifact: 'артефакт',
-  question: 'вопрос',
-  answer: 'ответ',
-  verdict: 'вердикт',
-  remark: 'замечание',
-  resolution: 'резолюция',
-  note: 'заметка',
-  created: 'заведение',
-  status_changed: 'смена статуса',
-  section_changed: 'правка раздела',
-  field_changed: 'правка поля',
-  assignee_changed: 'смена исполнителя',
-  link_added: 'связь добавлена',
-  link_removed: 'связь снята',
-} satisfies Record<EntryType, string>;
-
-/**
- * Исход разбора замечания — словами.
- *
- * Именно словами, а не идентификатором контракта: замечание оставляет человек, и ему
- * читать, чем оно кончилось. `accepted` рядом с ключом задачи выглядело бы как ещё
- * один служебный код, а это единственный ответ, которого человек ждал.
- */
-export const REMARK_OUTCOME_NAMES = {
-  fixed: 'поправлено',
-  accepted: 'принято в работу',
-  needs_detail: 'нужно уточнение',
-  declined: 'менять не будем',
-} satisfies Record<RemarkOutcome, string>;
 
 const words = (text: string): HeadlinePart => ({ kind: 'words', text });
 const id = (text: string): HeadlinePart => ({ kind: 'id', text });
@@ -107,21 +76,25 @@ const id = (text: string): HeadlinePart => ({ kind: 'id', text });
  *
  * `taskKey` нужен ответу и разбору замечания: они ссылаются на запись в той же
  * задаче, а в фактах описи лежит только её номер.
+ *
+ * Подписи приходят функцией перевода, а не берутся из экземпляра `i18next`: заголовок
+ * собирают компоненты, и они же обязаны быть подписаны на смену языка. Пространство
+ * одно — `ui`: заголовок записи одинаков в описи карточки и в ленте дела.
  */
-export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
+export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'ui'>): Headline {
   switch (facts.type) {
     case 'created':
-      return { kind: 'built', parts: [words('Задача заведена')] };
+      return { kind: 'built', parts: [words(t('entry.headline.created'))] };
 
     case 'status_changed':
       return {
         kind: 'built',
         parts: [
-          words('Статус'),
-          ...pair(facts.from_status, facts.to_status),
+          words(t('entry.headline.status')),
+          ...pair(facts.from_status, facts.to_status, t),
           // Причина — свободный текст, и её место в теле записи. Здесь только то,
           // искать её там или нет.
-          ...(facts.has_reason === true ? [words('· с причиной')] : []),
+          ...(facts.has_reason === true ? [words(t('entry.headline.withReason'))] : []),
         ],
       };
 
@@ -133,19 +106,28 @@ export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
     case 'section_changed':
       return {
         kind: 'built',
-        parts: [words('Правка раздела'), ...(facts.field == null ? [] : [id(facts.field)])],
+        parts: [
+          words(t('entry.headline.sectionEdited')),
+          ...(facts.field == null ? [] : [id(facts.field)]),
+        ],
       };
 
     case 'field_changed':
       return {
         kind: 'built',
-        parts: [words('Правка поля'), ...(facts.field == null ? [] : [id(facts.field)])],
+        parts: [
+          words(t('entry.headline.fieldEdited')),
+          ...(facts.field == null ? [] : [id(facts.field)]),
+        ],
       };
 
     case 'assignee_changed':
       return {
         kind: 'built',
-        parts: [words('Исполнитель'), ...pair(facts.assignee_from, facts.assignee_to)],
+        parts: [
+          words(t('entry.headline.assignee')),
+          ...pair(facts.assignee_from, facts.assignee_to, t),
+        ],
       };
 
     case 'link_added':
@@ -153,7 +135,11 @@ export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
       return {
         kind: 'built',
         parts: [
-          words(facts.type === 'link_added' ? 'Связь' : 'Связь снята'),
+          words(
+            facts.type === 'link_added'
+              ? t('entry.headline.linkAdded')
+              : t('entry.headline.linkRemoved'),
+          ),
           ...(facts.link_kind == null ? [] : [id(facts.link_kind)]),
           ...(facts.other_key == null ? [] : [{ kind: 'task' as const, key: facts.other_key }]),
         ],
@@ -163,7 +149,7 @@ export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
       return {
         kind: 'built',
         parts: [
-          words('Ответ на'),
+          words(t('entry.headline.answerTo')),
           ...(facts.question_no == null
             ? []
             : [{ kind: 'entry' as const, key: taskKey, no: facts.question_no }]),
@@ -174,7 +160,7 @@ export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
       return {
         kind: 'built',
         parts: [
-          words(`Обзорная проверка ${facts.check_no ?? '?'}`),
+          words(t('entry.headline.check', { no: facts.check_no ?? '?' })),
           ...(facts.outcome == null ? [] : [id(facts.outcome)]),
         ],
       };
@@ -188,11 +174,19 @@ export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
       return {
         kind: 'built',
         parts: [
-          words('Разбор'),
+          words(t('entry.headline.resolution')),
           ...(facts.remark_no == null
             ? []
             : [{ kind: 'entry' as const, key: taskKey, no: facts.remark_no }]),
-          ...(facts.outcome == null ? [] : [words(`· ${REMARK_OUTCOME_NAMES[facts.outcome]}`)]),
+          ...(facts.outcome == null
+            ? []
+            : [
+                words(
+                  t('entry.headline.resolutionOutcome', {
+                    outcome: t(`entry.remarkOutcome.${facts.outcome}`),
+                  }),
+                ),
+              ]),
           ...(facts.continuation_key == null
             ? []
             : [words('→'), { kind: 'task' as const, key: facts.continuation_key }]),
@@ -229,11 +223,15 @@ export function entryHeadline(facts: EntryFacts, taskKey: string): Headline {
 }
 
 /** Пара «было → стало». Отсутствие значения называется словом, а не пустотой. */
-function pair(before: string | null | undefined, after: string | null | undefined) {
+function pair(
+  before: string | null | undefined,
+  after: string | null | undefined,
+  t: TFunction<'ui'>,
+) {
   return [
-    before == null ? words('не назначен') : id(before),
+    before == null ? words(t('entry.headline.none')) : id(before),
     words('→'),
-    after == null ? words('снят') : id(after),
+    after == null ? words(t('entry.headline.cleared')) : id(after),
   ];
 }
 

@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { Badge, RelativeTime } from '@/shared/ui';
 import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
@@ -19,6 +20,7 @@ import { TaskFeatureMarks } from './feature-marks';
 export function TaskCard({ task }: { task: Task }) {
   const { search } = useLocation();
   const features = task.features ?? null;
+  const { t } = useTranslation('ui');
 
   return (
     /*
@@ -72,7 +74,7 @@ export function TaskCard({ task }: { task: Task }) {
       {/* Подвал прижат к низу: у карточек столбца он стоит на одном расстоянии от края. */}
       <div className="mt-auto flex flex-wrap items-center gap-2 text-meta text-muted">
         {task.assignee === null || task.assignee === undefined ? (
-          <span className="italic">не назначена</span>
+          <span className="italic">{t('task.cardUnassigned')}</span>
         ) : (
           <Badge mono>
             <span className="relative z-1">{task.assignee}</span>
@@ -80,7 +82,7 @@ export function TaskCard({ task }: { task: Task }) {
         )}
         {/* То же время, что в строке списка: активность в деле, а не правка карточки. */}
         {features?.last_entry_at === null || features?.last_entry_at === undefined ? (
-          <span className="italic">в деле пусто</span>
+          <span className="italic">{t('task.emptyCase')}</span>
         ) : (
           <RelativeTime value={features.last_entry_at} />
         )}

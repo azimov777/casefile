@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/lib';
 import type { TaskPriority } from '../api/tasks';
 
@@ -65,6 +66,8 @@ interface PriorityMarkProps {
 
 /** Приоритет задачи: высота столбиков, а не вторая серая плашка рядом со статусом. */
 export function PriorityMark({ priority, withName = true, className }: PriorityMarkProps) {
+  const { t } = useTranslation('ui');
+
   if (priority === null || priority === undefined || priority === '') return null;
 
   const known = isKnown(priority);
@@ -79,7 +82,7 @@ export function PriorityMark({ priority, withName = true, className }: PriorityM
       <svg viewBox="0 0 24 24" fill="none" className="size-(--ui-mark) shrink-0" aria-hidden="true">
         {shape}
       </svg>
-      <span className="sr-only">приоритет </span>
+      <span className="sr-only">{t('task.priorityLabel')} </span>
       <span className={withName ? 'font-mono text-mark' : 'sr-only'}>{priority}</span>
     </span>
   );

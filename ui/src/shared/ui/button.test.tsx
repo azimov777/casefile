@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { say } from '@testing/say';
 import { Button } from './button';
 
 /**
@@ -18,10 +19,16 @@ function inState(classes: string[], state: string): string[] {
 }
 
 describe('кнопка', () => {
+  /*
+   * Подписи взяты из словаря, а не набраны здесь: кнопке всё равно, что на ней
+   * написано, но набранная строкой русская подпись — это подпись мимо словаря,
+   * и отличить её от настоящей в поиске нечем.
+   */
   it.each([
-    ['primary', 'Ответить'],
-    ['quiet', 'Отмена'],
-  ] as const)('в тоне %s различает покой, наведение, фокус и запрет', (tone, label) => {
+    ['primary', 'answer.submit'],
+    ['quiet', 'receipt.close'],
+  ] as const)('в тоне %s различает покой, наведение, фокус и запрет', (tone, key) => {
+    const label = say.ui(key);
     render(
       <Button tone={tone} disabled>
         {label}
@@ -38,22 +45,24 @@ describe('кнопка', () => {
   });
 
   it('в разных тонах красится по-разному', () => {
-    const { rerender } = render(<Button tone="primary">Ответить</Button>);
-    const primary = classesOf('Ответить');
+    const label = say.ui('answer.submit');
+    const { rerender } = render(<Button tone="primary">{label}</Button>);
+    const primary = classesOf(label);
 
-    rerender(<Button tone="quiet">Ответить</Button>);
-    const quiet = classesOf('Ответить');
+    rerender(<Button tone="quiet">{label}</Button>);
+    const quiet = classesOf(label);
 
     expect(primary).not.toEqual(quiet);
   });
 
   it('запрет несёт атрибут и свой цвет, а не прозрачность', () => {
-    render(<Button disabled>Ответить</Button>);
+    const label = say.ui('answer.submit');
+    render(<Button disabled>{label}</Button>);
 
-    const button = screen.getByRole('button', { name: 'Ответить' });
+    const button = screen.getByRole('button', { name: label });
     expect(button).toBeDisabled();
 
-    const classes = classesOf('Ответить');
+    const classes = classesOf(label);
     // Прозрачность смешивает текст с фоном и роняет контраст ниже AA
     // (`docs/notes/ui.md`, «Прозрачность поверх цветной поверхности»).
     expect(classes.filter((klass) => /(^|:)opacity-/.test(klass))).toHaveLength(0);
@@ -63,9 +72,10 @@ describe('кнопка', () => {
   });
 
   it('класс места вызова перебивает свой, а не встаёт рядом', () => {
-    render(<Button className="px-1">Ответить</Button>);
+    const label = say.ui('answer.submit');
+    render(<Button className="px-1">{label}</Button>);
 
-    const classes = classesOf('Ответить');
+    const classes = classesOf(label);
     expect(classes).toContain('px-1');
     expect(classes).not.toContain('px-4');
   });

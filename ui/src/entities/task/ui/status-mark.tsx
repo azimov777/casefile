@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/lib';
 import type { TaskStatus } from '../api/tasks';
 
@@ -91,6 +92,8 @@ interface StatusMarkProps {
 
 /** Статус задачи: форма, а не плашка. Имя из контракта стоит рядом моноширинным. */
 export function StatusMark({ status, withName = true, className }: StatusMarkProps) {
+  const { t } = useTranslation('ui');
+
   if (status === null || status === undefined || status === '') return null;
 
   // Значение вне контракта не роняет отрисовку списка: показываем нейтральной формой.
@@ -114,7 +117,8 @@ export function StatusMark({ status, withName = true, className }: StatusMarkPro
       >
         {shape}
       </svg>
-      <span className="sr-only">статус </span>
+      {/* Пробел после подписи обязателен: диктор иначе прочёл бы «статусopen». */}
+      <span className="sr-only">{t('task.statusLabel')} </span>
       <span
         className={
           withName

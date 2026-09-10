@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { RelativeTime } from '@/shared/ui';
 import { cn } from '@/shared/lib';
 import type { Entry } from '../api/entries';
@@ -26,8 +27,9 @@ interface EntryCardProps {
  * и агент, которому человек её потом покажет, — в отличие от адреса страницы.
  */
 export function EntryCard({ entry, checks, highlighted = false, children }: EntryCardProps) {
+  const { t } = useTranslation('ui');
   const reference = `${entry.task_key}#${entry.no}`;
-  const headline = entryHeadline(factsOfEntry(entry), entry.task_key);
+  const headline = entryHeadline(factsOfEntry(entry), entry.task_key, t);
   // Служебная запись несёт один факт и получает столько места, сколько в ней смысла:
   // строка вместо карточки. Прятать её нельзя — дело обязано быть полным.
   const service = isServiceEntry(entry.type);
@@ -123,6 +125,7 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
  * которой быть не должно.
  */
 function CopyReference({ reference }: { reference: string }) {
+  const { t } = useTranslation('ui');
   const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
 
   async function copy() {
@@ -149,11 +152,11 @@ function CopyReference({ reference }: { reference: string }) {
         className="border-none border-current bg-transparent p-0 font-mono text-label text-muted hover:text-text hover:underline"
         onClick={() => void copy()}
       >
-        Скопировать {reference}
+        {t('entry.copy', { reference })}
       </button>
       {state === 'idle' ? null : (
         <span className="text-label" role="status">
-          {state === 'done' ? 'скопировано' : 'буфер обмена недоступен'}
+          {state === 'done' ? t('entry.copied') : t('entry.clipboardUnavailable')}
         </span>
       )}
     </span>

@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { ENTRY_TYPES, isServiceEntry, type EntryType } from '@/entities/entry';
 import { useExitHold } from '@/shared/lib';
@@ -32,6 +33,7 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
   const toggleRef = useRef<HTMLButtonElement>(null);
   /* Перечень доживает выход: свёртывание иначе убрало бы его в том же кадре. */
   const reveal = useExitHold(expanded);
+  const { t } = useTranslation('case');
 
   const agentTypes = ENTRY_TYPES.filter((type) => !isServiceEntry(type));
   const serviceTypes = ENTRY_TYPES.filter(isServiceEntry);
@@ -59,7 +61,7 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
      * и свёртывание кончалось бы скачком в восемь пикселей. Внутри обёртки он уезжает
      * вместе с местом и доходит до нуля. Тот же приём, что в отборе задач.
      */
-    <section className="flex flex-col" aria-label="Отбор записей">
+    <section className="flex flex-col" aria-label={t('filters.label')}>
       {/*
        * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
        * что дело платит за отбор, — всё остальное принадлежит записям. Тот же язык, что
@@ -74,15 +76,15 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
           aria-controls={typesId}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? 'Свернуть типы' : 'Выбрать типы'}
+          {expanded ? t('filters.collapse') : t('filters.expand')}
         </Button>
 
         <div className="flex flex-wrap gap-2">
           <Button tone="quiet" onClick={() => chooseGroup(agentTypes)}>
-            Записи агента
+            {t('filters.agentEntries')}
           </Button>
           <Button tone="quiet" onClick={() => chooseGroup(serviceTypes)}>
-            Служебные
+            {t('filters.serviceEntries')}
           </Button>
         </div>
 
@@ -95,10 +97,10 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
             за полное. */}
         <ul
           className="flex flex-[1_1_12rem] flex-wrap items-center gap-x-2 gap-y-1 list-none p-0"
-          aria-label="Отобранные типы записей"
+          aria-label={t('filters.chosen')}
         >
           {chosen.length === 0 ? (
-            <li className="text-meta text-muted">показаны все записи</li>
+            <li className="text-meta text-muted">{t('filters.allShown')}</li>
           ) : (
             chosen.map((type) => (
               // Чип типа: имя из контракта моноширинным, кнопка рядом снимает его
@@ -118,7 +120,7 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
                    * (`docs/notes/ui.md`).
                    */
                   className="grid place-items-center rounded-pill border-none bg-transparent p-0 leading-none text-muted transition-[background-color] duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text"
-                  aria-label={`Убрать тип: ${type}`}
+                  aria-label={t('filters.remove', { type })}
                   onClick={() => {
                     toggle(type, false);
                     toggleRef.current?.focus();
@@ -133,7 +135,7 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
 
         {chosen.length === 0 ? null : (
           <Button tone="quiet" onClick={() => onChange([])}>
-            Все записи
+            {t('filters.reset')}
           </Button>
         )}
       </div>
@@ -144,7 +146,7 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
             id={typesId}
             className="mt-2 flex flex-wrap gap-x-3 gap-y-2 rounded-control border border-line bg-surface px-4 py-3"
           >
-            <legend className="text-meta text-muted">Типы записей</legend>
+            <legend className="text-meta text-muted">{t('filters.legend')}</legend>
             {ENTRY_TYPES.map((type) => (
               <label key={type} className="inline-flex cursor-pointer items-center gap-1 text-meta">
                 <input

@@ -1,29 +1,22 @@
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/lib';
 import type { LiveStatus as LiveStatusValue } from '../model/use-live-journal';
 
 /**
- * Как называется каждое состояние потока и что оно значит для человека.
+ * Чем называется каждое состояние потока в словаре и тревожное ли оно.
  *
  * Перечислено ключами объекта: состояние, добавленное в `LiveStatus`, роняет сборку,
- * а не остаётся без подписи (тот же приём, что у тонов и списков контракта).
+ * а не остаётся без подписи (тот же приём, что у тонов и списков контракта). Сами
+ * подписи живут в словаре языков — здесь только имя ключа.
  */
 const STATES = {
-  connecting: {
-    label: 'подключаемся',
-    title: 'Открываем живой поток журнала',
-    alarming: false,
-  },
-  live: {
-    label: 'на связи',
-    title: 'Живой поток журнала открыт: экран обновляется сам',
-    alarming: false,
-  },
-  reconnecting: {
-    label: 'нет связи',
-    title: 'Соединение с потоком журнала потеряно, идёт переподключение',
-    alarming: true,
-  },
-} satisfies Record<LiveStatusValue, { label: string; title: string; alarming: boolean }>;
+  connecting: { key: 'connecting', alarming: false },
+  live: { key: 'online', alarming: false },
+  reconnecting: { key: 'offline', alarming: true },
+} satisfies Record<
+  LiveStatusValue,
+  { key: 'connecting' | 'online' | 'offline'; alarming: boolean }
+>;
 
 /**
  * Точка соединения — псевдоэлемент, а не узел разметки: она не содержание, а знак при
@@ -45,14 +38,15 @@ const INDICATOR =
  */
 export function LiveStatus({ status }: { status: LiveStatusValue }) {
   const state = STATES[status];
+  const { t } = useTranslation('ui');
 
   return (
     <span
       className={cn(INDICATOR, state.alarming ? 'text-danger' : 'text-muted')}
       role="status"
-      title={state.title}
+      title={t(`live.${state.key}Title`)}
     >
-      {state.label}
+      {t(`live.${state.key}`)}
     </span>
   );
 }

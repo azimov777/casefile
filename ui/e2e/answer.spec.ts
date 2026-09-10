@@ -39,7 +39,7 @@ test('ответ на вопрос из входящей закрывает ег
 
   // Счётчик в панели — то же число, что показывает `bootstrap`. Пишущие сценарии идут
   // по одному и убирают за собой, поэтому здесь открыт ровно вопрос демо.
-  await expect(side(page).getByText('Открытых вопросов: 1')).toBeVisible();
+  await expect(side(page).getByText('1 открытый вопрос')).toBeVisible();
 
   const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
   await expect(question.getByText('блокирующий')).toBeVisible();
@@ -60,7 +60,7 @@ test('ответ на вопрос из входящей закрывает ег
 
   // Вопрос при этом никуда не делся, а счётчик всё равно перечитан у бэкенда.
   await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toHaveCount(1);
-  // Ноль называется словами, а не числом: «Открытых вопросов: 0» человек читает
+  // Ноль называется словами, а не числом: «0 открытых вопросов» человек читает
   // как счётчик, который надо расшифровать, а «вопросов нет» — как ответ.
   await expect(side(page).getByText('Открытых вопросов нет')).toBeVisible();
 
@@ -153,7 +153,7 @@ test('кнопка «Ответить» не уезжает из-под курс
   // Карточка догружается блоками, и последний из них — опись дела. Пока её нет,
   // замер снимается с ещё не сложившейся страницы, и «кнопка уехала» означало бы
   // только «страница дорисовалась».
-  await expect(page.getByText(/Записей в деле:/)).toBeVisible();
+  await expect(page.getByText(/^В деле \d+ запис/)).toBeVisible();
 
   const form = page.getByRole('form', { name: `Ответ на DEMO-3#${question.no}` });
   const submit = form.getByRole('button', { name: 'Ответить' });

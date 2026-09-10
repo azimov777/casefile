@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/lib';
 import { Button } from '@/shared/ui';
 import { useDeferredList } from '../model/use-deferred-list';
@@ -18,6 +19,8 @@ import { useDeferredList } from '../model/use-deferred-list';
  */
 export function UpdatesBar() {
   const { count, vague, show } = useDeferredList();
+  const { t } = useTranslation('ui');
+
   if (count === 0 && !vague) return null;
 
   return (
@@ -38,12 +41,12 @@ export function UpdatesBar() {
       role="status"
       // Имя, а не только роль: `role="status"` носит и индикатор связи в шапке, и без
       // имени их не различить ни программе чтения с экрана, ни сквозному тесту.
-      aria-label="Обновления списка"
+      aria-label={t('live.updates')}
     >
       <span className="text-body">
-        {count > 0 ? `Изменилось задач: ${count}` : 'Пока не было связи, список мог измениться'}
+        {count > 0 ? t('live.changed', { count }) : t('live.changedUnknown')}
       </span>
-      <Button onClick={show}>Показать</Button>
+      <Button onClick={show}>{t('live.show')}</Button>
     </div>
   );
 }

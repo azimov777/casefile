@@ -49,7 +49,7 @@ test('карточка DEMO-6 рисуется одним запросом па�
     await expect(summary.getByText(part, { exact: true })).toBeVisible();
   }
 
-  await expect(page.getByText('Записей в деле: 7')).toBeVisible();
+  await expect(page.getByText('В деле 7 записей')).toBeVisible();
   await expect(header).toBeVisible();
 
   // Один запрос пакета и ни одного за телами записей.
@@ -153,7 +153,7 @@ test('доступность ленты дела', async ({ page }) => {
 
 test('доступность карточки задачи', async ({ page }) => {
   await page.goto('/tasks/DEMO-6');
-  await expect(page.getByText('Записей в деле: 7')).toBeVisible();
+  await expect(page.getByText('В деле 7 записей')).toBeVisible();
 
   const closed = await new AxeBuilder({ page }).analyze();
   expect(serious(closed.violations)).toEqual([]);

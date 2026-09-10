@@ -30,6 +30,7 @@ export function Sheet({
   open,
   onOpenChange,
   title,
+  closeLabel,
   returnFocusTo,
   children,
 }: {
@@ -37,6 +38,11 @@ export function Sheet({
   onOpenChange: (open: boolean) => void;
   /** Имя шторки: диалогу без имени программа чтения с экрана говорит «диалог». */
   title: string;
+  /**
+   * Имя кнопки закрытия. Приходит снаружи вместе с именем шторки: кирпич `shared`
+   * не знает, что за ней стоит, и подписи в его словаре быть не может.
+   */
+  closeLabel: string;
   /**
    * Куда вернуть фокус при закрытии. Radix возвращает его туда, где фокус был в момент
    * открытия, — но кнопка здесь не `Dialog.Trigger` (шторка и кнопка живут в разных
@@ -70,7 +76,7 @@ export function Sheet({
         >
           <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
           <DialogPrimitive.Close
-            aria-label="Закрыть разделы"
+            aria-label={closeLabel}
             className={cn(
               'absolute top-2 right-2 grid size-7 place-items-center rounded-control text-muted',
               'transition-colors duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text',

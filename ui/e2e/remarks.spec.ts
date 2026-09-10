@@ -61,7 +61,7 @@ test('признак «замечаний» стоит в строке спис�
   await page.goto('/tasks?queue=DEMO');
 
   const row = page.getByRole('row').filter({ hasText: 'DEMO-1' });
-  await expect(row.getByText('замечаний без разбора: 1')).toBeVisible();
+  await expect(row.getByText('1 замечание без разбора')).toBeVisible();
 
   // Флажок отбора оставляет только задачи с неразобранными замечаниями.
   await page.getByRole('button', { name: 'Изменить отбор' }).click();
@@ -78,7 +78,7 @@ test('признак «замечаний» стоит в строке спис�
   // Карточка доски — `article` с ключом: ссылка на ней носит название задачи, а не
   // ключ, и признак лежит рядом с ней, а не внутри.
   await expect(
-    page.getByRole('article').filter({ hasText: 'DEMO-1' }).getByText('замечаний без разбора: 1'),
+    page.getByRole('article').filter({ hasText: 'DEMO-1' }).getByText('1 замечание без разбора'),
   ).toBeVisible();
 });
 

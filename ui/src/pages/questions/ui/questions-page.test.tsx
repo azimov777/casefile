@@ -17,6 +17,7 @@ import {
 import { liveJournal } from '@testing/live-journal';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
+import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
 
 /** Что и с какими заголовками уходило на бэкенд за прогон. */
@@ -79,14 +80,18 @@ describe('входящая и ответ', () => {
 
     renderApp('/questions');
 
-    const blocking = await screen.findByRole('article', { name: 'Блокирующий вопрос DEMO-3#7' });
-    const usual = screen.getByRole('article', { name: 'Вопрос DEMO-4#8' });
+    const blocking = await screen.findByRole('article', {
+      name: say.questions('blockingQuestionLabel', { reference: 'DEMO-3#7' }),
+    });
+    const usual = screen.getByRole('article', {
+      name: say.questions('questionLabel', { reference: 'DEMO-4#8' }),
+    });
 
     // Различие держится не цветом кромки: признак есть в разметке и в доступном имени,
     // а рядом остаётся плашка со словом.
     expect(blocking).toHaveAttribute('data-blocking', 'true');
     expect(usual).not.toHaveAttribute('data-blocking');
-    expect(blocking).toHaveTextContent('блокирующий');
+    expect(blocking).toHaveTextContent(say.ui('entry.blocking'));
   });
   it('показывает адресованный вопрос и отвечает на него с ключом повтора', async () => {
     inbox();
@@ -94,17 +99,22 @@ describe('входящая и ответ', () => {
     renderApp('/questions');
 
     expect(await screen.findByText(/Срок хранения дел|Удалять ли записи/)).toBeInTheDocument();
-    expect(screen.getByText('блокирующий')).toBeInTheDocument();
-    expect(screen.getByText('Открытых вопросов: 2')).toBeInTheDocument();
+    expect(screen.getByText(say.ui('entry.blocking'))).toBeInTheDocument();
+    expect(screen.getByText(say.ui('app.openQuestions', { count: 2 }))).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Ответить' }));
-    await user.type(screen.getByLabelText('Ответ'), 'Храним вечно: дело неизменяемо.');
-    await user.click(screen.getByRole('button', { name: 'Ответить' }));
+    await user.click(screen.getByRole('button', { name: say.ui('answer.open') }));
+    await user.type(
+      screen.getByLabelText(say.ui('answer.fieldLabel')),
+      'Храним вечно: дело неизменяемо.',
+    );
+    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
 
     // Ответ подшит — и это сказано словами, с номером записи ссылкой. Вопрос при этом
     // никуда не делся: раньше здесь исчезал весь блок, и единственным признаком, что
     // что-то произошло, был счётчик в шапке.
-    const receipt = await screen.findByRole('region', { name: 'Ответ на DEMO-4#4 подшит' });
+    const receipt = await screen.findByRole('region', {
+      name: say.ui('answer.receiptLabel', { reference: 'DEMO-4#4' }),
+    });
     expect(within(receipt).getByRole('link', { name: 'DEMO-4#9' })).toHaveAttribute(
       'href',
       '/tasks/DEMO-4?entry=9',
@@ -113,7 +123,9 @@ describe('входящая и ответ', () => {
     expect(screen.getByText(/Удалять ли записи/)).toBeInTheDocument();
 
     // Счётчик всё равно перечитан у бэкенда: подтверждение его не подменяет.
-    await waitFor(() => expect(screen.getByText('Открытых вопросов: 1')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(say.ui('app.openQuestions', { count: 1 }))).toBeInTheDocument(),
+    );
 
     const post = posts()[0];
     expect(post?.key).toMatch(/^[0-9a-f-]{36}$/);
@@ -124,8 +136,8 @@ describe('входящая и ответ', () => {
     });
 
     // Закрыть подтверждение — решение человека, а не таймера.
-    await user.click(within(receipt).getByRole('button', { name: 'Закрыть' }));
-    expect(await screen.findByText(/Вопросов без ответа нет/)).toBeInTheDocument();
+    await user.click(within(receipt).getByRole('button', { name: say.ui('receipt.close') }));
+    expect(await screen.findByText(say.questions('noQuestions'))).toBeInTheDocument();
   });
 
   it('повтор после обрыва идёт с тем же ключом: второго ответа не будет', async () => {
@@ -151,15 +163,22 @@ describe('входящая и ответ', () => {
     const user = userEvent.setup();
     renderApp('/questions');
 
-    await user.click(await screen.findByRole('button', { name: 'Ответить' }));
-    await user.type(screen.getByLabelText('Ответ'), 'Ответ, который не дошёл с первого раза');
-    await user.click(screen.getByRole('button', { name: 'Ответить' }));
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.type(
+      screen.getByLabelText(say.ui('answer.fieldLabel')),
+      'Ответ, который не дошёл с первого раза',
+    );
+    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
 
-    expect(await screen.findByText(/База данных недоступна/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(new RegExp(say.errors('database_unavailable'))),
+    ).toBeInTheDocument();
     // Текст никуда не делся: человеку не нужно набирать его заново.
-    expect(screen.getByLabelText('Ответ')).toHaveValue('Ответ, который не дошёл с первого раза');
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue(
+      'Ответ, который не дошёл с первого раза',
+    );
 
-    await user.click(screen.getByRole('button', { name: 'Ответить' }));
+    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
     await waitFor(() => expect(posts()).toHaveLength(2));
 
     const [first, second] = posts();
@@ -185,21 +204,27 @@ describe('входящая и ответ', () => {
     const user = userEvent.setup();
     renderApp('/questions');
 
-    await user.click(await screen.findByRole('button', { name: 'Ответить' }));
-    await user.click(screen.getByRole('button', { name: 'Ответить' }));
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
 
-    expect(await screen.findByText(/Пустой ответ отправить нельзя/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Ответ')).toHaveAttribute('aria-invalid', 'true');
+    expect(await screen.findByText(say.ui('answer.empty'))).toBeInTheDocument();
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
     expect(posts()).toHaveLength(0);
 
     // Упрёк снимается первым же символом: человек сделал ровно то, о чём его
     // попросили, и продолжать показывать ему красное значит штрафовать за прошлое.
-    await user.type(screen.getByLabelText('Ответ'), 'О');
-    expect(screen.queryByText(/Пустой ответ отправить нельзя/)).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Ответ')).toHaveAttribute('aria-invalid', 'false');
+    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'О');
+    expect(screen.queryByText(say.ui('answer.empty'))).not.toBeInTheDocument();
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
 
-    await user.type(screen.getByLabelText('Ответ'), 'тветил');
-    await user.click(screen.getByRole('button', { name: 'Ответить' }));
+    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'тветил');
+    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
 
     expect(await screen.findByText('Тело записи не может быть пустым')).toBeInTheDocument();
     expect(posts()).toHaveLength(1);
@@ -248,9 +273,12 @@ describe('входящая и ответ', () => {
   }
 
   async function fillAndSend(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(await screen.findByRole('button', { name: 'Ответить' }));
-    await user.type(screen.getByLabelText('Ответ'), 'Храним вечно: дело неизменяемо.');
-    await user.click(screen.getByRole('button', { name: 'Ответить' }));
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.type(
+      screen.getByLabelText(say.ui('answer.fieldLabel')),
+      'Храним вечно: дело неизменяемо.',
+    );
+    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
     await waitFor(() => expect(posts()).toHaveLength(1));
   }
 
@@ -275,7 +303,9 @@ describe('входящая и ответ', () => {
       await Promise.resolve();
     });
 
-    const receipt = await screen.findByRole('region', { name: 'Ответ на DEMO-4#4 подшит' });
+    const receipt = await screen.findByRole('region', {
+      name: say.ui('answer.receiptLabel', { reference: 'DEMO-4#4' }),
+    });
     expect(within(receipt).getByRole('link', { name: 'DEMO-4#9' })).toBeInTheDocument();
     // Второго ответа не создано: отправка была одна.
     expect(posts()).toHaveLength(1);
@@ -292,13 +322,19 @@ describe('входящая и ответ', () => {
       await Promise.resolve();
     });
 
-    const receipt = await screen.findByRole('region', { name: 'Ответ на DEMO-4#4 подшит' });
+    const receipt = await screen.findByRole('region', {
+      name: say.ui('answer.receiptLabel', { reference: 'DEMO-4#4' }),
+    });
     expect(within(receipt).getByRole('link', { name: 'DEMO-4#9' })).toBeInTheDocument();
 
     // Кадр приезжает следом и ничего не отменяет.
     act(() => liveJournal.send(answerFrame()));
     await waitFor(() =>
-      expect(screen.getByRole('region', { name: 'Ответ на DEMO-4#4 подшит' })).toBeInTheDocument(),
+      expect(
+        screen.getByRole('region', {
+          name: say.ui('answer.receiptLabel', { reference: 'DEMO-4#4' }),
+        }),
+      ).toBeInTheDocument(),
     );
     expect(within(receipt).getByRole('link', { name: 'DEMO-4#9' })).toBeInTheDocument();
     expect(posts()).toHaveLength(1);
@@ -311,14 +347,16 @@ describe('входящая и ответ', () => {
     const user = userEvent.setup();
     const { unmount } = renderApp('/questions');
 
-    await user.click(await screen.findByRole('button', { name: 'Ответить' }));
-    await user.type(screen.getByLabelText('Ответ'), 'Начал писать и отвлёкся');
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'Начал писать и отвлёкся');
     unmount();
 
     renderApp('/questions');
-    await user.click(await screen.findByRole('button', { name: 'Ответить' }));
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
 
-    expect(screen.getByLabelText('Ответ')).toHaveValue('Начал писать и отвлёкся');
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue(
+      'Начал писать и отвлёкся',
+    );
   });
 
   it('отбор «только блокирующие» уходит в запрос', async () => {
@@ -326,8 +364,8 @@ describe('входящая и ответ', () => {
     const user = userEvent.setup();
     renderApp('/questions');
 
-    await screen.findByRole('button', { name: 'Ответить' });
-    await user.click(screen.getByRole('checkbox', { name: 'только блокирующие' }));
+    await screen.findByRole('button', { name: say.ui('answer.open') });
+    await user.click(screen.getByRole('checkbox', { name: say.questions('blockingOnly') }));
 
     await waitFor(() => {
       const last = sent.filter((call) => call.url.pathname.endsWith('/questions')).at(-1);
@@ -369,13 +407,20 @@ describe('входящая: мои замечания', () => {
 
     // Вывод обо всей входящей по отобранной выдаче не делается, а условие названо
     // поимённо в самом сообщении: человек мог о нём забыть.
-    const empty = await screen.findByText(/ничего не нашлось/);
-    expect(empty).toHaveTextContent('только блокирующие');
-    expect(screen.queryByText(/агенты вас не ждут/)).not.toBeInTheDocument();
+    const condition = say.questions('condition.blocking');
+    const empty = await screen.findByText(
+      say.questions('emptyByFilter', { conditions: condition }),
+    );
+    expect(empty).toHaveTextContent(condition);
+    expect(screen.queryByText(say.questions('noQuestions'))).not.toBeInTheDocument();
 
     // И снимается на месте, вместе с адресом.
-    await user.click(screen.getAllByRole('button', { name: 'Сбросить отбор' })[0]!);
-    expect(await screen.findByText(/Вопрос DEMO-4#8|DEMO-4#8/)).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: say.questions('resetFilter') })[0]!);
+    expect(
+      await screen.findByText(
+        new RegExp(`${say.questions('questionLabel', { reference: 'DEMO-4#8' })}|DEMO-4#8`),
+      ),
+    ).toBeInTheDocument();
     expect(address.current).not.toContain('blocking=true');
   });
 
@@ -393,9 +438,17 @@ describe('входящая: мои замечания', () => {
     renderApp('/questions?queue=TRK');
 
     await waitFor(() => {
-      expect(screen.getAllByText(/ничего не нашлось/).length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(
+          say.questions('emptyByFilter', {
+            conditions: say.questions('condition.queue', { queue: 'TRK' }),
+          }),
+        ).length,
+      ).toBeGreaterThan(0);
     });
-    expect(screen.queryByText(/уже разобрали/)).not.toBeInTheDocument();
+    // Вывод обо всей входящей по отобранной выдаче не делается: «неразобранных
+    // замечаний нет» — утверждение обо всём, и по отбору оно не звучит.
+    expect(screen.queryByText(say.questions('noRemarks'))).not.toBeInTheDocument();
   });
 
   it('без отбора пустая половина замечаний говорит нейтрально', async () => {
@@ -407,8 +460,9 @@ describe('входящая: мои замечания', () => {
 
     renderApp('/questions');
 
-    expect(await screen.findByText('Неразобранных замечаний нет.')).toBeInTheDocument();
-    expect(screen.queryByText(/уже разобрали/)).not.toBeInTheDocument();
+    expect(await screen.findByText(say.questions('noRemarks'))).toBeInTheDocument();
+    // И обратно: отбора нет — значит нечего и снимать, объяснения по отбору тоже нет.
+    expect(screen.queryByRole('button', { name: say.questions('resetFilter') })).toBeNull();
   });
 
   it('ссылка вопроса открывает свою запись, а не только задачу', async () => {
@@ -434,7 +488,7 @@ describe('входящая: мои замечания', () => {
     // приезжают вторым запросом — после того, как первый кадр сказал, кто вошёл.
     const row = await screen.findByText(/Дыры в нумерации/);
     const section = row.closest('section') as HTMLElement;
-    expect(within(section).getByText('ждёт разбора')).toBeInTheDocument();
+    expect(within(section).getByText(say.questions('awaitingResolution'))).toBeInTheDocument();
     // Ссылка называет запись и её же открывает: подпись `KEY#N` без номера в адресе
     // обещала бы одно, а вела в другое место.
     expect(within(section).getByRole('link', { name: 'DEMO-1#8' })).toHaveAttribute(
@@ -458,7 +512,7 @@ describe('входящая: мои замечания', () => {
 
     renderApp('/questions');
 
-    expect(await screen.findByText(/Неразобранных замечаний нет/)).toBeInTheDocument();
-    expect(screen.getByText(/Вопросов без ответа нет/)).toBeInTheDocument();
+    expect(await screen.findByText(say.questions('noRemarks'))).toBeInTheDocument();
+    expect(screen.getByText(say.questions('noQuestions'))).toBeInTheDocument();
   });
 });

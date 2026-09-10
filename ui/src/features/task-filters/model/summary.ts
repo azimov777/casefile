@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import type { TaskFilters } from './filters';
 
 /**
@@ -49,7 +50,7 @@ export const CONDITION_RESET = {
  * чип «очередь UI» рядом с ними был бы третьим именем того же самого — и снимался бы
  * так, что человек не понимал бы, куда он после этого попал.
  */
-export function describeFilters(filters: TaskFilters): FilterCondition[] {
+export function describeFilters(filters: TaskFilters, t: TFunction<'tasks'>): FilterCondition[] {
   const query = filters.query.trim();
 
   /*
@@ -59,7 +60,7 @@ export function describeFilters(filters: TaskFilters): FilterCondition[] {
    * чипов, из которых работает один. Условия при этом не потеряны — они остались
    * в адресе и вернутся, как только запрос опустеет.
    */
-  if (query !== '') return [{ id: 'query', label: `запрос: ${query}` }];
+  if (query !== '') return [{ id: 'query', label: t('filters.condition.query', { query }) }];
 
   const conditions: FilterCondition[] = [];
   const board = filters.view === 'board';
@@ -67,33 +68,42 @@ export function describeFilters(filters: TaskFilters): FilterCondition[] {
   // На доске статус — это столбец, и параметром он не уезжает (`filtersToListParams`).
   // Назвать его здесь значило бы соврать про выдачу: столбцы показаны все.
   if (!board && filters.status.length > 0) {
-    conditions.push({ id: 'status', label: `статус ${filters.status.join(', ')}` });
+    conditions.push({
+      id: 'status',
+      label: t('filters.condition.status', { values: filters.status.join(', ') }),
+    });
   }
 
   if (filters.priority.length > 0) {
-    conditions.push({ id: 'priority', label: `приоритет ${filters.priority.join(', ')}` });
+    conditions.push({
+      id: 'priority',
+      label: t('filters.condition.priority', { values: filters.priority.join(', ') }),
+    });
   }
 
   const assignee = filters.assignee.trim();
   if (assignee !== '') {
-    conditions.push({ id: 'assignee', label: `исполнитель ${assignee}` });
+    conditions.push({
+      id: 'assignee',
+      label: t('filters.condition.assignee', { value: assignee }),
+    });
   }
 
   const text = filters.text.trim();
   if (text !== '') {
-    conditions.push({ id: 'text', label: `текст «${text}»` });
+    conditions.push({ id: 'text', label: t('filters.condition.text', { value: text }) });
   }
 
   if (filters.blocked) {
-    conditions.push({ id: 'blocked', label: 'только заблокированные' });
+    conditions.push({ id: 'blocked', label: t('filters.condition.blocked') });
   }
 
   if (filters.withQuestions) {
-    conditions.push({ id: 'questions', label: 'есть открытые вопросы' });
+    conditions.push({ id: 'questions', label: t('filters.condition.questions') });
   }
 
   if (filters.withRemarks) {
-    conditions.push({ id: 'remarks', label: 'есть неразобранные замечания' });
+    conditions.push({ id: 'remarks', label: t('filters.condition.remarks') });
   }
 
   return conditions;

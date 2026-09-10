@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ApiError } from '../api';
-import { en, i18n, ru } from '../i18n';
-import { errorDictionary } from './dictionary';
+import { LANGUAGES, dictionaries, en, i18n, ru } from '../i18n';
 import { errorMessage, errorText } from './text';
 
 /**
@@ -18,34 +17,24 @@ function codesFromReference(): string[] {
   return [...rows].map((row) => row[1] as string);
 }
 
-/*
- * Источников текста два, и это переезд, а не устройство: коды экрана входа уже живут
- * в словарях языков, остальные ждут UI-78 в `dictionary.ts`. Полнота считается по обоим
- * сразу — иначе переезд ослабил бы проверку ровно в тот момент, когда она нужнее всего.
- */
-function covered(code: string): boolean {
-  return code in ru.errors || errorDictionary[code] !== undefined;
-}
-
 describe('словарь ошибок', () => {
-  it('покрывает каждый код из справочника бэкенда', () => {
+  /*
+   * Полнота спрашивается с каждого языка отдельно, а не с одного за всех: код,
+   * переведённый только на русский, — это английский экран с русской фразой посреди
+   * него, и поймать это обязана проверка, а не человек.
+   */
+  it.each(LANGUAGES)('словарь %s покрывает каждый код из справочника бэкенда', (language) => {
     const codes = codesFromReference();
 
     expect(codes.length).toBeGreaterThan(40);
     expect(
-      codes.filter((code) => !covered(code)),
-      'Дополни словарь src/shared/i18n/dictionaries/*/errors.ts',
+      codes.filter((code) => !(code in dictionaries[language].errors)),
+      `Дополни словарь src/shared/i18n/dictionaries/${language}/errors.ts`,
     ).toEqual([]);
   });
 
-  it('код лежит в одном месте: переехавший не остался и в старом словаре', () => {
-    expect(Object.keys(ru.errors).filter((code) => errorDictionary[code] !== undefined)).toEqual(
-      [],
-    );
-  });
-
   it('русские тексты на русском и заканчиваются точкой', () => {
-    for (const [code, text] of Object.entries({ ...errorDictionary, ...ru.errors })) {
+    for (const [code, text] of Object.entries(ru.errors)) {
       expect(text, code).toMatch(/[А-Яа-яЁё]/);
       expect(text, code).toMatch(/[.:]$/);
     }
@@ -63,19 +52,23 @@ describe('словарь ошибок', () => {
  * Язык подставляется явно: текст отказа берётся из словаря по языку интерфейса, и
  * модульный тест не вправе зависеть от того, на какой машине он запущен.
  */
-describe.each(['ru', 'en'] as const)('errorText на языке %s', (language) => {
-  const dictionary = language === 'ru' ? ru : en;
+describe.each(LANGUAGES)('errorText на языке %s', (language) => {
+  const dictionary = dictionaries[language];
 
   beforeAll(() => {
     void i18n.changeLanguage(language);
   });
 
   afterAll(() => {
-    void i18n.changeLanguage('ru');
+    void i18n.changeLanguage('en');
   });
 
   it('берёт текст по коду', () => {
     expect(errorText('unauthorized')).toBe(dictionary.errors.unauthorized);
+  });
+
+  it('берёт на своём языке и тот код, что переехал из старого словаря последним', () => {
+    expect(errorText('task_not_found')).toBe(dictionary.errors.task_not_found);
   });
 
   it('неизвестный код показывает фразу бэкенда и сам код', () => {
@@ -87,11 +80,6 @@ describe.each(['ru', 'en'] as const)('errorText на языке %s', (language) 
       dictionary.ui.error.unknownCode.replace('{{code}}', 'brand_new_code'),
     );
   });
-
-  it('код, ещё не переехавший в словари, показывается по-русски на любом языке', () => {
-    // Названная цена незаконченного переезда: UI-78 её снимает.
-    expect(errorText('task_not_found')).toBe(errorDictionary.task_not_found);
-  });
 });
 
 describe('errorMessage', () => {
@@ -99,10 +87,14 @@ describe('errorMessage', () => {
     void i18n.changeLanguage('ru');
   });
 
+  afterAll(() => {
+    void i18n.changeLanguage('en');
+  });
+
   it('отказ бэкенда переводит по коду', () => {
     const failure = new ApiError('task_not_found', 'Task not found', 404, {});
 
-    expect(errorMessage(failure)).toBe('Задачи с таким ключом нет.');
+    expect(errorMessage(failure)).toBe(ru.errors.task_not_found);
   });
 
   it('обрыв связи объясняет тем же словарём: код придуман клиентом', () => {

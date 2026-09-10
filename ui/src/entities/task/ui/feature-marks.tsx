@@ -1,4 +1,5 @@
 import { CircleHelp, Flag, Lock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { TaskFeatures } from '../api/tasks';
 
 /**
@@ -42,25 +43,29 @@ function Mark({
 
 export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
   const blocking = features.open_blocking_questions;
+  const { t } = useTranslation('ui');
 
   return (
     <>
       {features.blocked ? (
-        <Mark
-          icon={Lock}
-          label="заблокирована: есть связь blocked_by на незакрытую задачу"
-          tone="text-danger"
-          count={null}
-        />
+        <Mark icon={Lock} label={t('task.features.blocked')} tone="text-danger" count={null} />
       ) : null}
 
       {features.open_questions > 0 ? (
         <Mark
           icon={CircleHelp}
+          /*
+           * Два числа в одной фразе, и склоняются они порознь: `i18next` считает форму
+           * по одному `count`, поэтому второе приходит уже собранной фразой. Порядок
+           * кусков при этом задаёт словарь, а не эта строка, — склейки здесь нет.
+           */
           label={
             blocking > 0
-              ? `вопросов без ответа: ${features.open_questions}, из них блокирующих: ${blocking}`
-              : `вопросов без ответа: ${features.open_questions}`
+              ? t('task.features.questionsBlocking', {
+                  count: features.open_questions,
+                  blocking: t('task.features.blockingOf', { count: blocking }),
+                })
+              : t('task.features.questions', { count: features.open_questions })
           }
           tone={blocking > 0 ? 'text-danger' : 'text-attention'}
           count={features.open_questions}
@@ -74,7 +79,7 @@ export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
       {features.open_remarks > 0 ? (
         <Mark
           icon={Flag}
-          label={`замечаний без разбора: ${features.open_remarks}`}
+          label={t('task.features.remarks', { count: features.open_remarks })}
           tone="text-accent"
           count={features.open_remarks}
         />

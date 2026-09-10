@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { EMPTY_DRAFT, clearDraft, readDraft, saveDraft, type Draft } from '@/shared/lib';
 import { Button } from './button';
 import { Callout } from './callout';
@@ -69,6 +70,7 @@ export function Composer({
   const [showPreview, setShowPreview] = useState(false);
   const [emptyBody, setEmptyBody] = useState(false);
   const bodyId = useId();
+  const { t } = useTranslation('ui');
 
   // Форма может пережить смену того, о чём она: соседний вопрос той же задачи меняет
   // ключ черновика, не перемонтируя компонент.
@@ -143,7 +145,7 @@ export function Composer({
           {isPending ? pendingLabel : submitLabel}
         </Button>
         <Button tone="quiet" onClick={() => setShowPreview(!showPreview)}>
-          {showPreview ? 'Скрыть предпросмотр' : 'Предпросмотр'}
+          {showPreview ? t('composer.hidePreview') : t('composer.preview')}
         </Button>
       </div>
 
@@ -163,7 +165,7 @@ export function Composer({
 
       {showPreview && draft.body.trim() !== '' ? (
         <div className="flex flex-col gap-1 rounded-mark border border-dashed border-line-strong p-3">
-          <span className={LABEL}>Как это увидит агент</span>
+          <span className={LABEL}>{t('composer.agentView')}</span>
           <Markdown>{draft.body}</Markdown>
         </div>
       ) : null}

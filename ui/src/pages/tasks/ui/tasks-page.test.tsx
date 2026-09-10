@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, data, failure, task, taskPackage, taskPage } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
+import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
 import { TASK_PAGE_SIZE } from '@/entities/task';
 
@@ -33,7 +34,7 @@ function open(path: string) {
  * не существуют вовсе — ровно так же, как их не видит человек.
  */
 async function expandFilters(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Изменить отбор' }));
+  await user.click(screen.getByRole('button', { name: say.tasks('filters.expand') }));
 }
 
 /** Последний запрос списка. Его отсутствие — ошибка теста, а не проверяемое состояние. */
@@ -51,15 +52,18 @@ describe('список задач', () => {
     open('/tasks?queue=DEMO&status=open&status=in_progress');
     await screen.findByText('DEMO-3');
 
-    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
     // Очередь среди чипов не значится: она место, а не условие (UI-38).
     expect(within(conditions).getAllByRole('listitem')).toHaveLength(1);
-    expect(conditions).toHaveTextContent('статус open, in_progress');
+    const statusCondition = say.tasks('filters.condition.status', { values: 'open, in_progress' });
+    expect(conditions).toHaveTextContent(statusCondition);
 
     // Доступное имя называет условие целиком: «крестик» сам по себе диктору
     // ничего не говорит, а условий в строке несколько.
     await user.click(
-      screen.getByRole('button', { name: 'Убрать условие: статус open, in_progress' }),
+      screen.getByRole('button', {
+        name: say.tasks('filters.remove', { condition: statusCondition }),
+      }),
     );
 
     expect(address.current).toContain('queue=DEMO');
@@ -72,8 +76,8 @@ describe('список задач', () => {
     open('/tasks');
     await screen.findByText('DEMO-3');
 
-    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
-    expect(conditions).toHaveTextContent('показаны все задачи');
+    const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
+    expect(conditions).toHaveTextContent(say.tasks('filters.allShown'));
     expect(within(conditions).queryByRole('button')).not.toBeInTheDocument();
   });
 
@@ -83,10 +87,12 @@ describe('список задач', () => {
     open('/tasks?queue=DEMO&blocked=true&query=status%3A+open');
     await screen.findByText('DEMO-3');
 
-    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
     const items = within(conditions).getAllByRole('listitem');
     expect(items).toHaveLength(1);
-    expect(items[0]).toHaveTextContent('запрос: status: open');
+    expect(items[0]).toHaveTextContent(
+      say.tasks('filters.condition.query', { query: 'status: open' }),
+    );
   });
 
   it('смена отбора объявляется вслух, без перевода фокуса', async () => {
@@ -97,7 +103,9 @@ describe('список задач', () => {
     // Область постоянная, а не появляется вместе с текстом: `aria-live` объявляет
     // только то, что пришло внутрь уже существующего контейнера.
     await waitFor(() => {
-      expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent('Найдено задач: 2');
+      expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent(
+        say.tasks('found', { count: 2 }),
+      );
     });
   });
 
@@ -114,9 +122,12 @@ describe('список задач', () => {
     expect(request.searchParams.getAll('tags')).toEqual([]);
     expect(request.searchParams.getAll('priority')).toEqual(['high']);
 
-    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
-    expect(conditions).toHaveTextContent('приоритет high');
-    expect(conditions).not.toHaveTextContent(/тег/i);
+    const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
+    expect(conditions).toHaveTextContent(
+      say.tasks('filters.condition.priority', { values: 'high' }),
+    );
+    // Слово, которым назывались снятые теги (UI-41): на языке экрана, а не жёстко по-русски.
+    expect(conditions).not.toHaveTextContent(/tag/i);
   });
 
   it('признаки строки — три разных знака, и каждый называет себя по-русски', async () => {
@@ -145,9 +156,9 @@ describe('список задач', () => {
       .filter((node) => node.dataset.mark === 'feature');
 
     expect(marks).toHaveLength(3);
-    expect(row).toHaveTextContent(/заблокирована/);
-    expect(row).toHaveTextContent('вопросов без ответа: 2');
-    expect(row).toHaveTextContent('замечаний без разбора: 3');
+    expect(row).toHaveTextContent(say.ui('task.features.blocked'));
+    expect(row).toHaveTextContent(say.ui('task.features.questions', { count: 2 }));
+    expect(row).toHaveTextContent(say.ui('task.features.remarks', { count: 3 }));
 
     // Различие держится не только цветом: у каждого знака свой рисунок.
     const shapes = marks.map((node) => node.querySelector('svg')?.innerHTML ?? '');
@@ -164,8 +175,8 @@ describe('список задач', () => {
     const row = await screen.findByRole('row', { name: /DEMO-4/ });
     // Знак несёт форму, а род значения — текстом рядом: иначе диктор прочёл бы
     // «in_progress critical» и не сказал бы, что из этого чем является.
-    expect(row).toHaveTextContent('статус in_progress');
-    expect(row).toHaveTextContent('приоритет critical');
+    expect(row).toHaveTextContent(`${say.ui('task.statusLabel')} in_progress`);
+    expect(row).toHaveTextContent(`${say.ui('task.priorityLabel')} critical`);
   });
 
   it('ожидание видно в строке своим знаком, а отбор по нему собирает очередь человека', async () => {
@@ -182,7 +193,7 @@ describe('список задач', () => {
     open('/tasks?queue=DEMO');
 
     const waiting = await screen.findByRole('row', { name: /DEMO-5/ });
-    expect(waiting).toHaveTextContent('статус waiting');
+    expect(waiting).toHaveTextContent(`${say.ui('task.statusLabel')} waiting`);
 
     // Форма, а не только цвет: ожидание не повторяет работу рисунком — на
     // чёрно-белом экране рисунок остаётся единственным различием между ними.
@@ -200,8 +211,8 @@ describe('список задач', () => {
       expect(lastRequest().searchParams.getAll('status')).toEqual(['waiting']);
     });
     expect(address.current).toContain('status=waiting');
-    expect(screen.getByRole('list', { name: 'Условия отбора' })).toHaveTextContent(
-      'статус waiting',
+    expect(screen.getByRole('list', { name: say.tasks('filters.conditions') })).toHaveTextContent(
+      say.tasks('filters.condition.status', { values: 'waiting' }),
     );
   });
 
@@ -264,17 +275,27 @@ describe('список задач', () => {
 
     const blocked = (await screen.findByText('DEMO-6')).closest('tr');
     expect(blocked).not.toBeNull();
-    expect(within(blocked as HTMLElement).getByText(/^заблокирована/)).toBeInTheDocument();
+    expect(
+      within(blocked as HTMLElement).getByText(say.ui('task.features.blocked')),
+    ).toBeInTheDocument();
     // Время в строке одно — активность в деле; у задачи без записей она названа словами.
-    expect(within(blocked as HTMLElement).getByText('в деле пусто')).toBeInTheDocument();
-    expect(within(blocked as HTMLElement).queryByText(/сводка/)).toBeNull();
+    expect(within(blocked as HTMLElement).getByText(say.ui('task.emptyCase'))).toBeInTheDocument();
+    // Второго времени в строке нет: `updated_at` отсюда убран, и слово «сводка»
+    // в ней не появляется ни в одном виде (`ui.entry.type.summary` — то же слово,
+    // взятое ключом, чтобы проверка работала на любом языке).
+    expect(within(blocked as HTMLElement).queryByText(say.ui('entry.type.summary'))).toBeNull();
 
     const waiting = screen.getByText('DEMO-4').closest('tr');
     // Блокирующий вопрос — не отдельный знак, а состояние знака вопросов: четвёртый
     // значок рядом с третьим перестаёт читаться, а различие «вопрос есть» и «вопрос
     // держит работу» важнее ещё одного числа.
     expect(
-      within(waiting as HTMLElement).getByText('вопросов без ответа: 1, из них блокирующих: 1'),
+      within(waiting as HTMLElement).getByText(
+        say.ui('task.features.questionsBlocking', {
+          count: 1,
+          blocking: say.ui('task.features.blockingOf', { count: 1 }),
+        }),
+      ),
     ).toBeInTheDocument();
 
     // Один запрос на страницу списка и ни одного на строку.
@@ -306,7 +327,7 @@ describe('список задач', () => {
 
     expect(screen.getByRole('checkbox', { name: 'open' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'in_progress' })).not.toBeChecked();
-    expect(screen.getByLabelText('Исполнитель')).toHaveValue('owner');
+    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toHaveValue('owner');
   });
 
   it('пока грузит, говорит об этом словами', async () => {
@@ -320,7 +341,7 @@ describe('список задач', () => {
 
     open('/tasks');
 
-    expect(await screen.findByText('Загружаем задачи…')).toBeInTheDocument();
+    expect(await screen.findByText(say.tasks('loading'))).toBeInTheDocument();
     expect(await screen.findByText('DEMO-3')).toBeInTheDocument();
   });
 
@@ -330,8 +351,8 @@ describe('список задач', () => {
 
     open('/tasks?queue=DEMO&status=done');
 
-    expect(await screen.findByText('Задач по этим условиям нет')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Сбросить фильтры' }));
+    expect(await screen.findByText(say.tasks('empty'))).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: say.tasks('resetFilters') }));
 
     // Сброс снимает условия, но не место: человек остаётся в очереди, в которую
     // пришёл, — «уйти отсюда» делается в боковой панели (UI-38).
@@ -348,7 +369,7 @@ describe('список задач', () => {
 
     open('/tasks');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Внутренняя ошибка сервера.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(say.errors('internal_error'));
   });
 
   it('недоступный сервер называет сервером, а не пустой таблицей', async () => {
@@ -356,7 +377,7 @@ describe('список задач', () => {
 
     open('/tasks');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Сервер недоступен');
+    expect(await screen.findByRole('alert')).toHaveTextContent(say.errors('network_error'));
   });
 });
 
@@ -368,14 +389,22 @@ describe('свёрнутый отбор', () => {
     await screen.findByText('DEMO-3');
 
     // Форма закрыта: на первом экране списка стоят задачи, а не поля отбора.
-    expect(screen.queryByLabelText('Исполнитель')).toBeNull();
+    expect(screen.queryByLabelText(say.tasks('filters.assignee'))).toBeNull();
 
-    const conditions = screen.getByRole('list', { name: 'Условия отбора' });
+    const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
+    // Префикс, которым каждая кнопка чипа называет своё действие: сама кнопка снятия
+    // не входит в текст пункта (её `aria-label` — не текстовый узел), но снятая
+    // подстрока обязана быть тем же префиксом, что называет её код.
+    const removePrefix = say.tasks('filters.remove', { condition: '' });
     expect(
       within(conditions)
         .getAllByRole('listitem')
-        .map((item) => item.textContent?.replace('Убрать условие: ', '')),
-    ).toEqual(['статус open, in_progress', 'исполнитель owner', 'текст «токен»']);
+        .map((item) => item.textContent?.replace(removePrefix, '')),
+    ).toEqual([
+      say.tasks('filters.condition.status', { values: 'open, in_progress' }),
+      say.tasks('filters.condition.assignee', { value: 'owner' }),
+      say.tasks('filters.condition.text', { value: 'токен' }),
+    ]);
   });
 
   it('без условий говорит, что показаны все задачи, и не предлагает сброс', async () => {
@@ -384,8 +413,8 @@ describe('свёрнутый отбор', () => {
     open('/tasks');
     await screen.findByText('DEMO-3');
 
-    expect(screen.getByText('показаны все задачи')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Сбросить' })).toBeNull();
+    expect(screen.getByText(say.tasks('filters.allShown'))).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.tasks('filters.reset') })).toBeNull();
   });
 
   it('выбор человека помнится между визитами', async () => {
@@ -395,12 +424,12 @@ describe('свёрнутый отбор', () => {
     const first = open('/tasks');
     await screen.findByText('DEMO-3');
     await expandFilters(user);
-    expect(screen.getByLabelText('Исполнитель')).toBeInTheDocument();
+    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toBeInTheDocument();
     first.unmount();
 
     open('/tasks');
     await screen.findByText('DEMO-3');
-    expect(screen.getByLabelText('Исполнитель')).toBeInTheDocument();
+    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toBeInTheDocument();
   });
 
   it('отказ разбора раскрывает форму сам: опечатка сделана в поле, которого не видно', async () => {
@@ -414,8 +443,10 @@ describe('свёрнутый отбор', () => {
 
     open('/tasks?query=status: opne');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ошибка в символе 9');
-    expect(screen.getByLabelText('Запрос на языке бэкенда')).toHaveValue('status: opne');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      say.tasks('filters.query.errorAt', { position: 9 }),
+    );
+    expect(screen.getByLabelText(say.tasks('filters.query.label'))).toHaveValue('status: opne');
   });
 });
 
@@ -439,17 +470,19 @@ describe('поле запроса на языке бэкенда', () => {
     await screen.findByText('DEMO-3');
     await expandFilters(user);
 
-    await user.type(screen.getByLabelText('Запрос на языке бэкенда'), 'status: opne');
-    await user.click(screen.getByRole('button', { name: 'Применить' }));
+    await user.type(screen.getByLabelText(say.tasks('filters.query.label')), 'status: opne');
+    await user.click(screen.getByRole('button', { name: say.tasks('filters.apply') }));
 
     const problem = await screen.findByRole('alert');
-    expect(problem).toHaveTextContent('Значение условия отбора недопустимо.');
-    expect(problem).toHaveTextContent('Ошибка в символе 9');
-    expect(problem).toHaveTextContent('Допустимо: backlog, open, in_progress');
+    expect(problem).toHaveTextContent(say.errors('search_value_invalid'));
+    expect(problem).toHaveTextContent(say.tasks('filters.query.errorAt', { position: 9 }));
+    expect(problem).toHaveTextContent(
+      say.tasks('filters.query.allowed', { list: 'backlog, open, in_progress' }),
+    );
 
     // Таблица остаётся: человек правит запрос, глядя на то, что нашлось до опечатки.
     expect(screen.getByText('DEMO-3')).toBeInTheDocument();
-    expect(screen.getByText(/Показаны строки предыдущего отбора/)).toBeInTheDocument();
+    expect(screen.getByText(say.tasks('filters.query.stale'))).toBeInTheDocument();
   });
 
   it('пока не применён, называет себя черновиком и применяется по Enter', async () => {
@@ -461,16 +494,19 @@ describe('поле запроса на языке бэкенда', () => {
     await expandFilters(user);
 
     // Применять нечего — кнопка выключена, и это видно до всякого ввода.
-    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: say.tasks('filters.apply') })).toBeDisabled();
 
-    await user.type(screen.getByLabelText(/Запрос на языке бэкенда/), 'status: done');
-    expect(screen.getByText('не применено, Enter применит')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Применить' })).toBeEnabled();
+    await user.type(
+      screen.getByLabelText(new RegExp(say.tasks('filters.query.label'))),
+      'status: done',
+    );
+    expect(screen.getByText(say.tasks('filters.pending'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: say.tasks('filters.apply') })).toBeEnabled();
 
     await user.keyboard('{Enter}');
 
     expect(lastRequest().searchParams.get('query')).toBe('status: done');
-    expect(screen.queryByText('не применено, Enter применит')).toBeNull();
+    expect(screen.queryByText(say.tasks('filters.pending'))).toBeNull();
   });
 
   it('заполненный запрос отменяет структурные условия', async () => {
@@ -481,8 +517,8 @@ describe('поле запроса на языке бэкенда', () => {
     await screen.findByText('DEMO-1');
     await expandFilters(user);
 
-    await user.type(screen.getByLabelText('Запрос на языке бэкенда'), 'status: done');
-    await user.click(screen.getByRole('button', { name: 'Применить' }));
+    await user.type(screen.getByLabelText(say.tasks('filters.query.label')), 'status: done');
+    await user.click(screen.getByRole('button', { name: say.tasks('filters.apply') }));
 
     const last = lastRequest();
     expect(last.searchParams.get('query')).toBe('status: done');
@@ -502,9 +538,9 @@ describe('порядок и страницы', () => {
     // а он опирается на неё (`docs/notes/testing.md`). Здесь проверяется то, что от
     // страницы и зависит: порядок читается из адреса, показан человеку и уходит в
     // запрос. Сам выбор значения клавиатурой проверяет `e2e/filters.spec.ts`.
-    expect(screen.getByRole('combobox', { name: 'Сортировка' })).toHaveTextContent(
-      'сначала важные',
-    );
+    expect(
+      screen.getByRole('combobox', { name: say.tasks('filters.sort.label') }),
+    ).toHaveTextContent(say.tasks('filters.sort.-priority'));
     expect(lastRequest().searchParams.getAll('sort')).toEqual(['-priority']);
   });
 
@@ -535,9 +571,9 @@ describe('порядок и страницы', () => {
 
     // Число у заголовка — вся выдача по отбору, а не строки этой страницы.
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('120');
-    expect(screen.getByText('Страница 1 из 3')).toBeInTheDocument();
+    expect(screen.getByText(say.tasks('paging.pageOf', { page: 1, pages: 3 }))).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'Страница 2' }));
+    await user.click(screen.getByRole('link', { name: say.tasks('paging.page', { page: 2 }) }));
 
     expect(await screen.findByText('DEMO-51')).toBeInTheDocument();
     expect(screen.queryByText('DEMO-1')).not.toBeInTheDocument();
@@ -555,15 +591,16 @@ describe('порядок и страницы', () => {
     open('/tasks?page=2');
     await screen.findByText('DEMO-51');
 
-    expect(screen.getByRole('link', { name: 'Страница 2' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
-    expect(screen.getByRole('link', { name: 'Страница 1' })).not.toHaveAttribute('aria-current');
+    expect(
+      screen.getByRole('link', { name: say.tasks('paging.page', { page: 2 }) }),
+    ).toHaveAttribute('aria-current', 'page');
+    expect(
+      screen.getByRole('link', { name: say.tasks('paging.page', { page: 1 }) }),
+    ).not.toHaveAttribute('aria-current');
 
     // Табуляция доводит до ряда, Enter уводит на страницу: ряд собран ссылками,
     // а не кнопками с обработчиком.
-    screen.getByRole('link', { name: 'Предыдущая страница' }).focus();
+    screen.getByRole('link', { name: say.tasks('paging.previous') }).focus();
     await user.keyboard('{Enter}');
 
     expect(await screen.findByText('DEMO-1')).toBeInTheDocument();
@@ -578,9 +615,9 @@ describe('порядок и страницы', () => {
 
     // Ссылки нет — вести некуда; на её месте запрещённая кнопка, а не приглушённая
     // ссылка: имя на `a` без `href` диктору не полагается вовсе.
-    expect(screen.queryByRole('link', { name: 'Предыдущая страница' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Предыдущая страница' })).toBeDisabled();
-    expect(screen.getByRole('link', { name: 'Следующая страница' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: say.tasks('paging.previous') })).toBeNull();
+    expect(screen.getByRole('button', { name: say.tasks('paging.previous') })).toBeDisabled();
+    expect(screen.getByRole('link', { name: say.tasks('paging.next') })).toBeInTheDocument();
   });
 
   it('кнопки «Ещё» в табличном пути нет: способ листать один', async () => {
@@ -589,9 +626,22 @@ describe('порядок и страницы', () => {
     open('/tasks');
     await screen.findByText('DEMO-1');
 
-    expect(screen.queryByRole('button', { name: 'Ещё' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'В начало списка' })).toBeNull();
-    expect(screen.queryByText('Это последняя страница.')).toBeNull();
+    expect(screen.queryByRole('button', { name: say.tasks('board.more') })).toBeNull();
+
+    /*
+     * Второго способа листать нет и в самом ряду: там только ссылки на страницы да
+     * запрещённые ступени по краям. Раньше здесь стояли имена кнопок снятой пагинации
+     * («в начало списка», «это последняя страница»); после переезда подписей они
+     * перестали что-либо ловить — таких строк нет ни в одном словаре, и проверка
+     * проходила бы на любом коде. Проверяется то же самое, но по роли: действующая
+     * кнопка в ряду страниц и есть второй способ.
+     */
+    const row = screen.getByRole('navigation', { name: say.tasks('paging.label') });
+    expect(
+      within(row)
+        .queryAllByRole('button')
+        .filter((button) => !button.hasAttribute('disabled')),
+    ).toEqual([]);
   });
 
   it('единственная страница ряда не рисует: листать нечего', async () => {
@@ -600,7 +650,7 @@ describe('порядок и страницы', () => {
     open('/tasks');
     await screen.findByText('DEMO-3');
 
-    expect(screen.queryByRole('navigation', { name: 'Страницы выдачи' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: say.tasks('paging.label') })).toBeNull();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('1');
   });
 
@@ -609,8 +659,8 @@ describe('порядок и страницы', () => {
 
     open('/tasks?queue=DEMO&status=done');
 
-    expect(await screen.findByText('Задач по этим условиям нет')).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Страницы выдачи' })).toBeNull();
+    expect(await screen.findByText(say.tasks('empty'))).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: say.tasks('paging.label') })).toBeNull();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('0');
   });
 
@@ -622,19 +672,19 @@ describe('порядок и страницы', () => {
 
     // Бэкенд отвечает пустой страницей и прежним `total`: задачи есть, просто не здесь,
     // и лечится это не сбросом отбора, а возвратом на существующую страницу.
-    expect(await screen.findByText(/по этим условиям их 120/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Сбросить фильтры' })).toBeNull();
-    expect(screen.getByText('Страниц: 3')).toBeInTheDocument();
+    expect(await screen.findByText(say.tasks('beyond', { count: 120 }))).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.tasks('resetFilters') })).toBeNull();
+    expect(screen.getByText(say.tasks('paging.total', { count: 3 }))).toBeInTheDocument();
 
     // Шаг назад отсюда ведёт на последнюю существующую страницу, а не на соседний
     // по счёту номер: из пустоты в пустоту вести некуда.
-    expect(screen.getByRole('link', { name: 'Предыдущая страница' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: say.tasks('paging.previous') })).toHaveAttribute(
       'href',
       '/tasks?page=3',
     );
-    expect(screen.getByRole('button', { name: 'Следующая страница' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: say.tasks('paging.next') })).toBeDisabled();
 
-    await user.click(screen.getByRole('link', { name: 'Страница 3' }));
+    await user.click(screen.getByRole('link', { name: say.tasks('paging.page', { page: 3 }) }));
 
     expect(await screen.findByText('DEMO-101')).toBeInTheDocument();
     expect(address.current).toBe('/tasks?page=3');
@@ -655,14 +705,14 @@ describe('порядок и страницы', () => {
 
     // Номер страницы известен — он в адресе; сколько их всего, не знает никто,
     // и выдумывать это число нельзя.
-    expect(screen.getByText('Страница 1')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Страница 2' })).toBeNull();
+    expect(screen.getByText(say.tasks('paging.page', { page: 1 }))).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: say.tasks('paging.page', { page: 2 }) })).toBeNull();
 
-    await user.click(screen.getByRole('link', { name: 'Следующая страница' }));
+    await user.click(screen.getByRole('link', { name: say.tasks('paging.next') }));
 
     expect(await screen.findByText('DEMO-77')).toBeInTheDocument();
     expect(address.current).toBe('/tasks?page=2');
-    expect(screen.getByText('Страница 2')).toBeInTheDocument();
+    expect(screen.getByText(say.tasks('paging.page', { page: 2 }))).toBeInTheDocument();
   });
 
   it('старая ссылка с курсором открывает список с начала, а не падает', async () => {
@@ -709,12 +759,12 @@ describe('отбор по замечаниям', () => {
 
     await screen.findByText('DEMO-1');
     await expandFilters(user);
-    await user.click(screen.getByLabelText('есть неразобранные замечания'));
+    await user.click(screen.getByLabelText(say.tasks('filters.withRemarks')));
 
     // Отбор живёт в адресе: перезагрузка и присланная ссылка покажут то же самое.
     await waitFor(() => expect(address.current).toContain('remarks=true'));
     await waitFor(() => expect(asked.at(-1)?.searchParams.get('query')).toBe('open_remarks: > 0'));
-    expect(screen.getByLabelText('есть неразобранные замечания')).toBeChecked();
+    expect(screen.getByLabelText(say.tasks('filters.withRemarks'))).toBeChecked();
   });
 });
 
@@ -726,7 +776,7 @@ describe('переключение вида', () => {
     open('/tasks?queue=DEMO&status=open&priority=high&assignee=owner&sort=key');
     await screen.findByText('DEMO-3');
 
-    await user.click(screen.getByRole('link', { name: 'Доска' }));
+    await user.click(screen.getByRole('link', { name: say.tasks('view.board') }));
 
     // Раньше отсюда уходили на голое `/tasks?view=board`: очередь и всё остальное
     // молча оставались позади, и человек видел чужую выдачу.
@@ -748,7 +798,7 @@ describe('переключение вида', () => {
     open('/tasks?view=board&queue=DEMO&priority=high');
     await screen.findByText('DEMO-3');
 
-    await user.click(screen.getByRole('link', { name: 'Таблица' }));
+    await user.click(screen.getByRole('link', { name: say.tasks('view.table') }));
 
     await waitFor(() => expect(address.current).toBe('/tasks?queue=DEMO&priority=high'));
   });
@@ -759,10 +809,15 @@ describe('переключение вида', () => {
     open('/tasks?view=board&queue=DEMO');
     await screen.findByText('DEMO-3');
 
-    expect(screen.getByRole('link', { name: 'Доска' })).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('link', { name: 'Таблица' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: say.tasks('view.board') })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    expect(screen.getByRole('link', { name: say.tasks('view.table') })).not.toHaveAttribute(
+      'aria-current',
+    );
     // Второй точки переключения нет: в шапке доска больше не раздел.
-    expect(screen.getAllByRole('link', { name: 'Доска' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: say.tasks('view.board') })).toHaveLength(1);
   });
 
   it('верхняя полоса называет место: очередь и раздел', async () => {
@@ -771,7 +826,9 @@ describe('переключение вида', () => {
     open('/tasks?view=board&queue=DEMO&priority=high');
     await screen.findByText('DEMO-3');
 
-    expect(screen.getByLabelText('Где я')).toHaveTextContent('DEMO/Задачи');
+    expect(screen.getByLabelText(say.ui('app.whereAmI'))).toHaveTextContent(
+      `DEMO/${say.ui('app.crumbTasks')}`,
+    );
   });
 
   it('внутри задачи место называет её очередь и ключ, а вида не показывает', async () => {
@@ -784,8 +841,8 @@ describe('переключение вида', () => {
     await screen.findAllByText('DEMO-3');
 
     // Очередь прочитана из ключа задачи: отдельного запроса ради неё нет.
-    expect(screen.getByLabelText('Где я')).toHaveTextContent('DEMO/DEMO-3');
+    expect(screen.getByLabelText(say.ui('app.whereAmI'))).toHaveTextContent('DEMO/DEMO-3');
     // Переключать нечего: вид есть только у списка.
-    expect(screen.queryByRole('link', { name: 'Доска' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: say.tasks('view.board') })).not.toBeInTheDocument();
   });
 });

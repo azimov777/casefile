@@ -1,5 +1,6 @@
 import { cva } from 'class-variance-authority';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Badge, Markdown, TaskText } from '@/shared/ui';
 import type { Entry } from '../api/entries';
 
@@ -35,6 +36,8 @@ const REF = 'font-mono text-meta';
  * бэкенд заведёт новый тип.
  */
 export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
+  const { t } = useTranslation('ui');
+
   switch (entry.type) {
     case 'summary':
       return (
@@ -45,10 +48,10 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
          * метка отдаёт тексту всю ширину в обеих раскладках.
          */
         <dl className="grid gap-3">
-          <Part title="Сделано" value={entry.payload.done} />
-          <Part title="Осталось" value={entry.payload.remaining} />
-          <Part title="Что мешает" value={entry.payload.blockers} />
-          <Part title="Следующий шаг" value={entry.payload.next_step} />
+          <Part title={t('entry.summary.done')} value={entry.payload.done} />
+          <Part title={t('entry.summary.remaining')} value={entry.payload.remaining} />
+          <Part title={t('entry.summary.blockers')} value={entry.payload.blockers} />
+          <Part title={t('entry.summary.nextStep')} value={entry.payload.next_step} />
         </dl>
       );
 
@@ -56,13 +59,13 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
       return (
         <div className={BLOCK}>
           <p className={META}>
-            <span>Кому: </span>
+            <span>{t('entry.addressees')} </span>
             {entry.payload.addressees.map((name) => (
               <Badge key={name} mono>
                 {name}
               </Badge>
             ))}
-            {entry.payload.blocking ? <Badge tone="danger">блокирующий</Badge> : null}
+            {entry.payload.blocking ? <Badge tone="danger">{t('entry.blocking')}</Badge> : null}
           </p>
           <Text body={entry.body} />
         </div>
@@ -108,8 +111,8 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'section_changed':
       return (
         <Diff>
-          <Side title="Было" value={entry.payload.before} tone="was" />
-          <Side title="Стало" value={entry.payload.after} tone="now" />
+          <Side title={t('entry.was')} value={entry.payload.before} tone="was" />
+          <Side title={t('entry.now')} value={entry.payload.after} tone="now" />
         </Diff>
       );
 
@@ -122,8 +125,8 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'field_changed':
       return (
         <Diff>
-          <Side title="Было" value={entry.payload.before} tone="was" />
-          <Side title="Стало" value={entry.payload.after} tone="now" />
+          <Side title={t('entry.was')} value={entry.payload.before} tone="was" />
+          <Side title={t('entry.now')} value={entry.payload.after} tone="now" />
         </Diff>
       );
 
@@ -191,17 +194,19 @@ function Diff({ children }: { children: ReactNode }) {
 
 /** Пустое тело — не ошибка: у служебных записей содержание лежит в нагрузке. */
 function Text({ body }: { body: string }) {
-  if (body.trim() === '') return <p className="text-muted italic">Тела у этой записи нет.</p>;
+  const { t } = useTranslation('ui');
+  if (body.trim() === '') return <p className="text-muted italic">{t('entry.noBody')}</p>;
   return <Markdown>{body}</Markdown>;
 }
 
 /** Указатели записи: ключи задач и записей кликабельны, адреса открываются как есть. */
 function Refs({ refs }: { refs: string[] }) {
+  const { t } = useTranslation('ui');
   if (refs.length === 0) return null;
 
   return (
     <p className={META}>
-      <span>Указатели: </span>
+      <span>{t('entry.refs')} </span>
       {refs.map((ref) => (
         <span key={ref} className={REF}>
           {/^https?:\/\//.test(ref) ? (
@@ -251,6 +256,8 @@ function Side({
   value?: string | string[] | null;
   tone: 'was' | 'now';
 }) {
+  const { t } = useTranslation('ui');
+
   return (
     // Исход стороны назван разметкой, а не только цветом: проверка спрашивает, что
     // сторон две и они разного тона, а искать их по имени утилиты значило бы
@@ -258,7 +265,7 @@ function Side({
     <div data-side={tone} className={side({ tone })}>
       <span className={sideTitle({ tone })}>{title}</span>
       {value === null || value === undefined || value === '' ? (
-        <p className="text-muted italic">пусто</p>
+        <p className="text-muted italic">{t('entry.emptyValue')}</p>
       ) : Array.isArray(value) ? (
         <ol className="pl-6">
           {value.map((item, index) => (
@@ -273,5 +280,5 @@ function Side({
 }
 
 function assertNever(entry: never): never {
-  throw new Error(`Неизвестный тип записи: ${JSON.stringify(entry)}`);
+  throw new Error(`Unknown entry type: ${JSON.stringify(entry)}`);
 }

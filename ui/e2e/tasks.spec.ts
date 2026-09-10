@@ -71,7 +71,7 @@ test('признаки строки берутся из выдачи списк�
   // Блокирующий вопрос — не отдельный знак, а состояние знака вопросов: четвёртый
   // значок рядом с третьим перестаёт читаться (UI-31).
   await expect(
-    row(page, 'DEMO-4').getByText('вопросов без ответа: 1, из них блокирующих: 1'),
+    row(page, 'DEMO-4').getByText('1 вопрос без ответа, из них 1 блокирующий'),
   ).toBeVisible();
 
   expect(calls.filter((url) => /\/api\/v1\/tasks\?/.test(url))).toHaveLength(1);
@@ -147,7 +147,7 @@ test('пустая выдача объясняется и предлагает �
 test('ссылка на страницу за концом выдачи объясняется и возвращает рядом', async ({ page }) => {
   await page.goto('/tasks?queue=DEMO&page=99');
 
-  await expect(page.getByText(/по этим условиям их \d+/)).toBeVisible();
+  await expect(page.getByText(/по этим условиям есть \d+ задач/)).toBeVisible();
   // Сброс отбора здесь ни при чём: условия нашли задачи, кончилась выдача.
   await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toHaveCount(0);
 

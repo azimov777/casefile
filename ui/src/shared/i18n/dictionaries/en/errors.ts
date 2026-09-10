@@ -2,23 +2,73 @@
  * Тексты отказов по коду ошибки: ключ здесь — `error.code` бэкенда, а не наш
  * идентификатор (`../tracker/docs/ERRORS.md`).
  *
- * Здесь стоят коды, которыми может ответить `bootstrap`, и коды, которые придумывает
- * сам вход: экран `/login` показывает их человеку, и на английском языке они обязаны
- * быть английскими. Остальные шесть десятков кодов пока живут в
- * `shared/errors/dictionary.ts` на одном русском и переезжают сюда в UI-78; полноту
- * против справочника бэкенда оба источника проверяются вместе.
+ * Пространство покрывает справочник бэкенда целиком, и это стережёт
+ * `shared/errors/text.test.ts`: новый код на бэкенде роняет `pnpm check` раньше,
+ * чем английская фраза доедет до человека.
+ *
+ * Порядок алфавитный, а не по коду ответа HTTP: этот файл читают, разыскивая код,
+ * а не разглядывая, каким статусом он приезжает.
  */
 export const errors = {
   actor_label_required: 'A shared agent token requires a temporary-agent label.',
+  actor_not_addressable: 'A temporary agent cannot be addressed with a question.',
+  bad_request: 'The request could not be parsed.',
+  checks_not_passed: 'Not every review check has a positive verdict.',
+  closing_not_a_transition: 'A task is closed by an action of its own, not by a status change.',
+  conflict: 'The state of the object does not allow this action.',
+  cursor_with_offset: 'The page is addressed two ways at once: by cursor and by offset.',
   database_unavailable: 'The database is unavailable.',
+  entry_fields_invalid: 'The entry did not pass validation.',
+  entry_not_found: 'This task has no entry with that number.',
   http_error: 'The request failed.',
+  idempotency_key_reused: 'This idempotency key has already been used by another request.',
   internal_error: 'Internal server error.',
+  invalid_actor_label: 'The temporary-agent label does not match the pattern.',
+  invalid_cursor: 'The page cursor cannot be parsed.',
+  invalid_idempotency_key: 'The idempotency key is empty or too long.',
+  invalid_journal_cursor: 'The position in the journal feed cannot be parsed.',
+  invalid_link_kind: 'There is no such kind of link.',
+  invalid_page_offset: 'The page offset is negative.',
+  invalid_page_size: 'The page size is outside the allowed range.',
+  invalid_participant_name: 'The participant name does not match the pattern.',
+  invalid_queue_key: 'The queue key does not match the pattern.',
+  invalid_search_query: 'The query string cannot be parsed.',
+  invalid_task_key: 'The task key does not read as “KEY-NUMBER”.',
+  journal_stream_limit: 'Too many live streams are open. Try again later.',
+  journal_wait_too_long: 'The requested wait is longer than allowed.',
+  link_cycle_detected: 'The link would close a ring.',
+  link_exists: 'These two tasks are already linked that way.',
+  link_not_found: 'There is no such link between tasks.',
+  link_self_not_allowed: 'A task cannot be linked to itself.',
   malformed_response: 'The server reply does not match the contract.',
+  method_not_allowed: 'This address does not support that action.',
   network_error: 'The server is unreachable: check that the backend is up.',
+  not_found: 'The object was not found.',
+  participant_name_taken: 'The participant name is taken.',
+  participant_not_found: 'There is no participant by that name.',
   participant_required:
     'This is a shared agent token: there is no participant behind it. A person’s token from the participant registry is required.',
+  permission_denied: 'This token is not allowed to do that.',
+  queue_key_taken: 'The queue key is taken.',
+  queue_not_found: 'There is no queue with that key.',
+  search_field_unknown: 'There is no such field to filter by.',
+  search_operator_not_supported: 'This operator does not apply to this field.',
+  search_value_invalid: 'The value of the filter condition is not allowed.',
+  summary_required: 'Leaving “in_progress” requires a summary.',
+  task_blocked: 'The task has an open blocker.',
+  task_closed: 'The task is closed: its fields and links no longer change.',
+  task_field_locked: 'This field is not editable in the current status.',
+  task_fields_invalid: 'The task fields did not pass validation.',
+  task_has_unclosed_children: 'The task has children that are not closed.',
+  task_not_found: 'There is no task with that key.',
+  task_sections_incomplete: 'The sections of the task are not filled in completely.',
+  token_not_found: 'There is no token with that id.',
   token_not_header_safe:
     'A token of this kind cannot be sent: it contains characters a token never has — most likely something extra was picked up while copying. Copy the token whole and try again.',
   too_many_requests: 'Too many requests. Try again later.',
+  transition_not_allowed: 'The status table has no such transition.',
+  transition_reason_required: 'This transition requires a reason.',
   unauthorized: 'The token is unknown or revoked.',
+  validation_error: 'The value breaks a rule of the domain.',
+  version_conflict: 'The task changed while you were reading. Refresh the page and try again.',
 } as const;

@@ -1,4 +1,5 @@
 import { cva } from 'class-variance-authority';
+import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { caseHref, listReturnHref, taskRefHref } from '@/shared/lib';
@@ -51,6 +52,7 @@ const viewLink = cva(
 export function TaskNav({ taskKey, view, action }: TaskNavProps) {
   const location = useLocation();
   const back = listReturnHref(location.state);
+  const { t } = useTranslation('ui');
 
   return (
     /*
@@ -62,7 +64,7 @@ export function TaskNav({ taskKey, view, action }: TaskNavProps) {
      */
     <nav
       className="sticky top-0 z-5 flex flex-wrap items-center justify-between gap-3 border-b border-b-line bg-ground py-2 text-meta"
-      aria-label={`Навигация по задаче ${taskKey}`}
+      aria-label={t('task.nav.label', { key: taskKey })}
     >
       {/*
        * Настоящая ссылка с адресом, а не `history.back()`: человек должен видеть,
@@ -70,7 +72,7 @@ export function TaskNav({ taskKey, view, action }: TaskNavProps) {
        * — вход был прямой, — ссылка честно зовёт ко всем задачам и так и называется.
        */}
       <Link className="whitespace-nowrap" to={back ?? '/tasks'}>
-        {back === null ? '← Ко всем задачам' : '← К списку с отбором'}
+        {back === null ? t('task.nav.backAll') : t('task.nav.backFiltered')}
       </Link>
 
       {/* Действие и переключатель вида — одной группой справа. */}
@@ -88,7 +90,7 @@ export function TaskNav({ taskKey, view, action }: TaskNavProps) {
             state={location.state}
             aria-current={view === 'card' ? 'page' : undefined}
           >
-            Карточка
+            {t('task.nav.card')}
           </Link>
           {/* Разделитель нарисован левой границей второй ссылки: у пары он один,
               и рисовать его правой границей первой значило бы вынести его за
@@ -102,7 +104,7 @@ export function TaskNav({ taskKey, view, action }: TaskNavProps) {
             state={location.state}
             aria-current={view === 'case' ? 'page' : undefined}
           >
-            Дело
+            {t('task.nav.case')}
           </Link>
         </span>
       </span>

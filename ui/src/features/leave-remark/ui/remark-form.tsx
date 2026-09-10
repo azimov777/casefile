@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
 import { errorMessage } from '@/shared/errors';
 import { Composer, Receipt } from '@/shared/ui';
@@ -27,12 +28,14 @@ export function RemarkForm({ taskKey }: RemarkFormProps) {
   const remark = useLeaveRemark();
   const [filed, setFiled] = useState<{ entryNo: number; body: string } | null>(null);
   const fields = remark.error instanceof ApiError ? remark.error.fields : null;
+  // И ради подписи, и ради подписки на язык: текст отказа берёт язык у экземпляра.
+  const { t } = useTranslation('ui');
 
   if (filed !== null) {
     return (
       <Receipt
-        label={`Замечание к ${taskKey} подшито`}
-        headline="Замечание подшито"
+        label={t('remark.receiptLabel', { key: taskKey })}
+        headline={t('remark.receiptHeadline')}
         taskKey={taskKey}
         entryNo={filed.entryNo}
         body={filed.body}
@@ -43,20 +46,19 @@ export function RemarkForm({ taskKey }: RemarkFormProps) {
 
   return (
     <Composer
-      label={`Замечание к ${taskKey}`}
-      fieldLabel="Замечание"
+      label={t('remark.formLabel', { key: taskKey })}
+      fieldLabel={t('remark.fieldLabel')}
       storageKey={remarkDraftKey(taskKey)}
-      submitLabel="Оставить замечание"
-      pendingLabel="Отправляем…"
-      emptyProblem="Пустое замечание отправить нельзя: агенту нужно знать, что именно не так."
-      placeholder="Что вышло не так. Markdown; ссылки вида DEMO-2 и DEMO-2#7 станут ссылками."
+      submitLabel={t('remark.submit')}
+      pendingLabel={t('remark.pending')}
+      emptyProblem={t('remark.empty')}
+      placeholder={t('remark.placeholder')}
       problem={fields?.body ?? fields?.title}
       isPending={remark.isPending}
       failure={
         remark.isError ? (
           <>
-            {errorMessage(remark.error)} Повторная отправка не заведёт второе замечание: ключ
-            повтора у попытки тот же.
+            {errorMessage(remark.error)} {t('remark.retrySafe')}
           </>
         ) : undefined
       }

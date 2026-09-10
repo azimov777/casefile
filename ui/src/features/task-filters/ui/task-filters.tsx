@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { X } from 'lucide-react';
 import { cn, useExitHold } from '@/shared/lib';
@@ -82,13 +83,14 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
    * и показывать было бы нечего (`useExitHold`).
    */
   const reveal = useExitHold(expanded);
+  const { t } = useTranslation('tasks');
 
   // Отбор меняется и мимо формы: «сбросить», кнопка «назад», открытая ссылка.
   useEffect(() => {
     setDraft(toDraft(filters));
   }, [filters]);
 
-  const conditions = describeFilters(filters);
+  const conditions = describeFilters(filters, t);
   const pending = pendingFields(draft, filters);
   const hasDraft = Object.values(pending).some(Boolean);
 
@@ -122,7 +124,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
      * свёртывание кончалось бы скачком в восемь пикселей — тем самым рывком, только
      * поменьше. Внутри обёртки он уезжает вместе с местом и доходит до нуля.
      */
-    <section className="flex flex-col" aria-label="Отбор задач">
+    <section className="flex flex-col" aria-label={t('filters.label')}>
       {/*
        * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
        * что первый экран списка платит за отбор, — всё остальное принадлежит задачам.
@@ -135,7 +137,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
           aria-controls={formId}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? 'Свернуть отбор' : 'Изменить отбор'}
+          {expanded ? t('filters.collapse') : t('filters.expand')}
         </Button>
 
         {/* Список, а не абзац: `aria-label` роль абзаца не принимает, и программа
@@ -147,10 +149,10 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
          */}
         <ul
           className="flex grow basis-48 flex-wrap items-center gap-x-2 gap-y-1 list-none p-0"
-          aria-label="Условия отбора"
+          aria-label={t('filters.conditions')}
         >
           {conditions.length === 0 ? (
-            <li className="text-meta text-muted">показаны все задачи</li>
+            <li className="text-meta text-muted">{t('filters.allShown')}</li>
           ) : (
             conditions.map((condition) => (
               /*
@@ -175,7 +177,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                    * и глазом разницы нет, а замер вычисленных стилей её видит.
                    */
                   className="grid place-items-center rounded-pill border-none border-current bg-transparent p-0 leading-none text-muted transition-[background-color] duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text"
-                  aria-label={`Убрать условие: ${condition.label}`}
+                  aria-label={t('filters.remove', { condition: condition.label })}
                   onClick={() => {
                     applyWith(CONDITION_RESET[condition.id]);
                     toggleRef.current?.focus();
@@ -198,16 +200,19 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
         {board ? null : (
           <Select
             className="whitespace-nowrap"
-            label="Сортировка"
+            label={t('filters.sort.label')}
             value={filters.sort}
             onValueChange={(sort) => applyWith({ sort })}
-            options={TASK_SORTS.map((option) => ({ value: option.value, label: option.label }))}
+            options={TASK_SORTS.map((option) => ({
+              value: option,
+              label: t(`filters.sort.${option}`),
+            }))}
           />
         )}
 
         {conditions.length === 0 ? null : (
           <Button tone="quiet" onClick={onReset}>
-            Сбросить
+            {t('filters.reset')}
           </Button>
         )}
       </div>
@@ -217,7 +222,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
           <form
             id={formId}
             className="mt-2 flex flex-col gap-3 rounded-control border border-line bg-surface px-4 py-3"
-            aria-label="Условия отбора задач"
+            aria-label={t('filters.formLabel')}
             onSubmit={submit}
           >
             <div className={LINE}>
@@ -228,7 +233,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                */}
               {board ? null : (
                 <fieldset className={GROUP}>
-                  <legend className={LABEL}>Статус</legend>
+                  <legend className={LABEL}>{t('filters.statusLegend')}</legend>
                   {TASK_STATUSES.map((status) => (
                     <label key={status} className={CHECK}>
                       <input
@@ -247,7 +252,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
               )}
 
               <fieldset className={GROUP}>
-                <legend className={LABEL}>Приоритет</legend>
+                <legend className={LABEL}>{t('filters.priorityLegend')}</legend>
                 {TASK_PRIORITIES.map((priority) => (
                   <label key={priority} className={CHECK}>
                     <input
@@ -265,24 +270,22 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
               </fieldset>
             </div>
 
-            {board ? (
-              <p className={NOTE}>На доске показаны все статусы: каждый своим столбцом.</p>
-            ) : null}
+            {board ? <p className={NOTE}>{t('filters.boardNote')}</p> : null}
 
             <div className={LINE}>
               <DraftField
-                label="Исполнитель"
+                label={t('filters.assignee')}
                 value={draft.assignee}
                 pending={pending.assignee}
-                placeholder="имя целиком"
+                placeholder={t('filters.assigneePlaceholder')}
                 onChange={(value) => setDraft({ ...draft, assignee: value })}
               />
 
               <DraftField
-                label="Текст"
+                label={t('filters.text')}
                 value={draft.text}
                 pending={pending.text}
-                placeholder="в названии или описании"
+                placeholder={t('filters.textPlaceholder')}
                 onChange={(value) => setDraft({ ...draft, text: value })}
               />
 
@@ -292,7 +295,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                   checked={filters.blocked}
                   onChange={(event) => applyWith({ blocked: event.target.checked })}
                 />
-                заблокирована
+                {t('filters.blocked')}
               </label>
 
               <label className={CHECK}>
@@ -301,7 +304,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                   checked={filters.withQuestions}
                   onChange={(event) => applyWith({ withQuestions: event.target.checked })}
                 />
-                есть открытые вопросы
+                {t('filters.withQuestions')}
               </label>
 
               <label className={CHECK}>
@@ -310,17 +313,17 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                   checked={filters.withRemarks}
                   onChange={(event) => applyWith({ withRemarks: event.target.checked })}
                 />
-                есть неразобранные замечания
+                {t('filters.withRemarks')}
               </label>
             </div>
 
             <div className={LINE}>
               <DraftField
-                label="Запрос на языке бэкенда"
-                note="отменяет остальной отбор"
+                label={t('filters.query.label')}
+                note={t('filters.query.note')}
                 value={draft.query}
                 pending={pending.query}
-                placeholder="queue: DEMO and status: open and blocked: false"
+                placeholder={t('filters.query.placeholder')}
                 wide
                 invalid={problem !== null}
                 describedBy={problem === null ? undefined : problemId}
@@ -336,7 +339,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                   только тогда, когда есть что применять. Флажки и списки применяются
                   мгновенно и её не ждут. */}
               <Button type="submit" disabled={!hasDraft}>
-                Применить
+                {t('filters.apply')}
               </Button>
             </div>
           </form>
@@ -385,6 +388,7 @@ function DraftField({
   const describedByAll = [describedBy, pending ? pendingId : undefined].filter(
     (id): id is string => id !== undefined,
   );
+  const { t } = useTranslation('tasks');
 
   return (
     <div className={`flex flex-col gap-1${wide ? ' grow basis-96' : ''}`}>
@@ -404,7 +408,7 @@ function DraftField({
         {note === undefined ? null : <span className={NOTE}>{note}</span>}
         {pending ? (
           <span className="text-label font-semibold text-attention" id={pendingId}>
-            не применено, Enter применит
+            {t('filters.pending')}
           </span>
         ) : null}
       </div>
@@ -438,6 +442,12 @@ function DraftField({
  * читаются программой чтения с экрана.
  */
 function QueryProblemHint({ id, problem }: { id: string; problem: QueryProblem }) {
+  /*
+   * `useTranslation` нужен и ради подписки: `problem.message` собран `errorText`,
+   * а тот берёт язык у экземпляра и на смену языка не подписан.
+   */
+  const { t } = useTranslation('tasks');
+
   return (
     /*
      * Объяснение отказа наложено на страницу, а не встроено в поток формы: встроенное
@@ -449,9 +459,13 @@ function QueryProblemHint({ id, problem }: { id: string; problem: QueryProblem }
       id={id}
       role="alert"
     >
+      {/* Две фразы подряд, а не одна склеенная: отказ пришёл от бэкенда по коду,
+          а место ошибки называем мы. */}
       <p>
         {problem.message}
-        {problem.position === null ? null : ` Ошибка в символе ${problem.position + 1}.`}
+        {problem.position === null
+          ? null
+          : ` ${t('filters.query.errorAt', { position: problem.position + 1 })}`}
       </p>
 
       {problem.position === null || problem.query === '' ? null : (
@@ -463,11 +477,13 @@ function QueryProblemHint({ id, problem }: { id: string; problem: QueryProblem }
         </pre>
       )}
 
-      {problem.allowed.length === 0 ? null : <p>Допустимо: {problem.allowed.join(', ')}</p>}
+      {problem.allowed.length === 0 ? null : (
+        <p>{t('filters.query.allowed', { list: problem.allowed.join(', ') })}</p>
+      )}
 
       {/* Таблица под формой продолжает показывать прошлую удачную выдачу; сказать
           об этом надо здесь, у отказа, а не полосой над таблицей, которая её сдвинет. */}
-      <p>Показаны строки предыдущего отбора.</p>
+      <p>{t('filters.query.stale')}</p>
     </div>
   );
 }

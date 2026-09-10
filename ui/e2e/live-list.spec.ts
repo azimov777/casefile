@@ -71,7 +71,7 @@ test.describe('список под живым потоком', () => {
       title: 'Запись, ради которой список мог бы перестроиться',
     });
 
-    await expect(bar(page)).toContainText('Изменилось задач: 1');
+    await expect(bar(page)).toContainText('Изменилась 1 задача');
 
     // Ничего не сдвинулось и не переставилось: полоса стоит вне потока вёрстки.
     expect(await keys(page)).toEqual(before.keys);
@@ -112,7 +112,7 @@ test.describe('список под живым потоком', () => {
     });
     expect(patched.status()).toBe(200);
 
-    await expect(bar(page)).toContainText('Изменилось задач: 1');
+    await expect(bar(page)).toContainText('Изменилась 1 задача');
     await page.getByRole('button', { name: 'Показать' }).click();
 
     await expect(row).toContainText(was);
@@ -142,7 +142,7 @@ test.describe('список под живым потоком', () => {
     });
 
     // Человек вернулся в ту же точку, где был: строки на месте, накопленное — в полосе.
-    await expect(bar(page)).toContainText('Изменилось задач: 1');
+    await expect(bar(page)).toContainText('Изменилась 1 задача');
     expect(await keys(page)).toEqual(before.keys);
     expect(await tops(page)).toEqual(before.tops);
   });

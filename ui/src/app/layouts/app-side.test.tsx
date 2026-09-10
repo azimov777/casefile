@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, collection, data, failure } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
+import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
 
 beforeEach(() => {
@@ -31,16 +32,16 @@ describe('боковая панель', () => {
     server.use(flakyBootstrap(1));
     renderApp('/tasks');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('База данных недоступна.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(say.errors('database_unavailable'));
     expect(screen.queryByText('owner')).not.toBeInTheDocument();
 
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Повторить' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: say.ui('query.retry') }));
 
     // Повтор — это `refetch`, а не перезагрузка: страница рядом с панелью та же.
     expect(await screen.findByText('owner')).toBeInTheDocument();
-    expect(screen.getByText('Открытых вопросов: 2')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Повторить' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Задачи' })).toBeInTheDocument();
+    expect(screen.getByText(say.ui('app.openQuestions', { count: 2 }))).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.ui('query.retry') })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: say.tasks('title') })).toBeInTheDocument();
   });
 
   it('счётчик вопросов читается числом с подписью, а не голой цифрой', async () => {
@@ -49,7 +50,9 @@ describe('боковая панель', () => {
 
     // Диктору «2» рядом со словом «Входящая» досталось бы частью названия раздела,
     // поэтому число подписано, а сама цифра от него скрыта.
-    const inbox = await screen.findByRole('link', { name: 'Входящая Открытых вопросов: 2' });
+    const inbox = await screen.findByRole('link', {
+      name: `${say.ui('app.inbox')} ${say.ui('app.openQuestions', { count: 2 })}`,
+    });
     expect(inbox).toHaveAttribute('href', '/questions');
   });
 
@@ -57,9 +60,17 @@ describe('боковая панель', () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ open_questions: 0 }))));
     renderApp('/tasks');
 
-    const quiet = await screen.findByRole('link', { name: 'Входящая Открытых вопросов нет' });
+    const quiet = await screen.findByRole('link', {
+      name: `${say.ui('app.inbox')} ${say.ui('app.openQuestions', { count: 0 })}`,
+    });
     expect(quiet).toHaveAttribute('href', '/questions');
-    expect(screen.queryByText(/Открытых вопросов: /)).not.toBeInTheDocument();
+
+    // Вторая половина того же: ноль не требует внимания. Счётчик приглушён, а не
+    // набран тоном тревоги, — и это проверяется цветом, а не подписью, потому что
+    // подпись у нуля своя и о тоне ничего не говорит.
+    const counter = within(quiet).getByText('0').parentElement;
+    expect(counter).toHaveClass('text-faint');
+    expect(counter).not.toHaveClass('text-attention');
   });
 
   it('очереди из bootstrap — места, и текущее помечено `aria-current`', async () => {
@@ -71,7 +82,7 @@ describe('боковая панель', () => {
     // Переход в очередь сохраняет вид и остальной отбор: меняется только очередь.
     expect(demo).toHaveAttribute('href', '/tasks?view=board&queue=DEMO&status=open');
 
-    const all = screen.getByRole('link', { name: 'Все задачи' });
+    const all = screen.getByRole('link', { name: say.ui('app.allTasks') });
     expect(all).not.toHaveAttribute('aria-current');
     expect(all).toHaveAttribute('href', '/tasks?view=board&status=open');
   });
@@ -82,11 +93,12 @@ describe('боковая панель', () => {
     server.use(http.get(`${API}/api/v1/remarks`, () => collection([])));
     renderApp('/questions');
 
-    expect(await screen.findByRole('link', { name: /Входящая/ })).toHaveAttribute(
+    expect(
+      await screen.findByRole('link', { name: new RegExp(say.ui('app.inbox')) }),
+    ).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: say.ui('app.allTasks') })).not.toHaveAttribute(
       'aria-current',
-      'page',
     );
-    expect(screen.getByRole('link', { name: 'Все задачи' })).not.toHaveAttribute('aria-current');
   });
 
   it('длинное имя участника не расширяет панель, а переносится', async () => {
@@ -115,11 +127,11 @@ describe('боковая панель', () => {
     renderApp('/tasks');
     await screen.findByText('owner');
 
-    const side = screen.getByRole('complementary', { name: 'Разделы трекера' });
+    const side = screen.getByRole('complementary', { name: say.ui('app.trackerSections') });
     const buttons = within(side)
       .getAllByRole('button')
       .map((button) => button.textContent);
-    expect(buttons).toEqual(['Выйти']);
+    expect(buttons).toEqual([say.ui('app.signOut')]);
   });
 
   it('неизвестный код показывает фразу бэкенда и сам код', async () => {
@@ -131,7 +143,7 @@ describe('боковая панель', () => {
     renderApp('/tasks');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Something odd happened (brand_new_code)',
+      say.ui('error.withCode', { message: 'Something odd happened', code: 'brand_new_code' }),
     );
   });
 });

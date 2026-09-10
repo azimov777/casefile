@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import {
@@ -60,6 +62,8 @@ export function QuestionsPage() {
   // вопрос из входящей, а человеку надо увидеть, чем всё кончилось.
   const answering = useAnswering<Question>();
   const items = withHeld(loaded, answering.held, questionId);
+  const { t } = useTranslation('questions');
+  const { t: brick } = useTranslation('ui');
 
   /**
    * Условия, действующие на вопросы. Нужны, чтобы отличить «ничего нет» от «ничего
@@ -67,8 +71,8 @@ export function QuestionsPage() {
    * ни о чём не спрашивают, — а прежний текст утверждал именно это.
    */
   const questionConditions = [
-    ...(queue === '' ? [] : [`очередь ${queue}`]),
-    ...(blocking ? ['только блокирующие'] : []),
+    ...(queue === '' ? [] : [t('condition.queue', { queue })]),
+    ...(blocking ? [t('condition.blocking')] : []),
   ];
 
   function apply(changes: { queue?: string; blocking?: boolean }) {
@@ -90,20 +94,20 @@ export function QuestionsPage() {
     // продолжением одного (решение Д16). Ширину страницы держит оболочка.
     <main className="flex flex-col gap-4">
       <div>
-        <h1 className="text-title">Входящая</h1>
+        {/* Название раздела одно на панель и на заголовок экрана: разъехавшись, они
+            назвали бы одно место двумя словами. */}
+        <h1 className="text-title">{brick('app.inbox')}</h1>
         {/* Что здесь лежит — сказано словами: из названия раздела не видно, что
             половин две, а искать свои замечания человек приходит именно сюда. */}
-        <p className="mt-1 text-meta text-muted">
-          Вопросы, которых агенты ждут от вас, и ваши замечания, которых ждёте вы.
-        </p>
+        <p className="mt-1 text-meta text-muted">{t('intro')}</p>
       </div>
 
       <form
         className="flex flex-wrap items-end gap-4 rounded-control border border-line bg-surface px-4 py-3"
-        aria-label="Отбор входящей"
+        aria-label={t('filterLabel')}
       >
         <label className="flex flex-col gap-1">
-          <span className="text-meta text-muted">Очередь</span>
+          <span className="text-meta text-muted">{t('queue')}</span>
           {/* Фон и цвет названы у поля явно: у `select` есть системная палитра формы,
               и без объявления цвет достаётся ему от браузера, а не от нашей темы
               (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`»). */}
@@ -112,7 +116,7 @@ export function QuestionsPage() {
             value={queue}
             onChange={(event) => apply({ queue: event.target.value })}
           >
-            <option value="">все очереди</option>
+            <option value="">{t('allQueues')}</option>
             {(bootstrap.data?.queues ?? []).map((item) => (
               <option key={item.key} value={item.key}>
                 {item.key} — {item.title}
@@ -123,7 +127,7 @@ export function QuestionsPage() {
 
         {/* Область действия названа рядом с полем: очередь отбирает обе половины,
             а «только блокирующие» стоит внутри вопросов и к замечаниям не относится. */}
-        <p className="text-meta text-faint">Очередь отбирает обе половины входящей.</p>
+        <p className="text-meta text-faint">{t('queueNote')}</p>
       </form>
 
       {/*
@@ -145,7 +149,7 @@ export function QuestionsPage() {
       <div className="grid gap-4 [align-items:start] wide:grid-cols-2">
         <section aria-labelledby="questions-section" className="flex flex-col gap-3">
           <h2 className="text-screen" id="questions-section">
-            Вопросы ко мне
+            {t('questionsTitle')}
           </h2>
 
           {/*
@@ -160,17 +164,21 @@ export function QuestionsPage() {
               checked={blocking}
               onChange={(event) => apply({ blocking: event.target.checked })}
             />
-            только блокирующие
+            {t('blockingOnly')}
           </label>
 
           <QueryState
             query={questions}
-            loading="Читаем входящую…"
+            loading={t('loadingQuestions')}
             empty={
               items.length === 0
                 ? questionConditions.length === 0
-                  ? 'Вопросов без ответа нет: агенты вас не ждут.'
-                  : emptyByFilter(questionConditions, () => apply({ queue: '', blocking: false }))
+                  ? t('noQuestions')
+                  : emptyByFilter(
+                      questionConditions,
+                      () => apply({ queue: '', blocking: false }),
+                      t,
+                    )
                 : undefined
             }
           />
@@ -188,7 +196,7 @@ export function QuestionsPage() {
               onClick={() => void questions.fetchNextPage()}
               disabled={questions.isFetchingNextPage}
             >
-              {questions.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+              {questions.isFetchingNextPage ? t('loadingMore') : t('more')}
             </Button>
           ) : null}
         </section>
@@ -200,17 +208,17 @@ export function QuestionsPage() {
          */}
         <section aria-labelledby="remarks-section" className="flex flex-col gap-3">
           <h2 className="text-screen" id="remarks-section">
-            Мои замечания без разбора
+            {t('remarksTitle')}
           </h2>
 
           <QueryState
             query={remarks}
-            loading="Читаем замечания…"
+            loading={t('loadingRemarks')}
             empty={
               myRemarks.length === 0
                 ? queue === ''
-                  ? 'Неразобранных замечаний нет.'
-                  : emptyByFilter([`очередь ${queue}`], () => apply({ queue: '' }))
+                  ? t('noRemarks')
+                  : emptyByFilter([t('condition.queue', { queue })], () => apply({ queue: '' }), t)
                 : undefined
             }
           />
@@ -228,7 +236,7 @@ export function QuestionsPage() {
               onClick={() => void remarks.fetchNextPage()}
               disabled={remarks.isFetchingNextPage}
             >
-              {remarks.isFetchingNextPage ? 'Читаем…' : 'Ещё'}
+              {remarks.isFetchingNextPage ? t('loadingMore') : t('more')}
             </Button>
           ) : null}
         </section>
@@ -244,10 +252,10 @@ export function QuestionsPage() {
  * входящей, и делать его по отобранной выдаче нельзя. Условия перечислены поимённо,
  * потому что человек мог забыть про одно из них.
  */
-function emptyByFilter(conditions: string[], onReset: () => void) {
+function emptyByFilter(conditions: string[], onReset: () => void, t: TFunction<'questions'>) {
   return (
     <>
-      По этому отбору ({conditions.join(', ')}) ничего не нашлось.{' '}
+      {t('emptyByFilter', { conditions: conditions.join(', ') })}{' '}
       {/* Снятие отбора прямо из объяснения: человек уже читает, почему ничего не
           нашлось. Набрано ссылкой, но осталось кнопкой — оно меняет отбор, а не ведёт
           по адресу; фон назван явно, иначе кнопке достаётся системный. */}
@@ -256,7 +264,7 @@ function emptyByFilter(conditions: string[], onReset: () => void) {
         className="border-none bg-transparent p-0 text-accent underline"
         onClick={onReset}
       >
-        Сбросить отбор
+        {t('resetFilter')}
       </button>
     </>
   );
@@ -264,6 +272,8 @@ function emptyByFilter(conditions: string[], onReset: () => void) {
 
 /** Замечание во входящей: к какой задаче, когда оставлено и о чём. */
 function RemarkRow({ remark }: { remark: Remark }) {
+  const { t } = useTranslation('questions');
+
   return (
     // Кромка тоном внимания, а не опасности: замечание ждёт ответа, но ничего не
     // держит. Красное во входящей остаётся за блокирующим вопросом — тем, из-за
@@ -275,7 +285,7 @@ function RemarkRow({ remark }: { remark: Remark }) {
         <Link className="font-mono" to={taskRefHref({ key: remark.task_key, entryNo: remark.no })}>
           {remark.task_key}#{remark.no}
         </Link>
-        <Badge tone="attention">ждёт разбора</Badge>
+        <Badge tone="attention">{t('awaitingResolution')}</Badge>
         <RelativeTime value={remark.created_at} />
       </header>
 
@@ -324,6 +334,8 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
   const id = questionId(question);
   const [open, setOpen] = useState(false);
   const answered = answering.answerOf(id);
+  const { t } = useTranslation('questions');
+  const { t: brick } = useTranslation('ui');
 
   const blocking = question.payload.blocking;
 
@@ -333,7 +345,11 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
       // Признак виден разметке, а не только глазу: сквозной тест ищет блокирующий
       // вопрос по нему, а не по цвету кромки и не по тексту плашки.
       data-blocking={blocking ? 'true' : undefined}
-      aria-label={blocking ? `Блокирующий вопрос ${id}` : `Вопрос ${id}`}
+      aria-label={
+        blocking
+          ? t('blockingQuestionLabel', { reference: id })
+          : t('questionLabel', { reference: id })
+      }
     >
       <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
         <Link
@@ -343,7 +359,7 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
           {question.task_key}#{question.no}
         </Link>
         {/* Плашка остаётся рядом с признаком: цвет не единственный носитель смысла. */}
-        {blocking ? <Badge tone="danger">блокирующий</Badge> : null}
+        {blocking ? <Badge tone="danger">{brick('entry.blocking')}</Badge> : null}
         <RelativeTime value={question.created_at} />
       </header>
 
@@ -373,7 +389,7 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
         />
       ) : (
         <div>
-          <Button onClick={() => setOpen(true)}>Ответить</Button>
+          <Button onClick={() => setOpen(true)}>{brick('answer.open')}</Button>
         </div>
       )}
     </article>

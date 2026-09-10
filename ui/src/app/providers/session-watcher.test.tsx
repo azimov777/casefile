@@ -5,6 +5,7 @@ import { setToken } from '@/shared/api';
 import { API, failure } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
+import { say } from '@testing/say';
 
 describe('просроченный сеанс', () => {
   it('на 401 сбрасывает токен, уводит на вход и объясняет причину', async () => {
@@ -17,8 +18,8 @@ describe('просроченный сеанс', () => {
 
     renderApp('/tasks');
 
-    expect(await screen.findByText(/Сеанс закончился/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Токен участника')).toBeInTheDocument();
+    expect(await screen.findByText(say.login('expired'))).toBeInTheDocument();
+    expect(screen.getByLabelText(say.login('tokenLabel'))).toBeInTheDocument();
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
   });
 
@@ -33,7 +34,7 @@ describe('просроченный сеанс', () => {
     );
 
     renderApp('/tasks');
-    await screen.findByText(/Сеанс закончился/);
+    await screen.findByText(say.login('expired'));
 
     expect(requested.length).toBeGreaterThan(0);
     expect(requested.filter((url) => url.includes('trk_stale'))).toEqual([]);

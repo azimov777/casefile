@@ -1,0 +1,121 @@
+/**
+ * Экран списка задач: таблица, доска и отбор над ними (`src/pages/tasks`,
+ * `src/features/task-filters`).
+ */
+export const tasks = {
+  title: 'Задачи',
+  loading: 'Загружаем задачи…',
+  found_zero: 'Ничего не нашлось',
+  found_one: 'Нашлась {{count}} задача',
+  found_few: 'Нашлось {{count}} задачи',
+  found_many: 'Нашлось {{count}} задач',
+  found_other: 'Нашлось {{count}} задачи',
+  shown_zero: 'Ничего не показано',
+  shown_one: 'Показана {{count}} задача',
+  shown_few: 'Показано {{count}} задачи',
+  shown_many: 'Показано {{count}} задач',
+  shown_other: 'Показано {{count}} задачи',
+  empty: 'Задач по этим условиям нет',
+  resetFilters: 'Сбросить фильтры',
+  beyond_one:
+    'На этой странице задач нет: по этим условиям есть {{count}} задача, и она на предыдущих страницах',
+  beyond_few:
+    'На этой странице задач нет: по этим условиям есть {{count}} задачи, и все они на предыдущих страницах',
+  beyond_many:
+    'На этой странице задач нет: по этим условиям есть {{count}} задач, и все они на предыдущих страницах',
+  beyond_other:
+    'На этой странице задач нет: по этим условиям есть {{count}} задачи, и все они на предыдущих страницах',
+
+  table: {
+    label: 'Задачи, таблица прокручивается вбок',
+    caption_one: 'На этой странице {{count}} задача',
+    caption_few: 'На этой странице {{count}} задачи',
+    caption_many: 'На этой странице {{count}} задач',
+    caption_other: 'На этой странице {{count}} задачи',
+  },
+
+  paging: {
+    label: 'Страницы выдачи',
+    previous: 'Предыдущая страница',
+    next: 'Следующая страница',
+    page: 'Страница {{page}}',
+    pageOf: 'Страница {{page}} из {{pages}}',
+    total_one: '{{count}} страница',
+    total_few: '{{count}} страницы',
+    total_many: '{{count}} страниц',
+    total_other: '{{count}} страницы',
+  },
+
+  board: {
+    more: 'Ещё',
+    loadingMore: 'Читаем…',
+    partial: 'Показаны не все задачи отбора: столбцы дочитываются по кнопке.',
+    all_one: 'Показаны все задачи отбора, всего {{count}} задача.',
+    all_few: 'Показаны все задачи отбора, всего {{count}} задачи.',
+    all_many: 'Показаны все задачи отбора, всего {{count}} задач.',
+    all_other: 'Показаны все задачи отбора, всего {{count}} задачи.',
+    ofUnknown: '{{count}} из ?',
+    empty: 'Пусто',
+  },
+
+  view: {
+    label: 'Вид списка',
+    table: 'Таблица',
+    board: 'Доска',
+  },
+
+  filters: {
+    label: 'Отбор задач',
+    expand: 'Изменить отбор',
+    collapse: 'Свернуть отбор',
+    conditions: 'Условия отбора',
+    allShown: 'показаны все задачи',
+    remove: 'Убрать условие: {{condition}}',
+    reset: 'Сбросить',
+    formLabel: 'Условия отбора задач',
+    statusLegend: 'Статус',
+    priorityLegend: 'Приоритет',
+    boardNote: 'На доске показаны все статусы: каждый своим столбцом.',
+    assignee: 'Исполнитель',
+    assigneePlaceholder: 'имя целиком',
+    text: 'Текст',
+    textPlaceholder: 'в названии или описании',
+    blocked: 'заблокирована',
+    withQuestions: 'есть открытые вопросы',
+    withRemarks: 'есть неразобранные замечания',
+    pending: 'не применено, Enter применит',
+    apply: 'Применить',
+
+    sort: {
+      label: 'Сортировка',
+      '-last_entry_at': 'сначала живые в деле',
+      last_entry_at: 'сначала затихшие',
+      '-updated_at': 'сначала недавно правленные',
+      updated_at: 'сначала давно не тронутые',
+      '-priority': 'сначала важные',
+      priority: 'сначала неважные',
+      key: 'по ключу',
+      '-key': 'по ключу, с конца',
+    },
+
+    query: {
+      label: 'Запрос на языке бэкенда',
+      note: 'отменяет остальной отбор',
+      placeholder: 'queue: DEMO and status: open and blocked: false',
+      errorAt: 'Ошибка в символе {{position}}.',
+      allowed: 'Допустимо: {{list}}',
+      stale: 'Показаны строки предыдущего отбора.',
+    },
+
+    condition: {
+      query: 'запрос: {{query}}',
+      status: 'статус {{values}}',
+      priority: 'приоритет {{values}}',
+      assignee: 'исполнитель {{value}}',
+      text: 'текст «{{value}}»',
+      blocked: 'только заблокированные',
+      questions: 'есть открытые вопросы',
+      remarks: 'есть неразобранные замечания',
+    },
+  },
+} as const;

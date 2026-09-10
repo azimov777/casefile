@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
@@ -137,15 +138,17 @@ export function TaskPage() {
     [setSearchParams],
   );
 
+  const { t } = useTranslation('task');
+  // Кнопка замечания стоит в липкой навигации, а подпись у неё та же, что у формы:
+  // действие одно, и называться двумя фразами оно не должно.
+  const { t: brick } = useTranslation('ui');
+
   if (pkg.error instanceof ApiError && pkg.error.code === 'task_not_found') {
     return (
       <main className={SCREEN}>
-        <h1 className="text-title">Задачи {key} нет</h1>
-        <Callout>
-          Задачи с таким ключом нет: возможно, ключ набран с опечаткой или задача из другой
-          установки.
-        </Callout>
-        <Link to="/tasks">Вернуться к списку задач</Link>
+        <h1 className="text-title">{t('missingTitle', { key })}</h1>
+        <Callout>{t('missingText')}</Callout>
+        <Link to="/tasks">{t('backToList')}</Link>
       </main>
     );
   }
@@ -153,7 +156,7 @@ export function TaskPage() {
   if (pkg.data === undefined) {
     return (
       <main className={SCREEN}>
-        <QueryState query={pkg} loading={`Загружаем задачу ${key}…`} />
+        <QueryState query={pkg} loading={t('loading', { key })} />
       </main>
     );
   }
@@ -179,7 +182,7 @@ export function TaskPage() {
         view="card"
         action={
           remarkOpen ? null : (
-            <Button onClick={() => setRemarkOpen(true)}>Оставить замечание</Button>
+            <Button onClick={() => setRemarkOpen(true)}>{brick('remark.submit')}</Button>
           )
         }
       />
@@ -206,10 +209,10 @@ export function TaskPage() {
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
           <section className={block({ kind: summaryKind })} aria-labelledby="summary">
             <h2 className={blockTitle({ kind: summaryKind })} id="summary">
-              Последняя сводка
+              {t('summary')}
             </h2>
             {summary == null ? (
-              <p className={EMPTY}>Сводки ещё нет: по этой задаче никто не отчитывался.</p>
+              <p className={EMPTY}>{t('noSummary')}</p>
             ) : (
               <EntryBody entry={summary} />
             )}
@@ -217,10 +220,10 @@ export function TaskPage() {
 
           <section className={block({ kind: questionsKind })} aria-labelledby="questions">
             <h2 className={blockTitle({ kind: questionsKind })} id="questions">
-              Открытые вопросы
+              {t('questions')}
             </h2>
             {questions.length === 0 ? (
-              <p className={EMPTY}>Вопросов без ответа нет.</p>
+              <p className={EMPTY}>{t('noQuestions')}</p>
             ) : (
               <ul className={NOTICE_LIST}>
                 {questions.map((question, at) => (
@@ -258,10 +261,10 @@ export function TaskPage() {
            */}
           <section className={block({ kind: remarksKind })} aria-labelledby="remarks">
             <h2 className={blockTitle({ kind: remarksKind })} id="remarks">
-              Замечания
+              {t('remarks')}
             </h2>
             {remarks.length === 0 ? (
-              <p className={EMPTY}>Неразобранных замечаний нет.</p>
+              <p className={EMPTY}>{t('noRemarks')}</p>
             ) : (
               <ul className={NOTICE_LIST}>
                 {remarks.map((remark) => (
@@ -293,11 +296,11 @@ export function TaskPage() {
           <section className={block({ kind: 'list' })} aria-labelledby="case">
             <div className={BLOCK_HEAD}>
               <h2 className="text-screen" id="case">
-                Дело
+                {t('case')}
               </h2>
               {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
               1300-м пикселе прокрутки и находился только теми, кто дочитал. */}
-              <Link to={caseHref(task.key)}>Открыть всё дело лентой</Link>
+              <Link to={caseHref(task.key)}>{t('openCase')}</Link>
             </div>
             <TaskIndex
               taskKey={task.key}
@@ -312,7 +315,7 @@ export function TaskPage() {
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[2_1_0]">
           <section className={block()} aria-labelledby="sections">
             <h2 className={blockTitle()} id="sections">
-              Задание
+              {t('assignment')}
             </h2>
             {/* Задание показывается целиком и не прячется под сворачивание: это
                 договор с агентом, его читают подряд и ищут поиском браузера. */}
@@ -321,7 +324,7 @@ export function TaskPage() {
 
           <section className={block({ kind: 'list' })} aria-labelledby="links">
             <h2 className={blockTitle({ kind: 'list' })} id="links">
-              Связи
+              {t('links')}
             </h2>
             <TaskLinks links={links} />
           </section>
@@ -359,6 +362,7 @@ interface QuestionAnswerProps {
  * между «меня спросили» и «отвечаю» нет.
  */
 function QuestionAnswer({ taskKey, question, at, answering, askedFor }: QuestionAnswerProps) {
+  const { t: brick } = useTranslation('ui');
   const id = questionId(taskKey, question);
   const answered = answering.answerOf(id);
   const [open, setOpen] = useState(askedFor);
@@ -385,7 +389,7 @@ function QuestionAnswer({ taskKey, question, at, answering, askedFor }: Question
   if (!open && !answering.isHeld(id)) {
     return (
       <div>
-        <Button onClick={() => setOpen(true)}>Ответить</Button>
+        <Button onClick={() => setOpen(true)}>{brick('answer.open')}</Button>
       </div>
     );
   }

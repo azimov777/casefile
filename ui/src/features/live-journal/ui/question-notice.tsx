@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/shared/ui';
 import { cn, useExitHoldList } from '@/shared/lib';
 import { taskRefHref } from '@/shared/lib/task-refs';
@@ -36,6 +37,7 @@ export function QuestionNotice({
    * месте, а не перепрыгивает в конец.
    */
   const held = useExitHoldList(incomingQuestions, (question) => question.id);
+  const { t } = useTranslation('ui');
 
   return (
     // Стопка существует всегда, даже пустая, и `aria-live` стоит на ней, а не на
@@ -57,7 +59,7 @@ export function QuestionNotice({
        * до нуля. Он переехал внутрь — `mt-2` на самой карточке.
        */
       className="fixed right-4 bottom-4 z-10 flex max-w-(--ui-float-max) flex-col"
-      aria-label="Вопросы ко мне"
+      aria-label={t('live.questionsToMe')}
       aria-live="polite"
     >
       {held.map(({ key, item: question, leaving, entering }) => (
@@ -124,8 +126,8 @@ export function QuestionNotice({
                   {question.taskKey}#{question.no}
                 </Link>
                 {question.blocking ? (
-                  <Badge tone="danger" title="Работа по задаче стоит без ответа">
-                    блокирующий
+                  <Badge tone="danger" title={t('live.blockingTitle')}>
+                    {t('live.blockingBadge')}
                   </Badge>
                 ) : null}
               </p>
@@ -146,7 +148,9 @@ export function QuestionNotice({
                 )}
                 type="button"
                 onClick={() => dismissQuestion(question.id)}
-                aria-label={`Закрыть уведомление о вопросе ${question.taskKey}#${question.no}`}
+                aria-label={t('live.dismiss', {
+                  reference: `${question.taskKey}#${question.no}`,
+                })}
               >
                 ×
               </button>

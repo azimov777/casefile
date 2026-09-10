@@ -1,4 +1,6 @@
 import { useSearchParams } from 'react-router';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { TASK_PAGE_SIZE } from '@/entities/task';
 import { tasksHref } from '@/features/task-filters';
 import { PAGE_GAP, pageCount, pageWindow } from '@/shared/lib';
@@ -34,6 +36,7 @@ interface TasksPaginationProps {
  */
 export function TasksPagination({ page, total, hasMore }: TasksPaginationProps) {
   const [searchParams] = useSearchParams();
+  const { t } = useTranslation('tasks');
   const href = (number: number) => tasksHref(searchParams, { page: number });
 
   const pages = total === null ? null : pageCount(total, TASK_PAGE_SIZE);
@@ -59,9 +62,9 @@ export function TasksPagination({ page, total, hasMore }: TasksPaginationProps) 
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Pagination label="Страницы выдачи">
+      <Pagination label={t('paging.label')}>
         <PaginationItem>
-          <PaginationPrevious to={previous} label="Предыдущая страница" />
+          <PaginationPrevious to={previous} label={t('paging.previous')} />
         </PaginationItem>
 
         {(pages === null ? [page] : pageWindow(page, pages)).map((slot, index) =>
@@ -71,7 +74,11 @@ export function TasksPagination({ page, total, hasMore }: TasksPaginationProps) 
             <PaginationGap key={`gap-${index}`} />
           ) : (
             <PaginationItem key={slot}>
-              <PaginationLink to={href(slot)} current={slot === page} label={`Страница ${slot}`}>
+              <PaginationLink
+                to={href(slot)}
+                current={slot === page}
+                label={t('paging.page', { page: slot })}
+              >
                 {slot}
               </PaginationLink>
             </PaginationItem>
@@ -79,7 +86,7 @@ export function TasksPagination({ page, total, hasMore }: TasksPaginationProps) 
         )}
 
         <PaginationItem>
-          <PaginationNext to={next} label="Следующая страница" />
+          <PaginationNext to={next} label={t('paging.next')} />
         </PaginationItem>
       </Pagination>
 
@@ -89,15 +96,15 @@ export function TasksPagination({ page, total, hasMore }: TasksPaginationProps) 
        * ступени, поэтому подпись от него скрыта — иначе он прочёл бы это дважды.
        */}
       <span className="text-label text-muted" aria-hidden="true">
-        {pageLabel(page, pages)}
+        {pageLabel(page, pages, t)}
       </span>
     </div>
   );
 }
 
 /** Подпись ряда. Страница за концом выдачи не называется существующей. */
-function pageLabel(page: number, pages: number | null): string {
-  if (pages === null) return `Страница ${page}`;
-  if (page > pages) return `Страниц: ${pages}`;
-  return `Страница ${page} из ${pages}`;
+function pageLabel(page: number, pages: number | null, t: TFunction<'tasks'>): string {
+  if (pages === null) return t('paging.page', { page });
+  if (page > pages) return t('paging.total', { count: pages });
+  return t('paging.pageOf', { page, pages });
 }

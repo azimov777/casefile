@@ -26,11 +26,9 @@ export {
   type RemarkListParams,
 } from './api/remarks';
 export {
-  ENTRY_TYPE_NAMES,
   entryHeadline,
   factsOfEntry,
   headlineText,
-  REMARK_OUTCOME_NAMES,
   type EntryFacts,
   type RemarkOutcome,
   type Headline,
