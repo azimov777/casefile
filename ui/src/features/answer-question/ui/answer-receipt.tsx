@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Receipt } from '@/shared/ui';
 import type { Answered } from '../model/answering';
 
@@ -15,10 +16,13 @@ interface AnswerReceiptProps {
  * которыми названо случившееся, и адрес вопроса в метке.
  */
 export function AnswerReceipt({ taskKey, questionNo, answered, onClose }: AnswerReceiptProps) {
+  const { t } = useTranslation('ui');
+  const reference = `${taskKey}#${questionNo}`;
+
   return (
     <Receipt
-      label={`Ответ на ${taskKey}#${questionNo} подшит`}
-      headline="Ответ подшит"
+      label={t('answer.receiptLabel', { reference })}
+      headline={t('answer.receiptHeadline')}
       taskKey={taskKey}
       entryNo={answered.entryNo}
       body={answered.body}

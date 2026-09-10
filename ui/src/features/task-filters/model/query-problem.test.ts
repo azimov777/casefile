@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { say } from '@testing/say';
 import { ApiError } from '@/shared/api';
 import { caretLine, readQueryProblem } from './query-problem';
 
@@ -12,7 +13,8 @@ describe('разбор отказа на негодный отбор', () => {
     });
 
     expect(readQueryProblem(error, 'status: opne')).toEqual({
-      message: 'Значение условия отбора недопустимо.',
+      // Фраза отказа берётся из словаря по коду бэкенда — тем же путём, что и в коде.
+      message: say.errors('search_value_invalid'),
       position: 8,
       query: 'status: opne',
       allowed: ['backlog', 'open', 'in_progress'],

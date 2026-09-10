@@ -1,12 +1,11 @@
 import { Link, useSearchParams } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { tasksHref } from '../model/href';
 import type { TaskView } from '../model/filters';
 import { cn } from '@/shared/lib';
 
-const VIEWS: { value: TaskView; label: string }[] = [
-  { value: 'table', label: 'Таблица' },
-  { value: 'board', label: 'Доска' },
-];
+/** Порядок видов. Подписи к ним живут в словаре (`tasks.view`), а не рядом. */
+const VIEWS: TaskView[] = ['table', 'board'];
 
 /**
  * Переключатель вида: та же выдача таблицей или доской.
@@ -22,19 +21,20 @@ const VIEWS: { value: TaskView; label: string }[] = [
  */
 export function ViewSwitch({ view }: { view: TaskView }) {
   const [searchParams] = useSearchParams();
+  const { t } = useTranslation('tasks');
 
   return (
     <nav
-      aria-label="Вид списка"
+      aria-label={t('view.label')}
       className="inline-flex items-center gap-px rounded-control border border-line-strong p-px"
     >
       {VIEWS.map((option) => {
-        const current = option.value === view;
+        const current = option === view;
 
         return (
           <Link
-            key={option.value}
-            to={tasksHref(searchParams, { view: option.value })}
+            key={option}
+            to={tasksHref(searchParams, { view: option })}
             /*
              * `aria-current="true"`, а не `page`: оба вида — одна и та же страница
              * списка, и «текущая страница» сказало бы неправду. Здесь текущий
@@ -50,7 +50,7 @@ export function ViewSwitch({ view }: { view: TaskView }) {
                 : 'text-muted hover:bg-sunken hover:text-text',
             )}
           >
-            {option.label}
+            {t(`view.${option}`)}
           </Link>
         );
       })}

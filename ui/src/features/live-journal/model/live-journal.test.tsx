@@ -6,6 +6,7 @@ import { API, bootstrap, collection, data, taskPackage } from '@testing/msw/resp
 import { liveJournal } from '@testing/live-journal';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
+import { say } from '@testing/say';
 import { task } from '@testing/msw/responses';
 import { setToken } from '@/shared/api';
 
@@ -46,16 +47,18 @@ describe('живой поток', () => {
   it('открывает одно соединение на вкладку и держит его при переходах', async () => {
     renderApp('/tasks');
 
-    expect(await screen.findByText('на связи')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.online'))).toBeInTheDocument();
     expect(liveJournal.connections).toBe(1);
 
-    await userEvent.setup().click(screen.getByRole('link', { name: /Входящая/ }));
+    await userEvent
+      .setup()
+      .click(screen.getByRole('link', { name: new RegExp(say.ui('app.inbox')) }));
     server.use(
       http.get(`${API}/api/v1/questions`, () => collection([])),
       http.get(`${API}/api/v1/remarks`, () => collection([])),
     );
 
-    expect(await screen.findByRole('heading', { name: 'Входящая' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: say.ui('app.inbox') })).toBeInTheDocument();
     // Переход между экранами не стоит нового соединения: поток живёт в оболочке.
     expect(liveJournal.connections).toBe(1);
     expect(liveJournal.closed).toBe(0);
@@ -72,16 +75,16 @@ describe('живой поток', () => {
     });
 
     // Список не перечитан: строки на месте, а об изменении сказано полосой.
-    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
     expect(listings).toBe(before);
     expect(screen.getByText('open')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Показать' }));
+    await user.click(screen.getByRole('button', { name: say.ui('live.show') }));
 
     // Значение пришло из перечитанной выдачи, а не из кадра: кэш руками не правится.
     expect(await screen.findByText('done')).toBeInTheDocument();
     expect(listings).toBeGreaterThan(before);
-    expect(screen.queryByText(/Изменилось задач/)).not.toBeInTheDocument();
+    expect(screen.queryByText(say.ui('live.changed', { count: 1 }))).not.toBeInTheDocument();
   });
 
   it('полоса считает задачи, а не кадры', async () => {
@@ -95,7 +98,7 @@ describe('живой поток', () => {
     });
 
     // Три записи, но задачи две: человеку важно, сколько строк изменится.
-    expect(await screen.findByText('Изменилось задач: 2')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.changed', { count: 2 }))).toBeInTheDocument();
   });
 
   it('накопленное переживает переход между таблицей и доской', async () => {
@@ -106,17 +109,17 @@ describe('живой поток', () => {
     act(() => {
       liveJournal.send(entry(1035, 'DEMO-1', { type: 'status_changed' }));
     });
-    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'Доска' }));
+    await user.click(screen.getByRole('link', { name: say.tasks('view.board') }));
 
     // Полоса на месте: страница перемонтировалась, а накопленное живёт не в ней.
-    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
   });
 
   it('вопрос, адресованный мне, объявляется уведомлением со ссылкой на запись', async () => {
     renderApp('/tasks');
-    await screen.findByText('на связи');
+    await screen.findByText(say.ui('live.online'));
 
     act(() => {
       liveJournal.send(
@@ -133,12 +136,12 @@ describe('живой поток', () => {
     expect(notice).toHaveAttribute('href', '/tasks/DEMO-4?entry=7');
     // Ключа мало, чтобы решить, бросать ли текущее дело: видно, о чём спросили.
     expect(screen.getByText('Удалять ли записи дела отменённых задач через год')).toBeVisible();
-    expect(screen.getByText('блокирующий')).toBeVisible();
+    expect(screen.getByText(say.ui('live.blockingBadge'))).toBeVisible();
   });
 
   it('вопрос, адресованный не мне, уведомления не даёт', async () => {
     renderApp('/tasks');
-    await screen.findByText('на связи');
+    await screen.findByText(say.ui('live.online'));
 
     act(() => {
       liveJournal.send(
@@ -152,12 +155,14 @@ describe('живой поток', () => {
 
     await waitFor(() => expect(liveJournal.options).not.toBeNull());
     // Область объявления есть всегда, а вот карточки в ней быть не должно.
-    expect(screen.getByRole('complementary', { name: 'Вопросы ко мне' })).toBeEmptyDOMElement();
+    expect(
+      screen.getByRole('complementary', { name: say.ui('live.questionsToMe') }),
+    ).toBeEmptyDOMElement();
   });
 
   it('два вопроса подряд видны оба: второй не затирает первый', async () => {
     renderApp('/tasks');
-    await screen.findByText('на связи');
+    await screen.findByText(say.ui('live.online'));
 
     act(() => {
       liveJournal.send(
@@ -182,7 +187,7 @@ describe('живой поток', () => {
 
   it('закрытое среднее уведомление уходит одно, соседи остаются на своих местах', async () => {
     renderApp('/tasks');
-    await screen.findByText('на связи');
+    await screen.findByText(say.ui('live.online'));
 
     act(() => {
       for (const no of [20, 21, 22]) {
@@ -200,11 +205,13 @@ describe('живой поток', () => {
 
     await userEvent
       .setup()
-      .click(screen.getByRole('button', { name: 'Закрыть уведомление о вопросе DEMO-4#21' }));
+      .click(
+        screen.getByRole('button', { name: say.ui('live.dismiss', { reference: 'DEMO-4#21' }) }),
+      );
 
     // Стопка редеет по одному: закрытая карточка уходит, соседи остаются на своих
     // местах и в прежнем порядке — уходящий не перепрыгивает в конец выдачи.
-    const notice = screen.getByRole('complementary', { name: 'Вопросы ко мне' });
+    const notice = screen.getByRole('complementary', { name: say.ui('live.questionsToMe') });
     expect(
       within(notice)
         .getAllByRole('link')
@@ -214,7 +221,7 @@ describe('живой поток', () => {
 
   it('тот же кадр, приехавший второй раз, второго уведомления не даёт', async () => {
     renderApp('/tasks');
-    await screen.findByText('на связи');
+    await screen.findByText(say.ui('live.online'));
 
     const question = entry(1034, 'DEMO-4', {
       type: 'question',
@@ -234,7 +241,7 @@ describe('живой поток', () => {
 
   it('закрытое человеком уведомление не возвращается повторным кадром', async () => {
     renderApp('/tasks');
-    await screen.findByText('на связи');
+    await screen.findByText(say.ui('live.online'));
 
     const question = entry(1035, 'DEMO-4', {
       type: 'question',
@@ -247,7 +254,9 @@ describe('живой поток', () => {
 
     await userEvent
       .setup()
-      .click(screen.getByRole('button', { name: 'Закрыть уведомление о вопросе DEMO-4#12' }));
+      .click(
+        screen.getByRole('button', { name: say.ui('live.dismiss', { reference: 'DEMO-4#12' }) }),
+      );
     expect(screen.queryByRole('link', { name: 'DEMO-4#12' })).not.toBeInTheDocument();
 
     // Моргание сети не повод спрашивать заново то, на что человек уже сказал «видел».
@@ -257,7 +266,7 @@ describe('живой поток', () => {
       liveJournal.send(question);
     });
 
-    await waitFor(() => expect(screen.getByText('на связи')).toBeVisible());
+    await waitFor(() => expect(screen.getByText(say.ui('live.online'))).toBeVisible());
     expect(screen.queryByRole('link', { name: 'DEMO-4#12' })).not.toBeInTheDocument();
   });
 
@@ -266,8 +275,8 @@ describe('живой поток', () => {
     // загрузке страницы значит обесценить красный к третьему разу.
     renderApp('/tasks');
 
-    expect(await screen.findByText('на связи')).toBeVisible();
-    expect(screen.queryByText('нет связи')).not.toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.online'))).toBeVisible();
+    expect(screen.queryByText(say.ui('live.offline'))).not.toBeInTheDocument();
   });
 
   it('после обрыва список ждёт просьбы, а не переставляется сам', async () => {
@@ -276,22 +285,20 @@ describe('живой поток', () => {
     await screen.findByText('DEMO-1');
 
     act(() => liveJournal.options?.onLost());
-    expect(await screen.findByText('нет связи')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.offline'))).toBeInTheDocument();
 
     const before = listings;
     act(() => liveJournal.options?.onOpen());
 
-    expect(await screen.findByText('на связи')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.online'))).toBeInTheDocument();
 
     // Что случилось в паузу, интерфейс не знает и знать не может — потому и числа
     // в полосе нет. Строки при этом не тронуты: обрыв случается тогда, когда человек
     // ничего не делал, и переставлять список под ним особенно нечестно.
-    expect(
-      await screen.findByText('Пока не было связи, список мог измениться'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.changedUnknown'))).toBeInTheDocument();
     expect(listings).toBe(before);
 
-    await user.click(screen.getByRole('button', { name: 'Показать' }));
+    await user.click(screen.getByRole('button', { name: say.ui('live.show') }));
     await waitFor(() => expect(listings).toBeGreaterThan(before));
   });
 
@@ -317,10 +324,10 @@ describe('живой поток', () => {
     });
 
     // Накопленное не вылилось на экран: список ждёт просьбы, как и при видимой вкладке.
-    expect(await screen.findByText('Изменилось задач: 1')).toBeInTheDocument();
+    expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
     expect(listings).toBe(before);
 
-    await user.click(screen.getByRole('button', { name: 'Показать' }));
+    await user.click(screen.getByRole('button', { name: say.ui('live.show') }));
     await waitFor(() => expect(listings).toBeGreaterThan(before));
   });
 
@@ -330,7 +337,7 @@ describe('живой поток', () => {
     setToken(`trk_${String.fromCharCode(1087, 1088, 1080)}`);
     renderApp('/tasks');
 
-    expect(await screen.findByLabelText('Токен участника')).toBeInTheDocument();
+    expect(await screen.findByLabelText(say.login('tokenLabel'))).toBeInTheDocument();
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
     // Соединения не открывалось вовсе: переподключаться нечему.
     expect(liveJournal.connections).toBe(0);
@@ -338,11 +345,11 @@ describe('живой поток', () => {
 
   it('при 401 поток отдаёт сеанс общей обработке входа', async () => {
     renderApp('/tasks');
-    await screen.findByText('на связи');
+    await screen.findByText(say.ui('live.online'));
 
     act(() => liveJournal.options?.onUnauthorized());
 
-    expect(await screen.findByLabelText('Токен участника')).toBeInTheDocument();
+    expect(await screen.findByLabelText(say.login('tokenLabel'))).toBeInTheDocument();
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
   });
 });

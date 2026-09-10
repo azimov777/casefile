@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
 import { errorMessage } from '@/shared/errors';
 import { Composer } from '@/shared/ui';
@@ -39,23 +40,29 @@ export function AnswerForm({
 }: AnswerFormProps) {
   const answer = useAnswerQuestion();
   const fields = answer.error instanceof ApiError ? answer.error.fields : null;
+  /*
+   * `useTranslation` здесь и ради подписи, и ради подписки: `errorMessage` берёт язык
+   * у экземпляра `i18next` и сам на смену языка не перерисуется.
+   */
+  const { t } = useTranslation('ui');
+  const reference = `${taskKey}#${questionNo}`;
 
   return (
     <Composer
-      label={`Ответ на ${taskKey}#${questionNo}`}
-      fieldLabel="Ответ"
+      label={t('answer.formLabel', { reference })}
+      fieldLabel={t('answer.fieldLabel')}
       storageKey={draftKey(taskKey, questionNo)}
-      submitLabel="Ответить"
-      pendingLabel="Отправляем…"
-      emptyProblem="Пустой ответ отправить нельзя: агенту нужен текст, а не факт нажатия кнопки."
-      placeholder="Markdown. Ссылки вида DEMO-2 и DEMO-2#7 станут ссылками."
+      submitLabel={t('answer.submit')}
+      pendingLabel={t('answer.pending')}
+      emptyProblem={t('answer.empty')}
+      placeholder={t('answer.placeholder')}
       problem={fields?.body}
       isPending={answer.isPending}
       failure={
         answer.isError ? (
+          // Две фразы подряд: первая пришла отказом от бэкенда, вторая — наша.
           <>
-            {errorMessage(answer.error)} Повторная отправка не заведёт второй ответ: ключ повтора у
-            попытки тот же.
+            {errorMessage(answer.error)} {t('answer.retrySafe')}
           </>
         ) : undefined
       }

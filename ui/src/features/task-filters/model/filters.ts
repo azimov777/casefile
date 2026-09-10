@@ -86,16 +86,23 @@ export const DEFAULT_SORT = '-last_entry_at';
  * Порядки по `updated_at` остаются, хотя этой колонки в строке нет: правка карточки
  * мимо дела — приоритет, исполнитель, разделы задания — видна только через них.
  */
-export const TASK_SORTS: { value: string; label: string }[] = [
-  { value: '-last_entry_at', label: 'сначала живые в деле' },
-  { value: 'last_entry_at', label: 'сначала затихшие' },
-  { value: '-updated_at', label: 'сначала недавно правленные' },
-  { value: 'updated_at', label: 'сначала давно не тронутые' },
-  { value: '-priority', label: 'сначала важные' },
-  { value: 'priority', label: 'сначала неважные' },
-  { value: 'key', label: 'по ключу' },
-  { value: '-key', label: 'по ключу, с конца' },
-];
+export const TASK_SORTS = [
+  '-last_entry_at',
+  'last_entry_at',
+  '-updated_at',
+  'updated_at',
+  '-priority',
+  'priority',
+  'key',
+  '-key',
+] as const;
+
+/**
+ * Значение порядка из тех, что предлагает интерфейс. Подпись к нему живёт в словаре
+ * (`tasks.filters.sort`), а не рядом со значением: ключ словаря — само значение,
+ * и забытый перевод роняет сборку, а не показывает человеку `-last_entry_at`.
+ */
+export type TaskSort = (typeof TASK_SORTS)[number];
 
 /**
  * «Есть открытые вопросы» — единственное условие интерфейса, которое структурным
@@ -144,7 +151,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     withQuestions: params.get('questions') === 'true',
     withRemarks: params.get('remarks') === 'true',
     query: params.get('query') ?? '',
-    sort: TASK_SORTS.some((option) => option.value === sort) && sort !== null ? sort : DEFAULT_SORT,
+    sort: isTaskSort(sort) ? sort : DEFAULT_SORT,
     page: readPage(params.get('page')),
     collapsed: params.has('collapsed')
       ? keepKnown(params.getAll('collapsed'), TASK_STATUSES)
@@ -177,6 +184,10 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   }
 
   return params;
+}
+
+function isTaskSort(value: string | null): value is TaskSort {
+  return value !== null && (TASK_SORTS as readonly string[]).includes(value);
 }
 
 /** Одинаковы ли наборы статусов: порядок в них ничего не значит. */
