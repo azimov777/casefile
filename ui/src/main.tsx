@@ -4,7 +4,7 @@ import '@/shared/styles/index.css';
 import { App } from '@/app';
 
 const container = document.getElementById('root');
-if (container === null) throw new Error('Не найден корневой элемент #root');
+if (container === null) throw new Error('Root element #root not found');
 
 createRoot(container).render(
   <StrictMode>

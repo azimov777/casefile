@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation } from 'react-router';
 import { QuestionNotice, useLiveJournal } from '@/features/live-journal';
 import { Sheet } from '@/shared/ui';
@@ -11,6 +12,7 @@ export function AppShell() {
   // Один поток на вкладку: он поднимается здесь, а не на страницах, — переход между
   // экранами не должен стоить переподключения.
   const live = useLiveJournal();
+  const { t } = useTranslation('ui');
 
   /*
    * Шторка узкого экрана. Единственное состояние оболочки, которое не живёт в адресе,
@@ -36,7 +38,7 @@ export function AppShell() {
      */
     <div className="grid min-h-full grid-cols-[minmax(0,1fr)] fold:grid-cols-[var(--ui-side)_minmax(0,1fr)]">
       <aside
-        aria-label="Разделы трекера"
+        aria-label={t('app.trackerSections')}
         className="col-start-1 row-start-1 row-end-[span_99] hidden border-r border-line bg-surface fold:block"
       >
         {/* Панель прилипает: очередь — то, куда переходят с любой глубины прокрутки. */}
@@ -50,7 +52,8 @@ export function AppShell() {
       <Sheet
         open={sideOpen}
         onOpenChange={setSideOpen}
-        title="Разделы трекера"
+        title={t('app.trackerSections')}
+        closeLabel={t('app.closeSections')}
         returnFocusTo={openerRef}
       >
         <AppSide onNavigate={() => setSideOpen(false)} />

@@ -1,10 +1,13 @@
+import { useTranslation } from 'react-i18next';
 import { Callout } from '@/shared/ui';
 
 export function NotFound() {
+  const { t } = useTranslation('ui');
+
   return (
     <main>
-      <h1>Страница не найдена</h1>
-      <Callout>Такого адреса в интерфейсе нет.</Callout>
+      <h1>{t('app.notFound.title')}</h1>
+      <Callout>{t('app.notFound.text')}</Callout>
     </main>
   );
 }

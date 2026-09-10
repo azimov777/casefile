@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { API, bootstrap, data } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
+import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
 
 /**
@@ -34,17 +35,17 @@ describe('граница ошибок', () => {
   it('на падении страницы объясняет случившееся и оставляет оболочку живой', async () => {
     renderApp('/tasks');
 
-    expect(await screen.findByRole('heading', { name: 'Интерфейс сломался на этом месте' }));
-    expect(screen.getByRole('button', { name: 'Перезагрузить' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: say.ui('app.broken.title') }));
+    expect(screen.getByRole('button', { name: say.ui('app.broken.reload') })).toBeInTheDocument();
 
     // Шапка жива: человек уходит со сломанной страницы ссылкой, а не перезагрузкой.
-    expect(screen.getByRole('link', { name: 'Все задачи' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: say.ui('app.allTasks') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: say.ui('app.signOut') })).toBeInTheDocument();
   });
 
   it('технический текст исключения уходит в консоль, а не на страницу', async () => {
     renderApp('/tasks');
-    await screen.findByRole('heading', { name: 'Интерфейс сломался на этом месте' });
+    await screen.findByRole('heading', { name: say.ui('app.broken.title') });
 
     expect(screen.queryByText(/boom/)).not.toBeInTheDocument();
     expect(

@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { taskRefHref } from '@/shared/lib/task-refs';
 import { Markdown } from './markdown';
 
@@ -27,6 +28,8 @@ interface ReceiptProps {
  * «страница подшита, вот её адрес».
  */
 export function Receipt({ label, headline, taskKey, entryNo, body, onClose }: ReceiptProps) {
+  const { t } = useTranslation('ui');
+
   return (
     <section
       className="rounded-control border border-positive-line bg-positive-soft p-3"
@@ -56,7 +59,7 @@ export function Receipt({ label, headline, taskKey, entryNo, body, onClose }: Re
         type="button"
         onClick={onClose}
       >
-        Закрыть
+        {t('receipt.close')}
       </button>
     </section>
   );

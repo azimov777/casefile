@@ -1,5 +1,7 @@
 import { Fragment, type RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { PanelLeft } from 'lucide-react';
 import { bootstrapQueryOptions } from '@/entities/session';
@@ -31,6 +33,7 @@ export function AppTopbar({
   const filters = readFilters(searchParams);
   const bootstrap = useQuery(bootstrapQueryOptions());
   const waiting = bootstrap.data?.open_questions ?? 0;
+  const { t } = useTranslation('ui');
 
   return (
     /*
@@ -54,9 +57,9 @@ export function AppTopbar({
          * уехал в панель вместе со всем остальным, а «меня спрашивают» — то, ради чего
          * человек вообще открывает трекер, и молчать об этом до нажатия нельзя.
          */
-        aria-label={
-          waiting > 0 ? `Показать разделы, открытых вопросов: ${waiting}` : 'Показать разделы'
-        }
+        // Нулевая форма подписи — это просто «показать разделы»: сказать о вопросах
+        // нечего, и обходить склонение двоеточием не приходится.
+        aria-label={t('app.showSections', { count: waiting })}
         onClick={onOpenSide}
         className={cn(
           'relative grid size-9 shrink-0 place-items-center rounded-control border border-line-strong text-muted',
@@ -113,10 +116,14 @@ export function AppTopbar({
  * «где я». Ссылкой здесь становится только то, откуда человек пришёл и куда вернётся.
  */
 function Crumbs({ place }: { place: Place }) {
-  const parts = crumbsOf(place);
+  const { t } = useTranslation('ui');
+  const parts = crumbsOf(place, t);
 
   return (
-    <p className="flex min-w-0 items-center gap-1.5 text-meta text-muted" aria-label="Где я">
+    <p
+      className="flex min-w-0 items-center gap-1.5 text-meta text-muted"
+      aria-label={t('app.whereAmI')}
+    >
       {parts.map((part, index) => (
         <Fragment key={part.label}>
           {index === 0 ? null : (
@@ -152,18 +159,18 @@ interface Crumb {
   mono?: boolean;
 }
 
-function crumbsOf(place: Place): Crumb[] {
-  if (place.section === 'questions') return [{ label: 'Входящая' }];
+function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
+  if (place.section === 'questions') return [{ label: t('app.inbox') }];
 
   const queue: Crumb =
     place.queue === null
-      ? { label: 'Все задачи' }
+      ? { label: t('app.allTasks') }
       : { label: place.queue, mono: true, to: tasksHref('', { queue: place.queue }) };
 
   if (place.section === 'tasks') {
     // На самом списке очередь — уже текущее место: ссылка вела бы туда же, откуда
     // человек смотрит, и по дороге стирала бы остальной отбор.
-    return [{ ...queue, to: undefined }, { label: 'Задачи' }];
+    return [{ ...queue, to: undefined }, { label: t('app.crumbTasks') }];
   }
 
   if (place.taskKey === null) return [queue];
@@ -175,6 +182,6 @@ function crumbsOf(place: Place): Crumb[] {
   };
 
   return place.section === 'case'
-    ? [queue, task, { label: 'Дело' }]
+    ? [queue, task, { label: t('app.crumbCase') }]
     : [queue, { ...task, to: undefined }];
 }

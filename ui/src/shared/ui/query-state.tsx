@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { errorMessage } from '../errors';
 import { Button } from './button';
 import { Callout } from './callout';
@@ -43,6 +44,14 @@ const QUIET = 'text-meta text-muted';
  * ни того, на что смотрел на соседней половине экрана.
  */
 export function QueryState({ query, loading, empty, compact = false }: QueryStateProps) {
+  /*
+   * `useTranslation` здесь не ради двух подписей кнопки: `errorMessage` берёт язык
+   * у экземпляра `i18next` и на смену языка не подписан. Подписка нужна тому, кто
+   * показывает текст отказа, иначе после переключения он останется с прежней фразой
+   * до следующей отрисовки (`docs/notes/ui.md`).
+   */
+  const { t } = useTranslation('ui');
+
   if (query.error !== null && query.error !== undefined) {
     return (
       // Строкой: в шапке высота фиксирована, и рамка сообщения разъехалась бы с ней.
@@ -55,7 +64,7 @@ export function QueryState({ query, loading, empty, compact = false }: QueryStat
           <Callout tone="danger">{errorMessage(query.error)}</Callout>
         )}
         <Button tone="quiet" onClick={() => void query.refetch()} disabled={query.isFetching}>
-          {query.isFetching ? 'Повторяем…' : 'Повторить'}
+          {query.isFetching ? t('query.retrying') : t('query.retry')}
         </Button>
       </div>
     );

@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Button } from '@/shared/ui';
+import { BrokenScreen } from './broken-screen';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -28,26 +28,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override componentDidCatch(error: Error, info: ErrorInfo) {
     // Человеку — что случилось и что делать, разработчику — трасса. Показывать
     // сообщение исключения на странице бессмысленно: оно на английском и про наш код.
-    console.error('Отрисовка упала:', error, info.componentStack);
+    console.error('Render failed:', error, info.componentStack);
   }
 
   override render() {
     if (!this.state.failed) return this.props.children;
-
-    return (
-      <div
-        role="alert"
-        className="mx-auto my-8 flex max-w-168 flex-col items-start gap-3 rounded-control border border-danger-line bg-danger-soft p-6"
-      >
-        <h1 className="text-title text-danger">Интерфейс сломался на этом месте</h1>
-        {/* Тоном отказа окрашен только заголовок: объяснение — обычный текст, и цвет
-            содержания на цветной заливке назван явно, чтобы он не унаследовал тон. */}
-        <p className="text-text">
-          Экран не отрисовался из-за ошибки в самом интерфейсе — данные тут ни при чём. Подробности
-          ошибки лежат в консоли браузера.
-        </p>
-        <Button onClick={() => window.location.reload()}>Перезагрузить</Button>
-      </div>
-    );
+    return <BrokenScreen />;
   }
 }

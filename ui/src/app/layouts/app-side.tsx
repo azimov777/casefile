@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { Inbox } from 'lucide-react';
 import { bootstrapQueryOptions } from '@/entities/session';
@@ -23,6 +24,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const logout = useLogout();
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const { t } = useTranslation('ui');
 
   const queues = bootstrap.data?.queues ?? [];
   const place = readPlace(location.pathname, searchParams);
@@ -44,20 +46,20 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
           aria-hidden="true"
           className="grid size-5 place-items-center rounded-mark bg-accent font-mono text-mark text-accent-text"
         >
-          Т
+          {t('app.mark')}
         </span>
-        Трекер
+        {t('app.name')}
       </span>
 
-      <nav className="flex flex-col gap-px" aria-label="Разделы">
+      <nav className="flex flex-col gap-px" aria-label={t('app.sections')}>
         <p className="mt-1 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">
-          Очереди
+          {t('app.queues')}
         </p>
 
         {/* «Все задачи» — то же самое, что пустая очередь в отборе: без этого пункта
             из очереди некуда вернуться, кроме как снятием чипа в форме. */}
         <SideLink to={queueHref('')} current={place.queue === null && onList} onClick={onNavigate}>
-          Все задачи
+          {t('app.allTasks')}
         </SideLink>
 
         {queues.map((queue) => (
@@ -74,7 +76,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
         ))}
 
         <p className="mt-3 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">
-          Мне
+          {t('app.mine')}
         </p>
 
         <NavLink
@@ -91,7 +93,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
           }
         >
           <Inbox className="size-(--ui-mark) shrink-0" aria-hidden="true" />
-          Входящая
+          {t('app.inbox')}
           {/*
            * Счётчик читается как число с подписью, а не голой цифрой: «2» рядом со
            * словом «Входящая» диктор произнесёт как часть названия раздела. Само число
@@ -104,10 +106,10 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
                 bootstrap.data.open_questions > 0 ? 'font-semibold text-attention' : 'text-faint',
               )}
             >
+              {/* Счётчик склоняется, а не обходится двоеточием: у русского три формы,
+                  у английского две, и выбирает форму `i18next` по самому числу. */}
               <span className="sr-only">
-                {bootstrap.data.open_questions > 0
-                  ? `Открытых вопросов: ${bootstrap.data.open_questions}`
-                  : 'Открытых вопросов нет'}
+                {t('app.openQuestions', { count: bootstrap.data.open_questions })}
               </span>
               <span aria-hidden="true">{bootstrap.data.open_questions}</span>
             </span>
@@ -118,18 +120,18 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
       <div className="mt-auto flex flex-col items-start gap-1 border-t border-line px-2 pt-2 text-mark">
         {/* Отказ показывается с повтором: чинить бэкенд и перезагружать вкладку —
             разные действия, и второе не должно быть единственным доступным. */}
-        <QueryState query={bootstrap} loading="Загружаем участника…" compact />
+        <QueryState query={bootstrap} loading={t('app.loadingParticipant')} compact />
 
         {/* Имя переносится по любому месту: подпись участника — чужая строка, её длину
             интерфейс не выбирает, а горизонтальной прокрутки быть не должно. */}
         {bootstrap.data === undefined ? null : (
           <span className="max-w-full break-all font-mono text-muted">
-            {bootstrap.data.participant?.name ?? 'участника нет'}
+            {bootstrap.data.participant?.name ?? t('app.noParticipant')}
           </span>
         )}
 
         <Button tone="quiet" className="px-2 py-1 text-meta" onClick={logout}>
-          Выйти
+          {t('app.signOut')}
         </Button>
       </div>
     </div>
