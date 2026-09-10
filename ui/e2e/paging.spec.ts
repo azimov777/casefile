@@ -113,6 +113,17 @@ test('страницы списка листаются рядом номеров
   // в нём не пишутся.
   await pager.getByRole('link', { name: 'Предыдущая страница' }).click();
   await expect(page).not.toHaveURL(/page=/);
+
+  /*
+   * Строки читаются только после того, как пришли строки именно этой, первой страницы.
+   * `toHaveCount(PAGE_SIZE)` тут ничего не ждёт: если вторая страница тоже полна,
+   * строк ровно PAGE_SIZE и до ответа сервера (`keepPreviousData` держит строки второй
+   * страницы), и после — число не меняется, и подпорка ничего не ловит (UI-89). Ждём
+   * не число и не факт смены, а конкретное значение — первую строку первой страницы:
+   * оно не совпадёт со строками второй ни при каком их числе, в отличие от числа строк.
+   */
+  await expect(page.getByRole('rowheader').first()).toHaveText(firstPageKeys[0] as string);
+
   await expect(rows).toHaveCount(PAGE_SIZE);
   expect(await page.getByRole('rowheader').allInnerTexts()).toEqual(firstPageKeys);
 
