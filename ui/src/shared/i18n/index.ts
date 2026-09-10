@@ -1,4 +1,5 @@
 export { dictionaries, en, ru } from './dictionaries';
+export { syncDocumentLanguage } from './document-language';
 export { currentLanguage, i18n, setLanguage } from './i18n';
 export {
   DEFAULT_LANGUAGE,
