@@ -1,15 +1,16 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, collection, data, task } from '@testing/msw/responses';
+import { API, bootstrap, data, failure, task, taskListing } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
+import { reachEnd, watched } from '@testing/intersection';
 import { renderApp } from '@testing/render';
 import { say } from '@testing/say';
-import { TASK_STATUSES } from '@/entities/task';
+import { TASK_COLUMN_PAGE_SIZE, TASK_STATUSES } from '@/entities/task';
 import { setToken } from '@/shared/api';
 
-/** Запросы списка за прогон: доска обязана обходиться одним. */
+/** Запросы списка за прогон: доска читает столбцами, и считать их приходится. */
 let seen: URL[] = [];
 
 beforeEach(() => {
@@ -27,12 +28,28 @@ function tasksForEveryStatus() {
   return TASK_STATUSES.map((status, index) => task(`DEMO-${index + 1}`, { status }));
 }
 
-function listing(items = tasksForEveryStatus(), meta = {}) {
+/**
+ * Подмена списка задач: отвечает по параметрам запроса, как настоящий бэкенд.
+ *
+ * Общий ответ на все запросы здесь не годится: столбцы различаются только отбором
+ * по статусу, и один ответ на всех показал бы каждую задачу в каждом столбце.
+ */
+function listing(items = tasksForEveryStatus()) {
   return http.get(`${API}/api/v1/tasks`, ({ request }) => {
     const url = new URL(request.url);
     seen.push(url);
-    return collection(items, meta);
+    return taskListing(url, items);
   });
+}
+
+/** Запросы одного столбца: те, что спрашивали его статус. */
+function requestsFor(status: string): URL[] {
+  return seen.filter((url) => url.searchParams.getAll('status').includes(status));
+}
+
+/** Запросы за карточками: у запроса за одним лишь числом размер страницы — единица. */
+function readRequests(): URL[] {
+  return seen.filter((url) => url.searchParams.get('limit') !== '1');
 }
 
 function column(status: string) {
@@ -51,7 +68,7 @@ describe('доска', () => {
 
     // На карточке подписи для приоритета нет — места нет, — но значение не пропало:
     // оно ушло в доступное имя.
-    const card = within(open).getByRole('article');
+    const card = await within(open).findByRole('article');
     expect(card).toHaveTextContent(`${say.ui('task.priorityLabel')} critical`);
   });
 
@@ -66,20 +83,47 @@ describe('доска', () => {
       const key = `DEMO-${index + 1}`;
       const section = column(status);
       // Свёрнутый столбец карточек не показывает: разворачиваем и проверяем содержимое.
-      if (within(section).queryByText(key) === null) {
-        await userEvent.setup().click(within(section).getByRole('button'));
+      // Спрашивается именно раскрытие, а не наличие карточки: столбец читает своё
+      // сам, и «карточки ещё нет» означает «не дочитали», а не «свёрнут».
+      const toggle = within(section).getByRole('button');
+      if (toggle.getAttribute('aria-expanded') === 'false') {
+        await userEvent.setup().click(toggle);
       }
       // Ссылка на карточке одна, и она на названии: ключ перестал быть единственной
       // мишенью, а вести в задачу стала вся карточка (`task-card.tsx`).
-      expect(within(section).getByRole('link', { name: `Задача ${key}` })).toHaveAttribute(
+      expect(await within(section).findByRole('link', { name: `Задача ${key}` })).toHaveAttribute(
         'href',
         `/tasks/${key}`,
       );
       expect(within(section).getByText(key)).toBeInTheDocument();
     }
+  });
 
-    // Один запрос списка на отрисовку доски.
-    expect(seen).toHaveLength(1);
+  it('на отрисовку доски уходит по запросу на столбец и один на число выдачи', async () => {
+    server.use(listing());
+
+    renderApp('/tasks?queue=DEMO&view=board');
+    await screen.findByRole('region', { name: 'open' });
+    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+
+    // Раскрытый столбец читает карточки, свёрнутый — только своё число, и лишнего
+    // запроса нет ни у одного: `done` и `cancelled` свёрнуты по умолчанию.
+    for (const status of ['done', 'cancelled']) {
+      const asked = requestsFor(status);
+      expect(asked).toHaveLength(1);
+      expect((asked[0] as URL).searchParams.get('limit')).toBe('1');
+    }
+    for (const status of ['backlog', 'open', 'in_progress', 'waiting']) {
+      const asked = requestsFor(status);
+      expect(asked).toHaveLength(1);
+      expect((asked[0] as URL).searchParams.get('limit')).toBe(String(TASK_COLUMN_PAGE_SIZE));
+    }
+
+    // Число выдачи спрашивается без задач и ровно один раз: столбцам оно неизвестно —
+    // свёрнутый не читает вовсе, а сложить шесть чисел значило бы считать за бэкенд.
+    const whole = seen.filter((url) => url.searchParams.getAll('status').length === 0);
+    expect(whole).toHaveLength(1);
+    expect((whole[0] as URL).searchParams.get('limit')).toBe('1');
   });
 
   it('закрытые и отменённые свёрнуты и показывают число, клик раскрывает', async () => {
@@ -91,27 +135,35 @@ describe('доска', () => {
 
     const toggle = within(done).getByRole('button');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(toggle).toHaveTextContent('1');
+    // Число у свёрнутого столбца — от бэкенда, а не от прочитанного: карточек он
+    // не читал ни одной.
+    await waitFor(() => expect(toggle).toHaveTextContent('1'));
     expect(within(done).queryByRole('link')).not.toBeInTheDocument();
 
     await userEvent.setup().click(toggle);
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(within(done).getByRole('link')).toBeInTheDocument();
+    expect(await within(done).findByRole('link')).toBeInTheDocument();
   });
 
-  it('статус в отборе на доску не уходит: столбцы и есть отбор по статусу', async () => {
+  it('статус отбора на доску не уходит: столбец спрашивает только свой', async () => {
     server.use(listing());
 
     renderApp('/tasks?queue=DEMO&view=board&status=open&assignee=owner&sort=key');
     await screen.findByRole('region', { name: 'open' });
+    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
 
-    const request = seen[0] as URL;
-    expect(request.searchParams.getAll('status')).toEqual([]);
-    // Исполнитель — общий фильтр, он действует и на доске.
-    expect(request.searchParams.getAll('assignee')).toEqual(['owner']);
-    // Порядок внутри столбца задан доской: свежие в деле сверху.
-    expect(request.searchParams.getAll('sort')).toEqual(['-last_entry_at']);
+    for (const url of seen) {
+      // Ни один запрос не несёт чужого статуса: у столбца стоит его собственный,
+      // у числа выдачи — никакого. Условие человека сюда не попадает вовсе, иначе
+      // пять столбцов из шести оказались бы пустыми, притворяясь честными.
+      expect(url.searchParams.getAll('status').length).toBeLessThanOrEqual(1);
+      // Исполнитель — общий фильтр, он действует и на доске.
+      expect(url.searchParams.getAll('assignee')).toEqual(['owner']);
+      // Порядок внутри столбца задан доской: свежие в деле сверху.
+      expect(url.searchParams.getAll('sort')).toEqual(['-last_entry_at']);
+    }
+    expect(requestsFor('open')).toHaveLength(1);
   });
 
   it('переключение в таблицу сохраняет отбор и меняет адрес', async () => {
@@ -133,35 +185,119 @@ describe('доска', () => {
     await user.click(screen.getByRole('button', { name: say.tasks('filters.expand') }));
     expect(screen.getByLabelText(say.tasks('filters.assignee'))).toHaveValue('owner');
   });
+});
 
-  it('недочитанная выдача помечает столбцы «из ?» и дочитывается кнопкой', async () => {
-    let page = 0;
+/** Длинный столбец: страниц в нём заведомо больше двух. */
+const LONG = Array.from({ length: TASK_COLUMN_PAGE_SIZE * 2 + 3 }, (_, index) =>
+  task(`DEMO-${index + 1}`, { status: 'open' }),
+);
+
+describe('дочитывание столбца', () => {
+  it('столбец рисует первую страницу, а остальное приносит прокрутка', async () => {
+    server.use(listing(LONG));
+
+    renderApp('/tasks?queue=DEMO&view=board');
+    const open = await screen.findByRole('region', { name: 'open' });
+
+    // Сразу после отрисовки в разметке ровно страница, а не вся выдача, — при том
+    // что число в заголовке названо полное и честное.
+    await waitFor(() =>
+      expect(within(open).getAllByRole('article')).toHaveLength(TASK_COLUMN_PAGE_SIZE),
+    );
+    expect(within(open).getByRole('button')).toHaveTextContent(String(LONG.length));
+    expect(requestsFor('open')).toHaveLength(1);
+
+    // Докрутили до конца столбца — пришла следующая страница. Ни одного нажатия.
+    await reachEnd();
+    await waitFor(() =>
+      expect(within(open).getAllByRole('article')).toHaveLength(TASK_COLUMN_PAGE_SIZE * 2),
+    );
+
+    await reachEnd();
+    await waitFor(() => expect(within(open).getAllByRole('article')).toHaveLength(LONG.length));
+
+    // Столько запросов, сколько страниц: лишних дочитываний нет.
+    expect(requestsFor('open')).toHaveLength(3);
+    expect((requestsFor('open')[2] as URL).searchParams.get('cursor')).toBe(
+      String(TASK_COLUMN_PAGE_SIZE * 2),
+    );
+  });
+
+  it('дочитанный столбец сторожа снимает: спрашивать больше нечего', async () => {
+    server.use(listing([task('DEMO-1', { status: 'open' })]));
+
+    renderApp('/tasks?queue=DEMO&view=board');
+    const open = await screen.findByRole('region', { name: 'open' });
+    await within(open).findByRole('article');
+
+    // Столбец короче страницы — наблюдателя над ним нет вовсе, и сколько бы раз
+    // сторож ни показался, запроса не будет: циклу начаться неоткуда.
+    expect(watched()).toEqual([]);
+    const before = readRequests().length;
+    await reachEnd();
+    expect(readRequests()).toHaveLength(before);
+  });
+
+  it('дочитывание названо словами, а отказ виден и чинится повтором', async () => {
+    let attempt = 0;
     server.use(
       http.get(`${API}/api/v1/tasks`, ({ request }) => {
         const url = new URL(request.url);
         seen.push(url);
-        page += 1;
-        return page === 1
-          ? collection([task('DEMO-1', { status: 'open' })], {
-              has_more: true,
-              next_cursor: 'next',
-            })
-          : collection([task('DEMO-2', { status: 'open' })]);
+        if (url.searchParams.get('cursor') === null) return taskListing(url, LONG);
+        attempt += 1;
+        // Первая попытка дочитать — отказ, вторая (по кнопке) — страница.
+        return attempt === 1 ? failure('internal_error', 500) : taskListing(url, LONG);
       }),
     );
 
     renderApp('/tasks?queue=DEMO&view=board');
-
     const open = await screen.findByRole('region', { name: 'open' });
-    expect(within(open).getByRole('button')).toHaveTextContent(
-      say.tasks('board.ofUnknown', { count: 1 }),
+    await waitFor(() =>
+      expect(within(open).getAllByRole('article')).toHaveLength(TASK_COLUMN_PAGE_SIZE),
     );
 
-    await userEvent.setup().click(screen.getByRole('button', { name: say.tasks('board.more') }));
+    await reachEnd();
 
-    expect(await within(open).findByRole('link', { name: 'Задача DEMO-2' })).toBeInTheDocument();
-    expect(within(open).getByRole('button')).toHaveTextContent('2');
-    expect(seen).toHaveLength(2);
-    expect((seen[1] as URL).searchParams.get('cursor')).toBe('next');
+    // Отказ сказан словами, а не оборванной подгрузкой; прочитанное осталось на месте.
+    expect(await within(open).findByText(say.errors('internal_error'))).toBeInTheDocument();
+    expect(within(open).getAllByRole('article')).toHaveLength(TASK_COLUMN_PAGE_SIZE);
+
+    // И сторож снят: пока отказ не разобран, столбец сам не спрашивает — иначе
+    // отказ и новый запрос гонялись бы друг за другом в каждом кадре.
+    expect(watched()).toEqual([]);
+
+    await userEvent
+      .setup()
+      .click(within(open).getByRole('button', { name: say.ui('query.retry') }));
+
+    await waitFor(() =>
+      expect(within(open).getAllByRole('article')).toHaveLength(TASK_COLUMN_PAGE_SIZE * 2),
+    );
+    expect(within(open).queryByText(say.errors('internal_error'))).not.toBeInTheDocument();
+  });
+
+  it('столбец, которого не прочитали вовсе, говорит об этом словами', async () => {
+    server.use(
+      http.get(`${API}/api/v1/tasks`, ({ request }) => {
+        const url = new URL(request.url);
+        seen.push(url);
+        return url.searchParams.getAll('status').includes('open')
+          ? failure('internal_error', 500)
+          : taskListing(url, tasksForEveryStatus());
+      }),
+    );
+
+    renderApp('/tasks?queue=DEMO&view=board');
+    const open = await screen.findByRole('region', { name: 'open' });
+
+    // Пустой столбец и непрочитанный — разные беды, и путать их нельзя: у первого
+    // сказано «Пусто», у второго — что случилось, и рядом кнопка повтора.
+    expect(await within(open).findByText(say.errors('internal_error'))).toBeInTheDocument();
+    expect(within(open).queryByText(say.tasks('board.empty'))).not.toBeInTheDocument();
+    expect(within(open).getByRole('button', { name: say.ui('query.retry') })).toBeInTheDocument();
+
+    // Соседний столбец своё прочитал: отказ одного не гасит доску.
+    expect(await within(column('waiting')).findByRole('article')).toBeInTheDocument();
   });
 });

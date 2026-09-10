@@ -5,6 +5,7 @@ import { clearToken } from '@/shared/api';
 // Импортируется после подмены потока и точечно, минуя вход среза: вход тянет за собой
 // клиент SSE, а он в этот момент ещё не подменён — и настоящий в jsdom не работает.
 import { liveJournal } from './live-journal';
+import { resetIntersection, installIntersection } from './intersection';
 import { resetDeferred } from '@/features/live-journal/model/deferred';
 import { server } from './msw/server';
 
@@ -35,6 +36,13 @@ globalThis.ResizeObserver ??= class {
   disconnect(): void {}
 };
 
+/*
+ * `IntersectionObserver` в jsdom тоже нет, а столбец доски дочитывается им по мере
+ * прокрутки (`src/shared/lib/end-reach.ts`). Здесь он не заглушка, а управляемый:
+ * геометрии в jsdom нет, и «сторож показался» тест говорит сам (`reachEnd`).
+ */
+installIntersection();
+
 // Подмена API поднимается на весь прогон: тест, который сходил в сеть мимо обработчика,
 // должен падать, а не тихо получать чужой ответ.
 beforeAll(() => {
@@ -53,6 +61,9 @@ afterEach(() => {
   window.sessionStorage.clear();
   window.localStorage.clear();
   liveJournal.reset();
+  // Наблюдатели пересечения живут в модуле: без уборки следующий тест начинается
+  // со сторожами, стоящими на узлах снятой страницы.
+  resetIntersection();
   // Отложенные обновления списка живут в модуле, а не в React: без уборки следующий
   // тест начинается с чужой полосой «изменилось задач: N».
   resetDeferred();

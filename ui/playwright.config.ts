@@ -44,19 +44,19 @@ export default defineConfig({
     {
       name: 'светлая',
       testIgnore:
-        /(answer|case-readable|case-latest|live|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
+        /(answer|board-column|case-readable|case-latest|live|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
       testIgnore:
-        /(answer|case-readable|case-latest|live|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
+        /(answer|board-column|case-readable|case-latest|live|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
     },
     {
       name: 'запись',
       testMatch:
-        /(answer|case-readable|case-latest|live|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
+        /(answer|board-column|case-readable|case-latest|live|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
       // По одному пишущему сценарию за раз: они меняют одну и ту же демо-установку,
       // и параллельно каждый видел бы следы соседа.
       fullyParallel: false,

@@ -5,14 +5,11 @@
 export const tasks = {
   title: 'Tasks',
   loading: 'Loading the tasks…',
-  // Сколько нашлось по отбору (таблица) и сколько прочитано (доска): это разные числа,
-  // и называть их одним словом нельзя.
+  // Сколько нашлось по отбору — и у таблицы, и у доски: числа по статусам стоят
+  // в заголовках столбцов, а это про всю выдачу.
   found_zero: 'Nothing found',
   found_one: '{{count}} task found',
   found_other: '{{count}} tasks found',
-  shown_zero: 'Nothing shown',
-  shown_one: '{{count}} task shown',
-  shown_other: '{{count}} tasks shown',
   empty: 'No tasks match these conditions',
   resetFilters: 'Reset the filters',
   beyond_one:
@@ -37,13 +34,12 @@ export const tasks = {
   },
 
   board: {
-    more: 'More',
-    loadingMore: 'Reading…',
-    partial: 'Not all tasks of the selection are shown: the columns are read on demand.',
-    all_one: 'All tasks of the selection are shown, {{count}} task in total.',
-    all_other: 'All tasks of the selection are shown, {{count}} tasks in total.',
-    // «сколько-то из ?»: общее число знает только дочитанная до конца выдача.
+    reading: 'Reading the column…',
+    readingMore: 'Reading more…',
+    // «сколько-то из ?»: числа выдачи бэкенд не назвал, и точным его не заменить.
     ofUnknown: '{{count}} of ?',
+    // Свёрнутый столбец не читал ничего: без числа от бэкенда сказать ему нечего.
+    unknown: '?',
     empty: 'Empty',
   },
 

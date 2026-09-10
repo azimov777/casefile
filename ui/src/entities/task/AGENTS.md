@@ -6,11 +6,13 @@
 
 ## Папки
 
-- `api/` — `tasks.ts`: параметры отбора, запрос списка, ключи запросов, наборы значений
+- `api/` — `tasks.ts`: параметры отбора, запросы списка, столбца доски и числа выдачи,
+  ключи запросов, наборы значений
 - `ui/` — строка таблицы и заголовки её столбцов
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `tasksQueryOptions`, `fetchTasks`, `taskKeys`,
-  `TASK_STATUSES`, `TASK_PRIORITIES`, `TASK_LIST_FIELDS`, `TASK_PAGE_SIZE`, `TASK_COLUMNS`,
-  `TaskRow`, типы `Task`, `TaskFeatures`, `TaskListParams`, `TaskStatus`, `TaskPriority`
+- `index.ts` — публичный интерфейс среза: `tasksQueryOptions`, `tasksColumnQueryOptions`,
+  `tasksTotalQueryOptions`, `fetchTasks`, `taskKeys`, `TASK_STATUSES`, `TASK_PRIORITIES`,
+  `TASK_LIST_FIELDS`, `TASK_PAGE_SIZE`, `TASK_COLUMN_PAGE_SIZE`, `TASK_COLUMNS`, `TaskRow`,
+  типы `Task`, `TaskFeatures`, `TaskListParams`, `TaskStatus`, `TaskPriority`
