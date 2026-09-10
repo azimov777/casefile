@@ -110,6 +110,7 @@ describe('прочие шкалы проекта: класс от места в�
     ['tracking-caps', 'tracking-normal'],
     ['ease-fast', 'ease-linear'],
     ['animate-appear', 'animate-none'],
+    ['min-w-list', 'min-w-0'],
   ])('%s уступает %s', (own, outer) => {
     expect(cn(own, outer)).toBe(outer);
   });

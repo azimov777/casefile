@@ -342,19 +342,16 @@ test.describe('первый экран списка', () => {
 test.describe('список на узком экране', () => {
   test.use({ viewport: { width: 900, height: 800 } });
 
-  test('строка отбора и таблица укладываются без горизонтальной прокрутки', async ({
-    page,
-    request,
-  }) => {
+  test('страница не едет вбок, а название держит свою ширину', async ({ page, request }) => {
     test.setTimeout(120_000);
     await seed(request);
     await silenceJournal(page);
 
     await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
+    await fontsReady(page);
 
-    // Таблица сжимаема: обёртка обрезает переполнение (`overflow-x: clip`) и потому
-    // прокручиваемым предком не становится — иначе липкая шапка перестала бы липнуть.
+    // Страница вширь не едет: прокрутка таблицы остаётся внутри её рамки.
     const scroll = await page.evaluate(() => ({
       width: document.documentElement.scrollWidth,
       client: document.documentElement.clientWidth,
@@ -366,7 +363,18 @@ test.describe('список на узком экране', () => {
       `текст «${MARKER}»`,
     );
 
-    await rows(page).last().scrollIntoViewIfNeeded();
-    await expect(page.getByRole('columnheader', { name: 'Ключ' })).toBeInViewport();
+    /*
+     * 900 px — середина той полосы, где панель забирает место, а таблица его не
+     * получает: здесь у названия было 66 px, то есть три буквы и многоточие. Теперь
+     * таблица не сжимается ниже своего минимума, а прокручивается, и названию
+     * достаётся та же строка текста, что и на телефоне (UI-66).
+     *
+     * Липкой шапки на этой ширине нет и быть не может: прокрутка вбок делает рамку
+     * прокручиваемым предком, и шапка липнет к ней (`docs/notes/ui.md`, «Липкую шапку
+     * таблицы ломает `overflow` у её обёртки»). Что шапка жива там, где таблица
+     * помещается целиком, стережёт сценарий выше — на 1440 px.
+     */
+    const title = await page.getByRole('columnheader', { name: 'Название' }).boundingBox();
+    expect(Math.round(title?.width ?? 0)).toBeGreaterThanOrEqual(184);
   });
 });
