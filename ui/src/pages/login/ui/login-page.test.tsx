@@ -6,6 +6,7 @@ import { API, bootstrap, collection, data, failure } from '@testing/msw/response
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
 import { setToken } from '@/shared/api';
+import { en, ru } from '@/shared/i18n';
 
 const VALID = 'trk_valid';
 
@@ -26,10 +27,14 @@ beforeEach(() => {
   server.use(http.get(`${API}/api/v1/tasks`, () => collection([])));
 });
 
+/*
+ * Подписи берутся из словаря тем же ключом, что и в коде, а не повторены строкой:
+ * правка формулировки не роняет десяток тестов, а пропавший ключ роняет.
+ */
 async function submitToken(token: string) {
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText('Токен участника'), token);
-  await user.click(screen.getByRole('button', { name: 'Войти' }));
+  await user.type(screen.getByLabelText(ru.login.tokenLabel), token);
+  await user.click(screen.getByRole('button', { name: ru.login.submit }));
 }
 
 describe('экран входа', () => {
@@ -53,10 +58,8 @@ describe('экран входа', () => {
 
     await submitToken(CYRILLIC);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /Токен такого вида отправить нельзя/,
-    );
-    expect(screen.queryByText(/Сервер недоступен/)).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(ru.errors.token_not_header_safe);
+    expect(screen.queryByText(ru.errors.network_error)).not.toBeInTheDocument();
     // Запроса не было вовсе: заголовка из такого значения не выходит.
     expect(asked).toBe(0);
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
@@ -68,9 +71,7 @@ describe('экран входа', () => {
 
     await submitToken(CONTROL);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /Токен такого вида отправить нельзя/,
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(ru.errors.token_not_header_safe);
   });
 
   it('токен без префикса trk_ уходит на сервер: формат интерфейс не угадывает', async () => {
@@ -87,7 +88,7 @@ describe('экран входа', () => {
     // по существу, решает сервер, а не мы.
     await submitToken('not-a-tracker-token');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Токен неизвестен или отозван.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(ru.errors.unauthorized);
     expect(seen).toBe('Bearer not-a-tracker-token');
   });
 
@@ -97,7 +98,7 @@ describe('экран входа', () => {
 
     await submitToken(VALID);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Сервер недоступен/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(ru.errors.network_error);
   });
 
   it('испорченный токен в хранилище уводит на вход, а не на отказ сети', async () => {
@@ -110,7 +111,7 @@ describe('экран входа', () => {
 
     renderApp('/tasks');
 
-    expect(await screen.findByLabelText('Токен участника')).toBeInTheDocument();
+    expect(await screen.findByLabelText(ru.login.tokenLabel)).toBeInTheDocument();
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
   });
 
@@ -132,9 +133,9 @@ describe('экран входа', () => {
 
     await submitToken('trk_wrong');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Токен неизвестен или отозван.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(ru.errors.unauthorized);
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
-    expect(screen.getByLabelText('Токен участника')).toBeInTheDocument();
+    expect(screen.getByLabelText(ru.login.tokenLabel)).toBeInTheDocument();
   });
 
   it('не пускает общий агентский токен: за ним нет участника', async () => {
@@ -143,7 +144,7 @@ describe('экран входа', () => {
 
     await submitToken(VALID);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('общий агентский токен');
+    expect(await screen.findByRole('alert')).toHaveTextContent(ru.errors.participant_required);
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
   });
 
@@ -153,12 +154,12 @@ describe('экран входа', () => {
 
     await submitToken(VALID);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Сервер недоступен');
+    expect(await screen.findByRole('alert')).toHaveTextContent(ru.errors.network_error);
   });
 
   it('пустое поле не отправляется', () => {
     renderApp('/login');
-    expect(screen.getByRole('button', { name: 'Войти' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: ru.login.submit })).toBeDisabled();
   });
 
   it('вошедшего на экран входа не пускает', async () => {
@@ -166,6 +167,55 @@ describe('экран входа', () => {
     renderApp('/login');
 
     await submitToken(VALID);
-    await waitFor(() => expect(screen.queryByLabelText('Токен участника')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByLabelText(ru.login.tokenLabel)).not.toBeInTheDocument(),
+    );
+  });
+});
+
+describe('экран входа на английском', () => {
+  it('заголовок, подпись поля, подсказка и кнопка — из английского словаря', () => {
+    renderApp('/login', { language: 'en' });
+
+    expect(screen.getByRole('heading', { name: en.login.title })).toBeInTheDocument();
+    expect(screen.getByText(en.login.intro)).toBeInTheDocument();
+    expect(screen.getByLabelText(en.login.tokenLabel)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.login.submit })).toBeInTheDocument();
+    // Подсказка собрана `<Trans>`: команда внутри фразы стоит отдельным элементом,
+    // а не двумя ключами по краям.
+    expect(screen.getByText('docker compose run --rm init').tagName).toBe('CODE');
+  });
+
+  it('русской подписи на английском экране не осталось ни одной', () => {
+    const { container } = renderApp('/login', { language: 'en' });
+
+    /*
+     * Единственная законная кириллица экрана — название языка `Русский` в списке
+     * переключателя, а список Radix в jsdom не открывается: закрытый переключатель
+     * показывает только выбранный язык. Значит на английском экране кириллицы нет
+     * вовсе, и любое её появление — подпись, набранная мимо словаря.
+     */
+    const cyrillic = (container.textContent ?? '').match(/[А-Яа-яЁё]+/g) ?? [];
+    expect([...new Set(cyrillic)]).toEqual([]);
+  });
+
+  it('отказ при неверном токене тоже английский', async () => {
+    server.use(bootstrapByToken());
+    renderApp('/login', { language: 'en' });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(en.login.tokenLabel), 'trk_wrong');
+    await user.click(screen.getByRole('button', { name: en.login.submit }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.unauthorized);
+  });
+
+  it('переключатель языка стоит на самом входе: он нужен до входа, а не после', () => {
+    renderApp('/login', { language: 'en' });
+
+    // Открыть список Radix в jsdom нельзя — выбор проверяет сквозной сценарий; здесь
+    // проверяется, что переключатель на экране есть и знает текущий язык.
+    const trigger = screen.getByRole('combobox', { name: en.ui.language });
+    expect(trigger).toHaveTextContent('English');
   });
 });

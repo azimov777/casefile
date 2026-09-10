@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { errorMessage } from '@/shared/errors';
 import { Button, Callout, Input } from '@/shared/ui';
 import { useLogin } from '../model/use-login';
@@ -13,6 +14,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   const login = useLogin();
   const inputId = useId();
   const hintId = useId();
+  const { t } = useTranslation('login');
 
   const failed = login.error !== null && login.error !== undefined;
 
@@ -26,7 +28,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
       <div className="flex flex-col gap-2">
         <label className="font-semibold" htmlFor={inputId}>
-          Токен участника
+          {t('tokenLabel')}
         </label>
         <Input
           id={inputId}
@@ -37,17 +39,22 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           spellCheck={false}
           aria-invalid={failed}
           aria-describedby={hintId}
-          placeholder="trk_..."
+          placeholder={t('tokenPlaceholder')}
         />
         <span className="text-meta text-muted" id={hintId}>
-          Токен печатает <code>docker compose run --rm init</code> в репозитории бэкенда. Он
-          хранится только в этом браузере и уходит на сервер заголовком.
+          {/*
+           * Команда стоит внутри фразы, и потому фраза размечена целиком, а не собрана
+           * из кусков вокруг `<code>`: порядок слов у языков разный, и склейка
+           * `t('a') + <code/> + t('b')` переставилась бы неверно или не переставилась
+           * вовсе. Разметка живёт в словаре тегом `<cmd>`, элемент — здесь.
+           */}
+          <Trans t={t} i18nKey="tokenHint" components={{ cmd: <code /> }} />
         </span>
       </div>
 
       <div>
         <Button type="submit" disabled={login.isPending || token.trim() === ''}>
-          {login.isPending ? 'Проверяем…' : 'Войти'}
+          {login.isPending ? t('submitting') : t('submit')}
         </Button>
       </div>
 

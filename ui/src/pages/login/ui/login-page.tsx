@@ -1,12 +1,15 @@
+import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate } from 'react-router';
 import { useSessionExpired, useSessionToken } from '@/entities/session';
 import { LoginForm } from '@/features/auth';
+import { LanguageSwitch } from '@/features/switch-language';
 import { Callout } from '@/shared/ui';
 
 export function LoginPage() {
   const token = useSessionToken();
   const expired = useSessionExpired();
   const navigate = useNavigate();
+  const { t } = useTranslation('login');
 
   // Вошедшему на экране входа делать нечего.
   if (token !== null) return <Navigate to="/tasks" replace />;
@@ -25,18 +28,22 @@ export function LoginPage() {
      */
     <main className="flex min-h-full items-start justify-center px-4 pt-[clamp(calc(var(--spacing)*8),18vh,calc(var(--spacing)*48))] pb-8">
       <div className="flex w-full max-w-112 flex-col gap-6 rounded-control border border-line bg-surface p-8">
-        <div>
-          <h1 className="text-title">Трекер</h1>
-          <p className="mt-1 text-meta text-muted">
-            Наблюдение за задачами, которые ведут агенты, и ответы на их вопросы.
-          </p>
+        {/*
+         * Переключатель языка стоит на самом входе, а не только в оболочке: сюда человек
+         * попадает первым делом, и язык ему может понадобиться до того, как он вообще
+         * получит право что-то увидеть.
+         */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-title">{t('title')}</h1>
+            <p className="mt-1 text-meta text-muted">{t('intro')}</p>
+          </div>
+          {/* Отрицательное поле гасит внутренний отступ кнопки: подпись встаёт по краю
+              карточки, а область нажатия остаётся прежней. */}
+          <LanguageSwitch className="-mr-2 shrink-0" />
         </div>
 
-        {expired ? (
-          <Callout tone="danger">
-            Сеанс закончился: сервер больше не принимает сохранённый токен. Введите токен заново.
-          </Callout>
-        ) : null}
+        {expired ? <Callout tone="danger">{t('expired')}</Callout> : null}
 
         <LoginForm onSuccess={() => void navigate('/tasks', { replace: true })} />
       </div>
