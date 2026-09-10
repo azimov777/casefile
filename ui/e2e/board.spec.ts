@@ -366,3 +366,103 @@ test('у карточек столбца подвал на одном месте
   expect(Math.max(...distances) - Math.min(...distances)).toBeLessThanOrEqual(1);
   for (const card of measured) expect(card.titleLines).toBeLessThanOrEqual(2);
 });
+
+/**
+ * Высота окна, при которой самый длинный столбец демо заведомо не помещается в доску.
+ *
+ * Доска забирает остаток окна под заголовком с отбором, а карточка занимает около
+ * сотни пикселей: на низком окне переполняется даже столбец из двух задач. Числом,
+ * а не подбором под состав демо: длину столбцов решает бэкенд, и выписанное здесь
+ * «две карточки» устарело бы вместе с ним.
+ */
+const SHORT_WINDOW = { width: 1024, height: 420 };
+
+test('столбец прокручивается сам, а соседние столбцы и страница стоят на месте', async ({
+  page,
+  request,
+}) => {
+  const all = await tasksByStatus(request);
+  const longest = [...all.entries()].sort(([, left], [, right]) => right.length - left.length)[0];
+  expect(longest, 'в демо нет ни одной задачи').toBeDefined();
+  const [status] = longest as [string, string[]];
+
+  await silenceJournal(page);
+  await page.setViewportSize(SHORT_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const measure = () =>
+    page.evaluate((scrolled) => {
+      const sections = Array.from(document.querySelectorAll('section[aria-label]')).filter(
+        (node) => node.getAttribute('aria-label') !== 'Отбор задач',
+      );
+      const mine = sections.find((node) => node.getAttribute('aria-label') === scrolled);
+      return {
+        // Страница целиком: доска обязана помещаться в окно, иначе прокрутки
+        // окажется две и колесо будет двигать то одну, то другую.
+        pageScroll: Math.round(window.scrollY),
+        pageHeight: document.documentElement.scrollHeight,
+        windowHeight: document.documentElement.clientHeight,
+        column: {
+          over: (mine?.scrollHeight ?? 0) - (mine?.clientHeight ?? 0),
+          top: mine?.scrollTop ?? 0,
+        },
+        // Соседи: их место на экране и их собственная прокрутка.
+        others: sections
+          .filter((node) => node !== mine)
+          .map((node) => ({
+            x: Math.round(node.getBoundingClientRect().x),
+            y: Math.round(node.getBoundingClientRect().y),
+            top: node.scrollTop,
+          })),
+      };
+    }, status);
+
+  const before = await measure();
+  expect(before.pageHeight, 'доска не поместилась в окно').toBe(before.windowHeight);
+  expect(before.column.over, `столбцу ${status} нечего прокручивать`).toBeGreaterThan(0);
+
+  // Докручиваем столбец до самого конца: до этого места человек доезжает колесом,
+  // и именно здесь прокрутка цеплялась за страницу в WebKit (UI-68).
+  await column(page, status).evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await expect.poll(async () => (await measure()).column.top).toBeGreaterThan(0);
+
+  const after = await measure();
+  expect(after.pageScroll, 'страница поехала следом за столбцом').toBe(before.pageScroll);
+  expect(after.pageHeight).toBe(before.pageHeight);
+  expect(after.others, 'соседние столбцы сдвинулись').toEqual(before.others);
+});
+
+test('ниже точки остановки доска остаётся на прокрутке страницы', async ({ page, request }) => {
+  const all = await tasksByStatus(request);
+  const longest = [...all.entries()].sort(([, left], [, right]) => right.length - left.length)[0];
+  const [status] = longest as [string, string[]];
+
+  await silenceJournal(page);
+  /*
+   * Окно той же высоты, что у сценария выше, и другой ширины: решает именно ширина.
+   * Уже `fold` (44rem) доске остаётся полторы карточки — заголовок с отбором занимает
+   * там треть экрана, — и прокрутка страницы отдаёт столбцу весь экран. На телефоне
+   * это дороже, чем видеть соседей (UI-68).
+   */
+  await page.setViewportSize({ width: 320, height: SHORT_WINDOW.height });
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const measured = await column(page, status).evaluate((node) => ({
+    over: node.scrollHeight - node.clientHeight,
+    pageOver: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
+
+  // Столбец здесь не прокручиваемая область вовсе: он ровно своей высоты, а в окно
+  // не помещается страница целиком — как это и было до UI-68.
+  expect(measured.over).toBe(0);
+  expect(measured.pageOver).toBeGreaterThan(0);
+  // И это не повод странице поехать вбок.
+  expect(measured.sideways).toBe(0);
+});

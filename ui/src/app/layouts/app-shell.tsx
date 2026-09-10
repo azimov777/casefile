@@ -62,7 +62,7 @@ export function AppShell() {
       <div className="fold:col-start-2">
         <AppTopbar live={live} openerRef={openerRef} onOpenSide={() => setSideOpen(true)} />
 
-        <div className="px-4 pt-4 pb-12">
+        <div className="px-4 pt-4 pb-(--ui-page-tail)">
           {/*
            * Вторая граница, внутри оболочки: упавшая страница не уносит навигацию,
            * и человек уходит с неё ссылкой, а не перезагрузкой.
