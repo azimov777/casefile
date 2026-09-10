@@ -73,7 +73,7 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
          * занимает: то же число человек видит в строке управления, рядом с заголовком
          * страницы.
          */}
-        <caption className="sr-only">Задач по отбору: {tasks.length}</caption>
+        <caption className="sr-only">Задач на этой странице: {tasks.length}</caption>
         <thead>
           <tr>
             {TASK_COLUMNS.map((column, index) => (

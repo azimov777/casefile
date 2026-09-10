@@ -133,10 +133,29 @@ test('пустая выдача объясняется и предлагает �
   await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toBeEnabled();
 });
 
-test('негодный курсор в адресе объясняется по-русски', async ({ page }) => {
-  await page.goto('/tasks?queue=DEMO&cursor=неведомо');
+/**
+ * Ссылка на страницу, которой в этой выдаче нет: её переслали до того, как отбор сузили,
+ * или просто набрали руками. Бэкенд отвечает на смещение за концом выдачи пустой
+ * страницей и прежним `total` (TRK-41) — значит, экран обязан сказать, что задачи есть,
+ * просто не здесь, и дать чем вернуться.
+ *
+ * Раньше отсюда проверялся негодный курсор в адресе. Курсора в адресе таблицы больше
+ * нет — страница адресуется номером (UI-65), — и взять 4xx из адреса списка нечем:
+ * негодный номер читается как первая страница. Отказ по коду проверяет
+ * `resilience.spec.ts`, подменяя ответ в браузере.
+ */
+test('ссылка на страницу за концом выдачи объясняется и возвращает рядом', async ({ page }) => {
+  await page.goto('/tasks?queue=DEMO&page=99');
 
-  await expect(page.getByRole('alert')).toContainText('Курсор страницы не разбирается.');
+  await expect(page.getByText(/по этим условиям их \d+/)).toBeVisible();
+  // Сброс отбора здесь ни при чём: условия нашли задачи, кончилась выдача.
+  await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toHaveCount(0);
+
+  const pager = page.getByRole('navigation', { name: 'Страницы выдачи' });
+  await pager.getByRole('link', { name: 'Страница 1', exact: true }).click();
+
+  await expect(page).not.toHaveURL(/page=/);
+  await expect(rows(page).first()).toBeVisible();
 });
 
 test('доступность списка задач', async ({ page }) => {

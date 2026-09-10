@@ -59,12 +59,27 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
   };
 }
 
-/** Страница коллекции в оболочке контракта: `data` плюс `meta` с курсором. */
+/**
+ * Страница коллекции в оболочке контракта: `data` плюс `meta` с курсором.
+ *
+ * `total` здесь нет намеренно: из всех коллекций API его считает только список задач
+ * (TRK-41), у прочих в нём `null` — «не считали». Страницу списка задач поэтому
+ * собирают `taskPage`, а не этим.
+ */
 export function collection<T>(items: T[], meta: Partial<PageMeta> = {}) {
   return HttpResponse.json({
     data: items,
     meta: { has_more: false, next_cursor: null, ...meta },
   });
+}
+
+/**
+ * Страница `GET /api/v1/tasks`. Отличается от прочих коллекций общим числом выдачи:
+ * список задач заполняет `meta.total` всегда, и по нему интерфейс считает страницы.
+ * Умолчание — длина отданного куска: столько задач и нашлось, если страница одна.
+ */
+export function taskPage(items: Task[], meta: Partial<PageMeta> = {}) {
+  return collection(items, { total: items.length, ...meta });
 }
 
 /**

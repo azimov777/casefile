@@ -19,7 +19,7 @@ function filters(overrides: Partial<TaskFilters> = {}): TaskFilters {
 describe('чтение отбора из адреса', () => {
   it('разбирает повторяющиеся параметры и флажки', () => {
     const params = new URLSearchParams(
-      'queue=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&cursor=abc',
+      'queue=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&page=3',
     );
 
     expect(readFilters(params)).toEqual({
@@ -34,7 +34,7 @@ describe('чтение отбора из адреса', () => {
       withRemarks: true,
       query: '',
       sort: 'key',
-      cursor: 'abc',
+      page: 3,
       collapsed: DEFAULT_COLLAPSED,
     });
   });
@@ -46,6 +46,20 @@ describe('чтение отбора из адреса', () => {
     expect(parsed.status).toEqual(['open']);
     expect(parsed.priority).toEqual([]);
     expect(parsed.sort).toBe(DEFAULT_SORT);
+  });
+
+  it('негодный номер страницы читает как первую, а не как отказ', () => {
+    for (const search of ['page=abc', 'page=0', 'page=-2', 'page=1.5', 'page=']) {
+      expect(readFilters(new URLSearchParams(search)).page, search).toBe(1);
+    }
+  });
+
+  it('старая ссылка с курсором открывает начало списка: курсора в адресе больше нет', () => {
+    const parsed = readFilters(new URLSearchParams('queue=DEMO&cursor=eyJrIjog'));
+
+    expect(parsed.page).toBe(1);
+    expect(parsed.queue).toBe('DEMO');
+    expect(writeFilters(parsed).has('cursor')).toBe(false);
   });
 });
 
@@ -82,7 +96,7 @@ describe('запись отбора в адрес', () => {
 
   it('переживает круг: адрес → отбор → адрес', () => {
     const source = new URLSearchParams(
-      'queue=DEMO&status=open&priority=low&assignee=owner&text=очередь&blocked=true&questions=true&sort=key&cursor=xyz',
+      'queue=DEMO&status=open&priority=low&assignee=owner&text=очередь&blocked=true&questions=true&sort=key&page=4',
     );
 
     expect(writeFilters(readFilters(source)).toString()).toBe(source.toString());
@@ -102,7 +116,7 @@ describe('перевод отбора в параметры запроса', () 
       text: 'поиск',
       sort: [DEFAULT_SORT],
     });
-    expect(params.cursor).toBeUndefined();
+    expect(params.offset).toBeUndefined();
   });
 
   it('«есть открытые вопросы» уезжает условием языка запросов: числом его не выразить', () => {
@@ -125,20 +139,33 @@ describe('перевод отбора в параметры запроса', () 
       filters({ queue: 'DEMO', status: ['open'], withQuestions: true, query: ' status: done ' }),
     );
 
-    expect(params).toEqual({ query: 'status: done', sort: [DEFAULT_SORT], cursor: undefined });
+    expect(params).toEqual({ query: 'status: done', sort: [DEFAULT_SORT], offset: undefined });
   });
 
-  it('курсор и порядок едут при любом виде отбора', () => {
-    expect(filtersToListParams(filters({ cursor: 'abc', sort: '-priority' }))).toMatchObject({
-      cursor: 'abc',
+  it('номер страницы уезжает смещением, а порядок — при любом виде отбора', () => {
+    // Страница 3 по пятьдесят строк начинается со сто первой: `(3 - 1) * 50`.
+    expect(filtersToListParams(filters({ page: 3, sort: '-priority' }))).toMatchObject({
+      offset: 100,
       sort: ['-priority'],
     });
+  });
+
+  it('первая страница смещения не просит: `offset=0` — тот же запрос, только шумнее', () => {
+    expect(filtersToListParams(filters({ page: 1 })).offset).toBeUndefined();
+  });
+
+  it('доска смещения не получает: её страницы копятся своей подгрузкой', () => {
+    expect(filtersToListParams(filters({ view: 'board', page: 3 })).offset).toBeUndefined();
+  });
+
+  it('курсора в параметрах таблицы нет вовсе: он и смещение вместе — отказ бэкенда', () => {
+    expect(filtersToListParams(filters({ page: 3 }))).not.toHaveProperty('cursor');
   });
 });
 
 describe('признак «условия заданы»', () => {
-  it('порядок и курсор условиями не считаются', () => {
-    expect(hasConditions(filters({ sort: 'key', cursor: 'abc' }))).toBe(false);
+  it('порядок и номер страницы условиями не считаются', () => {
+    expect(hasConditions(filters({ sort: 'key', page: 3 }))).toBe(false);
     expect(hasConditions(filters({ blocked: true }))).toBe(true);
     expect(hasConditions(filters({ query: 'status: open' }))).toBe(true);
   });

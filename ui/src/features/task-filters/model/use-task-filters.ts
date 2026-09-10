@@ -4,10 +4,8 @@ import { EMPTY_FILTERS, readFilters, writeFilters, type TaskFilters } from './fi
 
 export interface TaskFiltersControl {
   filters: TaskFilters;
-  /** Меняет условия. Курсор сбрасывается: страница чужого отбора ничего не значит. */
+  /** Меняет условия. Номер страницы сбрасывается: страница чужого отбора ничего не значит. */
   apply: (changes: Partial<TaskFilters>) => void;
-  /** Следующая страница по `meta.next_cursor`. */
-  goToPage: (cursor: string) => void;
   reset: () => void;
 }
 
@@ -15,9 +13,10 @@ export interface TaskFiltersControl {
  * Отбор как состояние адреса. Своего состояния у списка нет вовсе: перезагрузка
  * страницы и открытая по ссылке вкладка обязаны показать одно и то же.
  *
- * Правка условий заменяет запись в истории, а «ещё» добавляет новую. Иначе одно
- * нажатие «назад» после трёх страниц выдачи уводило бы со списка вовсе, а каждая
- * буква, набранная в поле текста, оставляла бы в истории свой след.
+ * Правка условий заменяет запись в истории. Иначе каждая буква, набранная в поле
+ * текста, оставляла бы в истории свой след. Переход по страницам запись добавляет,
+ * и делает это сам браузер: страницы — обычные ссылки (`src/pages/tasks/ui/tasks-pagination.tsx`),
+ * и «назад» после них возвращает на прежнюю страницу выдачи.
  */
 export function useTaskFilters(): TaskFiltersControl {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,16 +25,9 @@ export function useTaskFilters(): TaskFiltersControl {
   const apply = useCallback(
     (changes: Partial<TaskFilters>) => {
       setSearchParams(
-        (previous) => writeFilters({ ...readFilters(previous), ...changes, cursor: '' }),
+        (previous) => writeFilters({ ...readFilters(previous), page: 1, ...changes }),
         { replace: true },
       );
-    },
-    [setSearchParams],
-  );
-
-  const goToPage = useCallback(
-    (cursor: string) => {
-      setSearchParams((previous) => writeFilters({ ...readFilters(previous), cursor }));
     },
     [setSearchParams],
   );
@@ -54,5 +46,5 @@ export function useTaskFilters(): TaskFiltersControl {
     );
   }, [setSearchParams]);
 
-  return { filters, apply, goToPage, reset };
+  return { filters, apply, reset };
 }

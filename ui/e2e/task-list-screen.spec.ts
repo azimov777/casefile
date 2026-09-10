@@ -236,6 +236,17 @@ test.describe('первый экран списка', () => {
     await expect(rows(page)).toHaveCount(TASKS);
 
     await page.getByRole('button', { name: 'Изменить отбор' }).click();
+    /*
+     * Форма раскрывается движением, и замер, снятый посреди него, ловит недоехавшую
+     * форму, а не сдвиг от объяснения: таблица «уезжает» ровно на остаток раскрытия.
+     * Ждать надо конца движения, а не «немного» (`docs/notes/testing.md`, «Геометрию
+     * меряют после того, как раскрытие доехало»).
+     */
+    await page
+      .getByRole('region', { name: 'Отбор задач' })
+      .evaluate((node) =>
+        Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+      );
     await fontsReady(page);
     const before = await topOf(rows(page).first());
 

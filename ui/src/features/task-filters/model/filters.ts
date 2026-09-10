@@ -1,4 +1,5 @@
 import {
+  TASK_PAGE_SIZE,
   TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskListParams,
@@ -34,7 +35,13 @@ export interface TaskFilters {
   /** Строка на языке запросов бэкенда. Клиент её не разбирает. */
   query: string;
   sort: string;
-  cursor: string;
+  /**
+   * Открытая страница таблицы, с 1. В адресе стоит номером (`?page=3`), а в запрос
+   * уезжает смещением: `offset = (page - 1) * TASK_PAGE_SIZE` (TRK-41). Номер, а не
+   * смещение, потому что адрес списка пересылают человеку, и «страница 3» он
+   * прочтёт, а «смещение 100» — нет.
+   */
+  page: number;
   /**
    * Свёрнутые столбцы доски. Живёт в адресе, как и всё, что меняет вид выдачи:
    * ссылка на доску должна открыться тем же самым, а не разворачивать столбцы,
@@ -118,7 +125,7 @@ export const EMPTY_FILTERS: TaskFilters = {
   withRemarks: false,
   query: '',
   sort: DEFAULT_SORT,
-  cursor: '',
+  page: 1,
   collapsed: DEFAULT_COLLAPSED,
 };
 
@@ -138,7 +145,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     withRemarks: params.get('remarks') === 'true',
     query: params.get('query') ?? '',
     sort: TASK_SORTS.some((option) => option.value === sort) && sort !== null ? sort : DEFAULT_SORT,
-    cursor: params.get('cursor') ?? '',
+    page: readPage(params.get('page')),
     collapsed: params.has('collapsed')
       ? keepKnown(params.getAll('collapsed'), TASK_STATUSES)
       : DEFAULT_COLLAPSED,
@@ -160,7 +167,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   if (filters.withRemarks) params.set('remarks', 'true');
   if (filters.query.trim() !== '') params.set('query', filters.query.trim());
   if (filters.sort !== DEFAULT_SORT) params.set('sort', filters.sort);
-  if (filters.cursor !== '') params.set('cursor', filters.cursor);
+  if (filters.page > 1) params.set('page', String(filters.page));
 
   // Умолчание в адрес не пишется, а «ничего не свёрнуто» пишется пустым значением:
   // без него это состояние не отличить от «параметра нет».
@@ -193,9 +200,16 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
     // свежие сверху. Чужая сортировка перемешала бы карточки внутри столбцов, и человек
     // не смог бы объяснить себе порядок.
     sort: [board ? DEFAULT_SORT : filters.sort],
-    // Курсор доски живёт в её собственной подгрузке, а не в адресе: страницы там
-    // накапливаются, а не заменяют друг друга.
-    cursor: board || filters.cursor === '' ? undefined : filters.cursor,
+    /*
+     * Номер страницы уезжает смещением: `offset` — второй адрес страницы рядом с
+     * курсором, и вместе с ним он не принимается (`422 cursor_with_offset`). Первая
+     * страница не адресуется вовсе: `offset=0` означает ровно то же, что его
+     * отсутствие, и в запросе он был бы шумом.
+     *
+     * Доска сюда не попадает: страницы там копятся, а положение чтения живёт в её
+     * собственной подгрузке (`tasksBoardQueryOptions`), а не в адресе.
+     */
+    offset: board || filters.page <= 1 ? undefined : (filters.page - 1) * TASK_PAGE_SIZE,
   };
 
   const query = filters.query.trim();
@@ -245,7 +259,7 @@ export function hasConditions(filters: TaskFilters): boolean {
     ...filters,
     ...PLACE,
     sort: DEFAULT_SORT,
-    cursor: '',
+    page: 1,
     collapsed: DEFAULT_COLLAPSED,
   });
   return [...conditions.keys()].length > 0;
@@ -258,6 +272,20 @@ export function hasConditions(filters: TaskFilters): boolean {
  * видом; «уйти из очереди» — отдельное действие, и делается оно в боковой панели.
  */
 export const PLACE: Pick<TaskFilters, 'queue' | 'view'> = { queue: '', view: 'table' };
+
+/**
+ * Номер страницы из адреса. Всё, что не целое число больше нуля, читается как первая
+ * страница: `?page=abc`, `?page=0` и `?page=-1` обязаны открыть список, а не отказ.
+ *
+ * Сюда же приходит и старая ссылка с `cursor=…`: параметра `page` в ней нет, и она
+ * открывает начало списка — тем же правилом, каким после UI-41 отбрасывается `tags=`.
+ * Курсор в адресе таблицы больше не значит ничего: страница адресуется смещением,
+ * а прислать бэкенду оба адреса сразу — `422 cursor_with_offset`.
+ */
+function readPage(value: string | null): number {
+  const page = Number(value);
+  return Number.isInteger(page) && page > 1 ? page : 1;
+}
 
 /**
  * Оставляет только значения, которые есть в контракте.

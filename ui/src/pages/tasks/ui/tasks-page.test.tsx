@@ -2,18 +2,11 @@ import { delay, http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  API,
-  bootstrap,
-  collection,
-  data,
-  failure,
-  task,
-  taskPackage,
-} from '@testing/msw/responses';
+import { API, bootstrap, data, failure, task, taskPackage, taskPage } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { setToken } from '@/shared/api';
+import { TASK_PAGE_SIZE } from '@/entities/task';
 
 /** Адреса всех запросов прогона: по ним проверяется, что лишних не было. */
 let seen: string[] = [];
@@ -53,7 +46,7 @@ function lastRequest(): URL {
 describe('список задач', () => {
   it('свёрнутый отбор показывает условия чипами, и чип снимается на месте', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&status=in_progress');
     await screen.findByText('DEMO-3');
@@ -74,7 +67,7 @@ describe('список задач', () => {
   });
 
   it('без условий чипов нет, а на их месте честная фраза', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks');
     await screen.findByText('DEMO-3');
@@ -85,7 +78,7 @@ describe('список задач', () => {
   });
 
   it('заполненный запрос оставляет один чип: остальное он всё равно отменяет', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&blocked=true&query=status%3A+open');
     await screen.findByText('DEMO-3');
@@ -97,19 +90,19 @@ describe('список задач', () => {
   });
 
   it('смена отбора объявляется вслух, без перевода фокуса', async () => {
-    server.use(listing(() => collection([task('DEMO-3'), task('DEMO-4')])));
+    server.use(listing(() => taskPage([task('DEMO-3'), task('DEMO-4')])));
 
     open('/tasks?queue=DEMO');
 
     // Область постоянная, а не появляется вместе с текстом: `aria-live` объявляет
     // только то, что пришло внутрь уже существующего контейнера.
     await waitFor(() => {
-      expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent('Показано задач: 2');
+      expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent('Найдено задач: 2');
     });
   });
 
   it('старая ссылка со снятым условием открывает список без него, а не падает', async () => {
-    server.use(listing(() => collection([task('DEMO-8')])));
+    server.use(listing(() => taskPage([task('DEMO-8')])));
 
     // `tags` сняты вместе с полем задачи (UI-41), но разосланные ссылки остались.
     // Неизвестное значение в адресе отбрасывается тем же правилом, что и опечатка:
@@ -129,7 +122,7 @@ describe('список задач', () => {
   it('признаки строки — три разных знака, и каждый называет себя по-русски', async () => {
     server.use(
       listing(() =>
-        collection([
+        taskPage([
           task('DEMO-9', {
             features: {
               blocked: true,
@@ -163,7 +156,7 @@ describe('список задач', () => {
 
   it('статус и приоритет в строке названы родом: знак читается и глазом, и диктором', async () => {
     server.use(
-      listing(() => collection([task('DEMO-4', { status: 'in_progress', priority: 'critical' })])),
+      listing(() => taskPage([task('DEMO-4', { status: 'in_progress', priority: 'critical' })])),
     );
 
     open('/tasks?queue=DEMO');
@@ -179,7 +172,7 @@ describe('список задач', () => {
     const user = userEvent.setup();
     server.use(
       listing(() =>
-        collection([
+        taskPage([
           task('DEMO-5', { status: 'waiting' }),
           task('DEMO-6', { status: 'in_progress' }),
         ]),
@@ -215,7 +208,7 @@ describe('список задач', () => {
   it('в задачу ведёт вся строка: клик по ячейке без ссылок уходит в её задачу', async () => {
     const user = userEvent.setup();
     server.use(
-      listing(() => collection([task('DEMO-3'), task('DEMO-4')])),
+      listing(() => taskPage([task('DEMO-3'), task('DEMO-4')])),
       // Переход настоящий, значит карточка спросит свой пакет: без подмены прогон
       // писал бы в вывод жалобу на неперехваченный запрос.
       http.get(`${API}/api/v1/tasks/DEMO-4`, () => data(taskPackage('DEMO-4'))),
@@ -238,7 +231,7 @@ describe('список задач', () => {
   it('рисует признаки из строки выдачи, не спрашивая задачу отдельно', async () => {
     server.use(
       listing(() =>
-        collection([
+        taskPage([
           task('DEMO-4', {
             status: 'open',
             assignee: 'demo_agent',
@@ -290,7 +283,7 @@ describe('список задач', () => {
   });
 
   it('отправляет условия из адреса структурными параметрами', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&status=in_progress&priority=high&blocked=true');
     await screen.findByText('DEMO-3');
@@ -305,7 +298,7 @@ describe('список задач', () => {
 
   it('восстанавливает форму из адреса', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&assignee=owner');
     await screen.findByText('DEMO-3');
@@ -321,7 +314,7 @@ describe('список задач', () => {
       http.get(`${API}/api/v1/tasks`, async ({ request }) => {
         seen.push(request.url);
         await delay(30);
-        return collection([task('DEMO-3')]);
+        return taskPage([task('DEMO-3')]);
       }),
     );
 
@@ -333,7 +326,7 @@ describe('список задач', () => {
 
   it('пустую выдачу объясняет и даёт сбросить условия, не унося из очереди', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([])));
+    server.use(listing(() => taskPage([])));
 
     open('/tasks?queue=DEMO&status=done');
 
@@ -369,7 +362,7 @@ describe('список задач', () => {
 
 describe('свёрнутый отбор', () => {
   it('называет все включённые условия и ни одно не прячет за счётчиком', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&text=токен');
     await screen.findByText('DEMO-3');
@@ -386,7 +379,7 @@ describe('свёрнутый отбор', () => {
   });
 
   it('без условий говорит, что показаны все задачи, и не предлагает сброс', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks');
     await screen.findByText('DEMO-3');
@@ -397,7 +390,7 @@ describe('свёрнутый отбор', () => {
 
   it('выбор человека помнится между визитами', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     const first = open('/tasks');
     await screen.findByText('DEMO-3');
@@ -415,7 +408,7 @@ describe('свёрнутый отбор', () => {
       listing((url) =>
         url.searchParams.has('query')
           ? failure('invalid_search_query', 422, 'Cannot parse', { position: 8 })
-          : collection([task('DEMO-3')]),
+          : taskPage([task('DEMO-3')]),
       ),
     );
 
@@ -438,7 +431,7 @@ describe('поле запроса на языке бэкенда', () => {
               value: 'opne',
               allowed: ['backlog', 'open', 'in_progress'],
             })
-          : collection([task('DEMO-3')]),
+          : taskPage([task('DEMO-3')]),
       ),
     );
 
@@ -461,7 +454,7 @@ describe('поле запроса на языке бэкенда', () => {
 
   it('пока не применён, называет себя черновиком и применяется по Enter', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks');
     await screen.findByText('DEMO-3');
@@ -482,7 +475,7 @@ describe('поле запроса на языке бэкенда', () => {
 
   it('заполненный запрос отменяет структурные условия', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([task('DEMO-1', { status: 'done' })])));
+    server.use(listing(() => taskPage([task('DEMO-1', { status: 'done' })])));
 
     open('/tasks?queue=DEMO&status=open');
     await screen.findByText('DEMO-1');
@@ -500,7 +493,7 @@ describe('поле запроса на языке бэкенда', () => {
 
 describe('порядок и страницы', () => {
   it('порядок берётся из адреса и уезжает в запрос тем же ключом', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?sort=-priority');
     await screen.findByText('DEMO-3');
@@ -515,34 +508,189 @@ describe('порядок и страницы', () => {
     expect(lastRequest().searchParams.getAll('sort')).toEqual(['-priority']);
   });
 
-  it('«ещё» листает по курсору из meta', async () => {
+  /**
+   * Выдача из `total` задач, нарезанная по страницам смещением из запроса, — ровно так,
+   * как её отдаёт бэкенд (TRK-41): `offset` пропускает строки, `total` не зависит от
+   * страницы, а за концом выдачи приходит пустой кусок с тем же `total`.
+   */
+  function paged(total: number) {
+    return listing((url) => {
+      const offset = Number(url.searchParams.get('offset') ?? '0');
+      const keys = Array.from({ length: total }, (_, index) => `DEMO-${index + 1}`);
+      const chunk = keys.slice(offset, offset + TASK_PAGE_SIZE);
+
+      return taskPage(
+        chunk.map((key) => task(key)),
+        { total, has_more: offset + TASK_PAGE_SIZE < total },
+      );
+    });
+  }
+
+  it('ряд страниц уводит на другую страницу выдачи: меняются и строки, и адрес', async () => {
+    const user = userEvent.setup();
+    server.use(paged(120));
+
+    open('/tasks');
+    await screen.findByText('DEMO-1');
+
+    // Число у заголовка — вся выдача по отбору, а не строки этой страницы.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('120');
+    expect(screen.getByText('Страница 1 из 3')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Страница 2' }));
+
+    expect(await screen.findByText('DEMO-51')).toBeInTheDocument();
+    expect(screen.queryByText('DEMO-1')).not.toBeInTheDocument();
+    // Смещение считается из номера страницы и размера страницы, и больше ничего
+    // в запросе не меняется: курсора рядом нет — бэкенд отверг бы оба сразу.
+    expect(lastRequest().searchParams.get('offset')).toBe('50');
+    expect(lastRequest().searchParams.get('cursor')).toBeNull();
+    expect(address.current).toBe('/tasks?page=2');
+  });
+
+  it('открытая страница названа диктору, и ходить по ряду можно клавиатурой', async () => {
+    const user = userEvent.setup();
+    server.use(paged(120));
+
+    open('/tasks?page=2');
+    await screen.findByText('DEMO-51');
+
+    expect(screen.getByRole('link', { name: 'Страница 2' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: 'Страница 1' })).not.toHaveAttribute('aria-current');
+
+    // Табуляция доводит до ряда, Enter уводит на страницу: ряд собран ссылками,
+    // а не кнопками с обработчиком.
+    screen.getByRole('link', { name: 'Предыдущая страница' }).focus();
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('DEMO-1')).toBeInTheDocument();
+    expect(address.current).toBe('/tasks');
+  });
+
+  it('на первой и последней странице шаг за край не ссылка, а глухая ступень', async () => {
+    server.use(paged(120));
+
+    open('/tasks');
+    await screen.findByText('DEMO-1');
+
+    // Ссылки нет — вести некуда; на её месте запрещённая кнопка, а не приглушённая
+    // ссылка: имя на `a` без `href` диктору не полагается вовсе.
+    expect(screen.queryByRole('link', { name: 'Предыдущая страница' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Предыдущая страница' })).toBeDisabled();
+    expect(screen.getByRole('link', { name: 'Следующая страница' })).toBeInTheDocument();
+  });
+
+  it('кнопки «Ещё» в табличном пути нет: способ листать один', async () => {
+    server.use(paged(120));
+
+    open('/tasks');
+    await screen.findByText('DEMO-1');
+
+    expect(screen.queryByRole('button', { name: 'Ещё' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'В начало списка' })).toBeNull();
+    expect(screen.queryByText('Это последняя страница.')).toBeNull();
+  });
+
+  it('единственная страница ряда не рисует: листать нечего', async () => {
+    server.use(listing(() => taskPage([task('DEMO-3')])));
+
+    open('/tasks');
+    await screen.findByText('DEMO-3');
+
+    expect(screen.queryByRole('navigation', { name: 'Страницы выдачи' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('1');
+  });
+
+  it('пустая выдача не обещает ни страниц, ни задач', async () => {
+    server.use(listing(() => taskPage([], { total: 0 })));
+
+    open('/tasks?queue=DEMO&status=done');
+
+    expect(await screen.findByText('Задач по этим условиям нет')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Страницы выдачи' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('0');
+  });
+
+  it('ссылка на страницу за концом выдачи объясняется и возвращает рядом', async () => {
+    const user = userEvent.setup();
+    server.use(paged(120));
+
+    open('/tasks?page=9');
+
+    // Бэкенд отвечает пустой страницей и прежним `total`: задачи есть, просто не здесь,
+    // и лечится это не сбросом отбора, а возвратом на существующую страницу.
+    expect(await screen.findByText(/по этим условиям их 120/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Сбросить фильтры' })).toBeNull();
+    expect(screen.getByText('Страниц: 3')).toBeInTheDocument();
+
+    // Шаг назад отсюда ведёт на последнюю существующую страницу, а не на соседний
+    // по счёту номер: из пустоты в пустоту вести некуда.
+    expect(screen.getByRole('link', { name: 'Предыдущая страница' })).toHaveAttribute(
+      'href',
+      '/tasks?page=3',
+    );
+    expect(screen.getByRole('button', { name: 'Следующая страница' })).toBeDisabled();
+
+    await user.click(screen.getByRole('link', { name: 'Страница 3' }));
+
+    expect(await screen.findByText('DEMO-101')).toBeInTheDocument();
+    expect(address.current).toBe('/tasks?page=3');
+  });
+
+  it('без общего числа номеров нет, но «дальше» остаётся честным', async () => {
     const user = userEvent.setup();
     server.use(
       listing((url) =>
-        url.searchParams.get('cursor') === 'page-2'
-          ? collection([task('DEMO-7')])
-          : collection([task('DEMO-3')], { has_more: true, next_cursor: 'page-2' }),
+        url.searchParams.get('offset') === '50'
+          ? taskPage([task('DEMO-77')], { total: null })
+          : taskPage([task('DEMO-3')], { total: null, has_more: true }),
       ),
     );
 
     open('/tasks');
     await screen.findByText('DEMO-3');
 
-    await user.click(screen.getByRole('button', { name: 'Ещё' }));
+    // Номер страницы известен — он в адресе; сколько их всего, не знает никто,
+    // и выдумывать это число нельзя.
+    expect(screen.getByText('Страница 1')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Страница 2' })).toBeNull();
 
-    expect(await screen.findByText('DEMO-7')).toBeInTheDocument();
-    expect(lastRequest().searchParams.get('cursor')).toBe('page-2');
-    expect(screen.getByRole('button', { name: 'В начало списка' })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Следующая страница' }));
+
+    expect(await screen.findByText('DEMO-77')).toBeInTheDocument();
+    expect(address.current).toBe('/tasks?page=2');
+    expect(screen.getByText('Страница 2')).toBeInTheDocument();
   });
 
-  it('на последней странице кнопки «ещё» нет', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+  it('старая ссылка с курсором открывает список с начала, а не падает', async () => {
+    server.use(paged(120));
 
-    open('/tasks');
-    await screen.findByText('DEMO-3');
+    // Курсор в адресе таблицы больше ничего не значит: страница адресуется номером,
+    // а прислать бэкенду оба адреса сразу — `422 cursor_with_offset`.
+    open('/tasks?queue=DEMO&cursor=eyJrIjogIkRFTU8tNTEifQ');
 
-    expect(screen.queryByRole('button', { name: 'Ещё' })).not.toBeInTheDocument();
-    expect(screen.getByText('Это последняя страница.')).toBeInTheDocument();
+    await screen.findByText('DEMO-1');
+    expect(lastRequest().searchParams.get('cursor')).toBeNull();
+    expect(lastRequest().searchParams.get('offset')).toBeNull();
+  });
+
+  it('смена условий возвращает на первую страницу: страницы 3 в новой выдаче может не быть', async () => {
+    const user = userEvent.setup();
+    server.use(paged(120));
+
+    open('/tasks?page=3');
+    await screen.findByText('DEMO-101');
+
+    await expandFilters(user);
+    await user.click(screen.getByRole('checkbox', { name: 'open' }));
+
+    await waitFor(() => {
+      expect(lastRequest().searchParams.get('offset')).toBeNull();
+    });
+    expect(address.current).toBe('/tasks?status=open');
   });
 });
 
@@ -553,7 +701,7 @@ describe('отбор по замечаниям', () => {
       http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
       http.get(`${API}/api/v1/tasks`, ({ request }) => {
         asked.push(new URL(request.url));
-        return collection([task('DEMO-1')]);
+        return taskPage([task('DEMO-1')]);
       }),
     );
     const user = userEvent.setup();
@@ -573,7 +721,7 @@ describe('отбор по замечаниям', () => {
 describe('переключение вида', () => {
   it('переносит на доску весь отбор, а не только адрес раздела', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&priority=high&assignee=owner&sort=key');
     await screen.findByText('DEMO-3');
@@ -595,7 +743,7 @@ describe('переключение вида', () => {
 
   it('возврат в таблицу отдаёт тот же отбор обратно', async () => {
     const user = userEvent.setup();
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?view=board&queue=DEMO&priority=high');
     await screen.findByText('DEMO-3');
@@ -606,7 +754,7 @@ describe('переключение вида', () => {
   });
 
   it('текущий вид назван текущим, и переключатель на странице один', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?view=board&queue=DEMO');
     await screen.findByText('DEMO-3');
@@ -618,7 +766,7 @@ describe('переключение вида', () => {
   });
 
   it('верхняя полоса называет место: очередь и раздел', async () => {
-    server.use(listing(() => collection([task('DEMO-3')])));
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?view=board&queue=DEMO&priority=high');
     await screen.findByText('DEMO-3');
@@ -628,7 +776,7 @@ describe('переключение вида', () => {
 
   it('внутри задачи место называет её очередь и ключ, а вида не показывает', async () => {
     server.use(
-      listing(() => collection([task('DEMO-3')])),
+      listing(() => taskPage([task('DEMO-3')])),
       http.get(`${API}/api/v1/tasks/DEMO-3`, () => data(taskPackage('DEMO-3'))),
     );
 

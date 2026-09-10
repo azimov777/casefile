@@ -260,6 +260,23 @@ export interface paths {
          *     пятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки
          *     выбираются целиком именем `features`; отдельный признак именем поля выдачи не
          *     выбирается — `blocked` остаётся именем условия отбора.
+         *
+         *     **Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на
+         *     странице: из него и `limit` собирается «страница 3 из 7, всего 98». Это
+         *     единственная коллекция API, которая его считает, и считает всегда — вторым запросом
+         *     по тому же отбору.
+         *
+         *     Страницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо
+         *     `offset` — номер первой строки от начала выдачи: страница N размера L начинается с
+         *     `(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных
+         *     адреса одной страницы, и выбрать за клиента значило бы отдать не ту.
+         *
+         *     Цена смещения названа честно: база читает и выбрасывает пропускаемые строки, а
+         *     страница сдвигается, если между двумя запросами задачу завели или подняли наверх
+         *     (`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от
+         *     этого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.
+         *     Смещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и
+         *     прежний `total`.
          */
         get: operations["list_tasks"];
         put?: never;
@@ -1369,6 +1386,12 @@ export interface components {
              * @default false
              */
             has_more: boolean;
+            /**
+             * Total
+             * @description Total number of rows matching the filter, across all pages; null means this collection does not count them. Only `GET /api/v1/tasks` fills it in
+             * @example 98
+             */
+            total?: number | null;
         };
         /**
          * ParticipantCreate
@@ -4093,6 +4116,8 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor from `meta.next_cursor` of a previous page */
                 cursor?: string | null;
+                /** @description Rows to skip before the page, an alternative address to `cursor`: page N of size L starts at `(N - 1) * L`. Sending both is refused (`cursor_with_offset`) */
+                offset?: number | null;
                 /** @description Queue keys; matching ignores case */
                 queue?: string[] | null;
                 /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a queue. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
