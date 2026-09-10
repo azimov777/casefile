@@ -184,10 +184,19 @@ run_the_checks() {
 
 # --- Коммит слияния ------------------------------------------------------------------
 
+# Сообщение из `-m` кладётся в `MERGE_MSG` не только перед коммитом, но и сразу на
+# конфликте (см. ветку конфликта ниже) — это то же самое место, которое git сам
+# создаёт при конфликте и не трогает до следующего коммита, поэтому оно одно и то же
+# переживает выход скрипта и повторный вызов `--continue`. Без `-m` строка ничего не
+# делает, и `MERGE_MSG` остаётся тем, что предложил git, — как и раньше.
+stage_message() {
+    [ -z "$MESSAGE" ] || printf '%s\n' "$MESSAGE" >"$(git rev-parse --git-dir)/MERGE_MSG"
+}
+
 commit_the_merge() {
     local msg_file
     msg_file="$(git rev-parse --git-dir)/MERGE_MSG"
-    [ -z "$MESSAGE" ] || printf '%s\n' "$MESSAGE" >"$msg_file"
+    stage_message
     printf '\n%s: %s — %s; %s — %s\n' \
         "$TRAILER_KEY" "${CHECK_COMMAND[*]}" "$CHECK_SUMMARY" \
         "${E2E_COMMAND[*]}" "$E2E_SUMMARY" >>"$msg_file"
@@ -273,6 +282,10 @@ report_unverified_merges
 say "==> слияние $BRANCH в $(git symbolic-ref --short HEAD) без коммита"
 if ! git merge --no-ff --no-commit "$BRANCH"; then
     if git rev-parse --quiet --verify MERGE_HEAD >/dev/null; then
+        # Сообщение из `-m` кладётся в `MERGE_MSG` здесь и сейчас: скрипт вот-вот выйдет,
+        # а следующий его вызов (`--continue`) о `-m` уже не будет знать ничего — только
+        # то, что лежит в `MERGE_MSG`.
+        stage_message
         say "==> конфликты: разберите их, добавьте в индекс (git add) и повторите:"
         say "    $SCRIPT_PATH --continue"
         exit 1
