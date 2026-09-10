@@ -5,6 +5,7 @@ import { PanelLeft } from 'lucide-react';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { ViewSwitch, readFilters, tasksHref } from '@/features/task-filters';
 import { LiveStatus, type LiveJournal } from '@/features/live-journal';
+import { LanguageSwitch } from '@/features/switch-language';
 import { cn } from '@/shared/lib';
 import { readPlace, type Place } from './place';
 
@@ -83,6 +84,15 @@ export function AppTopbar({
        */}
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
         {place.section === 'tasks' ? <ViewSwitch view={filters.view} /> : null}
+
+        {/*
+         * Язык живёт в полосе, а не в боковой панели: на узком экране панель уезжает
+         * за кнопку, и переключатель был бы доступен через два действия — а на экране
+         * входа панели нет вовсе, и человек искал бы его в двух разных местах. Полоса
+         * есть на всех экранах оболочки, и это то же место, что и на входе, — верхний
+         * правый угол.
+         */}
+        <LanguageSwitch />
 
         {/*
          * Свежесть показанного (`CONCEPT.md`, 5) стоит здесь, а не в подвале панели, как

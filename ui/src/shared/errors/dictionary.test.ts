@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ApiError } from '../api';
+import { en, i18n, ru } from '../i18n';
 import { errorDictionary } from './dictionary';
 import { errorMessage, errorText } from './text';
 
@@ -17,28 +18,64 @@ function codesFromReference(): string[] {
   return [...rows].map((row) => row[1] as string);
 }
 
+/*
+ * Источников текста два, и это переезд, а не устройство: коды экрана входа уже живут
+ * в словарях языков, остальные ждут UI-78 в `dictionary.ts`. Полнота считается по обоим
+ * сразу — иначе переезд ослабил бы проверку ровно в тот момент, когда она нужнее всего.
+ */
+function covered(code: string): boolean {
+  return code in ru.errors || errorDictionary[code] !== undefined;
+}
+
 describe('словарь ошибок', () => {
   it('покрывает каждый код из справочника бэкенда', () => {
     const codes = codesFromReference();
 
     expect(codes.length).toBeGreaterThan(40);
     expect(
-      codes.filter((code) => errorDictionary[code] === undefined),
-      'Дополни словарь src/shared/errors/dictionary.ts',
+      codes.filter((code) => !covered(code)),
+      'Дополни словарь src/shared/i18n/dictionaries/*/errors.ts',
     ).toEqual([]);
   });
 
-  it('тексты на русском и заканчиваются точкой', () => {
-    for (const [code, text] of Object.entries(errorDictionary)) {
+  it('код лежит в одном месте: переехавший не остался и в старом словаре', () => {
+    expect(Object.keys(ru.errors).filter((code) => errorDictionary[code] !== undefined)).toEqual(
+      [],
+    );
+  });
+
+  it('русские тексты на русском и заканчиваются точкой', () => {
+    for (const [code, text] of Object.entries({ ...errorDictionary, ...ru.errors })) {
       expect(text, code).toMatch(/[А-Яа-яЁё]/);
+      expect(text, code).toMatch(/[.:]$/);
+    }
+  });
+
+  it('английские тексты без кириллицы и заканчиваются точкой', () => {
+    for (const [code, text] of Object.entries(en.errors)) {
+      expect(text, code).not.toMatch(/[А-Яа-яЁё]/);
       expect(text, code).toMatch(/[.:]$/);
     }
   });
 });
 
-describe('errorText', () => {
+/*
+ * Язык подставляется явно: текст отказа берётся из словаря по языку интерфейса, и
+ * модульный тест не вправе зависеть от того, на какой машине он запущен.
+ */
+describe.each(['ru', 'en'] as const)('errorText на языке %s', (language) => {
+  const dictionary = language === 'ru' ? ru : en;
+
+  beforeAll(() => {
+    void i18n.changeLanguage(language);
+  });
+
+  afterAll(() => {
+    void i18n.changeLanguage('ru');
+  });
+
   it('берёт текст по коду', () => {
-    expect(errorText('unauthorized')).toBe('Токен неизвестен или отозван.');
+    expect(errorText('unauthorized')).toBe(dictionary.errors.unauthorized);
   });
 
   it('неизвестный код показывает фразу бэкенда и сам код', () => {
@@ -46,11 +83,22 @@ describe('errorText', () => {
   });
 
   it('неизвестный код без фразы бэкенда всё равно называет код', () => {
-    expect(errorText('brand_new_code')).toBe('Неизвестная ошибка (brand_new_code).');
+    expect(errorText('brand_new_code')).toBe(
+      dictionary.ui.error.unknownCode.replace('{{code}}', 'brand_new_code'),
+    );
+  });
+
+  it('код, ещё не переехавший в словари, показывается по-русски на любом языке', () => {
+    // Названная цена незаконченного переезда: UI-78 её снимает.
+    expect(errorText('task_not_found')).toBe(errorDictionary.task_not_found);
   });
 });
 
 describe('errorMessage', () => {
+  beforeAll(() => {
+    void i18n.changeLanguage('ru');
+  });
+
   it('отказ бэкенда переводит по коду', () => {
     const failure = new ApiError('task_not_found', 'Task not found', 404, {});
 
@@ -58,9 +106,7 @@ describe('errorMessage', () => {
   });
 
   it('обрыв связи объясняет тем же словарём: код придуман клиентом', () => {
-    expect(errorMessage(ApiError.network(new Error('fetch failed')))).toBe(
-      'Сервер недоступен: проверьте, что бэкенд поднят.',
-    );
+    expect(errorMessage(ApiError.network(new Error('fetch failed')))).toBe(ru.errors.network_error);
   });
 
   it('исключение не из API показывает своё сообщение', () => {
@@ -68,6 +114,6 @@ describe('errorMessage', () => {
   });
 
   it('брошенное не-исключение не выдаётся за ошибку контракта', () => {
-    expect(errorMessage('строка')).toBe('Неизвестная ошибка.');
+    expect(errorMessage('строка')).toBe(ru.ui.error.unknown);
   });
 });

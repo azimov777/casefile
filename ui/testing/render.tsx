@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { MemoryRouter, useLocation, useRoutes } from 'react-router';
 import { render } from '@testing-library/react';
 import { AppProviders, routes } from '@/app';
+import { i18n, type Language } from '@/shared/i18n';
 
 function Routed() {
   return useRoutes(routes);
@@ -33,7 +34,20 @@ function AddressProbe() {
  * тот на каждом переходе строит `Request` из недици с `AbortSignal` из jsdom, и они
  * друг друга не принимают. Список маршрутов при этом тот же самый, что у приложения.
  */
-export function renderApp(initialPath = '/') {
+export function renderApp(initialPath = '/', { language = 'ru' }: { language?: Language } = {}) {
+  /*
+   * Язык подставляется явно, а не берётся определителем: в jsdom `navigator.language`
+   * — `en-US`, и страничный тест зависел бы от среды, в которой запущен, а не от того,
+   * что проверяет.
+   *
+   * Умолчание пока русское, потому что переведён один экран входа (UI-77), а остальные
+   * ищут элементы по русским подписям. UI-78 переводит их и переворачивает умолчание
+   * на язык приложения — английский.
+   *
+   * Смена синхронна: словари вшиты в сборку (`initAsync: false`), грузить нечего.
+   */
+  void i18n.changeLanguage(language);
+
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: 0 },
