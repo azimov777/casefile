@@ -102,7 +102,9 @@ const NOT_IN_CODE: Record<string, string> = {
   maxPages: 'настройка бесконечного запроса TanStack Query, названная как невзятая',
   onlyBuiltDependencies: 'поле pnpm 10, названное как отменённое',
   resize_window: 'инструмент браузерного расширения, не код репозитория',
+  shouldSkip: 'помощник внутри `eslint-plugin-i18next`: им объяснено поведение правила',
   '10-listen-on-ipv6-by-default.sh': 'скрипт внутри образа nginx, а не наш файл',
+  'lib/helper/shouldSkip.js': 'файл внутри `eslint-plugin-i18next`, а не наш',
   'markdown.module.css': 'снесённый модуль стилей, названный как снесённый',
 };
 
