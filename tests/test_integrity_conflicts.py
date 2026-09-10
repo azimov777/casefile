@@ -17,9 +17,11 @@
 движка прогона, ручная уборка закоммиченных строк и барьер, который сводит обе
 транзакции в одной точке.
 
-Барьер стоит внутри подменённой функции проверки. Она считает то же самое и тем же
-запросом — добавляется только встреча, — поэтому подмена не подменяет проверяемое
-поведение, а лишь делает редкое чередование обязательным.
+Барьер стоит внутри подменённой функции проверки и стоит в ней **после** настоящего
+чтения: обе транзакции обязаны прочитать «свободно» раньше, чем любая из них закоммитит.
+Подмена считает то же самое и тем же запросом — добавляется только встреча, — поэтому
+проверяемое поведение она не подменяет, а лишь делает редкое чередование обязательным.
+Встреча до чтения выглядит так же, а проверяет другое: `meet_after_the_check` ниже.
 """
 
 import asyncio
@@ -34,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app import cli
 from app.db import session as session_module
-from app.db.repositories import QueueRepository, TokenRepository
+from app.db.repositories import ParticipantRepository, QueueRepository, TokenRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenScope
@@ -120,21 +122,38 @@ def committing_server(committing_sessions: async_sessionmaker[AsyncSession]) -> 
     return create_server(runtime=Runtime(sessions=scope))
 
 
-def meet_inside(monkeypatch: pytest.MonkeyPatch, barrier: asyncio.Barrier) -> None:
-    """Сводит обе транзакции сразу после проверки занятости ключа очереди.
+def meet_after_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+    barrier: asyncio.Barrier,
+    repository: type,
+    method: str,
+) -> None:
+    """Сводит обе транзакции в одной точке — сразу **после** чтения, решающего исход.
 
-    Без встречи гонки не будет: первая транзакция успевает закоммититься раньше, чем
-    вторая дойдёт до своей проверки, — и вторая честно ответит `queue_key_taken`, не
-    добравшись до уникального индекса.
+    Место встречи здесь не оформление, а само проверяемое условие. Создающий сценарий
+    читает занятость сам и на найденной строке отвечает своим доменным отказом
+    (`queue_key_taken`, `participant_name_taken`); до уникального индекса — а значит и до
+    проверяемого здесь перевода `IntegrityError` — доходит только тот, кто прочитал
+    раньше чужого коммита. Встреча после чтения делает это чередование обязательным для
+    обеих транзакций, и других исходов у проигравшего не остаётся.
+
+    Встреча **до** чтения — не более слабая постановка той же гонки, а постановка другой:
+    обе транзакции лишь начинают одновременно, дальше первым коммитит кто угодно, и
+    проигравший с равным правом печатает то один отказ, то другой. Тест от этого плавает
+    и врёт в обе стороны (`TRK-48`, заметка «Место встречи решает, какой из двух отказов
+    получит проигравший» в `docs/notes/testing.md`).
+
+    Подмена считает то же самое и тем же запросом — добавляется только встреча, — поэтому
+    проверяемое поведение она не подменяет.
     """
-    original = QueueRepository.get_by_key
+    original = getattr(repository, method)
 
-    async def rendezvous(self: QueueRepository, key: str) -> object:
-        found = await original(self, key)
+    async def rendezvous(self: object, value: str) -> object:
+        found = await original(self, value)
         await barrier.wait()
         return found
 
-    monkeypatch.setattr(QueueRepository, "get_by_key", rendezvous)
+    monkeypatch.setattr(repository, method, rendezvous)
 
 
 async def test_two_parallel_create_queue_calls_leave_mcp_a_domain_error(
@@ -150,7 +169,7 @@ async def test_two_parallel_create_queue_calls_leave_mcp_a_domain_error(
     кем-то ещё, и не повторяет вызов вслепую. Трассировки и имени класса драйвера в нём
     быть не должно: агент читает текст, а не разбирает исключения Python.
     """
-    meet_inside(monkeypatch, asyncio.Barrier(2))
+    meet_after_the_check(monkeypatch, asyncio.Barrier(2), QueueRepository, "get_by_key")
     arguments = {"key": QUEUE_KEY, "title": "Гонка ключа", "description": ""}
 
     async with AsyncExitStack() as clients:
@@ -179,21 +198,27 @@ async def test_two_parallel_init_commands_end_with_a_message_not_a_traceback(
 
     `init` идёт в Compose рядом с миграциями, поэтому запустить его дважды разом — не
     выдумка, а обычный день с двумя репликами. Признак пустой установки подменён на
-    «пуста» с барьером: иначе исход зависел бы от того, что оставили в базе соседние
-    тесты, а проверяется здесь не признак, а судьба ошибки целостности.
+    «пуста»: иначе исход зависел бы от того, что оставили в базе соседние тесты, а
+    проверяется здесь не признак, а судьба ошибки целостности.
+
+    Барьера в этой подмене нет намеренно. Она ничего не читает, и встреча в ней сводила
+    бы команды **до** первого запроса обеих — у сессий здесь движок прогона с `NullPool`,
+    и первым запросом идёт полное установление соединения. Кто подключился первым, тот
+    успевал закоммитить участника раньше, чем второй его прочитает, и проигравший печатал
+    `participant_name_taken` вместо перевода ошибки целостности (`TRK-48`). Сводит их
+    поэтому `meet_after_the_check` — на чтении имени участника, которым исход и решается.
     """
     monkeypatch.setattr(
         session_module,
         "_sessionmaker",
         async_sessionmaker(bind=committing_sessions.kw["bind"], expire_on_commit=False),
     )
-    barrier = asyncio.Barrier(2)
 
     async def empty_installation(self: TokenRepository) -> bool:
-        await barrier.wait()
         return False
 
     monkeypatch.setattr(TokenRepository, "any_exists", empty_installation)
+    meet_after_the_check(monkeypatch, asyncio.Barrier(2), ParticipantRepository, "get_by_name")
     args = cli._build_parser().parse_args(
         ["init", "--name", OWNER_NAME, "--description", "Владелец", "--token-name", "race"]
     )
