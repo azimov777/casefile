@@ -6,7 +6,7 @@
 дублируется.
 
 Что и зачем строим — `docs/CONCEPT.md`, правила разработки — `docs/CONVENTIONS.md`,
-разработчику интерфейса — `../tracker-ui/docs/FRONTEND.md`, коды ошибок — `docs/ERRORS.md`.
+разработчику интерфейса — `ui/docs/FRONTEND.md`, коды ошибок — `docs/ERRORS.md`.
 
 ## Требования
 

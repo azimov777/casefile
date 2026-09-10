@@ -11,7 +11,7 @@ import { i18n } from '../i18n';
  * с прежним текстом до следующей отрисовки.
  *
  * Источник текста один — пространство `errors` словарей языков. Полноту его против
- * `../tracker/docs/ERRORS.md` стережёт `text.test.ts`.
+ * `../docs/ERRORS.md` стережёт `text.test.ts`.
  */
 export function errorText(code: string, fallback = ''): string {
   const translated = i18n.t(code, { ns: 'errors', defaultValue: '' });

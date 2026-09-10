@@ -17,7 +17,7 @@ export interface QueryProblem {
   allowed: string[];
 }
 
-/** Коды, которыми бэкенд отвечает на негодный отбор (`../tracker/docs/ERRORS.md`). */
+/** Коды, которыми бэкенд отвечает на негодный отбор (`../docs/ERRORS.md`). */
 const QUERY_CODES = new Set([
   'invalid_search_query',
   'search_field_unknown',

@@ -4,7 +4,7 @@
 
 ## Файлы
 
-- `openapi.ts` — сгенерирован `pnpm gen:api` из `../tracker/openapi.json`, правке не подлежит;
+- `openapi.ts` — сгенерирован `pnpm gen:api` из `../openapi.json`, правке не подлежит;
   расхождение с контрактом ловит `openapi.contract.test.ts`
 - `client.ts` — клиент `openapi-fetch`, перехватчик токена и обработка `401`
 - `envelope.ts` — разбор оболочки `data` / `data` + `meta`; любой сбой становится `ApiError`

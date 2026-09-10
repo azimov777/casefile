@@ -1,4 +1,4 @@
-# Продакшен-запуск интерфейса рядом с прод-контуром бэкенда (`../tracker/docker-compose.prod.yml`).
+# Продакшен-запуск интерфейса рядом с прод-контуром бэкенда (`../docker-compose.prod.yml`).
 #
 # Запуск: docker compose -f docker-compose.prod.yml up -d --build
 #

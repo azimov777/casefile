@@ -101,7 +101,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
   if (index.length === 0) return <p className="text-muted italic">{t('index.empty')}</p>;
 
   // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
-  // именно последняя, а не последняя из подгруженных (`../tracker/docs/FRONTEND.md`).
+  // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
   const lastNo = index[index.length - 1]?.no ?? null;
 
   return (

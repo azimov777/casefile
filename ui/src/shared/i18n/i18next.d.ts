@@ -13,7 +13,7 @@ import type { en } from './dictionaries/en';
  * Пространство `errors` объявлено как `Record<string, string>` намеренно: его ключи —
  * коды ошибок бэкенда, приезжающие в рантайме, и требовать от компилятора списка кодов
  * значит требовать, чтобы клиент знал контракт наизусть. Полноту этого пространства
- * проверяет `shared/errors/text.test.ts` против `../tracker/docs/ERRORS.md` —
+ * проверяет `shared/errors/text.test.ts` против `../docs/ERRORS.md` —
  * то есть против источника, а не против нашей памяти.
  */
 declare module 'i18next' {

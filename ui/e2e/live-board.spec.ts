@@ -76,7 +76,7 @@ async function fillBacklog(request: APIRequestContext): Promise<string[]> {
  *
  * Разделы и проверка заполнены не для красоты: `backlog → open` требует четырёх
  * непустых разделов и непустого `checks`, иначе бэкенд отвечает
- * `409 task_sections_incomplete` (`../tracker/docs/ERRORS.md`). Задачи-наполнители
+ * `409 task_sections_incomplete` (`../docs/ERRORS.md`). Задачи-наполнители
  * такому требованию не отвечают, и двигать надо именно эту.
  */
 async function seedMover(request: APIRequestContext): Promise<string> {
