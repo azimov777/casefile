@@ -1,4 +1,13 @@
 import { expect, test, type ConsoleMessage, type Page } from '@playwright/test';
+import { installWithoutKey } from './contour';
+
+/**
+ * Экран входа проверяется на установке, которая ключа не выдаёт, — иначе человек
+ * попадал бы сразу на задачи и экрана входа не увидел (`e2e/login.spec.ts`).
+ */
+test.beforeEach(async ({ page }) => {
+  await installWithoutKey(page);
+});
 
 /*
  * Механизм языка на экране входа: откуда берётся язык, что его меняет и что при этом

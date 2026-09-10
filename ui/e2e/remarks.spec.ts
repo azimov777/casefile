@@ -1,14 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { readE2eToken } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 /**
  * Чтение замечаний на живых демо-данных: в наборе есть закрытая задача с двумя

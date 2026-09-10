@@ -1,15 +1,37 @@
 import { execFileSync } from 'node:child_process';
-import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import {
+  expect,
+  type APIRequestContext,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-/** Куда кладётся токен, добытый из контура: тесты читают его отсюда. */
-export const TOKEN_FILE = resolve(process.cwd(), '.e2e-token');
+/**
+ * Каталог, в который контур кладёт ключ установки. Заводится до подъёма: недостающий
+ * источник bind-mount Docker создаёт сам и на Linux — от root.
+ */
+export const SECRETS_DIR = resolve(process.cwd(), '.secrets');
 
-export function compose(args: string[]): string {
+/**
+ * Файл с ключом установки: его пишет сервис `local-token`, из него же ключ уезжает
+ * в контейнер интерфейса. Тесты читают тот самый файл, который получил образ, — своей
+ * копии токена у оснастки больше нет.
+ */
+export const TOKEN_FILE = resolve(SECRETS_DIR, 'ui-token');
+
+/**
+ * Вызов `docker compose`. Файл контура не назван: его берёт сам Docker — из
+ * `docker-compose.yml` рядом или из `COMPOSE_FILE`, которым соседние рабочие деревья
+ * подсовывают свои теги образов и порты.
+ */
+export function compose(args: string[], env: Record<string, string> = {}): string {
   return execFileSync('docker', ['compose', ...args], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
+    env: { ...process.env, ...env },
   });
 }
 
@@ -17,8 +39,32 @@ export function readE2eToken(): string {
   return readFileSync(TOKEN_FILE, 'utf8').trim();
 }
 
-export function writeE2eToken(token: string): void {
-  writeFileSync(TOKEN_FILE, token, 'utf8');
+/**
+ * Установка, которая ключа не выдаёт: `/config.json` отвечает так, как отвечает образ,
+ * которому ключа не дали.
+ *
+ * Нужна сценариям запасного пути — экрана входа. Контур ключ выдаёт всем (иначе
+ * продуктовый путь не проверял бы никто), и без этой подмены человек попадал бы сразу
+ * на задачи. Подменяется ровно один запрос, а не выдача ключа во всём контуре:
+ * ослаблять контур ради одного сценария нельзя (`docs/CONVENTIONS.md`).
+ */
+export async function installWithoutKey(target: Page | BrowserContext): Promise<void> {
+  await target.route('**/config.json', (route) => route.fulfill({ status: 404, body: '' }));
+}
+
+/**
+ * Установка, где людей несколько, глазами вошедшего: конфигурации с ключом нет, ключ
+ * введён руками и лежит в хранилище вкладки.
+ *
+ * Нужна там, где сценарий проверяет саму кнопку «Выйти»: на локальной установке её нет
+ * вовсе — выходить некуда, ключ отдаёт установка (`UI-74`). Это не обход выдачи ключа,
+ * а второй из двух путей, и он обязан проверяться так же живьём, как первый.
+ */
+export async function signedInByHand(page: Page): Promise<void> {
+  await installWithoutKey(page);
+  await page.addInitScript((value) => {
+    window.localStorage.setItem('tracker.token', value);
+  }, readE2eToken());
 }
 
 /**

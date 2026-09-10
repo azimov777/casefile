@@ -1,19 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, side, silenceJournal, tasksByStatus } from './contour';
-
-const token = readE2eToken();
-
-/**
- * Вход проверяется своим сценарием, здесь он только предусловие: токен кладётся
- * в хранилище до загрузки страницы, чтобы каждый сценарий не проходил форму заново.
- * Ставится на контекст, а не на вкладку: часть сценариев открывает вторую вкладку.
- */
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { side, silenceJournal, tasksByStatus } from './contour';
 
 function rows(page: Page) {
   return page.locator('tbody tr');

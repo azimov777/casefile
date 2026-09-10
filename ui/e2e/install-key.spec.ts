@@ -1,15 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, side } from './contour';
+import { installWithoutKey, readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
 /**
- * Ключ от установки в настоящем браузере и на собранном образе.
+ * Ключ от установки в настоящем браузере, на собранном образе и на настоящем контуре.
  *
- * Файл конфигурации кладёт рядом со статикой контур (`UI-75`), и здесь он подменяется
- * перехватом запроса: проверяется сторона приложения — берёт ли оно ключ, ждёт ли
- * ответа, убирает ли выход. Ответ отдаётся с задержкой: без неё «страж дождался»
- * ничем не отличалось бы от «страж успел».
+ * Первый сценарий ничего не подменяет: конфигурацию рядом со статикой положил сам контур
+ * (`local-token` выпустил ключ в файл, `docker/config-json.sh` положил его при старте
+ * контейнера), и открытый адрес — это в точности путь человека.
+ *
+ * Остальные подменяют один запрос, чтобы получить то, чего у этого контура нет:
+ * медленную конфигурацию, пустую и отсутствующую.
  */
 async function installGives(page: Page, body: string, delayMs = 300): Promise<void> {
   await page.route('**/config.json', async (route) => {
@@ -18,10 +20,14 @@ async function installGives(page: Page, body: string, delayMs = 300): Promise<vo
   });
 }
 
-test('с ключом от установки первый экран — задачи, и входа не было ни на кадр', async ({
-  page,
-}) => {
-  await installGives(page, JSON.stringify({ token }));
+test('открыл адрес — вижу задачи, ничего не вводив', async ({ page }) => {
+  // Конфигурация от контура, как её видит браузер. `no-store` — это свой `location`
+  // в `docker/nginx.conf.template`: без него ключ приезжал бы из кэша и переживал
+  // перевыпуск.
+  const config = await page.request.get('/config.json');
+  expect(config.status()).toBe(200);
+  expect(config.headers()['cache-control']).toBe('no-store');
+  expect(((await config.json()) as { token?: string }).token).toBe(token);
 
   const seenLogin: string[] = [];
   page.on('framenavigated', (frame) => seenLogin.push(frame.url()));
@@ -79,13 +85,11 @@ test('пустая конфигурация оставляет прежний п
   await expect(side(page).getByRole('button', { name: 'Выйти' })).toBeVisible();
 });
 
-test('без файла конфигурации образ отдаёт страницу, и это тоже «ключа нет»', async ({ page }) => {
-  // Перехвата здесь нет: `/config.json` идёт к nginx как есть. Одностраничное
-  // приложение отвечает на неизвестный путь разметкой `index.html`, а не `404`, —
-  // и ветка «ключа нет» обязана держаться на неразборчивом теле, а не на коде ответа.
-  const response = await page.request.get('/config.json');
-  expect(response.status()).toBe(200);
-  expect(await response.text()).toContain('<!doctype html>');
+test('без конфигурации — экран входа, и красной плашки при этом нет', async ({ page }) => {
+  // Так отвечает образ, которому ключа не дали: `location = /config.json` отдаёт `404`.
+  // Ветка «ключа нет» держится при этом не на коде ответа, а на неразборчивом теле —
+  // общее правило одностраничного приложения ответило бы `200` с разметкой.
+  await installWithoutKey(page);
 
   await page.goto('/');
 

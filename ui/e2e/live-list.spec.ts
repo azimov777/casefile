@@ -3,12 +3,6 @@ import { compose, fontsReady, readE2eToken } from './contour';
 
 const token = readE2eToken();
 
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
-
 function rows(page: Page) {
   return page.locator('tbody tr');
 }

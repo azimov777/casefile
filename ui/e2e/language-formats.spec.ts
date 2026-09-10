@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { silenceJournal } from './contour';
 
 /*
  * Язык говорит не только подписями (UI-79). Здесь проверяется то, что подписью
@@ -14,15 +14,10 @@ const ZONE = 'America/New_York';
 /** Дело демо-задачи: лента записей, и в каждой записи — подпись времени. */
 const CASE = '/tasks/DEMO-1/case';
 
-const token = readE2eToken();
-
 const SWITCH = { en: 'Interface language', ru: 'Язык интерфейса' };
 const NAME = { en: 'Tracker', ru: 'Трекер' };
 
-test.beforeEach(async ({ context, page }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
+test.beforeEach(async ({ page }) => {
   await silenceJournal(page);
 });
 
@@ -114,12 +109,22 @@ test.describe('смена языка', () => {
     expect(russian.exact).toMatch(/[А-Яа-яЁё]/);
 
     /*
-     * Пояс от языка не зависит: слова разошлись, а числа — день, час, минута
-     * и секунда — обязаны совпасть. Это и есть «человек с английским интерфейсом
-     * сидит в своём поясе, а не в лондонском».
+     * Пояс от языка не зависит: слова разошлись, а числа — день, год, минута и секунда —
+     * обязаны совпасть знак в знак. Это и есть «человек с английским интерфейсом сидит
+     * в своём поясе, а не в лондонском».
+     *
+     * Час сравнивается отдельно и по модулю 12: английская подсказка двенадцатичасовая,
+     * русская — двадцатичетырёхчасовая, и один и тот же миг читается как `2:38:49 PM`
+     * и `14:38:49`. Прежняя проверка равняла все числа подряд и потому падала каждый
+     * день после полудня — с полуночи до полудня числа совпадали, и никто этого
+     * не замечал (найдено прогоном UI-75 в 14:38 по Нью-Йорку).
      */
-    const digits = (value: string | null) => (value ?? '').match(/\d+/g)?.join(' ') ?? '';
-    expect(digits(russian.exact)).toBe(digits(english.exact));
+    const numbers = (value: string | null) => (value ?? '').match(/\d+/g)?.map(Number) ?? [];
+    const [ruDay, ruYear, ruHour, ruMinute, ruSecond] = numbers(russian.exact);
+    const [enDay, enYear, enHour, enMinute, enSecond] = numbers(english.exact);
+
+    expect([ruDay, ruYear, ruMinute, ruSecond]).toEqual([enDay, enYear, enMinute, enSecond]);
+    expect(ruHour % 12).toBe(enHour % 12);
 
     // И обратно: язык возвращается тем же переключателем, а не перезагрузкой.
     await switchTo(page, 'ru', 'English');

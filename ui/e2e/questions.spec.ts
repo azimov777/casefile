@@ -1,14 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { fontsReady, readE2eToken, side } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { fontsReady, side } from './contour';
 
 test('доступность входящей', async ({ page }) => {
   await page.goto('/questions');

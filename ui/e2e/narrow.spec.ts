@@ -1,17 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, side, silenceJournal } from './contour';
-
-const token = readE2eToken();
+import { fontsReady, side, signedInByHand, silenceJournal } from './contour';
 
 /** Экраны, на которых оболочка обязана держаться одинаково. */
 const SCREENS = ['/tasks?queue=DEMO', '/tasks/DEMO-6', '/tasks/DEMO-1/case', '/questions'];
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 /** Насколько документ шире окна. Больше нуля — страница разъехалась вширь. */
 async function overflow(page: Page): Promise<number> {
@@ -63,6 +55,9 @@ test('при увеличении текста вдвое полоса раст�
 });
 
 test('на узком экране разделы, входящая и выход достижимы клавиатурой', async ({ page }) => {
+  // Выход есть только там, где человек входил руками: на локальной установке ключ
+  // отдаёт она сама, и выходить некуда.
+  await signedInByHand(page);
   await silenceJournal(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/tasks?queue=DEMO');

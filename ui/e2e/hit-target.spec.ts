@@ -1,14 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, shellReady, silenceJournal } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { fontsReady, shellReady, silenceJournal } from './contour';
 
 function row(page: Page, key: string): Locator {
   return page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: key }) });

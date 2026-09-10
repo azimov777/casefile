@@ -1,20 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import {
-  contractStatuses,
-  fontsReady,
-  readE2eToken,
-  silenceJournal,
-  tasksByStatus,
-} from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { contractStatuses, fontsReady, silenceJournal, tasksByStatus } from './contour';
 
 function column(page: Page, status: string) {
   return page.getByRole('region', { name: status });

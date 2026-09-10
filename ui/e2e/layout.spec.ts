@@ -3,12 +3,6 @@ import { readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
-
 /** Заводит задачу в демо-очереди и возвращает её ключ. */
 async function makeTask(
   request: APIRequestContext,

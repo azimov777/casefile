@@ -1,13 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { silenceJournal } from './contour';
 
 test('возврат в список не теряет отбор, с которым человек ушёл', async ({ page }) => {
   await silenceJournal(page);

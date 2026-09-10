@@ -1,15 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
-
-const token = readE2eToken();
+import { fontsReady, silenceJournal } from './contour';
 
 test.use({ viewport: { width: 1440, height: 900 } });
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 test('свёрнутый отбор с двумя условиями занимает не больше строки', async ({ page }) => {
   await silenceJournal(page);
