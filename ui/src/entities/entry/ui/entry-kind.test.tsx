@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { say } from '@testing/say';
 import { ENTRY_TYPES } from '../api/entries';
-import { ENTRY_TYPE_NAMES } from '../model/headline';
 import { EntryKind } from './entry-kind';
 
 /** Рисунок знака: по нему и сравниваются рода записей. */
@@ -31,14 +31,15 @@ describe('знак рода записи', () => {
 
     // Знак дополняет слово, а не заменяет его: `section_changed` — то же, что видит агент.
     expect(container).toHaveTextContent('section_changed');
-    // Вслух `section_changed` не читается, поэтому рядом стоит русское название.
-    expect(container).toHaveTextContent(ENTRY_TYPE_NAMES.section_changed);
+    // Вслух `section_changed` не читается, поэтому рядом стоит название словами —
+    // из словаря тем же ключом, каким его зовёт компонент.
+    expect(container).toHaveTextContent(say.ui('entry.type.section_changed'));
   });
 
   it('без подписи род не пропадает: он уходит в доступное имя', () => {
     const { container } = render(<EntryKind type="verdict" withName={false} />);
 
-    expect(container).toHaveTextContent(ENTRY_TYPE_NAMES.verdict);
+    expect(container).toHaveTextContent(say.ui('entry.type.verdict'));
     expect(container.querySelector('svg')).not.toBeNull();
   });
 });

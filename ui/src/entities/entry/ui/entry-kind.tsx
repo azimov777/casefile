@@ -18,8 +18,8 @@ import {
   Unlink,
   User,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/lib';
-import { ENTRY_TYPE_NAMES } from '../model/headline';
 import type { EntryType } from '../api/entries';
 
 /**
@@ -89,6 +89,7 @@ interface EntryKindProps {
 /** Род записи: знак и идентификатор типа из контракта рядом. */
 export function EntryKind({ type, withName = true, className }: EntryKindProps) {
   const Icon = KIND_ICON[type];
+  const { t } = useTranslation('ui');
 
   return (
     <span
@@ -96,8 +97,8 @@ export function EntryKind({ type, withName = true, className }: EntryKindProps) 
       className={cn('inline-flex items-center gap-1.5 whitespace-nowrap', className)}
     >
       <Icon className={cn('size-(--ui-mark) shrink-0', KIND_COLOR[type])} aria-hidden="true" />
-      {/* Русское название — для диктора: `section_changed` вслух не читается. */}
-      <span className="sr-only">{ENTRY_TYPE_NAMES[type]}: </span>
+      {/* Название словами — для диктора: `section_changed` вслух не читается. */}
+      <span className="sr-only">{t(`entry.type.${type}`)}: </span>
       <span className={withName ? 'font-mono text-mark text-muted' : 'sr-only'}>{type}</span>
     </span>
   );

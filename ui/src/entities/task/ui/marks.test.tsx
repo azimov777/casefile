@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { say } from '@testing/say';
 import { TASK_PRIORITIES, TASK_STATUSES } from '../api/tasks';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
@@ -29,13 +30,15 @@ describe('знак статуса', () => {
   it('доступное имя называет род и значение', () => {
     render(<StatusMark status="in_progress" />);
 
-    expect(screen.getByText('in_progress').parentElement).toHaveTextContent('статус in_progress');
+    expect(screen.getByText('in_progress').parentElement).toHaveTextContent(
+      `${say.ui('task.statusLabel')} in_progress`,
+    );
   });
 
   it('без подписи значение не пропадает, а уходит в доступное имя', () => {
     const { container } = render(<StatusMark status="done" withName={false} />);
 
-    expect(container).toHaveTextContent('статус done');
+    expect(container).toHaveTextContent(`${say.ui('task.statusLabel')} done`);
     expect(container.querySelector('.sr-only')).not.toBeNull();
   });
 
@@ -68,7 +71,9 @@ describe('знак приоритета', () => {
   it('доступное имя называет род и значение', () => {
     render(<PriorityMark priority="critical" />);
 
-    expect(screen.getByText('critical').parentElement).toHaveTextContent('приоритет critical');
+    expect(screen.getByText('critical').parentElement).toHaveTextContent(
+      `${say.ui('task.priorityLabel')} critical`,
+    );
   });
 
   it('форма статуса и форма приоритета не совпадают ни в одной паре', () => {

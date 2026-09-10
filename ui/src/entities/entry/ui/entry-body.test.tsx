@@ -2,6 +2,7 @@ import { MemoryRouter } from 'react-router';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { entryOfType } from '@testing/msw/responses';
+import { say } from '@testing/say';
 import { ENTRY_TYPES, type EntryType } from '../api/entries';
 import { EntryCard } from './entry-card';
 
@@ -13,41 +14,84 @@ import { EntryCard } from './entry-card';
  * Словарь полный (`Record<EntryType, ...>`): тип, добавленный в контракт, уронит
  * сборку теста — и это единственный способ не выпустить в ленту запись, показанную
  * сырой нагрузкой.
+ *
+ * Подписи берутся из словаря тем же ключом, что и в коде, а идентификаторы контракта
+ * (`goal`, `blocked_by`, `DEMO-2`) стоят строками: они не переводятся. Собирается
+ * словарь функцией, а не значением модуля, потому что подпись зависит от языка,
+ * а он подставляется в тесте.
  */
-const EXPECTED: Record<EntryType, (string | RegExp)[]> = {
-  summary: ['Сделано', 'Осталось', 'Что мешает', 'Следующий шаг'],
-  decision: [/Тело записи/],
-  attempt: [/Тело записи/],
-  finding: [/Тело записи/],
-  artifact: [/Тело записи/, 'Указатели:'],
-  note: [/Тело записи/],
-  created: ['Задача заведена'],
-  question: ['Кому:', 'owner', 'блокирующий'],
-  answer: ['Ответ на', 'DEMO-1#1'],
-  verdict: ['Обзорная проверка 2', 'failed'],
-  remark: [/Тело записи/],
-  // Исход — словами: замечание оставил человек, и «accepted» ему ни о чём не говорит.
-  resolution: ['Разбор', 'DEMO-1#1', 'принято в работу', 'DEMO-2'],
-  status_changed: ['Статус', 'in_progress', 'open', /Задан блокирующий вопрос/],
-  section_changed: ['Правка раздела', 'goal', 'Было', 'Стало', 'Старая цель', 'Новая цель'],
-  field_changed: ['Правка поля', 'priority', 'Было', 'Стало', 'normal', 'critical'],
-  assignee_changed: ['Исполнитель', 'не назначен', 'demo_agent'],
-  link_added: ['Связь', 'blocked_by', 'DEMO-2'],
-  link_removed: ['Связь снята', 'blocked_by', 'DEMO-2'],
-};
+function expected(): Record<EntryType, (string | RegExp)[]> {
+  return {
+    summary: [
+      say.ui('entry.summary.done'),
+      say.ui('entry.summary.remaining'),
+      say.ui('entry.summary.blockers'),
+      say.ui('entry.summary.nextStep'),
+    ],
+    decision: [/Тело записи/],
+    attempt: [/Тело записи/],
+    finding: [/Тело записи/],
+    artifact: [/Тело записи/, say.ui('entry.refs')],
+    note: [/Тело записи/],
+    created: [say.ui('entry.headline.created')],
+    question: [say.ui('entry.addressees'), 'owner', say.ui('entry.blocking')],
+    answer: [say.ui('entry.headline.answerTo'), 'DEMO-1#1'],
+    verdict: [say.ui('entry.headline.check', { no: 2 }), 'failed'],
+    remark: [/Тело записи/],
+    // Исход — словами: замечание оставил человек, и «accepted» ему ни о чём не говорит.
+    resolution: [
+      say.ui('entry.headline.resolution'),
+      'DEMO-1#1',
+      say.ui('entry.remarkOutcome.accepted'),
+      'DEMO-2',
+    ],
+    status_changed: [
+      say.ui('entry.headline.status'),
+      'in_progress',
+      'open',
+      /Задан блокирующий вопрос/,
+    ],
+    section_changed: [
+      say.ui('entry.headline.sectionEdited'),
+      'goal',
+      say.ui('entry.was'),
+      say.ui('entry.now'),
+      'Старая цель',
+      'Новая цель',
+    ],
+    field_changed: [
+      say.ui('entry.headline.fieldEdited'),
+      'priority',
+      say.ui('entry.was'),
+      say.ui('entry.now'),
+      'normal',
+      'critical',
+    ],
+    assignee_changed: [
+      say.ui('entry.headline.assignee'),
+      say.ui('entry.headline.none'),
+      'demo_agent',
+    ],
+    link_added: [say.ui('entry.headline.linkAdded'), 'blocked_by', 'DEMO-2'],
+    link_removed: [say.ui('entry.headline.linkRemoved'), 'blocked_by', 'DEMO-2'],
+  };
+}
 
-/** Английские заготовки трекера: в русском интерфейсе их быть не должно ни у одного типа. */
-const ENGLISH = [
-  'Task created',
-  'Resolution of',
-  'Status changed',
-  'Section changed',
-  'Field changed',
-  'Assignee changed',
-  'Link added',
-  'Link removed',
-  'Answer to',
-  'Verdict on',
+/**
+ * Типы, чей заголовок собирает трекер по фактам: показывать вместо него присланный
+ * `title` нельзя ни на каком языке.
+ */
+const BUILT_HEADLINE: EntryType[] = [
+  'created',
+  'answer',
+  'verdict',
+  'resolution',
+  'status_changed',
+  'section_changed',
+  'field_changed',
+  'assignee_changed',
+  'link_added',
+  'link_removed',
 ];
 
 function show(type: EntryType) {
@@ -67,24 +111,29 @@ describe('представление записи по типу', () => {
     // законно встречается дважды — `demo_agent` стоит и в авторе записи, и в её
     // заголовке, — и строгий поиск по узлу падал бы на этом, ничего не проверив.
     const shown = container.textContent ?? '';
-    for (const expected of EXPECTED[type]) {
-      if (typeof expected === 'string') expect(shown).toContain(expected);
-      else expect(shown).toMatch(expected);
+    for (const wanted of expected()[type]) {
+      if (typeof wanted === 'string') expect(shown).toContain(wanted);
+      else expect(shown).toMatch(wanted);
     }
 
     // Сырая нагрузка на экране выглядела бы как JSON: фигурные скобки с кавычками.
     expect(container.textContent).not.toMatch(/\{"|":\s*"/);
 
-    // Заголовок, собранный трекером по-английски, в русский интерфейс не попадает.
-    for (const english of ENGLISH) {
-      expect(container.textContent).not.toContain(english);
+    /*
+     * Заголовок, приехавший в записи готовой строкой, вместо собранного по фактам
+     * не показывается. Проверка сравнивает с самой этой строкой, а не со списком
+     * английских заготовок трекера: на английском интерфейсе «Status changed» —
+     * законная подпись из словаря, и список перестал бы что-либо различать.
+     */
+    if (BUILT_HEADLINE.includes(type)) {
+      expect(shown).not.toContain(entryOfType(5, 'DEMO-1', type).title);
     }
   });
 
   it('у сводки заголовок не повторяет «следующий шаг» из её же тела', () => {
     const { container } = show('summary');
 
-    const step = screen.getByText('Следующий шаг').closest('div');
+    const step = screen.getByText(say.ui('entry.summary.nextStep')).closest('div');
     const value = step?.textContent ?? '';
     expect(value).not.toBe('');
     // Заголовок сводки выводится трекером из первой строки «следующего шага»: показать
@@ -125,10 +174,10 @@ describe('сравнение раздела', () => {
 
     // Цвет при этом не единственный носитель: подписи на месте и идут в том порядке,
     // в котором их прочитает программа чтения с экрана.
-    expect(was).toHaveTextContent('Было');
-    expect(now).toHaveTextContent('Стало');
-    expect(container.textContent?.indexOf('Было')).toBeLessThan(
-      container.textContent?.indexOf('Стало') ?? -1,
+    expect(was).toHaveTextContent(say.ui('entry.was'));
+    expect(now).toHaveTextContent(say.ui('entry.now'));
+    expect(container.textContent?.indexOf(say.ui('entry.was'))).toBeLessThan(
+      container.textContent?.indexOf(say.ui('entry.now')) ?? -1,
     );
   });
 });
