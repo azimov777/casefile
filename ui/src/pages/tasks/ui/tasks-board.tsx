@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { StatusMark, TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
 import { Button, Reveal } from '@/shared/ui';
 import { cn, useExitHold } from '@/shared/lib';
@@ -40,8 +41,58 @@ export function TasksBoard({
     byStatus.get(status)?.push(task);
   }
 
+  /*
+   * Доска высотой в остаток окна: столбец прокручивается внутри себя, а страница
+   * под ним не двигается вовсе (UI-68).
+   *
+   * Остаток считается замером, а не одним `calc`, потому что над доской нет ни одной
+   * величины, известной заранее: верхняя полоса задана минимумом и растёт от
+   * увеличенного текста, заголовок с формой отбора переносится по ширине окна и
+   * раскрывается по нажатию. Замеряется только отступ доски от верха документа —
+   * своя высота доски в него не входит, поэтому обратной связи «выросла — пересчитали —
+   * снова выросла» здесь нет. Всё, что ниже ряда столбцов, раздаёт уже флексбокс:
+   * подвал занимает своё, ряд забирает остаток (`flex-1` при `min-h-0`).
+   */
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState(0);
+
+  useLayoutEffect(() => {
+    const board = boardRef.current;
+    if (board === null) return;
+    const measure = () => {
+      setTop(Math.round(board.getBoundingClientRect().top + window.scrollY));
+    };
+    measure();
+
+    /*
+     * Наблюдают за родителем, а не за `document.body`: `body` объявлен `height: 100%`
+     * (`shared/styles/reset.css`), его рамка равна окну всегда, и раскрытая форма
+     * отбора его не меняет — доска съезжала вниз, оставаясь прежней высоты, и страница
+     * снова начинала прокручиваться. Родитель растёт вместе с тем, что стоит над
+     * доской, и это ровно то событие, из-за которого замер устарел.
+     */
+    const above = board.parentElement;
+    const observer = new ResizeObserver(() => {
+      // Через кадр: пересчёт идёт из обработчика наблюдателя, и без этого браузер
+      // ругается на не доставленные за проход уведомления.
+      window.requestAnimationFrame(measure);
+    });
+    if (above !== null) observer.observe(above);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      ref={boardRef}
+      style={
+        { '--ui-board-height': `calc(100dvh - ${top}px - var(--ui-page-tail))` } as CSSProperties
+      }
+      className="flex flex-col gap-4 fold:h-(--ui-board-height)"
+    >
       {/*
        * `items-stretch`, а не Tailwind по умолчанию (`items-start` стояло здесь до
        * UI-67): столбец — это рамка ровно по числу карточек, флекс-ряд без выравнивания
@@ -53,8 +104,13 @@ export function TasksBoard({
        * ряда; карточки внутри неё по-прежнему пакуются сверху (`flex-col`, без
        * `flex-grow` на списке), поэтому лишняя высота уходит в пустое место под
        * последней карточкой, а не растягивает сами карточки.
+       *
+       * `fold:flex-1` при `fold:min-h-0` — ряд забирает остаток доски под собой,
+       * а `min-h-0` снимает с него пол по содержимому, иначе прокручиваться было бы
+       * нечему. Обе утилиты стоят от точки остановки: ниже неё у доски нет своей
+       * высоты, и `flex-1` без неё схлопнул бы ряд в ноль.
        */}
-      <div className="flex items-stretch gap-3 overflow-x-auto pb-2">
+      <div className="flex items-stretch gap-3 overflow-x-auto pb-2 fold:min-h-0 fold:flex-1">
         {TASK_STATUSES.map((status) => (
           <BoardColumn
             key={status}
@@ -124,9 +180,17 @@ function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnPro
        * карточках (`mt-2`) и потому уезжает вместе с местом. Промежуток между
        * соседями держался бы, пока стоит сосед, и свёртывание кончалось бы
        * скачком в восемь пикселей.
+       *
+       * `fold:overflow-y-auto` — своя прокрутка столбца (UI-68): карточки уезжают
+       * внутри него, соседние столбцы и страница при этом стоят. Отдельного
+       * `tabIndex` под это не нужно — кнопка свёртывания стоит внутри самого
+       * прокручиваемого столбца, и с фокусом на ней он ходит стрелками и `PageDown`.
+       * Ниже точки остановки прокрутки у столбца нет вовсе: там доске остаётся
+       * полторы карточки, и страница отдаёт столбцу весь экран (`docs/notes/ui.md`,
+       * «Две прокрутки уживаются ровно тогда, когда у страницы прокрутки не остаётся»).
        */
       className={cn(
-        'relative flex w-(--ui-board-column) shrink-0 basis-(--ui-board-column) flex-col rounded-control border border-line bg-sunken p-3',
+        'relative flex w-(--ui-board-column) shrink-0 basis-(--ui-board-column) flex-col rounded-control border border-line bg-sunken p-3 fold:min-h-0 fold:overflow-y-auto',
         /*
          * Свёрнутый и пустой столбец остаётся столбцом той же ширины (решение
          * Д19): раньше он превращался в пилюлю по ширине содержимого, и ряд

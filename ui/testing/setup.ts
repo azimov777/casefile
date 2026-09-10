@@ -22,6 +22,19 @@ Element.prototype.setPointerCapture ??= () => {};
 Element.prototype.releasePointerCapture ??= () => {};
 Element.prototype.scrollIntoView ??= () => {};
 
+/*
+ * `ResizeObserver` в jsdom нет вовсе, а доска задач считает им свою высоту: она
+ * пересчитывается, когда над ней вырастает раскрытая форма отбора
+ * (`src/pages/tasks/ui/tasks-board.tsx`). Заглушка чинит падение среды, а не даёт
+ * поведения: без раскладки в jsdom мерить всё равно нечего — высоту доски и то,
+ * что страница под ней не прокручивается, проверяет `e2e/board.spec.ts`.
+ */
+globalThis.ResizeObserver ??= class {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+};
+
 // Подмена API поднимается на весь прогон: тест, который сходил в сеть мимо обработчика,
 // должен падать, а не тихо получать чужой ответ.
 beforeAll(() => {
