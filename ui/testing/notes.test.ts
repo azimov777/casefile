@@ -102,6 +102,7 @@ const NOT_IN_CODE: Record<string, string> = {
   maxPages: 'настройка бесконечного запроса TanStack Query, названная как невзятая',
   onlyBuiltDependencies: 'поле pnpm 10, названное как отменённое',
   resize_window: 'инструмент браузерного расширения, не код репозитория',
+  COMPOSE_PROJECT_NAME: 'переменная Docker Compose, не наш код',
   '10-listen-on-ipv6-by-default.sh': 'скрипт внутри образа nginx, а не наш файл',
   'markdown.module.css': 'снесённый модуль стилей, названный как снесённый',
 };
