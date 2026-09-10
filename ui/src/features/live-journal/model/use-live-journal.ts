@@ -7,7 +7,14 @@ import {
   type Bootstrap,
 } from '@/entities/session';
 import { clearToken, getToken, refreshInstallToken } from '@/shared/api';
-import { holdForRequest, holdWhileHidden, releaseHidden } from './deferred';
+import {
+  holdForRequest,
+  holdForWindow,
+  holdWhileHidden,
+  releaseHidden,
+  releaseWindowed,
+  subscribeWindowClosed,
+} from './deferred';
 import { parseFrame, type JournalFrame } from './frames';
 import { keysAfterReconnect, keysToInvalidate, type Invalidation } from './invalidation';
 import { openJournalStream } from './stream-client';
@@ -85,26 +92,47 @@ export function useLiveJournal(): LiveJournal {
     if (token === null || getToken() !== token) return;
 
     /**
-     * Раскладывает устаревшее по двум срокам.
+     * Раскладывает устаревшее по трём срокам (`deferred.ts`).
      *
-     * Список и доска не перечитываются никогда сами: они ждут, пока человек нажмёт
-     * «показать» (`deferred.ts`). Всё остальное перечитывается сразу — или копится до
-     * возврата во вкладку, потому что перечитывать невидимое незачем, а терять кадры
-     * нельзя.
+     * Таблица не перечитывается никогда сама: она ждёт, пока человек нажмёт «показать».
+     * Доска перечитывается сама, но окном склейки, а не на каждый кадр. Всё остальное —
+     * сразу. Невидимая вкладка не перечитывает ничего вовсе: перечитывать то, на что
+     * никто не смотрит, незачем, а терять кадры нельзя — потому они копятся до возврата.
      */
-    function invalidate({ immediate, deferred }: Invalidation, taskKey: string | null): void {
+    function invalidate(
+      { immediate, coalesced, deferred }: Invalidation,
+      taskKey: string | null,
+    ): void {
       holdForRequest(deferred, taskKey);
 
       if (document.hidden) {
-        holdWhileHidden(immediate);
+        holdWhileHidden([...immediate, ...coalesced]);
         return;
       }
       for (const key of immediate) void queryClient.invalidateQueries({ queryKey: key });
+      holdForWindow(coalesced);
     }
 
     function applyPending(): void {
       if (document.hidden) return;
       for (const key of releaseHidden()) void queryClient.invalidateQueries({ queryKey: key });
+    }
+
+    /**
+     * Окно склейки закрылось: накопленное уходит одним перечитыванием.
+     *
+     * Вкладка могла уйти в фон, пока окно шло. Тогда накопленное не выбрасывается и не
+     * перечитывается, а переезжает в срок «до возврата»: правило «невидимое не читаем»
+     * старше окна, а забытый кадр человек уже ничем не догонит.
+     */
+    function applyWindowed(): void {
+      const keys = releaseWindowed();
+      if (keys.length === 0) return;
+      if (document.hidden) {
+        holdWhileHidden(keys);
+        return;
+      }
+      for (const key of keys) void queryClient.invalidateQueries({ queryKey: key });
     }
 
     function onFrame(frame: JournalFrame): void {
@@ -135,6 +163,7 @@ export function useLiveJournal(): LiveJournal {
     }
 
     document.addEventListener('visibilitychange', applyPending);
+    const unsubscribe = subscribeWindowClosed(applyWindowed);
 
     const close = openJournalStream({
       token,
@@ -184,6 +213,7 @@ export function useLiveJournal(): LiveJournal {
 
     return () => {
       document.removeEventListener('visibilitychange', applyPending);
+      unsubscribe();
       close();
     };
   }, [queryClient, token]);

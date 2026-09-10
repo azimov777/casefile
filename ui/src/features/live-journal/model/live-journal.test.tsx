@@ -2,19 +2,24 @@ import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, collection, data, taskPackage } from '@testing/msw/responses';
+import { API, bootstrap, collection, data, taskListing, taskPackage } from '@testing/msw/responses';
 import { liveJournal } from '@testing/live-journal';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { task } from '@testing/msw/responses';
+import { TASK_COLUMN_PAGE_SIZE, TASK_PAGE_SIZE, type TaskStatus } from '@/entities/task';
 import { setToken } from '@/shared/api';
+import { COALESCE_WINDOW_MS } from './deferred';
 
 /** Сколько раз спрашивали список задач: по этому видно, перечитал ли кадр экран. */
 let listings = 0;
+/** Каждый запрос выдачи целиком: доска читает столбцами, и различать их приходится. */
+let seen: URL[] = [];
 
 beforeEach(() => {
   listings = 0;
+  seen = [];
   server.use(
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
     http.get(`${API}/api/v1/tasks`, () => {
@@ -101,7 +106,7 @@ describe('живой поток', () => {
     expect(await screen.findByText(say.ui('live.changed', { count: 2 }))).toBeInTheDocument();
   });
 
-  it('накопленное переживает переход между таблицей и доской', async () => {
+  it('полоса уходит вместе с таблицей и возвращается с ней же', async () => {
     const user = userEvent.setup();
     renderApp('/tasks');
     await screen.findByText('DEMO-1');
@@ -112,8 +117,15 @@ describe('живой поток', () => {
     expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: say.tasks('view.board') }));
+    await screen.findByRole('region', { name: 'open' });
 
-    // Полоса на месте: страница перемонтировалась, а накопленное живёт не в ней.
+    // На доске полосы нет: она обновляется сама, и предлагать ей нечего (UI-72).
+    expect(screen.queryByText(say.ui('live.changed', { count: 1 }))).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: say.tasks('view.table') }));
+
+    // Накопленное живёт в модуле, а не в странице: таблица возвращается со своей
+    // полосой и своим числом.
     expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
   });
 
@@ -351,5 +363,201 @@ describe('живой поток', () => {
 
     expect(await screen.findByLabelText(say.login('tokenLabel'))).toBeInTheDocument();
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
+  });
+});
+
+/**
+ * Доска под живым потоком.
+ *
+ * Доска — единственный экран списка, который перечитывает себя сам: переезд карточки
+ * между столбцами это то, ради чего на неё смотрят (UI-72). Проверяется здесь и цена
+ * этого — сколько запросов уходит на пачку кадров, — и то, что таблица от новой ветки
+ * не изменилась ни на шаг.
+ */
+describe('доска под живым потоком', () => {
+  /** Задача, которую агент двигает между столбцами прямо во время теста. */
+  let moved = false;
+
+  /**
+   * Выдача, отвечающая по отбору столбца, как настоящий бэкенд: общий ответ на все
+   * запросы показал бы одну и ту же задачу в каждом столбце, и «переехала» было бы
+   * не видно.
+   */
+  function board(): void {
+    moved = false;
+    server.use(
+      http.get(`${API}/api/v1/tasks`, ({ request }) => {
+        const url = new URL(request.url);
+        seen.push(url);
+        return taskListing(url, [
+          task('DEMO-1', { status: moved ? 'in_progress' : 'open' }),
+          task('DEMO-2', { status: 'waiting' }),
+        ]);
+      }),
+    );
+  }
+
+  /** Запросы за карточками столбцов: у запроса за одним лишь числом страница в строку. */
+  function columnRequests(): URL[] {
+    return seen.filter((url) => url.searchParams.get('limit') === String(TASK_COLUMN_PAGE_SIZE));
+  }
+
+  /** Запросы таблицы: её страница в полсотни строк ни с чем не спутать. */
+  function tableRequests(): URL[] {
+    return seen.filter((url) => url.searchParams.get('limit') === String(TASK_PAGE_SIZE));
+  }
+
+  function column(status: TaskStatus) {
+    return screen.getByRole('region', { name: status });
+  }
+
+  /**
+   * Пауза, внутри которой React волен дорисовывать. Голое ожидание таймера этого права
+   * не даёт: перерисовка от пришедшего ответа случилась бы вне `act`, и предупреждение
+   * о ней читалось бы как ошибка теста, которой нет.
+   */
+  async function idle(ms: number): Promise<void> {
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, ms));
+    });
+  }
+
+  /** Полоса обновлений. По имени: роль `status` носит и индикатор связи в шапке. */
+  function bar() {
+    return screen.queryByRole('status', { name: say.ui('live.updates') });
+  }
+
+  async function openBoard(): Promise<void> {
+    board();
+    renderApp('/tasks?queue=DEMO&view=board');
+    await screen.findByRole('region', { name: 'open' });
+    await within(column('open')).findByRole('article');
+    await waitFor(() => expect(columnRequests()).toHaveLength(4));
+  }
+
+  it('кадр при видимой вкладке сам переносит карточку в её столбец, и полосы нет', async () => {
+    await openBoard();
+    expect(within(column('in_progress')).queryByRole('article')).not.toBeInTheDocument();
+
+    // Агент двинул задачу: следующее чтение выдачи покажет её уже в другом столбце.
+    moved = true;
+    act(() => {
+      liveJournal.send(entry(1060, 'DEMO-1', { type: 'status_changed' }));
+    });
+
+    // Ни одного нажатия: карточка переехала сама. Ждать приходится дольше обычного —
+    // на окно склейки (`COALESCE_WINDOW_MS`), и это его цена, названная вслух.
+    expect(
+      await within(column('in_progress')).findByRole('article', undefined, { timeout: 5_000 }),
+    ).toHaveTextContent('DEMO-1');
+    expect(within(column('open')).queryByRole('article')).not.toBeInTheDocument();
+
+    // Полосы на доске нет ни при каком потоке кадров: предлагать показать то, что уже
+    // показано, значит врать про состояние экрана.
+    expect(bar()).not.toBeInTheDocument();
+  });
+
+  it('пачка кадров стоит одного перечитывания, а не десяти', async () => {
+    await openBoard();
+    const before = columnRequests().length;
+
+    // Десять записей за секунду — обычный заход агента по задаче. Идут вразбивку,
+    // а не разом: склейка обязана пережить паузы внутри пачки.
+    for (let frame = 0; frame < 10; frame += 1) {
+      act(() => {
+        liveJournal.send(entry(1070 + frame, 'DEMO-1', { type: 'attempt' }));
+      });
+      await idle(40);
+    }
+
+    await waitFor(() => expect(columnRequests().length).toBeGreaterThan(before), {
+      timeout: 5_000,
+    });
+    // По запросу на раскрытый столбец — четыре, а не сорок: окно склейки одно на пачку.
+    expect(columnRequests()).toHaveLength(before + 4);
+
+    // И оно не открывается второй раз само по себе: покой ничего не читает.
+    await idle(COALESCE_WINDOW_MS * 1.5);
+    expect(columnRequests()).toHaveLength(before + 4);
+  });
+
+  it('отключённый запрос таблицы обновление доски не будит', async () => {
+    await openBoard();
+
+    act(() => {
+      liveJournal.send(entry(1080, 'DEMO-1', { type: 'note' }));
+    });
+    await waitFor(() => expect(columnRequests()).toHaveLength(8), { timeout: 5_000 });
+
+    // При открытой доске табличный запрос выключен (`enabled: !board`), и его ключ
+    // вообще не инвалидируется: он ждёт просьбы человека, а просить на доске негде.
+    expect(tableRequests()).toEqual([]);
+  });
+
+  it('запросы доски при открытой таблице не будятся: столбцов на экране нет', async () => {
+    await openBoard();
+    const before = columnRequests().length;
+
+    await userEvent.setup().click(screen.getByRole('link', { name: say.tasks('view.table') }));
+    await screen.findByRole('table');
+
+    act(() => {
+      liveJournal.send(entry(1090, 'DEMO-1', { type: 'note' }));
+    });
+    await waitFor(() => expect(bar()).toBeInTheDocument());
+
+    // Окно склейки закрылось, ключи доски помечены устаревшими — но её запросов
+    // на экране нет, и в сеть не уходит ничего. Таблица при этом ждёт нажатия.
+    await idle(COALESCE_WINDOW_MS * 1.5);
+    expect(columnRequests()).toHaveLength(before);
+    expect(bar()).toHaveTextContent(say.ui('live.changed', { count: 1 }));
+  });
+
+  it('в фоновой вкладке доска молчит, а возврат приносит накопленное разом', async () => {
+    await openBoard();
+    const before = columnRequests().length;
+
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    moved = true;
+    act(() => {
+      for (const frame of [1100, 1101, 1102]) {
+        liveJournal.send(entry(frame, 'DEMO-1', { type: 'status_changed' }));
+      }
+    });
+
+    // Невидимая вкладка не перечитывает ничего: живость нужна тому, кто смотрит.
+    await idle(COALESCE_WINDOW_MS * 1.5);
+    expect(columnRequests()).toHaveLength(before);
+
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Накопленное вылилось одним перечитыванием — по запросу на столбец, а не по три.
+    expect(
+      await within(column('in_progress')).findByRole('article', undefined, { timeout: 5_000 }),
+    ).toHaveTextContent('DEMO-1');
+    expect(columnRequests()).toHaveLength(before + 4);
+    expect(bar()).not.toBeInTheDocument();
+  });
+
+  it('переподключение после обрыва обновляет доску само', async () => {
+    await openBoard();
+    const before = columnRequests().length;
+
+    act(() => liveJournal.options?.onLost());
+    expect(await screen.findByText(say.ui('live.offline'))).toBeInTheDocument();
+
+    // За время обрыва могло случиться что угодно, и кадров об этом не будет вовсе:
+    // доска перечитывает своё сама, а полосе с выдуманным числом здесь места нет.
+    moved = true;
+    act(() => liveJournal.options?.onOpen());
+
+    expect(
+      await within(column('in_progress')).findByRole('article', undefined, { timeout: 5_000 }),
+    ).toHaveTextContent('DEMO-1');
+    expect(columnRequests()).toHaveLength(before + 4);
+    expect(bar()).not.toBeInTheDocument();
   });
 });

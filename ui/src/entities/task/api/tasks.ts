@@ -58,13 +58,28 @@ export const TASK_PAGE_SIZE = 50;
  */
 export const TASK_COLUMN_PAGE_SIZE = 10;
 
+/**
+ * Ключи запросов, разложенные по двум экранам списка.
+ *
+ * Разложены они так не для порядка, а потому, что живой поток обновляет эти экраны
+ * по-разному: доска перечитывается сама, таблица ждёт просьбы человека (UI-72).
+ * Правило это выражается ровно двумя префиксами — `table` и `board`, — и общего
+ * корня над ними больше нет: единый `['tasks']` накрывал оба экрана, и всякий, кто
+ * брал его, отменял деление, сам того не заметив.
+ *
+ * Числа в заголовках столбцов стоят под `board` вместе со страницами: спрашивает их
+ * доска и только доска — таблица своё число берёт из меты собственной страницы.
+ */
 export const taskKeys = {
-  all: ['tasks'] as const,
-  list: (params: TaskListParams) => ['tasks', 'list', params] as const,
+  /** Всё, что читает таблица: страница выдачи целиком. */
+  table: ['tasks', 'table'] as const,
+  list: (params: TaskListParams) => ['tasks', 'table', params] as const,
+  /** Всё, что читает доска: страницы столбцов и числа над ними. */
+  board: ['tasks', 'board'] as const,
   /** Столбец доски: свой отбор по статусу, свой курсор, свои копящиеся страницы. */
-  column: (params: TaskListParams) => ['tasks', 'column', params] as const,
+  column: (params: TaskListParams) => ['tasks', 'board', 'column', params] as const,
   /** Сколько задач в отборе — без самих задач. */
-  total: (params: TaskListParams) => ['tasks', 'total', params] as const,
+  total: (params: TaskListParams) => ['tasks', 'board', 'total', params] as const,
 };
 
 export function fetchTasks(params: TaskListParams): Promise<Page<Task>> {
