@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { say } from '@testing/say';
 import { Input } from './input';
 
 /** Классы поля: состояния Tailwind различаются приставкой, покой идёт без неё. */
@@ -13,7 +14,7 @@ function inState(classes: string[], state: string): string[] {
 
 describe('поле ввода', () => {
   it('различает покой, наведение, фокус, отказ и запрет', () => {
-    render(<Input aria-label="Токен" />);
+    render(<Input aria-label={say.login('tokenLabel')} />);
 
     const classes = classesOf();
     expect(classes.some((klass) => /^(bg|text|border)-/.test(klass))).toBe(true);
@@ -24,7 +25,7 @@ describe('поле ввода', () => {
   });
 
   it('запрет несёт атрибут и свой цвет, а не прозрачность', () => {
-    render(<Input aria-label="Токен" disabled />);
+    render(<Input aria-label={say.login('tokenLabel')} disabled />);
 
     expect(screen.getByRole('textbox')).toBeDisabled();
 
@@ -36,13 +37,13 @@ describe('поле ввода', () => {
   });
 
   it('отказ виден и без цвета: он объявлен атрибутом', () => {
-    render(<Input aria-label="Токен" aria-invalid />);
+    render(<Input aria-label={say.login('tokenLabel')} aria-invalid />);
 
     expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('класс места вызова перебивает свой', () => {
-    render(<Input aria-label="Токен" className="px-1" />);
+    render(<Input aria-label={say.login('tokenLabel')} className="px-1" />);
 
     const classes = classesOf();
     expect(classes).toContain('px-1');
