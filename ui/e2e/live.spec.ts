@@ -88,7 +88,10 @@ test('запись, подшитая через API, доходит до отк�
   });
 
   await page.goto('/tasks?queue=DEMO');
-  await expect(page.getByRole('rowheader', { name: 'DEMO-3' })).toBeVisible();
+  // `exact`: имя по умолчанию ищется подстрокой, и `DEMO-3` попадает заодно в `DEMO-30`
+  // и всех соседей за тридцатым — а сколько задач заведут сценарии, идущие раньше,
+  // не знает никто.
+  await expect(page.getByRole('rowheader', { name: 'DEMO-3', exact: true })).toBeVisible();
 
   // Поток открыт: шапка говорит об этом словами.
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
