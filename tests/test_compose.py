@@ -53,6 +53,15 @@ OUTPUT_OPTION = "--output"
 #: Рабочий каталог обоих образов: относительный путь команды считается от него.
 WORKDIR = "/app"
 
+#: Чем контур возвращает записанный файл хозяину каталога, смонтированного с хоста.
+#: Дев-контур работает от root, узнаёт владельца прямо у каталога и отдаёт файл ему;
+#: прод-контур работает от непривилегированного пользователя, чужого uid взять не может
+#: и называет владельца переменной.
+OWNER_NAMED = {
+    "dev": ("chown", "$$(stat -c %u:%g /app)"),
+    "prod": ("user:", "TRACKER_SECRETS_USER"),
+}
+
 
 def _indent(line: str) -> int:
     return len(line) - len(line.lstrip())
@@ -196,6 +205,21 @@ def test_the_mcp_port_reaches_the_process_and_not_only_the_publication() -> None
         assert all(MCP_PORT in line for line in health), health
 
 
+def _output_paths(body: list[str]) -> list[PurePosixPath]:
+    """Файлы, которые команда сервиса называет ключом `--output`, — путями в контейнере.
+
+    Относительный путь считается от рабочего каталога образа: он один у обоих контуров,
+    и `--output .secrets/ui-token` означает `/app/.secrets/ui-token` в каждом.
+    """
+    paths: list[PurePosixPath] = []
+    for line in body:
+        if OUTPUT_OPTION not in line:
+            continue
+        output = PurePosixPath(line.split(OUTPUT_OPTION, 1)[1].split()[0])
+        paths.append(output if output.is_absolute() else PurePosixPath(WORKDIR) / output)
+    return paths
+
+
 def _mount_targets(lines: list[str]) -> set[str]:
     """Куда описание монтирует каталоги хоста: правые половины строк блока `volumes:`.
 
@@ -242,13 +266,11 @@ def test_both_contours_hand_the_ui_key_to_the_host() -> None:
         )
 
         service = services[LOCAL_TOKEN_SERVICE]
-        command = [line for line in service if OUTPUT_OPTION in line]
+        written = _output_paths(service)
 
-        assert len(command) == 1, f"{contour}: {OUTPUT_OPTION} в сервисе не разобран: {service}"
+        assert len(written) == 1, f"{contour}: {OUTPUT_OPTION} в сервисе не разобран: {service}"
 
-        output = PurePosixPath(command[0].split(OUTPUT_OPTION, 1)[1].split()[0])
-        if not output.is_absolute():
-            output = PurePosixPath(WORKDIR) / output
+        output = written[0]
         mounted = _mount_targets(_block(text, "x-app-service:")) | _mount_targets(service)
 
         # Сторожевой проверки на пустоту здесь нет намеренно: промах разбора даёт пустое
@@ -257,3 +279,51 @@ def test_both_contours_hand_the_ui_key_to_the_host() -> None:
             f"{contour}: {output} лежит вне каталогов хоста {sorted(mounted)} — "
             f"файл ключа не переживёт разовый контейнер, причём молча"
         )
+
+
+def _services_writing_onto_the_host(text: str) -> dict[str, str]:
+    """Сервисы, чей файл из `--output` ложится в каталог, смонтированный с хоста."""
+    shared = _mount_targets(_block(text, "x-app-service:"))
+    writing: dict[str, str] = {}
+    for name, body in _services(text).items():
+        mounted = shared | _mount_targets(body)
+        for output in _output_paths(body):
+            if any(str(parent) in mounted for parent in output.parents):
+                writing[name] = "\n".join(body)
+                break
+    return writing
+
+
+def test_the_written_file_ends_up_owned_by_the_one_who_reads_it() -> None:
+    """Файл, положенный контуром на машину хозяина, достаётся хозяину, а не root.
+
+    Процесс контейнера пишет файл своим uid, и на Linux этот же uid стоит владельцем
+    файла на хосте: bind-mount владельца не подменяет. Дев-контур работает от root —
+    и хозяин установки получает собственный каталог, из которого не может ни прочитать
+    ключ (`cat .secrets/ui-token` из README отвечает отказом), ни удалить его. На macOS
+    слой обмена файлами Docker Desktop владельца подменяет, поломки там нет вовсе, и
+    зелёный прогон на такой машине про права не говорит ничего (TRK-52#5).
+
+    Механизмы у контуров разные, потому что разные права у процесса: root узнаёт хозяина
+    прямо у смонтированного каталога и возвращает файл ему, а непривилегированный процесс
+    прод-контура чужого uid взять не может, и владелец назван ему переменной. Умолчание
+    той переменной годится не всякой машине, и дев-контуру она поэтому не подходит:
+    контур обязан подниматься одной командой без подготовки.
+
+    Стережёт проверка тех, кто называет файл ключом `--output`. Кеши инструментов сюда
+    не попадают, и они выведены за пределы репозитория совсем: `cache-dir` линтера и
+    `cache_dir` набора тестов задают путь мимо смонтированного каталога.
+    """
+    for contour, path in COMPOSE_FILES.items():
+        writing = _services_writing_onto_the_host(path.read_text(encoding="utf-8"))
+
+        assert writing, f"{contour}: сервисы, пишущие файл на машину хозяина, не разобраны"
+
+        for name, described in writing.items():
+            unnamed = [mark for mark in OWNER_NAMED[contour] if mark not in described]
+
+            assert not unnamed, (
+                f"{contour}, сервис {name}: файл ложится на машину хозяина, "
+                f"владельца ему никто не назначает ({unnamed}) — на Linux файл "
+                f"останется тому, кто писал, недоступным хозяину установки"
+            )
