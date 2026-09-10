@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { reachEnd, watched } from '@testing/intersection';
-import { useEndReach } from './end-reach';
+import { leaveEnd, reachEnd, watched } from '@testing/intersection';
+import { useBeyondEdge, useEndReach } from './end-reach';
 
 /**
  * Область и сторож: два узла в живом документе. Настоящей раскладки в jsdom нет,
@@ -80,5 +80,42 @@ describe('useEndReach', () => {
     expect(watched()).toHaveLength(1);
     await reachEnd();
     expect(onReach).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useBeyondEdge', () => {
+  it('конец за краем — за краем есть ещё; показался — знака нет', async () => {
+    const { area, end } = nodes('auto');
+
+    const { result } = renderHook(() => useBeyondEdge({ area: { current: area } }));
+    // Ссылку React зовёт сам, когда узел встаёт в разметку; здесь её зовёт тест.
+    act(() => result.current.end(end));
+
+    // До первого слова наблюдателя знака нет: нарисованный раньше замера, он обещал бы
+    // содержимое за краем там, где его нет.
+    expect(result.current.beyond).toBe(false);
+
+    await leaveEnd();
+    expect(result.current.beyond).toBe(true);
+
+    await reachEnd();
+    expect(result.current.beyond).toBe(false);
+  });
+
+  it('область не прокручивается — нет ни наблюдателя, ни знака', async () => {
+    /*
+     * Ниже точки остановки столбец доски прокручиваемой областью не является, и корнем
+     * стало бы окно: «сторож за нижним краем окна» это не «в столбце есть ещё карточки»,
+     * а «страница длинная». Знак по такому корню обещал бы прокрутку, которой нет (UI-91).
+     */
+    const { area, end } = nodes('visible');
+
+    const { result } = renderHook(() => useBeyondEdge({ area: { current: area } }));
+    // Ссылку React зовёт сам, когда узел встаёт в разметку; здесь её зовёт тест.
+    act(() => result.current.end(end));
+
+    expect(watched()).toEqual([]);
+    await leaveEnd();
+    expect(result.current.beyond).toBe(false);
   });
 });

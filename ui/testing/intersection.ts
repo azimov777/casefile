@@ -5,15 +5,15 @@ import { act } from '@testing-library/react';
  *
  * В jsdom своего нет вовсе, а раскладки нет тем более: настоящий наблюдатель здесь
  * молчал бы всегда, потому что ничего не пересекается ни с чем. Заглушка не изображает
- * геометрию — она даёт тесту сказать «сторож показался» и проверить, что из этого
- * вышло. Прокрутку в живом браузере проверяет `e2e/board.spec.ts`.
+ * геометрию — она даёт тесту сказать «сторож показался» или «сторож ушёл за край»
+ * и проверить, что из этого вышло. Прокрутку в живом браузере проверяет `e2e/board.spec.ts`.
  */
 
 interface Watch {
   root: Element | Document | null;
   rootMargin: string;
   targets: Set<Element>;
-  fire: () => void;
+  fire: (seen: boolean) => void;
 }
 
 const watches = new Set<Watch>();
@@ -31,9 +31,9 @@ class ControlledObserver implements IntersectionObserver {
       root: this.root,
       rootMargin: this.rootMargin,
       targets: new Set<Element>(),
-      fire: () => {
+      fire: (seen: boolean) => {
         const entries = [...this.watch.targets].map(
-          (target) => ({ target, isIntersecting: true }) as IntersectionObserverEntry,
+          (target) => ({ target, isIntersecting: seen }) as IntersectionObserverEntry,
         );
         if (entries.length > 0) callback(entries, this);
       },
@@ -86,7 +86,21 @@ export function watched(): { root: Element | Document | null; rootMargin: string
  * на обновление состояния вне действия, а тест видит экран до ответа.
  */
 export async function reachEnd(): Promise<void> {
+  await tell(true);
+}
+
+/**
+ * «Сторож ушёл за край» — обратное сообщение тем же наблюдателям.
+ *
+ * Настоящий наблюдатель говорит и об уходе пересечения, и на этом стоит знак края
+ * столбца доски: конец за краем — за краем есть ещё содержимое (UI-90).
+ */
+export async function leaveEnd(): Promise<void> {
+  await tell(false);
+}
+
+async function tell(seen: boolean): Promise<void> {
   await act(async () => {
-    for (const watch of [...watches]) watch.fire();
+    for (const watch of [...watches]) watch.fire(seen);
   });
 }

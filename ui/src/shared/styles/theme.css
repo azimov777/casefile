@@ -109,6 +109,7 @@
 
   --shadow-raised: var(--t-shadow);
   --shadow-sticky: var(--t-sticky);
+  --shadow-edge: var(--t-edge);
 
   /*
    * Точки остановки названы решением, а не размером экрана. `fold` — где строка списка
