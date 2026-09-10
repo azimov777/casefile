@@ -10,7 +10,7 @@ import { errorMessage, errorText } from './text';
  * а не переписывать на глаз. Новый код на бэкенде роняет `pnpm check` здесь — раньше,
  * чем английская фраза доедет до человека.
  */
-const ERRORS_MD = resolve(process.cwd(), '../tracker/docs/ERRORS.md');
+const ERRORS_MD = resolve(process.cwd(), '../docs/ERRORS.md');
 
 function codesFromReference(): string[] {
   const rows = readFileSync(ERRORS_MD, 'utf8').matchAll(/^\| `([a-z_]+)` \|/gm);

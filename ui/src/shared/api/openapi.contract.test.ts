@@ -6,16 +6,16 @@ import { describe, expect, it } from 'vitest';
 /**
  * Сгенерированный клиент коммитится, чтобы сборка не зависела от соседнего репозитория.
  * Значит, отставание копии от контракта надо ловить, а не обещать: этот тест
- * перегенерирует типы из `../tracker/openapi.json` и сверяет с закоммиченным файлом.
+ * перегенерирует типы из `../openapi.json` и сверяет с закоммиченным файлом.
  */
 const GENERATED = resolve(process.cwd(), 'src/shared/api/openapi.ts');
-const SCHEMA = resolve(process.cwd(), '../tracker/openapi.json');
+const SCHEMA = resolve(process.cwd(), '../openapi.json');
 
 describe('сгенерированный клиент API', () => {
   it('равен тому, что даёт генератор на текущем контракте', () => {
     expect(
       existsSync(SCHEMA),
-      `Не найден контракт ${SCHEMA}. Репозиторий бэкенда должен лежать рядом: ../tracker`,
+      `Не найден контракт ${SCHEMA}. Бэкенд — корень этого репозитория, на уровень выше ui/`,
     ).toBe(true);
 
     const cli = resolve(process.cwd(), 'node_modules/openapi-typescript/bin/cli.js');

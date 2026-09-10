@@ -39,7 +39,7 @@ if [ -f .env ]; then
   done <.env
 fi
 
-backend_dir=${TRACKER_BACKEND_DIR:-../tracker}
+backend_dir=${TRACKER_BACKEND_DIR:-..}
 backend_compose=${TRACKER_BACKEND_COMPOSE:-docker-compose.prod.yml}
 token_file=${TRACKER_UI_TOKEN_FILE:-$backend_dir/.secrets/ui-token}
 ui_port=${UI_PORT:-8080}
@@ -58,7 +58,7 @@ fi
 
 # Каталог под ключ заводится здесь, а не Docker'ом: недостающий источник bind-mount
 # Docker создаёт сам и на Linux — от root, а пишет в него непривилегированный процесс
-# прод-образа бэкенда (`../tracker/docs/notes/docker.md`).
+# прод-образа бэкенда (`../docs/notes/docker.md`).
 mkdir -p "$(dirname "$token_file")"
 
 backend() {

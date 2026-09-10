@@ -14,8 +14,8 @@ import { describe, expect, it } from 'vitest';
  * двумя артефактами бэкенда, которые тот выгружает командой.
  */
 const DOC = resolve(process.cwd(), 'docs/FRONTEND.md');
-const SCHEMA = resolve(process.cwd(), '../tracker/openapi.json');
-const ERRORS = resolve(process.cwd(), '../tracker/docs/ERRORS.md');
+const SCHEMA = resolve(process.cwd(), '../openapi.json');
+const ERRORS = resolve(process.cwd(), '../docs/ERRORS.md');
 
 /**
  * Путь API в тексте документа. Строка обрывается на первом символе, которого в пути
@@ -52,7 +52,7 @@ describe('карта контракта для интерфейса', () => {
   it('называет только те пути, которые есть в схеме', () => {
     expect(
       existsSync(SCHEMA),
-      `Не найден контракт ${SCHEMA}. Репозиторий бэкенда должен лежать рядом: ../tracker`,
+      `Не найден контракт ${SCHEMA}. Бэкенд — корень этого репозитория, на уровень выше ui/`,
     ).toBe(true);
 
     const named = [...new Set(doc().match(API_PATH) ?? [])];
@@ -68,7 +68,7 @@ describe('карта контракта для интерфейса', () => {
   it('называет только те коды ошибок, которые бэкенд может вернуть', () => {
     expect(
       existsSync(ERRORS),
-      `Не найден справочник ${ERRORS}. Репозиторий бэкенда должен лежать рядом: ../tracker`,
+      `Не найден справочник ${ERRORS}. Бэкенд — корень этого репозитория, на уровень выше ui/`,
     ).toBe(true);
 
     const named = codesNamedInTheDoc();

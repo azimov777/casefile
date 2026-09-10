@@ -144,7 +144,7 @@ export function curve(value: string): string {
 }
 
 /**
- * Значения статуса — из контракта соседнего репозитория, а не перечнем в тесте.
+ * Значения статуса — из контракта бэкенда, а не перечнем в тесте.
  *
  * Перечисление уже менялось дважды (2026-09-05 из него убрали статус, 2026-09-07
  * добавили `waiting`), и тест, выписавший его руками, проверял бы после такой правки
@@ -152,9 +152,9 @@ export function curve(value: string): string {
  * не уронив ни одного прогона.
  */
 export function contractStatuses(): string[] {
-  const contract = JSON.parse(
-    readFileSync(resolve(process.cwd(), '../tracker/openapi.json'), 'utf8'),
-  ) as { components: { schemas: { TaskStatus: { enum: string[] } } } };
+  const contract = JSON.parse(readFileSync(resolve(process.cwd(), '../openapi.json'), 'utf8')) as {
+    components: { schemas: { TaskStatus: { enum: string[] } } };
+  };
   return contract.components.schemas.TaskStatus.enum;
 }
 

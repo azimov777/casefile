@@ -12,7 +12,7 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "preview": "vite preview",
-    "gen:api": "openapi-typescript ../tracker/openapi.json --output src/shared/api/openapi.ts",
+    "gen:api": "openapi-typescript ../openapi.json --output src/shared/api/openapi.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "fsd": "steiger ./src",
