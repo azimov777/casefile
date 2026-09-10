@@ -308,7 +308,7 @@ JSON-конвертом ошибки. У значения по умолчани�
 
 ## Модель Pydantic в параметрах запроса раскладывается, только если она там одна
 
-**Что:** `filters: Annotated[TaskFilterQuery, Query()]` рядом с `query`, `sort`, `fields`,
+**Что:** `filters: Annotated[TaskFilters, Query()]` рядом с `query`, `sort`, `fields`,
 `limit` и `cursor` **не** превращается в набор параметров: FastAPI раскладывает модель на
 поля только тогда, когда она единственный параметр запроса у маршрута
 (`_get_flat_fields_from_params`, `len(fields) == 1`). Иначе она остаётся одним параметром
