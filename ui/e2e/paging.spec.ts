@@ -7,12 +7,6 @@ const token = readE2eToken();
 /** Столько задач помещается на страницу списка (`entities/task`, `TASK_PAGE_SIZE`). */
 const PAGE_SIZE = 50;
 
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
-
 /**
  * Сколько задач в очереди сейчас — по правде бэкенда, а не по длине прочитанной
  * страницы: `meta.total` считает всю выдачу по отбору и от размера страницы не зависит

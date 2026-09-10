@@ -3,12 +3,6 @@ import { readE2eToken } from './contour';
 
 const token = readE2eToken();
 
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
-
 /** Сколько замечаний подшито в деле задачи — правда бэкенда, а не экрана. */
 async function remarksOf(request: APIRequestContext, key: string): Promise<number> {
   const response = await request.get(`/api/v1/tasks/${key}/entries?types=remark`, {

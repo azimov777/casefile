@@ -1,14 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { curve, ms, readE2eToken, readFrame, silenceJournal } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { curve, ms, readFrame, signedInByHand, silenceJournal } from './contour';
 
 /** Боковая панель на широком экране; на узком та же панель живёт в шторке. */
 function side(page: Page) {
@@ -121,6 +113,10 @@ test('очередь остаётся подсвеченной внутри за
 });
 
 test('в панели нет действий, меняющих данные', async ({ page }) => {
+  // Установка с несколькими людьми: у неё панель богаче на одну кнопку — «Выйти», —
+  // и перечисление обязано ловить лишнее именно там, где кнопок больше. На локальной
+  // установке кнопок в панели нет вовсе (`e2e/install-key.spec.ts`).
+  await signedInByHand(page);
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
   await expect(side(page)).toBeVisible();
@@ -135,6 +131,9 @@ test.describe('узкий экран', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test('панель уезжает за кнопку, закрывается Esc и возвращает фокус', async ({ page }) => {
+    // Со входом руками: в шторке проверяется, что внутри неё лежит всё служебное,
+    // а «Выйти» есть только у установки, где людей несколько.
+    await signedInByHand(page);
     await silenceJournal(page);
     await page.goto('/tasks?queue=DEMO');
     await expect(page.getByRole('table')).toBeVisible();

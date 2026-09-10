@@ -1,7 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
-
-const token = readE2eToken();
+import { fontsReady, silenceJournal } from './contour';
 
 /** Пять экранов из `CONCEPT.md`, 3: список, доска, карточка, дело, входящая. */
 const SCREENS: [string, string][] = [
@@ -11,12 +9,6 @@ const SCREENS: [string, string][] = [
   ['дело', '/tasks/DEMO-3/case'],
   ['входящая', '/questions'],
 ];
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 /**
  * Самый мелкий кегль на странице среди элементов с собственным текстом.

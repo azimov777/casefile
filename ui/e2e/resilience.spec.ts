@@ -1,13 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { readE2eToken, side } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { side } from './contour';
 
 /**
  * Отказ бэкенда подменяется в браузере, а не гашением контейнера: гасить бэкенд

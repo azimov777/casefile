@@ -37,12 +37,6 @@ const LIST = `/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}`;
 /** Столько задач заводится: экран обязан вместить больше, чем помещалось раньше. */
 const TASKS = 21;
 
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
-
 async function makeTask(
   request: APIRequestContext,
   title: string,
@@ -317,11 +311,9 @@ test.describe('первый экран списка', () => {
     await expect(rows(page)).toHaveCount(5);
     const keys = await page.getByRole('rowheader').allInnerTexts();
 
-    // Чистый контекст: ни хранилища этой вкладки, ни её памяти о свёрнутом отборе.
+    // Чистый контекст: ни памяти этой вкладки о свёрнутом отборе, ни её хранилища.
+    // Ключ ему не подсевают — его отдаёт установка, как и всякой другой вкладке.
     const fresh = await browser.newContext();
-    await fresh.addInitScript((value) => {
-      window.localStorage.setItem('tracker.token', value);
-    }, token);
 
     try {
       const copy = await fresh.newPage();

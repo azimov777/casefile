@@ -29,12 +29,6 @@ const LONG_GOAL = Array.from(
   (_, index) => `Строка ${index + 1} прежней цели, которую правка обязана сохранить целиком.`,
 ).join('\n\n');
 
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
-
 async function api(
   request: APIRequestContext,
   method: 'post' | 'patch',

@@ -13,12 +13,6 @@ const PAGE_SIZE = 25;
  */
 const ENTRIES = 104;
 
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
-
 async function api(
   request: APIRequestContext,
   path: string,

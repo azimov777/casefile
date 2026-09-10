@@ -1,16 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { contractStatuses, fontsReady, readE2eToken, silenceJournal } from './contour';
-
-const token = readE2eToken();
+import { contractStatuses, fontsReady, silenceJournal } from './contour';
 
 /** Все статусы контракта разом видны в заголовках столбцов доски. */
 const STATUSES = contractStatuses();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 /** Вырезка одного знака статуса: только рисунок, без имени рядом. */
 async function shotOf(page: Page, status: string): Promise<Buffer> {

@@ -1,17 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
-
-const token = readE2eToken();
+import { fontsReady, silenceJournal } from './contour';
 
 /** Хост шрифтов и хост их файлов: гасятся вместе, иначе останется половина. */
 const FONT_HOSTS = ['https://fonts.googleapis.com/**', 'https://fonts.gstatic.com/**'];
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 /**
  * Сколько настоящих начертаний подобрано под этот текст этой гарнитурой.

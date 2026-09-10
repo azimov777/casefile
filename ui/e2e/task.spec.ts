@@ -1,14 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { silenceJournal } from './contour';
 
 /** Строка описи по заголовку записи: номер записи зависит от истории задачи, заголовок — нет. */
 function entryRow(page: Page, title: string) {

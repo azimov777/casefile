@@ -1,13 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { curve, fontsReady, ms, readE2eToken, readFrame, shellReady } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { curve, fontsReady, ms, readFrame, shellReady } from './contour';
 
 /**
  * Подменяет живой поток: соединение отвечает нашим потоком, а кадры в него шлёт сам

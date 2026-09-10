@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { silenceJournal } from './contour';
 
 /**
  * Сторож гашения: движение гасится **переменной**, а не перечислением переходов, —
@@ -21,8 +21,6 @@ import { readE2eToken, silenceJournal } from './contour';
  * чтением исходников. Разделение и его причина — `UI-63#10`.
  */
 
-const token = readE2eToken();
-
 /** Длительность мала настолько, что движения не видно, мс (`0.01ms` в `index.css`). */
 const EXTINGUISHED = 1;
 
@@ -38,12 +36,6 @@ interface Reading {
   vocabulary: { token: string; value: string; duration: number | null }[];
   places: Place[];
 }
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 /**
  * Приводит на экран движение всех трёх родов: переход по цвету живёт на любой кнопке,

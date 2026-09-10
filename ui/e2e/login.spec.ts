@@ -1,8 +1,21 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { fontsReady, readE2eToken } from './contour';
+import { fontsReady, installWithoutKey, readE2eToken } from './contour';
 
 const token = readE2eToken();
+
+/**
+ * Экран входа — запасной путь, и проверяется он на установке, которая ключа не выдаёт:
+ * так выглядит установка, где людей несколько и ключ у каждого свой.
+ *
+ * Установку сценарий получает себе явно, а не общим отключением выдачи ключа во всём
+ * контуре: контур ключ выдаёт всем (`e2e/global-setup.ts`), иначе продуктовый путь
+ * не проверял бы никто. Без этой подмены человек попадал бы сразу на задачи, а кнопки
+ * «Выйти» на экране не было бы вовсе.
+ */
+test.beforeEach(async ({ page }) => {
+  await installWithoutKey(page);
+});
 
 test('вход с токеном демо показывает участника и счётчик вопросов', async ({ page }) => {
   const requests: string[] = [];

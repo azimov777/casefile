@@ -1,14 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Locator } from '@playwright/test';
-import { compose, fontsReady, readE2eToken, side } from './contour';
+import { compose, fontsReady, readE2eToken, side, signedInByHand } from './contour';
 
 const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
 
 /**
  * Положение названных элементов на экране. Сравнивается до и после события, которое
@@ -161,6 +155,10 @@ test('вопрос ко мне объявляется уведомлением �
   page,
   request,
 }) => {
+  // Со входом руками: нижний край панели сторожится кнопкой «Выйти», а её нет там,
+  // где ключ отдаёт установка, — выходить некуда (`e2e/contour.ts`, `signedInByHand`).
+  await signedInByHand(page);
+
   // Список отобран по `done`, и DEMO-3 в него не входит. Это важно для замера:
   // заданный вопрос честно меняет признаки своей задачи — у неё появляется плашка
   // «вопросов 1», строка становится выше, и на общем списке замер смешивал бы две

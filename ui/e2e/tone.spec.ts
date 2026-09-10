@@ -1,13 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
-
-const token = readE2eToken();
-
-test.beforeEach(async ({ context }) => {
-  await context.addInitScript((value) => {
-    window.localStorage.setItem('tracker.token', value);
-  }, token);
-});
+import { silenceJournal } from './contour';
 
 function background(target: Locator): Promise<string> {
   return target.evaluate((node) => getComputedStyle(node).backgroundColor);
