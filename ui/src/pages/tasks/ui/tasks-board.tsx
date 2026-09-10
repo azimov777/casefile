@@ -2,7 +2,8 @@ import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StatusMark, TASK_STATUSES, TaskCard, type Task, type TaskStatus } from '@/entities/task';
 import { Button, Reveal } from '@/shared/ui';
-import { cn, useExitHold } from '@/shared/lib';
+import { useLanguage } from '@/shared/i18n';
+import { cn, formatNumber, useExitHold } from '@/shared/lib';
 
 interface TasksBoardProps {
   tasks: Task[];
@@ -158,6 +159,7 @@ interface BoardColumnProps {
 function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnProps) {
   const reveal = useExitHold(open);
   const { t } = useTranslation('tasks');
+  const { language } = useLanguage();
 
   return (
     <section
@@ -233,7 +235,9 @@ function BoardColumn({ status, column, hasMore, open, onToggle }: BoardColumnPro
           <span className="text-meta whitespace-nowrap text-muted">
             {/* «из ?»: сколько задач в статусе всего, знает только дочитанная
                 до конца выдача — врать точным числом до этого нельзя. */}
-            {hasMore ? t('board.ofUnknown', { count: column.length }) : column.length}
+            {hasMore
+              ? t('board.ofUnknown', { count: column.length })
+              : formatNumber(column.length, language)}
           </span>
         </button>
       </h3>
