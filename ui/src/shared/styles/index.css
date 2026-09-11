@@ -1,0 +1,47 @@
+/*
+ * Единственная точка подключения глобальных стилей: её импортирует `main.tsx`.
+ *
+ * Порядок каскада назван здесь явно, а не оставлен на умолчание. Слои идут
+ * `theme → base → components → utilities`; наш сброс живёт в `base`, поэтому
+ * утилита всегда сильнее сброса.
+ *
+ * Порядок важен и после того, как оформление собрано одними утилитами (UI-43,
+ * модулей в проекте не осталось). Неслойное правило сильнее любого слоя, поэтому
+ * CSS, пришедший мимо слоёв — с библиотекой, из `index.html`, вернувшимся
+ * `*.module.css`, — перебьёт утилиту молча: она просто не подействует, а соседняя
+ * подействует. Новый CSS кладётся в слой, а не рядом с ним.
+ *
+ * Preflight от Tailwind не подключён намеренно: у проекта свой сброс, и второй
+ * поверх него переопределял бы заголовки и поля форм.
+ */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@import './tokens.css';
+@import './theme.css';
+@import './reset.css' layer(base);
+
+/*
+ * Человеку, который просит систему не двигать интерфейс, движение гасится целиком
+ * и в одном месте: правило переопределяет длительности, а не переходы поимённо, —
+ * иначе каждый новый `transition` пришлось бы вспоминать гасить, и однажды его
+ * забудут. `0.01ms` вместо нуля: переход остаётся переходом и продолжает слать
+ * `transitionend`, на который может быть завязана логика.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0.01ms;
+    --motion-slow: 0.01ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

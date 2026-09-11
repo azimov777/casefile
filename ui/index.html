@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <!--
+      Язык и заголовок здесь — умолчание оболочки, а не выбор человека: выбор живёт
+      в `localStorage`, и прочитать его до запуска кода нечем. Настоящий язык ставит
+      `syncDocumentLanguage()` из `main.tsx` — синхронно, до первой отрисовки, и заново
+      на каждой смене языка.
+
+      Оба значения обязаны совпадать с языком по умолчанию и его словарём
+      (`DEFAULT_LANGUAGE`, `ui.app.name`). Сторожит это совпадение
+      `src/shared/i18n/document-language.test.ts`, а не вычитка: разъехались бы они
+      молча.
+    -->
+    <title>Tracker</title>
+    <!--
+      Fira Sans набирает подписи, Fira Code — идентификаторы контракта. Обе с
+      кириллицей. `display=swap`: контур сквозных тестов поднимается без интернета,
+      и страница обязана быть читаемой запасной гарнитурой, а не ждать букв.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400..600&family=Fira+Sans:wght@400;500;600&display=swap"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+# Сгенерирован `pnpm gen:api` — форматирование сделало бы файл неравным источнику.
+src/shared/api/openapi.ts
+
+# Документы верстаются руками: колонка 90 и переносы по смыслу — решение автора,
+# а prettier ломает продолжения строк внутри списков.
+*.md
