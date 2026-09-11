@@ -9,6 +9,7 @@ export {
   type LiveJournal,
   type LiveStatus as LiveStatusValue,
 } from './model/use-live-journal';
+export { FloatDock } from './ui/float-dock';
 export { LiveStatus } from './ui/live-status';
 export { QuestionNotice } from './ui/question-notice';
 export { UpdatesBar } from './ui/updates-bar';
