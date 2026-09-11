@@ -1,5 +1,5 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { compose, fontsReady, readE2eToken } from './contour';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { compose, fontsReady, readE2eToken, side, signedInByHand } from './contour';
 
 const token = readE2eToken();
 
@@ -504,4 +504,97 @@ test.describe('список под живым потоком', () => {
     expect(await keys(page)).toEqual(before.keys);
     expect(await tops(page)).toEqual(before.tops);
   });
+});
+
+/**
+ * Порог показа боковой панели (`--breakpoint-fold` в `shared/styles/theme.css`,
+ * 44rem = 704 px). Полоса, приклеенная к краю окна, до UI-98 закрывала подвал панели
+ * ровно там, где панель показана, — а на ширине сразу выше порога самой панели уже
+ * досталось место, и его меньше всего для всех остальных.
+ */
+const FOLD = 704;
+
+/** Числовой прямоугольник, как его отдаёт `boundingBox()`. */
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Есть ли у прямоугольников общая точка по обеим осям. */
+function overlaps(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+async function rectOf(locator: Locator, label: string): Promise<Rect> {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error(`нет прямоугольника: ${label}`);
+  return box;
+}
+
+/**
+ * Полоса обновлений стоит `fixed` в углу экрана. До UI-98 она держалась левого края
+ * окна и на ширине, где показана боковая панель, ложилась на её подвал — участника
+ * и, у установки со входом руками, кнопку «Выйти». Проверяется на 1440×900 (обычный
+ * широкий экран) и на ширине сразу выше порога показа панели, где места меньше всего.
+ *
+ * Установка со входом руками (`signedInByHand`): у локальной установки кнопки
+ * «Выйти» нет вовсе (`fromInstall`), а вторая часть проверки — как раз про неё.
+ */
+test.describe('полоса обновлений не закрывает подвал панели (UI-98)', () => {
+  for (const width of [FOLD + 1, 1440]) {
+    test(`на ${width} px подвал панели виден и нажимается целиком`, async ({ page, request }) => {
+      await signedInByHand(page);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/tasks?queue=DEMO');
+      await expect(rows(page).first()).toBeVisible();
+
+      const name = side(page).getByText('owner');
+      const signOut = side(page).getByRole('button', { name: 'Выйти' });
+      await expect(name).toBeVisible();
+      await expect(signOut).toBeVisible();
+
+      const target = (await keys(page)).at(-1) as string;
+      await addEntry(request, target, {
+        type: 'note',
+        title: `Запись для геометрии полосы на ${width} px`,
+      });
+      await expect(bar(page)).toContainText('Изменилась 1 задача');
+
+      // Метрика снимается уже подставленным шрифтом: он меняет ширины и точки
+      // переноса и у полосы, и у подвала панели.
+      await fontsReady(page);
+
+      const barBox = await rectOf(bar(page), 'полоса обновлений');
+      const nameBox = await rectOf(name, 'имя участника');
+      const signOutBox = await rectOf(signOut, 'кнопка «Выйти»');
+
+      expect(
+        overlaps(barBox, nameBox),
+        `${width} px: полоса ${JSON.stringify(barBox)} и имя ${JSON.stringify(nameBox)}`,
+      ).toBe(false);
+      expect(
+        overlaps(barBox, signOutBox),
+        `${width} px: полоса ${JSON.stringify(barBox)} и «Выйти» ${JSON.stringify(signOutBox)}`,
+      ).toBe(false);
+
+      // Проверка 2: кнопка достижима табом, пока полоса видна, — числом шагов до
+      // совпадения, а не фиксированным счётом (порядок пунктов панели может измениться).
+      for (
+        let step = 0;
+        step < 20 && !(await signOut.evaluate((node) => node === document.activeElement));
+        step += 1
+      ) {
+        await page.keyboard.press('Tab');
+      }
+      await expect(signOut).toBeFocused();
+      await expect(bar(page)).toBeVisible();
+
+      // И нажимается мышью без `force`: без этого флага клик Playwright отказал бы
+      // сам, наткнувшись на полосу, если бы та и вправду перекрывала кнопку.
+      await signOut.click();
+      await expect(page).toHaveURL(/\/login/);
+    });
+  }
 });
