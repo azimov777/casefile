@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Trans, useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
   ConnectionSnippets,
   LABEL_HEADER,
@@ -79,7 +79,17 @@ export function ConnectPage() {
           text={AGENT_TOKEN_COMMAND}
         />
         <Text>
-          <Trans t={t} i18nKey="token.ownToken" values={values} components={code} />
+          {/*
+           * Отдельный токен выпускается на соседнем экране, и абзац ведёт туда
+           * ссылкой. До UI-106 здесь стоял адрес `POST /api/v1/tokens`: выпускать
+           * доступы интерфейс не умел вовсе, и человеку оставался `curl`.
+           */}
+          <Trans
+            t={t}
+            i18nKey="token.ownToken"
+            values={values}
+            components={{ ...code, access: <Link to="/access" /> }}
+          />
         </Text>
         <Text>
           <Trans t={t} i18nKey="token.sharedToken" values={values} components={code} />

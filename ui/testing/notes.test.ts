@@ -100,6 +100,7 @@ const NOT_IN_CODE: Record<string, string> = {
   elementFromPoint: 'API браузера',
   cacheInBuiltFormats: 'поле i18next, названное как его умолчание: своего значения мы не ставим',
   maxPages: 'настройка бесконечного запроса TanStack Query, названная как невзятая',
+  MutationCache: 'кэш мутаций TanStack Query: им объяснено, почему секрет выпуска не идёт мутацией',
   onlyBuiltDependencies: 'поле pnpm 10, названное как отменённое',
   resize_window: 'инструмент браузерного расширения, не код репозитория',
   COMPOSE_PROJECT_NAME: 'переменная Docker Compose, не наш код',

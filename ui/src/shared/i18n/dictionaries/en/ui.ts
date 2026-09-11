@@ -52,9 +52,10 @@ export const ui = {
     mine: 'Mine',
     inbox: 'Inbox',
     // Группа панели про саму установку, а не про работу в очередях: подключение
-    // агента стоит здесь, следом за ним встанут «Доступы» (UI-106).
+    // агента и доступы касаются установки целиком.
     installation: 'Installation',
     connect: 'Connect an agent',
+    access: 'Access',
     openQuestions_zero: 'No open questions',
     openQuestions_one: '{{count, number}} open question',
     openQuestions_other: '{{count, number}} open questions',
@@ -103,6 +104,26 @@ export const ui = {
     done: '{{label}} is in the clipboard',
     failed:
       'The browser did not give access to the clipboard: select the text and copy it by hand.',
+  },
+
+  /**
+   * Представление доступа: строка списка на экране «Доступы» (`entities/token`).
+   * Подписи самого экрана — в пространстве `access`, здесь только то, чем строка
+   * называет себя и свои поля.
+   */
+  token: {
+    label: 'Access {{name}}',
+    scopeKind: 'scope',
+    scopeTask: 'The working cycle of an agent: tasks, case entries, and reading everything.',
+    scopeMain: 'The working cycle plus writing to the registries: participants, tokens and queues.',
+    thisSession: 'key of this session',
+    revoked: 'revoked',
+    shared: 'shared agent token',
+    issuedBy: 'issued by {{author}}',
+    issuedByTracker: 'issued by the installation itself',
+    lastUsed: 'last used',
+    neverUsed: 'never used yet',
+    revokedAt: 'revocation:',
   },
 
   /** Представление задачи: строка списка, карточка доски, знаки и навигация. */

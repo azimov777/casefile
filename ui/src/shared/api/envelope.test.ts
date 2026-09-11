@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from './error';
-import { unwrap, unwrapPage } from './envelope';
+import { unwrap, unwrapEmpty, unwrapPage } from './envelope';
 
 function ok<T>(payload: T, status = 200) {
   return Promise.resolve({ data: payload, response: new Response(null, { status }) });
@@ -57,5 +57,27 @@ describe('unwrapPage', () => {
   it('коллекция без meta отдаёт страницу без курсора, а не undefined', async () => {
     const page = await unwrapPage(ok({ data: [] }));
     expect(page).toEqual({ items: [], meta: null });
+  });
+});
+
+describe('unwrapEmpty', () => {
+  it('ответ без тела — не нарушение контракта: отзыв отвечает `204` и пустотой', async () => {
+    await expect(
+      unwrapEmpty(Promise.resolve({ response: new Response(null, { status: 204 }) })),
+    ).resolves.toBeUndefined();
+  });
+
+  it('отказ на ответе без тела приходит тем же `ApiError`', async () => {
+    const promise = unwrapEmpty(
+      failed({ error: { code: 'token_not_found', message: 'Token not found', details: {} } }, 404),
+    );
+
+    await expect(promise).rejects.toMatchObject({ code: 'token_not_found', status: 404 });
+  });
+
+  it('несостоявшийся запрос без тела — тоже `ApiError`, а не отказ сети мимо разбора', async () => {
+    await expect(
+      unwrapEmpty(Promise.reject(new TypeError('Failed to fetch'))),
+    ).rejects.toMatchObject({ code: 'network_error', status: 0 });
   });
 });

@@ -21,6 +21,8 @@ type EntryHeading = components['schemas']['EntryHeadingRead'];
 type Summary = components['schemas']['SummaryEntryRead'];
 type Question = components['schemas']['QuestionEntryRead'];
 type Remark = components['schemas']['RemarkEntryRead'];
+type AccessToken = components['schemas']['TokenRead'];
+type Participant = components['schemas']['ParticipantRead'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -117,6 +119,37 @@ export function taskListing(url: URL, items: Task[]) {
     has_more: next < matched.length,
     next_cursor: next < matched.length ? String(next) : null,
   });
+}
+
+/**
+ * Доступ так, как его отдаёт `GET /api/v1/tokens`: без секрета — его нет ни в списке,
+ * ни в базе. Умолчание — живой ключ участника `owner` набора `task`.
+ */
+export function accessToken(overrides: Partial<AccessToken> = {}): AccessToken {
+  return {
+    id: '55555555-5555-5555-5555-555555555555',
+    name: 'local-ui',
+    scope: 'task',
+    participant: 'owner',
+    created_by: AUTHOR,
+    created_at: '2026-09-01T10:00:00Z',
+    last_used_at: null,
+    revoked_at: null,
+    ...overrides,
+  };
+}
+
+/** Участник реестра: из него собран выбор «кому выпускать токен». */
+export function participant(name: string, overrides: Partial<Participant> = {}): Participant {
+  return {
+    id: `participant-${name}`,
+    kind: 'agent',
+    name,
+    description: '',
+    created_by: AUTHOR,
+    ...STAMPS,
+    ...overrides,
+  };
 }
 
 /**

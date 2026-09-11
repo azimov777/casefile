@@ -15,7 +15,7 @@ export const connect = {
     commandLabel: 'Command that reads the agent token',
     commandCaption: 'Terminal, in the installation directory',
     ownToken:
-      'A separate agent gets a token of its own: then its entries in cases are signed with its name rather than the shared <code>agent</code>. Such a token is issued with a key of the <code>main</code> scope: <code>POST /api/v1/tokens</code>.',
+      'A separate agent gets a token of its own: then its entries in cases are signed with its name rather than the shared <code>agent</code>. Such a token is issued by the <access>Access</access> screen — on a local installation there is nothing to enter for that.',
     sharedToken:
       'A token issued without a participant is a shared agent token: every action taken with it is signed by the <code>{{header}}</code> header. For such a token, tick the box at the fragments below.',
   },

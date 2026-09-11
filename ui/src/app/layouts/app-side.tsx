@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
-import { Inbox, Plug } from 'lucide-react';
+import { Inbox, KeyRound, Plug } from 'lucide-react';
 import { bootstrapQueryOptions, useInstallKey } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
@@ -119,6 +119,17 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/connect" onClick={onNavigate} className={sectionLink}>
           <Plug className="size-(--ui-mark) shrink-0" aria-hidden="true" />
           {t('app.connect')}
+        </NavLink>
+
+        {/*
+         * Доступы — вторая половина той же дороги: на «Подключить агента» человек
+         * читает, чем подключаются, здесь — заводит агента, выпускает ему токен и
+         * отзывает лишние. Пункт виден любым ключом: список доступов открыт и
+         * набору `task`, а что из этого можно делать, говорит сам экран.
+         */}
+        <NavLink to="/access" onClick={onNavigate} className={sectionLink}>
+          <KeyRound className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+          {t('app.access')}
         </NavLink>
       </nav>
 

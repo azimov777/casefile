@@ -19,6 +19,12 @@ const callout = cva('rounded-mark border px-4 py-3 text-body', {
 interface CalloutProps {
   /** `danger` — отказ или ошибка: сообщение объявляется программе чтения с экрана. */
   tone?: 'neutral' | 'danger';
+  /**
+   * Нужен там, где на сообщение ссылается что-то ещё: запрещённая кнопка называет
+   * им причину запрета (`aria-describedby`), и причина обязана быть той же самой,
+   * а не второй её копией рядом.
+   */
+  id?: string;
   children: ReactNode;
 }
 
@@ -26,9 +32,9 @@ interface CalloutProps {
  * Короткое сообщение о состоянии: отказ, пояснение, честная пустота.
  * Спиннера без текста в интерфейсе нет (CONVENTIONS.md, «Интерфейс»).
  */
-export function Callout({ tone = 'neutral', children }: CalloutProps) {
+export function Callout({ tone = 'neutral', id, children }: CalloutProps) {
   return (
-    <p className={callout({ tone })} role={tone === 'danger' ? 'alert' : undefined}>
+    <p id={id} className={callout({ tone })} role={tone === 'danger' ? 'alert' : undefined}>
       {children}
     </p>
   );
