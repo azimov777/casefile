@@ -89,7 +89,7 @@ test('список задач: оболочка и таблица английс
    * `KEY` вместо `Key` — проверка ловила бы регистр из таблицы стилей, а не подпись
    * из словаря.
    */
-  expect(await page.locator('thead th').allTextContents()).toEqual([
+  await expect(page.locator('thead th')).toHaveText([
     'Key',
     'Title',
     'Status',
