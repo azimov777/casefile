@@ -122,7 +122,7 @@ export const ui = {
     issuedBy: 'issued by {{author}}',
     issuedByTracker: 'issued by the installation itself',
     lastUsed: 'last used',
-    neverUsed: 'never',
+    neverUsed: 'never used yet',
     revokedAt: 'revocation:',
   },
 

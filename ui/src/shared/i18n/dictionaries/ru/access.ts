@@ -81,7 +81,7 @@ export const access = {
     forShared:
       'У токена нет участника: каждый запрос с ним несёт заголовок X-Actor-Label, и эта метка подписывает записи.',
     tokenLabel: 'Секрет токена',
-    tokenCaption: 'Показан один раз',
+    tokenCaption: 'Секрет токена, показан один раз',
     loadingAddress: 'Читаем адрес MCP…',
     done: 'Секрет сохранён',
   },

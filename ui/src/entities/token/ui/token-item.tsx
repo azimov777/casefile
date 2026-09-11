@@ -76,14 +76,15 @@ export function TokenItem({
             <RelativeTime value={token.created_at} />
           </span>
 
-          <span>
-            {t('token.lastUsed')}{' '}
-            {token.last_used_at === null || token.last_used_at === undefined ? (
-              <span className="text-faint">{t('token.neverUsed')}</span>
-            ) : (
-              <RelativeTime value={token.last_used_at} />
-            )}
-          </span>
+          {/* «Ни разу» — целая фраза, а не хвост к «последний раз ходили»: дописанное
+              к началу, оно читается как оборванное предложение. */}
+          {token.last_used_at === null || token.last_used_at === undefined ? (
+            <span className="text-faint">{t('token.neverUsed')}</span>
+          ) : (
+            <span>
+              {t('token.lastUsed')} <RelativeTime value={token.last_used_at} />
+            </span>
+          )}
 
           {revoked ? (
             <span>

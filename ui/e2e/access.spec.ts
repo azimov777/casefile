@@ -1,6 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { fontsReady, installWithoutKey, readTaskToken, side, silenceJournal } from './contour';
+import {
+  fontsReady,
+  installWithoutKey,
+  motionSettled,
+  readTaskToken,
+  side,
+  silenceJournal,
+} from './contour';
 
 /**
  * Экран «Доступы» (UI-106): список токенов установки, заведение агента, выпуск с
@@ -17,6 +24,8 @@ import { fontsReady, installWithoutKey, readTaskToken, side, silenceJournal } fr
 
 const AGENT = 'e2e_agent';
 const TOKEN_NAME = 'e2e_agent на прогоне';
+/** Общий агентский токен: им меряется тёмная тема и вид фрагментов с меткой. */
+const SHARED_TOKEN_NAME = 'общий на прогоне';
 
 /** Переход на экран из боковой панели — так, как его находит человек. */
 async function openFromNavigation(page: Page): Promise<void> {
@@ -29,8 +38,20 @@ async function openFromNavigation(page: Page): Promise<void> {
   );
 }
 
-/** Полный список нарушений доступности: сверяется с пустым, без порога серьёзности. */
+/**
+ * Полный список нарушений доступности, снятый **в покое**: без порога серьёзности и
+ * после того, как доехали шрифты и переходы цвета.
+ *
+ * Ждать перехода обязательно: указатель после закрытия окна остаётся там, где была его
+ * кнопка, и на перезагруженной странице под ним оказывается соседняя — та едет из
+ * запрета в наведение переходом цвета, а `axe`, попавший в этот кадр, меряет
+ * промежуточный цвет и находит нарушение, которого в покое нет (`UI-59#4`,
+ * `docs/notes/testing.md`).
+ */
 async function violations(page: Page): Promise<string[]> {
+  await fontsReady(page);
+  await motionSettled(page.locator('body'));
+
   const found = await new AxeBuilder({ page }).analyze();
   return found.violations.map(
     (violation) =>
@@ -69,7 +90,7 @@ test('ключ установки: агент заведён, токен вып�
   const secretDialog = page.getByRole('dialog');
   await expect(secretDialog.getByText('Скопируйте секрет сейчас')).toBeVisible();
   const shown = await secretDialog
-    .getByRole('figure', { name: 'Показан один раз' })
+    .getByRole('figure', { name: 'Секрет токена, показан один раз' })
     .locator('pre code')
     .textContent();
   const secret = (shown ?? '').trim();
@@ -78,12 +99,10 @@ test('ключ установки: агент заведён, токен вып�
   const claude = secretDialog.getByRole('region', { name: 'Claude Code' }).locator('pre code');
   await expect(claude).toContainText(`Authorization: Bearer ${secret}`);
 
-  // Доступность окна секрета — в обеих темах: сверяется полный список нарушений.
-  await fontsReady(page);
-  expect(await violations(page), 'окно секрета, светлая тема').toEqual([]);
-  await page.emulateMedia({ colorScheme: 'dark' });
-  expect(await violations(page), 'окно секрета, тёмная тема').toEqual([]);
-  await page.emulateMedia({ colorScheme: 'light' });
+  // Доступность окна секрета: сверяется полный список нарушений, а не порог тяжести.
+  // Тема здесь одна — та, что у проекта; вторую меряет сценарий ниже своим контекстом,
+  // а не сменой темы посреди жизни страницы (`docs/notes/testing.md`).
+  expect(await violations(page), 'окно секрета').toEqual([]);
 
   // Секрет настоящий: им ходят, и участник за ним — только что заведённый.
   const asAgent = await request.get('/api/v1/bootstrap', {
@@ -112,7 +131,6 @@ test('ключ установки: агент заведён, токен вып�
   expect(await page.content()).not.toContain(secret);
 
   // Экран в покое: доступность всего списка, тоже без единого нарушения.
-  await fontsReady(page);
   expect(await violations(page), 'экран «Доступы»').toEqual([]);
 
   // Отзыв спрашивает подтверждение и объясняет последствия.
@@ -134,6 +152,54 @@ test('ключ установки: агент заведён, токен вып�
   expect(after.status()).toBe(401);
   expect((await after.json()) as { error: { code: string } }).toMatchObject({
     error: { code: 'unauthorized' },
+  });
+});
+
+test.describe('тёмная тема', () => {
+  /*
+   * Тема задаётся контекстом, а не `emulateMedia` посреди страницы: замер `axe`,
+   * снятый сразу после смены, ловит кадр между темами — цвет текста уже новый, а фон
+   * ещё прежний, и правило контраста находит несуществующее нарушение
+   * (`docs/notes/testing.md`, «Замер `axe` сразу после смены темы»).
+   *
+   * Проект «запись» идёт в светлой теме, поэтому тёмную объявляет сам сценарий.
+   */
+  test.use({ colorScheme: 'dark' });
+
+  test('окно секрета общего токена и экран доступов не дают нарушений `axe`', async ({ page }) => {
+    await silenceJournal(page);
+    await page.goto('/access');
+    await expect(page.getByRole('heading', { level: 1, name: 'Доступы' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Выпустить токен' }).click();
+    const issueDialog = page.getByRole('dialog');
+    // Общий агентский токен: у фрагментов появляется `X-Actor-Label`, и объяснение
+    // метки — часть того, что меряется.
+    await issueDialog
+      .getByLabel('За кого говорит токен')
+      .selectOption({ label: 'Общий агентский токен, без участника' });
+    await issueDialog.getByLabel('Имя токена').fill(SHARED_TOKEN_NAME);
+    await issueDialog.getByRole('button', { name: 'Выпустить', exact: true }).click();
+
+    const secretDialog = page.getByRole('dialog');
+    await expect(secretDialog.getByText('Скопируйте секрет сейчас')).toBeVisible();
+    await expect(secretDialog.getByRole('region', { name: 'Claude Code' })).toContainText(
+      'X-Actor-Label',
+    );
+    expect(await violations(page), 'окно секрета в тёмной теме').toEqual([]);
+
+    await secretDialog.getByRole('button', { name: 'Секрет сохранён' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(await violations(page), 'экран «Доступы» в тёмной теме').toEqual([]);
+
+    // За собой прибирает сам сценарий: выпущенный доступ отзывается там же, где выпущен.
+    const row = page.getByRole('article', { name: `Доступ «${SHARED_TOKEN_NAME}»` });
+    await row.getByRole('button', { name: 'Отозвать' }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Отозвать', exact: true })
+      .click();
+    await expect(row).toHaveAttribute('data-revoked', 'true');
   });
 });
 
@@ -169,7 +235,6 @@ test('ключ набора `task` с экрана входа: список ви
   await expect(issue).toHaveAttribute('aria-describedby', explanationId ?? '');
   await expect(page.getByRole('button', { name: 'Отозвать' })).toHaveCount(0);
 
-  await fontsReady(page);
   expect(await violations(page), 'экран с ключом `task`').toEqual([]);
 
   // Ни одного запроса записи: отказ `403` проверкой прав не служит.

@@ -94,7 +94,7 @@ export const access = {
     forShared:
       'The token has no participant: every request with it carries the X-Actor-Label header, and that label signs the entries.',
     tokenLabel: 'Token secret',
-    tokenCaption: 'Shown once',
+    tokenCaption: 'Token secret, shown once',
     loadingAddress: 'Reading the MCP address…',
     done: 'I have saved the secret',
   },

@@ -105,7 +105,7 @@ export const ui = {
     issuedBy: 'выпустил {{author}},',
     issuedByTracker: 'выпустила сама установка,',
     lastUsed: 'последний раз ходили',
-    neverUsed: 'ни разу',
+    neverUsed: 'им ещё не ходили',
     revokedAt: 'отзыв:',
   },
 
