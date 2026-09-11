@@ -27,6 +27,10 @@ jobs:
       - uses: actions/checkout@v4
 
       # Дев-образ один на все сервисы контура: собирается один раз, дальше `run` его берёт.
+      # Зависимости он ставит строго из `uv.lock` (`uv sync --locked`, `docker/Dockerfile.dev`):
+      # набор идёт на тех же версиях, что у разработчика и в прод-образе, а lock-файл,
+      # разошедшийся с `pyproject.toml`, валит этот шаг явной ошибкой. PR бота обновлений
+      # (`dependabot.yml`) проверяется здесь же.
       - name: Build the dev image
         run: docker compose build api
 
