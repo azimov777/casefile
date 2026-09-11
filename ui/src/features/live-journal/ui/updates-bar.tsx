@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/shared/lib';
+import { cn, useExitHoldList } from '@/shared/lib';
 import { Button } from '@/shared/ui';
 import { useBarSlot } from '../model/bar-slot';
 import { useDeferredList } from '../model/use-deferred-list';
@@ -18,6 +18,11 @@ interface UpdatesBarProps {
    * которые вот-вот станут свежими.
    */
   reading: boolean;
+}
+
+/** Ключ единственного узла полосы в задержке размонтирования: другого у неё не бывает. */
+function barKey(): string {
+  return 'updates';
 }
 
 /**
@@ -42,7 +47,23 @@ export function UpdatesBar({ reading }: UpdatesBarProps) {
   const slot = useBarSlot();
   const { t } = useTranslation('ui');
 
-  if (reading || (count === 0 && !vague) || slot === null) return null;
+  /*
+   * Показана ли полоса, решает правило UI-95 — и только оно: здесь оно не тронуто.
+   * Задержка размонтирования (`shared/lib/exit-hold.ts`, одна на весь интерфейс)
+   * держит узел ещё `--motion-fast` после ухода, но не саму полосу: уходящая невидима
+   * с того же кадра, что и прежде, — держится только её место, пока оно схлопывается.
+   *
+   * Форма списочная, хотя узел один: уходящему она отдаёт то, что он говорил в последний
+   * раз (`item` — число). Нажатое «Показать» роняет счёт в ноль, и без этого невидимая
+   * полоса сменила бы число на «список мог измениться» — другой ширины. Ширина места
+   * решает, помещаются ли полоса и стопка рядом (`float-dock.tsx`), и сменись она
+   * посреди выхода, стопка перенеслась бы рывком — тем самым, от которого место и едет.
+   */
+  const shown = !reading && (count > 0 || vague);
+  const [held] = useExitHoldList(shown ? [count] : [], barKey);
+
+  if (held === undefined || slot === null) return null;
+  const { item: said, leaving, entering } = held;
 
   /*
    * Рисует полосу страница — она принадлежность таблицы и знает, читается ли таблица, —
@@ -57,22 +78,74 @@ export function UpdatesBar({ reading }: UpdatesBarProps) {
    */
   return createPortal(
     <div
+      // Опора для замеров: длительность и кривую движения места снимают с этого узла.
+      data-bar="place"
+      /*
+       * Место полосы в низу области содержания (UI-101). Где полоса и стопка не
+       * помещаются рядом, стопка стоит строкой выше полосы, и приход полосы поднимает
+       * её на эту строку, а уход опускает. Едет место строками сетки — тем же движением,
+       * что место карточки внутри стопки (`question-notice.tsx`): `transform` места
+       * не двигает, и стопка прыгнула бы в первом же кадре (`UI-59#12`). Полоса пришла
+       * сама — `--motion-slow`; уход отвечает человеку — `--motion-fast`.
+       *
+       * Где рядом помещаются, двигать нечему, и это свойство раскладки, а не условие
+       * здесь: место растёт внутри общей со стопкой строки, стопка прижата к её нижнему
+       * краю, а ширина места полная с первого кадра — строки сетки меняют только высоту.
+       *
+       * `starting:` — только появившейся в ответ на событие: полоса, стоявшая с первой
+       * отрисовки, никуда не приезжала (`CONCEPT.md`, 6).
+       */
       className={cn(
-        // Место под полосой указатель пропускает насквозь (`float-dock.tsx`), сама
-        // полоса — нет.
-        'pointer-events-auto flex max-w-(--ui-float-max) items-center gap-3',
-        'rounded-control border border-progress-line bg-progress-soft px-3 py-2',
-        'text-progress shadow-raised',
+        /*
+         * Полоса держится нижнего края места на всём ходу: место открывается и
+         * закрывается сверху, стопка едет, а сама полоса стоит.
+         *
+         * Одного `items-end` для этого мало — нужен и `content-end`. Место — элемент
+         * флекса: высоту ему флекс считает по содержимому (доля `fr` от высоты полосы),
+         * а потом Chrome раскладывает сетку с этой высотой как с определённой и считает
+         * долю второй раз — уже от неё. Строка выходит короче места, и без `content-end`
+         * она стоит у его верха: посреди хода полоса всплывала бы над своим местом
+         * в покое на f(1−f) своей высоты и съезжала обратно (UI-101#9).
+         */
+        'grid content-end items-end transition-[grid-template-rows]',
+        leaving
+          ? 'grid-rows-[0fr] duration-(--motion-fast) ease-exit'
+          : 'grid-rows-[1fr] duration-(--motion-slow) ease-fast',
+        !leaving && entering && 'starting:grid-rows-[0fr]',
       )}
-      role="status"
-      // Имя, а не только роль: `role="status"` носит и индикатор связи в шапке, и без
-      // имени их не различить ни программе чтения с экрана, ни сквозному тесту.
-      aria-label={t('live.updates')}
     >
-      <span className="text-body">
-        {count > 0 ? t('live.changed', { count }) : t('live.changedUnknown')}
-      </span>
-      <Button onClick={show}>{t('live.show')}</Button>
+      {/*
+        Прослойка без собственных полей: `min-h-0` обнуляет минимальный размер элемента
+        сетки, и строка `0fr` встаёт в ноль без обрезания, которое срезало бы тень полосы.
+        Промежуток до стопки над ней — поле самой полосы (`mt-2`), а не зазор строк
+        у места: зазор строк появился бы в тот кадр, когда появилась вторая строка, и не
+        уехал бы вместе с местом.
+      */}
+      <div className="min-h-0">
+        <div
+          className={cn(
+            // Место под полосой указатель пропускает насквозь (`float-dock.tsx`), сама
+            // полоса — нет.
+            'pointer-events-auto mt-2 flex max-w-(--ui-float-max) items-center gap-3',
+            'rounded-control border border-progress-line bg-progress-soft px-3 py-2',
+            'text-progress shadow-raised',
+            // Уходящей полосы нет с того же кадра, что и прежде: она не показывает числа,
+            // которое уже забрало чтение, и её «Показать» не нажать ни мышью, ни
+            // клавиатурой. Держится только её место, пока схлопывается.
+            leaving && 'invisible',
+          )}
+          role="status"
+          // Имя, а не только роль: `role="status"` носит и индикатор связи в шапке, и без
+          // имени их не различить ни программе чтения с экрана, ни сквозному тесту.
+          aria-label={t('live.updates')}
+          inert={leaving}
+        >
+          <span className="text-body">
+            {said > 0 ? t('live.changed', { count: said }) : t('live.changedUnknown')}
+          </span>
+          <Button onClick={show}>{t('live.show')}</Button>
+        </div>
+      </div>
     </div>,
     slot,
   );

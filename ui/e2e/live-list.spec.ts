@@ -1,5 +1,14 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { compose, fontsReady, readE2eToken, shellReady, side, signedInByHand } from './contour';
+import {
+  compose,
+  curve,
+  fontsReady,
+  ms,
+  readE2eToken,
+  shellReady,
+  side,
+  signedInByHand,
+} from './contour';
 
 const token = readE2eToken();
 
@@ -747,4 +756,428 @@ test.describe('полоса обновлений не спорит за мест
       }
     });
   }
+});
+
+/**
+ * Место полосы в низу области содержания: открывается, когда полоса приходит, и
+ * закрывается, когда уходит (`updates-bar.tsx`, `data-bar="place"`).
+ */
+const barPlace = (page: Page) => page.locator('[data-bar="place"]');
+
+/**
+ * Ждёт покоя всего, что на странице движется: карточки в стопке, её места и места
+ * полосы. Места полосы в стопке нет — она соседка стопки по низу области содержания, —
+ * поэтому ожидание по поддереву стопки его бы не дождалось.
+ *
+ * Перебитое движение — тоже покой: `finished` у него отклоняется `AbortError`, и без
+ * `catch` ожидание падало бы на том, что движение сменили (UI-102).
+ */
+async function motionsSettled(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.all(document.getAnimations().map((motion) => motion.finished.catch(() => undefined))),
+  );
+}
+
+/** Токены словаря движения, какими их отдаёт живой документ. */
+async function motionTokens(page: Page) {
+  return page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      fast: root.getPropertyValue('--motion-fast'),
+      slow: root.getPropertyValue('--motion-slow'),
+      enter: root.getPropertyValue('--ease-fast'),
+      exit: root.getPropertyValue('--ease-exit'),
+    };
+  });
+}
+
+/** Кадр низа области содержания: где карточка вопроса и что с полосой. */
+interface DockFrame {
+  /** Миллисекунды от начала наблюдения. */
+  at: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** Высота места полосы; `null` — места в разметке нет. */
+  place: number | null;
+  /** Прямоугольник самой полосы (лево, верх, право, низ); `null` — полосы в разметке нет. */
+  bar: number[] | null;
+  /** Полоса скрыта (`visibility: hidden`); `null` — полосы в разметке нет. */
+  hidden: boolean | null;
+  /** Полоса инертна; `null` — полосы в разметке нет. */
+  inert: boolean | null;
+  /** Под серединой «Показать» — полоса; `null` — точку не снимали. */
+  hit: boolean | null;
+}
+
+/** Движение места полосы в первом кадре, где место есть. */
+interface PlaceMotion {
+  running: boolean;
+  property: string;
+  duration: string;
+  easing: string;
+}
+
+interface DockMotion {
+  before: DockFrame;
+  frames: DockFrame[];
+  place: PlaceMotion | null;
+  done: boolean;
+  timedOut: boolean;
+}
+
+/**
+ * Снимает положение карточки вопроса и места полосы по кадрам — изнутри браузера:
+ * снаружи 120 мс выхода кончаются раньше первого замера (`docs/notes/ui.md`, «Кадр
+ * движения не поймать снаружи»).
+ *
+ * Приход (`leave: false`): наблюдение ставится до записи, от которой полоса придёт,
+ * и кончается, когда место полосы доехало и три кадра простояло. Уход (`leave: true`):
+ * «Показать» нажимает сам браузер сразу после первого замера, наблюдение кончается,
+ * когда место снято и три кадра его нет. Итог лежит в `window.dockMotion`.
+ */
+async function watchDock(page: Page, question: string, leave: boolean): Promise<void> {
+  await page.evaluate(
+    ({ question: title, leave: leaving }) => {
+      const card = Array.from(
+        document.querySelectorAll<HTMLElement>('[aria-label="Вопросы ко мне"] article'),
+      ).find((node) => node.textContent?.includes(title) === true);
+      if (card === undefined) throw new Error('карточки вопроса на странице нет');
+
+      const barOf = () => document.querySelector<HTMLElement>('[data-bar="place"] [role="status"]');
+      const button = leaving ? (barOf()?.querySelector('button') ?? null) : null;
+      if (leaving && button === null) throw new Error('кнопки «Показать» на странице нет');
+      const target = button?.getBoundingClientRect();
+      const aim =
+        target === undefined
+          ? null
+          : { x: target.left + target.width / 2, y: target.top + target.height / 2 };
+
+      const started = performance.now();
+      const sample = () => {
+        const box = card.getBoundingClientRect();
+        const place = document.querySelector<HTMLElement>('[data-bar="place"]');
+        const bar = barOf();
+        const under = aim === null ? null : document.elementFromPoint(aim.x, aim.y);
+        const barBox = bar?.getBoundingClientRect();
+        return {
+          at: Math.round(performance.now() - started),
+          left: box.left,
+          top: box.top,
+          width: box.width,
+          height: box.height,
+          place: place === null ? null : place.getBoundingClientRect().height,
+          bar: barBox === undefined ? null : [barBox.left, barBox.top, barBox.right, barBox.bottom],
+          hidden: bar === null ? null : getComputedStyle(bar).visibility === 'hidden',
+          inert: bar === null ? null : bar.inert,
+          hit: aim === null ? null : under?.closest('[data-bar="place"]') != null,
+        };
+      };
+
+      const record: DockMotion = {
+        before: sample(),
+        frames: [],
+        place: null,
+        done: false,
+        timedOut: false,
+      };
+      Object.assign(window, { dockMotion: record });
+
+      let calm = 0;
+      const tick = () => {
+        const place = document.querySelector<HTMLElement>('[data-bar="place"]');
+        if (place !== null && record.place === null) {
+          // Что движение идёт прямо сейчас, видно по живой анимации на узле, а
+          // длительность и кривую отдаёт вычисленный стиль: у перехода они на правиле.
+          const style = getComputedStyle(place);
+          record.place = {
+            running: place.getAnimations().length > 0,
+            property: style.transitionProperty,
+            duration: style.transitionDuration,
+            easing: style.transitionTimingFunction,
+          };
+        }
+        record.frames.push(sample());
+
+        const resting = leaving
+          ? place === null
+          : place !== null && place.getAnimations().length === 0;
+        calm = resting ? calm + 1 : 0;
+        if (calm >= 3 || performance.now() - started > 15_000) {
+          record.timedOut = calm < 3;
+          record.done = true;
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+
+      button?.click();
+      requestAnimationFrame(tick);
+    },
+    { question, leave },
+  );
+}
+
+async function dockMotion(page: Page): Promise<DockMotion> {
+  await page.waitForFunction(
+    () => (window as unknown as { dockMotion?: DockMotion }).dockMotion?.done === true,
+    undefined,
+    { timeout: 20_000 },
+  );
+  return page.evaluate(() => (window as unknown as { dockMotion: DockMotion }).dockMotion);
+}
+
+/** Шаги карточки по вертикали от кадра к кадру, начиная с положения до события. */
+function steps(start: number, tops: number[]): number[] {
+  return tops.map((top, index) => top - (index === 0 ? start : (tops[index - 1] as number)));
+}
+
+/** Прямоугольник карточки из кадра — для сравнения «ни на пиксель». */
+function cardRect({ left, top, width, height }: DockFrame): number[] {
+  return [left, top, width, height];
+}
+
+/**
+ * Стояла ли полоса на месте весь приход: на каждом кадре, где она есть, — тот же
+ * прямоугольник, что на последнем, в покое. Числа одного источника (`getBoundingClientRect`
+ * в браузере), поэтому сравниваются точно. Отклонение печатается в отчёт прогона.
+ */
+function stillBar(motion: DockMotion): boolean {
+  const seen = motion.frames.flatMap((frame) => (frame.bar === null ? [] : [frame.bar]));
+  const rest = JSON.stringify(seen.at(-1));
+  const moved = seen.filter((box) => JSON.stringify(box) !== rest);
+  if (moved.length > 0) report('UI-101 полоса сдвинулась', { rest: seen.at(-1), moved });
+  return seen.length > 0 && moved.length === 0;
+}
+
+/**
+ * Исходное положение сценариев ниже: карточка вопроса предельной ширины на экране,
+ * полосы нет, чтение таблицы и движение улеглись.
+ *
+ * Вопрос владельцу — это и карточка, и запись в деле задачи, то есть и полоса: их
+ * приход одним кадром потока движения стопки не требует (UI-98#16). Здесь нужен
+ * другой случай — полоса, пришедшая к уже висящей карточке, — поэтому первую полосу
+ * снимает «Показать».
+ */
+async function questionWithoutBar(page: Page): Promise<Locator> {
+  const card = stack(page).locator('article').filter({ hasText: LONG_QUESTION });
+  await expect(card).toBeVisible();
+  await expect(bar(page)).toContainText('Изменилась 1 задача');
+
+  const read = page.waitForResponse((response) => isTableRequest(response.url()));
+  await bar(page).getByRole('button', { name: 'Показать' }).click();
+  await read;
+  await expect(bar(page)).toBeHidden();
+  await expect(barPlace(page)).toHaveCount(0);
+
+  await fontsReady(page);
+  await motionsSettled(page);
+  return card;
+}
+
+/** Запись в деле задачи из таблицы: от неё полоса приходит сама, пока карточка висит. */
+async function barArrives(request: APIRequestContext): Promise<void> {
+  await addEntry(request, 'DEMO-3', {
+    type: 'note',
+    title: 'Запись, от которой полоса приходит к уже висящему вопросу',
+  });
+}
+
+/**
+ * Там, где полоса и карточка вопроса не помещаются рядом, стопка стоит строкой выше
+ * полосы (UI-98#13) и поднимается на эту строку, когда полоса приходит к уже висящей
+ * карточке, а опускается, когда «Показать» полосу убирает. До UI-101 это было
+ * в один кадр. Место полосы теперь едет строками сетки на токенах словаря движения:
+ * приход пришёл сам — `--motion-slow` и `--ease-fast`, уход отвечает человеку —
+ * `--motion-fast` и `--ease-exit`. На широком экране, где они стоят рядом, то же
+ * движение места не сдвигает карточку ни на пиксель.
+ */
+test.describe('стопка над полосой обновлений встаёт движением места, а не рывком (UI-101)', () => {
+  test('на 768 px приход полосы поднимает стопку, а уход опускает — движением на токенах', async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto('/tasks?queue=DEMO');
+    await expect(rows(page).first()).toBeVisible();
+    await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+    // Кадр с вопросом, обогнавший участника, уведомления не даст (`shellReady`).
+    await shellReady(page);
+    const motion = await motionTokens(page);
+
+    const question = await askOwner(request, 'DEMO-3', LONG_QUESTION);
+    try {
+      const card = await questionWithoutBar(page);
+
+      // Приход: полоса пришла сама, и стопка встаёт над ней.
+      await watchDock(page, LONG_QUESTION, false);
+      await barArrives(request);
+      const lift = await dockMotion(page);
+      expect(lift.timedOut, 'место полосы не пришло или не доехало').toBe(false);
+
+      expect(lift.place?.running).toBe(true);
+      expect(lift.place?.property).toBe('grid-template-rows');
+      expect(ms(lift.place?.duration ?? '')).toBe(ms(motion.slow));
+      expect(curve(lift.place?.easing ?? '')).toBe(curve(motion.enter));
+
+      const idle = lift.frames.filter((frame) => frame.place === null);
+      const lifting = lift.frames.filter((frame) => frame.place !== null).map((frame) => frame.top);
+      const liftStart = lift.before.top;
+      const liftEnd = lifting.at(-1) as number;
+      const liftSteps = steps(liftStart, lifting);
+      report('UI-101 приход 768px', {
+        from: liftStart,
+        to: liftEnd,
+        frames: lifting.length,
+        at: lift.frames.filter((frame) => frame.place !== null).map((frame) => frame.at),
+        tops: lifting.map((top) => Math.round(top * 10) / 10),
+        place: lift.place,
+      });
+
+      // Пока полосы не было, карточка стояла: сдвинуло её именно место полосы.
+      expect(idle.map((frame) => frame.top)).toEqual(idle.map(() => liftStart));
+      // Поднялась, а не осталась под полосой.
+      expect(liftEnd).toBeLessThan(liftStart);
+      // На первом снятом кадре карточка ещё в пути: место не встало разом.
+      expect(lifting[0]).toBeGreaterThan(liftEnd);
+      // Промежуточные положения были, и самый большой шаг за кадр меньше всего пути.
+      expect(lifting.some((top) => top < liftStart && top > liftEnd)).toBe(true);
+      expect(Math.max(...liftSteps.map((step) => -step))).toBeLessThan(liftStart - liftEnd);
+      // И ехала она в одну сторону — вверх, без отскока.
+      expect(Math.max(...liftSteps)).toBeLessThanOrEqual(0);
+
+      // Доехала над полосой, а не на неё.
+      await motionsSettled(page);
+      const lifted = {
+        bar: await rectOf(bar(page), 'полоса обновлений'),
+        card: await rectOf(card, 'карточка вопроса'),
+      };
+      report('UI-101 над полосой 768px', {
+        bar: rounded(lifted.bar),
+        card: rounded(lifted.card),
+      });
+      expect(lifted.card.y + lifted.card.height).toBeLessThanOrEqual(lifted.bar.y);
+      // Едет стопка, а не полоса: с первого кадра полоса стоит там, где встанет в покое.
+      expect(stillBar(lift)).toBe(true);
+
+      // Уход: «Показать» нажато, полосы нет, стопка опускается на её место.
+      await watchDock(page, LONG_QUESTION, true);
+      const drop = await dockMotion(page);
+      expect(drop.timedOut, 'место полосы не снялось').toBe(false);
+
+      expect(drop.place?.running).toBe(true);
+      expect(drop.place?.property).toBe('grid-template-rows');
+      expect(ms(drop.place?.duration ?? '')).toBe(ms(motion.fast));
+      expect(curve(drop.place?.easing ?? '')).toBe(curve(motion.exit));
+      // Уход вдвое короче прихода: он отвечает человеку (`UI-59#11`).
+      expect(ms(lift.place?.duration ?? '')).toBe(ms(drop.place?.duration ?? '') * 2);
+
+      const dropping = drop.frames.map((frame) => frame.top);
+      const dropStart = drop.before.top;
+      const dropEnd = dropping.at(-1) as number;
+      const dropSteps = steps(dropStart, dropping);
+      const held = drop.frames.filter((frame) => frame.place !== null);
+      report('UI-101 уход 768px', {
+        from: dropStart,
+        to: dropEnd,
+        frames: dropping.length,
+        held: held.length,
+        at: drop.frames.map((frame) => frame.at),
+        tops: dropping.map((top) => Math.round(top * 10) / 10),
+        place: drop.place,
+      });
+
+      // Опустилась ровно туда, где стояла до полосы.
+      expect(dropStart).toBe(liftEnd);
+      expect(dropEnd).toBe(liftStart);
+      expect(dropping[0]).toBeLessThan(dropEnd);
+      expect(dropping.some((top) => top > dropStart && top < dropEnd)).toBe(true);
+      expect(Math.max(...dropSteps)).toBeLessThan(dropEnd - dropStart);
+      expect(Math.min(...dropSteps)).toBeGreaterThanOrEqual(0);
+
+      /*
+       * Правило ухода полосы не сдвинуто (UI-95): узел доживает выход, но полосы уже
+       * нет. До нажатия «Показать» стояло под курсором; с первого кадра выхода и до
+       * снятия места полоса скрыта, инертна, и точка, где была кнопка, ведёт мимо неё.
+       */
+      expect(drop.before.hit).toBe(true);
+      expect(held.length).toBeGreaterThan(0);
+      expect(held.map((frame) => [frame.hidden, frame.inert, frame.hit])).toEqual(
+        held.map(() => [true, true, false]),
+      );
+
+      await expect(bar(page)).toBeHidden();
+      await expect(barPlace(page)).toHaveCount(0);
+    } finally {
+      await question.cleanup();
+    }
+  });
+
+  test('на 1440 px приход и уход полосы не сдвигают карточку ни на пиксель', async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/tasks?queue=DEMO');
+    await expect(rows(page).first()).toBeVisible();
+    await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+    await shellReady(page);
+
+    const question = await askOwner(request, 'DEMO-3', LONG_QUESTION);
+    try {
+      const card = await questionWithoutBar(page);
+      const rest = await rectOf(card, 'карточка вопроса до полосы');
+
+      await watchDock(page, LONG_QUESTION, false);
+      await barArrives(request);
+      const arrival = await dockMotion(page);
+      expect(arrival.timedOut, 'место полосы не пришло или не доехало').toBe(false);
+      await expect(bar(page)).toContainText('Изменилась 1 задача');
+      await motionsSettled(page);
+      const withBar = await rectOf(card, 'карточка вопроса при полосе');
+      const barBox = await rectOf(bar(page), 'полоса обновлений');
+
+      await watchDock(page, LONG_QUESTION, true);
+      const departure = await dockMotion(page);
+      expect(departure.timedOut, 'место полосы не снялось').toBe(false);
+      await expect(barPlace(page)).toHaveCount(0);
+      await motionsSettled(page);
+      const after = await rectOf(card, 'карточка вопроса после полосы');
+
+      const placeHeights = arrival.frames.flatMap((frame) =>
+        frame.place === null ? [] : [Math.round(frame.place)],
+      );
+      report('UI-101 1440px', {
+        rest: rounded(rest),
+        withBar: rounded(withBar),
+        after: rounded(after),
+        bar: rounded(barBox),
+        place: placeHeights,
+      });
+
+      // Широкий экран: полоса и карточка стоят рядом, в одной строке низа.
+      expect(barBox.x + barBox.width).toBeLessThan(withBar.x);
+      expect(overlaps(barBox, withBar)).toBe(false);
+
+      // Место полосы при этом ехало — проверка ниже не пустая.
+      expect(arrival.place?.running).toBe(true);
+      expect(Math.min(...placeHeights)).toBeLessThan(Math.max(...placeHeights));
+      expect(departure.place?.running).toBe(true);
+
+      // До и после — `boundingBox()`, и на каждом кадре обоих движений — то же самое.
+      expect(withBar).toEqual(rest);
+      expect(after).toEqual(rest);
+      for (const motion of [arrival, departure]) {
+        expect(motion.frames.map(cardRect)).toEqual(
+          motion.frames.map(() => cardRect(motion.before)),
+        );
+      }
+      // И сама полоса не едет: пришла сразу туда, где стоит в покое, — рядом двигать
+      // нечего, и движение места не вправе стать движением полосы.
+      expect(stillBar(arrival)).toBe(true);
+    } finally {
+      await question.cleanup();
+    }
+  });
 });
