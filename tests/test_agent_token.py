@@ -1,8 +1,8 @@
 """Токен агента выпускает установка: команда `agent-token`.
 
 Близнец `test_local_token.py`, и проверяется тем же способом — командой целиком, через
-её настоящую границу транзакции и настоящий файл. Здесь только то, чем агент отличается
-от интерфейса: набор `main`, участник-агент, заводимый на работающей установке, и
+её настоящую границу транзакции и настоящий файл. Набор у обоих `main`; здесь только то,
+чем агент отличается от интерфейса: участник-агент, заводимый на работающей установке, и
 владелец, которого команда заводит сама, если пришла на пустую установку первой.
 """
 
@@ -110,7 +110,7 @@ async def test_on_an_empty_installation_the_owner_comes_first_and_the_ui_key_sti
     assert ui.participant is not None
     assert ui.participant.name == DEFAULT_OWNER_NAME
     assert ui.participant.kind is ParticipantKind.HUMAN
-    assert ui.scope is TokenScope.TASK
+    assert ui.scope is TokenScope.MAIN
 
 
 async def test_a_second_run_keeps_the_same_token_and_issues_nothing(
@@ -161,7 +161,7 @@ async def test_the_ui_key_is_left_alone_when_the_agent_token_is_reissued(
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.TASK,
+        scope=TokenScope.MAIN,
         name=DEFAULT_LOCAL_TOKEN_NAME,
     )
     first = await ensure_agent_token(db_session, known_secret=None)
@@ -172,4 +172,4 @@ async def test_the_ui_key_is_left_alone_when_the_agent_token_is_reissued(
     assert second.revoked == 1
     assert first.token.is_revoked
     assert not ui.token.is_revoked
-    assert (await authenticate(db_session, ui.secret)).scope is TokenScope.TASK
+    assert (await authenticate(db_session, ui.secret)).scope is TokenScope.MAIN

@@ -7,9 +7,10 @@
   свежая установка оставалась бы запертой снаружи;
 - `issue-token` — выпустить токен напрямую. Это способ вернуть себе доступ, потеряв
   секрет: `init` на уже работающей установке ничего не создаёт;
-- `local-token` — положить действующий ключ набора `task` в файл, откуда его берёт
-  интерфейс локальной установки. Ключ добывает сама установка, а не человек, поэтому
-  секрет не печатается никогда: команда стоит в журнале подъёма контура;
+- `local-token` — положить действующий ключ набора `main` в файл, откуда его берёт
+  интерфейс локальной установки: человек там и есть её владелец. Ключ добывает сама
+  установка, а не человек, поэтому секрет не печатается никогда: команда стоит в
+  журнале подъёма контура. Годный ключ другого набора в файле она заменяет;
 - `agent-token` — то же для агента этой машины: токен набора `main` в файле, откуда его
   берёт тот, кто подключает агента к MCP (установщик `install.sh`);
 - `demo` — наполнить установку демонстрационными данными: очередь `DEMO`, задачи во всех
@@ -152,6 +153,9 @@ async def _local_token(args: argparse.Namespace) -> int:
     Файл пишется **до** коммита, внутри границы транзакции. Обратный порядок при упавшей
     записи оставил бы в базе действующий секрет, которого никто не знает; при этом —
     мёртвый секрет в файле, который следующий запуск просто заменит.
+
+    Годный ключ другого набора в файле — не повод молчать: сценарий заменяет его ключом
+    набора `main` и отзывает прежний (`ensure_local_token`), и файл переписывается.
     """
     return await _keep_in_file(args, ensure_local_token)
 
@@ -216,10 +220,14 @@ def _report_local_token(result: LocalToken, path: Path) -> None:
                 "The installation was empty: the owner is in place and the first token is issued."
             ),
             LocalTokenOutcome.REISSUED: "No working local token was found, a new one is issued.",
+            LocalTokenOutcome.RESCOPED: (
+                "The local token worked but had another scope: "
+                f"a {result.token.scope.value} one replaces it."
+            ),
         }[result.outcome]
     )
     if result.revoked:
-        print(f"revoked:     {result.revoked} previous token(s) with the same name")
+        print(f"revoked:     {result.revoked} previous token(s)")
     print(f"participant: {participant.name} ({participant.kind.value})")
     print(f"token name:  {result.token.name}")
     print(f"token scope: {result.token.scope.value}")
@@ -325,7 +333,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     local = commands.add_parser(
         "local-token",
-        help="Keep a working task-scope token in a file for the local UI; never prints it",
+        help="Keep a working main-scope token in a file for the local UI; never prints it",
     )
     # Путь обязателен: умолчание пути к файлу с рабочим секретом — ровно то неявное
     # поведение, из-за которого секрет однажды оказывается там, где его не искали.
