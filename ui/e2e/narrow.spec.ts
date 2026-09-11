@@ -77,7 +77,7 @@ test('на узком экране разделы, входящая и выхо�
   await expect(opener).toBeFocused();
   await page.keyboard.press('Enter');
 
-  const sheet = page.getByRole('dialog', { name: 'Разделы трекера' });
+  const sheet = page.getByRole('dialog', { name: 'Разделы Casefile' });
   await expect(sheet).toBeVisible();
 
   // Внутри шторки табом обходится всё служебное: очереди, входящая, выход.

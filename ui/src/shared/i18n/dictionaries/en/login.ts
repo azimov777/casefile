@@ -1,6 +1,6 @@
 /** Экран входа: заголовок, поле токена, кнопка и объяснение просроченного сеанса. */
 export const login = {
-  title: 'Tracker',
+  title: 'Casefile',
   intro: 'Watching over the tasks that agents run, and answering their questions.',
   // «Этот», а не «сохранённый»: сюда приводит и отказ по ключу, который отдала сама
   // установка, а его никто не сохранял и не вводил.

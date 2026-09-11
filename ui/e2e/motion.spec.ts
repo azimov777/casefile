@@ -56,7 +56,7 @@ async function motionOnScreen(page: Page): Promise<void> {
   await expect(page.locator('[data-reveal="place"]')).toBeVisible();
 
   await page.getByRole('button', { name: /Показать разделы/ }).click();
-  await expect(page.getByRole('dialog', { name: 'Разделы трекера' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Разделы Casefile' })).toBeVisible();
 }
 
 /**

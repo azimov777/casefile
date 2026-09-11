@@ -78,7 +78,7 @@ test('список задач: оболочка и таблица английс
   await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
-  const shell = page.getByRole('complementary', { name: 'Tracker sections' });
+  const shell = page.getByRole('complementary', { name: 'Casefile sections' });
   await expect(shell).toContainText('Queues');
   await expect(shell).toContainText('All tasks');
   await expect(shell).toContainText('Inbox');

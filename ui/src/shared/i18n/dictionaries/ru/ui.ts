@@ -30,10 +30,10 @@ export const ui = {
 
   /** Оболочка: боковая панель, верхняя полоса, границы ошибок и несуществующий адрес. */
   app: {
-    mark: 'Т',
-    name: 'Трекер',
+    mark: 'C',
+    name: 'Casefile',
     sections: 'Разделы',
-    trackerSections: 'Разделы трекера',
+    trackerSections: 'Разделы Casefile',
     closeSections: 'Закрыть разделы',
     showSections_zero: 'Показать разделы',
     showSections_one: 'Показать разделы, вас ждёт {{count, number}} вопрос',

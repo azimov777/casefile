@@ -4,7 +4,7 @@ import { curve, ms, readFrame, signedInByHand, silenceJournal } from './contour'
 
 /** Боковая панель на широком экране; на узком та же панель живёт в шторке. */
 function side(page: Page) {
-  return page.getByRole('complementary', { name: 'Разделы трекера' });
+  return page.getByRole('complementary', { name: 'Разделы Casefile' });
 }
 
 /**
@@ -145,7 +145,7 @@ test.describe('узкий экран', () => {
     await expect(opener).toBeVisible();
     await opener.click();
 
-    const sheet = page.getByRole('dialog', { name: 'Разделы трекера' });
+    const sheet = page.getByRole('dialog', { name: 'Разделы Casefile' });
     await expect(sheet).toBeVisible();
     await expect(sheet.getByRole('link', { name: /Входящая/ })).toBeVisible();
     await expect(sheet.getByRole('button', { name: 'Выйти' })).toBeVisible();
@@ -180,7 +180,7 @@ test.describe('узкий экран', () => {
     });
 
     await page.getByRole('button', { name: 'Показать разделы' }).click();
-    const sheet = page.getByRole('dialog', { name: 'Разделы трекера' });
+    const sheet = page.getByRole('dialog', { name: 'Разделы Casefile' });
     await expect(sheet).toBeVisible();
 
     const entering = await sheet.evaluate(readFrame);
@@ -224,7 +224,7 @@ test.describe('узкий экран', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
 
     await page.getByRole('button', { name: 'Показать разделы' }).click();
-    const sheet = page.getByRole('dialog', { name: 'Разделы трекера' });
+    const sheet = page.getByRole('dialog', { name: 'Разделы Casefile' });
     await expect(sheet).toBeVisible();
 
     // Гасятся оба конца, и гасит их переменная, а не перечисление: длительность взята
@@ -249,7 +249,7 @@ test.describe('узкий экран', () => {
     );
 
     const opener = page.getByRole('button', { name: 'Показать разделы' });
-    const sheet = page.getByRole('dialog', { name: 'Разделы трекера' });
+    const sheet = page.getByRole('dialog', { name: 'Разделы Casefile' });
     const interrupted = await page.evaluate(closeWhileEntering);
 
     // Движение ещё шло, когда человек передумал: `Esc` пришёл на первой трети пути.
@@ -286,7 +286,7 @@ test.describe('узкий экран', () => {
     await expect(page.getByRole('table')).toBeVisible();
 
     await page.getByRole('button', { name: 'Показать разделы' }).click();
-    const sheet = page.getByRole('dialog', { name: 'Разделы трекера' });
+    const sheet = page.getByRole('dialog', { name: 'Разделы Casefile' });
     await expect(sheet).toBeVisible();
 
     // Замер контраста снимается в покое: `axe`, попавший в середину появления, поймал бы

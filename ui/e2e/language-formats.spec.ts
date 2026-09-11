@@ -15,7 +15,7 @@ const ZONE = 'America/New_York';
 const CASE = '/tasks/DEMO-1/case';
 
 const SWITCH = { en: 'Interface language', ru: 'Язык интерфейса' };
-const NAME = { en: 'Tracker', ru: 'Трекер' };
+const NAME = { en: 'Casefile', ru: 'Casefile' };
 
 test.beforeEach(async ({ page }) => {
   await silenceJournal(page);

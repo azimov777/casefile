@@ -22,14 +22,14 @@ import { installWithoutKey } from './contour';
  * по одной на каждый вид текста экрана.
  */
 const ENGLISH = {
-  heading: 'Tracker',
+  heading: 'Casefile',
   tokenLabel: 'Participant token',
   submit: 'Sign in',
   refusal: 'The token is unknown or revoked.',
 };
 
 const RUSSIAN = {
-  heading: 'Трекер',
+  heading: 'Casefile',
   tokenLabel: 'Токен участника',
   submit: 'Войти',
   refusal: 'Токен неизвестен или отозван.',
@@ -161,7 +161,7 @@ test.describe('выбор человека против языка браузе�
    * Подписи оболочки, а не карточки входа: она стоит на каждом экране, и именно по ней
    * видно, что язык — свойство всего интерфейса, а не одного компонента.
    */
-  const SHELL = { sections: 'Tracker sections', queues: 'Queues', inbox: 'Inbox' };
+  const SHELL = { sections: 'Casefile sections', queues: 'Queues', inbox: 'Inbox' };
 
   test('английский из хранилища держится на всех экранах и переживает перезагрузку', async ({
     page,

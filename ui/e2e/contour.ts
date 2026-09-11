@@ -96,7 +96,7 @@ export async function fontsReady(page: Page): Promise<void> {
  * и выход. До UI-38 всё это стояло в шапке, и тесты искали его в `banner`.
  */
 export function side(page: Page): Locator {
-  return page.getByRole('complementary', { name: 'Разделы трекера' });
+  return page.getByRole('complementary', { name: 'Разделы Casefile' });
 }
 
 /**
