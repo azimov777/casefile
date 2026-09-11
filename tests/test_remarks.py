@@ -31,8 +31,6 @@ from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from conftest import Connect, call, refuse
 
-pytestmark = pytest.mark.anyio
-
 READY = {
     "queue": "trk",
     "title": "Починить выдачу ключей",

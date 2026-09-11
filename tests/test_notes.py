@@ -221,6 +221,8 @@ OUTSIDE_NAMES = frozenset(
         "HandlerResult",  # SDK MCP, объявленный тип результата обработчика
         "inputSchema",  # поле протокола MCP в ответе `tools/list`
         "__anext__",  # протокол асинхронного итератора, сам язык
+        "anyio_backend",  # anyio, фикстура его плагина pytest (TRK-59)
+        "ScopeMismatch",  # pytest, имя из текста ошибки о масштабе фикстуры (TRK-59)
     }
 )
 
