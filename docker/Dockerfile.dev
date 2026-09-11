@@ -26,10 +26,12 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_NO_CACHE=1
 
-# curl нужен проверке здоровья контейнера, build-essential — сборке колёс,
-# для которых нет готовых под эту версию Python.
+# curl нужен проверке здоровья контейнера, build-essential — сборке колёс, для которых
+# нет готовых под эту версию Python, git — тесту `tests/test_merge_script.py`, который
+# исполняет `scripts/merge-task-branch.sh` на временном репозитории (TRK-54); в
+# прод-образе git не нужен, туда не ставится.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl \
+    && apt-get install -y --no-install-recommends build-essential curl git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=uv /uv /usr/local/bin/uv
