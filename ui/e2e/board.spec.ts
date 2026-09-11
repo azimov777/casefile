@@ -772,56 +772,282 @@ test('при прокрутке ряда вбок заголовок едет в
   }
 });
 
-test('ниже точки остановки липкость снята: липнуть там не к чему', async ({ page, request }) => {
+/**
+ * Окно ниже точки остановки, в котором странице есть что прокручивать: столбцы демо
+ * коротки, и на 420 px доска помещается целиком.
+ */
+const NARROW_WINDOW = { width: 320, height: 320 };
+
+/**
+ * Уводит страницу вглубь доски — туда, где до UI-94 заголовки уезжали за верх окна
+ * вместе со своими столбцами. Глубина — сколько даёт страница, но не больше, чем
+ * заголовку есть куда ехать внутри своего столбца. Отдаёт эту глубину.
+ */
+async function sinkBoard(page: Page): Promise<number> {
+  const room = await page.evaluate(() => {
+    const first = document.querySelector('section[aria-label="backlog"]') as HTMLElement;
+    const board = (first.parentElement as HTMLElement).parentElement as HTMLElement;
+    const top = Math.round(board.getBoundingClientRect().top + window.scrollY);
+    const head = (first.querySelector('h3') as HTMLElement).getBoundingClientRect().height;
+    const max = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    const deeper = Math.min(max - top, Math.round(first.getBoundingClientRect().height - 2 * head));
+    window.scrollTo(0, top + deeper);
+    return { asked: top + deeper, deeper };
+  });
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(room.asked);
+  return room.deeper;
+}
+
+/** Ряд столбцов: сколько ему ехать вбок, где он сейчас и где его края. */
+function row(page: Page) {
+  return page.evaluate(() => {
+    const node = document.querySelector('section[aria-label="backlog"]')
+      ?.parentElement as HTMLElement;
+    const box = node.getBoundingClientRect();
+    return {
+      over: node.scrollWidth - node.clientWidth,
+      overY: node.scrollHeight - node.clientHeight,
+      left: Math.round(node.scrollLeft),
+      edges: { left: Math.round(box.left), right: Math.round(box.right) },
+      // Страница целиком: вбок она не едет ни при какой прокрутке ряда.
+      sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      pageY: Math.round(window.scrollY),
+    };
+  });
+}
+
+/**
+ * Ждёт, пока все шесть заголовков встанут у верха окна. Сдвиг прижима браузер
+ * пересчитывает к кадру после прокрутки, а не в том же вызове, — снятое сразу число
+ * ловило бы заголовок ещё на старом месте.
+ */
+async function pinned(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        (await heads(page)).columns
+          .filter((seen) => seen.head.top < 0 || seen.head.top > 2)
+          .map((seen) => `${seen.status}: ${seen.head.top}`),
+      { message: 'заголовки не встали у верха окна' },
+    )
+    .toEqual([]);
+  return heads(page);
+}
+
+test('ниже точки остановки заголовок прижат к верху окна на любой глубине прокрутки страницы', async ({
+  page,
+  request,
+}) => {
   const status = await longestColumn(request);
 
   await silenceJournal(page);
   /*
-   * Ниже `fold` своей прокрутки у столбца нет, а порт прокрутки заголовка — всё равно
-   * не окно: ряд столбцов ходит вбок (`overflow-x-auto`), и по спецификации это делает
-   * его прокручиваемым по обеим осям. По вертикали ряду прокручивать нечего, поэтому
-   * липкое там не двигается вовсе — а страница тем временем уезжает. Липкость снята
-   * (`fold:sticky`), и сценарий стережёт именно это: обещать человеку неработающее
-   * поведение хуже, чем не обещать.
-   *
-   * Окно ниже обычного: столбцы демо коротки, и на 420 px доска помещается целиком —
-   * прокручивать было бы нечего.
+   * Ниже `fold` своей прокрутки у столбца нет — едет страница, — а `sticky` там липнуть
+   * не к чему: порт прокрутки заголовка не окно, а ряд столбцов (`overflow-x-auto`
+   * делает его прокручиваемым по обеим осям), и по вертикали ряд не едет. До UI-94
+   * заголовок поэтому уезжал вместе со столбцом. Держит его у верха окна прижим по шкале
+   * доски (`pin-top`), и сценарий стережёт именно его: на глубине видно, какой столбец
+   * перед глазами.
    */
-  await page.setViewportSize({ width: 320, height: 320 });
+  await page.setViewportSize(NARROW_WINDOW);
   await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
-  const DEEPER = 24;
-  const room = await page.evaluate((deeper) => {
-    const board = document.querySelector('section[aria-label="backlog"]') as HTMLElement;
-    const row = board.parentElement as HTMLElement;
-    const top = board.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo(0, Math.round(top) + deeper);
-    return {
-      over: document.documentElement.scrollHeight - document.documentElement.clientHeight,
-      asked: Math.round(top) + deeper,
-      position: getComputedStyle(board.querySelector('h3') as Element).position,
-      rowOver: row.scrollHeight - row.clientHeight,
-    };
-  }, DEEPER);
-  expect(room.over, 'странице нечего прокручивать').toBeGreaterThanOrEqual(room.asked);
-  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(room.asked);
+  const deeper = await sinkBoard(page);
+  // Меньше высоты заголовка — не глубина: заголовок уехал бы за край наполовину,
+  // и сценарий этого не отличил бы.
+  expect(deeper, 'странице некуда уехать вглубь доски').toBeGreaterThanOrEqual(40);
 
-  // Липкости здесь нет, и причина названа числом: ряду по вертикали прокручивать нечего.
-  expect(room.position, JSON.stringify(room)).toBe('static');
-  expect(room.rowOver, JSON.stringify(room)).toBe(0);
+  const how = await column(page, status).evaluate((node) => {
+    const style = getComputedStyle(node.querySelector('h3') as Element);
+    return { position: style.position, animation: style.animationName };
+  });
+  // Держит прижим, а не липкость: липкое здесь стояло бы на месте вместе с рядом.
+  expect(how.position, JSON.stringify(how)).not.toBe('sticky');
+  expect(how.animation, JSON.stringify(how)).toBe('pin-top');
 
-  const measured = await heads(page);
-  const report = JSON.stringify({ room, ...measured });
+  const measured = await pinned(page);
+  const lane = await row(page);
+  const report = JSON.stringify({ deeper, lane, ...measured });
+  expect(measured.columns).toHaveLength(contractStatuses().length);
   for (const seen of measured.columns) {
-    // Заголовок уезжает вместе со своим столбцом — как и было до задачи.
+    // Столбец ушёл за верх окна, а его заголовок — нет: у верха окна, в пикселе рамки.
     expect(seen.column.top, report).toBeLessThan(0);
-    expect(seen.head.top - seen.column.top, report).toBe(1);
-    // И столбец при этом прокручиваемой областью не стал: ниже точки остановки едет
-    // страница.
+    expect(seen.head.top, report).toBeGreaterThanOrEqual(0);
+    expect(seen.head.top, report).toBeLessThanOrEqual(2);
+    // Над своим столбцом, а не над соседним, и не ниже его конца.
+    expect(Math.abs(seen.head.left - seen.column.left), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.column.right - seen.head.right), report).toBeLessThanOrEqual(2);
+    expect(seen.head.bottom, report).toBeLessThanOrEqual(seen.column.bottom);
+    // Столбец при этом прокручиваемой областью не стал: едет страница (UI-68).
     expect(seen.scrolled, report).toBe(0);
   }
+  // Ряд по вертикали так и не едет: прижатый заголовок второй прокрутки не заводит.
+  expect(lane.overY, report).toBe(0);
+  expect(lane.sideways, report).toBe(0);
+
+  // Прижатая шапка — та же кнопка: нажатие идёт туда, где она нарисована сейчас,
+  // а не туда, где её место в потоке, — и клавиатура доходит до неё же.
+  const toggle = column(page, 'backlog').getByRole('button');
+  const box = await toggle.boundingBox();
+  expect(box?.y ?? -1, report).toBeGreaterThanOrEqual(0);
+  await page.mouse.click(
+    (box?.x ?? 0) + (box?.width ?? 0) / 2,
+    (box?.y ?? 0) + (box?.height ?? 0) / 2,
+  );
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('ниже точки остановки все шесть столбцов достижимы вбок тем же жестом, а заголовок едет над своим', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.setViewportSize(NARROW_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  await sinkBoard(page);
+  await pinned(page);
+  const before = await row(page);
+  expect(before.over, 'ряду нечего прокручивать вбок').toBeGreaterThan(0);
+  expect(before.left).toBe(0);
+
+  /*
+   * Жест тот же, что до прижима: прокрутка вбок над рядом — колесо вбок, то есть то же,
+   * что смахивание двумя пальцами по тачпаду. Шагами, как рука, и над серединой окна:
+   * верх ряда давно за верхом окна, а под курсором обязан оказаться сам ряд.
+   */
+  await page.mouse.move(NARROW_WINDOW.width / 2, NARROW_WINDOW.height / 2);
+  for (let moved = 0; moved <= before.over; moved += 120) {
+    await page.mouse.wheel(120, 0);
+  }
+  await expect
+    .poll(async () => (await row(page)).left, { message: 'ряд не доехал вбок до упора' })
+    .toBe(before.over);
+
+  const after = await row(page);
+  const measured = await pinned(page);
+  const report = JSON.stringify({ before, after, ...measured });
+  // Последний столбец встал целиком у правого края ряда: доехать можно до каждого.
+  const last = measured.columns.at(-1);
+  expect(last?.status, report).toBe(contractStatuses().at(-1));
+  expect(Math.abs((last?.column.right ?? 0) - after.edges.right), report).toBeLessThanOrEqual(1);
+  expect(last?.column.left ?? -1, report).toBeGreaterThanOrEqual(after.edges.left);
+  for (const seen of measured.columns) {
+    // Заголовок уехал вбок вместе со своим столбцом и остался у верха окна.
+    expect(Math.abs(seen.head.left - seen.column.left), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.column.right - seen.head.right), report).toBeLessThanOrEqual(2);
+  }
+  // Вбок уехал ряд, а не страница, и вниз-вверх страница от этого не сдвинулась.
+  expect(after.sideways, report).toBe(0);
+  expect(after.pageY, report).toBe(before.pageY);
+});
+
+test('страница не едет вбок ни на узкой доске, ни на точке остановки', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+  await silenceJournal(page);
+
+  // 320 — ниже `fold`, где заголовки прижаты к окну; 704 — сама точка остановки, где
+  // столбец уже прокручивается сам. Вбок страница не едет ни в покое, ни на глубине,
+  // ни после прокрутки ряда до упора — это ловили дважды (UI-40, UI-48).
+  for (const width of [320, 704]) {
+    await page.setViewportSize({ width, height: NARROW_WINDOW.height });
+    await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+    await expect(column(page, status).getByRole('article').first()).toBeVisible();
+    await fontsReady(page);
+
+    const seen: Record<string, number> = { rest: (await row(page)).sideways };
+
+    await page.evaluate((scrolled) => {
+      const node = document.querySelector(`section[aria-label="${scrolled}"]`) as HTMLElement;
+      if (getComputedStyle(node).overflowY === 'auto') node.scrollTop = node.scrollHeight;
+      else window.scrollTo(0, document.documentElement.scrollHeight);
+    }, status);
+    seen.deep = (await row(page)).sideways;
+
+    await page.evaluate(() => {
+      const node = document.querySelector('section[aria-label="backlog"]')
+        ?.parentElement as HTMLElement;
+      node.scrollLeft = node.scrollWidth;
+    });
+    const lane = await row(page);
+    expect(lane.left, `на ${width}px ряд не уехал вбок`).toBeGreaterThan(0);
+    seen.side = lane.sideways;
+
+    expect(seen, `на ${width}px страница уехала вбок`).toEqual({ rest: 0, deep: 0, side: 0 });
+  }
+});
+
+test('прижатая шапка не просвечивает карточками, и `axe` на узкой доске чист', async ({
+  page,
+  request,
+}) => {
+  const status = await longestColumn(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize(NARROW_WINDOW);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, status).getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  // Самый длинный столбец — в окно, тем же рядом вбок: под его шапкой есть кому ехать.
+  await column(page, status).evaluate((node) => {
+    const lane = node.parentElement as HTMLElement;
+    lane.scrollLeft += node.getBoundingClientRect().left - lane.getBoundingClientRect().left;
+  });
+  await sinkBoard(page);
+  await pinned(page);
+
+  const measured = await column(page, status).evaluate((node) => {
+    const head = node.querySelector('h3') as HTMLElement;
+    const box = head.getBoundingClientRect();
+    // Точки по всей ширине шапки: название и исполнитель карточки подняты `z-1` над
+    // растяжкой ссылки, и одна точка посередине прошла бы мимо них.
+    const points = [0.1, 0.3, 0.5, 0.7, 0.9].flatMap((across) =>
+      [0.3, 0.7].map((down) => ({
+        x: box.left + box.width * across,
+        y: box.top + box.height * down,
+      })),
+    );
+    return {
+      background: getComputedStyle(head).backgroundColor,
+      column: getComputedStyle(node).backgroundColor,
+      onTop: points.filter((point) => head.contains(document.elementFromPoint(point.x, point.y)))
+        .length,
+      points: points.length,
+      under: Array.from(node.querySelectorAll('article')).filter((card) => {
+        const rect = card.getBoundingClientRect();
+        return rect.top < box.bottom && rect.bottom > box.top;
+      }).length,
+    };
+  });
+
+  await test.info().attach(`прижатая шапка на проезжающей карточке (${status})`, {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+
+  const report = JSON.stringify(measured);
+  expect(measured.under, `под шапкой ${status} нет ни одной карточки: ${report}`).toBeGreaterThan(
+    0,
+  );
+  expect(measured.onTop, report).toBe(measured.points);
+  expect(measured.background, report).not.toMatch(/, ?0\)$/);
+  expect(measured.background, report).toBe(measured.column);
+
+  const result = await new AxeBuilder({ page }).analyze();
+  const serious = result.violations
+    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
+    .map((violation) => violation.id);
+  expect(serious).toEqual([]);
 });
 
 /**
