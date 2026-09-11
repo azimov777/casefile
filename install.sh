@@ -97,21 +97,30 @@ main() {
   [ -n "$token" ] ||
     fail "the installation did not issue an agent token; see: docker compose logs agent-token"
 
+  # Адрес MCP спрашивается у самой установки, а не собирается из порта: правило адреса
+  # (`Settings.effective_mcp_public_url`, оно же отдаёт интерфейсу `GET
+  # /api/v1/installation`) живёт одним местом, и установщик не держит вторую его копию,
+  # которая разошлась бы при заданном `TRACKER_MCP_PUBLIC_URL` (TRK-71).
+  mcp_url=$(docker compose run --rm --no-deps -T --entrypoint python api -c \
+    "from app.core.config import get_settings; print(get_settings().effective_mcp_public_url)" \
+    </dev/null)
+  [ -n "$mcp_url" ] ||
+    fail "the installation did not report its MCP address; see: docker compose logs api"
+
   ui_port=$(setting CASEFILE_PORT 8080)
-  mcp_port=$(setting TRACKER_MCP_PORT 8100)
 
   echo
   bold "Casefile is running."
   echo
   echo "  Board:  http://localhost:$ui_port"
-  echo "  MCP:    http://localhost:$mcp_port/mcp"
+  echo "  MCP:    $mcp_url"
   echo
   bold "Connect Claude Code:"
-  echo "  claude mcp add --transport http --scope user casefile http://localhost:$mcp_port/mcp \\"
+  echo "  claude mcp add --transport http --scope user casefile $mcp_url \\"
   echo "    --header \"Authorization: Bearer $token\""
   echo
   bold "Any other MCP client (Codex, Cursor, ...):"
-  echo "  URL     http://localhost:$mcp_port/mcp"
+  echo "  URL     $mcp_url"
   echo "  Header  Authorization: Bearer $token"
   echo
   echo "Updates arrive by themselves every time Docker starts. Files and data: $DIR"

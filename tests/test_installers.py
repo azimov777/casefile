@@ -9,6 +9,9 @@
 только на настоящем Windows. Сторожим текстом — как `tests/test_merge_script.py`
 сторожит `scripts/merge-task-branch.sh`: дешёвая проверка, которая всё равно ловит
 самое дорогое — исчезнувшую проверку или разъехавшуюся фразу.
+
+Тем же текстовым способом файл сторожит и то, что установщики спрашивают адрес MCP у
+самой установки, а не собирают его из порта (TRK-71): см. `MCP_URL_PROBE` ниже.
 """
 
 import re
@@ -84,6 +87,38 @@ def test_the_windows_mode_check_comes_right_after_the_docker_is_running_check() 
             "проверка режима должна стоять между проверкой «Docker запущен» и "
             "скачиванием образов (docker compose pull)"
         )
+
+
+#: Общий вызов, которым оба установщика спрашивают адрес MCP у самой установки — тем же
+#: способом, каким интерфейс получает его через `GET /api/v1/installation`
+#: (`Settings.effective_mcp_public_url`; см. описание задачи TRK-71). Сторожит пропавший
+#: запрос к установке.
+MCP_URL_PROBE = "get_settings().effective_mcp_public_url"
+
+
+def test_both_installers_ask_the_installation_for_its_own_mcp_address() -> None:
+    """Адрес MCP спрашивается у установки, а не у переменной окружения (TRK-71)."""
+    sh_text = _read(INSTALL_SH)
+    ps1_text = _read(INSTALL_PS1)
+
+    assert MCP_URL_PROBE in sh_text, f"install.sh не спрашивает адрес через {MCP_URL_PROBE!r}"
+    assert MCP_URL_PROBE in ps1_text, f"install.ps1 не спрашивает адрес через {MCP_URL_PROBE!r}"
+
+
+def test_neither_installer_rebuilds_the_mcp_address_from_the_port() -> None:
+    """Установщик не держит вторую копию правила адреса — он печатает ответ установки.
+
+    Регресс к TRK-65#16: `mcp_port=$(setting TRACKER_MCP_PORT 8100)` (и её аналог в
+    PowerShell) собирали `http://localhost:$mcp_port/mcp` сами, вместо того чтобы
+    спросить установку, и расходились с ней при заданном `TRACKER_MCP_PUBLIC_URL`.
+    """
+    sh_text = _read(INSTALL_SH)
+    ps1_text = _read(INSTALL_PS1)
+
+    assert "mcp_port" not in sh_text, "install.sh снова собирает адрес из mcp_port"
+    assert "mcpPort" not in ps1_text, "install.ps1 снова собирает адрес из mcpPort"
+    assert "http://localhost:$mcp_port" not in sh_text
+    assert "http://localhost:$mcpPort" not in ps1_text
 
 
 def test_install_sh_still_parses() -> None:

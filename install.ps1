@@ -84,20 +84,30 @@ if ($LASTEXITCODE -ne 0 -or -not $token) {
     Fail 'the installation did not issue an agent token; see: docker compose logs agent-token'
 }
 
+# Адрес MCP спрашивается у самой установки, а не собирается из порта: правило адреса
+# (`Settings.effective_mcp_public_url`, оно же отдаёт интерфейсу `GET
+# /api/v1/installation`) живёт одним местом, и установщик не держит вторую его копию,
+# которая разошлась бы при заданном `TRACKER_MCP_PUBLIC_URL` (TRK-71).
+$mcpUrl = (& docker compose run --rm --no-deps -T --entrypoint python api -c `
+    'from app.core.config import get_settings; print(get_settings().effective_mcp_public_url)' `
+    | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $mcpUrl) {
+    Fail 'the installation did not report its MCP address; see: docker compose logs api'
+}
+
 $uiPort = Get-Setting 'CASEFILE_PORT' '8080'
-$mcpPort = Get-Setting 'TRACKER_MCP_PORT' '8100'
 
 Write-Host ''
 Write-Host 'Casefile is running.' -ForegroundColor Green
 Write-Host ''
 Write-Host "  Board:  http://localhost:$uiPort"
-Write-Host "  MCP:    http://localhost:$mcpPort/mcp"
+Write-Host "  MCP:    $mcpUrl"
 Write-Host ''
 Write-Host 'Connect Claude Code:' -ForegroundColor White
-Write-Host "  claude mcp add --transport http --scope user casefile http://localhost:$mcpPort/mcp --header `"Authorization: Bearer $token`""
+Write-Host "  claude mcp add --transport http --scope user casefile $mcpUrl --header `"Authorization: Bearer $token`""
 Write-Host ''
 Write-Host 'Any other MCP client (Codex, Cursor, ...):' -ForegroundColor White
-Write-Host "  URL     http://localhost:$mcpPort/mcp"
+Write-Host "  URL     $mcpUrl"
 Write-Host "  Header  Authorization: Bearer $token"
 Write-Host ''
 Write-Host "Updates arrive by themselves every time Docker starts. Files and data: $Dir"

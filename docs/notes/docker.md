@@ -411,3 +411,24 @@ lock-файле, который команда пришла чинить.
 всегда. Конвейер это стережёт: сборка дев-образа в `ci.yml` падает на разошедшемся файле.
 
 **Где:** `docker-compose.yml`, сервис `lock`; `docker/Dockerfile.dev`.
+
+## Установщик спрашивает вычисляемую настройку разовым `python -c`, а не REST
+
+**Что:** `install.sh`/`install.ps1` печатали адрес MCP, собранный из `TRACKER_MCP_PORT`
+своей же копией правила (`http://localhost:$mcp_port/mcp`), и расходились с установкой,
+если человек задал `TRACKER_MCP_PUBLIC_URL` (`Settings.effective_mcp_public_url`; тот же
+факт отдаёт интерфейсу `GET /api/v1/installation`). Правильно — спросить установку, а не
+собирать значение снова, но REST потребовал бы токена (эндпоинт открыт от набора `task` и
+выше) и разбора JSON без `jq` в образе.
+**Почему важно:** установщик уже вызывает `docker compose run` ради токена агента
+(`agent-token`) — тот же контур, тот же образ, без сети и без токена. Вычисляемое
+свойство настроек читается тем же путём без роутера и авторизации.
+**Как правильно:** `docker compose run --rm --no-deps -T --entrypoint python api -c
+"from app.core.config import get_settings; print(get_settings().effective_mcp_public_url)"`
+— `--no-deps`, потому что контур уже поднят и ждать `db`/`migrate` заново не нужно.
+Работает без БД: `get_settings()` не открывает соединение, а `PostgresDsn` в
+`Settings.database_url` валидирует только форму строки. Годится для любой другой
+вычисляемой настройки, которую установщику нужно напечатать, не заводя под неё
+подкоманду `app/cli.py` и не открывая её в REST.
+**Где:** `install.sh`, `install.ps1` (TRK-71); `app/core/config.py`,
+`Settings.effective_mcp_public_url`.
