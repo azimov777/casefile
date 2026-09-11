@@ -12,9 +12,11 @@ export {
   type Task,
   type TaskFeatures,
   type TaskListParams,
+  type TaskListRequest,
   type TaskPriority,
   type TaskStatus,
 } from './api/tasks';
+export { ARCHIVE_AFTER_DAYS } from './model/archive';
 export {
   taskPackageKeys,
   taskPackageQueryOptions,

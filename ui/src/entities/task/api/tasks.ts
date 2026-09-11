@@ -1,5 +1,6 @@
 import { infiniteQueryOptions, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components, type operations } from '@/shared/api';
+import { hideArchive } from '../model/archive';
 
 export type Task = components['schemas']['TaskSearchRead'];
 export type TaskFeatures = components['schemas']['TaskFeaturesRead'];
@@ -11,6 +12,20 @@ export type TaskPriority = components['schemas']['TaskPriority'];
  * и это упадёт сборкой, а не пустой выдачей.
  */
 export type TaskListParams = NonNullable<operations['list_tasks']['parameters']['query']>;
+
+/**
+ * Отбор, каким его просит интерфейс: параметры контракта и правило архива.
+ *
+ * Правила архива в контракте нет и быть не должно — выдача API по умолчанию прежняя
+ * (UI-97), — поэтому признак стоит рядом с параметрами, а не среди них: `fetchTasks`
+ * снимает его перед отправкой и сам складывает правило с `query`. В ключе запроса он
+ * стоит признаком без даты: дату порога знает только момент чтения (`hideArchive`).
+ * Нет признака — нет и правила, ровно как у самого API.
+ */
+export type TaskListRequest = TaskListParams & {
+  /** Прятать архив: закрытые задачи, в делах которых давно не писали. */
+  hideArchived?: boolean;
+};
 
 /**
  * Статусы и приоритеты списком для фильтров.
@@ -73,26 +88,46 @@ export const TASK_COLUMN_PAGE_SIZE = 10;
 export const taskKeys = {
   /** Всё, что читает таблица: страница выдачи целиком. */
   table: ['tasks', 'table'] as const,
-  list: (params: TaskListParams) => ['tasks', 'table', params] as const,
+  list: (params: TaskListRequest) => ['tasks', 'table', params] as const,
   /** Всё, что читает доска: страницы столбцов и числа над ними. */
   board: ['tasks', 'board'] as const,
   /** Столбец доски: свой отбор по статусу, свой курсор, свои копящиеся страницы. */
-  column: (params: TaskListParams) => ['tasks', 'board', 'column', params] as const,
+  column: (params: TaskListRequest) => ['tasks', 'board', 'column', params] as const,
   /** Сколько задач в отборе — без самих задач. */
-  total: (params: TaskListParams) => ['tasks', 'board', 'total', params] as const,
+  total: (params: TaskListRequest) => ['tasks', 'board', 'total', params] as const,
 };
 
-export function fetchTasks(params: TaskListParams): Promise<Page<Task>> {
-  return unwrapPage(
-    apiClient.GET('/api/v1/tasks', {
-      // Набор полей и размер страницы — умолчания списка: вызывающий вправе их
-      // переназначить, поэтому его параметры идут последними.
-      params: { query: { fields: TASK_LIST_FIELDS, limit: TASK_PAGE_SIZE, ...params } },
-    }),
-  );
+export async function fetchTasks({
+  hideArchived = false,
+  ...params
+}: TaskListRequest): Promise<Page<Task>> {
+  /*
+   * Порог архива считается здесь, в момент чтения, а не там, где строится ключ
+   * (UI-97#7). Дата в ключе делала бы его новым на каждой отрисовке: ответ вызывает
+   * отрисовку, отрисовка — новый ключ, и так без конца. Дата, замороженная на экране,
+   * держала бы ключ, но перечитывание по живому потоку шло бы со старым порогом.
+   * Здесь же любое чтение идёт со свежим порогом, а без чтения ничего не меняется:
+   * задача, пересёкшая порог, исчезает при следующем чтении — и не раньше.
+   */
+  const archive = hideArchived ? hideArchive(params.query, new Date()) : null;
+  const query = archive === null ? params : { ...params, query: archive.query };
+
+  try {
+    return await unwrapPage(
+      apiClient.GET('/api/v1/tasks', {
+        // Набор полей и размер страницы — умолчания списка: вызывающий вправе их
+        // переназначить, поэтому его параметры идут последними.
+        params: { query: { fields: TASK_LIST_FIELDS, limit: TASK_PAGE_SIZE, ...query } },
+      }),
+    );
+  } catch (error) {
+    // Отказ разбора склейки говорит о строке, которой человек не писал: его позиция
+    // возвращается в ту строку, что пришла в `params.query`.
+    throw archive === null ? error : archive.relocate(error);
+  }
 }
 
-export function tasksQueryOptions(params: TaskListParams) {
+export function tasksQueryOptions(params: TaskListRequest) {
   return queryOptions({
     queryKey: taskKeys.list(params),
     queryFn: () => fetchTasks(params),
@@ -114,7 +149,7 @@ export function tasksQueryOptions(params: TaskListParams) {
  * Курсор не из адреса: у столбца он не состояние экрана, а положение чтения —
  * переслать ссылку «на вторую страницу столбца» бессмысленно.
  */
-export function tasksColumnQueryOptions(status: TaskStatus, params: TaskListParams) {
+export function tasksColumnQueryOptions(status: TaskStatus, params: TaskListRequest) {
   const column = { ...params, status: [status], limit: TASK_COLUMN_PAGE_SIZE };
 
   return infiniteQueryOptions({
@@ -142,7 +177,7 @@ export function tasksColumnQueryOptions(status: TaskStatus, params: TaskListPara
  * `null` в ответе означает «коллекция не считала»: у списка задач такого не бывает,
  * но врать точным числом при нём нельзя — показывающий разбирает этот случай сам.
  */
-export function tasksTotalQueryOptions(params: TaskListParams) {
+export function tasksTotalQueryOptions(params: TaskListRequest) {
   const counted = { ...params, limit: 1, fields: ['status'] };
 
   return queryOptions({

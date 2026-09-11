@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { fontsReady, silenceJournal } from './contour';
+import { fontsReady, shownKeys, silenceJournal } from './contour';
 
 /** Хост шрифтов и хост их файлов: гасятся вместе, иначе останется половина. */
 const FONT_HOSTS = ['https://fonts.googleapis.com/**', 'https://fonts.gstatic.com/**'];
@@ -44,13 +44,15 @@ test('с сетью: Fira Sans и Fira Code загружены, кириллиц
 
 test('без хоста шрифтов: страница читаема запасной гарнитурой и не рассыпается', async ({
   page,
+  request,
 }) => {
+  const shown = await shownKeys(request);
   for (const host of FONT_HOSTS) await page.route(host, (route) => route.abort());
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
 
   const rows = page.locator('tbody tr');
-  await expect(rows).toHaveCount(7);
+  await expect(rows).toHaveCount(shown.length);
   await expect(page.getByRole('heading', { name: 'Задачи' })).toBeVisible();
 
   // Fira не пришла — значит буквы рисует системная запасная, названная в стеке.

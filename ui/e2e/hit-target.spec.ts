@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { fontsReady, shellReady, silenceJournal } from './contour';
+import { fontsReady, shellReady, shownKeys, silenceJournal } from './contour';
 
 function row(page: Page, key: string): Locator {
   return page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: key }) });
@@ -124,11 +124,12 @@ test('cmd-клик по строке открывает задачу второ�
   await aside.close();
 });
 
-test('обход табом даёт одну остановку на строку, и фокус виден', async ({ page }) => {
+test('обход табом даёт одну остановку на строку, и фокус виден', async ({ page, request }) => {
+  const shown = await shownKeys(request);
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
   await settled(page);
-  await expect(page.locator('tbody tr')).toHaveCount(7);
+  await expect(page.locator('tbody tr')).toHaveCount(shown.length);
 
   // Ставим фокус на ссылку первой строки и считаем, сколько шагов до второй.
   const first = page.locator('tbody tr').first().getByRole('link');

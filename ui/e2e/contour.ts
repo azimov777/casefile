@@ -158,13 +158,35 @@ export function contractStatuses(): string[] {
   return contract.components.schemas.TaskStatus.enum;
 }
 
+/** Сколько дней тишины в деле делают закрытую задачу архивной (UI-97). */
+const ARCHIVE_AFTER_DAYS = 3;
+
 /**
- * Какие задачи демо в каком статусе — по правде бэкенда, а не по памяти теста.
+ * Что человек видит в списке и на доске по умолчанию: всё, кроме архива — закрытых
+ * задач, в делах которых больше трёх дней не писали (UI-97). Закрытая задача без
+ * единой записи агента в архиве сразу: в демо это отменённая переходом `DEMO-7`.
+ *
+ * Правило написано здесь заново, а не взято из кода интерфейса: тест, берущий его
+ * оттуда же, откуда его берёт экран, сверял бы экран с самим собой. `now` — часы, от
+ * которых считать порог: у браузера со сдвинутыми часами (`page.clock`) он свой.
+ */
+export function outsideArchive(now: Date = new Date()): string {
+  const threshold = new Date(now.getTime() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
+  return `status: not in done, cancelled or last_entry_at: >= "${threshold.toISOString()}"`;
+}
+
+/**
+ * Какие задачи демо в каком статусе видит человек — по правде бэкенда, а не по памяти
+ * теста.
  *
  * Состав демо меняется вместе с бэкендом: 2026-09-07 задача, ждавшая ответа владельца,
  * ушла из `open` в `waiting` (TRK-15), и три сценария, помнившие её ключ и число строк,
  * покраснели разом, ничего не сказав про интерфейс. Спрошенный состав такие правки
  * переживает сам.
+ *
+ * По умолчанию это состав без архива — ровно то, что список и доска показывают,
+ * пока человек не попросил архив (UI-97). `archive: true` — все задачи, как их отдаёт
+ * API; `now` — часы, от которых считается порог архива.
  *
  * `params` дописывает условия к отбору: `{ assignee: 'demo_agent' }` отвечает на
  * вопрос «а что из этого его».
@@ -172,8 +194,16 @@ export function contractStatuses(): string[] {
 export async function tasksByStatus(
   request: APIRequestContext,
   params: Record<string, string> = {},
+  { archive = false, now = new Date() }: { archive?: boolean; now?: Date } = {},
 ): Promise<Map<string, string[]>> {
-  const query = new URLSearchParams({ queue: 'DEMO', fields: 'status', limit: '100', ...params });
+  const shown: Record<string, string> = archive ? {} : { query: outsideArchive(now) };
+  const query = new URLSearchParams({
+    queue: 'DEMO',
+    fields: 'status',
+    limit: '100',
+    ...shown,
+    ...params,
+  });
   const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
     headers: { Authorization: `Bearer ${readE2eToken()}` },
   });
@@ -184,4 +214,15 @@ export async function tasksByStatus(
     byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task.key]);
   }
   return byStatus;
+}
+
+/**
+ * Ключи задач демо, которые видит человек, — все статусы разом. По умолчанию без
+ * архива (UI-97): столько строк таблица показывает, открытая без условий.
+ */
+export async function shownKeys(
+  request: APIRequestContext,
+  options: { archive?: boolean; now?: Date } = {},
+): Promise<string[]> {
+  return [...(await tasksByStatus(request, {}, options)).values()].flat();
 }

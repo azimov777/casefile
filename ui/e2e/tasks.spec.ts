@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { side, silenceJournal, tasksByStatus } from './contour';
+import { shownKeys, side, silenceJournal, tasksByStatus } from './contour';
 
 function rows(page: Page) {
   return page.locator('tbody tr');
@@ -44,15 +44,21 @@ test('отбор по статусу open даёт ровно открытые �
   await expect(rows(page)).toHaveCount(open.length);
 });
 
-test('признаки строки берутся из выдачи списка, без запроса на задачу', async ({ page }) => {
+test('признаки строки берутся из выдачи списка, без запроса на задачу', async ({
+  page,
+  request,
+}) => {
+  // Сколько строк — по правде бэкенда и без архива: `DEMO-7`, отменённая без единой
+  // записи агента, в архиве с первой минуты (UI-97).
+  const shown = await shownKeys(request);
   await silenceJournal(page);
   const calls: string[] = [];
-  page.on('request', (request) => {
-    if (request.url().includes('/api/v1/tasks')) calls.push(request.url());
+  page.on('request', (call) => {
+    if (call.url().includes('/api/v1/tasks')) calls.push(call.url());
   });
 
   await page.goto('/tasks?queue=DEMO');
-  await expect(rows(page)).toHaveCount(7);
+  await expect(rows(page)).toHaveCount(shown.length);
 
   await expect(row(page, 'DEMO-6').getByText(/^заблокирована/)).toBeVisible();
   // Блокирующий вопрос — не отдельный знак, а состояние знака вопросов: четвёртый
@@ -67,18 +73,21 @@ test('признаки строки берутся из выдачи списк�
 
 test('опечатка в запросе объясняется позицией и списком допустимого, таблица остаётся', async ({
   page,
+  request,
 }) => {
+  const shown = await shownKeys(request);
   await page.goto('/tasks?queue=DEMO');
-  await expect(rows(page)).toHaveCount(7);
+  await expect(rows(page)).toHaveCount(shown.length);
 
   await page.getByRole('button', { name: 'Изменить отбор' }).click();
   await page.getByLabel('Запрос на языке бэкенда').fill('status: opne');
   await page.getByRole('button', { name: 'Применить' }).click();
 
+  // Запрос ушёл склеенным с правилом архива, а символ назван в строке человека.
   const problem = page.getByRole('alert');
   await expect(problem).toContainText('Ошибка в символе 9');
   await expect(problem).toContainText('open');
-  await expect(rows(page)).toHaveCount(7);
+  await expect(rows(page)).toHaveCount(shown.length);
 });
 
 test('сортировка живёт в адресе: вторая вкладка по той же ссылке показывает то же самое', async ({
@@ -145,9 +154,10 @@ test('ссылка на страницу за концом выдачи объя
   await expect(rows(page).first()).toBeVisible();
 });
 
-test('доступность списка задач', async ({ page }) => {
+test('доступность списка задач', async ({ page, request }) => {
+  const shown = await shownKeys(request);
   await page.goto('/tasks?queue=DEMO');
-  await expect(rows(page)).toHaveCount(7);
+  await expect(rows(page)).toHaveCount(shown.length);
 
   // Форму надо раскрыть: свёрнутую её `axe` не увидит, а проверять надо и её —
   // сценарий идёт в обеих темах, и поля формы в тёмной проверены только отсюда.

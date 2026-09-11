@@ -35,12 +35,15 @@ export function useTaskFilters(): TaskFiltersControl {
   /**
    * Сброс снимает условия, но не место: очередь и вид остаются. Человек просил
    * показать всё, а не унести себя из очереди, в которую он пришёл (UI-38).
+   *
+   * Показ архива тоже остаётся (UI-97): «сбросить» значит «показать больше», а
+   * вернуть умолчание архива значило бы, нажав его, увидеть меньше.
    */
   const reset = useCallback(() => {
     setSearchParams(
       (previous) => {
-        const { queue, view } = readFilters(previous);
-        return writeFilters({ ...EMPTY_FILTERS, queue, view });
+        const { queue, view, showArchive } = readFilters(previous);
+        return writeFilters({ ...EMPTY_FILTERS, queue, view, showArchive });
       },
       { replace: true },
     );
