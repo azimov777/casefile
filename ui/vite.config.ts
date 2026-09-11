@@ -20,16 +20,26 @@ function installConfig(token: string): Plugin {
   return {
     name: 'tracker-install-config',
     configureServer(server) {
-      server.middlewares.use('/config.json', (_request, response) => {
-        response.setHeader('Content-Type', 'application/json');
-        response.setHeader('Cache-Control', 'no-store');
-        if (token === '') {
-          response.statusCode = 404;
-          response.end('{}');
-          return;
-        }
-        response.end(JSON.stringify({ token }));
-      });
+      // Возвращённая функция — не побочный эффект самого хука: Vite вызывает такие
+      // функции уже после того, как навесил собственные внутренние промежуточные
+      // обработчики, в том числе проверку Host (`server.allowedHosts`, UI-107). Прежде
+      // здесь стоял вызов `server.middlewares.use` прямо в теле хука, и тогда обработчик
+      // вставал в цепочку РАНЬШЕ проверки Host — дев-сервер отдавал ключ установки
+      // любому заголовку Host, хотя сам Vite её уже умеет. Возврат функции чинит порядок,
+      // не трогая сам список разрешённых хостов: петля и `*.localhost` разрешены
+      // умолчанием Vite, дальше добавлять нечего.
+      return () => {
+        server.middlewares.use('/config.json', (_request, response) => {
+          response.setHeader('Content-Type', 'application/json');
+          response.setHeader('Cache-Control', 'no-store');
+          if (token === '') {
+            response.statusCode = 404;
+            response.end('{}');
+            return;
+          }
+          response.end(JSON.stringify({ token }));
+        });
+      };
     },
   };
 }
