@@ -26,10 +26,19 @@ COMPOSE_FILES = {
     "prod": PROJECT_ROOT / "docker-compose.prod.yml",
 }
 
-#: Сервис базы данных. Он единственный получает окружение мимо общего якоря: реквизиты
-#: `POSTGRES_*` поднимают сам PostgreSQL, а приложение их не читает — оно ходит по
-#: собранному из них `TRACKER_DATABASE_URL`.
-DATABASE_SERVICE = "db"
+#: Сервисы, которые не поднимают приложение и потому получают окружение мимо общего
+#: якоря. `db` — сам PostgreSQL: реквизиты `POSTGRES_*` читает он, а приложение ходит по
+#: собранному из них `TRACKER_DATABASE_URL`. `ui` и `updater` есть только у прод-контура,
+#: который стал установкой одной строкой (TRK-58): образ интерфейса и обновлятор
+#: установки, у каждого своё окружение.
+FOREIGN_SERVICES = frozenset({"db", "ui", "updater"})
+
+#: Сервис интерфейса и переменная, которой прод-контур называет ему файл с ключом.
+UI_SERVICE = "ui"
+UI_TOKEN_FILE = "TRACKER_UI_TOKEN_FILE"
+
+#: Разовый сервис, выпускающий токен агенту этой машины.
+AGENT_TOKEN_SERVICE = "agent-token"
 
 #: Якорь с переменными, которые контур задаёт сервисам сам.
 APP_ENVIRONMENT = "x-app-environment:"
@@ -53,14 +62,10 @@ OUTPUT_OPTION = "--output"
 #: Рабочий каталог обоих образов: относительный путь команды считается от него.
 WORKDIR = "/app"
 
-#: Чем контур возвращает записанный файл хозяину каталога, смонтированного с хоста.
-#: Дев-контур работает от root, узнаёт владельца прямо у каталога и отдаёт файл ему;
-#: прод-контур работает от непривилегированного пользователя, чужого uid взять не может
-#: и называет владельца переменной.
-OWNER_NAMED = {
-    "dev": ("chown", "$$(stat -c %u:%g /app)"),
-    "prod": ("user:", "TRACKER_SECRETS_USER"),
-}
+#: Чем дев-контур возвращает записанный файл хозяину каталога, смонтированного с хоста:
+#: он работает от root, узнаёт владельца прямо у каталога и отдаёт файл ему. Прод-контур
+#: на хост не пишет ничего — ключи у него живут в именованных томах.
+DEV_OWNER_NAMED = ("chown", "$$(stat -c %u:%g /app)")
 
 
 def _indent(line: str) -> int:
@@ -156,7 +161,7 @@ def test_every_application_service_takes_the_shared_environment() -> None:
 
     Без этого две проверки выше стерегут пустое место: сервис со своим `environment:`
     получил бы переменную, которой нет у соседнего контура, а сравнение якорей осталось
-    бы зелёным. Исключение одно — `db`: он поднимает PostgreSQL, а не приложение.
+    бы зелёным. Исключения — сервисы, которые приложение не поднимают (`FOREIGN_SERVICES`).
     """
     strayed: list[str] = []
     for contour, path in COMPOSE_FILES.items():
@@ -165,7 +170,7 @@ def test_every_application_service_takes_the_shared_environment() -> None:
         assert len(services) > 3, f"{contour}: сервисы не разобраны — проверка ничего не стережёт"
 
         for name, body in services.items():
-            if name == DATABASE_SERVICE:
+            if name in FOREIGN_SERVICES:
                 continue
             described = "\n".join(body)
             if "<<: *app-service" not in described:
@@ -188,7 +193,7 @@ def test_the_mcp_port_reaches_the_process_and_not_only_the_publication() -> None
 
     Проверяется не значение, а то, что все три места названы одной подстановкой:
     публикация, окружение процесса и проверка здоровья двигаются вместе или не двигаются
-    вовсе.
+    вовсе. Адрес публикации перед ними законен: прод-контур публикует только на петлю.
     """
     for contour, path in COMPOSE_FILES.items():
         text = path.read_text(encoding="utf-8")
@@ -200,7 +205,7 @@ def test_the_mcp_port_reaches_the_process_and_not_only_the_publication() -> None
             f"{contour}: порт MCP объявлен только файлом окружения — публикация сдвинется, "
             f"процесс останется прежним"
         )
-        assert f'"{MCP_PORT}:{MCP_PORT}"' in "\n".join(service), f"{contour}: {service}"
+        assert f'{MCP_PORT}:{MCP_PORT}"' in "\n".join(service), f"{contour}: {service}"
         assert health, f"{contour}: проверка здоровья {MCP_SERVICE} не разобрана"
         assert all(MCP_PORT in line for line in health), health
 
@@ -248,14 +253,23 @@ def _mounts(lines: list[str]) -> list[tuple[str, str]]:
     return mounts
 
 
+def _from_host(source: str) -> bool:
+    """Источник монтирования — путь на хосте, а не том Docker.
+
+    Путь на хосте записан относительным (`./`, `.` — каталог репозитория или установки)
+    или абсолютным (`/var/run/docker.sock` у обновлятора); имя тома с точки и косой черты
+    не начинается никогда. Анонимный том источника не имеет вовсе.
+    """
+    return source.startswith((".", "/"))
+
+
 def _mount_targets(lines: list[str]) -> set[str]:
     """Куда описание монтирует каталоги хоста: точки монтирования у источников с хоста.
 
     Именованные и анонимные тома отсеиваются: `pgdata:/var/lib/postgresql/data` живёт
-    внутри Docker, и файл, попавший туда, хосту не виден. Источник с хоста в обоих
-    контурах записан относительным путём — с него и начинается строка.
+    внутри Docker, и файл, попавший туда, хосту не виден.
     """
-    return {target for source, target in _mounts(lines) if source.startswith("./")}
+    return {target for source, target in _mounts(lines) if _from_host(source)}
 
 
 def test_no_contour_mounts_anything_inside_a_directory_taken_from_the_host() -> None:
@@ -276,10 +290,11 @@ def test_no_contour_mounts_anything_inside_a_directory_taken_from_the_host() -> 
     """
     for contour, path in COMPOSE_FILES.items():
         mounts = _mounts(_meaningful_lines(path.read_text(encoding="utf-8")))
-        from_host = [target for source, target in mounts if source.startswith("./")]
+        from_host = [target for source, target in mounts if _from_host(source)]
 
         # Сторожевое условие: без каталогов с хоста проверке не с чем сравнивать, и
-        # промах разбора зеленил бы её молча — оба контура такой каталог объявляют.
+        # промах разбора зеленил бы её молча — оба контура такой каталог объявляют:
+        # дев-контур — репозиторий, прод-контур — каталог установки у обновлятора.
         assert from_host, f"{contour}: каталогов хоста не разобрано: {mounts}"
 
         for source, target in mounts:
@@ -291,43 +306,79 @@ def test_no_contour_mounts_anything_inside_a_directory_taken_from_the_host() -> 
             )
 
 
-def test_both_contours_hand_the_ui_key_to_the_host() -> None:
-    """Ключ интерфейса оба контура кладут в каталог, видимый хосту.
+def _written_by(services: dict[str, list[str]], name: str, contour: str) -> PurePosixPath:
+    """Единственный файл, который сервис называет ключом `--output`."""
+    assert name in services, f"{contour}: сервиса {name} нет — установке нечем выдать ключ"
+    written = _output_paths(services[name])
+    assert len(written) == 1, f"{contour}: {OUTPUT_OPTION} в {name} не разобран: {written}"
+    return written[0]
 
-    Результат `local-token` — файл, а не вывод: секрет команда не печатает никогда, и
-    ничем, кроме файла, она не полезна. Оттуда его берёт контур интерфейса — и человек,
-    когда проверяет выданный ключ.
+
+def test_the_dev_contour_hands_the_keys_to_the_host() -> None:
+    """Ключ интерфейса и токен агента дев-контур кладёт в каталог, видимый хосту.
+
+    Результат `local-token` и `agent-token` — файл, а не вывод: секрет команды не
+    печатают никогда, и ничем, кроме файла, они не полезны. В разработке оттуда ключ
+    берёт `pnpm dev` интерфейса, а токен — тот, кто подключает агента к MCP.
 
     Стоит пути указать мимо смонтированного каталога, и команда отработает с кодом 0,
     напечатает, что ключ выдан, и унесёт файл вместе с разовым контейнером. Установка при
     этом останется с действующим токеном, которого никто не знает, — то есть молчаливым
-    отказом, каких у выдачи ключа быть не должно. У дев-контура каталог приходит общим
-    якорем (репозиторий смонтирован целиком), у прод-контура — своей строкой сервиса:
-    кода в образе там уже нет.
+    отказом, каких у выдачи ключа быть не должно.
     """
-    for contour, path in COMPOSE_FILES.items():
-        text = path.read_text(encoding="utf-8")
-        services = _services(text)
+    text = COMPOSE_FILES["dev"].read_text(encoding="utf-8")
+    services = _services(text)
+    shared = _mount_targets(_block(text, "x-app-service:"))
 
-        assert LOCAL_TOKEN_SERVICE in services, (
-            f"{contour}: сервиса {LOCAL_TOKEN_SERVICE} нет — установке нечем выдать ключ "
-            f"своему интерфейсу"
-        )
-
-        service = services[LOCAL_TOKEN_SERVICE]
-        written = _output_paths(service)
-
-        assert len(written) == 1, f"{contour}: {OUTPUT_OPTION} в сервисе не разобран: {service}"
-
-        output = written[0]
-        mounted = _mount_targets(_block(text, "x-app-service:")) | _mount_targets(service)
+    for name in (LOCAL_TOKEN_SERVICE, AGENT_TOKEN_SERVICE):
+        output = _written_by(services, name, "dev")
+        mounted = shared | _mount_targets(services[name])
 
         # Сторожевой проверки на пустоту здесь нет намеренно: промах разбора даёт пустое
         # множество, а пустое множество валит саму проверку — зеленить ей нечего.
         assert any(str(parent) in mounted for parent in output.parents), (
-            f"{contour}: {output} лежит вне каталогов хоста {sorted(mounted)} — "
+            f"dev, {name}: {output} лежит вне каталогов хоста {sorted(mounted)} — "
             f"файл ключа не переживёт разовый контейнер, причём молча"
         )
+
+
+def test_the_prod_contour_hands_the_ui_key_to_the_ui_through_a_named_volume() -> None:
+    """Прод-контур держит ключи в именованных томах, и ключ интерфейса доходит до `ui`.
+
+    Хоста у установки одной строкой нет: ни исходников, ни каталога под секреты. Ключ
+    `local-token` пишет в именованный том, `ui` монтирует тот же том и получает путь к
+    файлу переменной — промах в любом из трёх мест поднимает интерфейс без ключа, то есть
+    с экраном входа там, где его быть не должно, и без единой ошибки в журнале.
+
+    Токен агента лежит в своём томе, и `ui` его не монтирует: интерфейсу он не нужен, а
+    держать секрет набора `main` там, где его можно не держать, незачем.
+    """
+    services = _services(COMPOSE_FILES["prod"].read_text(encoding="utf-8"))
+
+    def volume_holding(name: str) -> str:
+        output = _written_by(services, name, "prod")
+        holders = [
+            source
+            for source, target in _mounts(services[name])
+            if any(parent == PurePosixPath(target) for parent in output.parents)
+        ]
+        assert len(holders) == 1, f"prod, {name}: {output} не лежит ни в одном томе сервиса"
+        assert not _from_host(holders[0]), f"prod, {name}: ключ уходит на хост ({holders[0]})"
+        return holders[0]
+
+    ui_key = volume_holding(LOCAL_TOKEN_SERVICE)
+    agent_key = volume_holding(AGENT_TOKEN_SERVICE)
+    ui_mounts = dict(_mounts(services[UI_SERVICE]))
+
+    assert ui_key in ui_mounts, f"prod: {UI_SERVICE} не монтирует том ключа {ui_key}"
+    key_name = _written_by(services, LOCAL_TOKEN_SERVICE, "prod").name
+    expected = PurePosixPath(ui_mounts[ui_key]) / key_name
+    described = [line.strip() for line in services[UI_SERVICE]]
+    assert f"{UI_TOKEN_FILE}: {expected}" in described, (
+        f"prod: {UI_SERVICE} ищет ключ не там, куда кладёт {LOCAL_TOKEN_SERVICE} ({expected})"
+    )
+    assert agent_key != ui_key
+    assert agent_key not in ui_mounts, f"prod: токен агента доступен {UI_SERVICE}"
 
 
 def _services_writing_onto_the_host(text: str) -> dict[str, str]:
@@ -344,7 +395,7 @@ def _services_writing_onto_the_host(text: str) -> dict[str, str]:
 
 
 def test_the_written_file_ends_up_owned_by_the_one_who_reads_it() -> None:
-    """Файл, положенный контуром на машину хозяина, достаётся хозяину, а не root.
+    """Файл, положенный дев-контуром на машину хозяина, достаётся хозяину, а не root.
 
     Процесс контейнера пишет файл своим uid, и на Linux этот же uid стоит владельцем
     файла на хосте: bind-mount владельца не подменяет. Дев-контур работает от root —
@@ -353,26 +404,40 @@ def test_the_written_file_ends_up_owned_by_the_one_who_reads_it() -> None:
     слой обмена файлами Docker Desktop владельца подменяет, поломки там нет вовсе, и
     зелёный прогон на такой машине про права не говорит ничего (TRK-52#5).
 
-    Механизмы у контуров разные, потому что разные права у процесса: root узнаёт хозяина
-    прямо у смонтированного каталога и возвращает файл ему, а непривилегированный процесс
-    прод-контура чужого uid взять не может, и владелец назван ему переменной. Умолчание
-    той переменной годится не всякой машине, и дев-контуру она поэтому не подходит:
-    контур обязан подниматься одной командой без подготовки.
+    Root узнаёт хозяина прямо у смонтированного каталога и возвращает файл ему — без
+    переменной, чьё умолчание годилось бы не всякой машине: контур обязан подниматься
+    одной командой без подготовки. Прод-контуру правило не нужно: на хост он не пишет
+    вовсе (`test_the_prod_contour_writes_nothing_onto_the_host`).
 
     Стережёт проверка тех, кто называет файл ключом `--output`. Кеши инструментов сюда
     не попадают, и они выведены за пределы репозитория совсем: `cache-dir` линтера и
     `cache_dir` набора тестов задают путь мимо смонтированного каталога.
     """
-    for contour, path in COMPOSE_FILES.items():
-        writing = _services_writing_onto_the_host(path.read_text(encoding="utf-8"))
+    writing = _services_writing_onto_the_host(COMPOSE_FILES["dev"].read_text(encoding="utf-8"))
 
-        assert writing, f"{contour}: сервисы, пишущие файл на машину хозяина, не разобраны"
+    assert writing, "dev: сервисы, пишущие файл на машину хозяина, не разобраны"
 
-        for name, described in writing.items():
-            unnamed = [mark for mark in OWNER_NAMED[contour] if mark not in described]
+    for name, described in writing.items():
+        unnamed = [mark for mark in DEV_OWNER_NAMED if mark not in described]
 
-            assert not unnamed, (
-                f"{contour}, сервис {name}: файл ложится на машину хозяина, "
-                f"владельца ему никто не назначает ({unnamed}) — на Linux файл "
-                f"останется тому, кто писал, недоступным хозяину установки"
-            )
+        assert not unnamed, (
+            f"dev, сервис {name}: файл ложится на машину хозяина, "
+            f"владельца ему никто не назначает ({unnamed}) — на Linux файл "
+            f"останется тому, кто писал, недоступным хозяину установки"
+        )
+
+
+def test_the_prod_contour_writes_nothing_onto_the_host() -> None:
+    """Установка одной строкой не кладёт на машину пользователя ни одного файла.
+
+    Каталог хоста у неё один — каталог установки, смонтированный обновлятору, — и пишет
+    туда только он сам, освежая compose-файл. Разовый сервис с `--output` в каталог хоста
+    вернул бы все беды с владельцем файла, от которых прод-контур ушёл на именованные тома
+    (`docs/notes/docker.md`, «Права на bind-mount»).
+    """
+    text = COMPOSE_FILES["prod"].read_text(encoding="utf-8")
+
+    assert _output_paths([line for body in _services(text).values() for line in body]), (
+        "prod: ни одного `--output` не разобрано — проверка ничего не стережёт"
+    )
+    assert _services_writing_onto_the_host(text) == {}

@@ -41,6 +41,12 @@ COPY --chown=tracker:tracker app ./app
 # `tracker-discipline` и берёт из него `instructions`. Без этой строки процесс MCP падает
 # на старте, а не молча отдаёт пустую дисциплину (`app/mcp/skill.py`).
 COPY --chown=tracker:tracker skill ./skill
+# Точка монтирования томов с ключами (`docker-compose.prod.yml`, `ui-key` и `agent-key`).
+# Каталог заводится здесь и отдаётся пользователю образа: пустой именованный том при
+# первом монтировании берёт владельца и права у каталога образа, а каталог, которого в
+# образе нет, Docker создаёт от root — и непривилегированный процесс не запишет туда
+# ключ. `0700`: в каталоге лежат только секреты.
+RUN install -d -o tracker -g tracker -m 0700 /app/.secrets
 
 USER tracker
 

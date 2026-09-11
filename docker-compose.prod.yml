@@ -1,35 +1,49 @@
-# Продакшен-контур: тот же набор сервисов, что и в разработке, но из прод-образа.
-# Отличия от dev: код внутри образа, тома с исходниками нет, автоперезапуска нет,
-# порт БД наружу не публикуется, значения секретов обязательны.
+# Casefile на этой машине: всё, что нужно трекеру, поднимается одной командой —
+#   docker compose -f docker-compose.prod.yml up -d
 #
-# Запуск: docker compose -f docker-compose.prod.yml up -d --build
+# Продакшен-контур из готовых образов: их собирает конвейер из каждого коммита main
+# (`.github/workflows/images.yml`) и публикует в ghcr.io. Исходников, томов с кодом и
+# сборки здесь нет — поэтому тот же файл работает и из клона репозитория, и из каталога
+# установки, куда его кладёт установщик одной строкой (`install.sh`, `install.ps1`).
+# Секции `build:` нет намеренно: в каталоге установки относительный контекст сборки
+# означал бы чужой каталог пользователя целиком.
+#
+# Порядок старта: db → migrate → local-token → agent-token → api и mcp → ui. Разовые
+# шаги идут на каждом подъёме и идемпотентны: миграции поверх применённых, ключи из своих
+# томов. Миграции — init-контейнер, а не часть старта приложения: несколько реплик,
+# применяющих их одновременно, дают гонку (`docs/CONVENTIONS.md`, «Запуск»).
+#
+# Автообновление — служба `updater` в конце файла: на каждом своём старте, то есть при
+# каждом старте Docker, она тянет образы последнего коммита main и пересоздаёт службы;
+# данные остаются в томах. Выключается `CASEFILE_AUTO_UPDATE=false` в `.env`.
+#
+# Наружу смотрят два порта, оба только на петлю: интерфейс (он же REST через прокси
+# `/api`) и MCP для агентов. База и API видны лишь внутри сети compose.
 
-name: tracker-prod
+name: casefile
 
 # Что контур задаёт сам. Эти переменные приезжают в контейнер настоящим окружением и
-# побеждают `.env`: адрес базы собирается из обязательных реквизитов сервиса `db`, и
-# строка из файла подменять его не должна. Всё остальное приложение берёт из `.env`.
+# побеждают `.env`: адрес базы собирается из реквизитов сервиса `db`, и строка из файла
+# подменять его не должна. Всё остальное приложение берёт из `.env`.
 x-app-environment: &app-environment
   TRACKER_ENVIRONMENT: production
   TRACKER_DEBUG: "false"
-  TRACKER_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER обязателен}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}@db:5432/${POSTGRES_DB:?POSTGRES_DB обязателен}
-  TRACKER_CORS_ORIGINS: ${TRACKER_CORS_ORIGINS:?TRACKER_CORS_ORIGINS обязателен}
+  TRACKER_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+  # Браузеру CORS здесь не нужен: интерфейс ходит в API через свой же источник. Значение
+  # оставлено тем же, что в дев-контуре, — для фронтенда, запущенного отдельно.
+  TRACKER_CORS_ORIGINS: ${TRACKER_CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
   # Единственная настройка, которую читают обе стороны: compose подставляет её в проброс
   # портов, а процесс MCP слушает то, что пришло в контейнер. Оставленная только в `.env`,
-  # она двигала бы публикацию и не двигала бы сервер, и наружу смотрел бы порт, на котором
-  # внутри никто не слушает. Обязательной её не делаем: у порта есть разумное умолчание.
+  # она двигала бы публикацию и не двигала бы сервер (`docs/notes/docker.md`).
   TRACKER_MCP_PORT: ${TRACKER_MCP_PORT:-8100}
 
 x-app-service: &app-service
-  build:
-    context: .
-    dockerfile: docker/Dockerfile.prod
-  image: tracker-prod:latest
-  # Настройки установки правятся в `.env` рядом с этим файлом — тем же способом, что и
-  # в дев-контуре, и тем же набором переменных. Файл читает compose на хосте: внутрь
-  # образа он не копируется (`.dockerignore`), поэтому секреты остаются снаружи.
-  # `required: false` — отсутствие файла не роняет запуск: недостающее берётся из
-  # значений по умолчанию, а обязательные реквизиты базы стережёт подстановка `:?` выше.
+  # Образ бэкенда один на все его процессы. Реестр и тег задаются переменными, чтобы
+  # установку можно было держать на своей копии образа или на выпуске, а не на `latest`.
+  image: ${CASEFILE_REGISTRY:-ghcr.io/azimov777}/casefile:${CASEFILE_VERSION:-latest}
+  # Настройки установки правятся в `.env` рядом с этим файлом — тем же способом и тем же
+  # набором переменных, что и в дев-контуре. Файл читает compose на хосте: внутрь образа
+  # он не копируется. `required: false` — без файла контур поднимается на умолчаниях.
   env_file:
     - path: .env
       required: false
@@ -42,31 +56,68 @@ x-app-service: &app-service
 services:
   db:
     image: postgres:17-alpine
+    # Реквизиты с умолчаниями, а не обязательные: база не публикуется наружу, и пароль
+    # виден только процессам этой сети. Обязательность стоила бы установке одной строкой
+    # шага подготовки — ровно того, от которого она избавляет.
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER обязателен}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}
-      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB обязателен}
+      POSTGRES_USER: ${POSTGRES_USER:-tracker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracker}
+      POSTGRES_DB: ${POSTGRES_DB:-tracker}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tracker} -d ${POSTGRES_DB:-tracker}"]
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
 
+  migrate:
+    <<: *app-service
+    command: alembic upgrade head
+    restart: "no"
+
+  # Ключ интерфейса: действующий токен набора `task` владельца в томе `ui-key`, откуда его
+  # берёт `ui` и отдаёт браузеру конфигурацией на своём источнике. Секрет не печатается
+  # никогда; повтор видит годный ключ и не выпускает ничего (`app/cli.py`). На хост ключ не
+  # выходит: том именованный, и владельца файлу назначать некому и незачем.
+  local-token:
+    <<: *app-service
+    command: python -m app.cli local-token --output .secrets/ui-token
+    volumes:
+      - ui-key:/app/.secrets
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Токен агента этой машины: набор `main` участника `agent` в томе `agent-key`. Его берёт
+  # установщик, чтобы напечатать человеку готовую команду подключения к MCP:
+  #   docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token
+  # Том отдельный от `ui-key`: интерфейсу этот токен не нужен, и в его контейнер он не
+  # попадает. Идёт после `local-token`, хотя порядок им и не важен (`app/services/setup.py`):
+  # два шага, пишущие в базу одновременно, спорили бы за первого участника.
+  agent-token:
+    <<: *app-service
+    command: python -m app.cli agent-token --output .secrets/agent-token
+    volumes:
+      - agent-key:/app/.secrets
+    restart: "no"
+    depends_on:
+      local-token:
+        condition: service_completed_successfully
+
   api:
     <<: *app-service
     # Срок остановки — последний рубеж, а не основной механизм: поток ленты кончается
-    # сам по сигналу (`app/core/shutdown.py`). Без него остановка ждала бы закрытия
-    # соединений **без срока**, и Docker снимал бы процесс `SIGKILL` вместе с запросом,
-    # который в этот момент писал в базу.
+    # сам по сигналу (`app/core/shutdown.py`).
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 10
-    ports:
-      - "${TRACKER_PORT:-8000}:8000"
-    # Больше срока uvicorn: за десять секунд он останавливается сам, и убивать его
-    # Docker не должен.
     stop_grace_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       # curl в прод-образе нет намеренно: проверка идёт средствами самого Python.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -75,90 +126,173 @@ services:
       retries: 5
       start_period: 10s
 
-  # MCP-сервер для агентов. Отдельный сервис по той же причине, что и в дев-контуре:
-  # его соединения долгие (долгое ожидание ленты), и держать их в одной очереди с
-  # запросами фронтенда нельзя. Реплик может быть несколько — состояние
-  # сессии живёт в процессе, поэтому балансировщик обязан закреплять клиента за одной.
+  # MCP-сервер для агентов. Отдельный сервис: его соединения долгие (долгое ожидание
+  # ленты), и держать их в одной очереди с запросами интерфейса нельзя. Ждёт токен агента,
+  # поэтому `up -d` возвращается тогда, когда подключаться уже есть с чем.
   mcp:
     <<: *app-service
     command: python -m app.mcp
-    # Порт с обеих сторон один: процесс MCP поднимает сервер сам и слушает
-    # `TRACKER_MCP_PORT` из настроек. Правая половина проброса обязана двигаться вместе
-    # с левой, иначе наружу публикуется порт, на котором внутри никто не слушает. Внутрь
-    # контейнера то же значение приезжает окружением из `x-app-environment` — одной и той
-    # же подстановкой, чтобы три места (проброс, процесс, проверка здоровья) двигались
-    # разом.
     ports:
-      - "${TRACKER_MCP_PORT:-8100}:${TRACKER_MCP_PORT:-8100}"
+      - "127.0.0.1:${TRACKER_MCP_PORT:-8100}:${TRACKER_MCP_PORT:-8100}"
+    stop_grace_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      agent-token:
+        condition: service_completed_successfully
     healthcheck:
-      # curl в прод-образе нет намеренно: проверка идёт средствами самого Python.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${TRACKER_MCP_PORT:-8100}/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    # Вызов инструмента доводится до конца по сигналу остановки: он может писать в базу.
-    # Больше `GRACEFUL_SHUTDOWN_TIMEOUT` из `app/mcp/__main__.py` (20 с): процесс
-    # останавливается сам, и до `SIGKILL` дело не доходит.
-    stop_grace_period: 30s
 
-  migrate:
-    <<: *app-service
-    command: alembic upgrade head
-    restart: "no"
-    profiles: ["tools"]
-
-  # Первичная настройка установки: участник-владелец и его первый токен набора `main`.
-  # Без неё API заперт — каждый маршрут `/api/v1` требует токена, а выпустить первый токен
-  # через API нельзя. Срабатывает только на пустой установке: если токен уже есть, команда
-  # ничего не создаёт и говорит об этом.
-  init:
-    <<: *app-service
-    command: python -m app.cli init
-    restart: "no"
-    profiles: ["tools"]
-
-  # Ключ интерфейса этой установки: команда кладёт действующий секрет в файл и не печатает
-  # его никогда. Файл ложится туда же, куда его кладёт дев-контур, — `.secrets/ui-token` в
-  # каталоге репозитория, — поэтому интерфейс монтирует один и тот же путь независимо от
-  # того, каким контуром поднят бэкенд.
-  #
-  # Каталог монтируется этому сервису, а не общему якорю: `api` и `mcp` предъявленный токен
-  # сверяют по базе, и секрет на диске им не нужен. Отличие прод-контура «тома с исходниками
-  # нет» этим не нарушено — монтируется каталог под один файл, а не код.
-  #
-  # Точка монтирования выбрана так, чтобы путь команды совпал с дев-контуром: рабочий каталог
-  # образа — `/app`, и `.secrets/ui-token` означает одно и то же место в обоих. Иначе команда
-  # печатала бы человеку путь внутри контейнера, а `cat` по нему на хосте не находил ничего.
-  #
-  # Каталог заводит человек (`mkdir -p .secrets`, README, «Продакшен-контур»), а не Docker:
-  # недостающий источник bind-mount Docker создаёт сам и на Linux — от root, а процесс здесь
-  # непривилегированный и в такой каталог не запишет. На macOS слой обмена файлами Docker
-  # Desktop владельца не переносит, и там это не воспроизводится (`docs/notes/docker.md`).
-  #
-  # `user:` называет владельца файла явно: читает его с хоста человек и контур интерфейса, а
-  # права `0600` открывают файл только владельцу. Умолчание — пользователь образа
-  # (`tracker`, uid 1000 в `docker/Dockerfile.prod`); машина, где владелец установки другой,
-  # правит `TRACKER_SECRETS_USER` в `.env`.
-  local-token:
-    <<: *app-service
-    command: python -m app.cli local-token --output .secrets/ui-token
-    user: "${TRACKER_SECRETS_USER:-1000:1000}"
+  ui:
+    image: ${CASEFILE_REGISTRY:-ghcr.io/azimov777}/casefile-ui:${CASEFILE_VERSION:-latest}
+    # Ключ образ берёт из файла (`ui/docker/config-json.sh`), а не из переменной: секрет не
+    # появляется в окружении контейнера, а том подключён только на чтение.
+    environment:
+      TRACKER_API_URL: http://api:8000
+      TRACKER_UI_TOKEN_FILE: /run/secrets/ui-token
     volumes:
-      - ./.secrets:/app/.secrets
-    restart: "no"
-    profiles: ["tools"]
+      - ui-key:/run/secrets:ro
+    ports:
+      # Только петля, и это не перестраховка: этот порт отдаёт браузеру рабочий ключ
+      # установки, то есть полный доступ к задачам всякому, кто его открыл.
+      - "127.0.0.1:${CASEFILE_PORT:-8080}:80"
+    healthcheck:
+      # Именно 127.0.0.1: nginx слушает только IPv4, а `localhost` в контейнере
+      # разрешается сначала в ::1.
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      local-token:
+        condition: service_completed_successfully
 
-  # Выгрузка схемы OpenAPI. В прод-образе код лежит в `/app` и записать туда результат
-  # нельзя — образ собран под непривилегированного пользователя, — поэтому файл пишется
-  # в стандартный вывод, а на хосте перенаправляется:
+  # Автообновление. Контейнеры с `restart: unless-stopped` Docker поднимает сам при своём
+  # старте, но на прежних образах: `pull_policy` действует только на `docker compose up`.
+  # Поэтому обновляет отдельная служба — при каждом своём старте, то есть при каждом
+  # старте Docker, и по желанию раз в `CASEFILE_UPDATE_INTERVAL` часов.
   #
-  #   docker compose -f docker-compose.prod.yml run --rm --no-deps schema > openapi.json
-  schema:
-    <<: *app-service
-    command: python -m app.cli openapi
-    restart: "no"
-    profiles: ["tools"]
+  # Цикл: освежить этот файл по `CASEFILE_COMPOSE_URL` (задаёт установщик; из клона
+  # репозитория файл не трогается), скачать образы Casefile и, если что-то изменилось,
+  # `up -d` и уборка висящих образов проекта. Себя служба в `up` не называет: пересоздав
+  # себя, она оборвала бы собственную команду на середине. Нет сети — служба пишет об
+  # этом и оставляет всё как есть.
+  #
+  # `up` только при изменении — не экономия, а обход: compose внутри видит `.env` по
+  # пути `/project/.env`, а путь `env_file` входит в хеш конфигурации службы. Безусловный
+  # `up` отсюда пересоздавал бы службы приложения на каждом старте Docker, хотя не
+  # изменилось ничего (TRK-58).
+  #
+  # Сокет Docker — это права root на машине, и они даны этой службе сознательно: без них
+  # обновлять контейнеры нечем. Кому это не подходит, выключает службу переменной
+  # `CASEFILE_AUTO_UPDATE=false` и обновляет установку повторным запуском установщика.
+  #
+  # Каталог установки смонтирован целиком, потому что compose внутри читает отсюда этот
+  # файл и `.env`. Путей хоста в остальных службах нет, поэтому то, что compose внутри
+  # видит каталог под другим именем, ничего не ломает — в том числе на Windows.
+  updater:
+    image: docker:29-cli
+    working_dir: /project
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/project
+    environment:
+      COMPOSE_FILE: docker-compose.prod.yml
+      CASEFILE_AUTO_UPDATE: ${CASEFILE_AUTO_UPDATE:-true}
+      CASEFILE_UPDATE_INTERVAL: ${CASEFILE_UPDATE_INTERVAL:-0}
+      CASEFILE_COMPOSE_URL: ${CASEFILE_COMPOSE_URL:-}
+    restart: unless-stopped
+    # На `docker compose up` служба стартует последней, когда контур уже поднят: иначе два
+    # compose — подъёма и её собственный — создавали бы одни и те же контейнеры наперегонки.
+    # На старте Docker зависимости не действуют, и это ничему не мешает: контейнеры там
+    # поднимает сам Docker, а compose службы только пересоздаёт изменившиеся.
+    depends_on:
+      mcp:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
+    # `$$` — буквальный доллар для оболочки: одиночный compose подставил бы сам.
+    command:
+      - sh
+      - -c
+      - |
+        log() { echo "casefile-updater: $$*"; }
+
+        # Печатает `changed`, если compose-файл заменён свежим.
+        refresh_compose() {
+          [ -n "$$CASEFILE_COMPOSE_URL" ] || return 0
+          if wget -q -T 30 -O /tmp/compose.yml "$$CASEFILE_COMPOSE_URL" &&
+            docker compose -f /tmp/compose.yml --project-directory /project config --quiet; then
+            if ! cmp -s /tmp/compose.yml "$$COMPOSE_FILE"; then
+              # Запись поверх, а не замена файла: владелец и права остаются хозяйскими.
+              cat /tmp/compose.yml >"$$COMPOSE_FILE"
+              log "compose file updated from $$CASEFILE_COMPOSE_URL" >&2
+              echo changed
+            fi
+          else
+            log "could not refresh the compose file, keeping the current one" >&2
+          fi
+        }
+
+        # Успех — какая-то служба не запущена или запущена не на том образе, что сейчас
+        # стоит под её тегом.
+        outdated() {
+          for service in api mcp ui; do
+            container=$$(docker compose ps -q "$$service")
+            [ -n "$$container" ] || return 0
+            running=$$(docker inspect -f '{{.Image}}' "$$container")
+            tag=$$(docker inspect -f '{{.Config.Image}}' "$$container")
+            current=$$(docker image inspect -f '{{.Id}}' "$$tag" 2>/dev/null) || return 0
+            [ "$$running" = "$$current" ] || return 0
+          done
+          return 1
+        }
+
+        update() {
+          changed=$$(refresh_compose)
+          if ! docker compose pull --quiet api ui; then
+            log "could not pull images (offline?), keeping the current ones"
+            return 0
+          fi
+          if [ -z "$$changed" ] && ! outdated; then
+            log "already up to date"
+            return 0
+          fi
+          if docker compose up -d db api mcp ui; then
+            log "updated"
+          else
+            log "services failed to start after the update, see: docker compose logs"
+          fi
+          docker image prune -f \
+            --filter "label=org.opencontainers.image.source=https://github.com/azimov777/casefile" \
+            >/dev/null 2>&1 || true
+        }
+
+        trap 'exit 0' TERM INT
+        if [ "$$CASEFILE_AUTO_UPDATE" = "false" ]; then
+          log "auto-update is off (CASEFILE_AUTO_UPDATE=false)"
+        else
+          update
+        fi
+        while :; do
+          if [ "$$CASEFILE_AUTO_UPDATE" != "false" ] && [ "$$CASEFILE_UPDATE_INTERVAL" -gt 0 ] 2>/dev/null; then
+            sleep "$$((CASEFILE_UPDATE_INTERVAL * 3600))" & wait $$!
+            update
+          else
+            sleep 86400 & wait $$!
+          fi
+        done
 
 volumes:
   pgdata:
+  ui-key:
+  agent-key:
