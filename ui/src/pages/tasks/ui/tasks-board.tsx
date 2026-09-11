@@ -364,7 +364,7 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
       </h2>
 
       {reveal.held ? (
-        <Reveal leaving={reveal.leaving} entering={reveal.entering}>
+        <Reveal hold={reveal}>
           {pages.data === undefined ? (
             /*
              * Первого ответа ещё нет — или не будет вовсе. И то и другое сказано

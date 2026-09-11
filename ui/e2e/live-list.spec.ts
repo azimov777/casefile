@@ -1107,6 +1107,18 @@ test.describe('стопка над полосой обновлений вста�
         held.map(() => [true, true, false]),
       );
 
+      /*
+       * Выход доехал до конца раньше, чем узел сняли (UI-111): в последнем кадре, где
+       * место ещё в разметке, оно уже схлопнулось само, а не обнуляется снятием узла.
+       * Иначе остаток хода стопка проходила бы одним кадром — тем рывком, от которого
+       * место и едет.
+       */
+      report('UI-111 уход полосы 768px', {
+        at: held.map((frame) => frame.at),
+        place: held.map((frame) => Math.round((frame.place ?? 0) * 10) / 10),
+      });
+      expect(held.at(-1)?.place, 'место полосы снято, не доехав до нуля').toBeLessThanOrEqual(1);
+
       await expect(bar(page)).toBeHidden();
       await expect(barPlace(page)).toHaveCount(0);
     } finally {
@@ -1176,6 +1188,14 @@ test.describe('стопка над полосой обновлений вста�
       // И сама полоса не едет: пришла сразу туда, где стоит в покое, — рядом двигать
       // нечего, и движение места не вправе стать движением полосы.
       expect(stillBar(arrival)).toBe(true);
+
+      // Уход и здесь доезжает до конца раньше, чем узел снимают (UI-111).
+      const held = departure.frames.filter((frame) => frame.place !== null);
+      report('UI-111 уход полосы 1440px', {
+        at: held.map((frame) => frame.at),
+        place: held.map((frame) => Math.round((frame.place ?? 0) * 10) / 10),
+      });
+      expect(held.at(-1)?.place, 'место полосы снято, не доехав до нуля').toBeLessThanOrEqual(1);
     } finally {
       await question.cleanup();
     }

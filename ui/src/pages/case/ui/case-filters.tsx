@@ -141,7 +141,7 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
       </div>
 
       {reveal.held ? (
-        <Reveal leaving={reveal.leaving} entering={reveal.entering}>
+        <Reveal hold={reveal}>
           <fieldset
             id={typesId}
             className="mt-2 flex flex-wrap gap-x-3 gap-y-2 rounded-control border border-line bg-surface px-4 py-3"

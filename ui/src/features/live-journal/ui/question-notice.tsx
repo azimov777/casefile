@@ -36,7 +36,9 @@ export function QuestionNotice({
    * же кадре, в котором человек нажал. Задержка размонтирования — общая на весь
    * интерфейс (`shared/lib/exit-hold.ts`), второй такой заводить нельзя. Списочная
    * форма держит стопку, редеющую по одному: закрытая карточка остаётся на своём
-   * месте, а не перепрыгивает в конец.
+   * месте, а не перепрыгивает в конец. Ссылка элемента стоит на месте карточки: в его
+   * поддереве оба движения выхода — место и сама карточка, — и узел снимается, когда
+   * кончились оба (UI-111).
    */
   const held = useExitHoldList(incomingQuestions, (question) => question.id);
   const { t } = useTranslation('ui');
@@ -68,9 +70,10 @@ export function QuestionNotice({
       aria-label={t('live.questionsToMe')}
       aria-live="polite"
     >
-      {held.map(({ key, item: question, leaving, entering }) => (
+      {held.map(({ key, item: question, leaving, entering, ref }) => (
         <div
           key={key}
+          ref={ref}
           // Опора для замеров: длительность и кривую движения места снимают с этого
           // узла, а не угадывают по вложенности.
           data-notice="place"
