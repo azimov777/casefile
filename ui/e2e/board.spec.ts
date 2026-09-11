@@ -500,7 +500,7 @@ function heads(page: Page) {
       window: { width: window.innerWidth, height: window.innerHeight },
       columns: sections.map((node) => ({
         status: node.getAttribute('aria-label') as string,
-        head: rect(node.querySelector('h3') as Element),
+        head: rect(node.querySelector('h2') as Element),
         column: rect(node),
         scrolled: Math.round(node.scrollTop),
         sideways: node.scrollWidth - node.clientWidth,
@@ -593,7 +593,7 @@ test('прилипшая шапка не просвечивает карточк
   await scrollColumn(page, status);
 
   const measured = await column(page, status).evaluate((node) => {
-    const head = node.querySelector('h3') as HTMLElement;
+    const head = node.querySelector('h2') as HTMLElement;
     const box = head.getBoundingClientRect();
     const cards = Array.from(node.querySelectorAll('article'));
     /*
@@ -790,7 +790,7 @@ async function sinkBoard(page: Page): Promise<number> {
     const first = document.querySelector('section[aria-label="backlog"]') as HTMLElement;
     const board = (first.parentElement as HTMLElement).parentElement as HTMLElement;
     const top = Math.round(board.getBoundingClientRect().top + window.scrollY);
-    const head = (first.querySelector('h3') as HTMLElement).getBoundingClientRect().height;
+    const head = (first.querySelector('h2') as HTMLElement).getBoundingClientRect().height;
     const max = document.documentElement.scrollHeight - document.documentElement.clientHeight;
     const deeper = Math.min(max - top, Math.round(first.getBoundingClientRect().height - 2 * head));
     window.scrollTo(0, top + deeper);
@@ -862,7 +862,7 @@ test('ниже точки остановки заголовок прижат к 
   expect(deeper, 'странице некуда уехать вглубь доски').toBeGreaterThanOrEqual(40);
 
   const how = await column(page, status).evaluate((node) => {
-    const style = getComputedStyle(node.querySelector('h3') as Element);
+    const style = getComputedStyle(node.querySelector('h2') as Element);
     return { position: style.position, animation: style.animationName };
   });
   // Держит прижим, а не липкость: липкое здесь стояло бы на месте вместе с рядом.
@@ -1009,7 +1009,7 @@ test('прижатая шапка не просвечивает карточка
   await pinned(page);
 
   const measured = await column(page, status).evaluate((node) => {
-    const head = node.querySelector('h3') as HTMLElement;
+    const head = node.querySelector('h2') as HTMLElement;
     const box = head.getBoundingClientRect();
     // Точки по всей ширине шапки: название и исполнитель карточки подняты `z-1` над
     // растяжкой ссылки, и одна точка посередине прошла бы мимо них.

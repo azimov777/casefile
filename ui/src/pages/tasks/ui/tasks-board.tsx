@@ -329,7 +329,7 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
        * Гаснет заголовок вместе со столбцом: свёрнутому и пустому фон и тень не нужны
        * — под ним нечему проезжать, а заливка сделала бы из пунктирной рамки плашку.
        */}
-      <h3
+      <h2
         className={cn(
           'z-2 -mx-3 rounded-t-control px-3 pt-3 pb-2 text-body max-fold:pin-top fold:sticky fold:top-0',
           !reveal.held || empty ? 'bg-transparent' : 'bg-sunken shadow-sticky',
@@ -361,7 +361,7 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
               : formatNumber(total, language)}
           </span>
         </button>
-      </h3>
+      </h2>
 
       {reveal.held ? (
         <Reveal leaving={reveal.leaving} entering={reveal.entering}>
