@@ -33,8 +33,10 @@ import {
   accessSync,
   chmodSync,
   constants,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -171,6 +173,103 @@ function resolveConflict(repo: string): void {
 function commitBody(repo: string): string {
   return execFileSync('git', ['log', '-1', '--format=%B'], { cwd: repo, encoding: 'utf8' });
 }
+
+// --- Раскладка монорепозитория (UI-108) -----------------------------------------------
+
+/** Временный репозиторий в раскладке монорепозитория (TRK-64): корень без
+ *  `package.json` (там бэкенд), интерфейс — в `ui/`, конфликт — в файле внутри `ui/`.
+ *  Скрипт сам (`SCRIPT`) не копируется внутрь: он лежит на диске по своему настоящему
+ *  пути и запускается с `cwd`, указывающим на этот временный репозиторий — ровно так,
+ *  как координатор вызывает его по абсолютному пути из соседнего дерева. */
+function makeMonorepoWithConflict(): string {
+  const repo = mkdtempSync(join(tmpdir(), 'merge-script-monorepo-'));
+  cleanupPaths.push(repo);
+  git(repo, ['init', '--quiet']);
+  git(repo, ['checkout', '--quiet', '-b', 'main']);
+  git(repo, ['config', 'user.email', 'test@example.invalid']);
+  git(repo, ['config', 'user.name', 'Test']);
+
+  mkdirSync(join(repo, 'ui'));
+  writeFileSync(join(repo, 'README.md'), 'бэкенд\n');
+  const file = join(repo, 'ui', 'file.txt');
+  writeFileSync(file, 'база\n');
+  git(repo, ['add', '.']);
+  git(repo, ['commit', '--quiet', '-m', 'база']);
+
+  git(repo, ['checkout', '--quiet', '-b', 'task/UI-0']);
+  writeFileSync(file, 'из ветки\n');
+  git(repo, ['add', 'ui/file.txt']);
+  git(repo, ['commit', '--quiet', '-m', 'из ветки']);
+
+  git(repo, ['checkout', '--quiet', 'main']);
+  writeFileSync(file, 'из main\n');
+  git(repo, ['add', 'ui/file.txt']);
+  git(repo, ['commit', '--quiet', '-m', 'из main']);
+
+  return repo;
+}
+
+/** Поддельный `pnpm`, как `makeFakeBin`, но вдобавок дописывает свой рабочий каталог в
+ *  `cwdLog` строкой за каждым вызовом — этим и ловится дефект UI-108: скрипт до правки
+ *  запускает набор из корня репозитория (там, где лежит бэкенд), а не из `ui/`. */
+function makeFakeBinRecordingCwd(cwdLog: string): string {
+  const bin = mkdtempSync(join(tmpdir(), 'merge-script-fakebin-'));
+  cleanupPaths.push(bin);
+  const pnpmPath = join(bin, 'pnpm');
+  writeFileSync(
+    pnpmPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+pwd >>'${cwdLog}'
+case "\${1:-}" in
+  check) echo "Tests  1 passed (1)" ;;
+  e2e) echo "1 passed (0.1s)" ;;
+  *)
+    echo "поддельный pnpm не знает команду: \${1:-}" >&2
+    exit 1
+    ;;
+esac
+`,
+  );
+  chmodSync(pnpmPath, 0o755);
+  return bin;
+}
+
+describe('scripts/merge-task-branch.sh: раскладка монорепозитория (UI-108)', () => {
+  it('прогон проверок идёт в каталоге интерфейса (ui/), а не в корне репозитория', () => {
+    const repo = makeMonorepoWithConflict();
+    const logDir = mkdtempSync(join(tmpdir(), 'merge-script-cwdlog-'));
+    cleanupPaths.push(logDir);
+    const cwdLog = join(logDir, 'pnpm-cwd.log');
+    const fakeBin = makeFakeBinRecordingCwd(cwdLog);
+    const message = 'merge(ui): проверка раскладки монорепозитория (UI-108)';
+
+    const conflicted = runScript(repo, fakeBin, ['task/UI-0', '-m', message]);
+    expect(conflicted.status, conflicted.stdout + conflicted.stderr).toBe(1);
+    expect(conflicted.stdout).toContain('--continue');
+
+    writeFileSync(join(repo, 'ui', 'file.txt'), 'разрешено\n');
+    git(repo, ['add', 'ui/file.txt']);
+
+    const continued = runScript(repo, fakeBin, ['--continue']);
+    expect(continued.status, continued.stdout + continued.stderr).toBe(0);
+
+    const body = commitBody(repo);
+    expect(body.split('\n')[0]).toBe(message);
+    expect(body).toContain('Merge-verified:');
+
+    const cwds = readFileSync(cwdLog, 'utf8')
+      .split('\n')
+      .filter((line) => line.length > 0);
+    // Оба набора (`pnpm check`, `pnpm e2e`) прогнаны хотя бы по разу на каждый вызов
+    // скрипта (первый ход и `--continue`) — не меньше двух строк.
+    expect(cwds.length).toBeGreaterThanOrEqual(2);
+    const expectedCwd = realpathSync(join(repo, 'ui'));
+    for (const cwd of cwds) {
+      expect(realpathSync(cwd)).toBe(expectedCwd);
+    }
+  });
+});
 
 describe('scripts/merge-task-branch.sh: сообщение из -m через конфликт (UI-96)', () => {
   it('с -m: заголовок коммита после --continue — переданное сообщение, а не предложение git', () => {
