@@ -35,16 +35,19 @@ If port 8080 or 8100 is taken, put `CASEFILE_PORT=<free port>` and/or
 
 ## 3. Connect yourself over MCP
 
-Take the token from the installer output, or read it without printing it anywhere else:
+Use the MCP address from the `MCP:` line the installer printed in step 2 — never assume a
+default port. The installation may be using a different port, or a public URL it was
+told to use. Take the token from the installer output too, or read it without printing
+it anywhere else:
 
 ```bash
 cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token
 ```
 
 - **Claude Code:**
-  `claude mcp add --transport http --scope user casefile http://localhost:8100/mcp --header "Authorization: Bearer <token>"`
-- **Any other MCP client:** add a streamable HTTP server at `http://localhost:8100/mcp`
-  with the header `Authorization: Bearer <token>`.
+  `claude mcp add --transport http --scope user casefile <MCP address from the installer output> --header "Authorization: Bearer <token>"`
+- **Any other MCP client:** add a streamable HTTP server at `<MCP address from the
+  installer output>` with the header `Authorization: Bearer <token>`.
 
 A running session does not pick up a new MCP server by itself: tell the user to restart
 the session (in Claude Code, `/mcp` reconnects).
