@@ -464,4 +464,40 @@ describe('полоса над таблицей считает с последн�
     expect(tableRequests()).toHaveLength(2);
     expect(bar()).not.toBeInTheDocument();
   });
+
+  /*
+   * Место полосы схлопывается движением, и узел полосы доживает выход (UI-101). Правило
+   * ухода от этого не сдвигается: счёт забрало начало чтения в тот же миг, а уходящая
+   * полоса инертна — «Показать» в ней не нажать — и говорит то, что говорила, а не
+   * «список мог измениться» другой ширины. Что она при этом невидима, jsdom не скажет:
+   * стилей в нём нет, и это меряет сквозной сценарий по кадрам (`e2e/live-list.spec.ts`).
+   */
+  it('уходящая полоса доживает выход инертной и с прежним числом', async () => {
+    // Длительность выхода задаётся так же, как её задаёт тема, — свойством на корне:
+    // без токена задержка нулевая, и узел уходит сразу (`shared/lib/exit-hold.ts`).
+    document.documentElement.style.setProperty('--motion-fast', '120ms');
+    try {
+      const user = userEvent.setup();
+      renderApp('/tasks?queue=DEMO');
+      await screen.findByRole('rowheader', { name: 'DEMO-1' });
+
+      agentMoves(1161, 'DEMO-1', 'in_progress');
+      await screen.findByText(say.ui('live.changed', { count: 1 }));
+      const node = screen.getByRole('status', { name: say.ui('live.updates') });
+      expect(node).not.toHaveAttribute('inert');
+
+      await user.click(within(node).getByRole('button', { name: say.ui('live.show') }));
+
+      expect(requestedTaskCount()).toBe(0);
+      expect(node).toBeInTheDocument();
+      expect(node).toHaveAttribute('inert');
+      expect(node).toHaveTextContent(say.ui('live.changed', { count: 1 }));
+
+      // И снимается, когда выход кончился.
+      await waitFor(() => expect(node).not.toBeInTheDocument());
+      expect(await within(row('DEMO-1')).findByText('in_progress')).toBeInTheDocument();
+    } finally {
+      document.documentElement.style.removeProperty('--motion-fast');
+    }
+  });
 });
