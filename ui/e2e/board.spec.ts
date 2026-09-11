@@ -131,7 +131,9 @@ test('свёрнутые столбцы живут в адресе: пережи
 });
 
 test('закрытые и отменённые свёрнуты, показывают число и раскрываются кликом', async ({ page }) => {
-  await page.goto('/tasks?queue=DEMO&view=board');
+  // С архивом: отменённая `DEMO-7` без записей агента в архиве сразу (UI-97), и
+  // раскрывать без него было бы нечего — а проверяется здесь раскрытие, не архив.
+  await page.goto('/tasks?queue=DEMO&view=board&archive=shown');
 
   for (const status of ['done', 'cancelled']) {
     const toggle = column(page, status).getByRole('button');

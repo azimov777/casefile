@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { outsideArchive, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -12,9 +12,18 @@ const PAGE_SIZE = 50;
  * страницы: `meta.total` считает всю выдачу по отбору и от размера страницы не зависит
  * (TRK-41). До него это же число собиралось запросом с `limit=200` и врало бы ровно
  * тогда, когда очередь перерастёт двести задач.
+ *
+ * Считаются задачи вне архива: столько список и показывает, пока архив не попросили
+ * (UI-97).
  */
 async function countTasks(request: APIRequestContext): Promise<number> {
-  const response = await request.get('/api/v1/tasks?queue=DEMO&fields=status&limit=1', {
+  const query = new URLSearchParams({
+    queue: 'DEMO',
+    fields: 'status',
+    limit: '1',
+    query: outsideArchive(),
+  });
+  const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const body = (await response.json()) as { meta: { total: number | null } };

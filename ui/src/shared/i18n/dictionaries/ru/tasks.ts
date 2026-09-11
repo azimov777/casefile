@@ -11,6 +11,8 @@ export const tasks = {
   found_many: 'Нашлось {{count, number}} задач',
   found_other: 'Нашлось {{count, number}} задачи',
   empty: 'Задач по этим условиям нет',
+  archiveHidden: 'Архив не показан.',
+  showArchive: 'Показать архив',
   resetFilters: 'Сбросить фильтры',
   beyond_one:
     'На этой странице задач нет: по этим условиям есть {{count, number}} задача, и она на предыдущих страницах',
@@ -67,6 +69,7 @@ export const tasks = {
     collapse: 'Свернуть отбор',
     conditions: 'Условия отбора',
     allShown: 'показаны все задачи',
+    allButArchive: 'показаны все задачи, кроме архива',
     remove: 'Убрать условие: {{condition}}',
     reset: 'Сбросить',
     formLabel: 'Условия отбора задач',
@@ -83,6 +86,17 @@ export const tasks = {
     pending: 'не применено, Enter применит',
     apply: 'Применить',
 
+    archive: {
+      label: 'показывать архив',
+      // «больше N дня» — родительный падеж: одного дня, но двух, пяти дней.
+      hint_one: 'Архив — закрытые задачи, в деле которых больше {{count, number}} дня нет записей',
+      hint_few: 'Архив — закрытые задачи, в деле которых больше {{count, number}} дней нет записей',
+      hint_many:
+        'Архив — закрытые задачи, в деле которых больше {{count, number}} дней нет записей',
+      hint_other:
+        'Архив — закрытые задачи, в деле которых больше {{count, number}} дня нет записей',
+    },
+
     sort: {
       label: 'Сортировка',
       '-last_entry_at': 'сначала живые в деле',
@@ -97,7 +111,7 @@ export const tasks = {
 
     query: {
       label: 'Запрос на языке бэкенда',
-      note: 'отменяет остальной отбор',
+      note: 'отменяет остальной отбор, но не архив',
       placeholder: 'queue: DEMO and status: open and blocked: false',
       errorAt: 'Ошибка в символе {{position}}.',
       allowed: 'Допустимо: {{list}}',

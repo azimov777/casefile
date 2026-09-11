@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { silenceJournal } from './contour';
+import { shownKeys, silenceJournal } from './contour';
 
 function background(target: Locator): Promise<string> {
   return target.evaluate((node) => getComputedStyle(node).backgroundColor);
@@ -26,10 +26,14 @@ function shapeColor(target: Locator): Promise<string> {
 
 test('статус читается тоном формы: работа, завершение и снятие покрашены по-разному', async ({
   page,
+  request,
 }) => {
+  // С архивом: отменённая `DEMO-7` — единственная `cancelled` демо, и без записей агента
+  // она в архиве с первой минуты (UI-97). Тону снятого нужна строка, а не умолчание списка.
+  const all = await shownKeys(request, { archive: true });
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
-  await expect(page.locator('tbody tr')).toHaveCount(7);
+  await page.goto('/tasks?queue=DEMO&archive=shown');
+  await expect(page.locator('tbody tr')).toHaveCount(all.length);
 
   const inProgress = await shapeColor(mark(page, 'status', 'in_progress'));
   const done = await shapeColor(mark(page, 'status', 'done'));

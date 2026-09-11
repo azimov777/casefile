@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
+import { ARCHIVE_AFTER_DAYS, TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { X } from 'lucide-react';
 import { cn, useExitHold } from '@/shared/lib';
 import { Button, Reveal, Select } from '@/shared/ui';
@@ -32,6 +32,12 @@ interface Draft {
 
 /** Флажок отбора: подпись и квадрат стоят в строку и не переносятся посередине. */
 const CHECK = 'inline-flex items-center gap-1 text-body whitespace-nowrap';
+
+/**
+ * Флажок в свёрнутой строке: кеглем и тоном порядка, который стоит рядом. Кеглем формы
+ * он выпирал бы из строки, где всё остальное — `text-meta`, и спорил бы с условиями.
+ */
+const ROW_CHECK = 'inline-flex items-center gap-1 text-meta text-muted whitespace-nowrap';
 
 /** Идентификатор контракта внутри флажка: он мельче подписи рядом. */
 const CODE = 'font-mono text-meta';
@@ -72,6 +78,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   const [expanded, setExpanded] = useFiltersExpanded(problem !== null);
   const formId = useId();
   const problemId = useId();
+  const archiveHintId = useId();
   /*
    * Кнопка раскрытия — якорь фокуса. Снятый чип исчезает вместе со своей кнопкой,
    * и фокус улетал бы на `body`: следующий Tab начинал бы обход страницы с начала,
@@ -91,6 +98,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   }, [filters]);
 
   const conditions = describeFilters(filters, t);
+  const archiveHint = t('filters.archive.hint', { count: ARCHIVE_AFTER_DAYS });
   const pending = pendingFields(draft, filters);
   const hasDraft = Object.values(pending).some(Boolean);
 
@@ -152,7 +160,13 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
           aria-label={t('filters.conditions')}
         >
           {conditions.length === 0 ? (
-            <li className="text-meta text-muted">{t('filters.allShown')}</li>
+            /*
+             * Без условий выдача всё равно отобрана, пока архив скрыт: «показаны все
+             * задачи» было бы выводом обо всём по отобранной выдаче (`docs/notes/ui.md`).
+             */
+            <li className="text-meta text-muted">
+              {filters.showArchive ? t('filters.allShown') : t('filters.allButArchive')}
+            </li>
           ) : (
             conditions.map((condition) => (
               /*
@@ -189,6 +203,27 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
             ))
           )}
         </ul>
+
+        {/*
+         * Архив — умолчание списка, а не условие (UI-97): чипом он не значится, крестиком
+         * не снимается и сбросом не возвращается. Флажок стоит в строке, видимой всегда:
+         * архив показывается одним действием, а свёрнутая форма потребовала бы двух.
+         * Что такое архив, флажок говорит подсказкой — и глазам (`title`), и программе
+         * чтения с экрана (`aria-describedby`): слово «архив» само по себе не называет
+         * ни порога, ни того, что в архив попадают только закрытые.
+         */}
+        <label className={ROW_CHECK} title={archiveHint}>
+          <input
+            type="checkbox"
+            checked={filters.showArchive}
+            aria-describedby={archiveHintId}
+            onChange={(event) => applyWith({ showArchive: event.target.checked })}
+          />
+          {t('filters.archive.label')}
+        </label>
+        <span id={archiveHintId} className="sr-only">
+          {archiveHint}
+        </span>
 
         {/*
          * Порядок стоит в строке, видимой всегда: колонка времени показывает активность

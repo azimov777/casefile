@@ -1,7 +1,7 @@
 import { delay, http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   API,
   bootstrap,
@@ -16,7 +16,8 @@ import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
-import { TASK_PAGE_SIZE } from '@/entities/task';
+import { i18n } from '@/shared/i18n';
+import { TASK_PAGE_SIZE, TASK_STATUSES, taskKeys } from '@/entities/task';
 
 /** Адреса всех запросов прогона: по ним проверяется, что лишних не было. */
 let seen: string[] = [];
@@ -53,6 +54,35 @@ function lastRequest(): URL {
   return new URL(url);
 }
 
+/**
+ * Правило показа, каким оно уходит в `query`, пока архив скрыт (UI-97). Написано здесь
+ * заново, а не собрано кодом: тест, берущий строку оттуда же, откуда её берёт запрос,
+ * сверял бы код с самим собой. Дата порога — любая: её точность проверяет
+ * `src/entities/task/model/archive.test.ts`, а здесь — что правило стоит и где.
+ */
+const OUTSIDE_ARCHIVE = String.raw`status: not in done, cancelled or last_entry_at: >= "\d{4}-\d{2}-\d{2}T[\d:.]+Z"`;
+
+/** Что уходит в `query` при скрытом архиве: запрос (если есть) по «и» с правилом. */
+function hidingArchive(query?: string): RegExp {
+  if (query === undefined) return new RegExp(`^${OUTSIDE_ARCHIVE}$`);
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\(${escaped}\\) and \\(${OUTSIDE_ARCHIVE}\\)$`);
+}
+
+/**
+ * Отказ разбора на слово `word` из запроса человека — с позицией в той строке, которую
+ * получил бэкенд, как отвечает он сам: в склейке с правилом архива позиция уже не та,
+ * что в строке человека, и возвращать её на место — дело клиента.
+ */
+function refusedAt(word: string, code: string, details: Record<string, unknown> = {}) {
+  return listing((url) => {
+    const query = url.searchParams.get('query') ?? '';
+    return query.includes(word)
+      ? failure(code, 422, 'Search query is invalid', { position: query.indexOf(word), ...details })
+      : taskPage([task('DEMO-3')]);
+  });
+}
+
 describe('список задач', () => {
   it('свёрнутый отбор показывает условия чипами, и чип снимается на месте', async () => {
     const user = userEvent.setup();
@@ -85,8 +115,9 @@ describe('список задач', () => {
     open('/tasks');
     await screen.findByText('DEMO-3');
 
+    // Архив скрыт по умолчанию (UI-97): «показаны все задачи» здесь было бы неправдой.
     const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
-    expect(conditions).toHaveTextContent(say.tasks('filters.allShown'));
+    expect(conditions).toHaveTextContent(say.tasks('filters.allButArchive'));
     expect(within(conditions).queryByRole('button')).not.toBeInTheDocument();
   });
 
@@ -323,7 +354,8 @@ describe('список задач', () => {
     expect(request.searchParams.getAll('status')).toEqual(['open', 'in_progress']);
     expect(request.searchParams.getAll('priority')).toEqual(['high']);
     expect(request.searchParams.get('blocked')).toBe('true');
-    expect(request.searchParams.get('query')).toBeNull();
+    // В строке запроса — одно правило архива: структурные условия в неё не уезжают.
+    expect(request.searchParams.get('query')).toMatch(hidingArchive());
   });
 
   it('восстанавливает форму из адреса', async () => {
@@ -419,7 +451,8 @@ describe('свёрнутый отбор', () => {
   it('без условий говорит, что показаны все задачи, и не предлагает сброс', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks');
+    // «Все задачи» — только при показанном архиве; без него — все, кроме архива.
+    open('/tasks?archive=shown');
     await screen.findByText('DEMO-3');
 
     expect(screen.getByText(say.tasks('filters.allShown'))).toBeInTheDocument();
@@ -442,13 +475,7 @@ describe('свёрнутый отбор', () => {
   });
 
   it('отказ разбора раскрывает форму сам: опечатка сделана в поле, которого не видно', async () => {
-    server.use(
-      listing((url) =>
-        url.searchParams.has('query')
-          ? failure('invalid_search_query', 422, 'Cannot parse', { position: 8 })
-          : taskPage([task('DEMO-3')]),
-      ),
-    );
+    server.use(refusedAt('opne', 'invalid_search_query'));
 
     open('/tasks?query=status: opne');
 
@@ -463,16 +490,11 @@ describe('поле запроса на языке бэкенда', () => {
   it('показывает позицию и допустимые значения, не очищая таблицу', async () => {
     const user = userEvent.setup();
     server.use(
-      listing((url) =>
-        url.searchParams.has('query')
-          ? failure('search_value_invalid', 422, 'Search value is invalid', {
-              field: 'status',
-              position: 8,
-              value: 'opne',
-              allowed: ['backlog', 'open', 'in_progress'],
-            })
-          : taskPage([task('DEMO-3')]),
-      ),
+      refusedAt('opne', 'search_value_invalid', {
+        field: 'status',
+        value: 'opne',
+        allowed: ['backlog', 'open', 'in_progress'],
+      }),
     );
 
     open('/tasks');
@@ -514,7 +536,7 @@ describe('поле запроса на языке бэкенда', () => {
 
     await user.keyboard('{Enter}');
 
-    expect(lastRequest().searchParams.get('query')).toBe('status: done');
+    expect(lastRequest().searchParams.get('query')).toMatch(hidingArchive('status: done'));
     expect(screen.queryByText(say.tasks('filters.pending'))).toBeNull();
   });
 
@@ -530,7 +552,8 @@ describe('поле запроса на языке бэкенда', () => {
     await user.click(screen.getByRole('button', { name: say.tasks('filters.apply') }));
 
     const last = lastRequest();
-    expect(last.searchParams.get('query')).toBe('status: done');
+    // Структурный отбор отменён, а правило архива — нет: оно складывается с запросом.
+    expect(last.searchParams.get('query')).toMatch(hidingArchive('status: done'));
     expect(last.searchParams.getAll('status')).toEqual([]);
     expect(last.searchParams.getAll('queue')).toEqual([]);
   });
@@ -770,7 +793,9 @@ describe('отбор по замечаниям', () => {
 
     // Отбор живёт в адресе: перезагрузка и присланная ссылка покажут то же самое.
     await waitFor(() => expect(address.current).toContain('remarks=true'));
-    await waitFor(() => expect(asked.at(-1)?.searchParams.get('query')).toBe('open_remarks: > 0'));
+    await waitFor(() =>
+      expect(asked.at(-1)?.searchParams.get('query')).toMatch(hidingArchive('open_remarks: > 0')),
+    );
     expect(screen.getByLabelText(say.tasks('filters.withRemarks'))).toBeChecked();
   });
 });
@@ -851,5 +876,157 @@ describe('переключение вида', () => {
     expect(screen.getByLabelText(say.ui('app.whereAmI'))).toHaveTextContent('DEMO/DEMO-3');
     // Переключать нечего: вид есть только у списка.
     expect(screen.queryByRole('link', { name: say.tasks('view.board') })).not.toBeInTheDocument();
+  });
+});
+
+describe('архив', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('скрыт по умолчанию и показывается одним нажатием флажка в строке отбора', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => taskPage([task('DEMO-3')])));
+
+    open('/tasks?queue=DEMO');
+    await screen.findByText('DEMO-3');
+    expect(lastRequest().searchParams.get('query')).toMatch(hidingArchive());
+
+    // Флажок стоит в свёрнутой строке: разворачивать форму ради архива не нужно.
+    const archive = screen.getByRole('checkbox', { name: say.tasks('filters.archive.label') });
+    expect(archive).not.toBeChecked();
+    // Что такое архив, флажок говорит сам: слово без порога ничего не называет.
+    expect(archive).toHaveAccessibleDescription(say.tasks('filters.archive.hint', { count: 3 }));
+
+    await user.click(archive);
+
+    await waitFor(() => expect(address.current).toBe('/tasks?queue=DEMO&archive=shown'));
+    // Показанный архив — это выдача API по умолчанию: правила в запросе нет вовсе.
+    await waitFor(() => expect(lastRequest().searchParams.has('query')).toBe(false));
+    expect(archive).toBeChecked();
+    expect(screen.getByText(say.tasks('filters.allShown'))).toBeInTheDocument();
+    // Условием архив не значится: чипа у него нет, и сбрасывать нечего.
+    expect(screen.queryByRole('button', { name: say.tasks('filters.reset') })).toBeNull();
+  });
+
+  it('доска прячет архив в каждом своём запросе: в столбцах и в числах над ними', async () => {
+    server.use(
+      listing((url) =>
+        taskListing(url, [
+          task('DEMO-2', { status: 'in_progress' }),
+          task('DEMO-1', { status: 'done' }),
+        ]),
+      ),
+    );
+
+    open('/tasks?queue=DEMO&view=board');
+    await screen.findByText('DEMO-2');
+
+    // Число выдачи, раскрытые столбцы и числа свёрнутых — каждый читает сам: запрос
+    // на столбец и один на всю выдачу. Правило обязано доехать до каждого, иначе
+    // свёрнутый `done` считал бы в своём числе и архив.
+    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+    for (const url of seen) {
+      expect(new URL(url).searchParams.get('query'), url).toMatch(hidingArchive());
+    }
+  });
+
+  it('показанный открывается ссылкой: флажок отмечен, и запрос уходит без правила', async () => {
+    server.use(listing(() => taskPage([task('DEMO-1', { status: 'done' })])));
+
+    open('/tasks?queue=DEMO&archive=shown&query=status%3A+done');
+    await screen.findByText('DEMO-1');
+
+    expect(
+      screen.getByRole('checkbox', { name: say.tasks('filters.archive.label') }),
+    ).toBeChecked();
+    expect(lastRequest().searchParams.get('query')).toBe('status: done');
+  });
+
+  it('сброс отбора выбор архива не трогает: сбросить значит показать больше', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => taskPage([task('DEMO-3')])));
+
+    open('/tasks?queue=DEMO&priority=high&archive=shown');
+    await screen.findByText('DEMO-3');
+
+    await user.click(screen.getByRole('button', { name: say.tasks('filters.reset') }));
+
+    await waitFor(() => expect(address.current).toBe('/tasks?queue=DEMO&archive=shown'));
+  });
+
+  it('пустая выдача при скрытом архиве говорит об этом и показывает архив кнопкой', async () => {
+    const user = userEvent.setup();
+    server.use(
+      listing((url) =>
+        url.searchParams.has('query')
+          ? taskPage([])
+          : taskPage([task('DEMO-1', { status: 'done' })]),
+      ),
+    );
+
+    open('/tasks?queue=DEMO&status=done');
+
+    expect(await screen.findByText(say.tasks('empty'))).toBeInTheDocument();
+    expect(screen.getByText(say.tasks('archiveHidden'))).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: say.tasks('showArchive') }));
+
+    await waitFor(() =>
+      expect(address.current).toBe('/tasks?queue=DEMO&status=done&archive=shown'),
+    );
+    expect(await screen.findByText('DEMO-1')).toBeInTheDocument();
+    // При показанном архиве пустота — это пустота очереди, и про архив молчат.
+    expect(screen.queryByText(say.tasks('archiveHidden'))).toBeNull();
+  });
+
+  it('отказ разбора указывает символ в строке человека, а не в склейке с правилом', async () => {
+    // Бэкенд возвращает и позицию, и строку — ту, что получил: склейку (UI-97#5).
+    server.use(
+      listing((url) => {
+        const query = url.searchParams.get('query') ?? '';
+        return failure('invalid_search_query', 422, 'Cannot parse', {
+          position: query.indexOf('opne'),
+          query,
+        });
+      }),
+    );
+
+    open('/tasks?query=status: opne');
+
+    const problem = await screen.findByRole('alert');
+    expect(problem).toHaveTextContent(say.tasks('filters.query.errorAt', { position: 9 }));
+    // Указатель стоит под строкой человека: правила архива в объяснении нет вовсе.
+    expect(problem.querySelector('pre')?.textContent).toBe(`status: opne\n${' '.repeat(8)}^`);
+    expect(problem).not.toHaveTextContent('last_entry_at');
+  });
+
+  it('порог не в ключе: время идёт и экран перерисовывается, а запрос один', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-11T12:00:00.000Z') });
+    server.use(listing(() => taskPage([task('DEMO-3')])));
+
+    const { queryClient } = open('/tasks?queue=DEMO');
+    await screen.findByText('DEMO-3');
+    expect(seen).toHaveLength(1);
+    expect(lastRequest().searchParams.get('query')).toContain('"2026-09-08T12:00:00.000Z"');
+
+    // Полдня спустя экран перерисовывается целиком — смена языка трогает каждую
+    // подпись. Дата в ключе дала бы здесь новый ключ, а с ним и новое чтение; без
+    // события потока чтения нет, и задача, пересёкшая порог, остаётся до него.
+    vi.setSystemTime(new Date('2026-09-12T00:00:00.000Z'));
+    await act(async () => {
+      await i18n.changeLanguage('ru');
+    });
+    expect(await screen.findByRole('heading', { name: /Задачи/ })).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(seen).toHaveLength(1);
+
+    // Чтение, которое всё-таки случилось, — по живому потоку, полосе или повтору, —
+    // идёт со свежим порогом: пересёкшая порог задача уходит ровно на нём.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: taskKeys.table });
+    });
+    await waitFor(() => expect(seen).toHaveLength(2));
+    expect(lastRequest().searchParams.get('query')).toContain('"2026-09-09T00:00:00.000Z"');
   });
 });

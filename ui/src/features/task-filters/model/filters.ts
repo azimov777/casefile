@@ -2,7 +2,7 @@ import {
   TASK_PAGE_SIZE,
   TASK_PRIORITIES,
   TASK_STATUSES,
-  type TaskListParams,
+  type TaskListRequest,
   type TaskPriority,
   type TaskStatus,
 } from '@/entities/task';
@@ -48,6 +48,15 @@ export interface TaskFilters {
    * которые отправитель свернул.
    */
   collapsed: TaskStatus[];
+  /**
+   * Показывать архив — закрытые задачи, в делах которых давно не писали (UI-97).
+   *
+   * По умолчанию архив скрыт, и это умолчание списка, а не условие отбора: выдачу
+   * оно сужает, но чипом не значится и сбросом отбора не возвращается (см.
+   * `hasConditions`, `useTaskFilters`). В адресе живёт так же, как всё, что меняет
+   * состав выдачи: пересланная ссылка на архив обязана открыть архив.
+   */
+  showArchive: boolean;
 }
 
 /**
@@ -114,6 +123,10 @@ export type TaskSort = (typeof TASK_SORTS)[number];
  * запроса отменяет структурный отбор целиком (см. `filtersToListParams`). Иначе
  * клиенту пришлось бы разбирать чужой запрос, чтобы дописать в него условие,
  * — ровно то, чего задача запрещает.
+ *
+ * С запросом человека складывается одно правило архива (UI-97) — и не здесь, а в
+ * момент чтения (`hideArchive` в `entities/task`): там же, где склейка, живёт и
+ * возврат её отказа в строку человека.
  */
 export const OPEN_QUESTIONS_CONDITION = 'open_questions: > 0';
 
@@ -134,7 +147,15 @@ export const EMPTY_FILTERS: TaskFilters = {
   sort: DEFAULT_SORT,
   page: 1,
   collapsed: DEFAULT_COLLAPSED,
+  showArchive: false,
 };
+
+/**
+ * Значение параметра `archive`, которым адрес говорит «архив показан». Слово, а не
+ * `true`: у соседних флажков `true` значит «только такие» (`blocked=true`), и
+ * `archived=true` читалось бы «только архив» — ровно наоборот.
+ */
+const ARCHIVE_SHOWN = 'shown';
 
 /** Адрес → отбор. Неизвестные значения отбрасываются: см. `keepKnown`. */
 export function readFilters(params: URLSearchParams): TaskFilters {
@@ -156,6 +177,9 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     collapsed: params.has('collapsed')
       ? keepKnown(params.getAll('collapsed'), TASK_STATUSES)
       : DEFAULT_COLLAPSED,
+    // Любое другое значение — умолчание: архив скрыт. Опечатка в адресе не вправе
+    // вывалить человеку всю историю очереди.
+    showArchive: params.get('archive') === ARCHIVE_SHOWN,
   };
 }
 
@@ -175,6 +199,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   if (filters.query.trim() !== '') params.set('query', filters.query.trim());
   if (filters.sort !== DEFAULT_SORT) params.set('sort', filters.sort);
   if (filters.page > 1) params.set('page', String(filters.page));
+  if (filters.showArchive) params.set('archive', ARCHIVE_SHOWN);
 
   // Умолчание в адрес не пишется, а «ничего не свёрнуто» пишется пустым значением:
   // без него это состояние не отличить от «параметра нет».
@@ -203,8 +228,15 @@ function sameStatuses(left: TaskStatus[], right: TaskStatus[]): boolean {
  * не смог бы объяснить себе выдачу — а спрятать поля формы, пока в запросе
  * что-то написано, значит потерять их значения.
  */
-export function filtersToListParams(filters: TaskFilters): TaskListParams {
+export function filtersToListParams(filters: TaskFilters): TaskListRequest {
   const board = filters.view === 'board';
+
+  /*
+   * Правило архива ложится поверх любого отбора, и поверх запроса человека тоже: его
+   * строка складывается с правилом по «и» в момент чтения (`fetchTasks`). Здесь стоит
+   * только признак — дата порога в ключ запроса не попадает (UI-97#7).
+   */
+  const archive = filters.showArchive ? {} : { hideArchived: true };
 
   const paging = {
     // На доске порядок задан её устройством: столбец — это статус, а внутри столбца
@@ -224,7 +256,7 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
   };
 
   const query = filters.query.trim();
-  if (query !== '') return { query, ...paging };
+  if (query !== '') return { query, ...paging, ...archive };
 
   return {
     queue: filters.queue === '' ? undefined : [filters.queue],
@@ -241,6 +273,7 @@ export function filtersToListParams(filters: TaskFilters): TaskListParams {
     // читает человек: «есть вопросы **и** есть замечания».
     query: conditionsOf(filters),
     ...paging,
+    ...archive,
   };
 }
 
@@ -264,6 +297,10 @@ function conditionsOf(filters: TaskFilters): string | undefined {
  * Очередь условием не считается: она стала местом в интерфейсе (UI-38). Пустая очередь
  * — это «здесь пока ничего нет», а не «ваши условия ничего не нашли», и предлагать
  * сброс, который вынесет человека из очереди, здесь нечего.
+ *
+ * Показ архива условием тоже не считается: он выдачу расширяет, а не сужает, и сброс
+ * его не трогает (UI-97). Без условий и с показанным архивом пустота — это пустота
+ * очереди.
  */
 export function hasConditions(filters: TaskFilters): boolean {
   const conditions = writeFilters({
@@ -272,6 +309,7 @@ export function hasConditions(filters: TaskFilters): boolean {
     sort: DEFAULT_SORT,
     page: 1,
     collapsed: DEFAULT_COLLAPSED,
+    showArchive: false,
   });
   return [...conditions.keys()].length > 0;
 }

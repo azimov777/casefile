@@ -203,6 +203,19 @@ export function TasksPage() {
             ) : (
               <>
                 <Callout>{t('empty')}</Callout>
+                {/*
+                 * Пока архив скрыт, «задач нет» — вывод о выдаче без архива, а не об
+                 * очереди: закрытые давно могут быть здесь же. Сказать об этом и дать
+                 * показать их — то же правило, что у пустой входящей с отбором.
+                 */}
+                {filters.showArchive ? null : (
+                  <>
+                    <span className="text-meta text-muted">{t('archiveHidden')}</span>
+                    <Button tone="quiet" onClick={() => apply({ showArchive: true })}>
+                      {t('showArchive')}
+                    </Button>
+                  </>
+                )}
                 <Button tone="quiet" onClick={reset} disabled={!hasConditions(filters)}>
                   {t('resetFilters')}
                 </Button>

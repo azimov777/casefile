@@ -11,6 +11,10 @@ export const tasks = {
   found_one: '{{count, number}} task found',
   found_other: '{{count, number}} tasks found',
   empty: 'No tasks match these conditions',
+  // Пустота при скрытом архиве: сказать, что за ней может стоять архив, и дать его
+  // показать — иначе «задач нет» читалось бы выводом обо всей очереди.
+  archiveHidden: 'The archive is not shown.',
+  showArchive: 'Show the archive',
   resetFilters: 'Reset the filters',
   beyond_one:
     'There are no tasks on this page: {{count, number}} task matches these conditions, and it is on an earlier page',
@@ -57,6 +61,8 @@ export const tasks = {
     collapse: 'Collapse the selection',
     conditions: 'Selection conditions',
     allShown: 'all tasks are shown',
+    // Без условий, но с умолчанием архива: «показаны все» было бы неправдой.
+    allButArchive: 'all tasks but the archive are shown',
     remove: 'Remove the condition: {{condition}}',
     reset: 'Reset',
     formLabel: 'Task selection conditions',
@@ -73,6 +79,16 @@ export const tasks = {
     pending: 'not applied, Enter applies it',
     apply: 'Apply',
 
+    archive: {
+      label: 'show the archive',
+      // Что такое архив — словами и числом из кода (`ARCHIVE_AFTER_DAYS`), а не
+      // вписанным в строку: порог живёт в одном месте.
+      hint_one:
+        'The archive: closed tasks with no entries in the case for over {{count, number}} day',
+      hint_other:
+        'The archive: closed tasks with no entries in the case for over {{count, number}} days',
+    },
+
     sort: {
       label: 'Order',
       '-last_entry_at': 'live cases first',
@@ -87,7 +103,7 @@ export const tasks = {
 
     query: {
       label: 'Query in the backend language',
-      note: 'cancels the rest of the selection',
+      note: 'cancels the rest of the selection, but not the archive',
       // Пример на языке запросов бэкенда, а не фраза: он одинаков на любом языке
       // (освобождён в `dictionaries.test.ts`).
       placeholder: 'queue: DEMO and status: open and blocked: false',

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_COLLAPSED,
   DEFAULT_SORT,
@@ -36,6 +36,7 @@ describe('чтение отбора из адреса', () => {
       sort: 'key',
       page: 3,
       collapsed: DEFAULT_COLLAPSED,
+      showArchive: false,
     });
   });
 
@@ -139,7 +140,14 @@ describe('перевод отбора в параметры запроса', () 
       filters({ queue: 'DEMO', status: ['open'], withQuestions: true, query: ' status: done ' }),
     );
 
-    expect(params).toEqual({ query: 'status: done', sort: [DEFAULT_SORT], offset: undefined });
+    // Правило архива остаётся и поверх запроса: его строка складывается с правилом
+    // в момент чтения (`fetchTasks`), а здесь стоит только признак (UI-97).
+    expect(params).toEqual({
+      query: 'status: done',
+      sort: [DEFAULT_SORT],
+      offset: undefined,
+      hideArchived: true,
+    });
   });
 
   it('номер страницы уезжает смещением, а порядок — при любом виде отбора', () => {
@@ -168,5 +176,49 @@ describe('признак «условия заданы»', () => {
     expect(hasConditions(filters({ sort: 'key', page: 3 }))).toBe(false);
     expect(hasConditions(filters({ blocked: true }))).toBe(true);
     expect(hasConditions(filters({ query: 'status: open' }))).toBe(true);
+  });
+});
+
+describe('архив', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('по умолчанию скрыт: и без условий, и под запросом человека, и на доске', () => {
+    expect(filtersToListParams(filters()).hideArchived).toBe(true);
+    expect(filtersToListParams(filters({ query: 'status: done' })).hideArchived).toBe(true);
+    expect(filtersToListParams(filters({ view: 'board' })).hideArchived).toBe(true);
+  });
+
+  it('показанный живёт в адресе словом `shown` и переживает круг', () => {
+    const source = new URLSearchParams('queue=DEMO&archive=shown');
+
+    const parsed = readFilters(source);
+    expect(parsed.showArchive).toBe(true);
+    expect(writeFilters(parsed).toString()).toBe(source.toString());
+    // Показанный архив в запрос не просится вовсе — выдача API по умолчанию и есть всё.
+    expect(filtersToListParams(parsed)).not.toHaveProperty('hideArchived');
+  });
+
+  it('умолчание в адрес не пишется, а негодное значение читается умолчанием', () => {
+    expect(writeFilters(filters({ showArchive: false })).has('archive')).toBe(false);
+    for (const search of ['archive=true', 'archive=', 'archive=SHOWN', '']) {
+      expect(readFilters(new URLSearchParams(search)).showArchive, search).toBe(false);
+    }
+  });
+
+  it('показ архива условием отбора не считается: он выдачу расширяет, а не сужает', () => {
+    expect(hasConditions(filters({ showArchive: true }))).toBe(false);
+  });
+
+  it('даты в параметрах нет: ключ запроса один и тот же, сколько бы времени ни прошло', () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-11T12:00:00Z') });
+    const before = filtersToListParams(filters({ query: 'status: done' }));
+
+    vi.setSystemTime(new Date('2026-09-15T08:30:00Z'));
+    const after = filtersToListParams(filters({ query: 'status: done' }));
+
+    expect(after).toEqual(before);
+    expect(JSON.stringify(after)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 });
