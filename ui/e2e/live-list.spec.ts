@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { compose, fontsReady, readE2eToken, side, signedInByHand } from './contour';
+import { compose, fontsReady, readE2eToken, shellReady, side, signedInByHand } from './contour';
 
 const token = readE2eToken();
 
@@ -595,6 +595,156 @@ test.describe('полоса обновлений не закрывает под�
       // сам, наткнувшись на полосу, если бы та и вправду перекрывала кнопку.
       await signOut.click();
       await expect(page).toHaveURL(/\/login/);
+    });
+  }
+});
+
+/** Стопка уведомлений о вопросах ко мне: живёт в оболочке, у правого края. */
+const stack = (page: Page) => page.getByRole('complementary', { name: 'Вопросы ко мне' });
+
+/**
+ * Предел ширины плавающего слоя на этой ширине окна — `--ui-float-max`
+ * в `shared/styles/theme.css`: 26rem, но не шире окна без полей в 3rem.
+ */
+function floatMax(width: number): number {
+  return Math.min(416, width - 48);
+}
+
+/**
+ * Заголовок заведомо длиннее строки: карточка уведомления — текст с переносом, и такой
+ * вопрос растягивает её до предела ширины. Замер обязан идти на предельной карточке —
+ * короткий заголовок дал бы узкую, и пересечение спряталось бы за ним.
+ */
+const LONG_QUESTION =
+  'Какой адрес брать для ленты событий: основной или резервный, если основной недоступен ' +
+  'дольше минуты, а резервный отвечает с задержкой в несколько секунд?';
+
+/**
+ * Вопрос владельцу, заданный по-настоящему, через API, и уборка за ним ответом — иначе
+ * он остался бы во входящей, и соседний пишущий сценарий видел бы не то, что ожидал.
+ * Образец — `askOwner` в `answer.spec.ts`.
+ */
+async function askOwner(
+  request: APIRequestContext,
+  key: string,
+  title: string,
+): Promise<{ cleanup: () => Promise<void> }> {
+  const asked = await request.post(`/api/v1/tasks/${key}/entries`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      type: 'question',
+      title,
+      body: 'Тело вопроса, на состав которого замер не опирается.',
+      payload: { addressees: ['owner'], blocking: false },
+    },
+  });
+  expect(asked.status()).toBe(201);
+  const no = ((await asked.json()) as { data: { no: number } }).data.no;
+
+  return {
+    cleanup: async () => {
+      const closed = await request.post(`/api/v1/tasks/${key}/entries`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: {
+          type: 'answer',
+          body: 'Закрыт сквозным тестом, чтобы входящая осталась какой была.',
+          payload: { question_no: no },
+        },
+      });
+      expect(closed.status()).toBe(201);
+    },
+  };
+}
+
+/** Прямоугольник целыми пикселями — для отчёта прогона, а не для сравнения. */
+function rounded({ x, y, width, height }: Rect): Record<string, number> {
+  return {
+    left: Math.round(x),
+    right: Math.round(x + width),
+    top: Math.round(y),
+    bottom: Math.round(y + height),
+  };
+}
+
+/** Числа в отчёт прогона: вердикт по замеру называет их, а не «прошло». */
+function report(type: string, numbers: unknown): void {
+  const description = JSON.stringify(numbers);
+  test.info().annotations.push({ type, description });
+  console.log(`[${type}] ${description}`);
+}
+
+/**
+ * Одно событие даёт оба плавающих слоя разом: вопрос владельцу — это и карточка
+ * в стопке, и запись в деле задачи, то есть «Изменилась 1 задача» в полосе. Рядом
+ * они помещаются не везде: на `fold` панель, полоса и карточка предельной ширины
+ * вместе с полями шире окна (`UI-98#13`). Сценарий проверяет, что на любой ширине, где
+ * показана панель, полоса не уходит ни под её подвал, ни под карточку, и «Показать»
+ * нажимается, пока уведомление видно. Ширины — сразу выше порога, обычный узкий
+ * ноутбук, место, где полоса и карточка ещё не помещаются рядом, и широкий экран.
+ */
+test.describe('полоса обновлений не спорит за место со стопкой уведомлений (UI-98#13)', () => {
+  for (const width of [FOLD + 1, 768, 900, 1440]) {
+    test(`на ${width} px полоса не уходит ни под подвал панели, ни под уведомление`, async ({
+      page,
+      request,
+    }) => {
+      await signedInByHand(page);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/tasks?queue=DEMO');
+      await expect(rows(page).first()).toBeVisible();
+      await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+      // Кадр с вопросом, обогнавший участника, уведомления не даст: «спросили ли меня»
+      // сверяется с именем из `bootstrap`.
+      await shellReady(page);
+
+      const name = side(page).getByText('owner');
+      const signOut = side(page).getByRole('button', { name: 'Выйти' });
+      await expect(signOut).toBeVisible();
+
+      const question = await askOwner(request, 'DEMO-3', LONG_QUESTION);
+      try {
+        const card = stack(page).locator('article').filter({ hasText: LONG_QUESTION });
+        await expect(card).toBeVisible();
+        await expect(bar(page)).toContainText('Изменилась 1 задача');
+
+        // Замер в покое: шрифт подставлен, приход карточки доехал (`docs/notes/ui.md`,
+        // «Замер геометрии снимается после `document.fonts.ready`»).
+        await fontsReady(page);
+        await stack(page).evaluate((node) =>
+          Promise.all(node.getAnimations({ subtree: true }).map((motion) => motion.finished)),
+        );
+
+        const boxes = {
+          bar: await rectOf(bar(page), 'полоса обновлений'),
+          card: await rectOf(card, 'карточка вопроса'),
+          name: await rectOf(name, 'имя участника'),
+          signOut: await rectOf(signOut, 'кнопка «Выйти»'),
+        };
+        report(`UI-98#13 ${width}px`, {
+          bar: rounded(boxes.bar),
+          card: rounded(boxes.card),
+          name: rounded(boxes.name),
+          signOut: rounded(boxes.signOut),
+        });
+        const numbers = `${width} px: ${JSON.stringify(boxes)}`;
+
+        // Карточка на пределе ширины: иначе замер проверял бы не худший случай.
+        expect(boxes.card.width, numbers).toBeGreaterThanOrEqual(floatMax(width) - 1);
+
+        expect(overlaps(boxes.bar, boxes.card), `полоса и карточка, ${numbers}`).toBe(false);
+        expect(overlaps(boxes.bar, boxes.name), `полоса и имя, ${numbers}`).toBe(false);
+        expect(overlaps(boxes.bar, boxes.signOut), `полоса и «Выйти», ${numbers}`).toBe(false);
+        expect(overlaps(boxes.card, boxes.name), `карточка и имя, ${numbers}`).toBe(false);
+        expect(overlaps(boxes.card, boxes.signOut), `карточка и «Выйти», ${numbers}`).toBe(false);
+
+        // «Показать» нажимается мышью без `force`, пока уведомление на экране: клик
+        // Playwright сам отказал бы, окажись под курсором карточка, а не кнопка.
+        await bar(page).getByRole('button', { name: 'Показать' }).click();
+        await expect(bar(page)).toBeHidden();
+        await expect(card).toBeVisible();
+      } finally {
+        await question.cleanup();
+      }
     });
   }
 });

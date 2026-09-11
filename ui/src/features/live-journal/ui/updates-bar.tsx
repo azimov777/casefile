@@ -1,6 +1,8 @@
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/lib';
 import { Button } from '@/shared/ui';
+import { useBarSlot } from '../model/bar-slot';
 import { useDeferredList } from '../model/use-deferred-list';
 
 interface UpdatesBarProps {
@@ -27,7 +29,8 @@ interface UpdatesBarProps {
  * предлагается, а решение остаётся за человеком.
  *
  * Полоса стоит вне потока вёрстки и потому ничего не сдвигает — тем же приёмом, что
- * уведомление о вопросе, и в другом углу, чтобы они не спорили за место.
+ * уведомление о вопросе, и в одном с ним месте: низ области содержания у них общий
+ * (`float-dock.tsx`), чтобы они не спорили за место.
  *
  * Сама не гаснет: убирает её только чтение таблицы — нажатие «Показать» или то, что
  * таблица перечитала себя сама, приходом на экран или сменой отбора (UI-95). Полоса,
@@ -36,31 +39,28 @@ interface UpdatesBarProps {
  */
 export function UpdatesBar({ reading }: UpdatesBarProps) {
   const { count, vague, show } = useDeferredList();
+  const slot = useBarSlot();
   const { t } = useTranslation('ui');
 
-  if (reading || (count === 0 && !vague)) return null;
+  if (reading || (count === 0 && !vague) || slot === null) return null;
 
-  return (
-    /*
-     * Полоса стоит вне потока вёрстки: обновление, о котором человек ещё не просил,
-     * не вправе сдвинуть строки, которые он читает. Место — левый нижний угол: правый
-     * занят стопкой уведомлений о вопросах, и спорить за него им незачем.
-     *
-     * На ширине, где показана боковая панель (`fold`), угол экрана — уже не угол
-     * содержания: там стоит подвал панели (участник, кнопка «Выйти»), и полоса,
-     * приклеенная к самому краю окна, легла бы поверх него (UI-98). Полоса поэтому
-     * начинается не от края окна, а от края панели плюс тот же отступ, что и без
-     * панели, — левый угол остаётся её местом, просто угол теперь содержательный,
-     * а не оконный. Ниже `fold` панель уезжает в шторку и подвала на экране нет,
-     * поэтому там полоса стоит как раньше, от края окна.
-     *
-     * Предел ширины общий со стопкой (`--ui-float-max`): и то и другое висит над
-     * содержанием в углу, и на узком экране обоим нужны поля по обе стороны.
-     */
+  /*
+   * Рисует полосу страница — она принадлежность таблицы и знает, читается ли таблица, —
+   * а стоит полоса в низу области содержания, рядом со стопкой уведомлений: порталом.
+   * Своего угла у неё больше нет. Два `fixed` в своих углах не знали друг о друге и на
+   * ширинах, где рядом им тесно, ложились один на другой (UI-98#13); разложить их
+   * так, чтобы тесно не было, может только общий поток, а в одном потоке лежат
+   * только соседи по разметке.
+   *
+   * Предел ширины общий со стопкой (`--ui-float-max`): и то и другое висит над
+   * содержанием, и на узком экране обоим нужны поля по обе стороны.
+   */
+  return createPortal(
     <div
       className={cn(
-        'fixed bottom-4 left-4 z-10 flex max-w-(--ui-float-max) items-center gap-3',
-        'fold:left-[calc(var(--ui-side)+var(--spacing)*4)]',
+        // Место под полосой указатель пропускает насквозь (`float-dock.tsx`), сама
+        // полоса — нет.
+        'pointer-events-auto flex max-w-(--ui-float-max) items-center gap-3',
         'rounded-control border border-progress-line bg-progress-soft px-3 py-2',
         'text-progress shadow-raised',
       )}
@@ -73,6 +73,7 @@ export function UpdatesBar({ reading }: UpdatesBarProps) {
         {count > 0 ? t('live.changed', { count }) : t('live.changedUnknown')}
       </span>
       <Button onClick={show}>{t('live.show')}</Button>
-    </div>
+    </div>,
+    slot,
   );
 }
