@@ -224,7 +224,7 @@ compose-файла, а не внутри контейнера, — сборка 
 owner --scope main`. Сводить два признака в один не надо: `init` обязан молчать на
 работающей установке, иначе его повтор рядом с миграциями плодил бы доступы.
 **Где:** `app/services/setup.py`, `initialize_installation` и `ensure_local_token`;
-`docker-compose.yml`, сервисы `init` и `local-token`; README, раздел «Ключ для
+`docker-compose.yml`, сервисы `init` и `local-token`; `docs/DEVELOPMENT.md`, раздел «Ключ для
 локального интерфейса».
 
 ## Права на bind-mount: macOS их подменяет, Linux — нет

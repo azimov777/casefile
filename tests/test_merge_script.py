@@ -25,7 +25,7 @@ SCRIPT = PROJECT_ROOT / "scripts" / "merge-task-branch.sh"
 
 #: Документы, описывающие слияние. Оба обязаны звать ту же строку и ту же команду, что
 #: и скрипт: расхождение здесь — это правило, которое исполняют по памяти.
-DOCUMENTS = (PROJECT_ROOT / "docs" / "CONVENTIONS.md", PROJECT_ROOT / "README.md")
+DOCUMENTS = (PROJECT_ROOT / "docs" / "CONVENTIONS.md", PROJECT_ROOT / "docs" / "DEVELOPMENT.md")
 
 #: Объявления в шапке скрипта. Читаются текстом, а не запуском: запускать скрипт отсюда
 #: нечем, а объявлены они одной строкой именно затем, чтобы их можно было прочитать.
@@ -80,10 +80,10 @@ def test_the_merge_runs_the_whole_suite_and_says_so() -> None:
 
     Облегчённый прогон на слиянии — это вторая планка качества, о которой никто не
     договаривался: часть набора зелена, а `main` красный по тому, что решили не гонять.
-    Поэтому команда из скрипта обязана быть той же, которую README называет прогоном
+    Поэтому команда из скрипта обязана быть той же, которую `docs/DEVELOPMENT.md` называет прогоном
     набора.
     """
     command = " ".join(_declaration(TEST_COMMAND).split())
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (PROJECT_ROOT / "docs" / "DEVELOPMENT.md").read_text(encoding="utf-8")
 
-    assert f"`{command}`" in readme, f"README не называет {command!r} прогоном набора"
+    assert f"`{command}`" in readme, f"docs/DEVELOPMENT.md не называет {command!r} прогоном набора"

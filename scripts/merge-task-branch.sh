@@ -17,7 +17,7 @@ set -euo pipefail
 
 #: Строка-доказательство в сообщении коммита слияния: чем прогнали и что вышло. По ней
 #: же считается ревизия непроверенных слияний, поэтому ключ не меняется молча — то же
-#: имя стоит в `docs/CONVENTIONS.md` и `README.md`, и сверяет их `tests/test_merge_script.py`.
+#: имя стоит в `docs/CONVENTIONS.md` и `docs/DEVELOPMENT.md`, и сверяет их `tests/test_merge_script.py`.
 TRAILER_KEY="Merge-verified"
 
 #: Прогон — тот же, что протокол требует перед коммитом, а не свой облегчённый: слияние

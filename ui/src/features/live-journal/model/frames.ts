@@ -4,7 +4,7 @@ import type { Entry, EntryType } from '@/entities/entry';
  * Кадр живого потока: та же запись дела, что и в ленте, плюс её сквозной номер `seq`.
  *
  * `seq` — курсор ленты: с него поток продолжается после обрыва
- * (`../README.md`, «Лента журнала»).
+ * (`../docs/DEVELOPMENT.md`, «Лента журнала»).
  */
 export interface JournalFrame {
   seq: number;
