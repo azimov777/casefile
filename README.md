@@ -60,14 +60,16 @@ Casefile gives every task a **case file** — an append-only log the agent write
 
 ## Connect your agent
 
-The installer prints this with your token filled in:
+The installer prints a ready-made command with your token and its actual MCP address
+filled in — by default:
 
 ```bash
 claude mcp add --transport http --scope user casefile http://localhost:8100/mcp \
   --header "Authorization: Bearer <token>"
 ```
 
-Any other MCP client works the same way: streamable HTTP at `http://localhost:8100/mcp` with that header.
+Any other MCP client works the same way: streamable HTTP at the MCP address the installer
+printed (`http://localhost:8100/mcp` by default) with that header.
 
 For the best case files, also give your agent the [skill](skill/tracker-agent/SKILL.md) that teaches the discipline (Claude Code: `~/.claude/skills/tracker-agent/SKILL.md`).
 
