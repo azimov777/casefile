@@ -1,0 +1,70 @@
+# Проверки: те же команды, что локально (`docs/CONVENTIONS.md`, `ui/docs/CONVENTIONS.md`) —
+# линтер и набор бэкенда в контейнере, `pnpm check` интерфейса.
+#
+# Срабатывает на каждый pull request и по вызову из `images.yml`: образы для установок
+# публикуются только после зелёных проверок, потому что у установок автообновление, и
+# красный коммит уехал бы в каждую из них на следующем старте Docker.
+#
+# Сквозных тестов Playwright здесь нет намеренно: они тяжёлые и живут в слиянии веток
+# (`ui/scripts/merge-task-branch.sh`).
+
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend — ruff and pytest in Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Дев-образ один на все сервисы контура: собирается один раз, дальше `run` его берёт.
+      - name: Build the dev image
+        run: docker compose build api
+
+      - name: Lint
+        run: docker compose run --rm lint
+
+      - name: Tests
+        run: docker compose run --rm test
+
+      - name: Stop the contour
+        if: always()
+        run: docker compose down -v
+
+  ui:
+    name: UI — format, lint, types, FSD boundaries, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ui
+    env:
+      # Версию pnpm задаёт `packageManager` в `ui/package.json`; corepack скачивает её сам,
+      # а без этой переменной спрашивал бы разрешения и ждал ответа, которого не будет.
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/.nvmrc
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Контрактные тесты читают `../openapi.json` и `../docs/ERRORS.md` — выгрузки
+      # бэкенда из того же чекаута, поэтому расхождение клиента с контрактом видно здесь же.
+      - name: Check
+        run: pnpm check
