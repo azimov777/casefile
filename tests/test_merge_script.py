@@ -1,7 +1,7 @@
 """Скрипт слияния под тестом: его запускают редко и в единственный неудобный момент.
 
 `scripts/merge-task-branch.sh` — единственное место, где проверяется результат слияния
-(`docs/CONVENTIONS.md`, раздел «Слияние ветки задачи в main»). Четыре вещи ломаются молча
+(`docs/CONVENTIONS.md`, раздел «Слияние ветки задачи в main»). Пять вещей ломаются молча
 и обнаруживаются ровно тогда, когда сливают ветку и меньше всего хотят разбираться с
 инструментом, — их и сторожит этот файл:
 
@@ -14,13 +14,16 @@
 - сообщение из `-m` теряется на конфликте (TRK-54, готовое решение — UI-96): скрипт
   выходит подсказкой про `--continue` раньше, чем кладёт `MESSAGE` в `MERGE_MSG`, и
   повторный вызов `--continue` этого сообщения уже не знает — коммит слияния получает
-  заголовок, который предложил сам git.
+  заголовок, который предложил сам git;
+- набор прогоняется на образе, собранном до слияния (TRK-70): `docker compose run` сам
+  образ не пересобирает, и ветка, меняющая `uv.lock` или `docker/Dockerfile.dev`,
+  получала бы `Merge-verified:` на старых версиях зависимостей.
 
 Первые три проверки читают скрипт текстом — запускать его отсюда нечем, git и docker
-живут на хосте. Последнюю (TRK-54) ведут на временном git-репозитории с настоящим
-конфликтом: сам `scripts/merge-task-branch.sh` запускается по-настоящему (git с этой
-задачи есть и в дев-образе), а `docker` на `PATH` подменён поддельным исполняемым файлом —
-мгновенным и не трогающим ни настоящий Docker, ни настоящий набор.
+живут на хосте. Остальные ведут на временном git-репозитории: сам
+`scripts/merge-task-branch.sh` запускается по-настоящему (git с TRK-54 есть и в
+дев-образе), а `docker` на `PATH` подменён поддельным исполняемым файлом — мгновенным и
+не трогающим ни настоящий Docker, ни настоящий набор.
 """
 
 import os
@@ -40,6 +43,7 @@ DOCUMENTS = (PROJECT_ROOT / "docs" / "CONVENTIONS.md", PROJECT_ROOT / "docs" / "
 #: нечем, а объявлены они одной строкой именно затем, чтобы их можно было прочитать.
 TRAILER_KEY = re.compile(r'^TRAILER_KEY="([^"]+)"', re.MULTILINE)
 TEST_COMMAND = re.compile(r"^TEST_COMMAND=\(([^)]+)\)", re.MULTILINE)
+BUILD_COMMAND = re.compile(r"^BUILD_COMMAND=\(([^)]+)\)", re.MULTILINE)
 
 
 def _declaration(pattern: re.Pattern[str]) -> str:
@@ -98,18 +102,44 @@ def test_the_merge_runs_the_whole_suite_and_says_so() -> None:
     assert f"`{command}`" in readme, f"docs/DEVELOPMENT.md не называет {command!r} прогоном набора"
 
 
-# --- Сообщение из `-m` через конфликт (TRK-54, готовое решение — UI-96) --------------
-#
-# Единственная проверка файла, которая исполняет сам скрипт, а не читает его текстом: ей
-# нужен настоящий git и временный репозиторий с настоящим конфликтом. `docker` на PATH
-# подменяется поддельным исполняемым файлом — первый токен `TEST_COMMAND` (docker compose
-# run --rm test) — мгновенным и не трогающим ни Docker, ни настоящий набор.
+def test_the_build_command_uses_compose_and_not_a_hardcoded_tag() -> None:
+    """Пересборка (TRK-70) идёт тем же `docker compose`, что и прогон, а не `docker build -t`.
 
-#: Поддельный `docker`: отвечает на `compose run --rm test` мгновенно и зелёным. Строка
-#: вывода подобрана под `summary_of` скрипта (последняя непустая строка) — ему всё равно,
-#: откуда она, лишь бы была.
+    Жёстко названный тег обошёл бы `COMPOSE_PROJECT_NAME`/`COMPOSE_FILE`, унаследованные
+    вызывающим (свой compose-проект, свои порты), и пересобрал бы образ чужого контура.
+    """
+    build = _declaration(BUILD_COMMAND).split()
+    assert build[:2] == ["docker", "compose"], f"BUILD_COMMAND не через docker compose: {build!r}"
+    assert "build" in build, f"BUILD_COMMAND не вызывает build: {build!r}"
+
+
+def test_the_build_and_test_commands_name_the_same_service() -> None:
+    """`BUILD_COMMAND` и `TEST_COMMAND` обязаны пересобирать и запускать одну службу.
+
+    Разъехавшиеся имена службы — это пересборка образа, который прогон не использует:
+    `Merge-verified:` продолжил бы врать так же, как до TRK-70.
+    """
+    build_service = _declaration(BUILD_COMMAND).split()[-1]
+    test_service = _declaration(TEST_COMMAND).split()[-1]
+    assert build_service == test_service, (
+        f"BUILD_COMMAND называет службу {build_service!r}, TEST_COMMAND — {test_service!r}"
+    )
+
+
+# --- Запуск самого скрипта на временном git-репозитории с поддельным `docker` -------
+#
+# Дальше идут проверки, которые исполняют сам скрипт, а не читают его текстом: им нужен
+# настоящий git. `docker` на `PATH` подменяется поддельным исполняемым файлом —
+# мгновенным и не трогающим ни настоящий Docker, ни настоящий набор.
+
+#: Поддельный `docker`: отвечает на `compose build ...` и `compose run --rm test`
+#: мгновенно и зелёным. Строка вывода `run` подобрана под `summary_of` скрипта
+#: (последняя непустая строка) — ему всё равно, откуда она, лишь бы была.
 FAKE_DOCKER = """#!/usr/bin/env bash
 set -euo pipefail
+if [ "${1:-}" = compose ] && [ "${2:-}" = build ]; then
+    exit 0
+fi
 if [ "${1:-}" = compose ] && [ "${2:-}" = run ]; then
     echo "1 passed in 0.01s"
     exit 0
@@ -129,8 +159,40 @@ def _make_fake_bin(tmp_path: Path) -> Path:
     return bin_dir
 
 
+def _make_fake_bin_recording_invocations(tmp_path: Path, log: Path) -> Path:
+    """Как `_make_fake_bin`, но вдобавок дописывает свои аргументы в `log` строкой за
+    каждым вызовом — этим и ловится порядок TRK-70: пересборка обязана случиться
+    раньше прогона, а не наоборот и не вместо него."""
+    bin_dir = tmp_path / "fakebin-recording"
+    bin_dir.mkdir()
+    fake_docker = bin_dir / "docker"
+    fake_docker.write_text(
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >>{log}
+if [ "${{1:-}}" = compose ] && [ "${{2:-}}" = build ]; then
+    exit 0
+fi
+if [ "${{1:-}}" = compose ] && [ "${{2:-}}" = run ]; then
+    echo "1 passed in 0.01s"
+    exit 0
+fi
+echo "поддельный docker не знает команду: $*" >&2
+exit 1
+""",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+    return bin_dir
+
+
 def _git(repo: Path, args: list[str]) -> None:
     subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+
+
+def _git_output(repo: Path, args: list[str]) -> str:
+    done = subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+    return done.stdout.strip()
 
 
 def _make_repo_with_conflict(tmp_path: Path) -> Path:
@@ -233,3 +295,89 @@ def test_without_dash_m_the_conflict_path_keeps_the_old_behaviour(tmp_path: Path
     body = _commit_body(repo)
     assert body.startswith("Merge branch 'task/TRK-0'")
     assert "Merge-verified:" in body
+
+
+# --- Образ пересобирается из смёрженного дерева, до прогона (TRK-70) ----------------
+
+
+def _make_repo_without_conflict(tmp_path: Path) -> Path:
+    """Временный репозиторий с веткой `task/TRK-0`, которая не конфликтует с `main`:
+    ветки трогают разные файлы. Сливается без остановки на конфликте — этим и
+    проверяется обычный ход, не через `--continue`."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, ["init", "--quiet"])
+    _git(repo, ["checkout", "--quiet", "-b", "main"])
+    _git(repo, ["config", "user.email", "test@example.invalid"])
+    _git(repo, ["config", "user.name", "Test"])
+
+    (repo / "main.txt").write_text("main\n", encoding="utf-8")
+    _git(repo, ["add", "main.txt"])
+    _git(repo, ["commit", "--quiet", "-m", "база"])
+
+    _git(repo, ["checkout", "--quiet", "-b", "task/TRK-0"])
+    (repo / "branch.txt").write_text("ветка\n", encoding="utf-8")
+    _git(repo, ["add", "branch.txt"])
+    _git(repo, ["commit", "--quiet", "-m", "из ветки"])
+
+    _git(repo, ["checkout", "--quiet", "main"])
+    return repo
+
+
+def test_the_image_is_rebuilt_before_the_suite_runs(tmp_path: Path) -> None:
+    """TRK-70: пересборка (`compose build`) случается раньше прогона (`compose run`),
+    и на каждый заход скрипта, не только на первый.
+
+    Без этого ветка, меняющая `uv.lock` или `docker/Dockerfile.dev`, проверялась бы
+    зависимостями, поставленными в образ до слияния, а `Merge-verified:` уходила бы в
+    историю неправдой.
+    """
+    git = shutil.which("git")
+    assert git is not None, "в образе нет git — слияние воспроизвести нечем"
+
+    repo = _make_repo_without_conflict(tmp_path)
+    log = tmp_path / "docker-invocations.log"
+    fake_bin = _make_fake_bin_recording_invocations(tmp_path, log)
+
+    done = _run_script(repo, fake_bin, ["task/TRK-0", "-m", "merge(x): проверка (TRK-0)"])
+    assert done.returncode == 0, done.stdout + done.stderr
+
+    invocations = log.read_text(encoding="utf-8").splitlines()
+    assert invocations, "docker не вызван вовсе"
+    build_at = next(i for i, line in enumerate(invocations) if line.startswith("compose build"))
+    run_at = next(i for i, line in enumerate(invocations) if line.startswith("compose run"))
+    assert build_at < run_at, f"пересборка не раньше прогона: {invocations!r}"
+
+
+def test_a_failed_rebuild_stops_the_merge_like_a_red_suite(tmp_path: Path) -> None:
+    """Неудачная пересборка отменяет слияние так же, как красный набор: `git merge
+    --abort`, ветка осталась прежней, дерево не тронуто."""
+    git = shutil.which("git")
+    assert git is not None, "в образе нет git — слияние воспроизвести нечем"
+
+    repo = _make_repo_without_conflict(tmp_path)
+    bin_dir = tmp_path / "fakebin-broken"
+    bin_dir.mkdir()
+    fake_docker = bin_dir / "docker"
+    fake_docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = compose ] && [ "${2:-}" = build ]; then
+    echo "поддельная пересборка красная" >&2
+    exit 1
+fi
+echo "поддельный docker не знает команду: $*" >&2
+exit 1
+""",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+
+    before = _git_output(repo, ["rev-parse", "HEAD"])
+
+    done = _run_script(repo, bin_dir, ["task/TRK-0", "-m", "merge(x): проверка (TRK-0)"])
+    assert done.returncode != 0, done.stdout + done.stderr
+
+    after = _git_output(repo, ["rev-parse", "HEAD"])
+    assert before == after, "ветка сдвинулась, хотя пересборка красная"
+    assert _git_output(repo, ["status", "--porcelain"]) == "", "слияние осталось начатым"
