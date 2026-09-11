@@ -310,6 +310,8 @@ interface PlaceFrame {
   place: number;
   /** Низ прослойки `min-h-0` — того, что несёт карточку внутри места. */
   layer: number;
+  /** Непрозрачность самой карточки: у неё своё движение, и оно тоже обязано доехать. */
+  opacity: number;
 }
 
 interface PlaceWatch {
@@ -361,8 +363,9 @@ async function watchPlace(
             };
             const box = place.getBoundingClientRect();
             const layer = place.firstElementChild?.getBoundingClientRect();
-            if (layer === undefined) {
-              reject(new Error('у места карточки нет прослойки'));
+            const card = place.querySelector('article');
+            if (layer === undefined || card === null) {
+              reject(new Error('у места карточки нет прослойки или самой карточки'));
               return;
             }
             record.frames.push({
@@ -370,6 +373,7 @@ async function watchPlace(
               height: box.height,
               place: box.bottom,
               layer: layer.bottom,
+              opacity: Number(getComputedStyle(card).opacity),
             });
           }
 
@@ -463,6 +467,50 @@ test('карточка стоит у нижнего края своего мес
       `${name}: низ карточки ушёл от низа места, ${JSON.stringify(gaps)}`,
     ).toBe(0);
   }
+});
+
+/**
+ * Выход доезжает до конца раньше, чем узел снимают (UI-111). Узел держит общая
+ * задержка размонтирования (`shared/lib/exit-hold.ts`), и снятый посреди выхода он
+ * обнулил бы остаток хода места одним кадром — тем самым рывком, от которого место
+ * и едет. Мерится последний кадр, где узел ещё в разметке: место в нём уже схлопнулось.
+ */
+test('закрытая карточка доезжает до конца выхода раньше, чем её снимают', async ({ page }) => {
+  await fakeJournal(page);
+  await page.goto('/tasks/DEMO-1/case');
+  await expect(page.locator('article[data-type]').first()).toBeVisible();
+  await fontsReady(page);
+  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+  // Кадр, пришедший раньше участника, уведомления не даст: «спросили ли меня»
+  // сверяется с именем из `bootstrap`, а он приезжает после первой отрисовки.
+  await shellReady(page);
+
+  const closed = { no: 71, title: 'Вопрос 71, который закроют' };
+  const kept = { no: 72, title: 'Вопрос 72, который останется' };
+  await ask(page, closed.no, closed.title);
+  await ask(page, kept.no, kept.title);
+  await expect(stack(page).locator('article')).toHaveCount(2);
+  await motionSettled(page);
+
+  const departure = await watchPlace(page, closed, true);
+  await expect(stack(page).locator('article')).toHaveCount(1);
+  const last = departure.frames.at(-1);
+  report('UI-111 уход карточки', {
+    frames: departure.frames.length,
+    at: departure.frames.map((frame) => frame.at),
+    height: departure.frames.map((frame) => Math.round(frame.height * 10) / 10),
+    opacity: departure.frames.map((frame) => Math.round(frame.opacity * 1000) / 1000),
+  });
+
+  expect(departure.timedOut, 'узел не снялся').toBe(false);
+  // Место ехало прямо сейчас: иначе последний кадр был бы нулём по другой причине.
+  expect(departure.motion?.running).toBe(true);
+  expect(departure.frames.length).toBeGreaterThan(1);
+  // В последнем кадре, где узел ещё в разметке, место уже доехало до нуля само,
+  // а не обнуляется снятием узла.
+  expect(last?.height, `место снято на ${JSON.stringify(last)}`).toBeLessThanOrEqual(1);
+  // И собственное движение карточки не срезано: к этому кадру она уже погасла.
+  expect(last?.opacity, `карточка снята на ${JSON.stringify(last)}`).toBe(0);
 });
 
 test('человек просит не двигать интерфейс — уведомление перестаёт ехать', async ({ page }) => {

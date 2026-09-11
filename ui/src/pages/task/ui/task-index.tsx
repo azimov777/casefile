@@ -257,7 +257,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
            * высоте ровно один кадр, пока строка уходит.
            */}
           <td className={cn(CELL, 'bg-sunken p-0')} colSpan={5}>
-            <Reveal leaving={details.leaving} entering={details.entering}>
+            <Reveal hold={details}>
               <div className="px-3 py-2">
                 <EntryDetails
                   taskKey={taskKey}

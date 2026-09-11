@@ -253,7 +253,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
       </div>
 
       {reveal.held ? (
-        <Reveal leaving={reveal.leaving} entering={reveal.entering}>
+        <Reveal hold={reveal}>
           <form
             id={formId}
             className="mt-2 flex flex-col gap-3 rounded-control border border-line bg-surface px-4 py-3"
