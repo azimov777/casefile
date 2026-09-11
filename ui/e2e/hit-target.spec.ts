@@ -158,10 +158,7 @@ test('доступность списка и доски с растянутой 
   for (const address of ['/tasks?queue=DEMO', '/tasks?queue=DEMO&view=board']) {
     await page.goto(address);
     const found = await new AxeBuilder({ page }).analyze();
-    const serious = found.violations
-      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-      .map((violation) => violation.id);
-    expect(serious, address).toEqual([]);
+    expect(found.violations, address).toEqual([]);
   }
 });
 

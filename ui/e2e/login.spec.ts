@@ -73,19 +73,12 @@ test('пробел в конце токена не мешает, а карточ
 test('доступность экрана входа и оболочки', async ({ page }) => {
   await page.goto('/login');
   const onLogin = await new AxeBuilder({ page }).analyze();
-  expect(serious(onLogin.violations)).toEqual([]);
+  expect(onLogin.violations).toEqual([]);
 
   await page.getByLabel('Токен участника').fill(token);
   await page.getByRole('button', { name: 'Войти' }).click();
   await expect(page.getByText('owner')).toBeVisible();
 
   const onTasks = await new AxeBuilder({ page }).analyze();
-  expect(serious(onTasks.violations)).toEqual([]);
+  expect(onTasks.violations).toEqual([]);
 });
-
-/** Нарушения уровня serious и выше: их приложение обязано не допускать. */
-function serious(violations: { id: string; impact?: string | null }[]) {
-  return violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-}

@@ -165,9 +165,5 @@ test('доступность списка задач', async ({ page, request })
   await expect(page.getByLabel('Запрос на языке бэкенда')).toBeVisible();
 
   const found = await new AxeBuilder({ page }).analyze();
-  const serious = found.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-
-  expect(serious).toEqual([]);
+  expect(found.violations).toEqual([]);
 });

@@ -348,10 +348,6 @@ test.describe('дело читается по-русски', () => {
     await expect(page.locator('article').first()).toBeVisible();
 
     const found = await new AxeBuilder({ page }).analyze();
-    const serious = found.violations
-      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-      .map((violation) => violation.id);
-
-    expect(serious).toEqual([]);
+    expect(found.violations).toEqual([]);
   });
 });

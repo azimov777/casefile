@@ -108,12 +108,17 @@ test('доступность узкого экрана на всех пяти э
   for (const address of SCREENS) {
     await page.goto(address);
     await expect(page.getByRole('main')).toBeVisible();
+    /*
+     * Карточка задачи (`/tasks/DEMO-6`) рисует `main` уже в состоянии загрузки, до
+     * прихода пакета: `h1` там появляется только с ним. `axe`, попавший в этот миг,
+     * ловит `page-has-heading-one` (moderate) — гонку измерения с загрузкой, а не
+     * дефект экрана (`docs/notes/testing.md`, UI-100). На загруженном экране `h1`
+     * есть везде из четырёх адресов.
+     */
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     const result = await new AxeBuilder({ page }).analyze();
-    const serious = result.violations
-      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-      .map((violation) => violation.id);
-    expect(serious, address).toEqual([]);
+    expect(result.violations, address).toEqual([]);
   }
 });
 

@@ -101,12 +101,21 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
        * заново по-русски; у сводки он дословно повторяет «следующий шаг» из тела,
        * и второй раз его показывать незачем.
        */}
+      {/*
+       * `h2`, а не `h3`: экран дела (`case-page.tsx`) не ставит между своим `h1` и
+       * лентой ни одного заголовка второго уровня, и `h3` здесь пропускал бы уровень
+       * целиком — то же нарушение `heading-order`, что `axe` ловил на доске до UI-99,
+       * теперь на ленте дела (UI-100). Перевод уровня не двигает вид: `h1`–`h3` сведены
+       * в одно правило сброса (`shared/styles/reset.css`), а размер заголовка задают
+       * явные утилиты (`text-body`), а не тег. `EntryCard` стоит только на этом экране
+       * (`entities/entry/index.ts`), так что менять уровень больше нигде не нужно.
+       */}
       {service ? null : headline.kind === 'built' ? (
-        <h3 className="text-body font-semibold">
+        <h2 className="text-body font-semibold">
           <EntryHeadline headline={headline} />
-        </h3>
+        </h2>
       ) : headline.kind === 'author' ? (
-        <h3 className="text-body font-semibold">{entry.title}</h3>
+        <h2 className="text-body font-semibold">{entry.title}</h2>
       ) : null}
 
       <EntryBody entry={entry} checks={checks} />

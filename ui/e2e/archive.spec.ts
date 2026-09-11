@@ -322,6 +322,13 @@ test('запрос человека складывается с правилом
   );
 });
 
+/**
+ * До UI-100 здесь стоял отбор по серьёзности, а полная проверка (без отбора) жила
+ * отдельным тестом рядом — `heading-order` (moderate) на доске в отбор `serious`/
+ * `critical` не попадал и оставался незамеченным до UI-99, хотя `axe` его исправно
+ * ловил на каждом прогоне архива (UI-97). Отбор снят и здесь: второй тест был бы
+ * его точной копией, поэтому проверка на архиве теперь одна.
+ */
 test('доступность таблицы и доски с переключателем архива', async ({ page }) => {
   await silenceJournal(page);
 
@@ -331,38 +338,11 @@ test('доступность таблицы и доски с переключа�
     await expect(page.locator('tbody tr, article').first()).toBeVisible();
 
     const found = await new AxeBuilder({ page }).analyze();
-    const serious = found.violations
-      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-      .map(
-        (violation) => `${violation.id}: ${violation.nodes.map((node) => node.target).join(' ')}`,
-      );
-    report(`axe ${path}`, {
-      нарушения: found.violations.map((violation) => `${violation.id} (${violation.impact})`),
-      серьёзных: serious,
-    });
-    expect(serious, path).toEqual([]);
-  }
-});
-
-/**
- * Отдельная проверка от предыдущей намеренно: там отбор по серьёзности остаётся —
- * это старый замер, и ослаблять его нельзя, — а здесь порог снят целиком. `heading-order`
- * (moderate) на доске в отбор `serious`/`critical` не попадал и оставался незамеченным до
- * UI-99, хотя `axe` его исправно ловил на каждом прогоне архива (UI-97).
- */
-test('доска и таблица не дают ни одного нарушения `axe`, включая некритичные', async ({ page }) => {
-  await silenceJournal(page);
-
-  for (const path of ['/tasks?queue=DEMO', '/tasks?queue=DEMO&view=board']) {
-    await page.goto(path);
-    await expect(page.locator('tbody tr, article').first()).toBeVisible();
-
-    const found = await new AxeBuilder({ page }).analyze();
     const violations = found.violations.map(
       (violation) =>
         `${violation.id} (${violation.impact}): ${violation.nodes.map((node) => node.target).join(' ')}`,
     );
-    report(`axe (все уровни) ${path}`, { нарушения: violations });
+    report(`axe ${path}`, { нарушения: violations });
     expect(violations, path).toEqual([]);
   }
 });

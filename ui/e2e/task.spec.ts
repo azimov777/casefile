@@ -7,12 +7,6 @@ function entryRow(page: Page, title: string) {
   return page.getByRole('row').filter({ has: page.getByRole('button', { name: title }) });
 }
 
-function serious(violations: { impact?: string | null; id: string }[]) {
-  return violations
-    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
-    .map((v) => v.id);
-}
-
 test('карточка DEMO-6 рисуется одним запросом пакета и объясняет, что задачу держит', async ({
   page,
 }) => {
@@ -133,14 +127,14 @@ test('доступность ленты дела', async ({ page }) => {
   await expect(page.getByRole('article').first()).toBeVisible();
 
   const closed = await new AxeBuilder({ page }).analyze();
-  expect(serious(closed.violations)).toEqual([]);
+  expect(closed.violations).toEqual([]);
 
   // И с раскрытым отбором по типам: у флажков свои подписи и своя группа.
   await page.getByRole('button', { name: 'Записи агента' }).click();
   await expect(page.getByRole('article').first()).toBeVisible();
 
   const filtered = await new AxeBuilder({ page }).analyze();
-  expect(serious(filtered.violations)).toEqual([]);
+  expect(filtered.violations).toEqual([]);
 });
 
 test('доступность карточки задачи', async ({ page }) => {
@@ -148,13 +142,13 @@ test('доступность карточки задачи', async ({ page }) =>
   await expect(page.getByText('В деле 7 записей')).toBeVisible();
 
   const closed = await new AxeBuilder({ page }).analyze();
-  expect(serious(closed.violations)).toEqual([]);
+  expect(closed.violations).toEqual([]);
 
   await page.getByRole('button', { name: /Обзорная проверка 2/ }).click();
   await expect(page.getByText('Неприменимый оператор').first()).toBeVisible();
 
   const opened = await new AxeBuilder({ page }).analyze();
-  expect(serious(opened.violations)).toEqual([]);
+  expect(opened.violations).toEqual([]);
 });
 
 test('лента дела: все типы записей, отбор и ответ под вопросом', async ({ page }) => {
