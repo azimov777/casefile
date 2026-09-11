@@ -1,20 +1,21 @@
-"""Первичная настройка установки: первый доступ человеку и ключ локальному интерфейсу.
+"""Первичная настройка установки: первый доступ человеку, ключ интерфейсу, токен агенту.
 
 Свежая база заперта снаружи: каждый маршрут `/api/v1` требует токена, а выпустить
 первый токен через API нельзя — для этого уже нужен токен. Разомкнуть круг может только
 код, работающий с базой напрямую, поэтому сценарии живут здесь, а команды
-`python -m app.cli init` и `python -m app.cli local-token` — тонкие обёртки над ними
-(их же зовут сервисы `init` и `local-token` в Compose).
+`python -m app.cli init`, `local-token` и `agent-token` — тонкие обёртки над ними
+(их же зовут одноимённые сервисы в Compose).
 
-Сценариев два, и разница между ними — в том, кто хранит секрет.
+Сценариев три, и разница между ними — в том, кто хранит секрет.
 
 | Сценарий | Кому доступ | Набор | Где живёт секрет |
 |---|---|---|---|
 | `initialize_installation` | человеку, руками | `main` | у человека, показан один раз |
 | `ensure_local_token` | интерфейсу установки | `task` | в файле, который держит установка |
+| `ensure_agent_token` | агенту машины, через MCP | `main` | в файле, который держит установка |
 
-Повтор не выпускает ничего ни у того, ни у другого, но признаки «уже сделано» разные:
-у первого это наличие любого токена в базе, у второго — годный секрет в своём файле.
+Повтор не выпускает ничего ни у одного, но признаки «уже сделано» разные: у первого это
+наличие любого токена в базе, у двух других — годный секрет в своём файле.
 
 Автор всего заведённого — сам трекер (`TRACKER_ACTOR`): участника, который завёл бы
 первого участника, в этот момент ещё не существует.
@@ -25,6 +26,7 @@ from enum import StrEnum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.participant import Participant
 from app.db.models.token import Token
 from app.db.repositories import ParticipantRepository, TokenRepository
 from app.domain.errors import ParticipantNotFoundError
@@ -42,6 +44,12 @@ DEFAULT_TOKEN_NAME = "bootstrap"
 #: прежний токен, чтобы отозвать его при выпуске замены, — поэтому имя постоянное, а не
 #: собранное из времени или случайного хвоста.
 DEFAULT_LOCAL_TOKEN_NAME = "local-ui"
+
+#: Участник, которому установка выпускает токен для MCP, и имя этого токена. Имя
+#: постоянное по той же причине, что у ключа интерфейса: по нему отзывается прежний.
+DEFAULT_AGENT_NAME = "agent"
+DEFAULT_AGENT_DESCRIPTION = "Агент этой машины: ходит в MCP токеном, который выдала установка"
+DEFAULT_AGENT_TOKEN_NAME = "local-agent"
 
 
 async def initialize_installation(
@@ -147,12 +155,10 @@ async def ensure_local_token(
     имени иначе тихо превращалась бы в нового человека с полным доступом к задачам.
     """
     tokens = TokenRepository(session)
-    name = token_name.strip()
 
-    if known_secret:
-        known = await tokens.get_by_hash(hash_token(known_secret))
-        if known is not None and not known.is_revoked and known.participant is not None:
-            return LocalToken(outcome=LocalTokenOutcome.KEPT, token=known, secret=None, revoked=0)
+    kept = await _kept_token(tokens, known_secret)
+    if kept is not None:
+        return LocalToken(outcome=LocalTokenOutcome.KEPT, token=kept, secret=None, revoked=0)
 
     # Признак «установка пуста» тот же, что у `initialize_installation`, и по той же
     # причине: участник без токена доступа не даёт. Считается он до выпуска — после
@@ -173,7 +179,89 @@ async def ensure_local_token(
             description=DEFAULT_OWNER_DESCRIPTION,
         )
 
-    stale = await tokens.list_live_named(participant.id, name)
+    return await _replace_token(
+        session, participant, token_name=token_name, scope=TokenScope.TASK, empty=empty
+    )
+
+
+async def ensure_agent_token(
+    session: AsyncSession,
+    *,
+    known_secret: str | None,
+    participant_name: str = DEFAULT_AGENT_NAME,
+    token_name: str = DEFAULT_AGENT_TOKEN_NAME,
+) -> LocalToken:
+    """Приводит установку к состоянию «у агента этой машины есть действующий токен набора `main`».
+
+    Нужен установке одной командой: агенту, которого человек подключает к MCP, токен
+    выдаёт сама установка, как ключ интерфейсу, — а не `init`, печатающий секрет в
+    журнал контейнера. Устроен как `ensure_local_token`: идемпотентен по файлу, признак
+    годности тот же, замена отзывает прежний одноимённый токен. Отличий три.
+
+    - Набор `main`, а не `task`: без него агент не заведёт даже первую очередь, а людей
+      в интерфейсе, которым этот набор мог бы понадобиться, установка не спрашивает.
+    - Участник-агент заводится, если его нет, на любой установке. Опечатки в имени
+      человека, от которой стережёт `ensure_local_token`, здесь нет: имя называет
+      контур, а завести агента этой машины и есть смысл первого запуска.
+    - На пустой установке заводится и владелец-человек, без токена. Установка
+      начинается с человека, и `ensure_local_token`, позванный следом, найдёт его, а не
+      откажет, — порядок двух команд перестаёт иметь значение.
+    """
+    tokens = TokenRepository(session)
+
+    kept = await _kept_token(tokens, known_secret)
+    if kept is not None:
+        return LocalToken(outcome=LocalTokenOutcome.KEPT, token=kept, secret=None, revoked=0)
+
+    empty = not await tokens.any_exists()
+    participants = ParticipantRepository(session)
+
+    owner_name = normalize_participant_name(DEFAULT_OWNER_NAME)
+    if empty and await participants.get_by_name(owner_name) is None:
+        await register_participant(
+            session,
+            actor=TRACKER_ACTOR,
+            kind=ParticipantKind.HUMAN,
+            name=DEFAULT_OWNER_NAME,
+            description=DEFAULT_OWNER_DESCRIPTION,
+        )
+
+    agent = await participants.get_by_name(normalize_participant_name(participant_name))
+    if agent is None:
+        agent = await register_participant(
+            session,
+            actor=TRACKER_ACTOR,
+            kind=ParticipantKind.AGENT,
+            name=participant_name,
+            description=DEFAULT_AGENT_DESCRIPTION,
+        )
+
+    return await _replace_token(
+        session, agent, token_name=token_name, scope=TokenScope.MAIN, empty=empty
+    )
+
+
+async def _kept_token(tokens: TokenRepository, known_secret: str | None) -> Token | None:
+    """Токен постоянной копии, если он годен: найден по хешу, не отозван, за ним участник."""
+    if not known_secret:
+        return None
+    known = await tokens.get_by_hash(hash_token(known_secret))
+    if known is None or known.is_revoked or known.participant is None:
+        return None
+    return known
+
+
+async def _replace_token(
+    session: AsyncSession,
+    participant: Participant,
+    *,
+    token_name: str,
+    scope: TokenScope,
+    empty: bool,
+) -> LocalToken:
+    """Отзывает прежние неотозванные токены участника с этим именем и выпускает новый."""
+    name = token_name.strip()
+    stale = await TokenRepository(session).list_live_named(participant.id, name)
     for token in stale:
         await revoke_token(session, token.id, actor=TRACKER_ACTOR)
 
@@ -181,7 +269,7 @@ async def ensure_local_token(
         session,
         actor=TRACKER_ACTOR,
         participant=participant,
-        scope=TokenScope.TASK,
+        scope=scope,
         name=name,
     )
     return LocalToken(

@@ -10,6 +10,8 @@
 - `local-token` — положить действующий ключ набора `task` в файл, откуда его берёт
   интерфейс локальной установки. Ключ добывает сама установка, а не человек, поэтому
   секрет не печатается никогда: команда стоит в журнале подъёма контура;
+- `agent-token` — то же для агента этой машины: токен набора `main` в файле, откуда его
+  берёт тот, кто подключает агента к MCP (установщик `install.sh`);
 - `demo` — наполнить установку демонстрационными данными: очередь `DEMO`, задачи во всех
   статусах и дела со всеми типами записей. Через API это были бы десятки запросов
   в нужном порядке;
@@ -20,6 +22,7 @@
 
     docker compose run --rm init
     docker compose run --rm local-token
+    docker compose run --rm agent-token
     docker compose run --rm demo
     docker compose run --rm schema
     docker compose run --rm --entrypoint python api -m app.cli issue-token --scope main
@@ -30,9 +33,9 @@ HTTP-запроса, отдельной логики коммита здесь �
 ## Кто печатает секрет, а кто нет
 
 `init` и `issue-token` печатают: секрет читает человек, и другого способа его получить
-нет. `local-token` не печатает никогда — её вывод уезжает в журнал подъёма контура, а
-секрет в журнале это тот же секрет на виду, от которого весь этот путь и уходит.
-Секрет попадает **только** в файл `--output`, и права на нём `0600`.
+нет. `local-token` и `agent-token` не печатают никогда — их вывод уезжает в журнал
+подъёма контура, а секрет в журнале это тот же секрет на виду, от которого весь этот
+путь и уходит. Секрет попадает **только** в файл `--output`, и права на нём `0600`.
 """
 
 import argparse
@@ -51,12 +54,15 @@ from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
 from app.services.setup import (
+    DEFAULT_AGENT_NAME,
+    DEFAULT_AGENT_TOKEN_NAME,
     DEFAULT_LOCAL_TOKEN_NAME,
     DEFAULT_OWNER_DESCRIPTION,
     DEFAULT_OWNER_NAME,
     DEFAULT_TOKEN_NAME,
     LocalToken,
     LocalTokenOutcome,
+    ensure_agent_token,
     ensure_local_token,
     initialize_installation,
 )
@@ -65,6 +71,10 @@ from app.services.setup import (
 #: рядом с репозиторием, и `0644` означал бы, что рабочий доступ к трекеру читает любой
 #: процесс любого пользователя этой машины.
 SECRET_FILE_MODE = 0o600
+
+#: Сценарий, приводящий файл с секретом в согласие с установкой: `ensure_local_token`
+#: или `ensure_agent_token`.
+type EnsureToken = Callable[..., Awaitable[LocalToken]]
 
 
 async def _init(args: argparse.Namespace) -> int:
@@ -143,9 +153,19 @@ async def _local_token(args: argparse.Namespace) -> int:
     записи оставил бы в базе действующий секрет, которого никто не знает; при этом —
     мёртвый секрет в файле, который следующий запуск просто заменит.
     """
+    return await _keep_in_file(args, ensure_local_token)
+
+
+async def _agent_token(args: argparse.Namespace) -> int:
+    """Кладёт в файл действующий токен агента этой машины — тем же путём, что ключ интерфейса."""
+    return await _keep_in_file(args, ensure_agent_token)
+
+
+async def _keep_in_file(args: argparse.Namespace, ensure: EnsureToken) -> int:
+    """Сверяет файл `--output` с установкой и пишет туда секрет, если выпущен новый."""
     path = Path(args.output)
     async with session_scope() as session:
-        result = await ensure_local_token(
+        result = await ensure(
             session,
             known_secret=_read_secret(path),
             participant_name=args.participant,
@@ -321,6 +341,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Name for the issued token; a live token with the same name is revoked",
     )
     local.set_defaults(handler=_local_token)
+
+    agent = commands.add_parser(
+        "agent-token",
+        help="Keep a working main-scope token for this machine's agent in a file; never prints it",
+    )
+    agent.add_argument("--output", required=True, help="File to keep the secret in, mode 0600")
+    agent.add_argument(
+        "--participant",
+        default=DEFAULT_AGENT_NAME,
+        help="Agent participant to issue the token to; registered when missing",
+    )
+    agent.add_argument(
+        "--name",
+        default=DEFAULT_AGENT_TOKEN_NAME,
+        help="Name for the issued token; a live token with the same name is revoked",
+    )
+    agent.set_defaults(handler=_agent_token)
 
     demo = commands.add_parser(
         "demo",
