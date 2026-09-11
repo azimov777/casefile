@@ -86,3 +86,26 @@ class TokenIssued(TokenRead):
         examples=["trk_0oUCtWtA6d9v0j0N1cMBAxk2wKAKopWzvbf_wQ8sDLc"],
         description="Full token value, shown once and never stored in plain text",
     )
+
+
+class CurrentTokenRead(BaseModel):
+    """Токен, которым сделан запрос: чем узнать его в списке и что он открывает.
+
+    Не `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,
+    а список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там.
+    """
+
+    id: uuid.UUID = Field(
+        description=(
+            "Identifier of the token this request was made with, the same `id` that "
+            "`GET /api/v1/tokens` lists: this is how a client finds its own key there"
+        ),
+    )
+    scope: TokenScope = Field(
+        examples=[TokenScope.TASK],
+        description=(
+            "Scope of that token, the only right in the tracker: `task` opens the working "
+            "cycle, `main` adds writes to queues, participants and tokens. A write beyond "
+            "it answers `403 permission_denied`"
+        ),
+    )

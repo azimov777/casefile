@@ -33,16 +33,48 @@ export interface paths {
         };
         /**
          * Read the first screen
-         * @description Текущий участник, очереди установки и число открытых вопросов к нему.
+         * @description Текущий участник, его токен с набором, очереди установки и число вопросов к нему.
          *
          *     Ровно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки
-         *     задач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек.
+         *     задач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,
+         *     а сведения установки, одинаковые для любого токена, — `GET /api/v1/installation`.
+         *
+         *     `token` — тот токен, что стоит в заголовке: `id` из `GET /api/v1/tokens` и набор. По
+         *     набору интерфейс решает, открыта ли запись, по `id` узнаёт свой ключ в списке токенов.
          *
          *     У общего агентского токена участника нет: `participant` приходит `null`, а
          *     `open_questions` — ноль, потому что временного агента нельзя адресовать вопросом
          *     (`docs/CONCEPT.md`, 3.6). Очереди в этом случае отдаются те же самые.
          */
         get: operations["read_bootstrap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/installation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the installation
+         * @description Публичный адрес MCP, из которого интерфейс собирает конфигурацию клиента агента.
+         *
+         *     Открыт любому набору, в том числе `task`: секрета здесь нет, а экрану подключения
+         *     агента нужен именно ключ, который у интерфейса уже есть. Ответ одинаков для любого
+         *     токена и меняется только с настройкой установки (`TRACKER_MCP_PUBLIC_URL`), поэтому
+         *     клиент вправе держать его всю жизнь вкладки.
+         *
+         *     В первый экран (`GET /api/v1/bootstrap`) адрес не входит: он нужен одному экрану, а
+         *     не первому кадру (`docs/CONCEPT.md`, 5.1).
+         */
+        get: operations["read_installation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -913,6 +945,8 @@ export interface components {
         BootstrapRead: {
             /** @description Participant behind the token; null for a shared agent token, whose author is a temporary agent and has no registry entry */
             participant?: components["schemas"]["ParticipantRead"] | null;
+            /** @description The token this request was made with: its `id` and scope. Present for every token, a shared agent one included, where `participant` is null */
+            token: components["schemas"]["CurrentTokenRead"];
             /**
              * Queues
              * @description Queues of the installation, one page capped at the common page ceiling. An installation with more queues than that pages `GET /api/v1/queues`
@@ -991,6 +1025,26 @@ export interface components {
             data: components["schemas"]["TokenRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        /**
+         * CurrentTokenRead
+         * @description Токен, которым сделан запрос: чем узнать его в списке и что он открывает.
+         *
+         *     Не `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,
+         *     а список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там.
+         */
+        CurrentTokenRead: {
+            /**
+             * Id
+             * Format: uuid
+             * @description Identifier of the token this request was made with, the same `id` that `GET /api/v1/tokens` lists: this is how a client finds its own key there
+             */
+            id: string;
+            /**
+             * @description Scope of that token, the only right in the tracker: `task` opens the working cycle, `main` adds writes to queues, participants and tokens. A write beyond it answers `403 permission_denied`
+             * @example task
+             */
+            scope: components["schemas"]["TokenScope"];
+        };
         /** DataResponse[BootstrapRead] */
         DataResponse_BootstrapRead_: {
             data: components["schemas"]["BootstrapRead"];
@@ -998,6 +1052,10 @@ export interface components {
         /** DataResponse[EntryRead] */
         DataResponse_EntryRead_: {
             data: components["schemas"]["EntryRead"];
+        };
+        /** DataResponse[InstallationRead] */
+        DataResponse_InstallationRead_: {
+            data: components["schemas"]["InstallationRead"];
         };
         /** DataResponse[ParticipantRead] */
         DataResponse_ParticipantRead_: {
@@ -1213,6 +1271,18 @@ export interface components {
              * @constant
              */
             database: "ok";
+        };
+        /**
+         * InstallationRead
+         * @description Факты установки: одинаковы для любого запросившего и меняются только с её настройкой.
+         */
+        InstallationRead: {
+            /**
+             * Mcp Url
+             * @description Address an MCP client connects to, whole: scheme, host, port and path. Use it as is: it is set by the installation (`TRACKER_MCP_PUBLIC_URL`) and differs from the address of this API behind a proxy or on another machine. Unset, it is `http://localhost:<TRACKER_MCP_PORT><TRACKER_MCP_PATH>`, which is right for a client on the machine the installation runs on
+             * @example http://localhost:8100/mcp
+             */
+            mcp_url: string;
         };
         /**
          * LinkCreate
@@ -3144,6 +3214,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_BootstrapRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_installation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_InstallationRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

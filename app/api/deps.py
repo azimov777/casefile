@@ -8,6 +8,7 @@ from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.errors import UnauthorizedError, ValidationError
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_OFFSET, MIN_PAGE_SIZE
 from app.db.session import get_session, session_scope
@@ -77,6 +78,22 @@ async def get_actor(
 
 ActorDep = Annotated[Actor, Depends(get_actor)]
 """Автор запроса. Зависимость кешируется на запрос, поэтому лишнего похода в БД нет."""
+
+
+def get_app_settings(request: Request) -> Settings:
+    """Настройки приложения, которое обслуживает запрос.
+
+    Берутся у самого приложения (`app.state.settings`, их кладёт `create_app`), а не у
+    `get_settings()`: приложение, собранное с другими настройками — тестом или вторым
+    экземпляром, — обязано отвечать своими, а не настройками процесса. Иначе ответ
+    расходился бы с тем, чем то же приложение настроило CORS и режим отладки.
+    """
+    settings: Settings = request.app.state.settings
+    return settings
+
+
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+"""Настройки приложения, собравшего маршрут: те же, что получил `create_app`."""
 
 
 def get_session_factory() -> SessionFactory:

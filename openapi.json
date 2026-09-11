@@ -43,7 +43,7 @@
           "bootstrap"
         ],
         "summary": "Read the first screen",
-        "description": "Текущий участник, очереди установки и число открытых вопросов к нему.\n\nРовно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки\nзадач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек.\n\nУ общего агентского токена участника нет: `participant` приходит `null`, а\n`open_questions` — ноль, потому что временного агента нельзя адресовать вопросом\n(`docs/CONCEPT.md`, 3.6). Очереди в этом случае отдаются те же самые.",
+        "description": "Текущий участник, его токен с набором, очереди установки и число вопросов к нему.\n\nРовно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки\nзадач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,\nа сведения установки, одинаковые для любого токена, — `GET /api/v1/installation`.\n\n`token` — тот токен, что стоит в заголовке: `id` из `GET /api/v1/tokens` и набор. По\nнабору интерфейс решает, открыта ли запись, по `id` узнаёт свой ключ в списке токенов.\n\nУ общего агентского токена участника нет: `participant` приходит `null`, а\n`open_questions` — ноль, потому что временного агента нельзя адресовать вопросом\n(`docs/CONCEPT.md`, 3.6). Очереди в этом случае отдаются те же самые.",
         "operationId": "read_bootstrap",
         "security": [
           {
@@ -80,6 +80,116 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DataResponse_BootstrapRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/installation": {
+      "get": {
+        "tags": [
+          "installation"
+        ],
+        "summary": "Read the installation",
+        "description": "Публичный адрес MCP, из которого интерфейс собирает конфигурацию клиента агента.\n\nОткрыт любому набору, в том числе `task`: секрета здесь нет, а экрану подключения\nагента нужен именно ключ, который у интерфейса уже есть. Ответ одинаков для любого\nтокена и меняется только с настройкой установки (`TRACKER_MCP_PUBLIC_URL`), поэтому\nклиент вправе держать его всю жизнь вкладки.\n\nВ первый экран (`GET /api/v1/bootstrap`) адрес не входит: он нужен одному экрану, а\nне первому кадру (`docs/CONCEPT.md`, 5.1).",
+        "operationId": "read_installation",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_InstallationRead_"
                 }
               }
             }
@@ -5018,6 +5128,10 @@
             ],
             "description": "Participant behind the token; null for a shared agent token, whose author is a temporary agent and has no registry entry"
           },
+          "token": {
+            "$ref": "#/components/schemas/CurrentTokenRead",
+            "description": "The token this request was made with: its `id` and scope. Present for every token, a shared agent one included, where `participant` is null"
+          },
           "queues": {
             "items": {
               "$ref": "#/components/schemas/QueueRead"
@@ -5037,6 +5151,7 @@
         },
         "type": "object",
         "required": [
+          "token",
           "queues",
           "open_questions"
         ],
@@ -5228,6 +5343,30 @@
         ],
         "title": "CollectionResponse[TokenRead]"
       },
+      "CurrentTokenRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Identifier of the token this request was made with, the same `id` that `GET /api/v1/tokens` lists: this is how a client finds its own key there"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/TokenScope",
+            "description": "Scope of that token, the only right in the tracker: `task` opens the working cycle, `main` adds writes to queues, participants and tokens. A write beyond it answers `403 permission_denied`",
+            "examples": [
+              "task"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "scope"
+        ],
+        "title": "CurrentTokenRead",
+        "description": "Токен, которым сделан запрос: чем узнать его в списке и что он открывает.\n\nНе `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,\nа список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там."
+      },
       "DataResponse_BootstrapRead_": {
         "properties": {
           "data": {
@@ -5251,6 +5390,18 @@
           "data"
         ],
         "title": "DataResponse[EntryRead]"
+      },
+      "DataResponse_InstallationRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InstallationRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[InstallationRead]"
       },
       "DataResponse_ParticipantRead_": {
         "properties": {
@@ -5758,6 +5909,24 @@
         ],
         "title": "HealthResponse",
         "description": "Состояние сервиса. `database` подтверждается реальным запросом, а не наличием конфига."
+      },
+      "InstallationRead": {
+        "properties": {
+          "mcp_url": {
+            "type": "string",
+            "title": "Mcp Url",
+            "description": "Address an MCP client connects to, whole: scheme, host, port and path. Use it as is: it is set by the installation (`TRACKER_MCP_PUBLIC_URL`) and differs from the address of this API behind a proxy or on another machine. Unset, it is `http://localhost:<TRACKER_MCP_PORT><TRACKER_MCP_PATH>`, which is right for a client on the machine the installation runs on",
+            "examples": [
+              "http://localhost:8100/mcp"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "mcp_url"
+        ],
+        "title": "InstallationRead",
+        "description": "Факты установки: одинаковы для любого запросившего и меняются только с её настройкой."
       },
       "LinkCreate": {
         "properties": {

@@ -210,6 +210,25 @@ def test_the_mcp_port_reaches_the_process_and_not_only_the_publication() -> None
         assert all(MCP_PORT in line for line in health), health
 
 
+def test_the_public_mcp_address_reaches_the_api_by_the_shared_environment() -> None:
+    """Публичный адрес MCP объявлен окружением контура с пустым умолчанием.
+
+    Его читает не MCP, а API: оттуда адрес уезжает интерфейсу (`GET /api/v1/installation`).
+    Причина объявлять его в `x-app-environment` та же, что у порта выше: значение из
+    командной строки (`TRACKER_MCP_PUBLIC_URL=... docker compose -p ... up`) видит только
+    подстановка, а до процесса доезжает лишь объявленное. Пустое умолчание — «не задано»:
+    тогда адрес выводится из `TRACKER_MCP_PORT`, объявленного тем же блоком (TRK-65#9).
+    """
+    for contour, path in COMPOSE_FILES.items():
+        text = path.read_text(encoding="utf-8")
+        declared = [line.strip() for line in _block(text, APP_ENVIRONMENT)]
+
+        assert "TRACKER_MCP_PUBLIC_URL: ${TRACKER_MCP_PUBLIC_URL:-}" in declared, (
+            f"{contour}: публичный адрес MCP не объявлен окружением контура — адрес из "
+            f"командной строки не дойдёт до API"
+        )
+
+
 def _output_paths(body: list[str]) -> list[PurePosixPath]:
     """Файлы, которые команда сервиса называет ключом `--output`, — путями в контейнере.
 

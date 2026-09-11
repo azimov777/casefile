@@ -40,6 +40,10 @@ export function failure(
 const AUTHOR = { kind: 'tracker', signature: null } as const;
 const STAMPS = { created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' };
 
+/**
+ * Первый кадр. Токен сеанса по умолчанию набора `task`, у которого запись закрыта:
+ * тест, которому нужна запись, называет `main` явно через `overrides`.
+ */
 export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
   return {
     participant: {
@@ -50,6 +54,7 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
       created_by: AUTHOR,
       ...STAMPS,
     },
+    token: { id: '33333333-3333-3333-3333-333333333333', scope: 'task' },
     queues: [
       {
         id: '22222222-2222-2222-2222-222222222222',
