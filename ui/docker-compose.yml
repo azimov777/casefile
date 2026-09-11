@@ -20,10 +20,11 @@ x-backend: &backend
     TRACKER_DEBUG: 'true'
     TRACKER_DATABASE_URL: postgresql+asyncpg://tracker:tracker@db:5432/tracker
   volumes:
-    # Образ разработки бэкенда несёт только зависимости, код приезжает томом —
-    # так же, как в его собственном контуре.
+    # Образ разработки бэкенда несёт только зависимости в /opt/venv (TRK-66), код
+    # приезжает томом — так же, как в его собственном контуре. Внутрь этого тома
+    # больше ничего не монтируется: анонимный `/app/.venv` заводил пустой каталог
+    # на машине хозяина и был снят (UI-109) — прятать в нём давно нечего.
     - ..:/app
-    - /app/.venv
   depends_on:
     db:
       condition: service_healthy
@@ -115,7 +116,6 @@ services:
     command: python -m app.cli local-token --output .secrets/ui-token
     volumes:
       - ..:/app
-      - /app/.venv
       - ./.secrets:/app/.secrets
     profiles: ['tools']
 
