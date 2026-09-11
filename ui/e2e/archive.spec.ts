@@ -343,3 +343,26 @@ test('доступность таблицы и доски с переключа�
     expect(serious, path).toEqual([]);
   }
 });
+
+/**
+ * Отдельная проверка от предыдущей намеренно: там отбор по серьёзности остаётся —
+ * это старый замер, и ослаблять его нельзя, — а здесь порог снят целиком. `heading-order`
+ * (moderate) на доске в отбор `serious`/`critical` не попадал и оставался незамеченным до
+ * UI-99, хотя `axe` его исправно ловил на каждом прогоне архива (UI-97).
+ */
+test('доска и таблица не дают ни одного нарушения `axe`, включая некритичные', async ({ page }) => {
+  await silenceJournal(page);
+
+  for (const path of ['/tasks?queue=DEMO', '/tasks?queue=DEMO&view=board']) {
+    await page.goto(path);
+    await expect(page.locator('tbody tr, article').first()).toBeVisible();
+
+    const found = await new AxeBuilder({ page }).analyze();
+    const violations = found.violations.map(
+      (violation) =>
+        `${violation.id} (${violation.impact}): ${violation.nodes.map((node) => node.target).join(' ')}`,
+    );
+    report(`axe (все уровни) ${path}`, { нарушения: violations });
+    expect(violations, path).toEqual([]);
+  }
+});
