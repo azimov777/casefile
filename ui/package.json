@@ -8,7 +8,6 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "./scripts/up.sh",
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "preview": "vite preview",
