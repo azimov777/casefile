@@ -9,6 +9,7 @@ import {
   releaseWindowed,
   requestedTaskCount,
   resetDeferred,
+  settleRequested,
   subscribeWindowClosed,
 } from './deferred';
 
@@ -101,6 +102,16 @@ describe('три срока не смешиваются', () => {
 
     // А просьба человека забирает только табличное.
     expect(releaseRequested()).toEqual([TABLE]);
+    expect(requestedTaskCount()).toBe(0);
+  });
+
+  it('уборка забывает и забранное чтением: отказ чужого чтения не вернёт его в полосу', () => {
+    holdForRequest([TABLE], 'DEMO-1');
+    releaseRequested();
+    resetDeferred();
+
+    // Чтение, начатое в прошлом тесте, кончилось отказом уже в этом.
+    settleRequested(false);
     expect(requestedTaskCount()).toBe(0);
   });
 

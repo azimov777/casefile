@@ -106,7 +106,7 @@ describe('живой поток', () => {
     expect(await screen.findByText(say.ui('live.changed', { count: 2 }))).toBeInTheDocument();
   });
 
-  it('полоса уходит вместе с таблицей и возвращается с ней же', async () => {
+  it('полоса уходит вместе с таблицей, а вернувшаяся таблица перечитана и полосы не несёт', async () => {
     const user = userEvent.setup();
     renderApp('/tasks');
     await screen.findByText('DEMO-1');
@@ -124,9 +124,11 @@ describe('живой поток', () => {
 
     await user.click(screen.getByRole('link', { name: say.tasks('view.table') }));
 
-    // Накопленное живёт в модуле, а не в странице: таблица возвращается со своей
-    // полосой и своим числом.
-    expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
+    // На возврате таблица перечитала выдачу сама и уже показывает изменение из кадра:
+    // предлагать его показать значило бы врать про состояние экрана (UI-95). Прежде
+    // здесь ждали полосу «изменилась 1 задача» — это и был дефект, который UI-95 снял.
+    expect(await screen.findByText('done')).toBeInTheDocument();
+    expect(screen.queryByText(say.ui('live.changed', { count: 1 }))).not.toBeInTheDocument();
   });
 
   it('вопрос, адресованный мне, объявляется уведомлением со ссылкой на запись', async () => {
