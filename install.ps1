@@ -50,6 +50,13 @@ if ($LASTEXITCODE -ne 0) { Fail "Docker Compose v2 is required (the 'docker comp
 & docker info *> $null
 if ($LASTEXITCODE -ne 0) { Fail 'Docker is not running. Start Docker Desktop and run this again.' }
 
+# Docker Desktop может быть переключён в режим Windows-контейнеров: тогда образы Linux
+# не поднимутся, а человек увидит чужую ошибку пула вместо причины.
+$osType = (& docker info --format '{{.OSType}}' 2>$null | Out-String).Trim()
+if ($osType -eq 'windows') {
+    Fail 'Docker Desktop is set to Windows containers, but Casefile needs Linux containers. Switch to Linux containers (right-click the Docker Desktop tray icon and choose "Switch to Linux containers...") and run this again.'
+}
+
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 Set-Location $Dir
 

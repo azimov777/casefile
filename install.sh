@@ -61,6 +61,15 @@ main() {
   docker info </dev/null >/dev/null 2>&1 ||
     fail "Docker is not running. Start Docker Desktop (or the docker service) and run this again."
 
+  # Docker Desktop может быть переключён в режим Windows-контейнеров: тогда образы
+  # Linux не поднимутся, а человек увидит чужую ошибку пула вместо причины. `|| true`
+  # не даёт `set -e` остановить скрипт, если старый Docker не понимает `--format`.
+  os_type=$(docker info --format '{{.OSType}}' </dev/null 2>/dev/null || true)
+  case "$os_type" in
+    windows)
+      fail "Docker Desktop is set to Windows containers, but Casefile needs Linux containers. Switch to Linux containers (right-click the Docker Desktop tray icon and choose \"Switch to Linux containers...\") and run this again." ;;
+  esac
+
   mkdir -p "$DIR"
   cd "$DIR"
 
