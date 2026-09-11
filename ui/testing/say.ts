@@ -20,6 +20,7 @@ export const say = {
   tasks: i18n.getFixedT(null, 'tasks'),
   task: i18n.getFixedT(null, 'task'),
   case: i18n.getFixedT(null, 'case'),
+  connect: i18n.getFixedT(null, 'connect'),
   questions: i18n.getFixedT(null, 'questions'),
   errors: i18n.getFixedT(null, 'errors'),
 };

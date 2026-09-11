@@ -56,7 +56,10 @@ describe('словари языков', () => {
     // пример на языке запросов бэкенда, подстановка кода ошибки, приписка к заголовку
     // разбора и знак вопроса вместо неизвестного числа — знаки и подстановки,
     // без единого слова. И имя продукта: Casefile — название, а не слово, и буква
-    // значка идёт за ним.
+    // значка идёт за ним. Так же и чужие продукты с форматами у фрагментов подключения
+    // (UI-105): Claude Code и Codex — названия клиентов, `JSON mcpServers` — имя формата
+    // конфигурации, URL и JSON — имена форматов, и подпись поля «URL» в приложении Codex
+    // на русском та же.
     const sameOnPurpose = new Set([
       'ui.app.name',
       'ui.app.mark',
@@ -66,6 +69,12 @@ describe('словари языков', () => {
       'tasks.board.unknown',
       'ui.error.withCode',
       'ui.entry.headline.resolutionOutcome',
+      'ui.snippets.clients.claudeCode',
+      'ui.snippets.clients.codex',
+      'ui.snippets.clients.json',
+      'ui.snippets.addressCaption',
+      'ui.snippets.codexField.url',
+      'ui.snippets.jsonCaption',
     ]);
 
     /*

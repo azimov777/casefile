@@ -44,6 +44,8 @@ export const ui = {
     allTasks: 'Все задачи',
     mine: 'Мне',
     inbox: 'Входящая',
+    installation: 'Установка',
+    connect: 'Подключить агента',
     openQuestions_zero: 'Открытых вопросов нет',
     openQuestions_one: '{{count, number}} открытый вопрос',
     openQuestions_few: '{{count, number}} открытых вопроса',
@@ -80,6 +82,14 @@ export const ui = {
   },
   receipt: {
     close: 'Закрыть',
+  },
+  copyBlock: {
+    action: 'Копировать',
+    copied: 'Скопировано',
+    label: 'Копировать: {{label}}',
+    copiedLabel: 'Скопировано: {{label}}',
+    done: '{{label}} — в буфере обмена',
+    failed: 'Браузер не дал доступа к буферу обмена: выделите текст и скопируйте его вручную.',
   },
 
   /** Представление задачи: строка списка, карточка доски, знаки и навигация. */
@@ -234,5 +244,45 @@ export const ui = {
     retrySafe: 'Повторная отправка не заведёт второе замечание: ключ повтора у попытки тот же.',
     receiptLabel: 'Замечание к {{key}} подшито',
     receiptHeadline: 'Замечание подшито',
+  },
+
+  /** Фрагменты подключения агента к MCP (`features/connect-agent`). */
+  snippets: {
+    clients: {
+      any: 'Любой клиент MCP',
+      claudeCode: 'Claude Code',
+      codex: 'Codex',
+      json: 'JSON mcpServers',
+    },
+    labelHint:
+      'Общий агентский токен никого не называет, поэтому каждый запрос с ним несёт заголовок <code>{{header}}</code> — подпись временного агента в записях дела. Замените <code>{{placeholder}}</code> меткой латиницей в snake_case, например <code>nightly_agent</code>.',
+    anyHint:
+      'Транспорт — streamable HTTP. Адрес задаёт установка, заголовки идут с каждым запросом.',
+    addressLabel: 'Адрес MCP',
+    addressCaption: 'URL',
+    headersLabel: 'Заголовки запроса',
+    headersCaption: 'Заголовки HTTP',
+    claudeHint:
+      'Регистрирует сервер <code>{{server}}</code> для всех ваших проектов (<code>--scope user</code>). Работающая сессия новый сервер сама не подхватит: <code>/mcp</code> или перезапуск. Подключился ли он, покажет <code>claude mcp list</code>.',
+    claudeLabel: 'Команда Claude Code',
+    terminalCaption: 'Терминал',
+    codexHint:
+      'Токен идёт через переменную окружения <code>{{env}}</code>, и секрет не ложится в файл конфигурации. Codex читает переменную из своего окружения: задайте её там, откуда Codex запускается, а приложение Codex после смены перезапустите.',
+    codexFileLabel: 'Секция конфигурации Codex',
+    codexEnvLabel: 'Переменная с токеном для Codex',
+    codexEnvCaption: 'Терминал, до запуска Codex',
+    codexFormHint:
+      'Или те же значения формой в приложении Codex (MCP-серверы в настройках, сервер Streamable HTTP):',
+    // Подписи полей — как их показывает приложение Codex на русском (снимок владельца
+    // из контекста UI-105); ключ файла стоит рядом, по нему поле и сверяется.
+    codexField: {
+      url: 'URL',
+      bearer_token_env_var: 'Переменная окружения токена Bearer',
+      http_headers: 'Заголовки',
+    },
+    jsonHint:
+      'Форма файла <code>.mcp.json</code> Claude Code. У Cursor те же <code>url</code> и <code>headers</code>; Windsurf, Gemini CLI и VS Code называют поля иначе — сверьтесь с документацией своего клиента.',
+    jsonLabel: 'Конфигурация mcpServers',
+    jsonCaption: 'JSON',
   },
 } as const;

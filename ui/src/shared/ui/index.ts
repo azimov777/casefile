@@ -3,6 +3,7 @@ export { Button } from './button';
 export { Callout } from './callout';
 export { Input } from './input';
 export { Composer } from './composer';
+export { CopyBlock } from './copy-block';
 export { Markdown } from './markdown';
 export {
   Pagination,

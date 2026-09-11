@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
-import { Inbox } from 'lucide-react';
+import { Inbox, Plug } from 'lucide-react';
 import { bootstrapQueryOptions, useInstallKey } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
@@ -82,19 +82,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
           {t('app.mine')}
         </p>
 
-        <NavLink
-          to="/questions"
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2 rounded-control px-2 py-1 text-meta no-underline',
-              'transition-colors duration-(--motion-fast) ease-fast',
-              isActive
-                ? 'bg-accent-soft font-semibold text-accent'
-                : 'text-muted hover:bg-sunken hover:text-text',
-            )
-          }
-        >
+        <NavLink to="/questions" onClick={onNavigate} className={sectionLink}>
           <Inbox className="size-(--ui-mark) shrink-0" aria-hidden="true" />
           {t('app.inbox')}
           {/*
@@ -117,6 +105,20 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
               <span aria-hidden="true">{bootstrap.data.open_questions}</span>
             </span>
           )}
+        </NavLink>
+
+        {/*
+         * Установка — отдельная группа, а не ещё один пункт «Мне»: подключение агента
+         * касается установки целиком, а не работы человека в очередях. Пункт — переход
+         * к инструкции, данных он не меняет.
+         */}
+        <p className="mt-3 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">
+          {t('app.installation')}
+        </p>
+
+        <NavLink to="/connect" onClick={onNavigate} className={sectionLink}>
+          <Plug className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+          {t('app.connect')}
         </NavLink>
       </nav>
 
@@ -146,6 +148,20 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Пункт раздела со своим адресом — входящая, подключение агента. Текущий раздел
+ * `NavLink` помечает `aria-current="page"` сам, заливка идёт следом за ним.
+ */
+function sectionLink({ isActive }: { isActive: boolean }): string {
+  return cn(
+    'flex items-center gap-2 rounded-control px-2 py-1 text-meta no-underline',
+    'transition-colors duration-(--motion-fast) ease-fast',
+    isActive
+      ? 'bg-accent-soft font-semibold text-accent'
+      : 'text-muted hover:bg-sunken hover:text-text',
   );
 }
 
