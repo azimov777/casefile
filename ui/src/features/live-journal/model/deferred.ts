@@ -15,6 +15,11 @@ import type { QueryKey } from '@tanstack/react-query';
  *
  * Все три выражены одной структурой и одними функциями: механизмы рядом разошлись бы
  * при первой же правке, и один из них перестал бы считать то, что копит другой.
+ *
+ * Срок «до просьбы» кончается не нажатием, а **началом чтения таблицы** — кто бы его
+ * ни вызвал: приход на экран, смена отбора, «Показать» (UI-95). Началось чтение —
+ * накопленное забирает оно, и полоса перестаёт его предлагать; кончилось чтение —
+ * забранное забывается, если ответ лёг, и возвращается в полосу, если нет.
  */
 interface Held {
   keys: QueryKey[];
@@ -51,6 +56,22 @@ function empty(): Held {
 
 const held: Record<Slot, Held> = { hidden: empty(), request: empty(), window: empty() };
 
+/**
+ * Накопленное для таблицы, которое забрало начавшееся чтение таблицы (UI-95).
+ *
+ * Не четвёртый срок, а продолжение второго. Полоса его не считает: запрос ушёл после
+ * этих кадров, и сервер прочитал выдачу уже с ними. Но и не забывает сразу: чтение
+ * может не дойти, и тогда показанные строки этих кадров не содержат — выбросить их
+ * значило бы оставить устаревшую строку без полосы.
+ *
+ * Граница — **начало** чтения, а не ответ. Кадр, пришедший, пока запрос в пути, сюда
+ * не попадает и остаётся в полосе, даже если ответ его всё же принёс: сервер мог
+ * прочитать выдачу раньше, чем запись подшита, и снимать такой кадр по ответу значит
+ * однажды его потерять. Ошибиться граница может только в одну сторону — предложить
+ * показать то, что уже пришло, — и это стоит одного лишнего запроса по нажатию.
+ */
+let taken: Held = empty();
+
 /** Заведённое окно склейки. `null` означает «окна нет — следующий кадр его заведёт». */
 let windowTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -66,6 +87,17 @@ function hold(slot: Slot, keys: QueryKey[], taskKey: string | null): void {
   held[slot].keys.push(...keys);
   if (taskKey === null) held[slot].vague = true;
   else held[slot].tasks.add(taskKey);
+}
+
+function isEmpty(slot: Held): boolean {
+  return slot.keys.length === 0 && !slot.vague;
+}
+
+/** Слить одно накопленное в другое: задачи объединением, «неизвестно что» — любым из двух. */
+function merge(into: Held, from: Held): void {
+  into.keys.push(...from.keys);
+  for (const task of from.tasks) into.tasks.add(task);
+  if (from.vague) into.vague = true;
 }
 
 /**
@@ -86,7 +118,7 @@ function unique(keys: QueryKey[]): QueryKey[] {
 
 function release(slot: Slot): QueryKey[] {
   const from = held[slot];
-  const wasEmpty = from.keys.length === 0 && !from.vague;
+  const wasEmpty = isEmpty(from);
   held[slot] = empty();
   if (!wasEmpty) notify();
   return unique(from.keys);
@@ -131,9 +163,34 @@ export function releaseHidden(): QueryKey[] {
   return release('hidden');
 }
 
-/** Забрать накопленное для таблицы: человек попросил показать новое. */
+/**
+ * Началось чтение таблицы: накопленное для неё забирает это чтение.
+ *
+ * Полоса после этого молчит о забранном, но оно ждёт исхода (`settleRequested`), а
+ * не выбрасывается. Повторный вызов в том же чтении ничего не забирает — забирать
+ * нечего, — поэтому нажатие «Показать» и само начало чтения, которое оно вызывает,
+ * не спорят друг с другом.
+ */
 export function releaseRequested(): QueryKey[] {
-  return release('request');
+  const from = held.request;
+  if (isEmpty(from)) return [];
+  held.request = empty();
+  merge(taken, from);
+  notify();
+  return unique(from.keys);
+}
+
+/**
+ * Чтение таблицы кончилось. Ответ лёг (`landed`) — забранное забывается: в показанных
+ * строках оно уже есть. Не лёг — возвращается в полосу вместе со всем, что пришло
+ * за время чтения: строки на экране остались прежними.
+ */
+export function settleRequested(landed: boolean): void {
+  const from = taken;
+  taken = empty();
+  if (landed || isEmpty(from)) return;
+  merge(held.request, from);
+  notify();
 }
 
 /** Забрать накопленное за окно склейки: окно закрылось. */
@@ -178,6 +235,7 @@ export function resetDeferred(): void {
   held.hidden = empty();
   held.request = empty();
   held.window = empty();
+  taken = empty();
   if (windowTimer !== null) clearTimeout(windowTimer);
   windowTimer = null;
   notify();
