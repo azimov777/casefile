@@ -293,6 +293,178 @@ test('закрытое уведомление не дёргает ни сосе�
   await expect(stack(page).locator('article')).toHaveCount(2);
 });
 
+/** Числа замера — в отчёт прогона: по ним пишется вердикт, а не по зелёной строке. */
+function report(type: string, numbers: unknown): void {
+  const description = JSON.stringify(numbers);
+  test.info().annotations.push({ type, description });
+  console.log(`[${type}] ${description}`);
+}
+
+/** Кадр места карточки в стопке: его высота и где низ места и низ прослойки в нём. */
+interface PlaceFrame {
+  /** Миллисекунды от начала наблюдения. */
+  at: number;
+  /** Высота места `data-notice="place"`. */
+  height: number;
+  /** Низ места. */
+  place: number;
+  /** Низ прослойки `min-h-0` — того, что несёт карточку внутри места. */
+  layer: number;
+}
+
+interface PlaceWatch {
+  /** Движение места в первом кадре, где место есть: идёт ли прямо сейчас и чем. */
+  motion: { running: boolean; property: string } | null;
+  frames: PlaceFrame[];
+  timedOut: boolean;
+}
+
+/**
+ * Снимает место карточки по кадрам — изнутри браузера, по той же причине, что и
+ * соседний сценарий: снаружи 120 мс ухода кончаются раньше первого замера.
+ *
+ * Приход (`leave: false`): наблюдение ставится до кадра потока с вопросом, и кадр шлёт
+ * сам браузер; кончается, когда место доехало и три кадра простояло. Уход
+ * (`leave: true`): карточку закрывает сам браузер; наблюдение кончается, когда узел
+ * снят и три кадра его нет.
+ */
+async function watchPlace(
+  page: Page,
+  question: { no: number; title: string },
+  leave: boolean,
+): Promise<PlaceWatch> {
+  return page.evaluate(
+    ({ question: asked, leave: leaving }) =>
+      new Promise<PlaceWatch>((resolve, reject) => {
+        const find = () =>
+          Array.from(document.querySelectorAll<HTMLElement>('[data-notice="place"]')).find(
+            (node) => node.textContent?.includes(asked.title) === true,
+          );
+        let place = leaving ? find() : undefined;
+        if (leaving && place === undefined) {
+          reject(new Error('закрываемой карточки на странице нет'));
+          return;
+        }
+
+        const started = performance.now();
+        const record: PlaceWatch = { motion: null, frames: [], timedOut: false };
+        let calm = 0;
+
+        const tick = () => {
+          place ??= find();
+          if (place?.isConnected === true) {
+            // Что движение идёт прямо сейчас, видно по живой анимации на самом месте,
+            // а не на карточке внутри него: у карточки движение своё.
+            record.motion ??= {
+              running: place.getAnimations().length > 0,
+              property: getComputedStyle(place).transitionProperty,
+            };
+            const box = place.getBoundingClientRect();
+            const layer = place.firstElementChild?.getBoundingClientRect();
+            if (layer === undefined) {
+              reject(new Error('у места карточки нет прослойки'));
+              return;
+            }
+            record.frames.push({
+              at: Math.round(performance.now() - started),
+              height: box.height,
+              place: box.bottom,
+              layer: layer.bottom,
+            });
+          }
+
+          const resting = leaving
+            ? place?.isConnected !== true
+            : place !== undefined && place.getAnimations().length === 0;
+          calm = resting ? calm + 1 : 0;
+          if (calm >= 3 || performance.now() - started > 10_000) {
+            record.timedOut = calm < 3;
+            resolve(record);
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+
+        if (leaving) {
+          place?.querySelector<HTMLElement>('button[aria-label^="Закрыть уведомление"]')?.click();
+        } else {
+          (window as unknown as { ask: (sent: { no: number; title: string }) => void }).ask(asked);
+        }
+        requestAnimationFrame(tick);
+      }),
+    { question, leave },
+  );
+}
+
+/**
+ * Карточка держится нижнего края своего места на всём ходу, а не только в покое
+ * (UI-110). Chrome считает долю `fr` у места дважды: высоту месту — по содержимому,
+ * а строку — ещё раз, от этой высоты. Строка выходит короче места, и без `content-end`
+ * стоит у его верха: посреди хода карточка всплывала бы над низом места на f(1−f) своей
+ * высоты и съезжала обратно. Прячется это за собственным движением карточки, а соседний
+ * сценарий мерит соседей по стопке и дело под ней — поэтому мерится сама прослойка.
+ */
+test('карточка стоит у нижнего края своего места на всём приходе и уходе', async ({ page }) => {
+  await fakeJournal(page);
+  await page.goto('/tasks/DEMO-1/case');
+  await expect(page.locator('article[data-type]').first()).toBeVisible();
+  await fontsReady(page);
+  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+  // Кадр, пришедший раньше участника, уведомления не даст: «спросили ли меня»
+  // сверяется с именем из `bootstrap`, а он приезжает после первой отрисовки.
+  await shellReady(page);
+
+  // Карточки две: и приход, и уход идут в стопке с соседом, как у человека.
+  const first = { no: 61, title: 'Вопрос 61, который закроют' };
+  const second = { no: 62, title: 'Вопрос 62, который придёт к уже висящему' };
+  await ask(page, first.no, first.title);
+  await expect(stack(page).locator('article')).toHaveCount(1);
+  await motionSettled(page);
+
+  const arrival = await watchPlace(page, second, false);
+  await expect(stack(page).locator('article')).toHaveCount(2);
+  await motionSettled(page);
+  const departure = await watchPlace(page, first, true);
+  await expect(stack(page).locator('article')).toHaveCount(1);
+
+  const watches = [
+    ['приход', arrival],
+    ['уход', departure],
+  ] as const;
+  // Числа обоих ходов — в отчёт до первого ожидания: упавший приход не прячет ухода.
+  for (const [name, watch] of watches) {
+    report(`UI-110 ${name}`, {
+      frames: watch.frames.length,
+      at: watch.frames.map((frame) => frame.at),
+      height: watch.frames.map((frame) => Math.round(frame.height * 10) / 10),
+      gap: watch.frames.map((frame) => Math.round((frame.place - frame.layer) * 10) / 10),
+    });
+  }
+
+  for (const [name, watch] of watches) {
+    const heights = watch.frames.map((frame) => frame.height);
+    const gaps = watch.frames.map((frame) => frame.place - frame.layer);
+
+    expect(watch.timedOut, `${name}: место не доехало или не снялось`).toBe(false);
+    // Место ехало, и ехало прямо сейчас: без этого проверка ниже была бы пустой.
+    expect(watch.motion?.running, name).toBe(true);
+    expect(watch.motion?.property, name).toBe('grid-template-rows');
+    const low = Math.min(...heights);
+    const high = Math.max(...heights);
+    expect(
+      heights.some((height) => height > low && height < high),
+      `${name}: ни одного кадра посреди хода`,
+    ).toBe(true);
+
+    // На каждом кадре низ прослойки — это низ места: карточка не всплывает над ним.
+    // Числа одного источника (`getBoundingClientRect`), поэтому сравниваются точно.
+    expect(
+      Math.max(...gaps.map((gap) => Math.abs(gap))),
+      `${name}: низ карточки ушёл от низа места, ${JSON.stringify(gaps)}`,
+    ).toBe(0);
+  }
+});
+
 test('человек просит не двигать интерфейс — уведомление перестаёт ехать', async ({ page }) => {
   await fakeJournal(page);
   await page.goto('/tasks?queue=DEMO');
