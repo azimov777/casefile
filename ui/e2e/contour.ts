@@ -226,3 +226,33 @@ export async function shownKeys(
 ): Promise<string[]> {
   return [...(await tasksByStatus(request, {}, options)).values()].flat();
 }
+
+/**
+ * Ждёт покоя движения на узле — не первого `finished`, а раунда, после которого
+ * работающих анимаций не осталось (`UI-102`).
+ *
+ * `Promise.all(node.getAnimations({ subtree: true }).map((a) => a.finished))` падает
+ * там, где под неподвижным указателем едет что-то с переходом по наведению: элемент
+ * проезжает под указателем, наведение начинается и снимается тем же кадром, отменённый
+ * переход отклоняет `finished` `AbortError`, и `Promise.all` роняет всё ожидание —
+ * законную гонку, а не дефект интерфейса. Отмена к тому же чаще всего запускает
+ * встречный переход тем же кадром (цвет едет назад), и его тоже нужно дождаться —
+ * поэтому одного `allSettled` мало, нужен раунд за раундом, пока список работающих
+ * анимаций не станет пуст. Потолок раундов не проверка, а сторож самого ожидания:
+ * настоящий бесконечный цикл (не эта гонка, а сломанное движение) должен упасть
+ * с понятной причиной, а не висеть до общего таймаута сценария.
+ */
+export async function motionSettled(node: Locator): Promise<void> {
+  await node.evaluate(async (element) => {
+    const ROUNDS = 20;
+    for (let round = 0; round < ROUNDS; round += 1) {
+      const animations = element.getAnimations({ subtree: true });
+      await Promise.allSettled(animations.map((animation) => animation.finished));
+      const stillRunning = element
+        .getAnimations({ subtree: true })
+        .some((animation) => animation.playState === 'running');
+      if (!stillRunning) return;
+    }
+    throw new Error(`движение на узле не улеглось за ${ROUNDS} раундов ожидания`);
+  });
+}

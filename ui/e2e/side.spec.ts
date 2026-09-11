@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { curve, ms, readFrame, signedInByHand, silenceJournal } from './contour';
+import { curve, motionSettled, ms, readFrame, signedInByHand, silenceJournal } from './contour';
 
 /** Боковая панель на широком экране; на узком та же панель живёт в шторке. */
 function side(page: Page) {
@@ -290,10 +290,13 @@ test.describe('узкий экран', () => {
     await expect(sheet).toBeVisible();
 
     // Замер контраста снимается в покое: `axe`, попавший в середину появления, поймал бы
-    // собственную рассинхронизацию, а не дефект интерфейса (`UI-59#4`).
-    await sheet.evaluate((node) =>
-      Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
-    );
+    // собственную рассинхронизацию, а не дефект интерфейса (`UI-59#4`). Указатель мыши
+    // остался там, где нажали «Показать разделы», и кнопка закрытия (`right-2` шторки)
+    // проезжает под ним, пока шторка едет слева: наведение начинается и снимается тем же
+    // кадром, отменённый переход отклоняет `finished` `AbortError` — законная гонка теста,
+    // а не дефект интерфейса. `motionSettled` дожидается и встречного перехода, который
+    // отмена запускает тем же кадром, а не только первого `finished` (`UI-102`).
+    await motionSettled(sheet);
 
     const result = await new AxeBuilder({ page }).analyze();
     const serious = result.violations
