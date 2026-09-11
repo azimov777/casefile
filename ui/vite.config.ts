@@ -20,16 +20,44 @@ function installConfig(token: string): Plugin {
   return {
     name: 'tracker-install-config',
     configureServer(server) {
-      server.middlewares.use('/config.json', (_request, response) => {
-        response.setHeader('Content-Type', 'application/json');
-        response.setHeader('Cache-Control', 'no-store');
-        if (token === '') {
-          response.statusCode = 404;
-          response.end('{}');
-          return;
-        }
-        response.end(JSON.stringify({ token }));
-      });
+      // Две ловушки промежуточного слоя Vite, обе про порядок навешивания (UI-107).
+      //
+      // 1) Возвращённая функция — не побочный эффект самого хука: Vite вызывает такие
+      // функции уже после того, как навесил собственные внутренние промежуточные
+      // обработчики, в том числе проверку Host (`server.allowedHosts`). Прежде здесь стоял
+      // вызов `server.middlewares.use` прямо в теле хука, и тогда обработчик вставал в
+      // цепочку РАНЬШЕ проверки Host — дев-сервер отдавал ключ установки любому заголовку
+      // Host, хотя сам Vite её уже умеет. Возврат функции чинит порядок, не трогая сам
+      // список разрешённых хостов: петля и `*.localhost` разрешены умолчанием Vite, дальше
+      // добавлять нечего.
+      //
+      // 2) Пост-хук встаёт и позже `htmlFallbackMiddleware` — запасного пути
+      // одностраничного приложения, который переписывает `req.url` в `/index.html`, если
+      // заголовок `Accept` не сузил запрос до `application/json` (пусто, `*/*` и
+      // `text/html` — все переписываются: это и есть браузерный `fetch` без явного
+      // `Accept`). Обработчик, подключённый через `server.middlewares.use('/config.json',
+      // ...)`, сверяет именно переписанный `req.url` и на обычный запрос браузера уже не
+      // срабатывает — дев-сервер вместо ключа отдавал разметку `index.html`. `req.originalUrl`
+      // запасной путь не трогает: connect выставляет его раз, при разборе запроса, до
+      // любых middleware, — поэтому путь берём из него, а сам обработчик остаётся не
+      // привязан к `server.middlewares.use(path, ...)` и решает сам, свой ли это запрос.
+      return () => {
+        server.middlewares.use((request, response, next) => {
+          const path = (request.originalUrl ?? request.url ?? '').split('?')[0];
+          if (path !== '/config.json') {
+            next();
+            return;
+          }
+          response.setHeader('Content-Type', 'application/json');
+          response.setHeader('Cache-Control', 'no-store');
+          if (token === '') {
+            response.statusCode = 404;
+            response.end('{}');
+            return;
+          }
+          response.end(JSON.stringify({ token }));
+        });
+      };
     },
   };
 }
