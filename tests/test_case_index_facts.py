@@ -31,8 +31,6 @@ from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
 
-pytestmark = pytest.mark.anyio
-
 #: Сколько байт на строку описи считается дешёвым. Проверяется не ради красоты числа:
 #: опись входит в каждый пакет задачи, и строка, выросшая в разы, означает, что в неё
 #: просочилось что-то свободное по длине.

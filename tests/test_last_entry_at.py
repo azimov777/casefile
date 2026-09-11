@@ -25,8 +25,6 @@ from app.services import search as service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 
-pytestmark = pytest.mark.anyio
-
 
 async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) -> Task:
     return await tasks_service.create_task(

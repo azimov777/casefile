@@ -36,8 +36,6 @@ from app.services.tasks import TaskChanges
 
 JOURNAL = "/api/v1/journal"
 
-pytestmark = pytest.mark.anyio
-
 
 async def tail(client: AsyncClient, after: int) -> list[dict]:
     """Хвост ленты после названного номера — так её читает интерфейс."""
