@@ -22,6 +22,7 @@ from fastapi.routing import APIRoute
 from app.api.deps import get_actor, reject_unknown_query_params
 from app.api.routes import (
     bootstrap,
+    installation,
     journal,
     links,
     participants,
@@ -70,6 +71,7 @@ api_router = APIRouter(
 )
 
 api_router.include_router(bootstrap.router)
+api_router.include_router(installation.router)
 api_router.include_router(participants.router)
 api_router.include_router(tokens.router)
 api_router.include_router(queues.router)

@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, PostgresDsn, field_validator
+from pydantic import Field, HttpUrl, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -90,6 +90,22 @@ class Settings(BaseSettings):
         default="/mcp",
         description="Path of the streamable HTTP endpoint the MCP client connects to",
     )
+    # Три поля выше — привязка процесса: где MCP слушает внутри контейнера. Это поле —
+    # адрес снаружи, по которому к нему подключается клиент; из него интерфейс собирает
+    # конфигурацию агента (`GET /api/v1/installation`). Совпадают они только у локальной
+    # установки, поэтому умолчание выводится из привязки (`effective_mcp_public_url`), а
+    # за прокси, на другой машине или с TLS владелец задаёт адрес целиком. По заголовкам
+    # запроса адрес не угадывается намеренно: запрос пришёл на адрес интерфейса, а не
+    # MCP, и заголовки пишет клиент (`docs/CONCEPT.md`, 5.1; решение TRK-65#9).
+    mcp_public_url: HttpUrl | None = Field(
+        default=None,
+        description=(
+            "Address MCP clients connect to from outside, reported to the interface by "
+            "`GET /api/v1/installation`. Unset or empty means the local default "
+            "`http://localhost:<mcp_port><mcp_path>`; set it when clients reach MCP by "
+            "another scheme, host, port or path: a proxy, TLS, another machine"
+        ),
+    )
     mcp_page_size: int = Field(
         default=25,
         ge=1,
@@ -125,6 +141,46 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.startswith("["):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("mcp_public_url", mode="before")
+    @classmethod
+    def _unset_public_url(cls, value: object) -> object:
+        """Пустая строка значит «не задано», а не «неверный адрес».
+
+        Compose передаёт переменную всегда — подстановкой `${TRACKER_MCP_PUBLIC_URL:-}` в
+        `x-app-environment`, — и у установки, где её никто не задавал, она приезжает
+        пустой. Без этого шага такой контур не поднялся бы вовсе: пустая строка не URL.
+        Общий `env_ignore_empty=True` вместо него не годится: он поменял бы смысл пустого
+        значения у соседей — `TRACKER_CORS_ORIGINS=` значит пустой список, а не умолчание.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("mcp_public_url")
+    @classmethod
+    def _public_url_without_credentials(cls, value: HttpUrl | None) -> HttpUrl | None:
+        """Адрес с `user:password@` отклоняется: он уезжает каждому держателю ключа.
+
+        Интерфейс показывает адрес любым ключом, даже набора `task`, и вкладывает его в
+        каждый фрагмент конфигурации клиента. Пароль в адресе стал бы общим для всех,
+        кто видит интерфейс; авторизация MCP идёт заголовком, а не адресом.
+        """
+        if value is not None and (value.username or value.password):
+            raise ValueError("must not carry credentials: every token holder sees this address")
+        return value
+
+    @property
+    def effective_mcp_public_url(self) -> str:
+        """Адрес MCP для клиента снаружи: заданный целиком или локальный по привязке.
+
+        Умолчание — `localhost` на порту и пути самого процесса: оба контура публикуют
+        MCP на тот же порт хоста (`TRACKER_MCP_PORT` стоит по обе стороны проброса), так
+        что для клиента на этой же машине адрес верен. Сдвинули порт — сдвинулся и адрес.
+        """
+        if self.mcp_public_url is not None:
+            return str(self.mcp_public_url)
+        return f"http://localhost:{self.mcp_port}{self.mcp_path}"
 
     @property
     def effective_test_database_url(self) -> str:

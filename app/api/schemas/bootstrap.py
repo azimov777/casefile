@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.api.schemas.participants import ParticipantRead
 from app.api.schemas.queues import QueueRead
+from app.api.schemas.tokens import CurrentTokenRead
 
 
 class BootstrapRead(BaseModel):
@@ -14,6 +15,12 @@ class BootstrapRead(BaseModel):
         description=(
             "Participant behind the token; null for a shared agent token, whose author "
             "is a temporary agent and has no registry entry"
+        ),
+    )
+    token: CurrentTokenRead = Field(
+        description=(
+            "The token this request was made with: its `id` and scope. Present for every "
+            "token, a shared agent one included, where `participant` is null"
         ),
     )
     queues: list[QueueRead] = Field(
