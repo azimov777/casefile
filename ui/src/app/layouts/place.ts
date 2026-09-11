@@ -1,7 +1,7 @@
 import { queueOfKey } from '@/shared/lib';
 
 /** Раздел, в котором человек находится. Совпадает с таблицей экранов `CONCEPT.md`, 3. */
-export type Section = 'tasks' | 'task' | 'case' | 'questions' | 'other';
+export type Section = 'tasks' | 'task' | 'case' | 'questions' | 'connect' | 'other';
 
 export interface Place {
   section: Section;
@@ -25,6 +25,10 @@ export interface Place {
 export function readPlace(pathname: string, params: URLSearchParams): Place {
   if (pathname === '/questions') {
     return { section: 'questions', queue: null, taskKey: null };
+  }
+
+  if (pathname === '/connect') {
+    return { section: 'connect', queue: null, taskKey: null };
   }
 
   if (pathname === '/tasks') {

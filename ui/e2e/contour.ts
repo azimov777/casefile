@@ -40,6 +40,18 @@ export function readE2eToken(): string {
 }
 
 /**
+ * Файл с ключом набора `task` для запасного пути — входа на `/login`. Выпускается
+ * отдельно от ключа установки (`e2e/global-setup.ts`): набор ключа установки задаёт
+ * установка, и с TRK-69 он станет `main`, а сценарию, проверяющему экран ключом `task`,
+ * нужен именно `task` — названный явно, а не доставшийся от соседа.
+ */
+export const TASK_TOKEN_FILE = resolve(SECRETS_DIR, 'task-token');
+
+export function readTaskToken(): string {
+  return readFileSync(TASK_TOKEN_FILE, 'utf8').trim();
+}
+
+/**
  * Установка, которая ключа не выдаёт: `/config.json` отвечает так, как отвечает образ,
  * которому ключа не дали.
  *

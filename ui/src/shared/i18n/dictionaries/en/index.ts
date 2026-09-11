@@ -1,4 +1,5 @@
 import { caseScreen } from './case';
+import { connect } from './connect';
 import { errors } from './errors';
 import { login } from './login';
 import { questions } from './questions';
@@ -12,10 +13,11 @@ import { ui } from './ui';
  * в каждом месте, где его звали.
  *
  * Новое пространство имён добавляется двумя строками — импортом и полем; их набор
- * задан программой UI-76: `login`, `tasks`, `task`, `case`, `questions`, `errors`, `ui`.
+ * задан программой UI-76: `login`, `tasks`, `task`, `case`, `questions`, `errors`, `ui`;
+ * `connect` добавила UI-105.
  *
  * Пространство `case` названо в файле `caseScreen`: `case` — ключевое слово, и
  * переменной с таким именем не бывает. Имя пространства при этом `case` — оно живёт
  * ключом объекта, а не именем переменной.
  */
-export const en = { case: caseScreen, errors, login, questions, task, tasks, ui } as const;
+export const en = { case: caseScreen, connect, errors, login, questions, task, tasks, ui } as const;

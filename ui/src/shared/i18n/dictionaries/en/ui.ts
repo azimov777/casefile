@@ -51,6 +51,10 @@ export const ui = {
     allTasks: 'All tasks',
     mine: 'Mine',
     inbox: 'Inbox',
+    // Группа панели про саму установку, а не про работу в очередях: подключение
+    // агента стоит здесь, следом за ним встанут «Доступы» (UI-106).
+    installation: 'Installation',
+    connect: 'Connect an agent',
     openQuestions_zero: 'No open questions',
     openQuestions_one: '{{count, number}} open question',
     openQuestions_other: '{{count, number}} open questions',
@@ -85,6 +89,20 @@ export const ui = {
   },
   receipt: {
     close: 'Close',
+  },
+
+  /**
+   * Текст для копирования (`shared/ui`, `CopyBlock`). Имя кнопки содержит её видимую
+   * подпись целиком: голосовое управление находит кнопку по тому, что на ней написано.
+   */
+  copyBlock: {
+    action: 'Copy',
+    copied: 'Copied',
+    label: 'Copy: {{label}}',
+    copiedLabel: 'Copied: {{label}}',
+    done: '{{label}} is in the clipboard',
+    failed:
+      'The browser did not give access to the clipboard: select the text and copy it by hand.',
   },
 
   /** Представление задачи: строка списка, карточка доски, знаки и навигация. */
@@ -240,5 +258,52 @@ export const ui = {
       'Sending it again will not file a second remark: the attempt keeps the same idempotency key.',
     receiptLabel: 'The remark on {{key}} is filed',
     receiptHeadline: 'Remark filed',
+  },
+
+  /**
+   * Фрагменты подключения агента к MCP (`features/connect-agent`): их показывают два
+   * экрана — «Подключить агента» и «Доступы», поэтому подписи живут здесь, а не в
+   * пространстве одного из них.
+   *
+   * Имена из кода — заголовок метки, подстановки, имя сервера, переменная окружения —
+   * приходят значениями (`{{header}}`, `{{placeholder}}`, `{{server}}`, `{{env}}`) из
+   * констант среза: перевод их не повторяет, и расходиться имени во фразе с именем во
+   * фрагменте негде. Названия клиентов — имена продуктов и не переводятся.
+   */
+  snippets: {
+    clients: {
+      any: 'Any MCP client',
+      claudeCode: 'Claude Code',
+      codex: 'Codex',
+      json: 'JSON mcpServers',
+    },
+    labelHint:
+      'A shared agent token names nobody, so every request with it carries the <code>{{header}}</code> header: the signature of a temporary agent in case entries. Replace <code>{{placeholder}}</code> with a label in latin snake_case, for example <code>nightly_agent</code>.',
+    anyHint:
+      'Transport: streamable HTTP. The address is set by the installation; the headers go with every request.',
+    addressLabel: 'MCP address',
+    addressCaption: 'URL',
+    headersLabel: 'Request headers',
+    headersCaption: 'HTTP headers',
+    claudeHint:
+      'Registers the <code>{{server}}</code> server for all your projects (<code>--scope user</code>). A running session does not pick up a new server by itself: run <code>/mcp</code> or restart it. <code>claude mcp list</code> shows whether it is connected.',
+    claudeLabel: 'Claude Code command',
+    terminalCaption: 'Terminal',
+    codexHint:
+      'The token goes through the <code>{{env}}</code> environment variable, so the secret does not land in the configuration file. Codex reads the variable from its own environment: set it where Codex is started from, and restart the Codex app after changing it.',
+    codexFileLabel: 'Codex configuration section',
+    codexEnvLabel: 'Codex token variable',
+    codexEnvCaption: 'Terminal, before starting Codex',
+    codexFormHint:
+      'Or the same values in the form of the Codex app (MCP servers in the settings, a Streamable HTTP server):',
+    codexField: {
+      url: 'URL',
+      bearer_token_env_var: 'Bearer token environment variable',
+      http_headers: 'Headers',
+    },
+    jsonHint:
+      'The shape of the Claude Code <code>.mcp.json</code> file. Cursor reads <code>url</code> and <code>headers</code> under the same names; Windsurf, Gemini CLI and VS Code name the fields differently — check the documentation of your client.',
+    jsonLabel: 'mcpServers configuration',
+    jsonCaption: 'JSON',
   },
 } as const;

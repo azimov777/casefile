@@ -1,4 +1,5 @@
 import { caseScreen } from './case';
+import { connect } from './connect';
 import { errors } from './errors';
 import { login } from './login';
 import { questions } from './questions';
@@ -7,4 +8,4 @@ import { tasks } from './tasks';
 import { ui } from './ui';
 
 /** Русский словарь: набор ключей обязан совпадать с английским (`dictionaries.test.ts`). */
-export const ru = { case: caseScreen, errors, login, questions, task, tasks, ui } as const;
+export const ru = { case: caseScreen, connect, errors, login, questions, task, tasks, ui } as const;
