@@ -218,10 +218,7 @@ test.describe('дело длиннее страницы', () => {
       await page.goto(address);
       await expect(page.getByRole('main')).toBeVisible();
       const found = await new AxeBuilder({ page }).analyze();
-      const serious = found.violations
-        .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-        .map((violation) => violation.id);
-      expect(serious, address).toEqual([]);
+      expect(found.violations, address).toEqual([]);
     }
   });
 });

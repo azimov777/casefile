@@ -143,11 +143,7 @@ test('страницы списка листаются рядом номеров
    * и глухая, которой некуда вести.
    */
   const found = await new AxeBuilder({ page }).analyze();
-  const serious = found.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-
-  expect(serious).toEqual([]);
+  expect(found.violations).toEqual([]);
 });
 
 /** Столько записей помещается на страницу ленты дела (`entities/entry`, `ENTRY_PAGE_SIZE`). */

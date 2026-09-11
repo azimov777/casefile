@@ -299,9 +299,6 @@ test.describe('узкий экран', () => {
     await motionSettled(sheet);
 
     const result = await new AxeBuilder({ page }).analyze();
-    const serious = result.violations
-      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-      .map((violation) => violation.id);
-    expect(serious).toEqual([]);
+    expect(result.violations).toEqual([]);
   });
 });

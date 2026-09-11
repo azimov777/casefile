@@ -7,10 +7,7 @@ test('доступность входящей', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Входящая' })).toBeVisible();
 
   const result = await new AxeBuilder({ page }).analyze();
-  const serious = result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-  expect(serious).toEqual([]);
+  expect(result.violations).toEqual([]);
 });
 
 test('входящая показывает адресованный вопрос и отбирает блокирующие', async ({ page }) => {

@@ -254,10 +254,7 @@ test('доступность доски', async ({ page }) => {
   await expect(column(page, 'open')).toBeVisible();
 
   const result = await new AxeBuilder({ page }).analyze();
-  const serious = result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-  expect(serious).toEqual([]);
+  expect(result.violations).toEqual([]);
 });
 
 test('столбцы одной ширины при любом сочетании свёрнутых и развёрнутых', async ({ page }) => {
@@ -651,10 +648,7 @@ test('прилипшая шапка не просвечивает карточк
   // `axe` смотрит на доску в том же прокрученном состоянии: контраст прилипшей шапки
   // он считает сам и по нарисованному.
   const result = await new AxeBuilder({ page }).analyze();
-  const serious = result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-  expect(serious).toEqual([]);
+  expect(result.violations).toEqual([]);
 });
 
 test('кнопка прилипшей шапки работает с глубины прокрутки: мышью и клавиатурой', async ({
@@ -1046,10 +1040,7 @@ test('прижатая шапка не просвечивает карточка
   expect(measured.background, report).toBe(measured.column);
 
   const result = await new AxeBuilder({ page }).analyze();
-  const serious = result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-  expect(serious).toEqual([]);
+  expect(result.violations).toEqual([]);
 });
 
 /**
@@ -1344,10 +1335,7 @@ test('знак края читается в своей теме и не съед
 
   // `axe` смотрит на доску со знаком: он декоративный и в дереве доступности его нет.
   const result = await new AxeBuilder({ page }).analyze();
-  const serious = result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => violation.id);
-  expect(serious).toEqual([]);
+  expect(result.violations).toEqual([]);
 });
 
 test('знак края не добавляет остановок Tab: до первой карточки их столько же, сколько без него', async ({
