@@ -775,11 +775,37 @@ test('при прокрутке ряда вбок заголовок едет в
 const NARROW_WINDOW = { width: 320, height: 320 };
 
 /**
+ * Ждёт, пока каждый столбец доски получит ответ на свой первый запрос.
+ *
+ * Высоту ряда задаёт самый длинный столбец (`items-stretch`), а с ней и то, куда
+ * странице есть ехать. Столбцы читают каждый своим запросом, и первая карточка одного
+ * из них не значит, что прочитана доска: под нагрузкой ответы расходятся на сотню
+ * миллисекунд, и `open` бывает нарисован, пока длинные столбцы ещё в пути (UI-113).
+ * Число в заголовке столбца приходит вместе с его ответом, а до него там «0 из ?», —
+ * поэтому ждётся число в конце заголовка, у каждого столбца.
+ */
+async function boardRead(page: Page): Promise<void> {
+  for (const status of contractStatuses()) {
+    await expect(
+      column(page, status).getByRole('button'),
+      `столбец ${status} не дождался ответа`,
+    ).toHaveText(/\d$/);
+  }
+}
+
+/**
  * Уводит страницу вглубь доски — туда, где до UI-94 заголовки уезжали за верх окна
  * вместе со своими столбцами. Глубина — сколько даёт страница, но не больше, чем
  * заголовку есть куда ехать внутри своего столбца. Отдаёт эту глубину.
+ *
+ * Сколько даёт страница, знает только прочитанная доска (`boardRead`). Недочитанная
+ * отдавала отрицательную глубину: страница уезжала до своего тогдашнего дна, не доходя
+ * до верха доски, прокрутка совпадала с заказанной, а заголовки оставались посреди окна
+ * на верху своих столбцов — и падение читалось как «прижим не сработал» (UI-113).
+ * Поэтому глубина здесь же и проверяется.
  */
 async function sinkBoard(page: Page): Promise<number> {
+  await boardRead(page);
   const room = await page.evaluate(() => {
     const first = document.querySelector('section[aria-label="backlog"]') as HTMLElement;
     const board = (first.parentElement as HTMLElement).parentElement as HTMLElement;
@@ -788,8 +814,14 @@ async function sinkBoard(page: Page): Promise<number> {
     const max = document.documentElement.scrollHeight - document.documentElement.clientHeight;
     const deeper = Math.min(max - top, Math.round(first.getBoundingClientRect().height - 2 * head));
     window.scrollTo(0, top + deeper);
-    return { asked: top + deeper, deeper };
+    return { asked: top + deeper, deeper, top, max };
   });
+  // Меньше высоты заголовка — не глубина: заголовок уехал бы за край наполовину,
+  // и сценарий этого не отличил бы.
+  expect(
+    room.deeper,
+    `странице некуда уехать вглубь доски: ${JSON.stringify(room)}`,
+  ).toBeGreaterThanOrEqual(40);
   await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(room.asked);
   return room.deeper;
 }
@@ -851,9 +883,6 @@ test('ниже точки остановки заголовок прижат к 
   await fontsReady(page);
 
   const deeper = await sinkBoard(page);
-  // Меньше высоты заголовка — не глубина: заголовок уехал бы за край наполовину,
-  // и сценарий этого не отличил бы.
-  expect(deeper, 'странице некуда уехать вглубь доски').toBeGreaterThanOrEqual(40);
 
   const how = await column(page, status).evaluate((node) => {
     const style = getComputedStyle(node.querySelector('h2') as Element);
