@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { AccessPage } from '@/pages/access';
 import { CasePage } from '@/pages/case';
 import { ConnectPage } from '@/pages/connect';
 import { LoginPage } from '@/pages/login';
@@ -24,6 +25,7 @@ export const routes: RouteObject[] = [
           { index: true, element: <Navigate to="/tasks" replace /> },
           { path: 'questions', element: <QuestionsPage /> },
           { path: 'connect', element: <ConnectPage /> },
+          { path: 'access', element: <AccessPage /> },
           { path: 'tasks', element: <TasksPage /> },
           { path: 'tasks/:key', element: <TaskPage /> },
           { path: 'tasks/:key/case', element: <CasePage /> },

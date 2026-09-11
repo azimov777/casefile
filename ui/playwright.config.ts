@@ -44,13 +44,13 @@ export default defineConfig({
     {
       name: 'светлая',
       testIgnore:
-        /(answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
       testIgnore:
-        /(answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
     },
     {
@@ -79,7 +79,7 @@ export default defineConfig({
     {
       name: 'запись',
       testMatch:
-        /(answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|live|live-board|live-list|paging|layout|task-list-screen|remark)\.spec\.ts/,
       // По одному пишущему сценарию за раз: они меняют одну и ту же демо-установку,
       // и параллельно каждый видел бы следы соседа.
       fullyParallel: false,

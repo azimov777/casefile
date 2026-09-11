@@ -162,6 +162,7 @@ interface Crumb {
 function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
   if (place.section === 'questions') return [{ label: t('app.inbox') }];
   if (place.section === 'connect') return [{ label: t('app.connect') }];
+  if (place.section === 'access') return [{ label: t('app.access') }];
 
   const queue: Crumb =
     place.queue === null
