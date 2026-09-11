@@ -1,12 +1,30 @@
 # Образ для разработки: код монтируется томом, поэтому внутрь копируется только
 # описание зависимостей. Правка исходника подхватывается автоперезапуском uvicorn
 # и не требует пересборки образа.
+
+# uv ставит зависимости из lock-файла и сам же его обновляет (сервис `lock` в
+# `docker-compose.yml`). Отдельной стадией, а не `COPY --from=<образ>`: бот обновлений
+# читает только строки FROM, и версия внутри `COPY --from` осталась бы без обновлений
+# (`.github/dependabot.yml`).
+FROM ghcr.io/astral-sh/uv:0.12.13 AS uv
+
 FROM python:3.14-slim
 
+# Окружение лежит в `/opt/venv`, вне `/app`: `/app` в контуре занят смонтированным
+# репозиторием, и всё, что образ положил бы туда, под томом исчезло бы. Сам проект в
+# окружение не ставится: код приезжает томом и находится по `PYTHONPATH` — так же, как
+# в прод-образе. `VIRTUAL_ENV` называет окружение командам `uv pip` (`uv pip freeze`);
+# системный `pip` образа принадлежит другому Python, и его `pip freeze` о зависимостях
+# не расскажет ничего.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PYTHONPATH=/app \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_COMPILE_BYTECODE=1 \
+    UV_NO_CACHE=1
 
 # curl нужен проверке здоровья контейнера, build-essential — сборке колёс,
 # для которых нет готовых под эту версию Python.
@@ -14,14 +32,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=uv /uv /usr/local/bin/uv
+
 WORKDIR /app
 
-# Зависимости ставятся отдельным слоем, до появления кода: правка исходника
-# не должна тянуть переустановку пакетов. Слой пересобирается только при
-# изменении pyproject.toml.
-COPY pyproject.toml ./
-RUN mkdir -p app && touch app/__init__.py \
-    && pip install --no-cache-dir -e ".[dev]"
+# Зависимости ставятся отдельным слоем, до появления кода: правка исходника не должна
+# тянуть переустановку пакетов. Версии — строго из `uv.lock`: `--locked` валит сборку,
+# если lock-файл разошёлся с `pyproject.toml`, вместо того чтобы молча разрешить
+# зависимости заново и поставить то, что свежее на момент сборки.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-install-project --extra dev
 
 EXPOSE 8000
 

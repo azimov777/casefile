@@ -660,6 +660,8 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 | Один тест | `docker compose run --rm test pytest tests/test_health.py -k health` |
 | Линтер и форматтер | `docker compose run --rm lint` |
 | Отформатировать код | `docker compose run --rm --entrypoint ruff lint format .` |
+| Свести `uv.lock` с правкой `pyproject.toml` | `docker compose run --rm lock` |
+| Обновить зависимости до свежих версий | `docker compose run --rm lock --upgrade` |
 | Слить ветку задачи в `main` | `scripts/merge-task-branch.sh task/TRK-45 -m "merge(область): что изменилось (TRK-45)"` |
 | Консоль в контейнере | `docker compose run --rm --entrypoint bash api` |
 | Остановить | `docker compose down` (с данными: `docker compose down -v`) |
@@ -674,10 +676,12 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 «Start Docker Desktop when you sign in to your computer».
 
 Правка исходника подхватывается автоматически: код смонтирован в контейнер, uvicorn
-перезапускается сам. Пересборка образа нужна только после изменения `pyproject.toml`:
+перезапускается сам. Пересборка образа нужна только после изменения `uv.lock` — раздел
+«Зависимости» ниже; `up -d` следом переводит на новый образ поднятые службы:
 
 ```bash
 docker compose build api
+docker compose up -d
 ```
 
 ### Миграции
@@ -705,6 +709,45 @@ docker compose run --rm migrate
 `docker compose run --rm test` поднимает БД, создаёт базу `tracker_test`, накатывает на неё
 миграции и прогоняет весь набор. Каждый тест идёт внутри транзакции, которая откатывается
 после него, поэтому порядок тестов не влияет на результат.
+
+### Зависимости
+
+Версии зависимостей бэкенда закрепляет `uv.lock` в корне репозитория. В `pyproject.toml`
+стоят только нижние границы — с какой версии проект работает, — а оба образа и конвейер
+ставят ровно записанное в lock-файле (`uv sync --locked`, `docker/Dockerfile.dev` и
+`docker/Dockerfile.prod`). Сборка без кэша на любой машине получает те же версии, пока их
+не обновили намеренно. Lock-файл, разошедшийся с `pyproject.toml`, валит сборку образа:
+
+```
+error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+hint: To update the lockfile, run `uv lock`.
+```
+
+uv на хосте не нужен: команда из подсказки — это сервис `lock`, и всё, что написано после
+имени сервиса, уходит аргументами в `uv lock`. Базы он не поднимает.
+
+Добавить или поменять зависимость — правка `pyproject.toml` нижней границей и lock-файл
+тем же коммитом:
+
+```bash
+docker compose run --rm lock      # свести uv.lock с правкой pyproject.toml
+docker compose build api          # образ с новым набором
+docker compose run --rm test
+```
+
+Обновить зависимости — отдельный шаг с прогоном набора, отдельным коммитом
+`build(deps): …`. Меняется только `uv.lock`:
+
+```bash
+docker compose run --rm lock --upgrade                   # все до свежих версий
+docker compose run --rm lock --upgrade-package fastapi   # или одну
+docker compose build api
+docker compose run --rm lint && docker compose run --rm test
+```
+
+Красный набор после обновления — это находка, а не помеха: либо код догоняет библиотеку,
+либо lock-файл возвращается (`git checkout uv.lock`) и причина становится задачей.
 
 ### Слияние ветки задачи
 
@@ -768,7 +811,7 @@ docker compose -f docker-compose.prod.yml run --rm --no-deps api \
 | Образ | собирается из `docker/Dockerfile.dev` | готовый из ghcr.io, `docker/Dockerfile.prod`, многостадийный |
 | Код | смонтирован томом | в образе |
 | Обновление кода | `--reload` при правке | новый образ на старте Docker |
-| Зависимости | рантайм + dev | только рантайм |
+| Зависимости | рантайм + dev, из `uv.lock` | только рантайм, из того же `uv.lock` |
 | Пользователь | root | непривилегированный `tracker` |
 | Ключи интерфейса и агента | файлы в `.secrets/`, владелец возвращается хозяину | именованные тома |
 | Разовые шаги | руками, `docker compose run --rm …` | сами, на каждом подъёме |
@@ -831,7 +874,8 @@ scripts/        команды, которым нужен хост: слияни
 
 Фоновых процессов нет: автоматики в трекере нет, а лента читается прямо из таблицы
 записей. Постоянно работают три сервиса Compose — БД, HTTP-сервер и MCP-сервер;
-остальные (`migrate`, `init`, `local-token`, `demo`, `schema`, `test`, `lint`) спрятаны
+остальные (`migrate`, `init`, `local-token`, `agent-token`, `demo`, `schema`, `test`,
+`lint`, `lock`) спрятаны
 за профилем `tools`, запускаются точечно через `run --rm` и завершаются.
 
 В каждой папке лежит `AGENTS.md` с картой её содержимого.

@@ -44,7 +44,7 @@ x-app-service: &app-service
     #
     # Точка монтирования здесь ровно одна, и второй быть не должно. Рядом стоял анонимный
     # том `- /app/.venv`, прятавший виртуальное окружение хоста. Прятать ему нечего:
-    # зависимости живут в системном окружении образа (`docker/Dockerfile.dev`), каталога
+    # зависимости живут в окружении образа `/opt/venv` (`docker/Dockerfile.dev`), каталога
     # `/app/.venv` внутри контейнера не читает никто, а окружение хоста в путь импорта не
     # попадает — Python подхватывает `.venv` только тем, что из него запущен. Цена же у
     # тома настоящая: чтобы смонтировать том в `/app/.venv`, Docker обязан иметь там
@@ -243,6 +243,24 @@ services:
   lint:
     <<: *app-service
     command: sh -c "ruff check . && ruff format --check ."
+    restart: "no"
+    profiles: ["tools"]
+
+  # Lock-файл зависимостей `uv.lock`: `uv lock` над смонтированным репозиторием, базы не
+  # нужно. Всё, что написано после имени сервиса, уходит аргументами в `uv lock`, поэтому
+  # команда объявлена `entrypoint`, а не `command` — `command` заменился бы целиком:
+  #   docker compose run --rm lock              # свести lock-файл с правкой pyproject.toml
+  #   docker compose run --rm lock --upgrade    # поднять все зависимости до свежих версий
+  # Владелец возвращается той же строкой и по той же причине, что у `schema`: имеющийся
+  # файл uv переписывает на месте, а заново созданный достался бы root.
+  lock:
+    <<: *app-service
+    entrypoint:
+      - sh
+      - -c
+      - uv lock "$$@" && chown $$(stat -c %u:%g /app) uv.lock
+      - lock
+    depends_on: []
     restart: "no"
     profiles: ["tools"]
 
