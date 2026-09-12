@@ -301,9 +301,14 @@ def test_every_concept_field_has_a_spec() -> None:
 
 
 def test_a_sort_key_is_not_automatically_a_filter_field() -> None:
-    """`key` и `updated_at` сортируют, но не фильтруют — и это решение, а не пропуск."""
-    assert search_field_spec("key") is None
+    """`updated_at` сортирует, но не фильтрует — и это решение, а не пропуск.
+
+    Функций дат в языке нет, и обещать отбор по времени обновления значило бы обещать
+    их. Ключ задачи с TRK-76 стоит в обоих наборах, и это тоже решение: по нему и
+    спрашивают про названные дела, и упорядочивают выдачу.
+    """
     assert search_field_spec("updated_at") is None
+    assert search_field_spec("key") is not None
     assert {SortKey.KEY.value, SortKey.UPDATED_AT.value} <= set(sortable_names())
 
 
@@ -315,10 +320,13 @@ def test_the_names_in_both_sets_are_those_you_both_filter_and_order_by() -> None
     """Пересечение словарей отбора и порядка — не случайность, а список по существу.
 
     Приоритет и время последней записи это то, по чему одинаково осмысленно и отбирать
-    («что горит», «что шевелилось за сутки»), и сортировать. Остальные имена живут
-    только в одном словаре, и держать их в обоих было бы обещанием, которого нет.
+    («что горит», «что шевелилось за сутки»), и сортировать. Ключ задачи — то, чем
+    сессия называет свои дела в отборе и чем задаётся естественный порядок списка.
+    Остальные имена живут только в одном словаре, и держать их в обоих было бы
+    обещанием, которого нет.
     """
     assert set(searchable_names()) & set(sortable_names()) == {
+        SearchField.KEY.value,
         SearchField.PRIORITY.value,
         SearchField.LAST_ENTRY_AT.value,
     }

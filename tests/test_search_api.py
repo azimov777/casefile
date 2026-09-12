@@ -246,8 +246,8 @@ async def test_every_declared_parameter_still_passes(
     `limit`, `cursor`): сторож сверяет имена с деревом зависимостей маршрута, и параметр,
     приехавший из вложенного `Depends()`, легко оказался бы вне этого дерева.
     """
-    del board
     everything: dict[str, Any] = {
+        "key": [board["plain"].key],
         "queue": ["TRK"],
         "parent": ["empty()"],
         "status": ["open", "backlog"],
@@ -318,6 +318,38 @@ async def test_a_repeated_parameter_accepts_any_of_the_values(
     found = await listed_keys(auth_client, status=["open", "backlog"], queue="TRK")
 
     assert set(found) == {task.key for task in board.values()}
+
+
+async def test_several_named_tasks_are_listed_by_key(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Ключ задачи — такой же параметр отбора, как остальные, и на обоих входах один.
+
+    Ради этого поле и появилось: ведущий несколько дел спрашивает про них одним
+    запросом, а не тянет очередь по статусу и не отбирает глазами.
+    """
+    first = board["plain"].key
+    second = board["asking"].key
+
+    by_parameter = await listed_keys(auth_client, key=[first, second])
+    by_query = await listed_keys(auth_client, query=f"key: in {first}, {second}")
+
+    assert by_parameter == sorted([first, second])
+    assert by_query == by_parameter
+
+
+async def test_an_unknown_key_in_the_filter_is_refused_and_named(
+    auth_client: AsyncClient, board: dict[str, Task]
+) -> None:
+    """Пустая страница на опечатку читалась бы как ответ «по этим задачам ничего»."""
+    del board
+    response = await auth_client.get("/api/v1/tasks", params={"key": ["TRK-9999"]})
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "search_value_invalid"
+    assert error["details"]["field"] == "key"
+    assert error["details"]["reason"] == "task_not_found"
 
 
 async def test_the_empty_marker_travels_through_a_structural_parameter(

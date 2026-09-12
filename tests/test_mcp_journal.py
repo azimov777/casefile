@@ -35,6 +35,7 @@ from app.db.repositories import EntryRepository
 from app.db.session import asyncpg_dsn, transaction
 from app.db.wakeup import journal_wakeup
 from app.domain.authors import TRACKER
+from app.domain.journal import MAX_TASK_KEYS
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskField
 from app.domain.tokens import TokenScope
@@ -43,8 +44,9 @@ from app.mcp.runtime import Runtime
 from app.mcp.server import create_server
 from app.services import case as case_service
 from app.services import participants as participants_service
+from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
-from app.services.auth import TRACKER_ACTOR
+from app.services.auth import TRACKER_ACTOR, Actor
 from conftest import Connect, call, connect_mcp, refuse
 
 #: Сколько ждёт тест, которому ждать нечего. Меньше контрольного опроса — иначе он
@@ -93,12 +95,64 @@ async def test_asking_for_a_longer_wait_than_allowed_is_refused(
 async def test_the_wait_reads_the_tail_it_already_has(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
-    """Хвост, который уже есть, отдаётся сразу: ожидание начинается с чтения."""
+    """Хвост, который уже есть, отдаётся сразу: ожидание начинается с чтения.
+
+    Здесь же проверено, что прежняя форма вызова — `task` одной строкой — работает без
+    изменений после того, как аргумент научился списку.
+    """
     async with mcp_session(task_secret) as session:
         page = await call(session, "wait_journal", after=0, task=task.key)
 
     assert [item["type"] for item in page["items"]] == ["created"]
     assert page["items"][0]["task_key"] == task.key
+
+
+async def test_the_wait_takes_several_task_keys_at_once(
+    mcp_session: Connect,
+    task_secret: str,
+    task: Task,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Сессия, ведущая несколько дел, называет их списком и ждёт по всем разом."""
+    second = await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        queue=queue,
+        title="Второе дело сессии",
+        description="Нужно, чтобы список ключей было чем провалить",
+    )
+    third = await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        queue=queue,
+        title="Задача, про которую не спрашивали",
+        description="Записи этой задачи в выдачу попасть не должны",
+    )
+    keys = [task.key, second.key]
+    outsider = third.key
+
+    async with mcp_session(task_secret) as session:
+        page = await call(session, "wait_journal", after=0, task=keys)
+
+    assert {item["task_key"] for item in page["items"]} == set(keys)
+    assert outsider not in {item["task_key"] for item in page["items"]}
+
+
+async def test_more_task_keys_than_the_ceiling_are_refused(
+    mcp_session: Connect, task_secret: str
+) -> None:
+    """Потолок ключей — отказ с числом, а не молча усечённый список."""
+    async with mcp_session(task_secret) as session:
+        failure = await refuse(
+            session,
+            "wait_journal",
+            task=[f"TRK-{number}" for number in range(MAX_TASK_KEYS + 1)],
+        )
+
+    assert "journal_too_many_tasks" in failure
+    assert str(MAX_TASK_KEYS) in failure
 
 
 # --- Пробуждение оповещением ----------------------------------------------------------

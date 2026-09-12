@@ -410,6 +410,49 @@ async def test_search_tasks_understands_the_query_language_and_the_arguments_ali
     assert open_task.key in [item["key"] for item in empty_assignee["items"]]
 
 
+async def test_search_tasks_asks_about_the_tasks_the_session_names(
+    mcp_session: Connect,
+    task_secret: str,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+    task: Task,
+) -> None:
+    """Ключи списком: сессия называет свои дела и получает их состояние одним вызовом.
+
+    И строка, и аргумент отвечают одинаково: у одного вопроса не бывает двух ответов в
+    зависимости от того, как его задали. Третья задача в той же очереди нужна, чтобы
+    отбор было чем провалить: без неё выдача «все задачи» совпала бы с названной парой.
+    """
+    second = await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        queue=queue,
+        title="Второе дело сессии",
+        description="Есть",
+    )
+    outsider = await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        queue=queue,
+        title="Задача, про которую не спрашивали",
+        description="Есть",
+    )
+    keys = sorted([task.key, second.key])
+    alien = outsider.key
+    async with mcp_session(task_secret) as session:
+        by_argument = await call(session, "search_tasks", key=keys, fields=["key"])
+        by_query = await call(
+            session, "search_tasks", query=f"key: in {keys[0]}, {keys[1]}", fields=["key"]
+        )
+        missing = await refuse(session, "search_tasks", key=["TRK-9999"])
+
+    assert sorted(item["key"] for item in by_argument["items"]) == keys
+    assert alien not in [item["key"] for item in by_argument["items"]]
+    assert by_query == by_argument
+    assert "search_value_invalid" in missing
+
+
 async def test_search_tasks_returns_the_same_rows_as_rest(
     mcp_session: Connect,
     auth_client: AsyncClient,
@@ -1542,7 +1585,7 @@ async def test_every_search_field_is_reachable_from_the_tool_itself(
     for name in searchable_names():
         assert f"`{name}`" in described, f"поле {name} не названо в описании языка"
 
-    for name in ("queue", "parent", "status", "assignee", "priority", "text"):
+    for name in ("key", "queue", "parent", "status", "assignee", "priority", "text"):
         assert name in arguments, f"поле {name} не выражается структурным параметром"
 
 

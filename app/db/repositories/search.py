@@ -266,7 +266,7 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
         case SearchValueKind.QUEUE_KEY:
             return _scalar(Task.queue_id, term.operator, term.values)
         case SearchValueKind.TASK_KEY:
-            return _parent(term.operator, term.values)
+            return _task_key(term)
         case SearchValueKind.STATUS:
             return _scalar(Task.status, term.operator, term.values)
         case SearchValueKind.ASSIGNEE:
@@ -293,10 +293,11 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
     match term.kind:
         case SearchValueKind.ASSIGNEE:
             return Task.assignee.is_(None)
-        case SearchValueKind.TASK_KEY:
+        case SearchValueKind.TASK_KEY if term.field is SearchField.PARENT:
             # «Родителя нет» — верхний уровень очереди: ни одной связи `parent`, где
             # эта задача была бы ребёнком. Колонки под родителя нет, и `IS NULL` тут
-            # не о чем спросить.
+            # не о чем спросить. Условие на поле, а не на вид значения: ключ самой
+            # задачи того же вида, но пустого состояния у него не бывает.
             return not_(_has_parent())
         case SearchValueKind.TIMESTAMP:
             # «В дело ещё ничего не подшивали»: учтённых записей нет, подзапрос пуст.
@@ -323,6 +324,28 @@ def _has_parent(source_id: Any = None) -> ColumnElement[bool]:
     if source_id is not None:
         conditions.append(Link.source_id == source_id)
     return select(Link.id).where(*conditions).correlate(Task).exists()
+
+
+def _task_key(term: SearchTerm) -> ColumnElement[bool]:
+    """Значение-ключ задачи: чей он, решает поле.
+
+    Вид значения у `parent` и `key` один — оба разрешаются в идентификатор задачи одним
+    и тем же путём сценария, — а условия разные: родитель живёт связью, ключ самой
+    задачи колонкой. Тот же приём, что у счётчиков (`_counted`): вид значения отвечает
+    за проверку, поле — за то, куда условие ложится.
+    """
+    match term.field:
+        case SearchField.PARENT:
+            return _parent(term.operator, term.values)
+        case SearchField.KEY:
+            # Сравнение идёт по `id`, а не по строке ключа: ключ уже разрешён в задачу
+            # сценарием, и второе сравнение — по тексту, с оглядкой на регистр — было бы
+            # вторым толкованием одного значения.
+            return _scalar(Task.id, term.operator, term.values)
+        case _:
+            # Недостижимо: вид `task_key` носят только эти два поля. Явная ошибка вместо
+            # тихого условия — чтобы третье поле назвало себя, а не отбирало не то.
+            raise ValueError(f"Search field {term.field.value!r} has no task-key condition")
 
 
 def _parent(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:

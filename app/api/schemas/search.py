@@ -118,6 +118,19 @@ class TaskFilters:
     пустыми, и ответ выглядел бы как «ничего не отфильтровано» (`docs/notes/api.md`).
     """
 
+    key: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["TRK-42", "TRK-43"]],
+            description=(
+                "Task keys; matching ignores case. Asks about several named tasks at "
+                "once instead of one request each. An unknown key answers 422 instead "
+                "of an empty page: emptiness here reads as an answer and would hide "
+                "the typo"
+            ),
+        ),
+    ] = None
     queue: Annotated[
         list[str] | None,
         Query(
@@ -218,6 +231,7 @@ class TaskFilters:
         terms: list[StructuredTerm] = [
             StructuredTerm(name=name, values=values)
             for name, values in (
+                ("key", self.key),
                 ("queue", self.queue),
                 ("parent", self.parent),
                 ("status", None if self.status is None else [item.value for item in self.status]),

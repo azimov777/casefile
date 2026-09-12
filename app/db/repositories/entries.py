@@ -409,7 +409,7 @@ class EntryRepository:
         self,
         *,
         after: int,
-        task_id: uuid.UUID | None = None,
+        task_ids: Sequence[uuid.UUID] | None = None,
         queue_id: uuid.UUID | None = None,
         types: Sequence[EntryType] | None = None,
         limit: int | None = None,
@@ -423,6 +423,10 @@ class EntryRepository:
         `task_id`, а кадром ленты нечего адресовать без ключа. Соединение с задачами
         нужно и для фильтра по очереди — у записи её нет.
 
+        `task_ids` сужает хвост набором задач, а не одной: сессия ведёт несколько дел и
+        ждёт новостей по ним одним вызовом. `None` — «все задачи»; пустой набор сюда не
+        приезжает (`app/domain/journal.py`, `resolve_task_keys`).
+
         Ложится на уникальный индекс по `seq`: чтение всегда идёт с конца, а фильтры
         сужают уже прочитанный хвост.
         """
@@ -430,8 +434,8 @@ class EntryRepository:
         statement = (
             select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(Entry.seq > after)
         )
-        if task_id is not None:
-            statement = statement.where(Entry.task_id == task_id)
+        if task_ids is not None:
+            statement = statement.where(Entry.task_id.in_(list(task_ids)))
         if queue_id is not None:
             statement = statement.where(Task.queue_id == queue_id)
         if types is not None:

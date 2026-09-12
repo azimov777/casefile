@@ -99,6 +99,7 @@
 | `invalid_queue_key` | Queue key is invalid | Ключ очереди не соответствует шаблону. |
 | `invalid_search_query` | Search query cannot be parsed | Строка на языке запросов не разбирается. |
 | `invalid_task_key` | Task key is invalid | Ключ задачи не разбирается как `КЛЮЧ-НОМЕР`. |
+| `journal_too_many_tasks` | Too many tasks in one journal filter | Задач в одном фильтре ленты больше потолка: потолок и присланное — в `details`. |
 | `journal_wait_too_long` | Requested wait exceeds the ceiling | Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
 | `search_field_unknown` | Search field is unknown | Имени поля отбора или ключа сортировки нет: допустимые перечислены в `details.allowed`. |

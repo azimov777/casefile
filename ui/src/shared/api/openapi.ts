@@ -4253,7 +4253,7 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ ключ`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ ключ`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
@@ -4265,6 +4265,8 @@ export interface operations {
                 cursor?: string | null;
                 /** @description Rows to skip before the page, an alternative address to `cursor`: page N of size L starts at `(N - 1) * L`. Sending both is refused (`cursor_with_offset`) */
                 offset?: number | null;
+                /** @description Task keys; matching ignores case. Asks about several named tasks at once instead of one request each. An unknown key answers 422 instead of an empty page: emptiness here reads as an answer and would hide the typo */
+                key?: string[] | null;
                 /** @description Queue keys; matching ignores case */
                 queue?: string[] | null;
                 /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a queue. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
@@ -5389,8 +5391,8 @@ export interface operations {
             query?: {
                 /** @description Read only entries after this tracker-wide sequence number. 0 means from the very beginning: entries are permanent, so any number is a valid position */
                 after?: number;
-                /** @description Only entries of this task; matching ignores case */
-                task?: string | null;
+                /** @description Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail */
+                task?: string[] | null;
                 /** @description Only entries of tasks in this queue; matching ignores case */
                 queue?: string | null;
                 /** @description Only entries of these types */
@@ -5479,8 +5481,8 @@ export interface operations {
     stream_journal: {
         parameters: {
             query?: {
-                /** @description Only entries of this task; matching ignores case */
-                task?: string | null;
+                /** @description Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail */
+                task?: string[] | null;
                 /** @description Only entries of tasks in this queue; matching ignores case */
                 queue?: string | null;
                 /** @description Only entries of these types */
