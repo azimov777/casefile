@@ -493,12 +493,27 @@ function heads(page: Page) {
         right: Math.round(box.right),
       };
     };
+    /*
+     * Внутренние края столбца — те, до которых достаёт содержимое. Это не рамка
+     * `getBoundingClientRect`: из неё надо вычесть границу (`clientLeft`) и место,
+     * занятое своей полосой прокрутки (в `clientWidth` его уже нет). С UI-116 полосу
+     * рисуем мы, и у переполненного столбца она отъедает `--ui-scrollbar` справа —
+     * заголовок внутри кончается там же, где содержимое, а не у границы столбца.
+     */
+    const inside = (node: Element) => {
+      const box = node.getBoundingClientRect();
+      return {
+        left: Math.round(box.left + node.clientLeft),
+        right: Math.round(box.left + node.clientLeft + node.clientWidth),
+      };
+    };
     return {
       window: { width: window.innerWidth, height: window.innerHeight },
       columns: sections.map((node) => ({
         status: node.getAttribute('aria-label') as string,
         head: rect(node.querySelector('h2') as Element),
         column: rect(node),
+        inside: inside(node),
         scrolled: Math.round(node.scrollTop),
         sideways: node.scrollWidth - node.clientWidth,
       })),
@@ -762,8 +777,8 @@ test('при прокрутке ряда вбок заголовок едет в
   for (const seen of measured.columns) {
     // Заголовок принадлежит своему столбцу и стоит ровно над ним — не над соседним
     // и не отдельной полосой поверх ряда.
-    expect(Math.abs(seen.head.left - seen.column.left), report).toBeLessThanOrEqual(2);
-    expect(Math.abs(seen.column.right - seen.head.right), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.head.left - seen.inside.left), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.inside.right - seen.head.right), report).toBeLessThanOrEqual(2);
     expect(seen.head.top - seen.column.top, report).toBeLessThanOrEqual(2);
   }
 });
@@ -902,8 +917,8 @@ test('ниже точки остановки заголовок прижат к 
     expect(seen.head.top, report).toBeGreaterThanOrEqual(0);
     expect(seen.head.top, report).toBeLessThanOrEqual(2);
     // Над своим столбцом, а не над соседним, и не ниже его конца.
-    expect(Math.abs(seen.head.left - seen.column.left), report).toBeLessThanOrEqual(2);
-    expect(Math.abs(seen.column.right - seen.head.right), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.head.left - seen.inside.left), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.inside.right - seen.head.right), report).toBeLessThanOrEqual(2);
     expect(seen.head.bottom, report).toBeLessThanOrEqual(seen.column.bottom);
     // Столбец при этом прокручиваемой областью не стал: едет страница (UI-68).
     expect(seen.scrolled, report).toBe(0);
@@ -965,8 +980,8 @@ test('ниже точки остановки все шесть столбцов 
   expect(last?.column.left ?? -1, report).toBeGreaterThanOrEqual(after.edges.left);
   for (const seen of measured.columns) {
     // Заголовок уехал вбок вместе со своим столбцом и остался у верха окна.
-    expect(Math.abs(seen.head.left - seen.column.left), report).toBeLessThanOrEqual(2);
-    expect(Math.abs(seen.column.right - seen.head.right), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.head.left - seen.inside.left), report).toBeLessThanOrEqual(2);
+    expect(Math.abs(seen.inside.right - seen.head.right), report).toBeLessThanOrEqual(2);
   }
   // Вбок уехал ряд, а не страница, и вниз-вверх страница от этого не сдвинулась.
   expect(after.sideways, report).toBe(0);
@@ -1181,7 +1196,10 @@ function edges(page: Page) {
         // Знак стоит у нижней рамки столбца: единица — сама рамка.
         gap: mark === null ? null : Math.round(box.bottom - mark.bottom),
         height: mark === null ? null : Math.round(mark.height),
-        width: mark === null ? null : Math.round(box.width - mark.width),
+        // Ширина, до которой знаку положено достать, — внутренняя: своя полоса
+        // прокрутки (UI-116) отъедает от рамки столбца `--ui-scrollbar`, и знак,
+        // живущий внутри области прокрутки, туда не достаёт и не должен.
+        width: mark === null ? null : Math.round(node.clientWidth - mark.width),
       };
     });
   });
