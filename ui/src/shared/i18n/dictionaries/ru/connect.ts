@@ -22,8 +22,10 @@ export const connect = {
     title: 'Скил дисциплины',
     fromServer:
       'Выжимку дисциплины сервер отдаёт клиенту сам при подключении — в инструкциях MCP, а полный текст — промптом <code>tracker-discipline</code>. Чтобы скил жил в харнессе постоянно, положите его файлом. Claude Code — этой командой в каталоге установки.',
-    commandLabel: 'Команда, ставящая скил в Claude Code',
-    commandCaption: 'Терминал, в каталоге установки',
+    commandBashLabel: 'Команда, ставящая скил в Claude Code (bash/zsh)',
+    commandBashCaption: 'Терминал, в каталоге установки',
+    commandPowerShellLabel: 'Команда, ставящая скил в Claude Code (PowerShell)',
+    commandPowerShellCaption: 'PowerShell, в каталоге установки',
     otherAgents: 'Другим агентам — тот же файл туда, где их харнесс держит скилы или инструкции.',
   },
 } as const;

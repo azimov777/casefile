@@ -74,3 +74,70 @@ HTTP (`url` у него значит SSE); VS Code — корень `servers`, �
 по его документации, а не по сходству.
 **Где:** `src/features/connect-agent/model/snippets.ts`, `connectionSnippets`;
 `src/shared/i18n/dictionaries/en/ui.ts`, `jsonHint`.
+
+## Команда установки скила: `&&` ломается в Windows PowerShell 5.1, `mkdir -p` — нет, но случайно
+
+**Что:** три отдельные находки `UI-118` про `mkdir -p ~/.claude/skills/tracker-agent &&
+docker compose exec -T mcp cat skill/tracker-agent/SKILL.md > ~/.claude/skills/tracker-agent/SKILL.md`.
+
+Первая: `&&` как оператор цепочки пайплайнов появился только в PowerShell 7
+(`about_Pipeline_Chain_Operators`: «Beginning in PowerShell 7, PowerShell implements the
+&& and || operators»). В Windows PowerShell 5.1 это `ParserError` — «The token '&&' is
+not a valid statement separator in this version» — и команда не выполняется вовсе, до
+всякого `mkdir` (воспроизведено многократно в чужих отчётах об этой самой ошибке, не
+только в документации).
+
+Вторая: `mkdir -p` в PowerShell не ломается — но не потому что там знают флаг `-p`.
+`mkdir` там — функция-обёртка над `New-Item -Type Directory` (исходник движка
+PowerShell, `src/System.Management.Automation/engine/InitialSessionState.cs`,
+`GetMkdirFunctionText`), и её параметры — `Path`, `Name`, `Value`, `Force`,
+`Credential`. Из них на «p» начинается только `Path`, и PowerShell резолвит `-p` в
+него сокращением имени (правило об однозначных сокращениях параметров, `about_Parameters`
+/ `about_Command_Syntax`) — значение после `-p` становится путём, а не флагом. А
+`New-Item -ItemType Directory -Path <вложенный путь>` создаёт недостающие промежуточные
+каталоги и без `-Force` (документация `New-Item`), так что результат случайно совпадает
+с bash. Без `-Force` повторный запуск на уже существующем каталоге кончится не тишиной,
+а ошибкой «already exists» — тем, чего у идемпотентного `mkdir -p` не бывает.
+
+Тем же исходником объясняется, почему приём проверки PowerShell в Linux-контейнере
+(запись выше в `../docs/notes/docker.md` — здесь нужный пример: `mkdir` собран условием
+`#if !UNIX` с комментарием «we remove mkdir on Linux because of a conflict») здесь не
+годится вовсе: в Linux-сборке PowerShell функции `mkdir` нет, и имя резолвится в
+настоящий `/usr/bin/mkdir` — поведение функции там не проверить, что бы она ни делала.
+
+Третья: запись файла. `>` в Windows PowerShell 5.1 — это `Out-File` с кодировкой по
+умолчанию `Unicode` (UTF-16LE); `Set-Content -Encoding utf8` там же кладёт BOM в начало
+файла (`about_Character_Encoding`: «Using any Unicode encoding, except UTF7, always
+creates a BOM», и для `UTF8` пятой версии явно — «Uses UTF-8 (with BOM)»). Тот же класс
+поломки уже нашёлся в этом репозитории у `.env` в `install.ps1` — комментарий рядом с
+`[System.IO.File]::WriteAllLines` там же объясняет, что `Set-Content -Encoding UTF8`
+поставил бы BOM перед первой переменной. Скил — тоже текст с фронтматтером, и невидимый
+BOM перед `---` сломал бы его чтение так же тихо.
+
+Довеском к третьей — байты `cat`, прежде чем лечь в файл, идут через конвейер
+PowerShell, а PowerShell декодирует вывод внешней команды кодировкой
+`[Console]::OutputEncoding` — по умолчанию в Windows PowerShell 5.1 это кодовая
+страница системы, не UTF-8 (`about_Character_Encoding`, раздел про `$OutputEncoding`).
+Скил (`../skill/tracker-agent/SKILL.md`) — сплошь русский текст: без явного `[Console]::OutputEncoding =
+[System.Text.Encoding]::UTF8` до вызова `docker` строки декодировались бы уже
+испорченными, и никакой выбор кодировки записи это не исправил бы задним числом.
+
+**Почему важно:** первая находка одна ломает всю строку на Windows PowerShell 5.1,
+которую тоже ставит `install.ps1` (`docs/CONVENTIONS.md` корня, «PowerShell 5.1 и 7»).
+Вторая — предупреждение не полагаться на случайное совпадение поведения флага:
+следующая похожая команда с `-p` может напороться на параметр, чьё сокращение решит
+иначе. Третья и четвёртая — та же ловушка, что уже стоила времени у `.env`
+(`install.ps1`), только тише: скил читает не PowerShell, а харнесс агента, и оба вида
+порчи (BOM, неверная кодировка входа) молчаливы — файл существует, весит разумно и
+не считается сломанным ничем в самом PowerShell.
+
+**Как правильно:** для PowerShell — не одна строка на два языка, а собственная,
+построенная заново: `;` вместо `&&`; `New-Item -ItemType Directory -Force -Path`
+вместо `mkdir -p`; `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` до
+вызова `docker`; `[System.IO.File]::WriteAllText` с `UTF8Encoding($false)` вместо `>`
+или `Set-Content -Encoding utf8`. Проверять `&&`/`mkdir` в Windows PowerShell 5.1 —
+по документации Microsoft и исходнику движка PowerShell (или на настоящем Windows,
+когда он появится — `TRK-63`), а не в Linux-контейнере с pwsh.
+
+**Где:** `src/pages/connect/model/skill-command.ts`, `SKILL_COMMAND`;
+`install.ps1`, комментарий у `[System.IO.File]::WriteAllLines` (тот же приём против BOM).

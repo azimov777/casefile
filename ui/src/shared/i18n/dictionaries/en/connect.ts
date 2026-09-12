@@ -28,8 +28,10 @@ export const connect = {
     title: 'Discipline skill',
     fromServer:
       'The server hands the gist of the discipline to the client by itself when it connects, in the MCP instructions, and the full text as the <code>tracker-discipline</code> prompt. To keep the skill in the harness for good, put it in as a file. Claude Code: run this command in the installation directory.',
-    commandLabel: 'Command that installs the skill for Claude Code',
-    commandCaption: 'Terminal, in the installation directory',
+    commandBashLabel: 'Command that installs the skill for Claude Code (bash/zsh)',
+    commandBashCaption: 'Terminal, in the installation directory',
+    commandPowerShellLabel: 'Command that installs the skill for Claude Code (PowerShell)',
+    commandPowerShellCaption: 'PowerShell, in the installation directory',
     otherAgents:
       'Other agents: the same file goes wherever their harness keeps skills or instructions.',
   },
