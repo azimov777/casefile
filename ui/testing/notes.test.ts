@@ -116,6 +116,18 @@ const NOT_IN_CODE: Record<string, string> = {
   'markdown.module.css': 'снесённый модуль стилей, названный как снесённый',
   AppleShowScrollBars: 'ключ NSUserDefaults macOS, не наш код',
   NSScroller: 'класс AppKit macOS, решающий оверлей или классику полосы, не наш код',
+  about_Pipeline_Chain_Operators: 'справочная статья PowerShell про `&&`/`||`, не наш код',
+  ParserError: 'тип ошибки разбора PowerShell, не наш код',
+  GetMkdirFunctionText: 'метод исходника движка PowerShell (`mkdir`), не наш код',
+  Force: 'параметр `New-Item`/`mkdir` PowerShell, не наш код',
+  Credential: 'параметр `mkdir` PowerShell, не наш код',
+  about_Parameters: 'справочная статья PowerShell про сокращения имён параметров, не наш код',
+  about_Command_Syntax: 'справочная статья PowerShell про синтаксис команд, не наш код',
+  Unicode: 'значение `-Encoding` у `Out-File` в Windows PowerShell 5.1, не наш код',
+  about_Character_Encoding: 'справочная статья PowerShell про кодировки, не наш код',
+  UTF8: 'значение `-Encoding` у `Out-File`/`Set-Content` в Windows PowerShell 5.1, не наш код',
+  $OutputEncoding:
+    'автоматическая переменная PowerShell для внешних программ, отличная от `[Console]::OutputEncoding`, не наш код',
 };
 
 /**

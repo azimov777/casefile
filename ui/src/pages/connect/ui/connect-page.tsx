@@ -9,6 +9,7 @@ import {
   installationQueryOptions,
 } from '@/features/connect-agent';
 import { CopyBlock, QueryState } from '@/shared/ui';
+import { SKILL_COMMAND } from '../model/skill-command';
 
 /**
  * Токен агента этой машины без печати куда-либо, кроме терминала человека: установка
@@ -18,16 +19,6 @@ import { CopyBlock, QueryState } from '@/shared/ui';
  */
 const AGENT_TOKEN_COMMAND =
   'docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token';
-
-/**
- * Скил дисциплины файлом для Claude Code — из самой установки, а не из сети: файл
- * `skill/tracker-agent/SKILL.md` есть у сервиса `mcp` и в образе установки
- * (`docker/Dockerfile.prod`), и в контуре разработки, где репозиторий смонтирован.
- * Ссылка на GitHub из `docs/agent-install.md` верна только для опубликованного
- * репозитория, а экран обязан работать на любой установке.
- */
-const SKILL_COMMAND =
-  'mkdir -p ~/.claude/skills/tracker-agent && docker compose exec -T mcp cat skill/tracker-agent/SKILL.md > ~/.claude/skills/tracker-agent/SKILL.md';
 
 /**
  * Экран «Подключить агента»: адрес MCP этой установки, готовые фрагменты под клиенты,
@@ -118,10 +109,19 @@ export function ConnectPage() {
         <Text>
           <Trans t={t} i18nKey="skill.fromServer" values={values} components={code} />
         </Text>
+        {/* Обе оболочки сразу, а не одна по умолчанию: угадывать оболочку по
+            `navigator.userAgent` запрещено (`UI-114`, решение UI-114#5) — в PowerShell
+            5.1 у команды свои три расхождения с bash/zsh (`UI-118`,
+            `src/pages/connect/model/skill-command.ts`). */}
         <CopyBlock
-          label={t('skill.commandLabel')}
-          caption={t('skill.commandCaption')}
-          text={SKILL_COMMAND}
+          label={t('skill.commandBashLabel')}
+          caption={t('skill.commandBashCaption')}
+          text={SKILL_COMMAND.bashZsh}
+        />
+        <CopyBlock
+          label={t('skill.commandPowerShellLabel')}
+          caption={t('skill.commandPowerShellCaption')}
+          text={SKILL_COMMAND.powerShell}
         />
         <Text>{t('skill.otherAgents')}</Text>
       </Part>
