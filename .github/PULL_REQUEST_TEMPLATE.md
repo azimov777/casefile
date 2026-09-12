@@ -8,6 +8,6 @@
 
 ## Checks
 
-- [ ] Every commit is signed off (`git commit -s`) — see [CONTRIBUTING.md](../CONTRIBUTING.md)
+- [ ] Every commit is signed off (`git commit -s`) — see [CONTRIBUTING.md](https://github.com/azimov777/casefile/blob/main/CONTRIBUTING.md)
 - [ ] `docker compose run --rm lint` and `docker compose run --rm test` pass
 - [ ] `pnpm check` passes, if the board changed
