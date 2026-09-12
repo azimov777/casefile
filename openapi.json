@@ -1894,13 +1894,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ ключ`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
+              "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ ключ`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
               "examples": [
                 "queue: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ ключ`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
+            "description": "Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ ключ`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
           },
           {
             "name": "sort",
@@ -2009,6 +2009,34 @@
               "title": "Offset"
             },
             "description": "Rows to skip before the page, an alternative address to `cursor`: page N of size L starts at `(N - 1) * L`. Sending both is refused (`cursor_with_offset`)"
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Task keys; matching ignores case. Asks about several named tasks at once instead of one request each. An unknown key answers 422 instead of an empty page: emptiness here reads as an answer and would hide the typo",
+              "examples": [
+                [
+                  "TRK-42",
+                  "TRK-43"
+                ]
+              ],
+              "title": "Key"
+            },
+            "description": "Task keys; matching ignores case. Asks about several named tasks at once instead of one request each. An unknown key answers 422 instead of an empty page: emptiness here reads as an answer and would hide the typo"
           },
           {
             "name": "queue",
@@ -4208,19 +4236,25 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Only entries of this task; matching ignores case",
+              "description": "Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail",
               "examples": [
-                "TRK-42"
+                [
+                  "TRK-42",
+                  "TRK-43"
+                ]
               ],
               "title": "Task"
             },
-            "description": "Only entries of this task; matching ignores case"
+            "description": "Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail"
           },
           {
             "name": "queue",
@@ -4436,19 +4470,25 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Only entries of this task; matching ignores case",
+              "description": "Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail",
               "examples": [
-                "TRK-42"
+                [
+                  "TRK-42",
+                  "TRK-43"
+                ]
               ],
               "title": "Task"
             },
-            "description": "Only entries of this task; matching ignores case"
+            "description": "Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail"
           },
           {
             "name": "queue",

@@ -22,6 +22,7 @@ from app.mcp.arguments import (
     CursorArg,
     FieldsArg,
     IdempotencyKeyArg,
+    KeysArg,
     LimitArg,
     OpenBlockingQuestionsArg,
     OpenQuestionsArg,
@@ -83,6 +84,7 @@ def register(tools: Toolset) -> None:
     @tools.tool()
     async def search_tasks(
         query: QueryArg = None,
+        key: KeysArg = None,
         queue: QueuesArg = None,
         parent: ParentFilterArg = None,
         status: StatusesArg = None,
@@ -113,6 +115,7 @@ def register(tools: Toolset) -> None:
                 actor=actor,
                 query=query,
                 structured=_terms(
+                    key=key,
                     queue=queue,
                     parent=parent,
                     status=status,
@@ -364,6 +367,7 @@ def register(tools: Toolset) -> None:
 
 def _terms(
     *,
+    key: Sequence[str] | None,
     queue: Sequence[str] | None,
     parent: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
@@ -390,6 +394,7 @@ def _terms(
     terms: list[StructuredTerm] = [
         StructuredTerm(name=name, values=values)
         for name, values in (
+            ("key", key),
             ("queue", queue),
             ("parent", parent),
             ("status", None if status is None else [item.value for item in status]),

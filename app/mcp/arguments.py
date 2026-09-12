@@ -32,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.sentinels import unset_field
 from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.idempotency import KEY_TTL
-from app.domain.journal import JOURNAL_START, MAX_WAIT_SECONDS
+from app.domain.journal import JOURNAL_START, MAX_TASK_KEYS, MAX_WAIT_SECONDS
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.query_language import (
@@ -581,6 +581,16 @@ FieldsArg = Annotated[
 # «или», аргументы между собой — по «и». Тот же разбор значений, что и у языка, поэтому
 # `assignee: ["empty()"]` и строка `assignee: empty()` значат буквально одно и то же:
 # своя ветка условий здесь развела бы MCP с REST на первом же краевом случае.
+KeysArg = Annotated[
+    list[str] | None,
+    Field(
+        description=(
+            "Ключи задач: спросить про несколько названных разом, а не по вызову на "
+            "каждую. Несуществующий ключ отвечает отказом, а не пустой выдачей"
+        ),
+        examples=[["TRK-42", "TRK-43"]],
+    ),
+]
 QueuesArg = Annotated[
     list[str] | None,
     Field(description="Ключи очередей", examples=[["TRK"]]),
@@ -664,8 +674,16 @@ AfterArg = Annotated[
     ),
 ]
 JournalTaskArg = Annotated[
-    str | None,
-    Field(description="Только записи этой задачи", examples=["TRK-42"]),
+    list[str] | str | None,
+    Field(
+        description=(
+            "Только записи этих задач: ключ или список ключей, не больше "
+            f"{MAX_TASK_KEYS}. Несколько дел спрашиваются одним ожиданием, а не по "
+            "вызову на каждое. Превышение — `journal_too_many_tasks` с числом в "
+            "подробностях; несуществующий ключ — `task_not_found`, а не пустая лента"
+        ),
+        examples=[["TRK-42", "TRK-43"]],
+    ),
 ]
 JournalQueueArg = Annotated[
     str | None,

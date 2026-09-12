@@ -410,6 +410,18 @@ class JournalWaitTooLongError(ValidationError):
     message = "Requested wait exceeds the ceiling"
 
 
+class JournalTooManyTasksError(ValidationError):
+    """Задач в одном фильтре ленты больше потолка: потолок и присланное — в `details`.
+
+    Не усечение списка молча: ждущий, назвавший шестьдесят дел и получивший записи по
+    пятидесяти, прочитал бы тишину по остальным как «там ничего не происходит» — то
+    есть как ответ. С числом в подробностях он строит свой цикл из нескольких ожиданий.
+    """
+
+    code = "journal_too_many_tasks"
+    message = "Too many tasks in one journal filter"
+
+
 class InvalidJournalCursorError(ValidationError):
     """`Last-Event-ID` потока не разбирается как сквозной номер записи.
 

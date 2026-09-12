@@ -56,6 +56,7 @@ from app.domain.search import (
     MANDATORY_FIELD,
     MAX_CONDITIONS,
     MAX_GROUP_DEPTH,
+    MAX_VALUES_PER_CONDITION,
     SELECTABLE_FIELDS,
     SINGLE_VALUE_OPERATORS,
     Condition,
@@ -234,11 +235,26 @@ def filter_from_structured(terms: Sequence[StructuredTerm]) -> SearchFilter:
 
     Пустой список значений означает «не фильтровать по этому полю», а не «ничего не
     подходит»: иначе снятая в интерфейсе галочка обнуляла бы выдачу.
+
+    Потолок значений в условии тот же, что в языке (`MAX_VALUES_PER_CONDITION`), и
+    проверяется здесь по той же причине, по какой потолок ожидания проверяется в домене:
+    структурный фильтр приезжает мимо разбора строки, и у REST его сторожит схема
+    параметра, а у MCP — ничто. Отказ называет и потолок, и присланное число: молчаливое
+    усечение списка ключей дало бы выдачу, в которой части спрошенных задач просто нет.
     """
     nodes: list[Node] = []
     for term in terms:
         if not term.values:
             continue
+        if len(term.values) > MAX_VALUES_PER_CONDITION:
+            raise SearchValueInvalidError(
+                details={
+                    "field": term.name,
+                    "reason": "too_many_values",
+                    "max": MAX_VALUES_PER_CONDITION,
+                    "got": len(term.values),
+                },
+            )
         values = tuple(_structured_value(item) for item in term.values)
         operator = term.operator
         if operator in {Operator.EQ, Operator.NE}:

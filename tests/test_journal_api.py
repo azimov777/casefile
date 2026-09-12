@@ -21,7 +21,7 @@ from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.case import EntryType
-from app.domain.journal import MAX_WAIT_SECONDS
+from app.domain.journal import MAX_TASK_KEYS, MAX_WAIT_SECONDS
 from app.services import case as case_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -217,6 +217,65 @@ async def test_several_types_are_joined_by_or(
     types = {item["type"] for item in response.json()["data"]}
 
     assert types == {"question", "note"}
+
+
+async def test_several_task_keys_narrow_the_tail_to_all_of_them(
+    auth_client: AsyncClient,
+    written: Written,
+    task: Task,
+) -> None:
+    """Сессия ведёт несколько дел и спрашивает про них одним обращением.
+
+    Параметр повторяется — так его пишет сгенерированный по схеме клиент.
+    """
+    both = await auth_client.get(
+        JOURNAL,
+        params={"after": written.start, "task": [task.key, written.other_task.key]},
+    )
+    one = await auth_client.get(
+        JOURNAL, params={"after": written.start, "task": [written.other_task.key]}
+    )
+
+    assert both.status_code == 200, both.text
+    keys = {item["task_key"] for item in both.json()["data"]}
+    assert keys == {task.key, written.other_task.key}
+
+    assert {item["task_key"] for item in one.json()["data"]} == {written.other_task.key}
+
+
+async def test_task_keys_may_be_listed_through_commas(
+    auth_client: AsyncClient,
+    written: Written,
+    task: Task,
+) -> None:
+    """Та же пара форм, что у остальных списочных параметров: повтор и запятая."""
+    through_commas = await auth_client.get(
+        JOURNAL,
+        params={"after": written.start, "task": f"{task.key},{written.other_task.key}"},
+    )
+    repeated = await auth_client.get(
+        JOURNAL,
+        params={"after": written.start, "task": [task.key, written.other_task.key]},
+    )
+
+    assert through_commas.status_code == 200, through_commas.text
+    assert [item["seq"] for item in through_commas.json()["data"]] == [
+        item["seq"] for item in repeated.json()["data"]
+    ]
+
+
+async def test_more_task_keys_than_the_ceiling_are_refused_with_the_number(
+    auth_client: AsyncClient,
+) -> None:
+    """Отказ приходит до разрешения ключей: усечение молча дало бы неполную ленту."""
+    response = await auth_client.get(
+        JOURNAL, params={"task": [f"TRK-{number}" for number in range(MAX_TASK_KEYS + 1)]}
+    )
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "journal_too_many_tasks"
+    assert error["details"] == {"tasks": MAX_TASK_KEYS + 1, "max": MAX_TASK_KEYS}
 
 
 async def test_an_unknown_task_is_refused_rather_than_answered_with_an_empty_tail(

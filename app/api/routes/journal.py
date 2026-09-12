@@ -42,6 +42,7 @@ from app.domain.case import EntryType
 from app.domain.journal import (
     DEFAULT_WAIT_SECONDS,
     JOURNAL_START,
+    MAX_TASK_KEYS,
     MAX_WAIT_SECONDS,
     parse_last_event_id,
 )
@@ -66,8 +67,17 @@ AfterQuery = Annotated[
     ),
 ]
 TaskQuery = Annotated[
-    str | None,
-    Query(description="Only entries of this task; matching ignores case", examples=["TRK-42"]),
+    list[str] | None,
+    Query(
+        description=(
+            "Only entries of these tasks; matching ignores case. Repeat the parameter or "
+            "separate the keys with commas — one key narrows the tail exactly as it "
+            f"always did, and at most {MAX_TASK_KEYS} keys fit in one filter. A session "
+            "leading several cases asks about all of them at once instead of polling "
+            "them one by one. An unknown key answers 422 instead of a silent empty tail"
+        ),
+        examples=[["TRK-42", "TRK-43"]],
+    ),
 ]
 QueueQuery = Annotated[
     str | None,

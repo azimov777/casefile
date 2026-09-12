@@ -19,7 +19,7 @@ from app.domain.errors import (
 )
 from app.domain.links import LinkKind
 from app.domain.query_language import QUERY_RIGHT_SHAPE
-from app.domain.search import Operator
+from app.domain.search import MAX_VALUES_PER_CONDITION, Operator
 from app.domain.tasks import TaskFeatures, TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
@@ -374,6 +374,121 @@ async def test_an_unknown_parent_key_is_refused_and_named(
     assert details["field"] == "parent"
     assert details["value"] == "TRK-404"
     assert details["reason"] == "task_not_found"
+
+
+# --- Ключ задачи ---------------------------------------------------------------------
+
+
+async def test_several_named_tasks_are_asked_about_in_one_request(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """Обзорная проверка 1: `key: in A, B` отдаёт ровно названные задачи.
+
+    Ради этого поле и заведено: сессия ведёт несколько дел и обязана спросить про них
+    одним запросом, а не тянуть очередь по статусу и отбирать глазами.
+    """
+    first = family["живой"].key
+    second = family["первый закрытый"].key
+
+    by_query = await keys(db_session, task_actor, query=f"key: in {first}, {second}")
+    assert sorted(by_query) == sorted([first, second])
+
+    # Без оператора несколько значений означают то же самое вхождение в набор.
+    assert sorted(await keys(db_session, task_actor, query=f"key: {first}, {second}")) == sorted(
+        [first, second]
+    )
+
+    # Структурный параметр отвечает тем же самым: у одного вопроса не бывает двух
+    # ответов в зависимости от того, как его задали.
+    by_filter = await keys(
+        db_session, task_actor, structured=[StructuredTerm(name="key", values=[first, second])]
+    )
+    assert sorted(by_filter) == sorted(by_query)
+
+
+async def test_a_single_key_and_a_negated_key_pick_and_drop_one_task(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """Обзорная проверка 1: `key: A` берёт одну задачу, `key: != A` исключает её одну."""
+    alive = family["живой"].key
+
+    assert await keys(db_session, task_actor, query=f"key: {alive}") == [alive]
+
+    everything = await keys(db_session, task_actor)
+    without = await keys(db_session, task_actor, query=f"key: != {alive}")
+
+    assert alive not in without
+    assert sorted(without) == sorted(key for key in everything if key != alive)
+
+
+async def test_the_key_field_narrows_together_with_the_rest(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """Ключ — обычное условие: складывается с остальными по «и», а не отменяет их."""
+    alive = family["живой"].key
+    cancelled = family["первый закрытый"].key
+
+    found = await keys(
+        db_session, task_actor, query=f"key: in {alive}, {cancelled} and status: open"
+    )
+
+    assert found == [alive]
+
+
+async def test_an_unknown_key_is_refused_rather_than_answered_with_an_empty_page(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Обзорная проверка 1: несуществующий ключ — отказ, а не пустота.
+
+    Довод тот же, что у родителя, и здесь он сильнее: пустая выдача на вопрос «что
+    сейчас с этими задачами» читается как «по ним ничего», и опечатка спряталась бы за
+    ответом, который выглядит осмысленным.
+    """
+    del queue
+    with pytest.raises(SearchValueInvalidError) as error:
+        await keys(db_session, task_actor, query="key: TRK-404")
+
+    details = error.value.details
+    assert details["field"] == "key"
+    assert details["value"] == "TRK-404"
+    assert details["reason"] == "task_not_found"
+
+
+async def test_a_key_has_no_empty_state_and_the_marker_is_refused(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """`key: empty()` — непонимание модели: ключ есть у каждой задачи."""
+    del queue
+    with pytest.raises(SearchValueInvalidError) as error:
+        await keys(db_session, task_actor, query="key: empty()")
+
+    assert error.value.details["reason"] == "empty_not_supported"
+
+
+async def test_a_structured_filter_refuses_more_values_than_the_ceiling(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """Потолок значений действует и на структурный фильтр, а не только на язык.
+
+    Строку разбирает парсер и отказывает сам; структурный фильтр приезжает мимо него, и
+    без этой проверки список в тысячу ключей ушёл бы в запрос целиком. Отказ называет и
+    потолок, и присланное число — усечение молча дало бы выдачу без части спрошенных
+    задач.
+    """
+    alive = family["живой"].key
+    with pytest.raises(SearchValueInvalidError) as error:
+        await keys(
+            db_session,
+            task_actor,
+            structured=[
+                StructuredTerm(name="key", values=[alive] * (MAX_VALUES_PER_CONDITION + 1))
+            ],
+        )
+
+    details = error.value.details
+    assert details["reason"] == "too_many_values"
+    assert details["max"] == MAX_VALUES_PER_CONDITION
+    assert details["got"] == MAX_VALUES_PER_CONDITION + 1
 
 
 async def test_both_inputs_narrow_each_other_instead_of_replacing(
