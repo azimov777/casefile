@@ -56,6 +56,7 @@ from app.domain.journal import (
     JOURNAL_START,
     JournalFilter,
     resolve_after,
+    resolve_task_keys,
     resolve_types,
     resolve_wait,
 )
@@ -93,7 +94,7 @@ type ClientGone = Callable[[], Awaitable[bool]]
 async def resolve_filter(
     session: AsyncSession,
     *,
-    task: str | None = None,
+    task: str | Sequence[str] | None = None,
     queue: str | None = None,
     types: Sequence[EntryType] | None = None,
 ) -> JournalFilter:
@@ -103,11 +104,18 @@ async def resolve_filter(
     как есть: опечатка в ключе иначе дала бы пустую ленту, неотличимую от «ничего не
     происходит», и ждущий висел бы до таймаута, считая установку спящей. Несуществующий
     ключ поэтому `task_not_found` или `queue_not_found`.
+
+    Задач называют сколько угодно в пределах потолка (`MAX_TASK_KEYS`): сессия, ведущая
+    несколько дел, спрашивает про них одним вызовом, а не по вызову на каждое. Ключи
+    разрешаются по одному тем же сценарием, что и единственный, — отдельной выборки
+    «сразу все» здесь нет намеренно: она умела бы молчать о промахнувшемся ключе, а
+    названный промах и есть то, ради чего разрешение вообще происходит.
     """
-    resolved_task = None if task is None else await tasks_service.get_task(session, task)
+    keys = resolve_task_keys(task)
+    task_ids = tuple([(await tasks_service.get_task(session, key)).id for key in keys])
     resolved_queue = None if queue is None else await queues_service.get_queue(session, queue)
     return JournalFilter(
-        task_id=resolved_task.id if resolved_task is not None else None,
+        task_ids=task_ids or None,
         queue_id=resolved_queue.id if resolved_queue is not None else None,
         types=resolve_types(types),
     )
@@ -138,7 +146,7 @@ async def read_journal(
         cursor_seq = int(value)
     page = await EntryRepository(session).journal_page(
         after=resolve_after(after, cursor_seq),
-        task_id=journal_filter.task_id,
+        task_ids=journal_filter.task_ids,
         queue_id=journal_filter.queue_id,
         types=journal_filter.types,
         limit=limit,
@@ -359,7 +367,7 @@ async def stream_journal(
             async with sessions() as session:
                 page = await EntryRepository(session).journal_page(
                     after=after,
-                    task_id=journal_filter.task_id,
+                    task_ids=journal_filter.task_ids,
                     queue_id=journal_filter.queue_id,
                     types=journal_filter.types,
                     limit=STREAM_BATCH_SIZE,

@@ -70,7 +70,46 @@ Other agents: put the same file wherever your harness keeps skills or instructio
 - `claude mcp list` shows `casefile` as connected (other clients: list the MCP tools and
   look for `list_queues`).
 
-## 6. Report to the user
+## 6. Learn about news in your tasks
+
+Casefile never pushes anything to you. If the owner answers a question or leaves a
+remark while you are not reading the case, that answer just sits in the journal until
+something asks for it — deliberately: delivery is a rejected design (`docs/CONCEPT.md`,
+"Отвергнутые варианты"), because the tracker is a ledger, not an orchestrator. Asking is
+the client's job, always.
+
+The tracker gives you one long-polling primitive for this: `wait_journal` in MCP,
+`GET /api/v1/journal?after=<seq>&wait=<seconds>` in REST (`wait` up to 60s). A call
+blocks until either a matching entry lands or the timeout passes, then returns. Journal
+entries are permanent — no expiry, no outbox — so you can always resume from the last
+`seq` you actually saw: there is no "too old a cursor" error, and no risk of a gap if
+you resume from exactly that number.
+
+While your session is open on a task, this is nothing new: it is the same
+`wait_journal(task=key, after=<last seq>, types=["answer"], timeout=...)` the skill
+already covers ("Вопросы", "Ждать живым"). The gap this section is about is different —
+**between one harness run and the next**, when no session is open at all. Nothing in
+Casefile starts a harness or writes into a closed session; some outside process has to
+do that, and Casefile does not ship one:
+
+- **A harness with its own way to learn about news** (for example, a background watcher
+  or a hook Claude Code keeps running) needs no script at all: point it at the same
+  `wait_journal`/`GET /api/v1/journal` call and let it feed matches into a new or
+  resumed session by whatever means it already has.
+- **Nothing built in**: a minimal, temporary example that long-polls a fixed list of
+  tasks and prints one line per new entry to stdout lives at
+  [`scripts/watch-journal.sh`](../scripts/watch-journal.sh) — read its header before
+  using it. It is not a supported tool: not wired into any `docker-compose*.yml`, it
+  writes nothing to the tracker, and it does not know whether the agent it is watching
+  for is alive. Running it is one command; what happens to a printed line (read it
+  yourself, redirect it into a prompt, pipe it into whatever your harness accepts) is
+  entirely up to you — Casefile has no opinion there.
+
+Either way, the recipe is the same three things: which tasks to watch, which `seq` to
+resume from, and how long a poll may wait before it comes back empty. The script's
+header names the exact variables.
+
+## 7. Report to the user
 
 In one short message: the board URL, that you are connected, and that Casefile updates
 itself every time Docker starts. To remove it later: `docker compose down -v` in `~/casefile`.

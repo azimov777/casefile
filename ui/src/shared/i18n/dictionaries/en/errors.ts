@@ -35,6 +35,7 @@ export const errors = {
   invalid_search_query: 'The query string cannot be parsed.',
   invalid_task_key: 'The task key does not read as “KEY-NUMBER”.',
   journal_stream_limit: 'Too many live streams are open. Try again later.',
+  journal_too_many_tasks: 'Too many tasks named in one journal filter.',
   journal_wait_too_long: 'The requested wait is longer than allowed.',
   link_cycle_detected: 'The link would close a ring.',
   link_exists: 'These two tasks are already linked that way.',

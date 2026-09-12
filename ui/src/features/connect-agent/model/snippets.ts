@@ -62,8 +62,13 @@ export interface SnippetTexts {
   claudeCode: string;
   /** Секция `~/.codex/config.toml`. */
   codexFile: string;
-  /** Переменная окружения с токеном для Codex. */
-  codexEnv: string;
+  /**
+   * Переменная окружения с токеном для Codex: `export` — синтаксис bash/zsh, `$env:` —
+   * PowerShell, и один без другого работает только на части заявленных платформ
+   * (Casefile ставится и на Windows, `install.ps1`). Оболочку экран не угадывает по
+   * `navigator.userAgent` — показывает обе строки (`UI-114`, решение UI-114#5).
+   */
+  codexEnv: { bashZsh: string; powerShell: string };
   /** Те же значения полями формы приложения Codex. */
   codexForm: CodexFormField[];
   /** Конфигурация `mcpServers` в форме `.mcp.json` Claude Code. */
@@ -83,7 +88,10 @@ export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): S
     headers: headers.map(([name, value]) => `${name}: ${value}`).join('\n'),
     claudeCode: claudeCodeCommand(mcpUrl, headers),
     codexFile: codexFile(mcpUrl, labelled),
-    codexEnv: `export ${TOKEN_ENV}=${shellQuote(secret)}`,
+    codexEnv: {
+      bashZsh: `export ${TOKEN_ENV}=${shellQuote(secret)}`,
+      powerShell: `$env:${TOKEN_ENV} = ${powerShellQuote(secret)}`,
+    },
     codexForm: [
       { key: 'url', name: null, value: mcpUrl },
       { key: 'bearer_token_env_var', name: null, value: TOKEN_ENV },
@@ -151,4 +159,15 @@ function tomlString(value: string): string {
  */
 export function shellQuote(value: string): string {
   return `"${value.replace(/["\\$`]/g, '\\$&')}"`;
+}
+
+/**
+ * Значение в двойных кавычках для PowerShell. Экранирующий знак там не обратный слеш, а
+ * обратная кавычка, и экранировать нужно её саму, `$` (старт подстановки переменной или
+ * `$(...)`) и закрывающую кавычку; обратный слеш для PowerShell не особый знак и не
+ * трогается. Проверено round-trip в pwsh 7.4.2 (`mcr.microsoft.com/powershell`, приём —
+ * как в TRK-58): `docs/notes/connect.md`, `UI-114#4`.
+ */
+export function powerShellQuote(value: string): string {
+  return `"${value.replace(/[`$"]/g, '`$&')}"`;
 }

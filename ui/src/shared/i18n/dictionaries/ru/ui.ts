@@ -286,8 +286,10 @@ export const ui = {
     codexHint:
       'Токен идёт через переменную окружения <code>{{env}}</code>, и секрет не ложится в файл конфигурации. Codex читает переменную из своего окружения: задайте её там, откуда Codex запускается, а приложение Codex после смены перезапустите.',
     codexFileLabel: 'Секция конфигурации Codex',
-    codexEnvLabel: 'Переменная с токеном для Codex',
-    codexEnvCaption: 'Терминал, до запуска Codex',
+    codexEnvBashLabel: 'Переменная с токеном для Codex (bash/zsh)',
+    codexEnvBashCaption: 'Терминал, до запуска Codex',
+    codexEnvPowerShellLabel: 'Переменная с токеном для Codex (PowerShell)',
+    codexEnvPowerShellCaption: 'PowerShell, до запуска Codex',
     codexFormHint:
       'Или те же значения формой в приложении Codex (MCP-серверы в настройках, сервер Streamable HTTP):',
     // Подписи полей — как их показывает приложение Codex на русском (снимок владельца

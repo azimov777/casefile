@@ -221,6 +221,133 @@ async def test_the_wait_returns_as_soon_as_the_entry_is_committed(
     assert elapsed < 2.0, f"ожидание длилось {elapsed:.1f}: разбудил опрос, не оповещение"
 
 
+# --- Несколько дел одним ожиданием ----------------------------------------------------
+
+
+async def _filter_of(
+    sessions: async_sessionmaker[AsyncSession],
+    task_ids: list[uuid.UUID],
+) -> JournalFilter:
+    """Фильтр, собранный из ключей так, как его собирает вызывающий: через сценарий."""
+    async with sessions() as session:
+        keys = []
+        for task_id in task_ids:
+            task = await session.get(Task, task_id)
+            assert task is not None
+            keys.append(task.key)
+        return await journal_service.resolve_filter(session, task=keys)
+
+
+async def test_four_entries_in_one_window_give_only_those_of_the_named_tasks(
+    committing_sessions: async_sessionmaker[AsyncSession],
+    committed_tasks: list[uuid.UUID],
+    listening: None,
+) -> None:
+    """Обзорная проверка 2: три названных дела приходят, четвёртое той же очереди — нет.
+
+    Четыре записи подшиты в одно окно, и запись посторонней задачи стоит между своими:
+    ожидание, которое просто останавливается на последней записи, прошло бы тест с одной
+    посторонней записью в конце.
+    """
+    mine = committed_tasks[:3]
+    outsider = committed_tasks[3]
+    journal_filter = await _filter_of(committing_sessions, mine)
+    start = await _latest_seq(committing_sessions)
+
+    first = await _append(committing_sessions, mine[0], "первое моё")
+    alien = await _append(committing_sessions, outsider, "чужое")
+    second = await _append(committing_sessions, mine[1], "второе моё")
+    third = await _append(committing_sessions, mine[2], "третье моё")
+
+    async with committing_sessions() as session:
+        page = await journal_service.wait_journal(
+            session,
+            actor=TRACKER_ACTOR,
+            journal_filter=journal_filter,
+            after=start,
+            wait=SHORT_WAIT,
+        )
+
+    assert [item.entry.seq for item in page.items] == [first, second, third]
+    assert alien not in [item.entry.seq for item in page.items]
+
+
+async def test_the_wait_over_three_tasks_is_woken_by_any_of_them(
+    committing_sessions: async_sessionmaker[AsyncSession],
+    committed_tasks: list[uuid.UUID],
+    listening: None,
+) -> None:
+    """Обзорная проверка 2: разбудить ожидание может запись любого из названных дел.
+
+    Порог тот же, что у одиночного ожидания: ответ быстрее контрольного опроса мог
+    прийти только по оповещению.
+    """
+    poll = get_settings().journal_wait_poll_interval
+    assert poll > 2.0, f"контрольный опрос настроен чаще проверки ({poll})"
+    mine = committed_tasks[:3]
+    journal_filter = await _filter_of(committing_sessions, mine)
+    loop = asyncio.get_running_loop()
+
+    for position, task_id in enumerate(mine):
+        start = await _latest_seq(committing_sessions)
+
+        async def write_later(target: uuid.UUID = task_id, mark: int = position) -> int:
+            await asyncio.sleep(0.5)
+            return await _append(committing_sessions, target, f"разбудили {mark}")
+
+        writer = asyncio.create_task(write_later())
+        began = loop.time()
+        async with committing_sessions() as session:
+            page = await journal_service.wait_journal(
+                session,
+                actor=TRACKER_ACTOR,
+                journal_filter=journal_filter,
+                after=start,
+                wait=30.0,
+            )
+        elapsed = loop.time() - began
+        written = await writer
+
+        assert [item.entry.seq for item in page.items] == [written], position
+        assert elapsed < 2.0, f"дело {position}: ждали {elapsed:.1f} — разбудил опрос"
+
+
+async def test_an_entry_of_a_fourth_task_leaves_the_wait_waiting(
+    committing_sessions: async_sessionmaker[AsyncSession],
+    committed_tasks: list[uuid.UUID],
+    listening: None,
+) -> None:
+    """Обзорная проверка 2: посторонняя запись ожидание не заканчивает.
+
+    Оповещение будит всех спящих — фильтр применяется уже после пробуждения. Значит,
+    проверять надо не «не проснулся», а «не ответил»: ожидание обязано досидеть до
+    таймаута и вернуть пустую страницу.
+    """
+    journal_filter = await _filter_of(committing_sessions, committed_tasks[:3])
+    start = await _latest_seq(committing_sessions)
+    loop = asyncio.get_running_loop()
+
+    async def write_alien() -> int:
+        await asyncio.sleep(0.3)
+        return await _append(committing_sessions, committed_tasks[3], "чужое")
+
+    writer = asyncio.create_task(write_alien())
+    began = loop.time()
+    async with committing_sessions() as session:
+        page = await journal_service.wait_journal(
+            session,
+            actor=TRACKER_ACTOR,
+            journal_filter=journal_filter,
+            after=start,
+            wait=SHORT_WAIT,
+        )
+    elapsed = loop.time() - began
+    await writer
+
+    assert page.items == []
+    assert elapsed >= SHORT_WAIT * 0.8, f"ожидание оборвалось на чужой записи через {elapsed:.1f}"
+
+
 # --- Гонка сигнала со строкой ---------------------------------------------------------
 
 

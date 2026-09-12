@@ -8,15 +8,72 @@
 
 import pytest
 
-from app.domain.errors import InvalidJournalCursorError, JournalWaitTooLongError
+from app.domain.errors import (
+    InvalidJournalCursorError,
+    JournalTooManyTasksError,
+    JournalWaitTooLongError,
+)
 from app.domain.journal import (
     DEFAULT_WAIT_SECONDS,
     JOURNAL_START,
+    MAX_TASK_KEYS,
     MAX_WAIT_SECONDS,
     parse_last_event_id,
     resolve_after,
+    resolve_task_keys,
     resolve_wait,
 )
+
+# --- Ключи задач фильтра --------------------------------------------------------------
+
+
+def test_no_tasks_named_means_the_whole_journal() -> None:
+    assert resolve_task_keys(None) == ()
+    assert resolve_task_keys([]) == ()
+
+
+def test_one_key_as_a_string_still_narrows_the_tail() -> None:
+    """Прежняя форма вызова обязана работать без изменений: `task="TRK-42"`."""
+    assert resolve_task_keys("TRK-42") == ("TRK-42",)
+
+
+def test_several_keys_come_as_a_list_or_through_commas() -> None:
+    """Две формы списка — та же пара, что у остальных списочных параметров API.
+
+    Повтор параметра пишет сгенерированный клиент, перечисление через запятую — человек
+    и агент, набирающие адрес руками.
+    """
+    assert resolve_task_keys(["TRK-1", "TRK-2"]) == ("TRK-1", "TRK-2")
+    assert resolve_task_keys(["TRK-1,TRK-2"]) == ("TRK-1", "TRK-2")
+    assert resolve_task_keys("TRK-1, TRK-2") == ("TRK-1", "TRK-2")
+
+
+def test_a_key_named_twice_is_resolved_once() -> None:
+    """Повтор ключа стоил бы второго разрешения в задачу и ничего бы не добавил."""
+    assert resolve_task_keys(["TRK-1", "trk-1", "TRK-2"]) == ("TRK-1", "TRK-2")
+
+
+def test_more_keys_than_the_ceiling_are_refused_with_both_numbers() -> None:
+    """Отказ, а не усечение: выдача без части спрошенных дел читалась бы как ответ.
+
+    Ждущий, назвавший больше потолка и получивший записи по части дел, счёл бы тишину
+    по остальным за «там ничего не происходит». С обоими числами в подробностях он
+    строит свой цикл из нескольких ожиданий.
+    """
+    keys = [f"TRK-{number}" for number in range(MAX_TASK_KEYS + 1)]
+
+    with pytest.raises(JournalTooManyTasksError) as failure:
+        resolve_task_keys(keys)
+
+    assert failure.value.details["max"] == MAX_TASK_KEYS
+    assert failure.value.details["tasks"] == MAX_TASK_KEYS + 1
+
+
+def test_exactly_the_ceiling_passes() -> None:
+    keys = [f"TRK-{number}" for number in range(MAX_TASK_KEYS)]
+
+    assert len(resolve_task_keys(keys)) == MAX_TASK_KEYS
+
 
 # --- Потолок ожидания ---------------------------------------------------------------
 

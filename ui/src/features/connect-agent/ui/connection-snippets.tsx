@@ -84,10 +84,18 @@ export function ConnectionSnippets({ mcpUrl, token, labelled }: SnippetInput) {
           caption={CODEX_CONFIG_PATH}
           text={snippets.codexFile}
         />
+        {/* Обе оболочки сразу, а не одна по умолчанию: угадывать оболочку по
+            `navigator.userAgent` запрещено, а любое умолчание без него человек мог бы не
+            заметить и скопировать нерабочую строку (`UI-114`, решение UI-114#5). */}
         <CopyBlock
-          label={t('snippets.codexEnvLabel')}
-          caption={t('snippets.codexEnvCaption')}
-          text={snippets.codexEnv}
+          label={t('snippets.codexEnvBashLabel')}
+          caption={t('snippets.codexEnvBashCaption')}
+          text={snippets.codexEnv.bashZsh}
+        />
+        <CopyBlock
+          label={t('snippets.codexEnvPowerShellLabel')}
+          caption={t('snippets.codexEnvPowerShellCaption')}
+          text={snippets.codexEnv.powerShell}
         />
         <CodexForm fields={snippets.codexForm} />
       </Client>

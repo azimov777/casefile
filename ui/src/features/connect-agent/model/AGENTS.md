@@ -2,5 +2,5 @@
 
 ## Файлы
 
-- `snippets.ts` — `connectionSnippets`: заголовки, команда Claude Code, секция и переменная Codex, поля формы Codex, JSON `mcpServers`; кавычки оболочки и строки TOML
-- `snippets.test.ts` — адрес как есть и другой адрес — другой текст, подстановка и токен, метка во всех фрагментах или ни в одном, порядок флагов Claude Code, секрет не в файле Codex
+- `snippets.ts` — `connectionSnippets`: заголовки, команда Claude Code, секция и переменная Codex (bash/zsh и PowerShell), поля формы Codex, JSON `mcpServers`; кавычки bash/zsh и PowerShell, строки TOML
+- `snippets.test.ts` — адрес как есть и другой адрес — другой текст, подстановка и токен, переменная Codex одна и та же в bash/zsh и PowerShell, метка во всех фрагментах или ни в одном, порядок флагов Claude Code, секрет не в файле Codex, кавычки PowerShell

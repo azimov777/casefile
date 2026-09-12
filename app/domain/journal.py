@@ -21,7 +21,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.domain.case import EntryType
-from app.domain.errors import InvalidJournalCursorError, JournalWaitTooLongError
+from app.domain.errors import (
+    InvalidJournalCursorError,
+    JournalTooManyTasksError,
+    JournalWaitTooLongError,
+)
 
 #: Номер, с которого начинается журнал. `seq` выдаётся с единицы, поэтому «ничего ещё
 #: не читал» — это ноль, а не `None`: у курсора ленты нет состояния «неизвестно».
@@ -36,6 +40,14 @@ DEFAULT_WAIT_SECONDS = 0.0
 #: где-нибудь по дороге, и обрыв неотличим от «ничего не случилось».
 MAX_WAIT_SECONDS = 60.0
 
+#: Сколько задач можно назвать в одном фильтре ленты. Потолок нужен не базе — `IN` по
+#: индексу дешёв, — а тому, что каждый ключ стоит отдельного разрешения в задачу перед
+#: ожиданием, а само условие переспрашивается на каждом контрольном опросе, пока вызов
+#: висит. Сессия ведёт единицы дел, и пятьдесят — с большим запасом над любым реальным
+#: числом; превышение отвечает отказом с числом, а не молча усекается: выдача без части
+#: спрошенных задач читалась бы как «там ничего не происходит».
+MAX_TASK_KEYS = 50
+
 
 @dataclass(frozen=True, slots=True)
 class JournalFilter:
@@ -48,9 +60,15 @@ class JournalFilter:
 
     `types is None` — «все типы», `types == ()` — «ни одного»: клиент, отобравший
     нулевой набор типов, обязан получить пустую ленту, а не всю.
+
+    `task_ids` держит **набор** задач, а не одну: сессия ведёт несколько дел и обязана
+    спрашивать про них одним ожиданием, иначе она либо опрашивает их по очереди, либо
+    тянет всю ленту установки и отбирает у себя (TRK-76). `None` — «все задачи»;
+    пустого кортежа здесь не бывает — разрешение ключей отдаёт `None`, когда не назвали
+    ни одного, и «ни одной задачи» как отбор смысла не имеет.
     """
 
-    task_id: uuid.UUID | None = None
+    task_ids: tuple[uuid.UUID, ...] | None = None
     queue_id: uuid.UUID | None = None
     types: tuple[EntryType, ...] | None = None
 
@@ -70,6 +88,41 @@ def resolve_wait(seconds: float | None) -> float:
             details={"wait": seconds, "min": 0, "max": MAX_WAIT_SECONDS},
         )
     return float(seconds)
+
+
+def resolve_task_keys(value: str | Sequence[str] | None) -> tuple[str, ...]:
+    """Ключи задач фильтра ленты: один, список или перечисление через запятую.
+
+    Формы три, и все три законны. Один ключ строкой — так лента сужалась всегда, и
+    отнимать эту форму значило бы сломать прежние вызовы ради новой возможности. Список
+    — то, чем сессия называет свои дела. Запятая внутри значения — та же форма, что у
+    остальных списочных параметров API (`split_names`): её пишет человек и агент,
+    набирающие адрес руками.
+
+    Потолок проверяется здесь, а не в схеме параметра: сценарий один на REST и MCP, и
+    отказ обязан быть одинаковым на обоих входах. В подробностях и потолок, и
+    присланное число — по ним звавший сразу построит свой цикл из нескольких ожиданий.
+    """
+    if value is None:
+        return ()
+    raw = [value] if isinstance(value, str) else list(value)
+    keys = [part.strip() for item in raw for part in item.split(",") if part.strip()]
+    if len(keys) > MAX_TASK_KEYS:
+        raise JournalTooManyTasksError(
+            details={"tasks": len(keys), "max": MAX_TASK_KEYS},
+        )
+    # Повторы снимаются здесь, а не в запросе: каждый ключ стоит разрешения в задачу, и
+    # дважды названное дело дважды искать незачем. Порядок сохраняется — по нему
+    # читается отказ, называющий промахнувшийся ключ.
+    unique: list[str] = []
+    taken: set[str] = set()
+    for key in keys:
+        folded = key.casefold()
+        if folded in taken:
+            continue
+        taken.add(folded)
+        unique.append(key)
+    return tuple(unique)
 
 
 def parse_last_event_id(raw: str | None) -> int | None:
