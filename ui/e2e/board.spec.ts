@@ -1040,6 +1040,8 @@ function lanes(page: Page) {
         room: room(node),
         overflowX: getComputedStyle(node).overflowX,
         clientWidth: node.clientWidth,
+        // Боковые поля самого столбца — того узла, который прокручивается (UI-117).
+        sides: [getComputedStyle(node).paddingLeft, getComputedStyle(node).paddingRight],
       })),
       row: { over: lane.scrollWidth - lane.clientWidth, room: room(lane) },
     };
@@ -1072,6 +1074,17 @@ test('столбец доски не прокручивается вбок ни 
       // Столбцу вбок ехать некуда: карточки укладываются в его ширину.
       expect(seen.over, report).toBeLessThanOrEqual(0);
       expect(seen.room, report).toBe(0);
+      /*
+       * И не появится от того, чего этот прогон не видит. Область прокрутки считается
+       * не по содержимому: к объединению padding-бокса с рамками потомков прибавляется
+       * своё боковое поле контейнера (`css-overflow-3`). Заголовок столбца намеренно
+       * растянут `-mx-3` на весь padding-бокс, то есть достаёт до края объединения, —
+       * значит любое боковое поле на самом прокручиваемом узле становится запасом
+       * прокрутки вбок. Safari 18.6 так и считает (у владельца было 246/258 у всех
+       * шести столбцов), Chromium и WebKit 26.5 — нет, и потому этот прогон поймать
+       * дефект замером не может: он ловит его условие (UI-117).
+       */
+      expect(seen.sides, report).toEqual(['0px', '0px']);
     }
 
     // А ряду — есть: шесть столбцов не влезают ни в одну из этих ширин, и это
