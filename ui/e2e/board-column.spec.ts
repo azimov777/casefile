@@ -150,6 +150,97 @@ test('раскрытие свёрнутого столбца читает одн
   expect(asked, 'запросов столбца на раскрытие').toHaveLength(2);
 });
 
+/**
+ * Слово, которое браузер не переносит нигде, — путь к файлу этого же репозитория.
+ *
+ * Дефис перенос разрешает, косая черта, точка и подчёркивание — нет (замерено:
+ * `scrollable-region-focusable` даёт пол ширины 66,8 px, а `tests/test_agent_token.py`
+ * — 161,3 px). Поэтому слово выбрано без дефисов и выписано целиком, а не собрано из
+ * кусков: сценарий проверяет ровно эту длину, и укоротившееся слово молча перестало бы
+ * проверять что-либо. Название с путём — не выдумка теста: ими полны дела этого трекера,
+ * и именно такое слово задаёт `min-content` карточки, а через него — ширину, которую
+ * требует содержимое столбца (UI-115).
+ */
+const UNBREAKABLE = 'src/shared/i18n/dictionaries/ru/tasks.ts';
+
+/** Исполнитель, по которому отбирается ровно одна заведённая здесь задача. */
+const PROBE = 'ui115_probe';
+
+/** Запас прокрутки вбок у столбцов и у ряда: точный, дробный — такой же, как у браузера. */
+function lanes(page: Page) {
+  return page.evaluate(() => {
+    const sections = Array.from(document.querySelectorAll('section[aria-label]')).filter(
+      (node) => node.getAttribute('aria-label') !== 'Отбор задач',
+    ) as HTMLElement[];
+    const room = (node: HTMLElement) => {
+      const was = node.scrollLeft;
+      node.scrollLeft = 1e6;
+      const reached = node.scrollLeft;
+      node.scrollLeft = was;
+      return Math.round(reached * 100) / 100;
+    };
+    const lane = sections[0]?.parentElement as HTMLElement;
+    return {
+      columns: sections.map((node) => ({
+        status: node.getAttribute('aria-label') as string,
+        over: node.scrollWidth - node.clientWidth,
+        room: room(node),
+        clientWidth: node.clientWidth,
+      })),
+      row: { over: lane.scrollWidth - lane.clientWidth, room: room(lane) },
+    };
+  });
+}
+
+test('длинное непереносимое слово в названии не разводит столбец вбок', async ({
+  page,
+  request,
+}) => {
+  /*
+   * Задача с путём в названии и своим исполнителем: по нему отбирается ровно она,
+   * и столбец `backlog` в этом отборе состоит из одной карточки — той, чьё название
+   * и проверяется. Без отбора она уехала бы на третью страницу столбца: порядок
+   * списка — по ключу по возрастанию, а заведённых соседями задач в демо к этому
+   * времени десятки.
+   */
+  const created = await request.post('/api/v1/tasks', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      queue: 'DEMO',
+      title: `Подпись рамки таблицы живёт в ${UNBREAKABLE}`,
+      description: 'Заведена сквозным тестом: в названии путь, который нигде не переносится.',
+      assignee: PROBE,
+    },
+  });
+  expect(created.status()).toBe(201);
+
+  await silenceJournal(page);
+
+  /*
+   * Ниже точки остановки, на ней и шире. Ширина окна ширины столбца не меняет — она
+   * задана `--ui-board-column`, — но меняет ветку: с `fold` у столбца `overflow-y: auto`,
+   * а рядом с ним и вторая ось вычисляется в `auto`, то есть переполнение вправо
+   * становится полосой прокрутки. Ниже `fold` полосы не будет и при переполнении —
+   * там содержимое просто вылезет на соседа, что не лучше.
+   */
+  for (const width of [640, 704, 1024]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(`/tasks?queue=DEMO&view=board&assignee=${PROBE}&collapsed=`);
+    await expect(column(page, LONG).getByRole('article')).toHaveCount(1);
+    await expect(column(page, LONG).getByRole('article').first()).toContainText(UNBREAKABLE);
+    await fontsReady(page);
+
+    const measured = await lanes(page);
+    const report = `на ${width}px ${JSON.stringify(measured)}`;
+    for (const seen of measured.columns) {
+      expect(seen.over, report).toBeLessThanOrEqual(0);
+      expect(seen.room, report).toBe(0);
+    }
+    // Прокрутка ряда вбок при этом цела: шесть столбцов не влезают ни в одну ширину.
+    expect(measured.row.room, report).toBeGreaterThan(0);
+  }
+});
+
 test('в покое доска не спрашивает ничего: ни пустой столбец, ни короткий', async ({
   page,
   request,

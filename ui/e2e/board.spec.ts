@@ -1011,6 +1011,76 @@ test('страница не едет вбок ни на узкой доске, �
   }
 });
 
+/**
+ * Запас прокрутки вбок у каждого столбца и у ряда, снятый одним кадром.
+ *
+ * Считается дважды и по-разному, потому что числа значат разное. `scrollWidth -
+ * clientWidth` — целые: доля пикселя в них пропадает, а полосу браузер по доле рисует.
+ * `scrollLeft`, доведённый до упора, — та самая величина запаса, дробная: её браузер
+ * и спрашивает, решая, нужна ли полоса. Первое сравнимо с числами задачи, второе строже.
+ */
+function lanes(page: Page) {
+  return page.evaluate(() => {
+    const sections = Array.from(document.querySelectorAll('section[aria-label]')).filter(
+      (node) => node.getAttribute('aria-label') !== 'Отбор задач',
+    ) as HTMLElement[];
+    const room = (node: HTMLElement) => {
+      const was = node.scrollLeft;
+      node.scrollLeft = 1e6;
+      const reached = node.scrollLeft;
+      node.scrollLeft = was;
+      return Math.round(reached * 100) / 100;
+    };
+    const lane = sections[0]?.parentElement as HTMLElement;
+    return {
+      columns: sections.map((node) => ({
+        status: node.getAttribute('aria-label') as string,
+        // Так эту величину называет задача: целыми, как её отдаёт браузер.
+        over: node.scrollWidth - node.clientWidth,
+        room: room(node),
+        overflowX: getComputedStyle(node).overflowX,
+        clientWidth: node.clientWidth,
+      })),
+      row: { over: lane.scrollWidth - lane.clientWidth, room: room(lane) },
+    };
+  });
+}
+
+test('столбец доски не прокручивается вбок ни на одной ширине, а ряд — прокручивается', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+
+  /*
+   * 640 — ниже точки остановки, где своей прокрутки у столбца нет вовсе; 704 — сама
+   * точка, с которой она включается; 1024 — шире неё. Ширина окна столбцу ширины не
+   * меняет (она задана `--ui-board-column`), но меняет ветку: с `fold` у столбца
+   * `overflow-y: auto`, а по правилу CSS вторая ось рядом с ним вычисляется в `auto`
+   * — то есть любое переполнение вправо становится полосой прокрутки (UI-115).
+   */
+  for (const width of [640, 704, 1024]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+    await boardRead(page);
+    await fontsReady(page);
+
+    const measured = await lanes(page);
+    const report = `на ${width}px ${JSON.stringify(measured)}`;
+    expect(measured.columns).toHaveLength(contractStatuses().length);
+
+    for (const seen of measured.columns) {
+      // Столбцу вбок ехать некуда: карточки укладываются в его ширину.
+      expect(seen.over, report).toBeLessThanOrEqual(0);
+      expect(seen.room, report).toBe(0);
+    }
+
+    // А ряду — есть: шесть столбцов не влезают ни в одну из этих ширин, и это
+    // та самая прокрутка вбок, которую завели UI-68 и UI-94.
+    expect(measured.row.over, report).toBeGreaterThan(0);
+    expect(measured.row.room, report).toBeGreaterThan(0);
+  }
+});
+
 test('прижатая шапка не просвечивает карточками, и `axe` на узкой доске чист', async ({
   page,
   request,
