@@ -84,7 +84,8 @@ describe('экран «Подключить агента»', () => {
     ).toBeInTheDocument();
     const codex = client(say.ui('snippets.clients.codex'));
     expect(within(codex).getByText(expected.codexFile, exact)).toBeInTheDocument();
-    expect(within(codex).getByText(expected.codexEnv)).toBeInTheDocument();
+    expect(within(codex).getByText(expected.codexEnv.bashZsh)).toBeInTheDocument();
+    expect(within(codex).getByText(expected.codexEnv.powerShell)).toBeInTheDocument();
     expect(
       within(client(say.ui('snippets.clients.json'))).getByText(expected.json, exact),
     ).toBeInTheDocument();

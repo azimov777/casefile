@@ -313,8 +313,10 @@ export const ui = {
     codexHint:
       'The token goes through the <code>{{env}}</code> environment variable, so the secret does not land in the configuration file. Codex reads the variable from its own environment: set it where Codex is started from, and restart the Codex app after changing it.',
     codexFileLabel: 'Codex configuration section',
-    codexEnvLabel: 'Codex token variable',
-    codexEnvCaption: 'Terminal, before starting Codex',
+    codexEnvBashLabel: 'Codex token variable (bash/zsh)',
+    codexEnvBashCaption: 'Terminal, before starting Codex',
+    codexEnvPowerShellLabel: 'Codex token variable (PowerShell)',
+    codexEnvPowerShellCaption: 'PowerShell, before starting Codex',
     codexFormHint:
       'Or the same values in the form of the Codex app (MCP servers in the settings, a Streamable HTTP server):',
     codexField: {
