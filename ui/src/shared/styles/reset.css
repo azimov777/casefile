@@ -73,3 +73,40 @@ h3 {
   font-weight: 600;
   line-height: 1.25;
 }
+
+/*
+ * ПОЛОСЫ ПРОКРУТКИ (UI-116): тоньше системных и в цвет темы, одним объявлением на
+ * весь интерфейс — у столбца доски, ряда столбцов, таблицы задач, ленты дела и окна
+ * секрета отдельного оформления нет и не будет: правится только здесь.
+ *
+ * Стандарт (`scrollbar-width`, `scrollbar-color` — CSS Scrollbars Styling Module
+ * Level 1, MDN), а не `::-webkit-scrollbar`: у него власти больше, но он нестандартен,
+ * и явно назначенная им ширина навсегда включает классическую полосу — даже там, где
+ * система прячет её сама (Chrome for Developers, «Scrollbar styling»: «when you set
+ * the width or height of ::-webkit-scrollbar, an overlay scrollbar is always
+ * displayed, effectively turning it into a classic scrollbar»,
+ * https://developer.chrome.com/docs/css-ui/scrollbar-styling). Стандартные свойства
+ * так не делают: там же — «the thumb only gets drawn while you are actively
+ * scrolling» про оверлейную полосу, а для macOS с выключенным «Always show scroll
+ * bars» отдельно отмечено, что `scrollbar-color` вне прокрутки визуально не
+ * проявляется (stefanjudis.com, «How to color the browser scrollbar across
+ * browsers»). Трекпад владельца прячет полосу сам — эта правка его не трогает.
+ *
+ * `scrollbar-color` наследуется (MDN), поэтому хватает объявления на `:root`.
+ * `scrollbar-width` — нет («an ancestor's value doesn't affect its descendants»,
+ * тот же MDN): без универсального селектора полосу получило бы только окно браузера,
+ * а не полосы внутри страницы.
+ *
+ * Цвет — `--color-faint`: тот же токен и то же отношение контраста, которое
+ * `theme.test.ts` уже держит не ниже 3.0 к `--t-ground`/`--t-surface`/`--t-sunken`
+ * в обеих темах (порог органа управления, тот же расчёт, что у текста); фактические
+ * числа выше и с запасом — 4.59–5.23 в светлой теме, 4.84–5.73 в тёмной. Дорожка
+ * прозрачна: заливки у неё нет, полосу видно по одному ползунку.
+ */
+:root {
+  scrollbar-color: var(--color-faint) transparent;
+}
+
+* {
+  scrollbar-width: thin;
+}

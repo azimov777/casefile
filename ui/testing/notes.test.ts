@@ -114,6 +114,8 @@ const NOT_IN_CODE: Record<string, string> = {
   '10-listen-on-ipv6-by-default.sh': 'скрипт внутри образа nginx, а не наш файл',
   'lib/helper/shouldSkip.js': 'файл внутри `eslint-plugin-i18next`, а не наш',
   'markdown.module.css': 'снесённый модуль стилей, названный как снесённый',
+  AppleShowScrollBars: 'ключ NSUserDefaults macOS, не наш код',
+  NSScroller: 'класс AppKit macOS, решающий оверлей или классику полосы, не наш код',
 };
 
 /**
