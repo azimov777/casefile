@@ -1,0 +1,38 @@
+# Подпись вклада: каждый коммит запроса на слияние несёт `Signed-off-by` своего автора
+# (`.github/DCO`, `CONTRIBUTING.md`).
+#
+# Отдельный конвейер, а не задание внутри `ci.yml`: тот вызывается ещё и из `images.yml`
+# на каждый коммит main, где проверять нечего — там нет ни базы, ни головы запроса, а
+# история до 12 сентября 2026 подписей не несёт вовсе.
+#
+# Проверку делает тот же скрипт, что доступен человеку до отправки PR
+# (`scripts/check-dco.sh`): расхождение конвейера с локальной командой означало бы
+# красноту, которую автор не может воспроизвести у себя.
+
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-off:
+    name: Every commit is signed off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Полная история: скрипт идёт по диапазону от базы до головы, а мелкий чекаут
+      # обрывает его на первом же коммите, которого нет в клоне.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check sign-off
+        # Хеши приезжают окружением, а не подстановкой в строку команды: так содержимое
+        # события не может дописать к ней ничего своего.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-dco.sh "$BASE_SHA" "$HEAD_SHA"
