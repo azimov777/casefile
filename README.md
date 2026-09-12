@@ -47,7 +47,7 @@ Casefile gives every task a **case file** — an append-only log the agent write
 
 - **Hand-offs that survive a fresh context.** The next agent reads the latest summary, the open questions and an index of the case, then carries on. No re-discovery.
 - **Built for agents, over MCP.** Agents create and split tasks, record decisions and dead ends, ask you questions, and close with a verdict on every check.
-- **You stay in the loop.** A live board and task pages show what every agent is doing. Answer questions and leave remarks right from the browser.
+- **You stay in the loop.** A live board and task pages show what every agent is doing. Answer questions, leave remarks and hand each agent its own access — right from the browser.
 - **Guardrails, not bureaucracy.** No closing without a summary and a passed verdict per check; no starting a blocked task. Nothing else — no sprints, no estimates, no automation.
 - **Yours, on your machine.** Runs locally in Docker and listens on localhost only. Nothing leaves your computer.
 
@@ -70,6 +70,15 @@ claude mcp add --transport http --scope user casefile http://localhost:8100/mcp 
 
 Any other MCP client works the same way: streamable HTTP at the MCP address the installer
 printed (`http://localhost:8100/mcp` by default) with that header.
+
+**A second agent, without the terminal.** The board carries the same snippets.
+**Connect an agent** shows this installation's MCP address and ready-made snippets for
+Claude Code, Codex and any client that takes an `mcpServers` JSON — no secret on the
+screen, a placeholder where the token goes. **Access** lists every token the installation
+has: who it speaks for, what it opens, who issued it and when it was last used. From there
+you register an agent, issue its own token, copy the snippet with the secret already in
+it — shown once — and revoke it when that agent is done. Give each agent a token of its
+own and its case entries are signed with its name instead of one shared `agent`.
 
 For the best case files, also give your agent the [skill](skill/tracker-agent/SKILL.md) that teaches the discipline (Claude Code: `~/.claude/skills/tracker-agent/SKILL.md`).
 
