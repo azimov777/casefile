@@ -5,6 +5,7 @@ import {
   TOKEN_ENV,
   TOKEN_PLACEHOLDER,
   connectionSnippets,
+  powerShellQuote,
   shellQuote,
   type SnippetTexts,
 } from './snippets';
@@ -23,7 +24,8 @@ function texts(snippets: SnippetTexts): string[] {
     snippets.headers,
     snippets.claudeCode,
     snippets.codexFile,
-    snippets.codexEnv,
+    snippets.codexEnv.bashZsh,
+    snippets.codexEnv.powerShell,
     snippets.json,
     ...snippets.codexForm.map((field) => `${field.key} ${field.name ?? ''} ${field.value}`),
   ];
@@ -52,7 +54,8 @@ describe('фрагменты подключения', () => {
     const blank = connectionSnippets({ mcpUrl: ADDRESS, labelled: false });
     expect(blank.headers).toBe(`Authorization: Bearer ${TOKEN_PLACEHOLDER}`);
     expect(blank.claudeCode).toContain(`--header "Authorization: Bearer ${TOKEN_PLACEHOLDER}"`);
-    expect(blank.codexEnv).toBe(`export ${TOKEN_ENV}="${TOKEN_PLACEHOLDER}"`);
+    expect(blank.codexEnv.bashZsh).toBe(`export ${TOKEN_ENV}="${TOKEN_PLACEHOLDER}"`);
+    expect(blank.codexEnv.powerShell).toBe(`$env:${TOKEN_ENV} = "${TOKEN_PLACEHOLDER}"`);
     expect(JSON.parse(blank.json).mcpServers.casefile.headers).toEqual({
       Authorization: `Bearer ${TOKEN_PLACEHOLDER}`,
     });
@@ -60,11 +63,29 @@ describe('фрагменты подключения', () => {
     const issued = connectionSnippets({ mcpUrl: ADDRESS, token: TOKEN, labelled: false });
     expect(issued.headers).toBe(`Authorization: Bearer ${TOKEN}`);
     expect(issued.claudeCode).toContain(`--header "Authorization: Bearer ${TOKEN}"`);
-    expect(issued.codexEnv).toBe(`export ${TOKEN_ENV}="${TOKEN}"`);
+    expect(issued.codexEnv.bashZsh).toBe(`export ${TOKEN_ENV}="${TOKEN}"`);
+    expect(issued.codexEnv.powerShell).toBe(`$env:${TOKEN_ENV} = "${TOKEN}"`);
     expect(JSON.parse(issued.json).mcpServers.casefile.headers.Authorization).toBe(
       `Bearer ${TOKEN}`,
     );
     for (const text of texts(issued)) expect(text).not.toContain(TOKEN_PLACEHOLDER);
+  });
+
+  it('переменная Codex названа одинаково в bash/zsh и в PowerShell, значение то же', () => {
+    // Проверка задачи UI-114: строка bash/zsh существует, строка PowerShell существует,
+    // и обе несут одно и то же имя переменной и одно и то же значение — токен или
+    // подстановку, — а не расходятся именем или значением между собой.
+    const blank = connectionSnippets({ mcpUrl: ADDRESS, labelled: false });
+    expect(blank.codexEnv.bashZsh).toContain(TOKEN_ENV);
+    expect(blank.codexEnv.powerShell).toContain(TOKEN_ENV);
+    expect(blank.codexEnv.bashZsh).toContain(TOKEN_PLACEHOLDER);
+    expect(blank.codexEnv.powerShell).toContain(TOKEN_PLACEHOLDER);
+
+    const issued = connectionSnippets({ mcpUrl: ADDRESS, token: TOKEN, labelled: false });
+    expect(issued.codexEnv.bashZsh).toContain(TOKEN_ENV);
+    expect(issued.codexEnv.powerShell).toContain(TOKEN_ENV);
+    expect(issued.codexEnv.bashZsh).toContain(TOKEN);
+    expect(issued.codexEnv.powerShell).toContain(TOKEN);
   });
 
   it('в файл Codex секрет не ложится: там только имя переменной', () => {
@@ -149,5 +170,31 @@ describe('кавычки оболочки', () => {
     expect(claudeCode).toContain('"https://host.test/mcp?token=\\$HOME&x=\\"1\\""');
     // В TOML своё экранирование: у базовой строки кавычка экранируется, а `$` — нет.
     expect(codexFile).toContain('url = "https://host.test/mcp?token=$HOME&x=\\"1\\""');
+  });
+});
+
+describe('кавычки PowerShell', () => {
+  /*
+   * Значения проверены round-trip в pwsh 7.4.2 (`mcr.microsoft.com/powershell`,
+   * `UI-114#4`): подставленные обратно в `$env:VAR = "<результат>"`, они дают исходную
+   * строку без изменений, включая случай, где `$(...)` иначе выполнился бы подвыражением.
+   */
+  it('знаки, которые PowerShell раскрывает внутри двойных кавычек, экранируются', () => {
+    expect(powerShellQuote('plain')).toBe('"plain"');
+    expect(powerShellQuote('a"b')).toBe('"a`"b"');
+    // Обратный слеш для PowerShell не экранирующий знак — трогать его не нужно.
+    expect(powerShellQuote('a\\b')).toBe('"a\\b"');
+    expect(powerShellQuote('$(rm -rf ~)')).toBe('"`$(rm -rf ~)"');
+    expect(powerShellQuote('`id`')).toBe('"``id``"');
+  });
+
+  it('токен со знаками PowerShell в переменной Codex не выполняется как команда', () => {
+    const token = '$(rm -rf ~)`whoami`"quoted"';
+    const { codexEnv } = connectionSnippets({ mcpUrl: ADDRESS, token, labelled: false });
+
+    expect(codexEnv.powerShell).toBe(`$env:${TOKEN_ENV} = ${powerShellQuote(token)}`);
+    expect(codexEnv.powerShell).toBe(
+      `$env:${TOKEN_ENV} = "\`$(rm -rf ~)\`\`whoami\`\`\`"quoted\`""`,
+    );
   });
 });
