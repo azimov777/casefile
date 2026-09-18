@@ -1,7 +1,7 @@
 import { MemoryRouter } from 'react-router';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { entryOfType } from '@testing/msw/responses';
+import { entryOfType, summaryEntry } from '@testing/msw/responses';
 import { say } from '@testing/say';
 import { ENTRY_TYPES, type EntryType } from '../api/entries';
 import { EntryCard } from './entry-card';
@@ -139,6 +139,42 @@ describe('представление записи по типу', () => {
     // Заголовок сводки выводится трекером из первой строки «следующего шага»: показать
     // его вторым разом жирным над тем же текстом значит занять две строки ничем.
     expect(container.querySelectorAll('h3')).toHaveLength(0);
+  });
+
+  it('пятая часть сводки: с `unmeasured` рисует подпись и текст (TRK-78, UI-120)', () => {
+    const entry = summaryEntry(5, 'DEMO-1');
+    const withUnmeasured = {
+      ...entry,
+      payload: {
+        ...entry.payload,
+        unmeasured: 'Прод-путь не проверялся: гонял только дев-контур',
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <EntryCard entry={withUnmeasured} checks={[]} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(say.ui('entry.summary.unmeasured'))).toBeInTheDocument();
+    expect(
+      screen.getByText('Прод-путь не проверялся: гонял только дев-контур'),
+    ).toBeInTheDocument();
+  });
+
+  it('пятая часть сводки: без `unmeasured` не рисует ни подписи, ни пустого блока', () => {
+    // `summaryEntry` не кладёт `unmeasured` в нагрузку вовсе — тот же случай, что у
+    // промежуточных сводок и у всех дел, закрытых до TRK-78.
+    const { container } = render(
+      <MemoryRouter>
+        <EntryCard entry={summaryEntry(5, 'DEMO-1')} checks={[]} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText(say.ui('entry.summary.unmeasured'))).not.toBeInTheDocument();
+    // Четыре части — по числу `<dt>` в разметке: пятая не рисует пустой заголовок.
+    expect(container.querySelectorAll('dt')).toHaveLength(4);
   });
 
   it('вердикт называет проверку её текстом из задачи, а не только номером', () => {
