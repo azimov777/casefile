@@ -543,7 +543,9 @@ async def _child_task(session: AsyncSession, queue: Queue, *, agent: Actor, pare
         goal="Разрыв потока покрыт тестом",
         context="Родительская задача нашла причину; тест выделен, чтобы не смешивать правки",
     )
-    await links_service.add_link(session, task, parent, actor=agent, kind=LinkKind.PARENT)
+    # `add_link(a, b, kind=PARENT)` — «a родитель b»: родитель здесь `parent`
+    # (задача в работе), а не свежесозданный `task` (TRK-97).
+    await links_service.add_link(session, parent, task, actor=agent, kind=LinkKind.PARENT)
     return task
 
 
