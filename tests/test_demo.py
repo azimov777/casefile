@@ -166,6 +166,28 @@ async def test_every_demo_row_names_the_parents_its_card_shows(
     assert any(rows.values()), "в демо нет ни одного ребёнка"
 
 
+async def test_decomposed_test_is_a_child_of_the_task_in_progress(
+    db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
+) -> None:
+    """Тест, выделенный декомпозицией, — ребёнок задачи в работе, а не наоборот (TRK-97).
+
+    `_child_task` создаёт тест из задачи в работе, поэтому родитель — она: направление
+    однажды стояло навыворот (UI-119#8), и здесь проверена именно эта пара задач, а не
+    словарь видов связей вообще (им занята `test_demo_fills_every_link_kind`).
+    """
+    _done, in_progress, _candidate, _waiting, child, _checking, _cancelled = seeded.tasks
+    assert in_progress.status is TaskStatus.IN_PROGRESS
+    assert child.status is TaskStatus.BACKLOG
+
+    outcome = await search_service.search_tasks(
+        db_session, actor=reader, query=f"queue: {DEMO_QUEUE_KEY}", limit=200
+    )
+    rows = {found.task.key: found.parents for found in outcome.page.items}
+
+    assert rows[child.key] == (TaskParent(key=in_progress.key, title=in_progress.title),)
+    assert rows[in_progress.key] == ()
+
+
 async def test_demo_leaves_exactly_one_open_blocking_question(
     db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
 ) -> None:
