@@ -219,6 +219,7 @@ export const ui = {
       remaining: 'Remaining',
       blockers: 'Blockers',
       nextStep: 'Next step',
+      unmeasured: 'What the checks did not measure',
     },
     addressees: 'Asked of:',
     blocking: 'blocking',

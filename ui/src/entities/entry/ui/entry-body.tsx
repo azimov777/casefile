@@ -52,6 +52,15 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
           <Part title={t('entry.summary.remaining')} value={entry.payload.remaining} />
           <Part title={t('entry.summary.blockers')} value={entry.payload.blockers} />
           <Part title={t('entry.summary.nextStep')} value={entry.payload.next_step} />
+          {/*
+           * Пятая часть — только у закрывающей сводки (TRK-78): у промежуточных и у всех
+           * дел, закрытых до её появления, ключа в нагрузке нет вовсе. `Part` в этом
+           * случае не рисуется совсем, а не пустым блоком — отсутствие значения здесь
+           * обычный случай, а не пробел, который надо чем-то заполнить.
+           */}
+          {entry.payload.unmeasured == null || entry.payload.unmeasured === '' ? null : (
+            <Part title={t('entry.summary.unmeasured')} value={entry.payload.unmeasured} />
+          )}
         </dl>
       );
 

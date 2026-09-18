@@ -202,6 +202,7 @@ export const ui = {
       remaining: 'Осталось',
       blockers: 'Что мешает',
       nextStep: 'Следующий шаг',
+      unmeasured: 'Чего проверки не измерили',
     },
     addressees: 'Кому:',
     blocking: 'блокирующий',
