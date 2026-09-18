@@ -470,3 +470,35 @@ class IdempotencyKeyReusedError(ConflictError):
 
     code = "idempotency_key_reused"
     message = "Idempotency key was used for a different request"
+
+
+# --- Вход владельца по паролю ------------------------------------------------------------
+
+
+class PasswordLoginOffError(ConflictError):
+    """Пароль владельца на установке не задан: входить по паролю не во что.
+
+    Не `401`: неверного здесь ничего не прислали, у установки просто нет замка
+    (`TRACKER_PASSWORD_HASH` пуст), и ключ интерфейсу она отдаёт без входа. Встретить
+    этот код в работе значит, что nginx интерфейса и API расходятся в режиме —
+    интерфейс считает установку закрытой, а API пароля не знает.
+    """
+
+    code = "password_login_off"
+    message = "Password login is not set up on this installation"
+
+
+class PasswordAttemptsExceededError(TooManyRequestsError):
+    """Неудачных попыток входа за окно столько, сколько разрешено: пароль не проверяется.
+
+    Ограничение общее на процесс, а не на адрес: за прокси все попытки приходят с одного
+    адреса, а заголовку с адресом клиента перебирающий может написать что угодно. В
+    `details` — `retry_after` (через сколько секунд освободится место), `limit` и
+    `window_seconds`; то же число секунд несёт заголовок `Retry-After`.
+    """
+
+    code = "password_attempts_exceeded"
+    message = "Too many password attempts"
+
+    def response_headers(self) -> dict[str, str]:
+        return {"Retry-After": str(self.details["retry_after"])}

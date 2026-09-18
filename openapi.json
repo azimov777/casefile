@@ -4760,6 +4760,261 @@
           }
         }
       }
+    },
+    "/api/v1/session": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Log in with the owner password",
+        "description": "Проверяет пароль владельца и ставит куку сеанса; с ней `/config.json` отдаёт ключ.\n\nКука `casefile_session` — `HttpOnly`, `SameSite=Strict`, `Path=/`, со сроком сеанса, и\n`Secure`, если запрос пришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).\n\nНеверный пароль — `401 unauthorized` с `details.reason: wrong_password`. Неудачных\nпопыток за окно столько, сколько разрешено, — `429 password_attempts_exceeded` с\n`Retry-After`, и пароль тогда не проверяется вовсе. Пароля у установки нет — `409\npassword_login_off`.\n\nОтвечает `200`, а не `201`: сеанс не адресуемый ресурс, и повторить вход ключом\nидемпотентности нельзя — такие ключи живут в паре с токеном, а его здесь нет.",
+        "operationId": "open_session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_SessionRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong password or no live session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The installation has no owner password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many password attempts, retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Check the browser session",
+        "description": "Жив ли сеанс из куки: `200` со сроком или `401 unauthorized`.\n\nПричина отказа — в `details.reason`: `missing_session`, `unknown_session` (в том\nчисле после выхода и перезапуска API), `session_expired`. Этим маршрутом nginx\nинтерфейса решает, отдать ли `/config.json`.",
+        "operationId": "read_session",
+        "parameters": [
+          {
+            "name": "casefile_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly`",
+              "title": "Casefile Session"
+            },
+            "description": "Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly`"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_SessionRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong password or no live session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The installation has no owner password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many password attempts, retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Log out",
+        "description": "Гасит сеанс на сервере и стирает куку. Идемпотентен: без сеанса отвечает так же.\n\nКлюч, уже отданный вкладке, выход не отзывает — он отнимает возможность получить\nключ заново (`docs/CONCEPT.md`, 5.4).",
+        "operationId": "close_session",
+        "parameters": [
+          {
+            "name": "casefile_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly`",
+              "title": "Casefile Session"
+            },
+            "description": "Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly`"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Wrong password or no live session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The installation has no owner password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many password attempts, retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5531,6 +5786,18 @@
           "data"
         ],
         "title": "DataResponse[QueueRead]"
+      },
+      "DataResponse_SessionRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SessionRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[SessionRead]"
       },
       "DataResponse_TaskLinkRead_": {
         "properties": {
@@ -6448,6 +6715,24 @@
         "type": "object",
         "title": "ParticipantUpdate",
         "description": "Частичное обновление: применяется только переданное.\n\nМеняется одно описание. Имя стоит подписью в уже подшитых записях дела, а род\nобъясняет читателю, кто говорит, — переписывать их задним числом значит переписывать\nисторию, поэтому этих полей здесь нет вовсе, и лишнее поле схема отвергает.\n\nУ описания нет осмысленного `null`, поэтому поле объявлено не-nullable: передать\n`null` схема не даст. Молча отбросить его было бы хуже отказа — клиент получил бы\n`200` и уверенность, что поле изменено."
+      },
+      "PasswordLogin": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "description": "The owner password of this installation, as typed. It is checked against `TRACKER_PASSWORD_HASH` and never stored or logged"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "PasswordLogin",
+        "description": "Вход по паролю установки. Имени нет: пароль у установки один — владельца."
       },
       "PlainEntryCreate": {
         "properties": {
@@ -7531,6 +7816,22 @@
         ],
         "title": "SectionChangedPayload",
         "description": "Правка названия, описания или раздела в `backlog`: «было» и «стало» целиком.\n\nУ точечной правки проверки «целиком» — это тексты самой проверки, а не всего\nсписка, и её номер стоит в `check_no`."
+      },
+      "SessionRead": {
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At",
+            "description": "When the session ends, counted from the login (`TRACKER_SESSION_HOURS`). It also ends earlier on logout and when the API process restarts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expires_at"
+        ],
+        "title": "SessionRead",
+        "description": "Живой сеанс браузера. Секрета здесь нет: он едет только в куке `HttpOnly`."
       },
       "StatusChangedEntryRead": {
         "properties": {

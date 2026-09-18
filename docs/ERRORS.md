@@ -72,6 +72,7 @@
 | `link_cycle_detected` | Link would create a cycle | Связь замкнула бы кольцо в иерархии или в блокировках. |
 | `link_exists` | Link already exists | Такая связь между этими задачами уже есть. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
+| `password_login_off` | Password login is not set up on this installation | Пароль владельца на установке не задан: входить по паролю не во что. |
 | `queue_key_taken` | Queue key is already taken | Ключ очереди уже занят: ключи уникальны без учёта регистра. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
@@ -115,6 +116,7 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `journal_stream_limit` | Too many open journal streams | Открытых потоков журнала на этом процессе столько, сколько разрешено настройкой. |
+| `password_attempts_exceeded` | Too many password attempts | Неудачных попыток входа за окно столько, сколько разрешено: пароль не проверяется. |
 | `too_many_requests` | Too many requests | Ресурс исчерпан и просьба повторить позже, а не отказ навсегда. |
 
 ## 500 — внутренняя ошибка

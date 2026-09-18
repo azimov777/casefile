@@ -11,13 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.errors import register_exception_handlers
-from app.api.router import api_router, generate_operation_id
+from app.api.router import api_router, generate_operation_id, session_router
 from app.api.routes import health
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.shutdown import shutdown
 from app.db.session import dispose_engine
 from app.db.wakeup import journal_wakeup
+from app.services.login import PasswordLogin
 
 logger = get_logger("main")
 
@@ -65,6 +66,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         generate_unique_id_function=generate_operation_id,
     )
     app.state.settings = settings
+    # Сеансы входа по паролю и окно попыток живут столько же, сколько приложение
+    # (`app/services/login.py`). Испорченный `TRACKER_PASSWORD_HASH` роняет здесь сборку,
+    # то есть старт процесса, а не первую попытку входа.
+    app.state.password_login = PasswordLogin.from_settings(settings)
 
     app.add_middleware(
         CORSMiddleware,
@@ -78,6 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(api_router)
+    app.include_router(session_router)
 
     return app
 

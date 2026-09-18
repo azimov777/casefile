@@ -7,7 +7,8 @@
 Так новый маршрут защищён по умолчанию: чтобы оставить его открытым, это придётся
 сделать осознанно, а забыть авторизацию — нельзя. Обратный порядок держался бы на
 внимательности семнадцати задач подряд. Вне `/api/v1` остаётся только `/health` для
-мониторинга.
+мониторинга; без токена под `/api/v1` — только вход по паролю, вынесенный в свой роутер
+(`session_router` ниже).
 
 Важное ограничение FastAPI 0.141, о которое легко споткнуться: `route_class`,
 `dependencies` и `responses` родительского роутера **не** наследуются роутерами,
@@ -29,6 +30,7 @@ from app.api.routes import (
     questions,
     queues,
     remarks,
+    session,
     tasks,
     tokens,
 )
@@ -80,3 +82,25 @@ api_router.include_router(links.router)
 api_router.include_router(questions.router)
 api_router.include_router(remarks.router)
 api_router.include_router(journal.router)
+
+
+# Вход владельца по паролю — единственное под `/api/v1`, что живёт без токена: пароль и
+# есть то, чем браузер получает ключ (`docs/CONCEPT.md`, 5.4). Отдельный роутер, а не
+# исключение внутри общего: общий требует токен у всего, что в него попало, и открыть
+# маршрут можно только вынеся его сюда осознанно. Список таких маршрутов объявлен кодом
+# (`app/api/contract.py`, `TOKEN_EXEMPT`), и сплошная проверка сверяет его с этим роутером.
+SESSION_ERROR_RESPONSES: dict[int | str, dict[str, object]] = {
+    401: {"model": ErrorResponse, "description": "Wrong password or no live session"},
+    409: {"model": ErrorResponse, "description": "The installation has no owner password"},
+    422: {"model": ErrorResponse, "description": "Request validation failed"},
+    429: {"model": ErrorResponse, "description": "Too many password attempts, retry later"},
+    500: {"model": ErrorResponse, "description": "Unexpected error"},
+}
+
+session_router = APIRouter(
+    prefix="/api/v1",
+    dependencies=[Depends(reject_unknown_query_params)],
+    responses=SESSION_ERROR_RESPONSES,
+)
+
+session_router.include_router(session.router)

@@ -36,6 +36,7 @@ from httpx import AsyncClient
 from app.api.contract import (
     BODYLESS_STATUS_CODES,
     ENVELOPE_EXEMPT,
+    TOKEN_EXEMPT,
     declared_error_classes,
     error_catalog,
     render_error_catalog,
@@ -58,6 +59,11 @@ UNCALLABLE: dict[tuple[str, str], str] = {
         "Бесконечный поток `text/event-stream`: развёртка ждала бы конца ответа, "
         "которого нет. Форма кадра проверяется в `tests/test_journal_stream.py`, "
         "отсутствие оболочки — по схеме, через `ENVELOPE_EXEMPT`."
+    ),
+    ("GET", "/api/v1/session"): (
+        "Отвечает по куке сеанса, не по токену развёртки, и только на установке, где "
+        "задан пароль владельца: общей фикстуре пароля не дали, и честный ответ здесь — "
+        "`409`. Успешный ответ в оболочке проверяет `tests/test_password_login.py`."
     ),
 }
 
@@ -130,6 +136,34 @@ def test_exemptions_carry_a_reason() -> None:
     """Причина обязательна: молча пропущенный маршрут неотличим от забытого."""
     for route, reason in ENVELOPE_EXEMPT.items():
         assert len(reason) > 40, route
+    for route, reason in TOKEN_EXEMPT.items():
+        assert len(reason) > 40, route
+
+
+def test_every_token_exemption_points_at_a_real_route(schema: dict[str, Any]) -> None:
+    """Маршрут без токена объявлен кодом, и объявление не висит в пустоте."""
+    declared = {(method, path) for method, path, _ in operations(schema)}
+
+    assert set(TOKEN_EXEMPT) <= declared, sorted(set(TOKEN_EXEMPT) - declared)
+
+
+def test_only_the_declared_routes_skip_the_token(schema: dict[str, Any]) -> None:
+    """Без схемы авторизации в OpenAPI — ровно маршруты из `TOKEN_EXEMPT`.
+
+    Схема `ApiToken` попадает в операцию вместе с зависимостью аутентификации общего
+    роутера. Маршрут под `/api/v1` без неё и без строки в `TOKEN_EXEMPT` — это маршрут,
+    открытый по недосмотру, и развёртка «без токена — `401`» его бы тоже не увидела,
+    если бы исключала по отсутствию схемы, а не по объявлению.
+    """
+    tokenless = {
+        (method, path)
+        for method, path, operation in operations(schema)
+        if path.startswith("/api/v1") and not operation.get("security")
+    }
+
+    assert tokenless == set(TOKEN_EXEMPT), (
+        f"routes without a token {sorted(tokenless)}, declared {sorted(TOKEN_EXEMPT)}"
+    )
 
 
 def test_errors_are_described_with_the_common_envelope(schema: dict[str, Any]) -> None:
@@ -165,12 +199,15 @@ async def test_every_route_answers_with_the_error_envelope_without_a_token(
 ) -> None:
     """Развёртка по всем операциям: без токена каждая отвечает `401` в общей оболочке.
 
+    Кроме объявленных в `TOKEN_EXEMPT` (вход по паролю): их токен не спрашивает, и что
+    они отвечают, проверяет `tests/test_password_login.py`.
+
     Ошибка приходит из зависимости роутера и обработчика исключений, а не из кода
     эндпоинта, поэтому проверять её надо именно так — по всем маршрутам сразу.
     """
     checked = 0
     for method, path, _ in operations(schema):
-        if not path.startswith("/api/v1"):
+        if not path.startswith("/api/v1") or (method, path) in TOKEN_EXEMPT:
             continue
         url = _substitute(path, dict.fromkeys(_path_params(path), PLACEHOLDER))
         response = await client.request(method, url)
@@ -270,8 +307,12 @@ async def sample(owner: Participant, queue: Queue, task: Task) -> dict[str, str]
 
 
 def _api_operations(schema: dict[str, Any]) -> int:
-    """Сколько операций объявлено под `/api/v1` — ожидаемый охват развёртки без токена."""
-    return sum(1 for _, path, _ in operations(schema) if path.startswith("/api/v1"))
+    """Сколько операций под `/api/v1` требуют токен — ожидаемый охват развёртки без токена."""
+    return sum(
+        1
+        for method, path, _ in operations(schema)
+        if path.startswith("/api/v1") and (method, path) not in TOKEN_EXEMPT
+    )
 
 
 # --- Идемпотентность ---------------------------------------------------------------
