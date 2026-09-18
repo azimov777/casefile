@@ -98,13 +98,24 @@ describe('установка, закрытая паролем', () => {
     expect(sent).toEqual([]);
   });
 
-  it('окно попыток называет секунды из отказа', async () => {
+  /**
+   * `details.scope` различает своё окно и общий потолок установки (`TRK-98`, `UI-121`):
+   * без него (или с незнакомым интерфейсу значением) экран не может сказать, чья это
+   * помеха, и показывает нынешний общий текст с секундами.
+   */
+  it.each([
+    [undefined, 'passwordThrottled'],
+    ['a-future-scope-value', 'passwordThrottled'],
+    ['address', 'passwordThrottledAddress'],
+    ['installation', 'passwordThrottledInstallation'],
+  ] as const)('scope %s называет секунды словами своего текста', async (scope, key) => {
     server.use(
       http.post(`${API}/api/v1/session`, () =>
         failure('password_attempts_exceeded', 429, 'Too many password attempts', {
           retry_after: 42,
           limit: 5,
           window_seconds: 60,
+          ...(scope === undefined ? {} : { scope }),
         }),
       ),
     );
@@ -112,9 +123,7 @@ describe('установка, закрытая паролем', () => {
 
     await typePassword(PASSWORD);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      say.login('passwordThrottled', { seconds: 42 }),
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(say.login(key, { seconds: 42 }));
   });
 
   it('верный пароль открывает задачи ключом установки, и в хранилище не остаётся ничего', async () => {
