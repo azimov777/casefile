@@ -3,8 +3,10 @@ export { unwrap, unwrapEmpty, unwrapPage, type Page, type PageMeta } from './env
 export { ApiError, CLIENT_ERROR_CODES, type ErrorDetail } from './error';
 export {
   installConfigState,
+  installLocked,
   loadInstallToken,
   refreshInstallToken,
+  reloadInstallToken,
   subscribeInstallConfig,
   type ConfigState,
 } from './install-config';

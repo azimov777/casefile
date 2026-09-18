@@ -693,6 +693,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check the browser session
+         * @description Жив ли сеанс из куки: `200` со сроком или `401 unauthorized`.
+         *
+         *     Причина отказа — в `details.reason`: `missing_session`, `unknown_session` (в том
+         *     числе после выхода и перезапуска API), `session_expired`. Этим маршрутом nginx
+         *     интерфейса решает, отдать ли `/config.json`.
+         */
+        get: operations["read_session"];
+        put?: never;
+        /**
+         * Log in with the owner password
+         * @description Проверяет пароль владельца и ставит куку сеанса; с ней `/config.json` отдаёт ключ.
+         *
+         *     Кука `casefile_session` — `HttpOnly`, `SameSite=Strict`, `Path=/`, со сроком сеанса, и
+         *     `Secure`, если запрос пришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).
+         *
+         *     Неверный пароль — `401 unauthorized` с `details.reason: wrong_password`. Неудачных
+         *     попыток за окно столько, сколько разрешено, — `429 password_attempts_exceeded` с
+         *     `Retry-After`, и пароль тогда не проверяется вовсе. Пароля у установки нет — `409
+         *     password_login_off`.
+         *
+         *     Отвечает `200`, а не `201`: сеанс не адресуемый ресурс, и повторить вход ключом
+         *     идемпотентности нельзя — такие ключи живут в паре с токеном, а его здесь нет.
+         */
+        post: operations["open_session"];
+        /**
+         * Log out
+         * @description Гасит сеанс на сервере и стирает куку. Идемпотентен: без сеанса отвечает так же.
+         *
+         *     Ключ, уже отданный вкладке, выход не отзывает — он отнимает возможность получить
+         *     ключ заново (`docs/CONCEPT.md`, 5.4).
+         */
+        delete: operations["close_session"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1108,6 +1154,10 @@ export interface components {
         /** DataResponse[QueueRead] */
         DataResponse_QueueRead_: {
             data: components["schemas"]["QueueRead"];
+        };
+        /** DataResponse[SessionRead] */
+        DataResponse_SessionRead_: {
+            data: components["schemas"]["SessionRead"];
         };
         /** DataResponse[TaskLinkRead] */
         DataResponse_TaskLinkRead_: {
@@ -1593,6 +1643,17 @@ export interface components {
              * @example Релизный бот, ведёт задачи выкладки
              */
             description?: string;
+        };
+        /**
+         * PasswordLogin
+         * @description Вход по паролю установки. Имени нет: пароль у установки один — владельца.
+         */
+        PasswordLogin: {
+            /**
+             * Password
+             * @description The owner password of this installation, as typed. It is checked against `TRACKER_PASSWORD_HASH` and never stored or logged
+             */
+            password: string;
         };
         /**
          * PlainEntryCreate
@@ -2253,6 +2314,18 @@ export interface components {
              * @description New value; a list for `checks`
              */
             after?: string | string[] | null;
+        };
+        /**
+         * SessionRead
+         * @description Живой сеанс браузера. Секрета здесь нет: он едет только в куке `HttpOnly`.
+         */
+        SessionRead: {
+            /**
+             * Expires At
+             * Format: date-time
+             * @description When the session ends, counted from the login (`TRACKER_SESSION_HOURS`). It also ends earlier on logout and when the API process restarts
+             */
+            expires_at: string;
         };
         /**
          * StatusChangedEntryRead
@@ -5652,6 +5725,209 @@ export interface operations {
                 };
             };
             /** @description Too many open streams on this server */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly` */
+                casefile_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_SessionRead_"];
+                };
+            };
+            /** @description Wrong password or no live session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The installation has no owner password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many password attempts, retry later */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    open_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordLogin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_SessionRead_"];
+                };
+            };
+            /** @description Wrong password or no live session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The installation has no owner password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many password attempts, retry later */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    close_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly` */
+                casefile_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Wrong password or no live session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The installation has no owner password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many password attempts, retry later */
             429: {
                 headers: {
                     [name: string]: unknown;

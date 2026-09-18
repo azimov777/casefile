@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { Inbox, KeyRound, Plug } from 'lucide-react';
-import { bootstrapQueryOptions, useInstallKey } from '@/entities/session';
+import { bootstrapQueryOptions, useInstallKey, useInstallLocked } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
 import { Button, QueryState } from '@/shared/ui';
@@ -25,6 +25,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const logout = useLogout();
   // Ключ отдала установка — выходить некуда: см. кнопку в самом низу панели.
   const fromInstall = useInstallKey();
+  const locked = useInstallLocked();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { t } = useTranslation('ui');
@@ -151,8 +152,11 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
          * и ввести не сможет: нажатие вернуло бы его на тот же экран через секунду —
          * конфигурацию читают заново при каждой загрузке вкладки. Там, где людей
          * несколько, конфигурации с ключом нет, и кнопка стоит как стояла.
+         *
+         * Установка, закрытая паролем, ключ тоже отдаёт сама, но за паролем: выход там
+         * закрывает сеанс, и без пароля ключа больше не будет (`TRK-90`).
          */}
-        {fromInstall ? null : (
+        {fromInstall && !locked ? null : (
           <Button tone="quiet" className="px-2 py-1 text-meta" onClick={logout}>
             {t('app.signOut')}
           </Button>
