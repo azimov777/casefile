@@ -38,6 +38,11 @@ x-backend: &backend
     # подменяют дополнением к `ui`, а службу, которой оно не знает, собрали бы под общим
     # тегом (`docs/notes/testing.md`).
     TRACKER_PASSWORD_HASH: scrypt:32768:8:3:xwuxdvEw-i5O3uOc8nLBDg:wwifPZjmvEw4m4SEs1YeNa4ITHTC2CuTnG9z1i-dIbM
+    # Адрес клиента для окна попыток входа API берёт из `X-Real-IP` только от службы `ui`
+    # — как в установке (`../docker-compose.prod.yml`). Второй экземпляр интерфейса,
+    # в режиме пароля, `e2e/global-setup.ts` поднимает с именем службы (`--use-aliases`),
+    # и вход в сценариях идёт тем же путём, что у владельца.
+    TRACKER_REAL_IP_FROM: ui
   volumes:
     # Образ разработки бэкенда несёт только зависимости в /opt/venv (TRK-66), код
     # приезжает томом — так же, как в его собственном контуре. Внутрь этого тома

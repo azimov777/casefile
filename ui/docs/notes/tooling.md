@@ -273,3 +273,24 @@ DNS-запись на этот же адрес (DNS rebinding), соединяе
 подниматься, если порт опубликован не на петле (`TRACKER_UI_BIND`).
 **Где:** `docker/access-mode.sh`; `docker/nginx.conf.template`; `e2e/password-login.spec.ts`;
 `e2e/host-guard.spec.ts`.
+
+## Кто клиент для API, решает nginx: `realip` от названных прокси и перезаписанный `X-Real-IP`
+
+**Что:** шаг старта `docker/access-mode.sh` пишет третий файл — `real-ip.conf` с
+`set_real_ip_from` на каждый адрес из `TRACKER_UI_TRUSTED_PROXIES` (`CASEFILE_TRUSTED_PROXIES`
+установки), `real_ip_header X-Forwarded-For` и `real_ip_recursive on`; при пустом списке —
+только комментарий. Шаблон подключает его на уровне `server`, а в `location /api/` ставит
+`proxy_set_header X-Real-IP $remote_addr` — присланный клиентом заголовок этим заменяется, а
+не дописывается. API берёт адрес клиента для окна попыток входа только из этого заголовка и
+только от службы `ui` (TRK-98).
+**Почему важно:** `real_ip_recursive on` берёт самый правый адрес цепочки, не названный
+доверенным, — поэтому доверенным называют только свои прокси: сеть вроде `0.0.0.0/0` вернула
+бы левый адрес цепочки, то есть написанный клиентом. Имён хостов список не принимает (шаг
+старта отказывается подниматься с объяснением): имя в `set_real_ip_from` nginx разрешил бы
+один раз при старте. Шаг старта теперь обязан писать три файла в любом режиме — без
+любого из них nginx не поднимется.
+**Как правильно:** доверие правится в `docker/access-mode.sh`, объяснение — у `include` в
+шаблоне. Проверить, кого nginx считает клиентом, — первое поле строк `docker compose logs
+ui`: после `realip` там адрес браузера, а не прокси.
+**Где:** `docker/access-mode.sh`; `docker/nginx.conf.template`; `../docker-compose.prod.yml`,
+`TRACKER_UI_TRUSTED_PROXIES`; `../app/api/client_address.py`.

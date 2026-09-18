@@ -146,6 +146,33 @@ mcp.casefile.example.com {
 with `TRACKER_MCP_PUBLIC_URL=https://mcp.casefile.example.com/mcp`. A proxy that sends
 `X-Forwarded-Proto: https` gets the session cookie marked `Secure`.
 
+**Name your proxy.** Sign-in tells guessers apart by address (see **Guessing** below). Behind
+a proxy every request arrives from the proxy, so the board must be told which address is
+the proxy; only then does it take the browser's address from the proxy's
+`X-Forwarded-For`. From anyone else that header is ignored — anybody can write it. Add to
+`~/casefile/.env`:
+
+```bash
+CASEFILE_TRUSTED_PROXIES=172.18.0.1   # the address the board sees the proxy come from
+```
+
+and run `docker compose up -d`. That address is not the proxy's own: it is whatever
+Docker shows the board. With the proxy on the same machine and `CASEFILE_BIND=127.0.0.1`,
+it is the gateway of the installation's network, on Linux and Docker Desktop alike:
+
+```bash
+docker network inspect casefile_default -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+```
+
+To check, run `docker compose logs ui`: each request line starts with the address it came
+from — with the proxy named, the browser's; without, the proxy's. Several proxies or a
+network go comma-separated (`172.18.0.1,10.0.0.0/8`). The network gets its address when it
+is created, so after `docker compose down` check the gateway again. Keep
+`CASEFILE_BIND=127.0.0.1` behind a proxy: Docker Desktop shows **every** connection to a
+port published to the network as `192.168.65.1`, so naming that address would let anyone
+claim any address. Without this line nothing breaks, but everyone behind the proxy shares
+one address — and one guesser holds the owner at "try again later" again.
+
 What else to know:
 
 - **No password, no network.** With `CASEFILE_BIND` beyond localhost and no password, the
@@ -156,9 +183,17 @@ What else to know:
   password (a new hash in `.env` and `docker compose up -d`). A tab that already holds the
   key keeps working until it reloads; if you think the key leaked, revoke the `local-ui`
   token on **Access** — the next `docker compose up -d` issues a new one.
-- **Guessing.** After 5 wrong passwords within a minute, sign-in answers "try again later"
-  to everyone — the right password included — until the minute has passed. Agents, which
-  use tokens, are not affected.
+- **Guessing.** After 5 wrong passwords within a minute from one address, sign-in answers
+  "try again later" to that address — the right password included — until the minute has
+  passed; other addresses sign in as usual. On top of that the whole installation takes at
+  most 20 wrong passwords a minute from all addresses together, which is what holds
+  guessing spread over many machines. The price is named: four or more addresses guessing
+  at once keep everyone, you included, at "try again later" for as long as they keep going
+  (an IPv6 client counts as its whole `/64`). Your open sessions and the agents, which use
+  tokens, are not affected. A client is the address that opened the connection, or the one
+  your named proxy reports (above). Docker Desktop hides the address of every connection
+  from the network behind one of its own, so there the board tells clients apart only
+  behind a proxy on the same machine.
 
 ## Under the hood
 

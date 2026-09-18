@@ -14,6 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response, status
 
+from app.api.client_address import ClientAddressesDep
 from app.api.schemas.common import DataResponse
 from app.api.schemas.session import PasswordLogin as PasswordLoginBody
 from app.api.schemas.session import SessionRead
@@ -53,6 +54,7 @@ async def open_session(
     request: Request,
     response: Response,
     login: PasswordLoginDep,
+    addresses: ClientAddressesDep,
 ) -> DataResponse[SessionRead]:
     """Проверяет пароль владельца и ставит куку сеанса; с ней `/config.json` отдаёт ключ.
 
@@ -60,14 +62,16 @@ async def open_session(
     `Secure`, если запрос пришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).
 
     Неверный пароль — `401 unauthorized` с `details.reason: wrong_password`. Неудачных
-    попыток за окно столько, сколько разрешено, — `429 password_attempts_exceeded` с
-    `Retry-After`, и пароль тогда не проверяется вовсе. Пароля у установки нет — `409
+    попыток за окно с этого адреса или со всей установки столько, сколько разрешено, —
+    `429 password_attempts_exceeded` с `Retry-After` и `details.scope`, и пароль тогда не
+    проверяется вовсе. Адрес клиента — собеседник TCP, а за nginx установки — его
+    `X-Real-IP`; прочим заголовкам с адресом API не верит. Пароля у установки нет — `409
     password_login_off`.
 
     Отвечает `200`, а не `201`: сеанс не адресуемый ресурс, и повторить вход ключом
     идемпотентности нельзя — такие ключи живут в паре с токеном, а его здесь нет.
     """
-    opened = await login.open(payload.password)
+    opened = await login.open(payload.password, await addresses.of(request))
     _set_cookie(response, opened, secure=_arrived_over_https(request))
     return DataResponse[SessionRead](data=SessionRead(expires_at=opened.expires_at))
 

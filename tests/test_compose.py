@@ -530,3 +530,53 @@ def test_both_contours_hand_the_password_hash_to_the_application() -> None:
         ]
 
         assert "TRACKER_PASSWORD_HASH: ${TRACKER_PASSWORD_HASH:-}" in declared, contour
+
+
+#: Шаблон nginx образа интерфейса: половина договора об адресе клиента, которую compose
+#: не видит, — кто пишет `X-Real-IP`.
+UI_NGINX_TEMPLATE = PROJECT_ROOT / "ui" / "docker" / "nginx.conf.template"
+
+#: Кому API установки верит `X-Real-IP` и чем прокси владельца доходят до nginx.
+PROD_REAL_IP_FROM = "TRACKER_REAL_IP_FROM: ui"
+DEV_REAL_IP_FROM = 'TRACKER_REAL_IP_FROM: ""'
+UI_TRUSTED_PROXIES = "TRACKER_UI_TRUSTED_PROXIES: ${CASEFILE_TRUSTED_PROXIES:-}"
+
+
+def _location(template: str, path: str) -> list[str]:
+    """Строки блока `location <path> {` шаблона nginx до закрывающей скобки."""
+    lines = template.splitlines()
+    starts = [n for n, line in enumerate(lines) if line.strip() == f"location {path} {{"]
+    assert len(starts) == 1, f"location {path}: {len(starts)} блоков вместо одного"
+    body: list[str] = []
+    for line in lines[starts[0] + 1 :]:
+        if line.strip() == "}":
+            break
+        body.append(line.strip())
+    return body
+
+
+def test_the_api_believes_the_client_address_only_from_the_nginx_that_writes_it() -> None:
+    """Адрес клиента для окна попыток входа: API верит `X-Real-IP` только службе `ui`.
+
+    Две половины одного договора (TRK-98#6), и порознь каждая бесполезна или опасна:
+    - прод-контур называет API доверенным собеседником `ui`, а nginx образа интерфейса
+      **перезаписывает** `X-Real-IP` своим `$remote_addr` на пути к API — присланный
+      клиентом заголовок до API не доходит;
+    - дев-контур публикует API напрямую, nginx перед ним нет — доверенных нет;
+    - прокси владельца доходят до nginx единственной подстановкой, пустой по умолчанию.
+    """
+    anchors = _by_contour(lambda text: [line.strip() for line in _block(text, APP_ENVIRONMENT)])
+    ui_described = [
+        line.strip()
+        for line in _services(COMPOSE_FILES["prod"].read_text(encoding="utf-8"))[UI_SERVICE]
+    ]
+    template = UI_NGINX_TEMPLATE.read_text(encoding="utf-8")
+    api_location = _location(template, "/api/")
+
+    assert PROD_REAL_IP_FROM in anchors["prod"], anchors["prod"]
+    assert DEV_REAL_IP_FROM in anchors["dev"], anchors["dev"]
+    assert UI_TRUSTED_PROXIES in ui_described, ui_described
+    assert "proxy_set_header X-Real-IP $remote_addr;" in api_location, api_location
+    assert "include /etc/nginx/casefile/real-ip.conf;" in [
+        line.strip() for line in template.splitlines()
+    ]

@@ -11,6 +11,7 @@
 
 import asyncio
 import io
+import ipaddress
 import logging
 import threading
 from collections.abc import AsyncIterator
@@ -19,17 +20,27 @@ from datetime import UTC, datetime, timedelta
 from http.cookies import SimpleCookie
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from app import cli
+from app.api.client_address import ClientAddresses, IPAddress
 from app.api.routes.session import SESSION_COOKIE
 from app.core.config import Settings
 from app.db.session import get_session
 from app.domain.passwords import MIN_PASSWORD_LENGTH, PasswordHash, hash_password, verify_password
 from app.main import create_app
 from app.services import login as login_module
-from app.services.login import ATTEMPT_LIMIT, ATTEMPT_WINDOW, PasswordLogin
+from app.services.login import (
+    ATTEMPT_LIMIT_PER_ADDRESS,
+    ATTEMPT_LIMIT_TOTAL,
+    ATTEMPT_WINDOW,
+    PasswordLogin,
+    client_key,
+)
 
 PASSWORD = "correct horse battery staple"
 SESSION_URL = "/api/v1/session"
@@ -56,11 +67,10 @@ def clock() -> Clock:
     return Clock()
 
 
-@asynccontextmanager
-async def client_of(
+def application_of(
     settings: Settings, db_session: AsyncSession, clock: Clock | None = None
-) -> AsyncIterator[AsyncClient]:
-    """Клиент приложения, собранного с этими настройками, на транзакции теста."""
+) -> FastAPI:
+    """Приложение, собранное с этими настройками, на транзакции теста."""
     application = create_app(settings)
     application.dependency_overrides[get_session] = lambda: db_session
     if clock is not None:
@@ -71,8 +81,27 @@ async def client_of(
             session_ttl=built._ttl,
             clock=clock,
         )
-    transport = ASGITransport(app=application)
+    return application
+
+
+@asynccontextmanager
+async def client_from(application: FastAPI, peer: str = "127.0.0.1") -> AsyncIterator[AsyncClient]:
+    """Клиент, чьё соединение с приложением открыто с адреса `peer`.
+
+    Один и тот же `application` — одни и те же окна попыток: так два клиента с разных
+    адресов видят общий процесс API, как в жизни.
+    """
+    transport = ASGITransport(app=application, client=(peer, 123))
     async with AsyncClient(transport=transport, base_url="http://casefile.test") as http_client:
+        yield http_client
+
+
+@asynccontextmanager
+async def client_of(
+    settings: Settings, db_session: AsyncSession, clock: Clock | None = None
+) -> AsyncIterator[AsyncClient]:
+    """Клиент приложения, собранного с этими настройками, на транзакции теста."""
+    async with client_from(application_of(settings, db_session, clock)) as http_client:
         yield http_client
 
 
@@ -230,30 +259,327 @@ async def test_a_new_process_forgets_every_session(db_session: AsyncSession) -> 
 # --- Перебор ---------------------------------------------------------------------------
 
 
+def refusal(response: Response) -> dict[str, object]:
+    """Подробности отказа `429` — после проверки, что это он."""
+    assert response.status_code == 429, response.text
+    error = response.json()["error"]
+    assert error["code"] == "password_attempts_exceeded"
+    assert response.headers["retry-after"] == str(error["details"]["retry_after"])
+    assert "set-cookie" not in response.headers
+    details: dict[str, object] = error["details"]
+    return details
+
+
+@pytest.fixture
+def locked_app(db_session: AsyncSession, clock: Clock) -> FastAPI:
+    """Установка с паролем, API которой клиенты видят напрямую — без прокси впереди."""
+    return application_of(Settings(password_hash=HASH, session_hours=24), db_session, clock)
+
+
+#: Адрес nginx интерфейса в сети контура и два клиента за ним. Адреса — из блоков для
+#: документации (RFC 5737), чтобы не спутать их ни с чьими настоящими.
+NGINX = "172.18.0.5"
+GUESSER = "203.0.113.7"
+OWNER = "198.51.100.20"
+
+
+@pytest.fixture
+def behind_nginx(db_session: AsyncSession, clock: Clock) -> FastAPI:
+    """Установка, где API верит `X-Real-IP` только от своего nginx — как в прод-контуре."""
+    settings = Settings(password_hash=HASH, session_hours=24, real_ip_from=[NGINX])
+    return application_of(settings, db_session, clock)
+
+
 async def test_attempts_over_the_window_are_refused_even_with_the_right_password(
     locked: AsyncClient, clock: Clock
 ) -> None:
-    """Сверх окна пароль не проверяется вовсе: `429` с `Retry-After`, и верный тоже."""
-    for _ in range(ATTEMPT_LIMIT):
+    """Сверх окна адреса пароль не проверяется вовсе: `429` с `Retry-After`, и верный тоже."""
+    for _ in range(ATTEMPT_LIMIT_PER_ADDRESS):
         assert (await log_in(locked, "wrong password")).status_code == 401
     clock.advance(timedelta(seconds=10))
 
     refused = await log_in(locked)
 
-    assert refused.status_code == 429
-    error = refused.json()["error"]
-    assert error["code"] == "password_attempts_exceeded"
     window = int(ATTEMPT_WINDOW.total_seconds())
-    assert error["details"] == {
+    assert refusal(refused) == {
         "retry_after": window - 10,
-        "limit": ATTEMPT_LIMIT,
+        "limit": ATTEMPT_LIMIT_PER_ADDRESS,
         "window_seconds": window,
+        "scope": "address",
     }
-    assert refused.headers["retry-after"] == str(window - 10)
-    assert "set-cookie" not in refused.headers
 
     clock.advance(ATTEMPT_WINDOW)
     assert (await log_in(locked)).status_code == 200
+
+
+async def test_a_guesser_does_not_lock_out_the_owner_signing_in_from_another_address(
+    locked_app: FastAPI,
+) -> None:
+    """С одного адреса идут непрерывные неудачи, а верный пароль с другого проходит.
+
+    Перебирающий упирается в своё окно, и дальше его попытки отказываются, не занимая
+    места: общий потолок он не выбирает, сколько бы ни старался.
+    """
+    async with client_from(locked_app, GUESSER) as guesser, client_from(locked_app, OWNER) as owner:
+        outcomes = [
+            (await log_in(guesser, f"guess number {n}")).status_code
+            for n in range(ATTEMPT_LIMIT_TOTAL * 2)
+        ]
+        signed_in = await log_in(owner)
+
+    assert outcomes[:ATTEMPT_LIMIT_PER_ADDRESS] == [401] * ATTEMPT_LIMIT_PER_ADDRESS
+    assert set(outcomes[ATTEMPT_LIMIT_PER_ADDRESS:]) == {429}
+    assert signed_in.status_code == 200, signed_in.text
+    assert session_cookie(signed_in)[SESSION_COOKIE].value
+
+
+async def test_guessing_from_many_addresses_stops_at_the_installation_ceiling(
+    locked_app: FastAPI, clock: Clock
+) -> None:
+    """Перебор со многих адресов упирается в общий потолок — и тогда ждут все, владелец тоже.
+
+    Это названная цена (`TRK-98#7`): распределённый перебор держит установку перед `429`,
+    пока идёт, но подбирать быстрее потолка не может.
+    """
+    guessers = ATTEMPT_LIMIT_TOTAL // ATTEMPT_LIMIT_PER_ADDRESS
+    for number in range(guessers):
+        async with client_from(locked_app, f"203.0.113.{number + 1}") as guesser:
+            for _ in range(ATTEMPT_LIMIT_PER_ADDRESS):
+                assert (await log_in(guesser, "wrong password")).status_code == 401
+    clock.advance(timedelta(seconds=15))
+
+    async with client_from(locked_app, OWNER) as owner:
+        refused = await log_in(owner)
+        window = int(ATTEMPT_WINDOW.total_seconds())
+        assert refusal(refused) == {
+            "retry_after": window - 15,
+            "limit": ATTEMPT_LIMIT_TOTAL,
+            "window_seconds": window,
+            "scope": "installation",
+        }
+
+        clock.advance(ATTEMPT_WINDOW)
+        assert (await log_in(owner)).status_code == 200
+
+
+@pytest.mark.parametrize("header", ["X-Forwarded-For", "X-Real-IP", "Forwarded"])
+async def test_a_forged_address_header_without_a_trusted_proxy_does_not_widen_the_window(
+    locked_app: FastAPI, header: str
+) -> None:
+    """Подделанный заголовок с адресом не даёт новых окон: перебор ограничен, как был.
+
+    Никто не назван доверенным — клиент это тот, кто открыл соединение, что бы он ни
+    написал о себе. Каждая попытка называет себя новым адресом, а окно у всех одно.
+    """
+    async with client_from(locked_app, GUESSER) as guesser:
+        outcomes = []
+        for number in range(ATTEMPT_LIMIT_TOTAL):
+            forged = f"192.0.2.{number + 1}"
+            value = f"for={forged}" if header == "Forwarded" else forged
+            response = await log_in(guesser, "wrong password", **{header: value})
+            outcomes.append(response.status_code)
+
+    assert outcomes.count(401) == ATTEMPT_LIMIT_PER_ADDRESS
+    assert outcomes[ATTEMPT_LIMIT_PER_ADDRESS:] == [429] * (
+        ATTEMPT_LIMIT_TOTAL - ATTEMPT_LIMIT_PER_ADDRESS
+    )
+
+
+async def test_behind_the_installation_nginx_the_client_is_its_x_real_ip(
+    behind_nginx: FastAPI,
+) -> None:
+    """За своим nginx клиент — его `X-Real-IP`: перебор одного не держит другого."""
+    async with client_from(behind_nginx, NGINX) as via_nginx:
+        for _ in range(ATTEMPT_LIMIT_PER_ADDRESS):
+            guessed = await log_in(via_nginx, "wrong password", **{"X-Real-IP": GUESSER})
+            assert guessed.status_code == 401
+        refused = await log_in(via_nginx, **{"X-Real-IP": GUESSER})
+        signed_in = await log_in(via_nginx, **{"X-Real-IP": OWNER})
+
+    assert refusal(refused)["scope"] == "address"
+    assert signed_in.status_code == 200, signed_in.text
+
+
+async def test_the_api_reads_no_forwarding_chain_even_from_its_nginx(
+    behind_nginx: FastAPI,
+) -> None:
+    """`X-Forwarded-For` не значит ничего и от своего nginx: цепочку разбирает nginx.
+
+    nginx пишет адрес клиента в `X-Real-IP` сам, перезаписывая присланный; цепочка
+    `X-Forwarded-For`, которую он пропускает дальше, начинается тем, что написал клиент.
+    """
+    async with client_from(behind_nginx, NGINX) as via_nginx:
+        outcomes = [
+            (
+                await log_in(
+                    via_nginx,
+                    "wrong password",
+                    **{"X-Real-IP": GUESSER, "X-Forwarded-For": f"192.0.2.{n + 1}, {GUESSER}"},
+                )
+            ).status_code
+            for n in range(ATTEMPT_LIMIT_PER_ADDRESS + 3)
+        ]
+
+    assert outcomes.count(401) == ATTEMPT_LIMIT_PER_ADDRESS
+    assert outcomes[-1] == 429
+
+
+async def test_a_forged_x_real_ip_from_a_peer_that_is_not_the_nginx_is_ignored(
+    behind_nginx: FastAPI,
+) -> None:
+    """`X-Real-IP` от собеседника не из списка — просто заголовок: клиент — сам собеседник.
+
+    Так случилось бы, если бы порт API кто-то опубликовал в обход nginx: прямой клиент
+    называет себя новым адресом на каждой попытке и всё равно упирается в своё окно.
+    """
+    async with client_from(behind_nginx, GUESSER) as direct:
+        outcomes = [
+            (
+                await log_in(direct, "wrong password", **{"X-Real-IP": f"192.0.2.{n + 1}"})
+            ).status_code
+            for n in range(ATTEMPT_LIMIT_TOTAL)
+        ]
+
+    assert outcomes.count(401) == ATTEMPT_LIMIT_PER_ADDRESS
+    assert outcomes[ATTEMPT_LIMIT_PER_ADDRESS:] == [429] * (
+        ATTEMPT_LIMIT_TOTAL - ATTEMPT_LIMIT_PER_ADDRESS
+    )
+
+
+async def test_a_trusted_peer_without_a_usable_x_real_ip_is_the_client_itself(
+    behind_nginx: FastAPI, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Свой nginx заголовок ставит всегда; нет его или в нём мусор — клиент сам собеседник."""
+    caplog.set_level(logging.WARNING)
+    async with client_from(behind_nginx, NGINX) as via_nginx:
+        for value in ["not an address", "", "203.0.113.7:4431"]:
+            await log_in(via_nginx, "wrong password", **{"X-Real-IP": value})
+        await log_in(via_nginx, "wrong password")
+        await log_in(via_nginx, "wrong password")
+        refused = await log_in(via_nginx, **{"X-Real-IP": "   "})
+
+    assert refusal(refused)["scope"] == "address"
+    assert "sent no usable x-real-ip header" in caplog.text
+
+
+class Resolver:
+    """DNS для теста: имя → адреса, со счётчиком обращений."""
+
+    def __init__(self, table: dict[str, set[str]]) -> None:
+        self.table = table
+        self.calls = 0
+
+    async def __call__(self, name: str) -> frozenset[IPAddress]:
+        self.calls += 1
+        if name not in self.table:
+            raise OSError(f"{name} does not resolve")
+        return frozenset(ipaddress.ip_address(address) for address in self.table[name])
+
+
+class Monotonic:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def request_from(peer: str, real_ip: str = OWNER) -> Request:
+    """Запрос, пришедший с адреса `peer` с заголовком `X-Real-IP`."""
+    return Request(
+        {"type": "http", "headers": [(b"x-real-ip", real_ip.encode())], "client": (peer, 1)}
+    )
+
+
+async def test_a_trusted_proxy_named_by_host_follows_its_address() -> None:
+    """Имя службы (`ui`) разрешается при входе: пересозданный с новым адресом nginx — свой.
+
+    Разрешённое имя помнится несколько секунд — поток отказов не ходит в DNS на каждой
+    попытке, — а не разрешившееся имя не доверяет никому.
+    """
+    resolver = Resolver({"ui": {NGINX}})
+    monotonic = Monotonic()
+    addresses = ClientAddresses(["ui"], resolve=resolver, clock=monotonic, ttl=5.0)
+
+    assert str(await addresses.of(request_from(NGINX))) == OWNER
+    assert str(await addresses.of(request_from(GUESSER))) == GUESSER
+    assert resolver.calls == 1
+
+    # `ui` пересоздан с новым адресом. Пока помнится старый, новый — чужой.
+    resolver.table["ui"] = {"172.18.0.9"}
+    assert str(await addresses.of(request_from("172.18.0.9"))) == "172.18.0.9"
+    monotonic.now += 5.0
+    assert str(await addresses.of(request_from("172.18.0.9"))) == OWNER
+    assert resolver.calls == 2
+
+    # Имя не разрешилось (служба остановлена) — доверия нет.
+    del resolver.table["ui"]
+    monotonic.now += 5.0
+    assert str(await addresses.of(request_from("172.18.0.9"))) == "172.18.0.9"
+
+
+async def test_a_trusted_network_needs_no_resolution() -> None:
+    """Адрес или сеть в списке сверяются без DNS; клиент без адреса — неизвестен."""
+    resolver = Resolver({})
+    addresses = ClientAddresses(["172.18.0.0/16"], resolve=resolver)
+
+    assert str(await addresses.of(request_from(NGINX))) == OWNER
+    assert str(await addresses.of(request_from(GUESSER))) == GUESSER
+    assert await addresses.of(Request({"type": "http", "headers": [], "client": None})) is None
+    assert resolver.calls == 0
+
+
+def test_the_trusted_peers_setting_takes_addresses_networks_and_names() -> None:
+    """Список через запятую, пустая строка — никого, опечатка роняет старт."""
+    assert Settings(real_ip_from="ui, 10.0.0.0/8,fd00::1").real_ip_from == [
+        "ui",
+        "10.0.0.0/8",
+        "fd00::1",
+    ]
+    assert Settings(real_ip_from="").real_ip_from == []
+
+    with pytest.raises(ValidationError, match="not an IP address, a network or a host name"):
+        Settings(real_ip_from="ui/api")
+
+
+def test_an_ipv6_client_is_its_64_network_and_a_mapped_ipv4_is_ipv4() -> None:
+    """Одна машина IPv6 владеет целой `/64`: окно на отдельный адрес она обходила бы даром."""
+    first = client_key(ipaddress.ip_address("2001:db8:1:2::1"))
+    second = client_key(ipaddress.ip_address("2001:db8:1:2:ffff::9"))
+    neighbour = client_key(ipaddress.ip_address("2001:db8:1:3::1"))
+
+    assert first == second == "2001:db8:1:2::/64"
+    assert neighbour != first
+    assert client_key(ipaddress.ip_address("::ffff:203.0.113.7")) == GUESSER
+    assert client_key(None) == login_module.UNKNOWN_CLIENT
+
+
+async def test_the_counters_never_hold_more_addresses_than_the_ceiling() -> None:
+    """Адрес помнится, пока у него неудача в окне или идущая попытка, — их не больше потолка.
+
+    Сотни адресов, по одной неудаче каждый, со сдвигом часов: словарь адресов не растёт
+    выше потолка, отказанные адреса в нём не заводятся, а после окна он пустеет.
+    """
+    clock = Clock()
+    login = PasswordLogin(
+        password_hash=PasswordHash.parse(HASH), session_ttl=timedelta(hours=1), clock=clock
+    )
+    largest = 0
+    for number in range(300):
+        address = ipaddress.ip_address(f"10.0.{number // 250}.{number % 250 + 1}")
+        with pytest.raises(
+            (login_module.UnauthorizedError, login_module.PasswordAttemptsExceededError)
+        ):
+            await login.open("wrong password", address)
+        largest = max(largest, len(login._clients))
+        clock.advance(timedelta(seconds=1))
+
+    assert largest <= ATTEMPT_LIMIT_TOTAL
+    assert len(login._clients) <= ATTEMPT_LIMIT_TOTAL
+
+    clock.advance(ATTEMPT_WINDOW)
+    await login.open(PASSWORD, ipaddress.ip_address(OWNER))
+    assert login._clients == {}
 
 
 async def test_attempts_in_flight_count_against_the_window(
@@ -261,8 +587,9 @@ async def test_attempts_in_flight_count_against_the_window(
 ) -> None:
     """Одновременные попытки занимают окно до исхода: сотня разом не проскочит проверку.
 
-    Проверка пароля держится на событии, пока тест не отпустит: все попытки окна идут
-    одновременно, и следующая получает отказ, не дожидаясь их неудач.
+    Проверка пароля держится на событии, пока тест не отпустит: все попытки окна адреса
+    идут одновременно, и следующая с того же адреса получает отказ, не дожидаясь их
+    неудач, — а попытка с другого адреса проходит.
     """
     release = threading.Event()
     checked: list[str] = []
@@ -274,17 +601,25 @@ async def test_attempts_in_flight_count_against_the_window(
 
     monkeypatch.setattr(login_module, "verify_password", slow_verify)
     login = PasswordLogin(password_hash=PasswordHash.parse(HASH), session_ttl=timedelta(hours=1))
+    guesser = ipaddress.ip_address(GUESSER)
 
-    pending = [asyncio.create_task(login.open("wrong password")) for _ in range(ATTEMPT_LIMIT)]
+    pending = [
+        asyncio.create_task(login.open("wrong password", guesser))
+        for _ in range(ATTEMPT_LIMIT_PER_ADDRESS)
+    ]
     await asyncio.sleep(0)
     try:
-        with pytest.raises(login_module.PasswordAttemptsExceededError):
-            await login.open(PASSWORD)
+        with pytest.raises(login_module.PasswordAttemptsExceededError) as refused:
+            await login.open(PASSWORD, guesser)
+        owner = asyncio.create_task(login.open(PASSWORD, ipaddress.ip_address(OWNER)))
+        await asyncio.sleep(0)
     finally:
         release.set()
         results = await asyncio.gather(*pending, return_exceptions=True)
 
-    assert PASSWORD not in checked
+    assert refused.value.details["scope"] == "address"
+    assert (await owner).expires_at
+    assert checked.count(PASSWORD) == 1
     assert all(isinstance(result, login_module.UnauthorizedError) for result in results)
 
 

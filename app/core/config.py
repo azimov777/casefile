@@ -1,10 +1,17 @@
 """Конфигурация приложения: читается из переменных окружения и валидируется Pydantic."""
 
+import ipaddress
+import re
 from functools import lru_cache
 from typing import Annotated, Literal
 
 from pydantic import Field, HttpUrl, PostgresDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+#: Имя хоста по RFC 1123: метки из букв, цифр и дефиса через точку. Имя службы compose
+#: (`ui`) — частный случай.
+_HOST_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+HOST_NAME = re.compile(rf"{_HOST_LABEL}(?:\.{_HOST_LABEL})*")
 
 
 class Settings(BaseSettings):
@@ -149,6 +156,20 @@ class Settings(BaseSettings):
             "the login. Sessions live in the memory of the API process and end with it"
         ),
     )
+    # Кому API верит адрес клиента в `X-Real-IP` (`app/api/client_address.py`). Адрес
+    # нужен окну попыток входа: неудачи считаются на адрес, и написать его себе сам
+    # клиент не должен. Верят не заголовку, а собеседнику: прод-контур называет здесь
+    # службу `ui` — nginx своей установки, который перезаписывает заголовок адресом,
+    # видимым ему самому. Пусто — адрес клиента это собеседник TCP, заголовков нет.
+    real_ip_from: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Peers whose `X-Real-IP` header the API takes as the client address of a "
+            "password login: IP addresses, networks or host names, comma-separated. A host "
+            "name is resolved when a login arrives. Empty means the client is the TCP peer "
+            "and no header is believed"
+        ),
+    )
 
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
@@ -157,12 +178,33 @@ class Settings(BaseSettings):
         description="Origins allowed for the browser frontend",
     )
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "real_ip_from", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
-        """Позволяет задавать список через запятую: `TRACKER_CORS_ORIGINS=a,b`."""
+        """Список через запятую: `TRACKER_CORS_ORIGINS=a,b`, `TRACKER_REAL_IP_FROM=ui`.
+
+        Пустая строка — пустой список: compose передаёт переменную всегда.
+        """
         if isinstance(value, str) and not value.startswith("["):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("real_ip_from")
+    @classmethod
+    def _real_ip_from_names_peers(cls, value: list[str]) -> list[str]:
+        """Каждая запись — адрес, сеть или имя хоста; опечатка роняет старт.
+
+        Молча пропущенная запись значила бы, что nginx установки не назван доверенным, и
+        окно попыток снова стало бы одним на всех клиентов — без единого признака почему.
+        """
+        for entry in value:
+            try:
+                ipaddress.ip_network(entry, strict=False)
+            except ValueError:
+                if not HOST_NAME.fullmatch(entry):
+                    raise ValueError(
+                        f"{entry!r} is not an IP address, a network or a host name"
+                    ) from None
         return value
 
     @field_validator("mcp_public_url", mode="before")

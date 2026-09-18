@@ -491,10 +491,10 @@ class PasswordLoginOffError(ConflictError):
 class PasswordAttemptsExceededError(TooManyRequestsError):
     """Неудачных попыток входа за окно столько, сколько разрешено: пароль не проверяется.
 
-    Ограничение общее на процесс, а не на адрес: за прокси все попытки приходят с одного
-    адреса, а заголовку с адресом клиента перебирающий может написать что угодно. В
-    `details` — `retry_after` (через сколько секунд освободится место), `limit` и
-    `window_seconds`; то же число секунд несёт заголовок `Retry-After`.
+    Окон два: на адрес клиента и общее на установку, с потолком выше (`TRK-98#7`). Какое
+    отказало, говорит `details.scope` — `address` или `installation`; там же `limit`
+    этого окна, `window_seconds` и `retry_after` (через сколько секунд освободится место).
+    То же число секунд несёт заголовок `Retry-After`.
     """
 
     code = "password_attempts_exceeded"

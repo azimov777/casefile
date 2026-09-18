@@ -18,13 +18,56 @@
 #   без сеанса отвечает `401 {"login":"password"}` — по нему интерфейс рисует форму
 #   пароля. Проверки `Host` нет: границу держит кука, а сервер отвечает любому своему
 #   имени и за любым прокси.
+#
+# Третий файл — кто клиент, в любом режиме (TRK-98#6): прокси перед установкой, которым
+# nginx верит `X-Forwarded-For` (`TRACKER_UI_TRUSTED_PROXIES`, адреса и сети через
+# запятую). Пусто — никому: клиент это тот, кто открыл соединение, и адрес его написать
+# нельзя. По адресу клиента API считает попытки входа по паролю.
 set -eu
 
 dir=/etc/nginx/casefile
 login=${TRACKER_UI_LOGIN:-}
 bind=${TRACKER_UI_BIND:-127.0.0.1}
+trusted=$(printf '%s' "${TRACKER_UI_TRUSTED_PROXIES:-}" | tr ',' ' ')
 
 mkdir -p "$dir"
+
+# Список проверяется до записи: имя хоста или опечатка в `set_real_ip_from` уронили бы
+# nginx с сообщением о строке файла, которого владелец не писал. `set -f` — чтобы
+# запись вида `*` не развернулась в имена файлов.
+set -f
+{
+  echo "# Кто клиент: доверенные прокси перед установкой (access-mode.sh)."
+  for proxy in $trusted; do
+    case $proxy in
+      *[!0-9A-Fa-f.:/]*)
+        echo "$0: CASEFILE_TRUSTED_PROXIES: '$proxy' is not an IP address or a network; name the proxy by the address the board sees it from, see README, Network mode" >&2
+        exit 1
+        ;;
+    esac
+    echo "set_real_ip_from $proxy;"
+  done
+  if [ -n "$trusted" ]; then
+    echo "real_ip_header X-Forwarded-For;"
+    echo "real_ip_recursive on;"
+  fi
+} >"$dir/real-ip.conf"
+set +f
+
+if [ -n "$trusted" ]; then
+  echo "$0: X-Forwarded-For is believed from:$(printf ' %s' $trusted); every other client is the address of its connection"
+  case $bind in
+    127.* | ::1 | '[::1]' | localhost) ;;
+    *)
+      # Не отказ: прокси на другой машине — законная схема. Но на Docker Desktop все
+      # соединения с портом, опубликованным в сеть, приходят с одного адреса, и доверие
+      # ему — доверие всей сети (замеры TRK-98#5 и #10).
+      echo "$0: warning: the board is published on $bind and believes X-Forwarded-For from the addresses above: anyone reaching the port from them names any client. Keep the proxy on this machine with CASEFILE_BIND=127.0.0.1; see README, Network mode." >&2
+      ;;
+  esac
+else
+  echo "$0: no trusted proxies: every client is the address of its connection"
+fi
 
 case $login in
   password)
