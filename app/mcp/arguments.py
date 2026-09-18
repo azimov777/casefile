@@ -42,6 +42,7 @@ from app.domain.query_language import (
 )
 from app.domain.search import (
     FEATURES_FIELD,
+    PARENTS_FIELD,
     searchable_names,
     selectable_names,
     sortable_names,
@@ -540,6 +541,10 @@ ClosingEntriesArg = Annotated[
 #: Признаки в набор входят: они короткие, а решение «брать ли задачу» без них не
 #: принимается — иначе агент звал бы `get_task` на каждую строку выдачи, чтобы узнать,
 #: не заблокирована ли она.
+#:
+#: Родители входят по той же причине: без них агент не видит, к какой программе
+#: относится задача, и читает `get_task` построчно. Цена замерена (TRK-95#7): у задачи
+#: верхнего уровня — `"parents":[]`, 13 символов, у ребёнка — ключ и название родителя.
 DEFAULT_SEARCH_FIELDS: tuple[str, ...] = (
     "key",
     "title",
@@ -547,6 +552,7 @@ DEFAULT_SEARCH_FIELDS: tuple[str, ...] = (
     "assignee",
     "priority",
     FEATURES_FIELD,
+    PARENTS_FIELD,
 )
 
 QueryArg = Annotated[
@@ -596,6 +602,7 @@ FieldsArg = Annotated[
             + ". Ключ приходит всегда, пустой список означает «задачу целиком»: разделы "
             "длинные. `features` приносит вычисляемые признаки строки: "
             + ", ".join(f"`{name}`" for name in feature_names())
+            + ". `parents` — прямые родители: ключ и название"
         )
     ),
 ]

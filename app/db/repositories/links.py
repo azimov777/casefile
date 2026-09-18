@@ -10,12 +10,14 @@
 — единственное определение признака `blocked` в SQL, и поиску нужен тот же запрос,
 вложенный в `EXISTS` по каждой строке выдачи. Метод, привязанный к сессии, туда не
 годится, а второе написание условия развело бы поиск с карточкой (`docs/notes/search.md`).
+Так же объявлен `parents_of`: родители строки выдачи — подзапрос внутри выборки страницы.
 """
 
 import uuid
 from typing import Any
 
-from sqlalchemy import Integer, Select, Uuid, cast, literal, or_, select
+from sqlalchemy import Integer, Select, Uuid, cast, func, literal, or_, select, text
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -172,4 +174,38 @@ def related_task_keys(task_id: Any, *, kind: LinkKind, as_source: bool) -> Selec
         select(other.key)
         .join(Link, other.id == other_side)
         .where(own_side == task_id, Link.kind == kind, other.status.not_in(CLOSED_STATUSES))
+    )
+
+
+def parents_of(task_id: Any) -> Select[tuple[Any]]:
+    """Прямые родители задачи одним значением: JSON-список `{key, title}`, пустой — `[]`.
+
+    Отдаётся не строками, а одним агрегатом, потому что поиск вкладывает запрос в
+    выборку страницы скалярным подзапросом — колонкой рядом с признаками, — и родители
+    всей страницы приезжают тем же запросом, что и сама страница, без запроса на строку
+    (`CONCEPT.md`, 4.4). Строками запрос пришлось бы соединять со страницей, а соединение
+    размножило бы задачу по числу родителей и сломало бы и страницу, и курсор.
+
+    Родитель — источник связи `parent`, задача — её цель (`app/domain/links.py`,
+    `canonical_form`), поэтому ребёнок ищется по `target_id`: тот же индекс
+    `ix_links_target_id_kind`, что у отбора `parent:`. Порядок — появление связи, как у
+    связей в карточке (`list_for_task`): ключ содержит номер, и строковый порядок поставил
+    бы `TRK-10` перед `TRK-2`.
+
+    `[]`, а не `NULL`, у задачи без родителей: у списка «ничего» — это пустой список, и
+    второй способ сказать то же самое вызывающему пришлось бы помнить.
+    """
+    parent = aliased(Task, name="parent_task")
+    listed = func.jsonb_agg(
+        aggregate_order_by(
+            func.jsonb_build_object("key", parent.key, "title", parent.title),
+            Link.created_at,
+            Link.id,
+        )
+    )
+    return (
+        select(func.coalesce(listed, text("'[]'::jsonb")))
+        .select_from(Link)
+        .join(parent, parent.id == Link.source_id)
+        .where(Link.kind == LinkKind.PARENT, Link.target_id == task_id)
     )

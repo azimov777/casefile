@@ -1945,7 +1945,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names",
+              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parents`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parents` brings the direct parents of the task, key and title of each; a top-level task has an empty list",
               "examples": [
                 [
                   "title",
@@ -1954,7 +1954,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names"
+            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parents`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parents` brings the direct parents of the task, key and title of each; a top-level task has an empty list"
           },
           {
             "name": "limit",
@@ -8361,6 +8361,31 @@
         "title": "TaskPackageRead",
         "description": "Пакет преемника (`CONCEPT.md`, 4.2).\n\nВсё, что нужно агенту с чистым контекстом, одним вызовом. Полно хранится, по\nоглавлению читается: карточка, связи, признаки, последняя сводка и открытые вопросы\nприходят целиком, остальные записи — строками описи, а их тела запрашиваются\nточечно."
       },
+      "TaskParentRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "examples": [
+              "TRK-80"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация Casefile: выпуск v0.1.0 и один день запуска"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "TaskParentRead",
+        "description": "Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).\n\nСтатуса нет намеренно: строка называет, куда задача входит, а о родителе\nспрашивают его самого."
+      },
       "TaskPriority": {
         "type": "string",
         "enum": [
@@ -8740,6 +8765,21 @@
               }
             ],
             "description": "Computed features of the task, the same object the successor package carries. Included unless `fields` asks for a narrower set without `features`"
+          },
+          "parents": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TaskParentRead"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parents",
+            "description": "Direct parents of the task, key and title of each, in the order the links were made: a task may have more than one. Empty for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parents`"
           }
         },
         "type": "object",
