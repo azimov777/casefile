@@ -2750,6 +2750,25 @@ export interface components {
             index: components["schemas"]["EntryHeadingRead"][];
         };
         /**
+         * TaskParentRead
+         * @description Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
+         *
+         *     Статуса нет намеренно: строка называет, куда задача входит, а о родителе
+         *     спрашивают его самого.
+         */
+        TaskParentRead: {
+            /**
+             * Key
+             * @example TRK-80
+             */
+            key: string;
+            /**
+             * Title
+             * @example Популяризация Casefile: выпуск v0.1.0 и один день запуска
+             */
+            title: string;
+        };
+        /**
          * TaskPriority
          * @description Приоритет. Порядок членов — от низшего к высшему, на него опирается сортировка поиска.
          * @enum {string}
@@ -2898,6 +2917,11 @@ export interface components {
             updated_at?: string | null;
             /** @description Computed features of the task, the same object the successor package carries. Included unless `fields` asks for a narrower set without `features` */
             features?: components["schemas"]["TaskFeaturesRead"] | null;
+            /**
+             * Parents
+             * @description Direct parents of the task, key and title of each, in the order the links were made: a task may have more than one. Empty for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parents`
+             */
+            parents?: components["schemas"]["TaskParentRead"][] | null;
         };
         /**
          * TaskStatus
@@ -4352,7 +4376,7 @@ export interface operations {
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parents`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parents` brings the direct parents of the task, key and title of each; a top-level task has an empty list */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
