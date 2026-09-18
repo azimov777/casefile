@@ -1,5 +1,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { compose, SECRETS_DIR, TASK_TOKEN_FILE, TOKEN_FILE } from './contour';
+import {
+  compose,
+  LOGIN_PORT,
+  LOGIN_URL,
+  SECRETS_DIR,
+  TASK_TOKEN_FILE,
+  TOKEN_FILE,
+} from './contour';
 
 /**
  * Поднимает установку в том же порядке, что и продакшен-контур (`../docker-compose.prod.yml`):
@@ -31,9 +38,44 @@ async function globalSetup(): Promise<void> {
   compose(['run', '--rm', 'demo']);
   issueTaskToken();
 
-  compose(['up', '-d', '--wait', '--build', 'ui'], {
-    TRACKER_UI_TOKEN: readFileSync(TOKEN_FILE, 'utf8').trim(),
-  });
+  const token = readFileSync(TOKEN_FILE, 'utf8').trim();
+  compose(['up', '-d', '--wait', '--build', 'ui'], { TRACKER_UI_TOKEN: token });
+  await startLockedInterface(token);
+}
+
+/**
+ * Второй экземпляр интерфейса — установка, закрытая паролем владельца (`TRK-90`).
+ *
+ * Одноразовый контейнер той же службы `ui`, а не отдельная служба: так он берёт тот же
+ * образ, что собран выше, — с тегом, который соседнее дерево подменило своим дополнением
+ * к `ui`. Режим задаётся окружением контейнера (`TRACKER_UI_LOGIN`), ключ — тот же, что
+ * у основного экземпляра. Бэкенд общий: пароль знает API всего контура.
+ *
+ * `run -d` не ждёт готовности, поэтому ждём сами — первой отданной страницы. Гасит
+ * контейнер `global-teardown.ts` (`down --remove-orphans`: одноразовые контейнеры
+ * обычный `down` не трогает).
+ */
+async function startLockedInterface(token: string): Promise<void> {
+  compose(
+    [
+      ...['run', '-d', '--rm', '--no-deps'],
+      ...['-p', `127.0.0.1:${LOGIN_PORT}:80`],
+      ...['-e', 'TRACKER_UI_LOGIN=password'],
+      'ui',
+    ],
+    { TRACKER_UI_TOKEN: token },
+  );
+
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      if ((await fetch(LOGIN_URL)).ok) return;
+    } catch {
+      // Порт ещё не открыт: nginx стартует после шагов входа образа.
+    }
+    if (Date.now() > deadline) throw new Error(`${LOGIN_URL} did not answer within a minute`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
 }
 
 /**

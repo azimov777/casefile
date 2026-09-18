@@ -60,6 +60,25 @@ ENVELOPE_EXEMPT: dict[tuple[str, str], str] = {
 }
 
 
+#: Маршруты под `/api/v1`, которые отвечают без токена. Ключ — метод и путь, значение —
+#: причина. Всё остальное под `/api/v1` требует токен зависимостью общего роутера
+#: (`app/api/router.py`), и сплошная проверка (`tests/test_api_contract.py`) исключает из
+#: развёртки «без токена — `401`» ровно эти маршруты, а не молча пропущенные.
+TOKEN_EXEMPT: dict[tuple[str, str], str] = {
+    ("POST", "/api/v1/session"): (
+        "Password login of the installation owner: the password is what a browser trades "
+        "for the installation key, so there is no token to ask for yet"
+    ),
+    ("GET", "/api/v1/session"): (
+        "Session check behind nginx `auth_request` for `/config.json`: it reads the session "
+        "cookie, and the browser asking has no token until it passes"
+    ),
+    ("DELETE", "/api/v1/session"): (
+        "Logout ends the cookie session; the token the tab holds is not what is being closed"
+    ),
+}
+
+
 @dataclass(frozen=True, slots=True)
 class ErrorCode:
     """Одна строка справочника ошибок."""

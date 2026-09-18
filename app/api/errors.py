@@ -56,11 +56,13 @@ def error_response(
     code: str,
     message: str,
     details: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     """Собирает ответ в формате `{"error": {"code", "message", "details"}}`."""
     return JSONResponse(
         status_code=status_code,
         content={"error": {"code": code, "message": message, "details": details or {}}},
+        headers=headers,
     )
 
 
@@ -69,7 +71,9 @@ async def handle_app_error(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
     if exc.status_code >= 500:
         logger.exception("Application error at %s %s", request.method, request.url.path)
-    return error_response(exc.status_code, exc.code, exc.message, exc.details)
+    return error_response(
+        exc.status_code, exc.code, exc.message, exc.details, exc.response_headers()
+    )
 
 
 async def handle_request_validation_error(request: Request, exc: Exception) -> JSONResponse:

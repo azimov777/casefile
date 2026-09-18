@@ -40,6 +40,14 @@ class AppError(Exception):
             self.status_code = status_code
         super().__init__(self.message)
 
+    def response_headers(self) -> dict[str, str]:
+        """Заголовки HTTP, которые ответ на эту ошибку обязан нести. Обычно никаких.
+
+        Метод, а не поле: заголовок чаще всего собирается из `details` конкретного
+        случая (`Retry-After` из числа секунд), и хранить одно значение дважды незачем.
+        """
+        return {}
+
     def __repr__(self) -> str:
         return f"{type(self).__name__}(code={self.code!r}, message={self.message!r})"
 

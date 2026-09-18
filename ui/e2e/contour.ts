@@ -52,6 +52,22 @@ export function readTaskToken(): string {
 }
 
 /**
+ * Пароль владельца контура: его хеш стоит в `TRACKER_PASSWORD_HASH` бэкенда
+ * (`docker-compose.yml`). Учебный, как и весь контур.
+ */
+export const E2E_PASSWORD = 'e2e contour password';
+
+/**
+ * Порт второго экземпляра интерфейса — той же службы `ui`, поднятой одноразовым
+ * контейнером в режиме пароля (`global-setup.ts`). Свой порт, а не свой адрес на том же:
+ * режим задаётся контейнеру при старте, и в одном nginx двух режимов нет.
+ */
+export const LOGIN_PORT = process.env.UI_LOGIN_PORT ?? '8082';
+
+/** Адрес установки, закрытой паролем: тот же бэкенд, другой режим интерфейса. */
+export const LOGIN_URL = `http://localhost:${LOGIN_PORT}`;
+
+/**
  * Установка, которая ключа не выдаёт: `/config.json` отвечает так, как отвечает образ,
  * которому ключа не дали.
  *

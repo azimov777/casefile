@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, HttpUrl, PostgresDsn, field_validator
+from pydantic import Field, HttpUrl, PostgresDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -127,6 +127,29 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Вход владельца по паролю -----------------------------------------------------
+    # Замок на одну дверь для установки, выставленной в сеть (`docs/CONCEPT.md`, 5.4).
+    # Хранится хеш, а не пароль: печатает его `python -m app.cli password-hash`.
+    # `SecretStr` — чтобы значение не попало ни в `repr` настроек, ни в журнал. Разбирает
+    # строку сценарий входа (`PasswordLogin.from_settings`) при сборке приложения API:
+    # испорченный хеш роняет старт, а не первую попытку входа.
+    password_hash: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Hash of the owner password printed by `python -m app.cli password-hash`. "
+            "Set, the interface hands the installation key to a browser only after a "
+            "password login; unset or empty, the installation works as a local one"
+        ),
+    )
+    session_hours: int = Field(
+        default=168,
+        ge=1,
+        description=(
+            "Lifetime of a browser session opened by the password, in hours, counted from "
+            "the login. Sessions live in the memory of the API process and end with it"
+        ),
+    )
+
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
     cors_origins: Annotated[list[str], NoDecode] = Field(
@@ -168,6 +191,15 @@ class Settings(BaseSettings):
         """
         if value is not None and (value.username or value.password):
             raise ValueError("must not carry credentials: every token holder sees this address")
+        return value
+
+    @field_validator("password_hash", mode="before")
+    @classmethod
+    def _unset_password_hash(cls, value: object) -> object:
+        """Пустая строка — «пароля нет»: compose передаёт переменную всегда, пустой у
+        установки без пароля (`${TRACKER_PASSWORD_HASH:-}` в `x-app-environment`)."""
+        if isinstance(value, str) and not value.strip():
+            return None
         return value
 
     @property

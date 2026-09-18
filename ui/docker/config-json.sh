@@ -47,8 +47,16 @@ case $token in
     ;;
 esac
 
+# С паролем владельца (`TRACKER_UI_LOGIN=password`, `access-mode.sh`) файл называет и
+# режим: nginx отдаёт его только после входа, и по полю `login` интерфейс узнаёт, что
+# выход здесь есть — ключ пришёл от установки, но за паролем.
+login_field=
+if [ "${TRACKER_UI_LOGIN:-}" = password ]; then
+  login_field=',"login":"password"'
+fi
+
 # Секрет не печатается никогда: вывод этого скрипта уходит в журнал контейнера, а его
 # читают и показывают.
-printf '{"token":"%s"}' "$token" >"$target"
+printf '{"token":"%s"%s}' "$token" "$login_field" >"$target"
 chmod 0644 "$target"
 echo "$0: ключ установки положен в $target"

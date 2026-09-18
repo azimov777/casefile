@@ -16,6 +16,11 @@ export const CLIENT_ERROR_CODES = {
    * сети значит послать человека чинить бэкенд вместо буфера обмена.
    */
   tokenNotHeaderSafe: 'token_not_header_safe',
+  /**
+   * Пароль принят, а установка ключа так и не отдала. Значит, nginx интерфейса и API
+   * расходятся в режиме: вход открыл сеанс, которого `/config.json` не спрашивает.
+   */
+  installKeyMissing: 'install_key_missing',
 } as const;
 
 /**

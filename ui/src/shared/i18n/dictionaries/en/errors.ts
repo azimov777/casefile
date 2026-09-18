@@ -22,6 +22,8 @@ export const errors = {
   entry_not_found: 'This task has no entry with that number.',
   http_error: 'The request failed.',
   idempotency_key_reused: 'This idempotency key has already been used by another request.',
+  install_key_missing:
+    'The password was accepted, but the installation handed out no key. See the ui container log.',
   internal_error: 'Internal server error.',
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
   invalid_cursor: 'The page cursor cannot be parsed.',
@@ -49,6 +51,8 @@ export const errors = {
   participant_not_found: 'There is no participant by that name.',
   participant_required:
     'This is a shared agent token: there is no participant behind it. A person’s token from the participant registry is required.',
+  password_attempts_exceeded: 'Too many failed sign-in attempts. Try again later.',
+  password_login_off: 'This installation has no owner password.',
   permission_denied: 'This token is not allowed to do that.',
   queue_key_taken: 'The queue key is taken.',
   queue_not_found: 'There is no queue with that key.',

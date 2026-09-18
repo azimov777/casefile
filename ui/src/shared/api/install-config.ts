@@ -4,10 +4,15 @@ import { getInstallToken, isHeaderSafe, setInstallToken } from './token';
  * Конфигурация, которую отдаёт сама установка: как интерфейс узнаёт ключ, не спрашивая
  * человека.
  *
- * Контракт: `GET /config.json` на своём источнике, объект с необязательным полем
- * `token`. Отсутствие файла, пустой объект и неразборчивый ответ — один и тот же
- * нормальный случай «ключа от установки нет», а не ошибка на экране: тот же образ
+ * Контракт: `GET /config.json` на своём источнике, объект с необязательными полями
+ * `token` и `login`. Отсутствие файла, пустой объект и неразборчивый ответ — один и тот
+ * же нормальный случай «ключа от установки нет», а не ошибка на экране: тот же образ
  * поднимают там, где людей несколько, и там ключ у каждого свой (`UI-73`).
+ *
+ * `login: "password"` — установка закрыта паролем владельца (`TRK-90`, бэкенд
+ * `docs/CONCEPT.md`, 5.4). Без входа она отвечает `401` с этим полем и без ключа, после
+ * входа — `200` с ключом и тем же полем. По нему экран входа спрашивает пароль, а не
+ * токен, и выход появляется там, где ключ пришёл от установки.
  *
  * Кто кладёт файл рядом со статикой — дело контура (`UI-75`), не приложения.
  */
@@ -24,6 +29,16 @@ export type ConfigState = 'unread' | 'reading' | 'read';
 
 let state: ConfigState = 'unread';
 let firstRead: Promise<string | null> | null = null;
+
+/** Закрыта ли установка паролем владельца: так сказал последний разборчивый ответ. */
+let locked = false;
+
+/** Что сказала установка: ключ (или `null`) и закрыта ли она паролем. */
+interface InstallAnswer {
+  token: string | null;
+  /** `null` — ответ неразборчив или не дошёл: о замке он ничего не сказал. */
+  locked: boolean | null;
+}
 
 /** Ключ, ради которого конфигурацию уже перечитывали после `401`. */
 let rereadFor: string | null = null;
@@ -48,7 +63,7 @@ function notify(): void {
  * переподняли с новым ключом, — и ответ из кэша вернул бы ровно тот, который только что
  * отказал.
  */
-async function readConfig(): Promise<string | null> {
+async function readConfig(): Promise<InstallAnswer> {
   let body: unknown;
   try {
     /*
@@ -56,23 +71,32 @@ async function readConfig(): Promise<string | null> {
      * «свой источник» — это и есть требование контракта, а `fetch` в jsdom приезжает
      * из Node и относительных адресов не понимает вовсе. Строкой модуль был бы
      * непроверяем.
+     *
+     * Кука сеанса входа по паролю едет с этим запросом сама: источник свой, а
+     * `credentials` по умолчанию — `same-origin`.
      */
     const response = await globalThis.fetch(new URL(CONFIG_URL, window.location.href), {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     });
-    if (!response.ok) return null;
+    // `404` — файла нет: ключа установка не даёт и паролем не закрыта. `401`
+    // разбирается наравне с `200`: это ответ закрытой установки «ключ — после входа»,
+    // и тело его говорит, каким входом. Прочие отказы о замке не говорят ничего.
+    if (response.status === 404) return { token: null, locked: false };
+    if (!response.ok && response.status !== 401) return { token: null, locked: null };
     body = await response.json();
   } catch {
-    return null;
+    return { token: null, locked: null };
   }
 
-  if (typeof body !== 'object' || body === null) return null;
-  const token: unknown = (body as Record<string, unknown>).token;
-  if (typeof token !== 'string') return null;
+  if (typeof body !== 'object' || body === null) return { token: null, locked: null };
+  const fields = body as Record<string, unknown>;
+  const answer = { locked: fields.login === 'password' };
+  const token: unknown = fields.token;
+  if (typeof token !== 'string') return { token: null, ...answer };
 
   const value = token.trim();
-  if (value === '') return null;
+  if (value === '') return { token: null, ...answer };
   /*
    * Ключ установки проходит ту же проверку, что и введённый руками: источник доверия
    * не отменяет того, что из испорченного значения браузер не соберёт заголовок.
@@ -81,9 +105,24 @@ async function readConfig(): Promise<string | null> {
    */
   if (!isHeaderSafe(value)) {
     console.warn(`${CONFIG_URL}: ключ установки не годится для заголовка и пропущен`);
-    return null;
+    return { token: null, ...answer };
   }
-  return value;
+  return { token: value, ...answer };
+}
+
+/**
+ * Ключ из ответа установки; заодно запоминает, закрыта ли она паролем.
+ *
+ * Неразборчивый ответ или оборванная сеть о замке не говорят ничего, и прежнее знание
+ * остаётся: иначе обрыв связи посреди работы превращал бы форму пароля в поле токена.
+ */
+async function askInstallation(): Promise<string | null> {
+  const answer = await readConfig();
+  if (answer.locked !== null && answer.locked !== locked) {
+    locked = answer.locked;
+    notify();
+  }
+  return answer.token;
 }
 
 /**
@@ -97,7 +136,7 @@ export function loadInstallToken(): Promise<string | null> {
   firstRead ??= (() => {
     state = 'reading';
     notify();
-    return readConfig().then((token) => {
+    return askInstallation().then((token) => {
       setInstallToken(token);
       state = 'read';
       notify();
@@ -105,6 +144,29 @@ export function loadInstallToken(): Promise<string | null> {
     });
   })();
   return firstRead;
+}
+
+/**
+ * Спрашивает установку заново — после входа по паролю, когда сеанс уже открыт.
+ *
+ * Не `loadInstallToken`: тот отвечает один раз за загрузку вкладки, а здесь ответ
+ * меняется посреди неё — до входа установка ключа не давала, после отдаёт. Память о
+ * перечитывании после `401` забывается: она относилась к прежнему ключу.
+ */
+export async function reloadInstallToken(): Promise<string | null> {
+  const token = await askInstallation();
+  firstRead = Promise.resolve(token);
+  reread = null;
+  rereadFor = null;
+  setInstallToken(token);
+  state = 'read';
+  notify();
+  return token;
+}
+
+/** Закрыта ли установка паролем владельца: вход — паролем, и выход у ключа установки есть. */
+export function installLocked(): boolean {
+  return locked;
 }
 
 /**
@@ -128,7 +190,7 @@ export function refreshInstallToken(used: string): Promise<string | null> {
 
   if (rereadFor !== used || reread === null) {
     rereadFor = used;
-    reread = readConfig().then((token) => {
+    reread = askInstallation().then((token) => {
       setInstallToken(token);
       return token === null || token === used ? null : token;
     });
@@ -154,8 +216,12 @@ export function subscribeInstallConfig(listener: Listener): () => void {
  * Только для оснастки тестов: страничному тесту, который про ключ установки ничего
  * не проверяет, незачем ждать лишний кадр и держать обработчик `/config.json`.
  */
-export function seedInstallConfig(token: string | null): void {
+export function seedInstallConfig(
+  token: string | null,
+  { password = false }: { password?: boolean } = {},
+): void {
   firstRead = Promise.resolve(token);
+  locked = password;
   setInstallToken(token);
   state = 'read';
   notify();
@@ -166,6 +232,7 @@ export function resetInstallConfig(): void {
   firstRead = null;
   reread = null;
   rereadFor = null;
+  locked = false;
   state = 'unread';
   notify();
 }
