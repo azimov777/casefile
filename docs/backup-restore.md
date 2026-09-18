@@ -24,9 +24,14 @@ a different machine — see "Tokens after a restore" below.
 
 ```bash
 cd ~/casefile
-docker compose exec -T db pg_dump -U "${POSTGRES_USER:-tracker}" -d "${POSTGRES_DB:-tracker}" \
-  -Fc > casefile-$(date +%Y%m%d-%H%M%S).dump
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > casefile-$(date +%Y%m%d-%H%M%S).dump
 ```
+
+The single quotes matter: `$POSTGRES_USER` and `$POSTGRES_DB` are expanded inside the `db`
+container, where compose has already filled them in from this directory's `.env`. Your own
+shell never reads that file, so writing them unquoted would silently fall back to whatever
+your shell has — wrong the moment `.env` sets its own names.
 
 `-Fc` is the custom pg_dump format: compressed, and restorable with `pg_restore --clean`
 over an existing database without a separate `DROP SCHEMA` step. The dump holds only the
@@ -56,8 +61,8 @@ Wait for `db` to become healthy (`docker compose ps`), then restore into it:
 
 ```bash
 cat /path/to/casefile-*.dump | \
-  docker compose exec -T db pg_restore -U "${POSTGRES_USER:-tracker}" -d "${POSTGRES_DB:-tracker}" \
-  --clean --if-exists --no-owner --no-privileges
+  docker compose exec -T db sh -c \
+  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --no-privileges'
 ```
 
 This works the same way whether `db` was just created empty or already holds an older
