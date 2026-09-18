@@ -6,16 +6,20 @@ import type { Task } from '../api/tasks';
 import { hasFeatureBadges } from './feature-badges';
 import { PriorityMark } from './priority-mark';
 import { TaskFeatureMarks } from './feature-marks';
+import { TaskParents } from './task-parents';
 
 /**
  * Задача карточкой: то же, что строка списка, но в один столбец. Признаки берутся
  * из той же выдачи, поэтому запроса на карточку нет.
  *
- * Кликабельна целиком: настоящая ссылка одна, на названии, а на всю карточку её
- * растягивает псевдоэлемент. Строка списка этот приём отменила (UI-39), карточка — нет:
- * `position: relative` в WebKit не создаёт containing block только у `display: table-row`,
- * а карточка — обычный блочный `article`, и `inset: 0` считается от неё. Перетаскивания
- * нет и не будет: статусы двигают агенты (`CONCEPT.md`, 7).
+ * Кликабельна целиком: настоящая ссылка в задачу одна, на названии, а на всю карточку
+ * её растягивает псевдоэлемент. Строка списка этот приём отменила (UI-39), карточка —
+ * нет: `position: relative` в WebKit не создаёт containing block только у
+ * `display: table-row`, а карточка — обычный блочный `article`, и `inset: 0` считается
+ * от неё. Перетаскивания нет и не будет: статусы двигают агенты (`CONCEPT.md`, 7).
+ *
+ * Вторая ссылка бывает только у задачи с родителем: она ведёт в родителя и поднята
+ * над растяжкой (UI-119).
  */
 export function TaskCard({ task }: { task: Task }) {
   const { search } = useLocation();
@@ -30,6 +34,16 @@ export function TaskCard({ task }: { task: Task }) {
      * их десятки в шести столбцах.
      */
     <article className="relative flex flex-col gap-2 rounded-mark border border-line bg-surface p-3 transition-[border-color,background-color] duration-(--motion-fast) ease-fast hover:border-line-strong hover:bg-sunken">
+      {/*
+       * Родитель — первой строкой, над ключом (UI-119): по нему доска с десятками
+       * карточек читается программами, и задачу для этого открывать не надо. Одна
+       * строка с многоточием: название ниже по-прежнему занимает свои две (Д21),
+       * а столбец не ширится от длинного названия родителя (UI-115). Ссылка поднята
+       * над растяжкой и ведёт в родителя; остальная карточка — в саму задачу.
+       * У задачи верхнего уровня строки нет вовсе.
+       */}
+      <TaskParents parents={task.parents ?? []} raised />
+
       <div className="flex items-center justify-between gap-2">
         {/* Ключ не поднят над растяжкой: клик по нему ведёт в ту же задачу. */}
         <span className="font-mono text-meta">{task.key}</span>

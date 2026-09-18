@@ -156,6 +156,15 @@ export const ui = {
       remarks_one: '{{count, number}} remark not yet resolved',
       remarks_other: '{{count, number}} remarks not yet resolved',
     },
+    // Родитель задачи подписью на карточке доски и в строке списка (UI-119).
+    parents: {
+      label: 'parent',
+      caption: '<key>{{key}}</key> · {{title}}',
+      item: '{{key}} · {{title}}',
+      more: '+{{count, number}}',
+      others_one: 'and {{count, number}} more parent: {{parents, list}}',
+      others_other: 'and {{count, number}} more parents: {{parents, list}}',
+    },
     nav: {
       label: 'Navigation for task {{key}}',
       backAll: '← To all tasks',

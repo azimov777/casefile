@@ -4,6 +4,7 @@ import { hideArchive } from '../model/archive';
 
 export type Task = components['schemas']['TaskSearchRead'];
 export type TaskFeatures = components['schemas']['TaskFeaturesRead'];
+export type TaskParent = components['schemas']['TaskParentRead'];
 export type TaskStatus = components['schemas']['TaskStatus'];
 export type TaskPriority = components['schemas']['TaskPriority'];
 
@@ -57,8 +58,14 @@ export const TASK_PRIORITIES = Object.keys(PRIORITY_SET) as TaskPriority[];
  * Что просить в строке. Полная задача тащит пять разделов и `checks`; таблице они не
  * нужны, а весят больше всего остального вместе взятого. `features` выбирается целиком
  * одним именем — иначе `422 search_field_unknown` (`docs/FRONTEND.md`).
+ *
+ * `parents` — прямые родители строки, ключ и название каждого (TRK-95): ими карточка
+ * и строка подписывают, из какой программы задача (UI-119). Родители всей страницы
+ * приезжают этим же запросом, поэтому запроса на карточку родителя нет. Без имени в
+ * наборе поля в строке нет вовсе, а `parent` в единственном числе — условие отбора,
+ * и в наборе полей оно отвечает `422`.
  */
-export const TASK_LIST_FIELDS = ['title', 'status', 'assignee', 'priority', 'features'];
+export const TASK_LIST_FIELDS = ['title', 'status', 'assignee', 'priority', 'features', 'parents'];
 
 /** Сколько строк на странице: столько помещается на экран без прокрутки шапки. */
 export const TASK_PAGE_SIZE = 50;
