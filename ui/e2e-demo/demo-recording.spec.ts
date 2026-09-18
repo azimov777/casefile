@@ -6,11 +6,16 @@ import { expect, test, type Page } from '@playwright/test';
  * задачу и ведёт её через MCP/REST, доска обновляется сама.
  *
  * Не часть `pnpm e2e` — своя папка (`testDir` в `playwright.demo.config.ts`), свой
- * конфиг без глобального подъёма контура. Бэкенд, участник `claude` и фоновые задачи
- * (APP-1…APP-5) подготовлены заранее отдельным контуром и скриптом `seed-background.py`
- * — команды целиком в `e2e-demo/README.md`. Здесь только то, что должно попасть в кадр:
- * агент своим токеном (`DEMO_AGENT_TOKEN`) заводит ОДНУ новую задачу вживую, а страница
- * в это время смотрит на доску тем же способом, каким её видит человек.
+ * конфиг без глобального подъёма контура. Бэкенд, участник `claude` и девять фоновых
+ * задач (`APP-1`…`APP-9`: 3 backlog, 2 open, 2 in_progress, 1 waiting, 1 done —
+ * столько, чтобы колонки не пустовали под записью, TRK-82) подготовлены заранее
+ * отдельным контуром и скриптом `seed-background.py` — команды целиком в
+ * `e2e-demo/README.md`. Здесь только то, что должно попасть в кадр: агент своим
+ * токеном (`DEMO_AGENT_TOKEN`) заводит ОДНУ новую задачу вживую, а страница в это
+ * время смотрит на доску тем же способом, каким её видит человек. Пауза после
+ * каждого перехода статуса длиннее паузы после записи дела намеренно: среди
+ * нескольких карточек колонки движение новой задачи должно быть заметно, а не
+ * промелькнуть.
  *
  * Видео пишет `playwright.demo.config.ts` (`use.video: 'on'`) — по одному файлу на
  * прогон, без явного `recordVideo` в коде. Пауз `waitForTimeout` в сценарии столько,
@@ -70,13 +75,15 @@ test('agent works a task while the board watches', async ({ page }) => {
   await page.waitForTimeout(2_000);
 
   // Сцена 3: агент двигает задачу по статусам — доска повторяет движение сама.
+  // Пауза дольше, чем в первой версии записи (TRK-82): колонки теперь не пустуют,
+  // и карточке нужно время остаться на виду среди соседей, а не потеряться.
   await agentCall('POST', `/api/v1/tasks/${key}/transition`, { to: 'open' });
   await expect(card('open')).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(2_200);
 
   await agentCall('POST', `/api/v1/tasks/${key}/transition`, { to: 'in_progress' });
   await expect(card('in_progress')).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(2_200);
 
   // Сцена 4: агент подшивает записи в дело, пока человек смотрит доску.
   await agentCall('POST', `/api/v1/tasks/${key}/entries`, {

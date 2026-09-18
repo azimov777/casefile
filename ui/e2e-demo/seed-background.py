@@ -1,11 +1,19 @@
-"""Seeds background (non-recorded) data for `docs/assets/demo.gif` (TRK-82).
+"""Seeds background (non-recorded) data for `docs/assets/demo-light.gif`/`demo-dark.gif`
+(TRK-82).
 
 Run on the host with plain python3 (stdlib only, no deps) against the isolated
 backend's REST API — see `README.md` in this folder for how that backend is
-raised. Creates queue APP ("Checkout service") and five background tasks
-spanning backlog/open/in_progress/waiting/done, so the board already looks
-lived-in before the Playwright recording starts. The recording itself
-(`demo-recording.spec.ts`) creates exactly ONE more task live, on camera.
+raised. Creates queue APP ("Checkout service") and nine background tasks spanning
+backlog (3) / open (2) / in_progress (2) / waiting (1) / done (1), so the busiest
+column already stands close to as tall as the task-page scene (~700px of 800) —
+one card per column left the board mostly empty below the fold, and no amount of
+cropping fixes that: the board's own column height is `100dvh`-driven regardless
+of card count (`ui/src/pages/tasks/ui/tasks-board.tsx`). Titles are kept short
+enough to stay one line: a column's own visible height (before it grows its own
+scrollbar, `fold:overflow-y-auto`) is close to what three cards need, and one
+long enough to wrap to two lines already pushed a four-card backlog into a
+scroll of its own on a live check — measured, not calculated. The recording
+itself (`demo-recording.spec.ts`) creates exactly ONE more task live, on camera.
 
     python3 seed-background.py <owner-token-file> <claude-token-file>
 """
@@ -62,7 +70,9 @@ def main() -> None:
             b["payload"] = payload
         call("POST", f"/api/v1/tasks/{key}/entries", actor_token, b)
 
-    # 1. backlog
+    # 1. backlog — three cards: the one that was already here, plus two short,
+    # single-line ones (see the module docstring for why single-line and why
+    # three, not four).
     create_task(
         queue="APP",
         title="Refund flow for partially captured orders",
@@ -86,7 +96,41 @@ def main() -> None:
     )
     print("APP-1 backlog created")
 
-    # 2. open, unassigned
+    create_task(
+        queue="APP",
+        title="Idle carts never expire",
+        description="A cart left untouched for weeks still shows as active and holds stock.",
+        goal="An idle cart releases its held stock",
+        context="Stock is reserved on add-to-cart, released only on checkout or explicit removal",
+        constraints="No change to the reservation model itself",
+        output="A cart idle for 24h releases its reservation and is marked abandoned",
+        checks=[
+            "A cart untouched for 24h releases its stock reservation",
+            "Returning to an abandoned cart re-reserves stock if still available",
+        ],
+        priority="low",
+        assignee="claude",
+    )
+    print("APP-2 backlog created")
+
+    create_task(
+        queue="APP",
+        title="Coupon codes can stack silently",
+        description="Two different coupon codes both apply to the same order with no warning.",
+        goal="At most one coupon code applies per order",
+        context="Coupon application has no mutual-exclusion check against a coupon already on the order",
+        constraints="Existing single-coupon orders must not change retroactively",
+        output="A second coupon code is rejected with a clear reason, not silently stacked",
+        checks=[
+            "Applying a second coupon code is rejected, not stacked",
+            "Removing the first coupon lets a new one apply",
+        ],
+        priority="normal",
+        assignee="claude",
+    )
+    print("APP-3 backlog created")
+
+    # 2. open — two cards.
     open_key = create_task(
         queue="APP",
         title="Rate-limit the public orders API",
@@ -104,7 +148,27 @@ def main() -> None:
     transition(open_key, "open")
     print(f"{open_key} open created")
 
-    # 3. in_progress, with a decision/finding trail and a live summary
+    saved_cards_key = create_task(
+        queue="APP",
+        title="Saved cards outlive a reissue",
+        description="A saved card keeps charging after the customer's bank reissues it with a new number.",
+        goal="A reissued card is re-verified before it charges again",
+        context="Card tokens don't carry a reissue signal from the payment processor's webhooks yet",
+        constraints="No extra step for customers whose card wasn't reissued",
+        output="A reissue webhook flags the saved card for re-verification on next use",
+        checks=[
+            "A reissued card is re-verified before the next charge",
+            "An untouched card keeps charging without extra friction",
+        ],
+        priority="normal",
+        assignee="claude",
+    )
+    transition(saved_cards_key, "open")
+    print(f"{saved_cards_key} open created")
+
+    # 3. in_progress — two cards: the one with a decision/finding trail and a
+    # live summary, plus a second, quieter one (no entries — it just sits there,
+    # a neighbor `APP-11` will later join without stealing its own history).
     discount_key = create_task(
         queue="APP",
         title="A discount code can be applied twice",
@@ -143,6 +207,25 @@ def main() -> None:
         },
     })
     print(f"{discount_key} in_progress created")
+
+    inventory_key = create_task(
+        queue="APP",
+        title="Inventory checks stall checkout",
+        description="A slow inventory lookup can hold the checkout form open for several seconds.",
+        goal="Checkout never waits on a slow inventory check",
+        context="The inventory service is called synchronously from the checkout request path",
+        constraints="Checkout must still refuse to sell stock that's actually gone",
+        output="Checkout uses a cached stock count with a short TTL instead of a live call",
+        checks=[
+            "Checkout completes without waiting on a live inventory call",
+            "An item that sold out in the last few seconds is still caught before payment",
+        ],
+        priority="normal",
+        assignee="claude",
+    )
+    transition(inventory_key, "open")
+    transition(inventory_key, "in_progress")
+    print(f"{inventory_key} in_progress created")
 
     # 4. waiting, with a blocking question to owner
     uuid_key = create_task(
