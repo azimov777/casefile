@@ -16,13 +16,6 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30",
     "alembic>=1.14",
-    # HTTP-клиент сегодня нужен не приложению, а тестам REST API: `tests/conftest.py`
-    # (фикстура `client`) и почти весь `tests/` ходят по ASGI (`httpx.AsyncClient` +
-    # `ASGITransport`) без сети и без реального сервера. SDK MCP этот пакет не тянет —
-    # у него отдельная зависимость `httpx2` (`docs/notes/mcp.md`, `uv.lock`). Нужен ли он
-    # приложению в будущем и не пора ли ему в `dev` — решается отдельно (TRK-94), не
-    # этой правкой.
-    "httpx>=0.28",
     # Официальный SDK Model Context Protocol: транспорт, протокол и объявление
     # инструментов для MCP-сервера (`app/mcp/`). Версия 2.x — в ней FastMCP
     # переименован в `MCPServer`, а server-to-client нотификации идут подписками
@@ -35,6 +28,13 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
     "ruff>=0.9",
+    # HTTP-клиент нужен не приложению, а тестам REST API: `tests/conftest.py` (фикстура
+    # `client`) и почти весь `tests/` ходят по ASGI (`httpx.AsyncClient` + `ASGITransport`)
+    # без сети и без реального сервера. Приложение его не импортирует (`grep -rn httpx
+    # app/` пусто), прод-образ (`docker/Dockerfile.prod`) ставит зависимости без этой
+    # extra, и SDK MCP этот пакет не тянет — у него отдельная зависимость `httpx2`
+    # (`docs/notes/mcp.md`, `uv.lock`). Решено TRK-94.
+    "httpx>=0.28",
     # Объявлена явно, хотя приезжает и так: её тянет сам SDK MCP — ею он сверяет ответ
     # инструмента с объявленной `outputSchema` на стороне клиента. Тест делает ровно то
     # же самое (`tests/test_mcp_tools.py`), и зависимость теста от библиотеки должна
