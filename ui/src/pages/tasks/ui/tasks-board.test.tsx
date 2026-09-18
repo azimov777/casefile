@@ -126,6 +126,41 @@ describe('доска', () => {
     expect((whole[0] as URL).searchParams.get('limit')).toBe('1');
   });
 
+  it('родителя карточки приносит выдача столбца: запросов столько же, на родителя — ни одного', async () => {
+    const asked: string[] = [];
+    server.use(
+      listing([
+        task('DEMO-5', {
+          status: 'backlog',
+          parents: [{ key: 'DEMO-2', title: 'Лента журнала теряет записи' }],
+        }),
+        task('DEMO-3', { status: 'open' }),
+      ]),
+      http.get(`${API}/api/v1/tasks/:key`, ({ request }) => {
+        asked.push(request.url);
+        return failure('task_not_found', 404);
+      }),
+    );
+
+    renderApp('/tasks?queue=DEMO&view=board');
+
+    const child = await within(column('backlog')).findByRole('article');
+    expect(within(child).getByRole('link', { name: /DEMO-2/ })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-2',
+    );
+    const top = await within(column('open')).findByRole('article');
+    expect(within(top).getAllByRole('link')).toHaveLength(1);
+
+    // Столько же запросов, сколько до UI-119: по одному на столбец и один на число.
+    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+    // Карточки читаются с родителями в наборе полей — тем же запросом, что и столбец.
+    for (const url of readRequests()) {
+      expect(url.searchParams.getAll('fields')).toContain('parents');
+    }
+    expect(asked).toEqual([]);
+  });
+
   it('закрытые и отменённые свёрнуты и показывают число, клик раскрывает', async () => {
     server.use(listing());
     renderApp('/tasks?queue=DEMO&view=board');

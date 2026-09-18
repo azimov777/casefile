@@ -7,15 +7,18 @@ import type { Task } from '../api/tasks';
 import { TaskFeatureMarks } from './feature-marks';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
+import { TaskParents } from './task-parents';
 
 /**
  * Строка списка задач. Ничего не вычисляет: признаки приходят из `features` той же
  * выдачи, поэтому запроса на строку нет (`docs/FRONTEND.md`, «Строка списка»).
  *
- * В задачу ведёт вся строка, а не один ключ. Настоящая ссылка ровно одна — на
+ * В задачу ведёт вся строка, а не один ключ. Настоящая ссылка в задачу ровно одна — на
  * названии, самой широкой и самой заметной ячейке: она даёт обход с клавиатуры одной
  * остановкой на задачу, контекстное меню, «копировать адрес» и cmd-клик. Остальную
- * площадь строки в задачу уводит обработчик клика на `<tr>`.
+ * площадь строки в задачу уводит обработчик клика на `<tr>`. Вторая ссылка бывает
+ * только у задачи с родителем и ведёт в родителя (UI-119): её клик обработчик строки
+ * не трогает, как и клик по любой ссылке.
  *
  * **Растяжки псевдоэлементом здесь больше нет** (UI-39). Она рисовала `inset: 0` от
  * `<tr class="relative">`, а `position: relative` у элемента с `display: table-row`
@@ -76,9 +79,14 @@ export function TaskRow({ task }: { task: Task }) {
      * Обводка фокуса рисуется строкой, а не ссылкой: остановка одна на задачу, и
      * показать надо задачу целиком. `outline` — единственное, чем это можно нарисовать:
      * `box-shadow` у `table-row` не рисует ни один движок (UI-39#5).
+     *
+     * Строку обводит фокус только на её собственной ссылке (`data-link="task"`). Ссылка
+     * на родителя (UI-119) — вторая остановка в строке, и ведёт она в другую задачу:
+     * обведённая строка обещала бы Enter в эту. Её фокус рисует общий `:focus-visible`
+     * вокруг самой подписи.
      */
     <tr
-      className="h-(--ui-row-height) cursor-pointer border-t border-line hover:bg-sunken has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-focus"
+      className="h-(--ui-row-height) cursor-pointer border-t border-line hover:bg-sunken has-[[data-link=task]:focus-visible]:outline-2 has-[[data-link=task]:focus-visible]:-outline-offset-2 has-[[data-link=task]:focus-visible]:outline-focus"
       onClick={openTask}
       onAuxClick={openTaskAside}
     >
@@ -86,23 +94,36 @@ export function TaskRow({ task }: { task: Task }) {
         {task.key}
       </th>
       <td className="max-w-0 overflow-hidden px-3">
-        <Link
-          className="text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
-          to={href}
-          // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
-          // он вернётся к тем же строкам, а не ко всем задачам очереди.
-          state={listReturnState(search)}
-          // Перетаскивание ссылки выключено, иначе протяжка по названию таскала бы
-          // ссылку вместо того, чтобы выделять текст.
-          draggable={false}
-          onClick={skipClickWhileSelecting}
-        >
-          {/* Урезанное многоточием название отдаёт полный текст подсказкой:
-              обрезание без доступа к скрытому — потеря данных, а не плотность. */}
-          <span className="block truncate" title={title}>
-            {title}
-          </span>
-        </Link>
+        {/*
+         * Родитель стоит в ячейке названия, справа, а не своим столбцом (UI-119): у
+         * большинства строк родителя нет, и столбец под него стоял бы пустым, отнимая
+         * ширину у названия. Справа — чтобы подписи родителей читались сверху вниз
+         * одной полосой, а начало названия у всех строк стояло на одном месте.
+         * В одну строку с названием: высота строки задана токеном и от подписи не
+         * растёт (решение Д4). Подпись берёт не больше двух пятых ячейки, остальное
+         * — название; тесно обоим, и многоточием уступают оба.
+         */}
+        <div className="flex items-center gap-3">
+          <Link
+            data-link="task"
+            className="min-w-0 flex-1 text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
+            to={href}
+            // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
+            // он вернётся к тем же строкам, а не ко всем задачам очереди.
+            state={listReturnState(search)}
+            // Перетаскивание ссылки выключено, иначе протяжка по названию таскала бы
+            // ссылку вместо того, чтобы выделять текст.
+            draggable={false}
+            onClick={skipClickWhileSelecting}
+          >
+            {/* Урезанное многоточием название отдаёт полный текст подсказкой:
+                обрезание без доступа к скрытому — потеря данных, а не плотность. */}
+            <span className="block truncate" title={title}>
+              {title}
+            </span>
+          </Link>
+          <TaskParents parents={task.parents ?? []} className="max-w-2/5 shrink-0" />
+        </div>
       </td>
       <td className="px-3">
         <StatusMark status={task.status} />

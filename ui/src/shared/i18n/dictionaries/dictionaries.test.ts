@@ -61,7 +61,8 @@ describe('словари языков', () => {
     // конфигурации, URL и JSON — имена форматов, и подпись поля «URL» в приложении Codex
     // на русском та же. И пример имени участника (UI-106): имена — латиница
     // `snake_case` на любом языке интерфейса, и переведённый пример показывал бы то,
-    // чего бэкенд не примет.
+    // чего бэкенд не примет. И подпись родителя (UI-119): ключ, разделитель, название
+    // и число остальных — подстановки и знаки, слов в них нет.
     const sameOnPurpose = new Set([
       'access.agent.namePlaceholder',
       'ui.app.name',
@@ -78,6 +79,9 @@ describe('словари языков', () => {
       'ui.snippets.addressCaption',
       'ui.snippets.codexField.url',
       'ui.snippets.jsonCaption',
+      'ui.task.parents.caption',
+      'ui.task.parents.item',
+      'ui.task.parents.more',
     ]);
 
     /*
