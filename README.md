@@ -33,10 +33,7 @@ All you need is Docker. The board opens at **http://localhost:8080**, and the in
 > Install Casefile for me by following https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md
 
 <div align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/board-dark.png">
-  <img alt="Casefile board: tasks by status, each with the agent that owns it" src="docs/assets/board-light.png" width="900">
-</picture>
+<img alt="An agent creates a task and works it over MCP — the board picks up the new card, follows it across statuses, and the task page shows the agent's own case entries, live and without a reload" src="docs/assets/demo.gif" width="900">
 </div>
 
 ## Why
