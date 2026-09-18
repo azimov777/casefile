@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Записывает `docs/assets/demo.gif` (TRK-82): человек смотрит доску, агент заводит
+ * Записывает `docs/assets/demo-light.gif`/`demo-dark.gif` (TRK-82, тема — прогон
+ * дважды с разным `DEMO_COLOR_SCHEME`): человек смотрит доску, агент заводит
  * задачу и ведёт её через MCP/REST, доска обновляется сама.
  *
  * Не часть `pnpm e2e` — своя папка (`testDir` в `playwright.demo.config.ts`), свой

@@ -11,7 +11,15 @@ import { defineConfig, devices } from '@playwright/test';
  * своим проектом Compose (`COMPOSE_PROJECT_NAME=trk82`), поднятая и наполненная вручную
  * до записи. Поэтому здесь нет `globalSetup`/`globalTeardown` — `e2e-demo/README.md`
  * называет команды, которыми контур поднимается и гасится.
+ *
+ * `DEMO_COLOR_SCHEME` (`light` по умолчанию, либо `dark`) — README вставляет GIF
+ * парой, светлая/тёмная, тем же `<picture>`, что раньше нёс статичный скриншот
+ * доски (`docs/assets/board-light.png`/`board-dark.png`, снятый до TRK-82). Разметка
+ * от темы не зависит — только цвета токенов, — поэтому кадрирование (`e2e-demo/README.md`,
+ * шаг 5) одинаково годится обеим записям.
  */
+const colorScheme = process.env.DEMO_COLOR_SCHEME === 'dark' ? 'dark' : 'light';
+
 export default defineConfig({
   testDir: './e2e-demo',
   timeout: 60_000,
@@ -23,7 +31,7 @@ export default defineConfig({
     baseURL: process.env.DEMO_UI_URL ?? 'http://localhost:8082',
     viewport: { width: 1280, height: 800 },
     locale: 'en-US',
-    colorScheme: 'light',
+    colorScheme,
     video: {
       mode: 'on',
       size: { width: 1280, height: 800 },

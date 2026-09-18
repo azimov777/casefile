@@ -1,8 +1,8 @@
 # e2e-demo
 
-Не сквозные тесты — материал для `docs/assets/demo.gif` (TRK-82). Отдельно от
-`ui/e2e/`, чтобы `pnpm e2e` его не подхватывал: свой `testDir`
-(`../playwright.demo.config.ts`), свой контур бэкенда.
+Не сквозные тесты — материал для `docs/assets/demo-light.gif`/`demo-dark.gif`
+(TRK-82). Отдельно от `ui/e2e/`, чтобы `pnpm e2e` его не подхватывал: свой
+`testDir` (`../playwright.demo.config.ts`), свой контур бэкенда.
 
 Плёнку не поднимает `globalSetup`, как `ui/e2e/` — контур здесь одноразовый,
 с показательными данными, а не тот, что использует обычный прогон. Ниже —
@@ -73,16 +73,27 @@ docker run -d --name demo-ui \
 
 ## 4. Записать
 
+README вставляет GIF парой (светлая/тёмная тема, `<picture>` — как раньше со
+статичным скриншотом доски), поэтому сценарий гоняется дважды —
+`DEMO_COLOR_SCHEME` переключает тему в `playwright.demo.config.ts`:
+
 ```bash
 DEMO_AGENT_TOKEN="$CLAUDE" DEMO_API_URL=http://localhost:9020 DEMO_UI_URL=http://localhost:9082 \
   npx playwright test -c playwright.demo.config.ts
+mv test-results/**/video.webm /tmp/demo-light.webm
+
+DEMO_AGENT_TOKEN="$CLAUDE" DEMO_API_URL=http://localhost:9020 DEMO_UI_URL=http://localhost:9082 \
+  DEMO_COLOR_SCHEME=dark npx playwright test -c playwright.demo.config.ts
+mv test-results/**/video.webm /tmp/demo-dark.webm
 ```
 
-Видео ложится в `test-results/**/video.webm` (гитигнорится, `../.gitignore`).
-Сценарий — `demo-recording.spec.ts`: открывает доску, заводит задачу REST-вызовом
-от лица `claude` (агент из шага 2), двигает её по статусам, подшивает записи,
-открывает карточку. Каждый REST-вызов — то же самое, что сделал бы вызов
-инструмента MCP: оба идут через один сценарий `services` (`docs/CONVENTIONS.md`).
+(гитигнорится, `../.gitignore`.) Сценарий — `demo-recording.spec.ts`: открывает
+доску, заводит задачу REST-вызовом от лица `claude` (агент из шага 2), двигает
+её по статусам, подшивает записи, открывает карточку. Каждый REST-вызов — то же
+самое, что сделал бы вызов инструмента MCP: оба идут через один сценарий
+`services` (`docs/CONVENTIONS.md`). Разметка от темы не зависит — только цвета
+токенов, — поэтому геометрия (и, значит, обрезка в следующем шаге) у обеих
+записей одна и та же.
 
 ## 5. Свести в GIF
 
@@ -97,18 +108,22 @@ DEMO_AGENT_TOKEN="$CLAUDE" DEMO_API_URL=http://localhost:9020 DEMO_UI_URL=http:/
 (`REVIEW CHECKS` внизу правой колонки кончаются примерно на 700px по вертикали);
 обрезка по низу доски срезала бы там записи и подпись агента, ради которых
 и снимали. Проверено покадрово после пересборки, что при этой высоте ничего
-важного не обрезано ни на одной сцене:
+важного не обрезано ни на одной сцене. Прогнать на обоих файлах из шага 4
+(пути ниже — под `/tmp`, куда легли `mv`):
 
 ```bash
-docker run --rm -v "$PWD:/w" -w /w jrottenberg/ffmpeg:7-alpine \
-  -ss 0.5 -i test-results/**/video.webm \
+for theme in light dark; do
+docker run --rm -v "/tmp:/w" -w /w jrottenberg/ffmpeg:7-alpine \
+  -ss 0.5 -i demo-$theme.webm \
   -vf "crop=1280:740:0:0,fps=15,scale=1100:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" \
-  -loop 0 ../docs/assets/demo.gif
+  -loop 0 demo-$theme.gif
+done
+cp /tmp/demo-light.gif /tmp/demo-dark.gif ../docs/assets/
 ```
 
 `fps=15`, ширина `1100` и палитра через `palettegen`/`paletteuse` (а не
 единственная общая палитра) — компромисс, при котором ~17.5 секунд записи
-укладываются в 4 МБ (потолок — 10 МБ, `docs/CONVENTIONS.md`, задача TRK-82).
+укладываются в 4–5 МБ каждая (потолок — 10 МБ, `docs/CONVENTIONS.md`, задача TRK-82).
 
 ## 6. Погасить
 

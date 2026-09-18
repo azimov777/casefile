@@ -1,6 +1,7 @@
 # ui/e2e-demo
 
-Материал для записи `docs/assets/demo.gif` (TRK-82) — не сквозные тесты. Свой
+Материал для записи `docs/assets/demo-light.gif`/`demo-dark.gif` (TRK-82) — не
+сквозные тесты. Свой
 `testDir` (`../playwright.demo.config.ts`) и свой изолированный контур бэкенда:
 `pnpm e2e` (`playwright test` без `-c`) эту папку не подхватывает.
 

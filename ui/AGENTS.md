@@ -18,8 +18,8 @@
 - `src/` — исходный код по слоям Feature-Sliced Design
 - `testing/` — обвязка модульных и страничных тестов и проверки вне экранов: подмена API, рендер, сторож заметок
 - `e2e/` — сквозные сценарии Playwright и подъём контура для них
-- `e2e-demo/` — запись `docs/assets/demo.gif` (TRK-82): свой сценарий и свой контур,
-  `pnpm e2e` их не подхватывает
+- `e2e-demo/` — запись `docs/assets/demo-light.gif`/`demo-dark.gif` (TRK-82): свой
+  сценарий и свой контур, `pnpm e2e` их не подхватывает
 - `docker/` — образ интерфейса и конфигурация nginx
 - `scripts/` — команда подъёма установки целиком, команда слияния ветки задачи
 
@@ -40,8 +40,8 @@
   подписей: в разметке не набирают текст руками, а язык не пишут литералом
 - `steiger.config.ts` — правила границ слоёв Feature-Sliced Design
 - `playwright.config.ts` — сквозные тесты в светлой и тёмной теме и на английском; пишущие сценарии отдельным проектом после читающих
-- `playwright.demo.config.ts` — конфиг записи `docs/assets/demo.gif` (`e2e-demo/`), в
-  `pnpm e2e` (`playwright test` без `-c`) не попадает
+- `playwright.demo.config.ts` — конфиг записи `docs/assets/demo-light.gif`/`demo-dark.gif`
+  (`e2e-demo/`, тема — `DEMO_COLOR_SCHEME`), в `pnpm e2e` (`playwright test` без `-c`) не попадает
 - `docker-compose.yml` — контур сборки и сквозных тестов: интерфейс и бэкенд из корня репозитория,
   ключ интерфейса выпускает сервис `local-token`
 - `.env.example` — образец настроек этой машины: порт контура сквозных тестов, адрес API и ключ
