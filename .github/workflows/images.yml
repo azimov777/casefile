@@ -3,6 +3,12 @@
 # `sha-<коммит>`, для amd64 и arm64. Их берёт `docker-compose.prod.yml`, а служба
 # `updater` установки подтягивает `latest` на каждом старте Docker.
 #
+# Пуш тега `v*` добавляет к тем же образам номер версии без `v` (`v0.1.0` → `0.1.0`):
+# `docker/metadata-action` берёт его из семвера тега (`type=semver`), а `latest` при этом
+# не трогается — `enable={{is_default_branch}}` истинно только для пуша в default branch,
+# и тег веткой не является. Так установку можно закрепить на выпуске через
+# `CASEFILE_VERSION=0.1.0` в `.env` (`docker-compose.prod.yml`), а не только на `latest`.
+#
 # Проверки — вызовом `ci.yml`, а не параллельным workflow: публикация обязана ждать их
 # исхода, иначе красный коммит разъехался бы по всем установкам.
 #
@@ -18,6 +24,7 @@ name: Images
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -72,6 +79,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
+            type=semver,pattern={{version}}
 
       - uses: docker/build-push-action@v6
         with:
