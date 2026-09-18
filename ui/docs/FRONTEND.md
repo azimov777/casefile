@@ -197,7 +197,9 @@ MCP не выводится из адреса страницы. Решение �
   (`reloadInstallToken`) и работает ключом, как на локальной установке. Отказы:
   `401 unauthorized` с `details.reason: wrong_password`; `429 password_attempts_exceeded`
   с `details.retry_after` (секунды) и заголовком `Retry-After` — пароль тогда не
-  проверяется вовсе; `409 password_login_off` — у установки пароля нет.
+  проверяется вовсе; `details.scope` говорит, чьё окно кончилось: `address` — неудачи с
+  этого адреса, `installation` — общий потолок установки, то есть перебор идёт со многих
+  адресов (`TRK-98`); `409 password_login_off` — у установки пароля нет.
 - `GET /api/v1/session` — жив ли сеанс из куки: `200` со сроком или `401` с причиной
   (`missing_session`, `unknown_session`, `session_expired`). Им пользуется nginx
   (`auth_request`), интерфейсу он не нужен: ему хватает ответа `/config.json`.
@@ -253,7 +255,7 @@ MCP не выводится из адреса страницы. Решение �
 | `task_field_locked` | Раздел правится только в `backlog` |
 | `transition_not_allowed`, `transition_reason_required` | Перехода нет в таблице либо он требует причины |
 | `closing_not_a_transition` | В `done` ведёт не переход, а закрытие: `POST /api/v1/tasks/{task_key}/close` |
-| `password_attempts_exceeded` | Вход паролем: неудачных попыток за окно столько, сколько разрешено; секунды в `details.retry_after` |
+| `password_attempts_exceeded` | Вход паролем: неудачных попыток за окно столько, сколько разрешено; секунды в `details.retry_after`, чьё окно — в `details.scope` (`address` или `installation`) |
 
 Отдельно про ответ на вопрос: своего кода у него нет. `question_no`, указывающий на
 несуществующую запись или на запись не того типа, приходит как `entry_fields_invalid`

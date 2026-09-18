@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.api.client_address import ClientAddresses
 from app.api.errors import register_exception_handlers
 from app.api.router import api_router, generate_operation_id, session_router
 from app.api.routes import health
@@ -70,6 +71,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # (`app/services/login.py`). Испорченный `TRACKER_PASSWORD_HASH` роняет здесь сборку,
     # то есть старт процесса, а не первую попытку входа.
     app.state.password_login = PasswordLogin.from_settings(settings)
+    # Кому верить адрес клиента для окна попыток (`TRACKER_REAL_IP_FROM`); имена хостов в
+    # нём разрешаются при попытке входа, а не здесь — `ui` поднимается позже API.
+    app.state.client_addresses = ClientAddresses.from_settings(settings)
 
     app.add_middleware(
         CORSMiddleware,

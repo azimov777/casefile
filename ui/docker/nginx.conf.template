@@ -34,6 +34,15 @@ server {
     # источника у неё нет, и `/config.json` ей не отдаётся.
     include /etc/nginx/casefile/host-guard.conf;
 
+    # Кто клиент (TRK-98#6). По умолчанию — тот, кто открыл соединение (`$remote_addr`).
+    # Если соединение пришло от прокси, которого владелец назвал доверенным
+    # (`TRACKER_UI_TRUSTED_PROXIES`), модуль realip заменяет `$remote_addr` самым правым
+    # адресом `X-Forwarded-For`, не названным доверенным. Список пуст — `X-Forwarded-For`
+    # не значит ничего: написать его может кто угодно. Файл пишет `docker/access-mode.sh`.
+    # Итог уходит в API заголовком `X-Real-IP` (`location /api/` ниже), а API считает по
+    # нему попытки входа на адрес клиента.
+    include /etc/nginx/casefile/real-ip.conf;
+
     # Конфигурация установки: её кладёт при старте `docker/config-json.sh`, если контуру
     # дали ключ. Свой `location` заведён ради честного `404`: под общим правилом ниже
     # запрос к несуществующему файлу получил бы `200` и разметку index.html, и «ключа
@@ -91,6 +100,11 @@ server {
         proxy_pass ${TRACKER_API_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        # Адрес клиента для окна попыток входа — один, и пишет его этот nginx, а не
+        # клиент: `proxy_set_header` заменяет присланный заголовок, а не дописывает к нему.
+        # API верит ему только от этой службы (`TRACKER_REAL_IP_FROM: ui`). Цепочку
+        # `X-Forwarded-For` API не читает; она идёт дальше как есть, для журналов.
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $casefile_forwarded_proto;
 

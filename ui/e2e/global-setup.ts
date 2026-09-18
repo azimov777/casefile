@@ -54,11 +54,16 @@ async function globalSetup(): Promise<void> {
  * `run -d` не ждёт готовности, поэтому ждём сами — первой отданной страницы. Гасит
  * контейнер `global-teardown.ts` (`down --remove-orphans`: одноразовые контейнеры
  * обычный `down` не трогает).
+ *
+ * `--use-aliases` даёт контейнеру имя службы в сети контура. Без него API не узнал бы в
+ * нём свой nginx (`TRACKER_REAL_IP_FROM: ui`) и считал бы попытки входа на адрес
+ * контейнера, а не на тот, что nginx прислал в `X-Real-IP`, — не тем путём, что у
+ * владельца (`TRK-98`).
  */
 async function startLockedInterface(token: string): Promise<void> {
   compose(
     [
-      ...['run', '-d', '--rm', '--no-deps'],
+      ...['run', '-d', '--rm', '--no-deps', '--use-aliases'],
       ...['-p', `127.0.0.1:${LOGIN_PORT}:80`],
       ...['-e', 'TRACKER_UI_LOGIN=password'],
       'ui',

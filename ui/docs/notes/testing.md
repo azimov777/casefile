@@ -687,3 +687,18 @@ Compose v5, TRK-90). Вторая: обычный `docker compose down` одно
 ждёт), гасить `down -v --remove-orphans`. Порт — `UI_LOGIN_PORT`, умолчание 8082.
 **Где:** `e2e/global-setup.ts`, `startLockedInterface`; `e2e/global-teardown.ts`;
 `e2e/contour.ts`, `LOGIN_PORT`; `docker-compose.yml`.
+
+## Одноразовый `ui` в сквозном контуре не зовётся `ui` без `--use-aliases`
+
+**Что:** `docker compose run` даёт контейнеру в сети проекта только его собственное имя
+(`<проект>-ui-run-<хеш>`), без имени службы; с `--use-aliases` — ещё и `ui`. Проверено на
+Compose 5 (TRK-98): без флага `getaddrinfo('ui')` из API возвращает один адрес — основного
+экземпляра, с флагом — оба.
+**Почему важно:** API контура верит `X-Real-IP` только собеседнику по имени `ui`
+(`TRACKER_REAL_IP_FROM: ui`, как в установке). Второй экземпляр интерфейса без флага был бы
+для API чужим, и сценарии входа паролем шли бы не тем путём, что у владельца: попытки
+считались бы на адрес контейнера, а не на адрес, присланный nginx.
+**Как правильно:** одноразовый экземпляр службы, который должен быть узнан по её имени,
+поднимать с `--use-aliases`.
+**Где:** `e2e/global-setup.ts`, `startLockedInterface`; `docker-compose.yml`,
+`TRACKER_REAL_IP_FROM`.
