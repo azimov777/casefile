@@ -41,6 +41,12 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY docker/config-json.sh /docker-entrypoint.d/40-tracker-config-json.sh
 RUN chmod +x /docker-entrypoint.d/40-tracker-config-json.sh
 
+# Режим доступа — кому отдавать ключ и каким `Host` отвечать — тоже решается при старте:
+# его задаёт контур (`TRACKER_UI_LOGIN`, `TRACKER_UI_BIND`), а шаблон подключает файлы,
+# которые пишет этот шаг. Номер 30 — после развёртывания шаблона, до ключа.
+COPY docker/access-mode.sh /docker-entrypoint.d/30-tracker-access-mode.sh
+RUN chmod +x /docker-entrypoint.d/30-tracker-access-mode.sh
+
 # Куда проксировать `/api`. Умолчание — сервис `api` контура сквозных тестов.
 ENV TRACKER_API_URL=http://api:8000
 
