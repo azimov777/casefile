@@ -11,6 +11,7 @@ import pytest
 
 from app.domain.case import (
     MAX_ENTRY_TITLE_LENGTH,
+    MAX_SUMMARY_PART_LENGTH,
     EntryContext,
     EntryRef,
     EntryType,
@@ -24,6 +25,11 @@ from app.domain.fields import FieldProblem
 
 CONTEXT = EntryContext(task_key="TRK-1", checks=("первая", "вторая", "третья"))
 
+#: Тот же повод, но закрывающий: у сводки в нём пятая часть, `unmeasured`.
+CLOSING_CONTEXT = EntryContext(
+    task_key="TRK-1", checks=("первая", "вторая", "третья"), closing=True
+)
+
 #: Первая строка `done` — то, чем сводка подписывается в описи дела.
 FIRST_LINE = "Разобрался, где сгорает номер"
 
@@ -35,6 +41,12 @@ SUMMARY = {
     "remaining": "Перенести выдачу номера",
     "blockers": "нет",
     "next_step": NEXT_STEP,
+}
+
+#: Закрывающая сводка: те же четыре части и пятая — риск, который проверки не мерили.
+CLOSING_SUMMARY = {
+    **SUMMARY,
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
 }
 
 
@@ -142,6 +154,62 @@ def test_a_summary_does_not_accept_a_title() -> None:
 
     assert problems(error) == {"title": "not_allowed"}
     assert error.value.details["fields"][0]["derived_from"] == "done"
+
+
+# --- Закрывающая сводка: пятая часть (TRK-78) ----------------------------------------
+
+
+def test_a_closing_summary_without_the_unmeasured_key_is_refused() -> None:
+    """Закрывающий повод требует `unmeasured` наравне с остальными четырьмя частями.
+
+    Ключа в присланной нагрузке нет вовсе, и отказ тот же, что у части, присланной
+    пустой: `required`. Непереданное и пустое — одна ошибка автора, части нет; два
+    разных кода звали бы его разбираться с типом, которого он не присылал.
+    """
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(CLOSING_CONTEXT, type=EntryType.SUMMARY, payload=SUMMARY)
+
+    assert error.value.details["fields"] == [{"field": "unmeasured", "reason": "required"}]
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_a_closing_summary_with_a_blank_unmeasured_is_required(blank: str) -> None:
+    """Пустая строка и строка из одних пробелов — тот же отказ, что и у прочих частей."""
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(
+            CLOSING_CONTEXT, type=EntryType.SUMMARY, payload={**SUMMARY, "unmeasured": blank}
+        )
+
+    assert problems(error) == {"unmeasured": "required"}
+
+
+def test_a_plain_summary_refuses_unmeasured_as_an_extra_field() -> None:
+    """Посреди работы `unmeasured` — чужое поле: агент узнаёт, что сводка ушла без него."""
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(
+            CONTEXT, type=EntryType.SUMMARY, payload={**SUMMARY, "unmeasured": "Что-нибудь"}
+        )
+
+    assert problems(error) == {"unmeasured": "not_allowed"}
+
+
+def test_a_closing_summary_with_unmeasured_is_built_and_still_titled_by_done() -> None:
+    """Пятая часть едет в `payload`, а заголовок остаётся первой строкой `done`."""
+    draft = build_entry(CLOSING_CONTEXT, type=EntryType.SUMMARY, payload=CLOSING_SUMMARY)
+
+    assert draft.payload["unmeasured"] == CLOSING_SUMMARY["unmeasured"]
+    assert draft.title == FIRST_LINE
+
+
+def test_a_too_long_unmeasured_part_is_refused() -> None:
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(
+            CLOSING_CONTEXT,
+            type=EntryType.SUMMARY,
+            payload={**CLOSING_SUMMARY, "unmeasured": "ш" * (MAX_SUMMARY_PART_LENGTH + 1)},
+        )
+
+    assert problems(error) == {"unmeasured": "too_long"}
 
 
 # --- Вопрос, ответ, вердикт ---------------------------------------------------------

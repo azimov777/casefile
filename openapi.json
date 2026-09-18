@@ -5250,6 +5250,71 @@
           }
         }
       },
+      "ClosingSummaryPayload": {
+        "properties": {
+          "done": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Done",
+            "description": "What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary",
+            "examples": [
+              "Разобрался, где сгорает номер"
+            ]
+          },
+          "remaining": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Remaining",
+            "description": "What is left",
+            "examples": [
+              "Перенести выдачу номера после валидации"
+            ]
+          },
+          "blockers": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Blockers",
+            "description": "What is in the way; write `нет` rather than leaving it empty",
+            "examples": [
+              "Нет"
+            ]
+          },
+          "next_step": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Next Step",
+            "description": "The next step: one concrete action for whoever picks the case up",
+            "examples": [
+              "Перенести вызов next_task_number в конец create_task"
+            ]
+          },
+          "unmeasured": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Unmeasured",
+            "description": "Which part of the goal no review check measured, and which risk the author considers theoretical. Required when closing: a verdict answers its check, not the goal, and only the author knows the gap",
+            "examples": [
+              "Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "done",
+          "remaining",
+          "blockers",
+          "next_step",
+          "unmeasured"
+        ],
+        "title": "ClosingSummaryPayload",
+        "description": "Закрывающая сводка: те же четыре части и обязательный `unmeasured`.\n\nТретья модель одной сводки, и каждая отвечает своей роли: `SummaryPartsPayload` —\nчто подшивают посреди работы, `SummaryPayload` — что читают, эта — чем закрывают.\nОбщей быть они не могут: у чтения часть необязательна (дела, закрытые до её\nпоявления), у создания её нет вовсе, у закрытия она обязательна. Схема, обещающая\nклиенту необязательность там, где домен требует, отправила бы его узнавать правила\nиз `422` вместо контракта, — а расхождение границ двух входов трекер уже проходил\n(TRK-76)."
+      },
       "CollectionResponse_EntryRead_": {
         "properties": {
           "data": {
@@ -7677,7 +7742,7 @@
             "title": "Type"
           },
           "payload": {
-            "$ref": "#/components/schemas/SummaryPayload"
+            "$ref": "#/components/schemas/SummaryPartsPayload"
           }
         },
         "additionalProperties": false,
@@ -7687,7 +7752,7 @@
           "payload"
         ],
         "title": "SummaryEntryCreate",
-        "description": "Сводка. Заголовок не принимается: он равен первой строке `done`."
+        "description": "Сводка посреди работы. Заголовок не принимается: он равен первой строке `done`.\n\nНагрузка — четыре части и только они: закрывающая сводка сюда не подшивается, у неё\nсвоя дверь (`POST /tasks/{key}/close`) и своя модель с `unmeasured`."
       },
       "SummaryEntryRead": {
         "properties": {
@@ -7782,7 +7847,7 @@
         "title": "SummaryEntryRead",
         "description": "Сводка: точка входа преемника. Последняя главнее предыдущих."
       },
-      "SummaryPayload": {
+      "SummaryPartsPayload": {
         "properties": {
           "done": {
             "type": "string",
@@ -7833,13 +7898,84 @@
           "blockers",
           "next_step"
         ],
+        "title": "SummaryPartsPayload",
+        "description": "Четыре части сводки, все непустые: то, что подшивают посреди работы.\n\nЭто же тело у `POST /tasks/{key}/entries` с типом `summary`, и пятой части здесь\nнет **намеренно**: закрывающая сводка едет не сюда, а в `POST /tasks/{key}/close`.\nПрисланный `unmeasured` отвергнет схема, не доводя до домена."
+      },
+      "SummaryPayload": {
+        "properties": {
+          "done": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Done",
+            "description": "What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary",
+            "examples": [
+              "Разобрался, где сгорает номер"
+            ]
+          },
+          "remaining": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Remaining",
+            "description": "What is left",
+            "examples": [
+              "Перенести выдачу номера после валидации"
+            ]
+          },
+          "blockers": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Blockers",
+            "description": "What is in the way; write `нет` rather than leaving it empty",
+            "examples": [
+              "Нет"
+            ]
+          },
+          "next_step": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Next Step",
+            "description": "The next step: one concrete action for whoever picks the case up",
+            "examples": [
+              "Перенести вызов next_task_number в конец create_task"
+            ]
+          },
+          "unmeasured": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16384,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmeasured",
+            "description": "Which part of the goal no review check measured, and which risk the author considers theoretical. Closing summaries only: the key is absent on summaries filed mid-work and on those filed before this part existed",
+            "examples": [
+              "Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "done",
+          "remaining",
+          "blockers",
+          "next_step"
+        ],
         "title": "SummaryPayload",
-        "description": "Справка при передаче. Четыре части, все непустые."
+        "description": "Сводка, как её **читают**: четыре части и, у закрывающей, пятая.\n\nТерпимость к отсутствию `unmeasured` — свойство чтения, а не подшивки: читаются и\nпромежуточные сводки, у которых части не бывает, и все дела, закрытые до её\nпоявления. Отдельной моделью от `SummaryPartsPayload` она стоит именно поэтому:\nпока чтение и создание делили одну модель, необязательное поле уезжало в\n`model_dump()` маршрута создания значением `null` и роняло **всякую** обычную\nсводку — домен честно отвергал часть, которой в промежуточной сводке не место\n(TRK-78). Одна модель на две роли расходится молча; две расходиться не умеют."
       },
       "TaskClosing": {
         "properties": {
           "summary": {
-            "$ref": "#/components/schemas/SummaryPayload",
+            "$ref": "#/components/schemas/ClosingSummaryPayload",
             "description": "The closing summary. Filed last, after the entries and the verdicts, so that it speaks of their outcome"
           },
           "verdicts": {

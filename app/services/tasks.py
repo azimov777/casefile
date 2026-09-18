@@ -448,6 +448,8 @@ async def close_task(
             remaining=summary.remaining,
             blockers=summary.blockers,
             next_step=summary.next_step,
+            unmeasured=summary.unmeasured,
+            closing=True,
         )
     )
 

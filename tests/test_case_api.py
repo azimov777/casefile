@@ -7,9 +7,15 @@
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.author import created_by_columns
+from app.db.models.entry import Entry
 from app.db.models.queue import Queue
-from app.domain.case import SERVICE_ENTRY_TYPES
+from app.db.repositories import EntryRepository
+from app.domain.case import SERVICE_ENTRY_TYPES, EntryType
+from app.domain.tasks import TaskStatus
+from app.services import tasks as tasks_service
 
 READY = {
     "queue": "trk",
@@ -27,6 +33,12 @@ SUMMARY = {
     "remaining": "Перенести выдачу номера",
     "blockers": "нет",
     "next_step": "Перенести вызов в конец create_task",
+}
+
+#: Закрывающая сводка: та же четвёрка и пятая часть, обязательная только при закрытии.
+CLOSING_SUMMARY = {
+    **SUMMARY,
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
 }
 
 
@@ -54,7 +66,9 @@ async def transition(client: AsyncClient, key: str, to: str, **body: Any) -> Any
 
 async def close(client: AsyncClient, key: str, **body: Any) -> Any:
     """Закрытие: сводка обязательна, вердикты и записи — по желанию вызывающего."""
-    return await client.post(f"/api/v1/tasks/{key}/close", json={"summary": SUMMARY, **body})
+    return await client.post(
+        f"/api/v1/tasks/{key}/close", json={"summary": CLOSING_SUMMARY, **body}
+    )
 
 
 async def move(client: AsyncClient, key: str, *statuses: str, reason: str | None = None) -> None:
@@ -218,6 +232,41 @@ async def test_closing_needs_a_passing_verdict_on_every_check(
     assert passed.json()["data"]["status"] == "done"
 
 
+async def test_closing_via_rest_rejects_a_missing_or_blank_unmeasured_by_the_schema(
+    auth_client: AsyncClient, queue: Queue
+) -> None:
+    """TRK-78: на запись закрытия `unmeasured` обязателен уже в схеме, раньше домена.
+
+    `TaskClosing.summary` — не та модель, что читает записи: там часть терпима ради
+    старых дел, а здесь на неё нельзя закрыться вовсе. Отказ приходит `422
+    validation_error`, а не `entry_fields_invalid` — тот путь проверяет сервис
+    (`tests/test_case_service.py`) и MCP (`tests/test_mcp_tools.py`).
+    """
+    await create(auth_client, checks=["первая"])
+    await move(auth_client, "TRK-1", "open", "in_progress")
+
+    missing = await auth_client.post(
+        "/api/v1/tasks/TRK-1/close",
+        json={"summary": SUMMARY, "verdicts": [{"check_no": 1, "outcome": "passed"}]},
+    )
+    assert missing.status_code == 422, missing.text
+    assert missing.json()["error"]["code"] == "validation_error"
+
+    blank = await auth_client.post(
+        "/api/v1/tasks/TRK-1/close",
+        json={
+            "summary": {**SUMMARY, "unmeasured": ""},
+            "verdicts": [{"check_no": 1, "outcome": "passed"}],
+        },
+    )
+    assert blank.status_code == 422, blank.text
+    assert blank.json()["error"]["code"] == "validation_error"
+
+    # Задача осталась в работе: схема отклонила запрос до того, как он что-то подшил.
+    data = await package(auth_client, "TRK-1")
+    assert data["task"]["status"] == "in_progress"
+
+
 # --- Пакет преемника ------------------------------------------------------------------
 
 
@@ -300,6 +349,47 @@ async def test_entries_are_read_by_number_type_and_position(
     missing = await auth_client.get("/api/v1/tasks/TRK-1/entries/99")
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "entry_not_found"
+
+
+async def test_a_summary_without_the_unmeasured_part_is_still_read_without_errors(
+    auth_client: AsyncClient, db_session: AsyncSession, queue: Queue
+) -> None:
+    """Совместимость со старыми делами: схема чтения терпит отсутствие `unmeasured`.
+
+    Два случая сразу: промежуточная сводка (у неё пятой части не бывает вовсе) и
+    закрывающая сводка дела, закрытого до появления этой части, — такая в базе уже
+    есть и подшита была без неё. Обе читаются через `GET .../entries/{no}` и через
+    карточку задачи, и в обоих `unmeasured` просто нет в `payload`, а не `null`.
+    """
+    await create(auth_client)
+    intermediate = await append(auth_client, "TRK-1", type="summary", payload=SUMMARY)
+    assert "unmeasured" not in intermediate["payload"]
+
+    # Дело до TRK-78: закрывающая сводка без пятой части и статус `done` — подшито
+    # напрямую в обход домена, ровно так, как это дело лежит в базе с прошлой версии.
+    task = await tasks_service.get_task(db_session, "TRK-1")
+    no = await EntryRepository(db_session).allocate_no(task.id)
+    legacy_closing_summary = Entry(
+        task_id=task.id,
+        no=no,
+        type=EntryType.SUMMARY,
+        title=SUMMARY["done"].splitlines()[0],
+        body="",
+        payload=SUMMARY,
+        refs=[],
+        **created_by_columns(task.created_by),
+    )
+    await EntryRepository(db_session).add(legacy_closing_summary)
+    task.status = TaskStatus.DONE
+    await db_session.flush()
+
+    read_by_no = await auth_client.get(f"/api/v1/tasks/TRK-1/entries/{no}")
+    assert read_by_no.status_code == 200, read_by_no.text
+    assert "unmeasured" not in read_by_no.json()["data"]["payload"]
+
+    data = await package(auth_client, "TRK-1")
+    assert data["task"]["status"] == "done"
+    assert "unmeasured" not in data["summary"]["payload"]
 
 
 async def test_a_reference_must_exist_while_an_address_is_taken_as_is(

@@ -305,6 +305,10 @@ def register(tools: Toolset) -> None:
         `closing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части
         не оставляет в деле ни одной записи и статуса не меняет.
 
+        Финальная сводка на одну часть длиннее промежуточной: сверх четырёх обычных она
+        требует `unmeasured` — какую часть цели не измерила ни одна обзорная проверка.
+        Пустой она быть не может, как и остальные: `entry_fields_invalid`.
+
         Каждая запись получает свой номер в описи. Записи немедленно видны в ленте и
         человеку в интерфейсе; будят ждущих `wait_journal`. Порядок подшивки: присланные
         записи, вердикты, сводка.
@@ -332,6 +336,7 @@ def register(tools: Toolset) -> None:
                         remaining=summary.remaining,
                         blockers=summary.blockers,
                         next_step=summary.next_step,
+                        unmeasured=summary.unmeasured,
                     ),
                     verdicts=[
                         case_service.VerdictFiling(

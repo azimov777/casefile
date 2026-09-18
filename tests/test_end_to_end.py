@@ -87,6 +87,14 @@ SUMMARY: dict[str, str] = {
     "next_step": "Закрыть задачу",
 }
 
+#: Закрывающая сводка полного цикла: те же четыре части и пятая, обязательная только
+#: при закрытии (TRK-78). Промежуточная сводка ниже по файлу (строка ~283) остаётся на
+#: `SUMMARY` — у неё пятой части не бывает вовсе.
+CLOSING_SUMMARY: dict[str, str] = {
+    **SUMMARY,
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
+}
+
 
 # --- Полный цикл через REST -----------------------------------------------------------
 
@@ -136,7 +144,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
     # описи и цикл проверял бы не то.
 
     closed = await auth_client.post(
-        f"/api/v1/tasks/{key}/close", json={"summary": SUMMARY, **CLOSING}
+        f"/api/v1/tasks/{key}/close", json={"summary": CLOSING_SUMMARY, **CLOSING}
     )
     assert closed.status_code == 200, closed.text
     assert closed.json()["data"]["status"] == "done"
@@ -145,7 +153,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
 
     assert [item["type"] for item in package["index"]] == [item.value for item in FULL_CYCLE_INDEX]
     assert package["transitions"] == [], "закрытая задача никуда не переводится"
-    assert package["summary"]["payload"] == SUMMARY
+    assert package["summary"]["payload"] == CLOSING_SUMMARY
     # Последняя запись агента — сводка: после неё в деле только служебная запись о
     # переходе в `done`, а служебные признак не двигают. Заголовок сводки не
     # принимается, а выводится из `done`: это и есть то, что преемник видит в описи,
@@ -156,7 +164,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
         if heading["type"] not in {item.value for item in SERVICE_ENTRY_TYPES}
     ][-1]
     assert last_agent["type"] == "summary"
-    assert last_agent["title"] == SUMMARY["done"]
+    assert last_agent["title"] == CLOSING_SUMMARY["done"]
     assert package["features"] == {
         "blocked": False,
         "open_questions": 0,
@@ -212,14 +220,14 @@ async def test_a_task_goes_the_whole_way_through_mcp(
             title="Возврат номера при откате не работает",
             body="Гонка",
         )
-        closed = await call(session, "close_task", key=key, summary=SUMMARY, **CLOSING)
+        closed = await call(session, "close_task", key=key, summary=CLOSING_SUMMARY, **CLOSING)
         assert closed["status"] == "done"
         # Ответ называет каждую подшитую страницу и говорит, чей заголовок вывел трекер:
         # у артефакта он прислан вызовом и обратно не едет.
         assert [item["title"] for item in closed["entries"]] == [
             None,
             "Verdict on check 1: passed",
-            SUMMARY["done"],
+            CLOSING_SUMMARY["done"],
             "Status changed: in_progress -> done",
         ]
 
@@ -227,7 +235,7 @@ async def test_a_task_goes_the_whole_way_through_mcp(
 
     assert [item["type"] for item in package["index"]] == [item.value for item in FULL_CYCLE_INDEX]
     assert package["transitions"] == []
-    assert package["summary"]["payload"] == SUMMARY
+    assert package["summary"]["payload"] == CLOSING_SUMMARY
 
 
 # --- Ожидание ответа на блокирующий вопрос --------------------------------------------
