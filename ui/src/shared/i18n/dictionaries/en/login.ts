@@ -21,6 +21,16 @@ export const login = {
   passwordHint:
     'The owner of the installation knows the password. After signing in, the installation hands the key to the browser itself — no token to enter.',
   passwordWrong: 'The password did not match.',
+  // General text: `details.scope` is unknown to the interface, or absent (`UI-121`).
   passwordThrottled: 'Too many failed attempts. Try again in {{seconds}} s.',
+  // `details.scope: "address"` (`TRK-98`) — the window is spent on attempts from this
+  // device; every other address still gets its password checked.
+  passwordThrottledAddress:
+    'Too many failed attempts from this device. Try again in {{seconds}} s.',
+  // `details.scope: "installation"` — the installation-wide ceiling is spent: the
+  // password is being tried from many addresses at once, and this is not the owner's
+  // mistake.
+  passwordThrottledInstallation:
+    'The installation is being brute-forced from many addresses at once — this is not your mistake. Sign-in opens again in {{seconds}} s.',
   passwordExpired: 'The session is over. Sign in with the password again.',
 } as const;

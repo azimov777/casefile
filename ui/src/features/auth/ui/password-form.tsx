@@ -35,12 +35,25 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
    * Два отказа объясняются словами экрана входа, а не общим словарём ошибок. `401` здесь
    * значит «пароль не подошёл», а словарь по коду `unauthorized` говорит о токене. Окно
    * попыток называет секунды из `details.retry_after` — общий текст их не знает.
+   *
+   * `details.scope` (`TRK-98`) различает своё окно и общий потолок установки (`UI-121`):
+   * владелец, упёршийся в потолок, не ошибался сам — установку перебирают с чужих
+   * адресов. Тип `details` — `Record<string, unknown>` из сгенерированного контракта
+   * (`ErrorDetail.details` в `shared/api/openapi.ts`): своего `scope` там нет, бэкенд
+   * не обещал его перечислением, поэтому значение читается как есть и неизвестное —
+   * как отсутствующее.
    */
   function refusal(error: Error): string {
     if (error instanceof ApiError && error.code === 'unauthorized') return t('passwordWrong');
     if (error instanceof ApiError && error.code === 'password_attempts_exceeded') {
       const seconds = Number(error.details.retry_after);
-      if (Number.isFinite(seconds)) return t('passwordThrottled', { seconds });
+      if (Number.isFinite(seconds)) {
+        if (error.details.scope === 'address') return t('passwordThrottledAddress', { seconds });
+        if (error.details.scope === 'installation') {
+          return t('passwordThrottledInstallation', { seconds });
+        }
+        return t('passwordThrottled', { seconds });
+      }
     }
     return errorMessage(error);
   }
