@@ -72,7 +72,11 @@ async def close(session: AsyncSession, task: Task, actor: Actor) -> None:
             for check_no in range(1, len(task.checks) + 1)
         ],
         summary=case_service.SummaryFiling(
-            done="сделано", remaining="осталось", blockers="нет", next_step="дальше"
+            done="сделано",
+            remaining="осталось",
+            blockers="нет",
+            next_step="дальше",
+            unmeasured="Связи между задачами эти тесты не измеряют, риск считаю теоретическим",
         ),
     )
 

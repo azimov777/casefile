@@ -90,6 +90,7 @@ CLOSING_SUMMARY = {
     "remaining": "Ничего",
     "blockers": "Нет",
     "next_step": "Шагов нет, задача закрыта",
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
 }
 
 #: Аргументы, с которыми инструмент набора `main` доходит до проверки прав. Значения
@@ -1264,6 +1265,37 @@ async def test_a_refused_closing_files_nothing_at_all(
     assert after["index"] == before["index"], "отказ оставил в деле записи"
     assert after["task"]["status"] == "in_progress"
     assert after["task"]["version"] == before["task"]["version"]
+
+
+async def test_a_blank_unmeasured_reaches_the_domain_and_files_nothing(
+    mcp_session: Connect, task_secret: str, closing_task: str
+) -> None:
+    """TRK-78: схема инструмента требует часть строкой, но не запрещает пустую.
+
+    Так же, как у остальных частей сводки (`app/mcp/arguments.py`): пустая строка
+    обязана дойти до домена и вернуться понятным `entry_fields_invalid` с именем
+    поля, а не оборваться на разборе аргументов. Вердикты этого же вызова в деле
+    не остаются — отказ на сводке откатывает всё, включая уже поданные вердикты.
+    """
+    key = closing_task
+    async with mcp_session(task_secret) as session:
+        before = await call(session, "get_task", key=key)
+        failure = await refuse(
+            session,
+            "close_task",
+            key=key,
+            summary={**CLOSING_SUMMARY, "unmeasured": ""},
+            verdicts=[
+                {"check_no": 1, "outcome": "passed", "evidence": "Прогон зелёный"},
+                {"check_no": 2, "outcome": "passed", "evidence": "Линтер чист"},
+            ],
+        )
+        after = await call(session, "get_task", key=key)
+
+    assert "entry_fields_invalid" in failure, failure
+    assert '"field": "unmeasured"' in failure, failure
+    assert after["index"] == before["index"], "отказ оставил в деле записи"
+    assert after["task"]["status"] == "in_progress"
 
 
 async def test_a_status_move_does_not_close_a_task(

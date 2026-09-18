@@ -274,6 +274,7 @@ async def test_a_task_with_an_outdated_verdict_does_not_close(
                 "remaining": "Проверить заново",
                 "blockers": "Ничего",
                 "next_step": "Подшить вердикты по нынешним формулировкам",
+                "unmeasured": "Отказ ждём на вердиктах, форму сводки тут не мерим",
             },
         )
 

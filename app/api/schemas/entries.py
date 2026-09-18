@@ -34,11 +34,19 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    model_serializer,
+)
 
 from app.api.schemas.authors import AuthorRead
 from app.db.models.entry import Entry
 from app.domain.case import (
+    CLOSING_SUMMARY_PART,
     MAX_ADDRESSEES,
     MAX_ENTRY_BODY_LENGTH,
     MAX_ENTRY_TITLE_LENGTH,
@@ -244,8 +252,13 @@ class EmptyPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class SummaryPayload(BaseModel):
-    """Справка при передаче. Четыре части, все непустые."""
+class SummaryPartsPayload(BaseModel):
+    """Четыре части сводки, все непустые: то, что подшивают посреди работы.
+
+    Это же тело у `POST /tasks/{key}/entries` с типом `summary`, и пятой части здесь
+    нет **намеренно**: закрывающая сводка едет не сюда, а в `POST /tasks/{key}/close`.
+    Присланный `unmeasured` отвергнет схема, не доводя до домена.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -276,6 +289,53 @@ class SummaryPayload(BaseModel):
         examples=["Перенести вызов next_task_number в конец create_task"],
         description="The next step: one concrete action for whoever picks the case up",
     )
+
+
+class SummaryPayload(SummaryPartsPayload):
+    """Сводка, как её **читают**: четыре части и, у закрывающей, пятая.
+
+    Терпимость к отсутствию `unmeasured` — свойство чтения, а не подшивки: читаются и
+    промежуточные сводки, у которых части не бывает, и все дела, закрытые до её
+    появления. Отдельной моделью от `SummaryPartsPayload` она стоит именно поэтому:
+    пока чтение и создание делили одну модель, необязательное поле уезжало в
+    `model_dump()` маршрута создания значением `null` и роняло **всякую** обычную
+    сводку — домен честно отвергал часть, которой в промежуточной сводке не место
+    (TRK-78). Одна модель на две роли расходится молча; две расходиться не умеют.
+    """
+
+    unmeasured: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_SUMMARY_PART_LENGTH,
+        examples=["Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь"],
+        description=(
+            "Which part of the goal no review check measured, and which risk the author "
+            "considers theoretical. Closing summaries only: the key is absent on "
+            "summaries filed mid-work and on those filed before this part existed"
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _without_the_absent_part(self, serialize: SerializerFunctionWrapHandler):
+        """Часть, которой в записи нет, не показывается ключом со значением `null`.
+
+        Запись дела отдаётся такой, какой её подшили. `null` читался бы как «часть есть,
+        и она пуста», а пустых частей у сводки не бывает — их отвергает домен. Без этого
+        REST дописывал бы ключ каждой промежуточной сводке и каждому делу, закрытому до
+        появления части, и расходился бы с MCP, который отдаёт нагрузку как есть, — а
+        совпадение двух дверей проверяется набором.
+
+        **Возвращаемый тип не аннотирован намеренно.** Pydantic строит схему
+        сериализации по аннотации возврата, и `dict[str, Any]` стирает её до
+        `{"type": "object", "additionalProperties": true}`: в `openapi.json` пропадают
+        все четыре части, а сгенерированный клиент получает `unknown` вместо полей —
+        ровно то, ради чего нагрузка вообще описана моделью (шапка модуля). Без
+        аннотации схема остаётся полной, а ключ всё так же не попадает в вывод.
+        """
+        data = serialize(self)
+        if data.get(CLOSING_SUMMARY_PART) is None:
+            data.pop(CLOSING_SUMMARY_PART, None)
+        return data
 
 
 class QuestionPayload(BaseModel):
@@ -671,10 +731,14 @@ class PlainEntryCreate(_TitledEntryCreate):
 
 
 class SummaryEntryCreate(_EntryCreateBase):
-    """Сводка. Заголовок не принимается: он равен первой строке `done`."""
+    """Сводка посреди работы. Заголовок не принимается: он равен первой строке `done`.
+
+    Нагрузка — четыре части и только они: закрывающая сводка сюда не подшивается, у неё
+    своя дверь (`POST /tasks/{key}/close`) и своя модель с `unmeasured`.
+    """
 
     type: Literal[EntryType.SUMMARY]
-    payload: SummaryPayload
+    payload: SummaryPartsPayload
 
 
 class QuestionEntryCreate(_TitledEntryCreate):

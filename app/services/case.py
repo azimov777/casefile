@@ -46,6 +46,7 @@ from app.db.repositories import EntryRepository, ParticipantRepository, TaskRepo
 from app.db.wakeup import journal_wakeup
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
+    CLOSING_SUMMARY_PART,
     EntryContext,
     EntryDraft,
     EntryHeading,
@@ -330,12 +331,17 @@ class VerdictFiling:
 
 @dataclass(frozen=True, slots=True)
 class SummaryFiling:
-    """Четыре части сводки. Заголовка нет: его выводит домен из `done`."""
+    """Части закрывающей сводки. Заголовка нет: его выводит домен из `done`.
+
+    Форма одна на всё закрытие, и `unmeasured` в ней обязателен наравне с остальными:
+    значение по умолчанию сделало бы «ничего не измерено» невидимым пропуском.
+    """
 
     done: Any
     remaining: Any
     blockers: Any
     next_step: Any
+    unmeasured: Any
 
 
 # --- Записи агента --------------------------------------------------------------------
@@ -351,16 +357,21 @@ async def append_entry(
     body: Any = "",
     payload: dict[str, Any] | None = None,
     refs: Any = (),
+    closing: bool = False,
 ) -> Entry:
     """Подшивает запись агента: форма проверяется доменом, существование — здесь.
 
     Единственная точка входа для всех типов записей агента. Обёртки ниже (`add_summary`,
     `ask`, `answer`, `add_verdict`, `add_entry`) существуют ради инструментов MCP,
     у которых один инструмент — один вид действия; своей логики в них нет.
+
+    `closing` доезжает до домена как часть контекста: от него зависит состав частей
+    сводки. Снаружи его не задают — он приходит от сценария закрытия, который один и
+    знает, что подшивает последнюю запись работы.
     """
     ensure_scope(actor, TokenScope.TASK, action="case.append")
     draft = build_entry(
-        EntryContext(task_key=task.key, checks=task.checks),
+        EntryContext(task_key=task.key, checks=task.checks, closing=closing),
         type=type,
         title=title,
         body=body,
@@ -389,6 +400,8 @@ async def add_summary(
     remaining: Any,
     blockers: Any,
     next_step: Any,
+    unmeasured: Any = None,
+    closing: bool = False,
     body: Any = "",
     refs: Any = (),
 ) -> Entry:
@@ -397,7 +410,21 @@ async def add_summary(
     Заголовка не принимает: он равен первой строке `done`, и второй способ задать
     опись развёл бы её с содержанием. Именно `done`: в описи сводка обязана говорить о
     случившемся, как и все соседние строки.
+
+    При закрытии добавляется `unmeasured` — какую часть цели не измерила ни одна
+    проверка. Ключ кладётся в нагрузку **всегда**, когда сводка закрывающая, даже с
+    пустым значением: иначе непереданная часть уехала бы в домен как отсутствующая
+    и вместо «required» получила бы молчание. Вне закрытия ключа нет — и присланный
+    домен отвергнет, а не выбросит молча.
     """
+    payload: dict[str, Any] = {
+        "done": done,
+        "remaining": remaining,
+        "blockers": blockers,
+        "next_step": next_step,
+    }
+    if closing or unmeasured is not None:
+        payload[CLOSING_SUMMARY_PART] = unmeasured
     return await append_entry(
         session,
         task,
@@ -405,12 +432,8 @@ async def add_summary(
         type=EntryType.SUMMARY,
         body=body,
         refs=refs,
-        payload={
-            "done": done,
-            "remaining": remaining,
-            "blockers": blockers,
-            "next_step": next_step,
-        },
+        payload=payload,
+        closing=closing,
     )
 
 

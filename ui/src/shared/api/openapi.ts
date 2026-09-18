@@ -983,6 +983,50 @@ export interface components {
             text: string;
         };
         ClosingEntryCreate: components["schemas"]["PlainEntryCreate"] | components["schemas"]["RemarkEntryCreate"];
+        /**
+         * ClosingSummaryPayload
+         * @description Закрывающая сводка: те же четыре части и обязательный `unmeasured`.
+         *
+         *     Третья модель одной сводки, и каждая отвечает своей роли: `SummaryPartsPayload` —
+         *     что подшивают посреди работы, `SummaryPayload` — что читают, эта — чем закрывают.
+         *     Общей быть они не могут: у чтения часть необязательна (дела, закрытые до её
+         *     появления), у создания её нет вовсе, у закрытия она обязательна. Схема, обещающая
+         *     клиенту необязательность там, где домен требует, отправила бы его узнавать правила
+         *     из `422` вместо контракта, — а расхождение границ двух входов трекер уже проходил
+         *     (TRK-76).
+         */
+        ClosingSummaryPayload: {
+            /**
+             * Done
+             * @description What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary
+             * @example Разобрался, где сгорает номер
+             */
+            done: string;
+            /**
+             * Remaining
+             * @description What is left
+             * @example Перенести выдачу номера после валидации
+             */
+            remaining: string;
+            /**
+             * Blockers
+             * @description What is in the way; write `нет` rather than leaving it empty
+             * @example Нет
+             */
+            blockers: string;
+            /**
+             * Next Step
+             * @description The next step: one concrete action for whoever picks the case up
+             * @example Перенести вызов next_task_number в конец create_task
+             */
+            next_step: string;
+            /**
+             * Unmeasured
+             * @description Which part of the goal no review check measured, and which risk the author considers theoretical. Required when closing: a verdict answers its check, not the goal, and only the author knows the gap
+             * @example Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь
+             */
+            unmeasured: string;
+        };
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -2315,7 +2359,10 @@ export interface components {
         };
         /**
          * SummaryEntryCreate
-         * @description Сводка. Заголовок не принимается: он равен первой строке `done`.
+         * @description Сводка посреди работы. Заголовок не принимается: он равен первой строке `done`.
+         *
+         *     Нагрузка — четыре части и только они: закрывающая сводка сюда не подшивается, у неё
+         *     своя дверь (`POST /tasks/{key}/close`) и своя модель с `unmeasured`.
          */
         SummaryEntryCreate: {
             /**
@@ -2335,7 +2382,7 @@ export interface components {
              * @enum {string}
              */
             type: "summary";
-            payload: components["schemas"]["SummaryPayload"];
+            payload: components["schemas"]["SummaryPartsPayload"];
         };
         /**
          * SummaryEntryRead
@@ -2399,10 +2446,14 @@ export interface components {
             payload: components["schemas"]["SummaryPayload"];
         };
         /**
-         * SummaryPayload
-         * @description Справка при передаче. Четыре части, все непустые.
+         * SummaryPartsPayload
+         * @description Четыре части сводки, все непустые: то, что подшивают посреди работы.
+         *
+         *     Это же тело у `POST /tasks/{key}/entries` с типом `summary`, и пятой части здесь
+         *     нет **намеренно**: закрывающая сводка едет не сюда, а в `POST /tasks/{key}/close`.
+         *     Присланный `unmeasured` отвергнет схема, не доводя до домена.
          */
-        SummaryPayload: {
+        SummaryPartsPayload: {
             /**
              * Done
              * @description What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary
@@ -2429,12 +2480,56 @@ export interface components {
             next_step: string;
         };
         /**
+         * SummaryPayload
+         * @description Сводка, как её **читают**: четыре части и, у закрывающей, пятая.
+         *
+         *     Терпимость к отсутствию `unmeasured` — свойство чтения, а не подшивки: читаются и
+         *     промежуточные сводки, у которых части не бывает, и все дела, закрытые до её
+         *     появления. Отдельной моделью от `SummaryPartsPayload` она стоит именно поэтому:
+         *     пока чтение и создание делили одну модель, необязательное поле уезжало в
+         *     `model_dump()` маршрута создания значением `null` и роняло **всякую** обычную
+         *     сводку — домен честно отвергал часть, которой в промежуточной сводке не место
+         *     (TRK-78). Одна модель на две роли расходится молча; две расходиться не умеют.
+         */
+        SummaryPayload: {
+            /**
+             * Done
+             * @description What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary
+             * @example Разобрался, где сгорает номер
+             */
+            done: string;
+            /**
+             * Remaining
+             * @description What is left
+             * @example Перенести выдачу номера после валидации
+             */
+            remaining: string;
+            /**
+             * Blockers
+             * @description What is in the way; write `нет` rather than leaving it empty
+             * @example Нет
+             */
+            blockers: string;
+            /**
+             * Next Step
+             * @description The next step: one concrete action for whoever picks the case up
+             * @example Перенести вызов next_task_number в конец create_task
+             */
+            next_step: string;
+            /**
+             * Unmeasured
+             * @description Which part of the goal no review check measured, and which risk the author considers theoretical. Closing summaries only: the key is absent on summaries filed mid-work and on those filed before this part existed
+             * @example Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь
+             */
+            unmeasured?: string | null;
+        };
+        /**
          * TaskClosing
          * @description Чем закрывают задачу: записи, вердикты и финальная сводка одного вызова.
          */
         TaskClosing: {
             /** @description The closing summary. Filed last, after the entries and the verdicts, so that it speaks of their outcome */
-            summary: components["schemas"]["SummaryPayload"];
+            summary: components["schemas"]["ClosingSummaryPayload"];
             /**
              * Verdicts
              * @description Verdicts filed by this call. May be empty: verdicts filed earlier during the work count as well, and the transition checks the case, not the request

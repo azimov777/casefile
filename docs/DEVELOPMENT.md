@@ -406,7 +406,8 @@ OpenAPI, знает её точно.
 
 ```bash
 # сводка: четыре части, все непустые. Заголовок не принимается — им становится
-# первая строка done
+# первая строка done. Здесь подшивают промежуточную; закрывающая едет в
+# POST /tasks/{key}/close и несёт пятую часть — unmeasured
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      -d '{"type": "summary", "payload": {"done": "Разобрался", "remaining": "Дописать",
           "blockers": "нет", "next_step": "Перенести вызов в конец create_task"}}' \

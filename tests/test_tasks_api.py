@@ -34,6 +34,12 @@ SUMMARY = {
     "next_step": "Дописать проверку",
 }
 
+#: Закрывающая сводка: та же четвёрка и пятая часть, обязательная только при закрытии.
+CLOSING_SUMMARY = {
+    **SUMMARY,
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
+}
+
 
 async def summary(client: AsyncClient, key: str) -> dict[str, Any]:
     """Сводка ради перехода: без неё из `in_progress` не выйти (задача 23)."""
@@ -59,7 +65,7 @@ async def move(client: AsyncClient, key: str, *statuses: str, reason: str | None
             closed = await client.post(
                 f"/api/v1/tasks/{key}/close",
                 json={
-                    "summary": SUMMARY,
+                    "summary": CLOSING_SUMMARY,
                     "verdicts": [
                         {"check_no": check_no, "outcome": "passed"}
                         for check_no in range(1, len(current["checks"]) + 1)
