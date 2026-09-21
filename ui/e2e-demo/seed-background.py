@@ -44,14 +44,23 @@ def call(method: str, path: str, token: str, body: object = None):
 
 
 def main() -> None:
-    owner = open(sys.argv[1]).read().strip()
-    claude = open(sys.argv[2]).read().strip()
+    with open(sys.argv[1]) as f:
+        owner = f.read().strip()
+    with open(sys.argv[2]) as f:
+        claude = f.read().strip()
 
-    call("POST", "/api/v1/queues", owner, {
-        "key": "APP",
-        "title": "Checkout service",
-        "description": "Backend that owns cart, pricing and payment webhooks for the online store.",
-    })
+    call(
+        "POST",
+        "/api/v1/queues",
+        owner,
+        {
+            "key": "APP",
+            "title": "Checkout service",
+            "description": (
+                "Backend that owns cart, pricing and payment webhooks for the online store."
+            ),
+        },
+    )
     print("queue APP created")
 
     def create_task(**fields):
@@ -118,7 +127,9 @@ def main() -> None:
         title="Coupon codes can stack silently",
         description="Two different coupon codes both apply to the same order with no warning.",
         goal="At most one coupon code applies per order",
-        context="Coupon application has no mutual-exclusion check against a coupon already on the order",
+        context=(
+            "Coupon application has no mutual-exclusion check against a coupon already on the order"
+        ),
         constraints="Existing single-coupon orders must not change retroactively",
         output="A second coupon code is rejected with a clear reason, not silently stacked",
         checks=[
@@ -151,9 +162,13 @@ def main() -> None:
     saved_cards_key = create_task(
         queue="APP",
         title="Saved cards outlive a reissue",
-        description="A saved card keeps charging after the customer's bank reissues it with a new number.",
+        description=(
+            "A saved card keeps charging after the customer's bank reissues it with a new number."
+        ),
         goal="A reissued card is re-verified before it charges again",
-        context="Card tokens don't carry a reissue signal from the payment processor's webhooks yet",
+        context=(
+            "Card tokens don't carry a reissue signal from the payment processor's webhooks yet"
+        ),
         constraints="No extra step for customers whose card wasn't reissued",
         output="A reissue webhook flags the saved card for re-verification on next use",
         checks=[
@@ -189,23 +204,36 @@ def main() -> None:
     )
     transition(discount_key, "open")
     transition(discount_key, "in_progress")
-    entry(discount_key, claude, "finding",
-          "Discount write happens before the order version check, not after",
-          "The handler writes the discount row, then checks the order version — "
-          "a second request racing in before the first commit passes the same check.")
-    entry(discount_key, claude, "decision",
-          "Take the order's optimistic lock before writing the discount",
-          "Move the version check ahead of the discount write and reject the "
-          "second request with `discount_already_applied` instead of a generic 409.")
-    call("POST", f"/api/v1/tasks/{discount_key}/entries", claude, {
-        "type": "summary",
-        "payload": {
-            "done": "Lock moved ahead of the discount write, first pass green locally",
-            "remaining": "Load test the concurrent-submit case",
-            "blockers": "None",
-            "next_step": "Run the p95 checkout benchmark",
+    entry(
+        discount_key,
+        claude,
+        "finding",
+        "Discount write happens before the order version check, not after",
+        "The handler writes the discount row, then checks the order version — "
+        "a second request racing in before the first commit passes the same check.",
+    )
+    entry(
+        discount_key,
+        claude,
+        "decision",
+        "Take the order's optimistic lock before writing the discount",
+        "Move the version check ahead of the discount write and reject the "
+        "second request with `discount_already_applied` instead of a generic 409.",
+    )
+    call(
+        "POST",
+        f"/api/v1/tasks/{discount_key}/entries",
+        claude,
+        {
+            "type": "summary",
+            "payload": {
+                "done": "Lock moved ahead of the discount write, first pass green locally",
+                "remaining": "Load test the concurrent-submit case",
+                "blockers": "None",
+                "next_step": "Run the p95 checkout benchmark",
+            },
         },
-    })
+    )
     print(f"{discount_key} in_progress created")
 
     inventory_key = create_task(
@@ -245,19 +273,28 @@ def main() -> None:
     )
     transition(uuid_key, "open")
     transition(uuid_key, "in_progress")
-    entry(uuid_key, claude, "question",
-          "Can we take a 5-minute write freeze on Sunday at 02:00 UTC?",
-          "The backfill needs one exclusive lock at the end. Everything else runs online.",
-          payload={"addressees": ["owner"], "blocking": True})
-    call("POST", f"/api/v1/tasks/{uuid_key}/entries", claude, {
-        "type": "summary",
-        "payload": {
-            "done": "Backfill script is ready and tested on a production copy (3 min 40 s)",
-            "remaining": "Run it in the freeze window",
-            "blockers": "Waiting for the owner on the freeze-window question",
-            "next_step": "Once the window is confirmed, schedule the migration job",
+    entry(
+        uuid_key,
+        claude,
+        "question",
+        "Can we take a 5-minute write freeze on Sunday at 02:00 UTC?",
+        "The backfill needs one exclusive lock at the end. Everything else runs online.",
+        payload={"addressees": ["owner"], "blocking": True},
+    )
+    call(
+        "POST",
+        f"/api/v1/tasks/{uuid_key}/entries",
+        claude,
+        {
+            "type": "summary",
+            "payload": {
+                "done": "Backfill script is ready and tested on a production copy (3 min 40 s)",
+                "remaining": "Run it in the freeze window",
+                "blockers": "Waiting for the owner on the freeze-window question",
+                "next_step": "Once the window is confirmed, schedule the migration job",
+            },
         },
-    })
+    )
     transition(uuid_key, "waiting", reason="Blocked on owner: confirm the 5-minute freeze window")
     print(f"{uuid_key} waiting created")
 
@@ -282,29 +319,50 @@ def main() -> None:
     )
     transition(rounding_key, "open")
     transition(rounding_key, "in_progress")
-    entry(rounding_key, claude, "finding",
-          "Only the summary step used float; line items were always integer minor units",
-          "Every stored amount is already an integer minor unit; the summary step "
-          "was the only place that cast to float before summing.")
-    entry(rounding_key, claude, "decision",
-          "Sum minor units as integers, format for display last",
-          "Formatting (and its rounding) happens once, on the final integer total, "
-          "not on each intermediate line.")
-    call("POST", f"/api/v1/tasks/{rounding_key}/close", claude, {
-        "summary": {
-            "done": "Cart summary sums minor units as integers end to end",
-            "remaining": "None",
-            "blockers": "None",
-            "next_step": "No steps left, the task is closed",
+    entry(
+        rounding_key,
+        claude,
+        "finding",
+        "Only the summary step used float; line items were always integer minor units",
+        "Every stored amount is already an integer minor unit; the summary step "
+        "was the only place that cast to float before summing.",
+    )
+    entry(
+        rounding_key,
+        claude,
+        "decision",
+        "Sum minor units as integers, format for display last",
+        "Formatting (and its rounding) happens once, on the final integer total, "
+        "not on each intermediate line.",
+    )
+    call(
+        "POST",
+        f"/api/v1/tasks/{rounding_key}/close",
+        claude,
+        {
+            "summary": {
+                "done": "Cart summary sums minor units as integers end to end",
+                "remaining": "None",
+                "blockers": "None",
+                "next_step": "No steps left, the task is closed",
+            },
+            "verdicts": [
+                {
+                    "check_no": 1,
+                    "outcome": "passed",
+                    "evidence": "docker compose run --rm test "
+                    "tests/test_cart_totals.py::test_jpy_cart — passed",
+                },
+                {
+                    "check_no": 2,
+                    "outcome": "passed",
+                    "evidence": "docker compose run --rm test "
+                    "tests/test_cart_totals.py::test_eur_cart — passed",
+                },
+            ],
+            "entries": [],
         },
-        "verdicts": [
-            {"check_no": 1, "outcome": "passed",
-             "evidence": "docker compose run --rm test tests/test_cart_totals.py::test_jpy_cart — passed"},
-            {"check_no": 2, "outcome": "passed",
-             "evidence": "docker compose run --rm test tests/test_cart_totals.py::test_eur_cart — passed"},
-        ],
-        "entries": [],
-    })
+    )
     print(f"{rounding_key} done created")
 
     print("background seed complete")
