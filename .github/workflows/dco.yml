@@ -8,6 +8,11 @@
 # Проверку делает тот же скрипт, что доступен человеку до отправки PR
 # (`scripts/check-dco.sh`): расхождение конвейера с локальной командой означало бы
 # красноту, которую автор не может воспроизвести у себя.
+#
+# PR от Dependabot проходят без подписи — у бота нет своего адреса, которым он мог бы
+# расписаться за код (`scripts/check-dco.sh`, `CONTRIBUTING.md`). Признак этого — не
+# что-либо в коммите, а `github.event.pull_request.user.login` ниже: содержимым вклада
+# его не подделать.
 
 name: DCO
 
@@ -30,9 +35,10 @@ jobs:
           fetch-depth: 0
 
       - name: Check sign-off
-        # Хеши приезжают окружением, а не подстановкой в строку команды: так содержимое
-        # события не может дописать к ней ничего своего.
+        # Хеши и логин автора PR приезжают окружением, а не подстановкой в строку
+        # команды: так содержимое события не может дописать к ней ничего своего.
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
         run: scripts/check-dco.sh "$BASE_SHA" "$HEAD_SHA"
