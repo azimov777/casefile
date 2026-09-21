@@ -535,3 +535,31 @@ iptables и `docker-proxy`, образы туда — `docker save | docker exec
 «другая машина» — контейнер во внешней сети рядом с ним.
 **Где:** `ui/docker/access-mode.sh`, `TRACKER_UI_TRUSTED_PROXIES`;
 `docker-compose.prod.yml`, служба `ui`; `README.md`, «Network mode».
+
+## `name: tracker` в `docker-compose.yml` — один compose-проект на все `git worktree`, не по дереву
+
+**Что:** `docker-compose.yml` задаёт `name: tracker` явно. Это фиксированное имя
+compose-проекта, а не выведенное из папки, и оно одинаково для основного дерева и для
+любого соседнего `git worktree` (общий `.git`, свой рабочий каталог, но тот же
+`docker-compose.yml`), если не переопределить `COMPOSE_PROJECT_NAME`. Правка одних портов
+(`POSTGRES_PORT`/`TRACKER_PORT`/`TRACKER_MCP_PORT`) от коллизии не спасает: имя проекта, а
+с ним контейнеры (`tracker-db-1` и так далее) и тома — общие, и `docker compose` тихо
+пересоздаёт уже работающий чужой контейнер под новые порты вместо того, чтобы завести
+рядом свой. Воспроизведено на TRK-81: `docker compose run --rm lint` из свежего worktree
+пересобрал `tracker-db-1` основного дерева и на несколько секунд снял с него прежний порт;
+том с данными не пострадал — восстановлено обратным `docker compose up -d db` из основного
+дерева с его штатным `.env`, схема проверена `\dt` после.
+**Почему важно:** несколько агентов параллельно в соседних `git worktree` обычным делом
+поднимают Docker ради тестов и живой проверки — без явного имени проекта каждый такой
+запуск рискует пересобрать контейнер БД, которым в этот момент пользуется другое дерево,
+а не поднять свой рядом.
+**Как правильно:** любой `docker compose` из `git worktree`, отличного от основного дерева
+— с явным `COMPOSE_PROJECT_NAME` вместе с портами, например: `COMPOSE_PROJECT_NAME=wt-trk-81
+POSTGRES_PORT=15432 TRACKER_PORT=18000 TRACKER_MCP_PORT=18100 docker compose run --rm test`.
+Тогда сеть, том и контейнеры получают отдельные имена (`wt-trk-81-db-1` и так далее) и не
+пересекаются ни с основным деревом, ни с соседними worktree. `scripts/merge-task-branch.sh`
+этой ловушки не несёт — он honour’ит `COMPOSE_PROJECT_NAME`/`COMPOSE_FILE`, унаследованные
+вызывающим (запись выше, «`docker compose run` сам не пересобирает образ»), но только
+когда вызывающий их действительно задал; голый интерактивный `docker compose` без
+переменной — нет.
+**Где:** `docker-compose.yml`, строка `name: tracker`.
