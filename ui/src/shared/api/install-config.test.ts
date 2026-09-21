@@ -2,7 +2,12 @@ import { HttpResponse, http } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONFIG } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
-import { loadInstallToken, refreshInstallToken } from './install-config';
+import {
+  installLocked,
+  loadInstallToken,
+  refreshInstallToken,
+  reloadInstallToken,
+} from './install-config';
 import { getInstallToken, getToken, setToken } from './token';
 
 const INSTALL = 'trk_from_the_installation';
@@ -148,5 +153,78 @@ describe('перечитывание после `401`', () => {
 
     expect(await refreshInstallToken(INSTALL)).toBe('trk_reissued');
     expect(asked).toBe(beforeLate);
+  });
+});
+
+describe('установка, закрытая паролем владельца', () => {
+  /** Отвечает, как образ интерфейса в режиме пароля: без сеанса `401`, с ним — ключ. */
+  function lockedInstall(session: { open: boolean }) {
+    server.use(
+      http.get(CONFIG, () => {
+        asked += 1;
+        return session.open
+          ? HttpResponse.json({ token: INSTALL, login: 'password' })
+          : HttpResponse.json({ login: 'password' }, { status: 401 });
+      }),
+    );
+  }
+
+  it('`401` с полем `login` — ключа нет, установка закрыта, и это не ошибка', async () => {
+    lockedInstall({ open: false });
+
+    expect(await loadInstallToken()).toBeNull();
+    expect(installLocked()).toBe(true);
+    expect(getToken()).toBeNull();
+  });
+
+  it('после входа перечитывается заново, хотя за эту загрузку уже спрашивали', async () => {
+    const session = { open: false };
+    lockedInstall(session);
+    await loadInstallToken();
+
+    session.open = true;
+
+    expect(await reloadInstallToken()).toBe(INSTALL);
+    expect(getInstallToken()).toBe(INSTALL);
+    expect(installLocked()).toBe(true);
+    expect(asked).toBe(2);
+    // Ключ за паролем тоже только в памяти вкладки.
+    expect(window.localStorage.getItem('tracker.token')).toBeNull();
+  });
+
+  it('открытый сеанс на загрузке вкладки — ключ сразу, и замок всё равно виден', async () => {
+    lockedInstall({ open: true });
+
+    expect(await loadInstallToken()).toBe(INSTALL);
+    expect(installLocked()).toBe(true);
+  });
+
+  it('сеанс кончился посреди работы — перечитывание после `401` ведёт на вход', async () => {
+    const session = { open: true };
+    lockedInstall(session);
+    await loadInstallToken();
+
+    session.open = false;
+
+    expect(await refreshInstallToken(INSTALL)).toBeNull();
+    expect(installLocked()).toBe(true);
+  });
+
+  it('`404` у установки без пароля замка не ставит', async () => {
+    answers(null);
+
+    await loadInstallToken();
+
+    expect(installLocked()).toBe(false);
+  });
+
+  it('оборванная сеть о замке не говорит ничего: прежнее знание остаётся', async () => {
+    const session = { open: true };
+    lockedInstall(session);
+    await loadInstallToken();
+    server.use(http.get(CONFIG, () => HttpResponse.error()));
+
+    expect(await refreshInstallToken(INSTALL)).toBeNull();
+    expect(installLocked()).toBe(true);
   });
 });

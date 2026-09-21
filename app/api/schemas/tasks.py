@@ -20,10 +20,10 @@ from app.api.schemas.entries import (
     QuestionEntryRead,
     RemarkEntryRead,
     SummaryEntryRead,
-    SummaryPayload,
+    SummaryPartsPayload,
 )
 from app.api.schemas.links import TaskLinkRead
-from app.domain.case import MAX_ENTRY_BODY_LENGTH, VerdictOutcome
+from app.domain.case import MAX_ENTRY_BODY_LENGTH, MAX_SUMMARY_PART_LENGTH, VerdictOutcome
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     MAX_ASSIGNEE_LENGTH,
@@ -303,12 +303,36 @@ class TaskClosingVerdict(BaseModel):
     )
 
 
+class ClosingSummaryPayload(SummaryPartsPayload):
+    """Закрывающая сводка: те же четыре части и обязательный `unmeasured`.
+
+    Третья модель одной сводки, и каждая отвечает своей роли: `SummaryPartsPayload` —
+    что подшивают посреди работы, `SummaryPayload` — что читают, эта — чем закрывают.
+    Общей быть они не могут: у чтения часть необязательна (дела, закрытые до её
+    появления), у создания её нет вовсе, у закрытия она обязательна. Схема, обещающая
+    клиенту необязательность там, где домен требует, отправила бы его узнавать правила
+    из `422` вместо контракта, — а расхождение границ двух входов трекер уже проходил
+    (TRK-76).
+    """
+
+    unmeasured: str = Field(
+        min_length=1,
+        max_length=MAX_SUMMARY_PART_LENGTH,
+        examples=["Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь"],
+        description=(
+            "Which part of the goal no review check measured, and which risk the author "
+            "considers theoretical. Required when closing: a verdict answers its check, "
+            "not the goal, and only the author knows the gap"
+        ),
+    )
+
+
 class TaskClosing(BaseModel):
     """Чем закрывают задачу: записи, вердикты и финальная сводка одного вызова."""
 
     model_config = ConfigDict(extra="forbid")
 
-    summary: SummaryPayload = Field(
+    summary: ClosingSummaryPayload = Field(
         description=(
             "The closing summary. Filed last, after the entries and the verdicts, so "
             "that it speaks of their outcome"

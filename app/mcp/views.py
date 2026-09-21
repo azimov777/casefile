@@ -160,8 +160,8 @@ from app.domain.case import (
 )
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
-from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD
-from app.domain.tasks import TaskFeatures, TaskField, TaskPriority, TaskStatus
+from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD, PARENTS_FIELD
+from app.domain.tasks import TaskFeatures, TaskField, TaskParent, TaskPriority, TaskStatus
 from app.services.links import TaskLink
 from app.services.search import FoundTask
 from app.services.tasks import TaskClosure, TaskMutation, TaskPackage
@@ -295,6 +295,18 @@ def features(value: TaskFeatures) -> FeaturesView:
     )
 
 
+class ParentView(BaseModel):
+    """Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4)."""
+
+    key: str
+    title: str
+
+
+def parent(value: TaskParent) -> ParentView:
+    """Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4)."""
+    return ParentView(key=value.key, title=value.title)
+
+
 class FoundTaskView(BaseModel):
     """Строка выдачи поиска: карточка задачи, у которой любое поле может отсутствовать.
 
@@ -332,6 +344,7 @@ class FoundTaskView(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     features: FeaturesView | None = None
+    parents: list[ParentView] | None = None
     # Обрезка объявляется рядом со значением, поэтому у каждого длинного поля своя пара
     # признаков. Пять полей, десять имён — перечислены, а не собраны генератором:
     # схему инструмента читает модель, и имя поля в ней должно быть видно как имя.
@@ -364,6 +377,8 @@ def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> F
     Признаки идут вложенным объектом, тем же, что в пакете преемника: агент, выбирающий
     задачу из списка, видит `blocked` и открытые вопросы сразу, а не вызывает `get_task`
     на каждую строку. Их нет в ответе, если их не просили (`fields` без `features`).
+    Родители — по тому же правилу: список ключей и названий, пустой у задачи верхнего
+    уровня, и поля нет вовсе, если его не просили.
 
     Карточка разбирается на словарь через `dict()`, а не собирается вторым списком
     полей: набор полей строки — это набор полей `TaskView`, и второе его перечисление
@@ -372,6 +387,8 @@ def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> F
     payload: dict[str, Any] = dict(task(found.task))
     if found.features is not None:
         payload[FEATURES_FIELD] = features(found.features)
+    if found.parents is not None:
+        payload[PARENTS_FIELD] = [parent(item) for item in found.parents]
     if fields:
         selected = {*fields, MANDATORY_FIELD}
         payload = {name: value for name, value in payload.items() if name in selected}

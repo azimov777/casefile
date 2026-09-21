@@ -79,7 +79,11 @@ async def move(
                     for check_no in range(1, len(task.checks) + 1)
                 ],
                 summary=case_service.SummaryFiling(
-                    done="сделано", remaining="осталось", blockers="нет", next_step="дальше"
+                    done="сделано",
+                    remaining="осталось",
+                    blockers="нет",
+                    next_step="дальше",
+                    unmeasured="Переходы этих тестов живую проверку не гоняли, риск теоретический",
                 ),
             )
             continue

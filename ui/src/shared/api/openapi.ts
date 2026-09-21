@@ -693,6 +693,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check the browser session
+         * @description Жив ли сеанс из куки: `200` со сроком или `401 unauthorized`.
+         *
+         *     Причина отказа — в `details.reason`: `missing_session`, `unknown_session` (в том
+         *     числе после выхода и перезапуска API), `session_expired`. Этим маршрутом nginx
+         *     интерфейса решает, отдать ли `/config.json`.
+         */
+        get: operations["read_session"];
+        put?: never;
+        /**
+         * Log in with the owner password
+         * @description Проверяет пароль владельца и ставит куку сеанса; с ней `/config.json` отдаёт ключ.
+         *
+         *     Кука `casefile_session` — `HttpOnly`, `SameSite=Strict`, `Path=/`, со сроком сеанса, и
+         *     `Secure`, если запрос пришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).
+         *
+         *     Неверный пароль — `401 unauthorized` с `details.reason: wrong_password`. Неудачных
+         *     попыток за окно с этого адреса или со всей установки столько, сколько разрешено, —
+         *     `429 password_attempts_exceeded` с `Retry-After` и `details.scope`, и пароль тогда не
+         *     проверяется вовсе. Адрес клиента — собеседник TCP, а за nginx установки — его
+         *     `X-Real-IP`; прочим заголовкам с адресом API не верит. Пароля у установки нет — `409
+         *     password_login_off`.
+         *
+         *     Отвечает `200`, а не `201`: сеанс не адресуемый ресурс, и повторить вход ключом
+         *     идемпотентности нельзя — такие ключи живут в паре с токеном, а его здесь нет.
+         */
+        post: operations["open_session"];
+        /**
+         * Log out
+         * @description Гасит сеанс на сервере и стирает куку. Идемпотентен: без сеанса отвечает так же.
+         *
+         *     Ключ, уже отданный вкладке, выход не отзывает — он отнимает возможность получить
+         *     ключ заново (`docs/CONCEPT.md`, 5.4).
+         */
+        delete: operations["close_session"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -983,6 +1031,50 @@ export interface components {
             text: string;
         };
         ClosingEntryCreate: components["schemas"]["PlainEntryCreate"] | components["schemas"]["RemarkEntryCreate"];
+        /**
+         * ClosingSummaryPayload
+         * @description Закрывающая сводка: те же четыре части и обязательный `unmeasured`.
+         *
+         *     Третья модель одной сводки, и каждая отвечает своей роли: `SummaryPartsPayload` —
+         *     что подшивают посреди работы, `SummaryPayload` — что читают, эта — чем закрывают.
+         *     Общей быть они не могут: у чтения часть необязательна (дела, закрытые до её
+         *     появления), у создания её нет вовсе, у закрытия она обязательна. Схема, обещающая
+         *     клиенту необязательность там, где домен требует, отправила бы его узнавать правила
+         *     из `422` вместо контракта, — а расхождение границ двух входов трекер уже проходил
+         *     (TRK-76).
+         */
+        ClosingSummaryPayload: {
+            /**
+             * Done
+             * @description What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary
+             * @example Разобрался, где сгорает номер
+             */
+            done: string;
+            /**
+             * Remaining
+             * @description What is left
+             * @example Перенести выдачу номера после валидации
+             */
+            remaining: string;
+            /**
+             * Blockers
+             * @description What is in the way; write `нет` rather than leaving it empty
+             * @example Нет
+             */
+            blockers: string;
+            /**
+             * Next Step
+             * @description The next step: one concrete action for whoever picks the case up
+             * @example Перенести вызов next_task_number в конец create_task
+             */
+            next_step: string;
+            /**
+             * Unmeasured
+             * @description Which part of the goal no review check measured, and which risk the author considers theoretical. Required when closing: a verdict answers its check, not the goal, and only the author knows the gap
+             * @example Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь
+             */
+            unmeasured: string;
+        };
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -1064,6 +1156,10 @@ export interface components {
         /** DataResponse[QueueRead] */
         DataResponse_QueueRead_: {
             data: components["schemas"]["QueueRead"];
+        };
+        /** DataResponse[SessionRead] */
+        DataResponse_SessionRead_: {
+            data: components["schemas"]["SessionRead"];
         };
         /** DataResponse[TaskLinkRead] */
         DataResponse_TaskLinkRead_: {
@@ -1549,6 +1645,17 @@ export interface components {
              * @example Релизный бот, ведёт задачи выкладки
              */
             description?: string;
+        };
+        /**
+         * PasswordLogin
+         * @description Вход по паролю установки. Имени нет: пароль у установки один — владельца.
+         */
+        PasswordLogin: {
+            /**
+             * Password
+             * @description The owner password of this installation, as typed. It is checked against `TRACKER_PASSWORD_HASH` and never stored or logged
+             */
+            password: string;
         };
         /**
          * PlainEntryCreate
@@ -2211,6 +2318,18 @@ export interface components {
             after?: string | string[] | null;
         };
         /**
+         * SessionRead
+         * @description Живой сеанс браузера. Секрета здесь нет: он едет только в куке `HttpOnly`.
+         */
+        SessionRead: {
+            /**
+             * Expires At
+             * Format: date-time
+             * @description When the session ends, counted from the login (`TRACKER_SESSION_HOURS`). It also ends earlier on logout and when the API process restarts
+             */
+            expires_at: string;
+        };
+        /**
          * StatusChangedEntryRead
          * @description Служебная запись о переходе статуса.
          */
@@ -2315,7 +2434,10 @@ export interface components {
         };
         /**
          * SummaryEntryCreate
-         * @description Сводка. Заголовок не принимается: он равен первой строке `done`.
+         * @description Сводка посреди работы. Заголовок не принимается: он равен первой строке `done`.
+         *
+         *     Нагрузка — четыре части и только они: закрывающая сводка сюда не подшивается, у неё
+         *     своя дверь (`POST /tasks/{key}/close`) и своя модель с `unmeasured`.
          */
         SummaryEntryCreate: {
             /**
@@ -2335,7 +2457,7 @@ export interface components {
              * @enum {string}
              */
             type: "summary";
-            payload: components["schemas"]["SummaryPayload"];
+            payload: components["schemas"]["SummaryPartsPayload"];
         };
         /**
          * SummaryEntryRead
@@ -2399,10 +2521,14 @@ export interface components {
             payload: components["schemas"]["SummaryPayload"];
         };
         /**
-         * SummaryPayload
-         * @description Справка при передаче. Четыре части, все непустые.
+         * SummaryPartsPayload
+         * @description Четыре части сводки, все непустые: то, что подшивают посреди работы.
+         *
+         *     Это же тело у `POST /tasks/{key}/entries` с типом `summary`, и пятой части здесь
+         *     нет **намеренно**: закрывающая сводка едет не сюда, а в `POST /tasks/{key}/close`.
+         *     Присланный `unmeasured` отвергнет схема, не доводя до домена.
          */
-        SummaryPayload: {
+        SummaryPartsPayload: {
             /**
              * Done
              * @description What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary
@@ -2429,12 +2555,56 @@ export interface components {
             next_step: string;
         };
         /**
+         * SummaryPayload
+         * @description Сводка, как её **читают**: четыре части и, у закрывающей, пятая.
+         *
+         *     Терпимость к отсутствию `unmeasured` — свойство чтения, а не подшивки: читаются и
+         *     промежуточные сводки, у которых части не бывает, и все дела, закрытые до её
+         *     появления. Отдельной моделью от `SummaryPartsPayload` она стоит именно поэтому:
+         *     пока чтение и создание делили одну модель, необязательное поле уезжало в
+         *     `model_dump()` маршрута создания значением `null` и роняло **всякую** обычную
+         *     сводку — домен честно отвергал часть, которой в промежуточной сводке не место
+         *     (TRK-78). Одна модель на две роли расходится молча; две расходиться не умеют.
+         */
+        SummaryPayload: {
+            /**
+             * Done
+             * @description What has been done. Its first line becomes the entry title, so make it one phrase naming what happened; an over-long line is cut at a word boundary
+             * @example Разобрался, где сгорает номер
+             */
+            done: string;
+            /**
+             * Remaining
+             * @description What is left
+             * @example Перенести выдачу номера после валидации
+             */
+            remaining: string;
+            /**
+             * Blockers
+             * @description What is in the way; write `нет` rather than leaving it empty
+             * @example Нет
+             */
+            blockers: string;
+            /**
+             * Next Step
+             * @description The next step: one concrete action for whoever picks the case up
+             * @example Перенести вызов next_task_number в конец create_task
+             */
+            next_step: string;
+            /**
+             * Unmeasured
+             * @description Which part of the goal no review check measured, and which risk the author considers theoretical. Closing summaries only: the key is absent on summaries filed mid-work and on those filed before this part existed
+             * @example Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь
+             */
+            unmeasured?: string | null;
+        };
+        /**
          * TaskClosing
          * @description Чем закрывают задачу: записи, вердикты и финальная сводка одного вызова.
          */
         TaskClosing: {
             /** @description The closing summary. Filed last, after the entries and the verdicts, so that it speaks of their outcome */
-            summary: components["schemas"]["SummaryPayload"];
+            summary: components["schemas"]["ClosingSummaryPayload"];
             /**
              * Verdicts
              * @description Verdicts filed by this call. May be empty: verdicts filed earlier during the work count as well, and the transition checks the case, not the request
@@ -2655,6 +2825,25 @@ export interface components {
             index: components["schemas"]["EntryHeadingRead"][];
         };
         /**
+         * TaskParentRead
+         * @description Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
+         *
+         *     Статуса нет намеренно: строка называет, куда задача входит, а о родителе
+         *     спрашивают его самого.
+         */
+        TaskParentRead: {
+            /**
+             * Key
+             * @example TRK-80
+             */
+            key: string;
+            /**
+             * Title
+             * @example Популяризация Casefile: выпуск v0.1.0 и один день запуска
+             */
+            title: string;
+        };
+        /**
          * TaskPriority
          * @description Приоритет. Порядок членов — от низшего к высшему, на него опирается сортировка поиска.
          * @enum {string}
@@ -2803,6 +2992,11 @@ export interface components {
             updated_at?: string | null;
             /** @description Computed features of the task, the same object the successor package carries. Included unless `fields` asks for a narrower set without `features` */
             features?: components["schemas"]["TaskFeaturesRead"] | null;
+            /**
+             * Parents
+             * @description Direct parents of the task, key and title of each, in the order the links were made: a task may have more than one. Empty for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parents`
+             */
+            parents?: components["schemas"]["TaskParentRead"][] | null;
         };
         /**
          * TaskStatus
@@ -4257,7 +4451,7 @@ export interface operations {
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parents`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parents` brings the direct parents of the task, key and title of each; a top-level task has an empty list */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -5557,6 +5751,209 @@ export interface operations {
                 };
             };
             /** @description Too many open streams on this server */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly` */
+                casefile_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_SessionRead_"];
+                };
+            };
+            /** @description Wrong password or no live session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The installation has no owner password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many password attempts, retry later */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    open_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordLogin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_SessionRead_"];
+                };
+            };
+            /** @description Wrong password or no live session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The installation has no owner password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many password attempts, retry later */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    close_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description Browser session opened by `POST /api/v1/session`; set and read as `HttpOnly` */
+                casefile_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Wrong password or no live session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The installation has no owner password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many password attempts, retry later */
             429: {
                 headers: {
                     [name: string]: unknown;

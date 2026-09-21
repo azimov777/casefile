@@ -13,6 +13,10 @@
   журнале подъёма контура. Годный ключ другого набора в файле она заменяет;
 - `agent-token` — то же для агента этой машины: токен набора `main` в файле, откуда его
   берёт тот, кто подключает агента к MCP (установщик `install.sh`);
+- `password-hash` — напечатать хеш пароля владельца для `TRACKER_PASSWORD_HASH`: так
+  установку закрывают паролем перед тем, как выставить в сеть (`docs/CONCEPT.md`, 5.4).
+  Пароль спрашивается с терминала без эха (или читается строкой из трубы), наружу уходит
+  только хеш. Базы команда не касается;
 - `demo` — наполнить установку демонстрационными данными: очередь `DEMO`, задачи во всех
   статусах и дела со всеми типами записей. Через API это были бы десятки запросов
   в нужном порядке;
@@ -27,6 +31,7 @@
     docker compose run --rm demo
     docker compose run --rm schema
     docker compose run --rm --entrypoint python api -m app.cli issue-token --scope main
+    docker compose run --rm --no-deps --entrypoint python api -m app.cli password-hash
 
 Команды идут через `session_scope`: транзакцию фиксирует та же граница, что и у
 HTTP-запроса, отдельной логики коммита здесь нет.
@@ -41,6 +46,7 @@ HTTP-запроса, отдельной логики коммита здесь �
 
 import argparse
 import asyncio
+import getpass
 import json
 import os
 import sys
@@ -50,6 +56,7 @@ from pathlib import Path
 from app.core.errors import AppError
 from app.core.logging import configure_logging
 from app.db.session import dispose_engine, session_scope
+from app.domain.passwords import WeakPasswordError, check_new_password, hash_password
 from app.domain.tokens import TokenScope
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
@@ -238,6 +245,36 @@ def _report_local_token(result: LocalToken, path: Path) -> None:
     print("       http://localhost:8000/api/v1/bootstrap")
 
 
+async def _password_hash(args: argparse.Namespace) -> int:
+    """Печатает строку `TRACKER_PASSWORD_HASH=...` для `.env` установки.
+
+    Пароль не попадает ни в аргументы команды (их видно в списке процессов и в истории
+    оболочки), ни в вывод: с терминала он читается без эха и дважды, из трубы — первой
+    строкой. В стандартный вывод уходит ровно одна строка с хешем, пояснения — в поток
+    ошибок, поэтому вывод можно дописать в файл как есть.
+    """
+    if sys.stdin.isatty():
+        password = getpass.getpass("Owner password: ")
+        if getpass.getpass("Repeat it: ") != password:
+            print("The two passwords differ; nothing was printed.", file=sys.stderr)
+            return 1
+    else:
+        password = sys.stdin.readline().rstrip("\r\n")
+    try:
+        check_new_password(password)
+    except WeakPasswordError as exc:
+        print(f"weak_password: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"TRACKER_PASSWORD_HASH={hash_password(password).render()}")
+    print(
+        "Put this line into .env next to docker-compose.prod.yml and run "
+        "`docker compose up -d`. The password itself is stored nowhere.",
+        file=sys.stderr,
+    )
+    return 0
+
+
 async def _demo(args: argparse.Namespace) -> int:
     """Наполняет установку демонстрационными данными.
 
@@ -366,6 +403,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Name for the issued token; a live token with the same name is revoked",
     )
     agent.set_defaults(handler=_agent_token)
+
+    password = commands.add_parser(
+        "password-hash",
+        help="Print TRACKER_PASSWORD_HASH for the owner password; asks it without echo",
+    )
+    password.set_defaults(handler=_password_hash)
 
     demo = commands.add_parser(
         "demo",

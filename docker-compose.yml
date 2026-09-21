@@ -25,6 +25,13 @@ x-app-environment: &app-environment
   # по TLS или с другой машины. Объявлен здесь, а не оставлен `.env`, по той же причине,
   # что и порт: иначе значение из командной строки не дошло бы до процесса API.
   TRACKER_MCP_PUBLIC_URL: ${TRACKER_MCP_PUBLIC_URL:-}
+  # Хеш пароля владельца (`python -m app.cli password-hash`); пусто — пароля нет. Объявлен
+  # так же, как в прод-контуре, где из этой подстановки выводится ещё и режим интерфейса.
+  TRACKER_PASSWORD_HASH: ${TRACKER_PASSWORD_HASH:-}
+  # Кому API верит адрес клиента в `X-Real-IP` (`app/api/client_address.py`). Здесь —
+  # никому: API опубликован на хосте напрямую, nginx перед ним нет, и заголовок пишет
+  # сам клиент. Прод-контур называет службу `ui` — свой nginx.
+  TRACKER_REAL_IP_FROM: ""
 
 x-app-service: &app-service
   build:

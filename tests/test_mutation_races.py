@@ -207,6 +207,7 @@ async def _close(sessions: async_sessionmaker[AsyncSession], task_id: uuid.UUID)
                     remaining="Ничего",
                     blockers="Нет",
                     next_step="Шагов нет, задача закрыта",
+                    unmeasured="Гонка проверяется прогоном, отдельной обзорной проверки на неё нет",
                 ),
             )
         except AppError as error:

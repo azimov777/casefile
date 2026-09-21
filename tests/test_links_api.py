@@ -28,6 +28,12 @@ SUMMARY = {
     "next_step": "дописать тест",
 }
 
+#: Закрывающая сводка: та же четвёрка и пятая часть, обязательная только при закрытии.
+CLOSING_SUMMARY = {
+    **SUMMARY,
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
+}
+
 
 async def create(client: AsyncClient, title: str) -> str:
     response = await client.post("/api/v1/tasks", json={**READY, "title": title})
@@ -44,7 +50,7 @@ async def closing(client: AsyncClient, key: str) -> Any:
     return await client.post(
         f"/api/v1/tasks/{key}/close",
         json={
-            "summary": SUMMARY,
+            "summary": CLOSING_SUMMARY,
             "verdicts": [
                 {"check_no": check_no, "outcome": "passed"}
                 for check_no in range(1, len(READY["checks"]) + 1)

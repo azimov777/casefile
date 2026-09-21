@@ -15,6 +15,7 @@ from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
+from app.db.session import transaction
 from app.domain.authors import label_author
 from app.domain.case import EntryType
 from app.domain.errors import (
@@ -39,6 +40,12 @@ SUMMARY = {
     "remaining": "Перенести выдачу номера",
     "blockers": "нет",
     "next_step": "Перенести вызов в конец create_task",
+}
+
+#: Закрывающая сводка: те же четыре части и пятая, которой у промежуточной не бывает.
+CLOSING_SUMMARY = {
+    **SUMMARY,
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
 }
 
 
@@ -86,7 +93,7 @@ async def close(session: AsyncSession, task: Task, actor: Actor) -> None:
         session,
         task,
         actor=actor,
-        summary=service.SummaryFiling(**SUMMARY),
+        summary=service.SummaryFiling(**CLOSING_SUMMARY),
     )
 
 
@@ -361,6 +368,91 @@ async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
         {"check_no": 1, "reason": "no_verdict"},
         {"check_no": 2, "reason": "no_verdict"},
     ]
+
+
+# --- Закрывающая сводка: пятая часть (TRK-78) ------------------------------------------
+
+
+async def test_closing_refused_on_a_blank_unmeasured_files_nothing_at_all(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """TRK-78: отказ на `unmeasured` откатывает весь вызов, включая поданные вердикты.
+
+    Вердикт этого же вызова подшивается **до** сводки (`close_task` подшивает записи,
+    вердикты, сводку — в этом порядке), и без отката в описи осталась бы страница с
+    вердиктом, а задача — без сводки: преемник прочёл бы такое дело как незаконченную
+    работу без права её продолжить. Граница отката здесь настоящая, боевая
+    (`app/db/session.py`, `transaction`) — та же, что держит вход приложения.
+    """
+    task = await ready(db_session, task_actor, queue, checks=["первая"])
+    key = task.key
+    before = await service.case_index(db_session, task, actor=task_actor)
+    # Коммит закрывает точку сохранения фикстур и открытого выше `ready()`: откат
+    # ниже обязан унести только работу неудачного закрытия, а не всю подготовку.
+    await db_session.commit()
+
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        async with transaction(db_session):
+            await tasks_service.close_task(
+                db_session,
+                task,
+                actor=task_actor,
+                summary=service.SummaryFiling(**{**SUMMARY, "unmeasured": ""}),
+                verdicts=[service.VerdictFiling(check_no=1, outcome="passed")],
+            )
+
+    assert error.value.details["fields"] == [{"field": "unmeasured", "reason": "required"}]
+
+    # Объекты ORM, прочитанные до отката, устарели — задачу и опись перечитываем
+    # заново, а не смотрим на `task` напрямую (`tests/conftest.py`, `mcp_sessions`).
+    reread = await tasks_service.get_task(db_session, key)
+    assert reread.status is TaskStatus.IN_PROGRESS
+    after = await service.case_index(db_session, reread, actor=task_actor)
+    assert len(after) == len(before), "отказ на сводке оставил в деле записи"
+    assert await entries(db_session, reread, types=[EntryType.VERDICT]) == [], (
+        "вердикт того же вызова не должен пережить откат"
+    )
+
+
+async def test_closing_with_unmeasured_carries_the_part_into_the_case(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """TRK-78: заполненная пятая часть доезжает до дела и видна в последней сводке."""
+    task = await ready(db_session, task_actor, queue, checks=["первая"])
+    unmeasured = "Живая проверка на проде не гонялась, риск считаю теоретическим"
+
+    await tasks_service.close_task(
+        db_session,
+        task,
+        actor=task_actor,
+        summary=service.SummaryFiling(**{**SUMMARY, "unmeasured": unmeasured}),
+        verdicts=[service.VerdictFiling(check_no=1, outcome="passed")],
+    )
+
+    assert task.status is TaskStatus.DONE
+    filed = await entries(db_session, task, types=[EntryType.SUMMARY])
+    assert filed[-1].payload["unmeasured"] == unmeasured
+
+
+async def test_a_summary_filed_without_unmeasured_still_reads_fine(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """Совместимость со старыми делами: у промежуточной сводки части нет вовсе.
+
+    Читается она тем же путём, что и закрывающая, — `case_index` и чтение записи по
+    номеру, — и в обоих случаях `unmeasured` в payload просто отсутствует, а не
+    приходит `null`: старые сводки (и все промежуточные) не обязаны знать о части,
+    которой не было в момент подшивки.
+    """
+    filed = await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
+    assert "unmeasured" not in filed.payload
+
+    package = await tasks_service.read_task_package(db_session, task.key, actor=task_actor)
+    assert package.summary is not None
+    assert "unmeasured" not in package.summary.payload
+
+    read_back = await service.read_entry(db_session, task, filed.no, actor=task_actor)
+    assert "unmeasured" not in read_back.payload
 
 
 # --- Пакет преемника ------------------------------------------------------------------

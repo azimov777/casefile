@@ -5,10 +5,14 @@
 свойства держатся на том, что второй реализации нет; тесты стерегут это на данных.
 """
 
+from datetime import UTC, datetime
+from typing import Any
+
 import pytest
-from sqlalchemy import text, update
+from sqlalchemy import event, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.link import Link
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.pagination import CursorWithOffsetError, InvalidPageOffsetError
@@ -20,7 +24,7 @@ from app.domain.errors import (
 from app.domain.links import LinkKind
 from app.domain.query_language import QUERY_RIGHT_SHAPE
 from app.domain.search import MAX_VALUES_PER_CONDITION, Operator
-from app.domain.tasks import TaskFeatures, TaskPriority, TaskStatus
+from app.domain.tasks import TaskFeatures, TaskParent, TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import queues as queues_service
@@ -374,6 +378,150 @@ async def test_an_unknown_parent_key_is_refused_and_named(
     assert details["field"] == "parent"
     assert details["value"] == "TRK-404"
     assert details["reason"] == "task_not_found"
+
+
+# --- Родители в строке выдачи ----------------------------------------------------------
+
+
+async def test_a_row_names_its_direct_parent_by_key_and_title(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """TRK-95: ребёнок называет родителя ключом и названием, верхний уровень — никого.
+
+    Пустой кортеж у верхнего уровня — ответ «родителей нет», а не «их не считали»: тот
+    ответ — `None`, и его дают только выдачи, где поле не просили.
+    """
+    program = family["program"]
+    outcome = await service.search_tasks(db_session, actor=task_actor)
+    rows = {found.task.key: found.parents for found in outcome.page.items}
+
+    for name in ("живой", "первый закрытый", "второй закрытый"):
+        assert rows[family[name].key] == (TaskParent(key=program.key, title=program.title),)
+    assert rows[program.key] == ()
+    assert rows[family["outsider"].key] == ()
+
+
+async def test_a_row_names_the_direct_parent_and_not_the_grandparent(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Родство прямое, как у отбора `parent:`: цепочки предков в строке нет (`CONCEPT.md`, 4.4)."""
+    program = await make(db_session, task_actor, queue, "программа")
+    child = await make(db_session, task_actor, queue, "ребёнок")
+    grandchild = await make(db_session, task_actor, queue, "внук")
+    await links_service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
+    await links_service.add_link(
+        db_session, grandchild, child, actor=task_actor, kind=LinkKind.CHILD
+    )
+
+    outcome = await service.search_tasks(db_session, actor=task_actor)
+    rows = {found.task.key: found.parents for found in outcome.page.items}
+
+    assert rows[grandchild.key] == (TaskParent(key=child.key, title=child.title),)
+    assert rows[child.key] == (TaskParent(key=program.key, title=program.title),)
+
+
+async def test_a_task_with_two_parents_names_both_in_the_order_the_links_were_made(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """Родителей бывает несколько (`docs/notes/links.md`), и строка отдаёт всех.
+
+    Второй родитель ставится обычной связью и принимается: ограничения «не больше одного»
+    нет ни в базе, ни в сценарии. Порядок — появление связи, как у связей в карточке, а
+    не ключ: родитель с меньшим ключом связан позже и стоит вторым. Время связей задано
+    явно — в одной транзакции `now()` у обеих одно и то же, и порядок решал бы случайный
+    `id`.
+    """
+    linked_later = await make(db_session, task_actor, queue, "связан вторым")
+    linked_first = await make(db_session, task_actor, queue, "связан первым")
+    child = await make(db_session, task_actor, queue, "ребёнок двух программ")
+    for parent, moment in ((linked_first, 1), (linked_later, 2)):
+        await links_service.add_link(
+            db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT
+        )
+        await db_session.execute(
+            update(Link)
+            .where(Link.source_id == parent.id, Link.target_id == child.id)
+            .values(created_at=datetime(2026, 9, moment, tzinfo=UTC))
+        )
+    assert linked_later.key < linked_first.key, "порядок ключей обязан отличаться от порядка связей"
+
+    outcome = await service.search_tasks(db_session, actor=task_actor, query=f"key: {child.key}")
+
+    assert outcome.page.items[0].parents == (
+        TaskParent(key=linked_first.key, title=linked_first.title),
+        TaskParent(key=linked_later.key, title=linked_later.title),
+    )
+
+
+async def test_parents_are_not_selected_when_the_fields_leave_them_out(
+    db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
+) -> None:
+    """`fields` без `parents` — прямая просьба не платить за подзапрос, как у признаков."""
+    narrow = await service.search_tasks(db_session, actor=task_actor, fields=["title"])
+    assert narrow.page.items
+    assert all(found.parents is None for found in narrow.page.items)
+
+    asked = await service.search_tasks(db_session, actor=task_actor, fields=["parents"])
+    rows = {found.task.key: found.parents for found in asked.page.items}
+    assert rows[family["живой"].key] == (
+        TaskParent(key=family["program"].key, title=family["program"].title),
+    )
+    assert all(found.features is None for found in asked.page.items)
+
+
+async def _page_selects(session: AsyncSession, actor: Actor, **call: Any) -> tuple[int, int]:
+    """Сколько `SELECT` ушло на страницу поиска и сколько строк в ней пришло с родителем.
+
+    Запросы считаются событием SQLAlchemy на соединении, как у `last_entry_at`
+    (`tests/test_last_entry_at.py`): запрос на строку не виден ни по ответу, ни по времени
+    на малых данных — только по числу.
+    """
+    statements: list[str] = []
+    connection = await session.connection()
+
+    def record(conn: Any, cursor: Any, statement: str, *args: Any) -> None:
+        statements.append(statement)
+
+    event.listen(connection.sync_connection.engine, "before_cursor_execute", record)
+    try:
+        outcome = await service.search_tasks(session, actor=actor, **call)
+    finally:
+        event.remove(connection.sync_connection.engine, "before_cursor_execute", record)
+
+    with_parents = sum(1 for found in outcome.page.items if found.parents)
+    selects = [item for item in statements if item.lstrip().upper().startswith("SELECT")]
+    return len(selects), with_parents
+
+
+async def test_a_page_with_parents_costs_the_same_queries_whatever_its_size(
+    db_session: AsyncSession, task_actor: Actor, queue: Queue
+) -> None:
+    """TRK-95, проверка 4: родители страницы выбираются тем же запросом, что и страница.
+
+    Страница из одной строки и из пятидесяти стоят одинаково. Без отбора это ровно один
+    `SELECT`; отбор `parent:` добавляет постоянный запрос — ключ родителя разрешается в
+    задачу, — и от размера страницы он тоже не зависит.
+    """
+    program = await make(db_session, task_actor, queue, "программа")
+    other_program = await make(db_session, task_actor, queue, "вторая программа")
+    for index in range(60):
+        child = await make(db_session, task_actor, queue, f"ребёнок {index}")
+        await links_service.add_link(
+            db_session, program, child, actor=task_actor, kind=LinkKind.PARENT
+        )
+        if index % 2:
+            await links_service.add_link(
+                db_session, other_program, child, actor=task_actor, kind=LinkKind.PARENT
+            )
+
+    assert await _page_selects(db_session, task_actor, limit=1) == (1, 0)
+    assert await _page_selects(db_session, task_actor, limit=50) == (1, 48)
+
+    by_parent = f"parent: {program.key}"
+    one = await _page_selects(db_session, task_actor, query=by_parent, limit=1)
+    fifty = await _page_selects(db_session, task_actor, query=by_parent, limit=50)
+    assert one == (fifty[0], 1)
+    assert fifty[1] == 50
 
 
 # --- Ключ задачи ---------------------------------------------------------------------

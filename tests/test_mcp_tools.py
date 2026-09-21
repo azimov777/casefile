@@ -30,6 +30,7 @@ from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
+from app.domain.links import LinkKind
 from app.domain.query_language import QUERY_EXAMPLES, QUERY_WRONG_SHAPE, parse_query
 from app.domain.search import (
     Condition,
@@ -44,6 +45,7 @@ from app.domain.tokens import TokenScope
 from app.mcp.arguments import DEFAULT_SEARCH_FIELDS, FieldsArg, QueryArg
 from app.mcp.views import FeaturesView
 from app.services import case as case_service
+from app.services import links as links_service
 from app.services import queues as queues_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -90,6 +92,7 @@ CLOSING_SUMMARY = {
     "remaining": "Ничего",
     "blockers": "Нет",
     "next_step": "Шагов нет, задача закрыта",
+    "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
 }
 
 #: Аргументы, с которыми инструмент набора `main` доходит до проверки прав. Значения
@@ -482,6 +485,53 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
         # В деле только служебная `created`: записей агента ещё нет, признак пуст.
         "last_entry_at": None,
     }
+
+
+async def test_search_tasks_names_the_parents_and_leaves_them_out_when_not_asked(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+    task_secret: str,
+) -> None:
+    """Проверка 3 задачи TRK-95: `parents` в `fields` — поле есть, без него — поля нет.
+
+    Строка совпадает с REST поле в поле. По умолчанию поле приезжает: агент одним
+    поиском видит программу каждой задачи (TRK-95#7). Имя `parent` в `fields` — отказ с
+    перечнем, где стоит `parents`: это имя условия отбора, а не поля выдачи.
+    """
+    program = await tasks_service.create_task(
+        db_session, actor=task_actor, queue=queue, title="программа", description="описание"
+    )
+    child = await tasks_service.create_task(
+        db_session, actor=task_actor, queue=queue, title="ребёнок", description="описание"
+    )
+    await links_service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
+    # Ключи и названия читаются до вызовов: сервер MCP фиксирует ту же сессию, и
+    # истёкший объект полез бы в базу вне асинхронного контекста.
+    named = [{"key": program.key, "title": program.title}]
+    program_key, child_key = program.key, child.key
+
+    fields = ["key", "parents"]
+    async with mcp_session(task_secret) as session:
+        asked = await call(session, "search_tasks", queue=["TRK"], fields=fields)
+        narrow = await call(session, "search_tasks", queue=["TRK"], fields=["key", "title"])
+        default = await call(session, "search_tasks", queue=["TRK"])
+        wrong_name = await refuse(session, "search_tasks", fields=["key", "parent"])
+
+    assert asked["items"] == [
+        {"key": program_key, "parents": []},
+        {"key": child_key, "parents": named},
+    ]
+    assert all("parents" not in item for item in narrow["items"])
+    assert [item["parents"] for item in default["items"]] == [[], named]
+    assert "search_field_unknown" in wrong_name
+    assert '"parents"' in wrong_name
+
+    response = await auth_client.get("/api/v1/tasks", params={"queue": "TRK", "fields": fields})
+    assert response.status_code == 200, response.text
+    assert asked["items"] == response.json()["data"]
 
 
 async def test_search_tasks_clips_a_long_text_and_says_so(
@@ -1264,6 +1314,37 @@ async def test_a_refused_closing_files_nothing_at_all(
     assert after["index"] == before["index"], "отказ оставил в деле записи"
     assert after["task"]["status"] == "in_progress"
     assert after["task"]["version"] == before["task"]["version"]
+
+
+async def test_a_blank_unmeasured_reaches_the_domain_and_files_nothing(
+    mcp_session: Connect, task_secret: str, closing_task: str
+) -> None:
+    """TRK-78: схема инструмента требует часть строкой, но не запрещает пустую.
+
+    Так же, как у остальных частей сводки (`app/mcp/arguments.py`): пустая строка
+    обязана дойти до домена и вернуться понятным `entry_fields_invalid` с именем
+    поля, а не оборваться на разборе аргументов. Вердикты этого же вызова в деле
+    не остаются — отказ на сводке откатывает всё, включая уже поданные вердикты.
+    """
+    key = closing_task
+    async with mcp_session(task_secret) as session:
+        before = await call(session, "get_task", key=key)
+        failure = await refuse(
+            session,
+            "close_task",
+            key=key,
+            summary={**CLOSING_SUMMARY, "unmeasured": ""},
+            verdicts=[
+                {"check_no": 1, "outcome": "passed", "evidence": "Прогон зелёный"},
+                {"check_no": 2, "outcome": "passed", "evidence": "Линтер чист"},
+            ],
+        )
+        after = await call(session, "get_task", key=key)
+
+    assert "entry_fields_invalid" in failure, failure
+    assert '"field": "unmeasured"' in failure, failure
+    assert after["index"] == before["index"], "отказ оставил в деле записи"
+    assert after["task"]["status"] == "in_progress"
 
 
 async def test_a_status_move_does_not_close_a_task(

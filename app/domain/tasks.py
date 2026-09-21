@@ -895,3 +895,17 @@ def feature_names() -> list[str]:
     REST не хватало `last_entry_at`, и признак существовал, о котором нигде не сказано.
     """
     return [field.name for field in dataclass_fields(TaskFeatures)]
+
+
+@dataclass(frozen=True, slots=True)
+class TaskParent:
+    """Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
+
+    Больше ничего намеренно: строка называет, куда задача входит, а состояние родителя —
+    его статус, его признаки — это вопрос о другой задаче, и задаётся он ей самой.
+    Родителей у задачи бывает несколько (`docs/notes/links.md`), поэтому строка несёт их
+    список, а не одно значение.
+    """
+
+    key: str
+    title: str

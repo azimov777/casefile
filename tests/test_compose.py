@@ -460,3 +460,123 @@ def test_the_prod_contour_writes_nothing_onto_the_host() -> None:
         "prod: ни одного `--output` не разобрано — проверка ничего не стережёт"
     )
     assert _services_writing_onto_the_host(text) == {}
+
+
+#: Адрес публикации портов прод-контура. Одно выражение на все места, где он назван:
+#: проброс интерфейса, проброс MCP и то, что контур сообщает интерфейсу для сторожа.
+BIND = "${CASEFILE_BIND:-127.0.0.1}"
+
+#: Режим интерфейса выводится из той же подстановки, что уходит в API.
+UI_LOGIN = "TRACKER_UI_LOGIN: ${TRACKER_PASSWORD_HASH:+password}"
+UI_BIND = f"TRACKER_UI_BIND: {BIND}"
+
+
+def _published(body: list[str]) -> list[str]:
+    """Строки проброса портов сервиса — без тире и кавычек."""
+    published: list[str] = []
+    inside, base = False, 0
+    for line in body:
+        if line.strip() == "ports:":
+            inside, base = True, _indent(line)
+            continue
+        if inside and _indent(line) <= base:
+            break
+        if inside:
+            published.append(line.strip().removeprefix("- ").strip("'\""))
+    return published
+
+
+def test_the_prod_contour_publishes_both_ports_on_one_bind_address() -> None:
+    """Интерфейс и MCP публикуются на `CASEFILE_BIND` с петлёй по умолчанию.
+
+    Один адрес на оба порта: в сеть установка выходит целиком, и сторож интерфейса
+    (`ui/docker/access-mode.sh`) решает по тому же значению, что и публикация. Адрес,
+    зашитый в одну строку, двигал бы порт мимо сторожа.
+    """
+    services = _services(COMPOSE_FILES["prod"].read_text(encoding="utf-8"))
+
+    for name in (UI_SERVICE, MCP_SERVICE):
+        published = _published(services[name])
+        assert published, f"prod, {name}: проброс портов не разобран"
+        assert all(line.startswith(f"{BIND}:") for line in published), (name, published)
+
+
+def test_the_ui_learns_the_mode_and_the_bind_from_the_same_substitutions() -> None:
+    """Режим пароля и адрес публикации доходят до `ui` теми же подстановками, что до API.
+
+    Режим выводится из `TRACKER_PASSWORD_HASH` — той же переменной, что уходит в API
+    общим окружением. Разойдись они, интерфейс спросил бы пароль, которого API не знает,
+    или отдал бы ключ без входа там, где API пароль знает.
+    """
+    text = COMPOSE_FILES["prod"].read_text(encoding="utf-8")
+    described = [line.strip() for line in _services(text)[UI_SERVICE]]
+    declared = [line.strip() for line in _block(text, APP_ENVIRONMENT)]
+
+    assert UI_LOGIN in described, described
+    assert UI_BIND in described, described
+    assert "TRACKER_PASSWORD_HASH: ${TRACKER_PASSWORD_HASH:-}" in declared
+
+
+def test_both_contours_hand_the_password_hash_to_the_application() -> None:
+    """Хеш пароля объявлен общим окружением в обоих контурах с пустым умолчанием.
+
+    Значение из командной строки (`TRACKER_PASSWORD_HASH=... docker compose up`) видит
+    только подстановка; не объявленное здесь, оно дошло бы до режима интерфейса и не
+    дошло бы до API.
+    """
+    for contour, path in COMPOSE_FILES.items():
+        declared = [
+            line.strip() for line in _block(path.read_text(encoding="utf-8"), APP_ENVIRONMENT)
+        ]
+
+        assert "TRACKER_PASSWORD_HASH: ${TRACKER_PASSWORD_HASH:-}" in declared, contour
+
+
+#: Шаблон nginx образа интерфейса: половина договора об адресе клиента, которую compose
+#: не видит, — кто пишет `X-Real-IP`.
+UI_NGINX_TEMPLATE = PROJECT_ROOT / "ui" / "docker" / "nginx.conf.template"
+
+#: Кому API установки верит `X-Real-IP` и чем прокси владельца доходят до nginx.
+PROD_REAL_IP_FROM = "TRACKER_REAL_IP_FROM: ui"
+DEV_REAL_IP_FROM = 'TRACKER_REAL_IP_FROM: ""'
+UI_TRUSTED_PROXIES = "TRACKER_UI_TRUSTED_PROXIES: ${CASEFILE_TRUSTED_PROXIES:-}"
+
+
+def _location(template: str, path: str) -> list[str]:
+    """Строки блока `location <path> {` шаблона nginx до закрывающей скобки."""
+    lines = template.splitlines()
+    starts = [n for n, line in enumerate(lines) if line.strip() == f"location {path} {{"]
+    assert len(starts) == 1, f"location {path}: {len(starts)} блоков вместо одного"
+    body: list[str] = []
+    for line in lines[starts[0] + 1 :]:
+        if line.strip() == "}":
+            break
+        body.append(line.strip())
+    return body
+
+
+def test_the_api_believes_the_client_address_only_from_the_nginx_that_writes_it() -> None:
+    """Адрес клиента для окна попыток входа: API верит `X-Real-IP` только службе `ui`.
+
+    Две половины одного договора (TRK-98#6), и порознь каждая бесполезна или опасна:
+    - прод-контур называет API доверенным собеседником `ui`, а nginx образа интерфейса
+      **перезаписывает** `X-Real-IP` своим `$remote_addr` на пути к API — присланный
+      клиентом заголовок до API не доходит;
+    - дев-контур публикует API напрямую, nginx перед ним нет — доверенных нет;
+    - прокси владельца доходят до nginx единственной подстановкой, пустой по умолчанию.
+    """
+    anchors = _by_contour(lambda text: [line.strip() for line in _block(text, APP_ENVIRONMENT)])
+    ui_described = [
+        line.strip()
+        for line in _services(COMPOSE_FILES["prod"].read_text(encoding="utf-8"))[UI_SERVICE]
+    ]
+    template = UI_NGINX_TEMPLATE.read_text(encoding="utf-8")
+    api_location = _location(template, "/api/")
+
+    assert PROD_REAL_IP_FROM in anchors["prod"], anchors["prod"]
+    assert DEV_REAL_IP_FROM in anchors["dev"], anchors["dev"]
+    assert UI_TRUSTED_PROXIES in ui_described, ui_described
+    assert "proxy_set_header X-Real-IP $remote_addr;" in api_location, api_location
+    assert "include /etc/nginx/casefile/real-ip.conf;" in [
+        line.strip() for line in template.splitlines()
+    ]

@@ -343,6 +343,40 @@ describe('список задач', () => {
     expect(seen.filter((url) => /\/api\/v1\/tasks\/[^?]/.test(url))).toEqual([]);
   });
 
+  it('родителя строки приносит та же выдача: поле просит список, запроса на родителя нет', async () => {
+    const asked: string[] = [];
+    server.use(
+      listing(() =>
+        taskPage([
+          task('DEMO-5', { parents: [{ key: 'DEMO-2', title: 'Лента журнала теряет записи' }] }),
+          task('DEMO-3'),
+        ]),
+      ),
+      // Запрос за карточкой родителя был бы ошибкой задачи, а не среды: он записывается,
+      // а не роняет прогон жалобой на неперехваченный запрос.
+      http.get(`${API}/api/v1/tasks/:key`, ({ request }) => {
+        asked.push(request.url);
+        return failure('task_not_found', 404);
+      }),
+    );
+
+    open('/tasks?queue=DEMO');
+
+    const child = (await screen.findByText('DEMO-5')).closest('tr') as HTMLElement;
+    const parent = within(child).getByRole('link', { name: /DEMO-2/ });
+    expect(parent).toHaveAttribute('href', '/tasks/DEMO-2');
+    expect(parent).toHaveTextContent('Лента журнала теряет записи');
+    // У задачи верхнего уровня подписи нет: ссылка в строке одна — своя.
+    const top = screen.getByText('DEMO-3').closest('tr') as HTMLElement;
+    expect(within(top).getAllByRole('link')).toHaveLength(1);
+
+    // Без имени в наборе полей поля в строке нет вовсе (TRK-95): его просит сам список.
+    expect(lastRequest().searchParams.getAll('fields')).toContain('parents');
+    // Запрос на страницу один, как и до UI-119, и ни одного — на родителя.
+    expect(seen).toHaveLength(1);
+    expect(asked).toEqual([]);
+  });
+
   it('отправляет условия из адреса структурными параметрами', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 

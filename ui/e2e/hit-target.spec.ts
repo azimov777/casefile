@@ -124,19 +124,34 @@ test('cmd-клик по строке открывает задачу второ�
   await aside.close();
 });
 
-test('обход табом даёт одну остановку на строку, и фокус виден', async ({ page, request }) => {
+test('обход табом даёт одну остановку на задачу, и фокус виден', async ({ page, request }) => {
   const shown = await shownKeys(request);
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
   await settled(page);
-  await expect(page.locator('tbody tr')).toHaveCount(shown.length);
+  const rows = page.locator('tbody tr');
+  await expect(rows).toHaveCount(shown.length);
 
-  // Ставим фокус на ссылку первой строки и считаем, сколько шагов до второй.
-  const first = page.locator('tbody tr').first().getByRole('link');
+  /*
+   * Своя ссылка строки — на названии (`data-link="task"`). У задачи с родителем за ней
+   * стоит вторая, в родителя (UI-119): это другая задача и законная вторая остановка.
+   * Поэтому шаг считается от строки без родителя — порядок строк демо с равным временем
+   * записей бэкенд не закрепляет, и «первая строка» бывает любой.
+   */
+  const from = await rows.evaluateAll((nodes) =>
+    nodes.findIndex(
+      (node) =>
+        node.querySelector('[data-mark="parents"]') === null && node.nextElementSibling !== null,
+    ),
+  );
+  expect(from, 'в выдаче нет строки без родителя, за которой идёт ещё одна').toBeGreaterThanOrEqual(
+    0,
+  );
+  const first = rows.nth(from).locator('a[data-link="task"]');
   await first.focus();
 
   await page.keyboard.press('Tab');
-  const second = page.locator('tbody tr').nth(1).getByRole('link');
+  const second = rows.nth(from + 1).locator('a[data-link="task"]');
   await expect(second).toBeFocused();
 
   // Обводку рисует сама строка, а не ссылка внутри неё: остановка одна на задачу,

@@ -42,6 +42,7 @@ from app.domain.query_language import (
 )
 from app.domain.search import (
     FEATURES_FIELD,
+    PARENTS_FIELD,
     searchable_names,
     selectable_names,
     sortable_names,
@@ -262,6 +263,23 @@ SummaryNextStepArg = Annotated[
         examples=["Перенести вызов next_task_number в конец create_task"],
     ),
 ]
+SummaryUnmeasuredArg = Annotated[
+    str,
+    Field(
+        description=(
+            "Какая часть цели не измерена ни одной обзорной проверкой — и какой риск ты "
+            "сам считаешь теоретическим. Вердикт отвечает проверке, а не цели: назови "
+            "то, что ты сделал, но не доказал, что запускал руками вместо проверки и "
+            "где судил по сходству, а не по замеру. «Ничего» — законный ответ, когда "
+            "проверки покрыли цель целиком, но это ответ, а не отписка: если в голове "
+            "вертится «вообще-то я не пробовал…» — это и есть содержание поля"
+        ),
+        examples=[
+            "Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь. "
+            "Риск считаю теоретическим — команды отличаются одним флагом"
+        ],
+    ),
+]
 
 # --- Вопросы и вердикты ---------------------------------------------------------------
 
@@ -446,7 +464,12 @@ class TaskChanges(BaseModel):
 
 
 class ClosingSummary(BaseModel):
-    """Финальная сводка. Заголовка не принимает: им становится первая строка `done`."""
+    """Финальная сводка. Заголовка не принимает: им становится первая строка `done`.
+
+    На одну часть длиннее промежуточной: `unmeasured` есть только здесь. Обязателен —
+    значение по умолчанию превратило бы «чего не измерили» в поле, которое молча
+    опускают ровно в тех делах, где оно и нужно.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -454,6 +477,7 @@ class ClosingSummary(BaseModel):
     remaining: SummaryRemainingArg
     blockers: SummaryBlockersArg
     next_step: SummaryNextStepArg
+    unmeasured: SummaryUnmeasuredArg
 
 
 class ClosingVerdict(BaseModel):
@@ -517,6 +541,10 @@ ClosingEntriesArg = Annotated[
 #: Признаки в набор входят: они короткие, а решение «брать ли задачу» без них не
 #: принимается — иначе агент звал бы `get_task` на каждую строку выдачи, чтобы узнать,
 #: не заблокирована ли она.
+#:
+#: Родители входят по той же причине: без них агент не видит, к какой программе
+#: относится задача, и читает `get_task` построчно. Цена замерена (TRK-95#7): у задачи
+#: верхнего уровня — `"parents":[]`, 13 символов, у ребёнка — ключ и название родителя.
 DEFAULT_SEARCH_FIELDS: tuple[str, ...] = (
     "key",
     "title",
@@ -524,6 +552,7 @@ DEFAULT_SEARCH_FIELDS: tuple[str, ...] = (
     "assignee",
     "priority",
     FEATURES_FIELD,
+    PARENTS_FIELD,
 )
 
 QueryArg = Annotated[
@@ -573,6 +602,7 @@ FieldsArg = Annotated[
             + ". Ключ приходит всегда, пустой список означает «задачу целиком»: разделы "
             "длинные. `features` приносит вычисляемые признаки строки: "
             + ", ".join(f"`{name}`" for name in feature_names())
+            + ". `parents` — прямые родители: ключ и название"
         )
     ),
 ]
