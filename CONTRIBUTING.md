@@ -30,6 +30,11 @@ scripts/check-dco.sh
 If you forgot, `git rebase --signoff main` signs the whole branch and
 `git commit --amend -s --no-edit` fixes the last commit.
 
+Dependabot's own pull requests are the one exception: the bot only bumps versions in an
+already-approved lock file, has no code of its own to claim rights over, and cannot add a
+sign-off line. The check waives it for the PR GitHub itself attributes to `dependabot[bot]`
+— not for anyone who merely names themselves that in a commit.
+
 ## Your contribution is MIT
 
 Casefile is MIT-licensed (see [LICENSE](LICENSE)), and contributions come in under the

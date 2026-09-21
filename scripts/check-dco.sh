@@ -18,6 +18,18 @@
 # Слияния пропускаются: у merge-коммита нет своего содержимого, подписывать в нём нечего,
 # а делает их не вкладчик, а тот, кто ведёт слияния (`docs/CONVENTIONS.md`).
 #
+# Dependabot тоже пропускается, но не по имени в коммите — оно ничем не отличается от
+# `Signed-off-by` по подделываемости: в коммит можно вписать любое имя и любой адрес, и
+# проверка, поверившая ему, перестала бы что-либо значить для всех остальных. Пропуск
+# смотрит на `PR_AUTHOR_LOGIN` — кого автором PR считает сам GitHub
+# (`.github/workflows/dco.yml`, `github.event.pull_request.user.login`). Это поле GitHub
+# выставляет по факту авторизации при открытии PR, и переписать его содержимым вклада
+# нельзя: открыть PR от имени `dependabot[bot]` может только сам бот. Переменная пуста при
+# локальном запуске человеком — тогда пропуска нет и проверка идёт как обычно.
+# `is_dependabot_commit` ниже — вторая, узкая половина признака: даже внутри PR, который
+# GitHub числит за ботом, пропускаются только коммиты, которые сам бот и написал —
+# `.github/dependabot.yml` правит только lock-файл и своего кода не добавляет.
+#
 # Скрипт живёт на хосте, а не в контейнере: ему нужна история git, а не окружение
 # приложения. Тем же файлом проверку гоняет и конвейер (`.github/workflows/dco.yml`), и
 # человек у себя до отправки PR — как и с остальными проверками проекта.
@@ -41,11 +53,30 @@ if [ -z "$commits" ]; then
   exit 0
 fi
 
+# Кого GitHub считает автором PR — см. блок про Dependabot в шапке файла. Пусто при
+# локальном запуске: тогда исключения ниже никогда не сработают.
+pr_author_login="${PR_AUTHOR_LOGIN:-}"
+
+is_dependabot_commit() {
+  # Имя и адрес коммита сами по себе не доказывают ничего (см. шапку файла) — отсюда и
+  # два условия сразу, и то, что вызывающий код проверяет их только вместе с
+  # pr_author_login, никогда не вместо него.
+  [ "$(git show -s --format='%an' "$1")" = "dependabot[bot]" ] || return 1
+  git show -s --format='%ae' "$1" | grep -qE '^[0-9]+\+dependabot\[bot\]@users\.noreply\.github\.com$'
+}
+
 unsigned=""
 checked=0
+exempt=0
 
 for commit in $commits; do
   checked=$((checked + 1))
+
+  if [ "$pr_author_login" = "dependabot[bot]" ] && is_dependabot_commit "$commit"; then
+    exempt=$((exempt + 1))
+    continue
+  fi
+
   author=$(git show -s --format='%an <%ae>' "$commit")
   # `%(trailers:key=Signed-off-by,valueonly)` разбирает подвал по правилам git, а не
   # грепом: так не считается за подпись строка из тела сообщения или из цитаты.
@@ -85,4 +116,8 @@ MESSAGE
   exit 1
 fi
 
-echo "All ${checked} commit(s) in ${range} are signed off."
+if [ "$exempt" -gt 0 ]; then
+  echo "All ${checked} commit(s) in ${range} are signed off (${exempt} exempt as dependabot[bot])."
+else
+  echo "All ${checked} commit(s) in ${range} are signed off."
+fi
