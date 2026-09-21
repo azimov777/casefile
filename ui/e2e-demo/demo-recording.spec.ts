@@ -58,7 +58,8 @@ test('agent works a task while the board watches', async ({ page }) => {
     description:
       'Stripe redelivers a webhook after a slow 200 response, and the handler charges the order a second time.',
     goal: 'A redelivered webhook never charges the same order twice',
-    context: "The handler is idempotent on nothing yet; Stripe's own `event.id` is on every payload",
+    context:
+      "The handler is idempotent on nothing yet; Stripe's own `event.id` is on every payload",
     constraints: 'No schema change to the payments table today',
     output: "Webhook handler dedupes by Stripe's `event.id` before charging",
     checks: [
@@ -70,7 +71,8 @@ test('agent works a task while the board watches', async ({ page }) => {
   })) as { data: { key: string } };
   const key = created.data.key;
 
-  const card = (status: string) => column(page, status).getByRole('article').filter({ hasText: key });
+  const card = (status: string) =>
+    column(page, status).getByRole('article').filter({ hasText: key });
   await expect(card('backlog')).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(2_000);
 
@@ -96,7 +98,7 @@ test('agent works a task while the board watches', async ({ page }) => {
   await agentCall('POST', `/api/v1/tasks/${key}/entries`, {
     type: 'decision',
     title: "Dedupe by Stripe's event id before charging",
-    body: "Store the event id in a small dedupe table, checked before the charge, not after.",
+    body: 'Store the event id in a small dedupe table, checked before the charge, not after.',
   });
   await page.waitForTimeout(1_200);
 
