@@ -64,8 +64,8 @@ def main() -> None:
             body["reason"] = reason
         call("POST", f"/api/v1/tasks/{key}/transition", claude, body)
 
-    def entry(key, actor_token, type_, title, body="", payload=None):
-        b = {"type": type_, "title": title, "body": body}
+    def entry(key, actor_token, type, title, body="", payload=None):
+        b = {"type": type, "title": title, "body": body}
         if payload is not None:
             b["payload"] = payload
         call("POST", f"/api/v1/tasks/{key}/entries", actor_token, b)
