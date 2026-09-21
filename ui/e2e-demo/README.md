@@ -120,15 +120,23 @@ mv test-results/**/video.webm /tmp/demo-dark.webm
 for theme in light dark; do
 docker run --rm -v "/tmp:/w" -w /w jrottenberg/ffmpeg:7-alpine \
   -ss 0.5 -i demo-$theme.webm \
-  -vf "crop=1280:740:0:0,fps=15,scale=1100:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" \
+  -vf "crop=1280:740:0:0,fps=8,scale=1100:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff:max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" \
   -loop 0 demo-$theme.gif
 done
 cp /tmp/demo-light.gif /tmp/demo-dark.gif ../docs/assets/
 ```
 
-`fps=15`, ширина `1100` и палитра через `palettegen`/`paletteuse` (а не
-единственная общая палитра) — компромисс, при котором ~18–22 секунды записи
-укладываются в 5–7 МБ каждая (потолок — 10 МБ, `docs/CONVENTIONS.md`, задача TRK-82).
+`fps=8`, ширина `1100`, палитра через `palettegen`/`paletteuse` с сокращённым числом
+цветов (`max_colors=128` вместо 256 по умолчанию) — компромисс, при котором ~19–22
+секунды записи укладываются в 3–5 МБ каждая (потолок — 10 МБ, `docs/CONVENTIONS.md`,
+задача TRK-82). Первая версия (`fps=15`, 256 цветов) укладывалась в 5–7 МБ; по
+пожеланию владельца — файл не тяжелее, но без потери качества (TRK-82#58) — параметры
+пересняты и пересчитаны, а не сжаты повторным проходом по уже готовому GIF: **скорость
+смены кадров (8 в секунду) выбрана для этой записи** — статичные сцены с паузами на
+чтение, без плавной анимации, — и не подходит по умолчанию для любой другой записи.
+Уменьшение проверено покадрово на кадрах с самым мелким текстом (таблица записей
+дела) и с самым сложным фоном (доска): на глаз неотличимо от версии на 256 цветах,
+общая длительность обеих тем не изменилась (`ffprobe -show_entries format=duration`).
 
 ## 6. Погасить
 
