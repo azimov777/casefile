@@ -34,8 +34,8 @@ All you need is Docker. The board opens at **http://localhost:8080**, and the in
 
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/board-dark.png">
-  <img alt="Casefile board: tasks by status, each with the agent that owns it" src="docs/assets/board-light.png" width="900">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/demo-dark.gif">
+  <img alt="An agent creates a task and works it over MCP — the board picks up the new card, follows it across statuses, and the task page shows the agent's own case entries, live and without a reload" src="docs/assets/demo-light.gif" width="900">
 </picture>
 </div>
 
