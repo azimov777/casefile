@@ -83,6 +83,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/installation/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the installation
+         * @description Все данные установки одним документом — чтобы поднять их в другом Casefile.
+         *
+         *     Только администратору (`403 admin_required`): в архиве хеши паролей всех людей и
+         *     хеши всех токенов. Ответ сохраняют как есть и отдают приёму другой установки
+         *     (`POST` этого же адреса). Токены сеансов браузера и ключи идемпотентности не едут
+         *     (`app/services/archive.py`).
+         */
+        get: operations["export_installation"];
+        put?: never;
+        /**
+         * Import an installation archive
+         * @description Заменяет данные этой установки архивом другой — только пустой и только администратору.
+         *
+         *     Тело — ответ выгрузки как есть. Архив более старой версии доводится миграциями до
+         *     схемы этой установки; более новой — отказ `409 archive_revision_unknown`. Установка с
+         *     очередями — `409 installation_not_empty`. Ключ интерфейса и ключ агента этой машины
+         *     переживают приём, одноимённые ключи источника отзываются; сеансы браузера этой
+         *     установки заканчиваются — войти заново учётной записью из архива.
+         *
+         *     Не создающий маршрут (`200`, без ключа идемпотентности): повтор после успеха
+         *     получает `installation_not_empty`, а не второй приём.
+         */
+        post: operations["import_installation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/participants": {
         parameters: {
             query?: never;
@@ -1140,6 +1178,86 @@ export interface components {
             question_no: number;
         };
         /**
+         * ArchiveFormat
+         * @description Что за документ перед нами. Значение одно: других архивов у трекера нет.
+         * @enum {string}
+         */
+        ArchiveFormat: "casefile.installation-archive";
+        /**
+         * ArchiveImportRead
+         * @description Итог приёма архива.
+         */
+        ArchiveImportRead: {
+            /**
+             * Schema Revision
+             * @description Revision the archive was taken at
+             * @example c4a9d31f7e58
+             */
+            schema_revision: string;
+            /**
+             * Head Revision
+             * @description Revision this installation brought the data up to
+             * @example 7e3b52a9c1d4
+             */
+            head_revision: string;
+            /**
+             * Tables
+             * @description Rows per table in this installation after the import
+             */
+            tables: components["schemas"]["ImportedTableRead"][];
+            /** @description Rows this installation had before the import and has lost to the archive. Its own machine keys survive (`machine_keys`) */
+            replaced: components["schemas"]["ReplacedRowsRead"];
+            /**
+             * Machine Keys
+             * @description Names of this installation's own keys that survived the import: the board's key and the key of this machine's agent, now attached to the archive's participants of the same name
+             * @example [
+             *       "local-agent",
+             *       "local-ui"
+             *     ]
+             */
+            machine_keys: string[];
+            /**
+             * Revoked Source Keys
+             * @description Keys of the same names that came in the archive and were revoked here: their secrets live on the machine the archive came from
+             * @example 2
+             */
+            revoked_source_keys: number;
+        };
+        /**
+         * ArchiveTableRead
+         * @description Строки одной таблицы установки: значения в порядке `columns`, каждое — текстом.
+         */
+        ArchiveTableRead: {
+            /**
+             * Name
+             * @description Table name at the archive's revision
+             * @example tasks
+             */
+            name: string;
+            /**
+             * Columns
+             * @description Column names; every row lists its values in this order
+             * @example [
+             *       "id",
+             *       "key",
+             *       "title"
+             *     ]
+             */
+            columns: string[];
+            /**
+             * Rows
+             * @description Rows of the table. Each value is the PostgreSQL text form of the column (what `column::text` gives; time in UTC), and null is SQL NULL. The receiving Casefile hands the text back to PostgreSQL as is, so a value never passes through a JSON type
+             * @example [
+             *       [
+             *         "0b9a…",
+             *         "TRK-1",
+             *         "First task"
+             *       ]
+             *     ]
+             */
+            rows: (string | null)[][];
+        };
+        /**
          * AssigneeChangedEntryRead
          * @description Служебная запись о смене исполнителя.
          */
@@ -1433,6 +1551,10 @@ export interface components {
         DataResponse_AccountWithPasswordRead_: {
             data: components["schemas"]["AccountWithPasswordRead"];
         };
+        /** DataResponse[ArchiveImportRead] */
+        DataResponse_ArchiveImportRead_: {
+            data: components["schemas"]["ArchiveImportRead"];
+        };
         /** DataResponse[BootstrapRead] */
         DataResponse_BootstrapRead_: {
             data: components["schemas"]["BootstrapRead"];
@@ -1440,6 +1562,10 @@ export interface components {
         /** DataResponse[EntryRead] */
         DataResponse_EntryRead_: {
             data: components["schemas"]["EntryRead"];
+        };
+        /** DataResponse[InstallationArchive] */
+        DataResponse_InstallationArchive_: {
+            data: components["schemas"]["InstallationArchive"];
         };
         /** DataResponse[InstallationRead] */
         DataResponse_InstallationRead_: {
@@ -1663,6 +1789,67 @@ export interface components {
              * @constant
              */
             database: "ok";
+        };
+        /**
+         * ImportedTableRead
+         * @description Сколько строк таблицы стоит в установке после приёма.
+         */
+        ImportedTableRead: {
+            /**
+             * Name
+             * @example entries
+             */
+            name: string;
+            /**
+             * Rows
+             * @example 3398
+             */
+            rows: number;
+        };
+        /**
+         * InstallationArchive
+         * @description Архив установки: все её данные на одной ревизии схемы (`docs/moving.md`).
+         */
+        InstallationArchive: {
+            /** @description What the document is */
+            format: components["schemas"]["ArchiveFormat"];
+            /**
+             * Format Version
+             * @description Layout of this document. It changes only when the layout does; the database schema is `schema_revision`
+             * @example 1
+             */
+            format_version: number;
+            /**
+             * Schema Revision
+             * @description Database migration revision the rows were taken at. A Casefile that knows the revision brings the rows up to its own schema; one that does not (the archive is newer) refuses with `archive_revision_unknown`
+             * @example 7e3b52a9c1d4
+             */
+            schema_revision: string;
+            /**
+             * App Version
+             * @description Casefile version that took it
+             * @example 0.1.0
+             */
+            app_version: string;
+            /**
+             * Exported At
+             * Format: date-time
+             * @description When the archive was taken
+             */
+            exported_at: string;
+            /**
+             * Tables
+             * @description Every table of the installation except the migration version and idempotency keys; browser session tokens are left out of `tokens`
+             */
+            tables: components["schemas"]["ArchiveTableRead"][];
+        };
+        /**
+         * InstallationArchiveUpload
+         * @description Тело приёма — ответ выгрузки как есть, вместе с оболочкой `data`.
+         */
+        InstallationArchiveUpload: {
+            /** @description The archive. The body is the response of `GET /api/v1/installation/archive` verbatim, so a saved download is posted back without editing */
+            data: components["schemas"]["InstallationArchive"];
         };
         /**
          * InstallationRead
@@ -2386,6 +2573,27 @@ export interface components {
          * @enum {string}
          */
         RemarkOutcome: "fixed" | "accepted" | "needs_detail" | "declined";
+        /**
+         * ReplacedRowsRead
+         * @description Сколько строк приёмника заменено архивом: его люди и доступы до приёма.
+         */
+        ReplacedRowsRead: {
+            /**
+             * Participants
+             * @example 2
+             */
+            participants: number;
+            /**
+             * Tokens
+             * @example 2
+             */
+            tokens: number;
+            /**
+             * Accounts
+             * @example 1
+             */
+            accounts: number;
+        };
         /**
          * ResolutionEntryCreate
          * @description Резолюция. Заголовок не принимается: он собирается из ссылки на замечание и исхода.
@@ -3832,6 +4040,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_InstallationRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_installation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_InstallationArchive_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    import_installation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallationArchiveUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_ArchiveImportRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

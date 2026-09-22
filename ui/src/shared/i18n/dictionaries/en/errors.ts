@@ -16,6 +16,10 @@ export const errors = {
   actor_label_required: 'A shared agent token requires a temporary-agent label.',
   actor_not_addressable: 'A temporary agent cannot be addressed with a question.',
   admin_required: 'Only an administrator can manage people.',
+  archive_format_unsupported: 'This file is not an installation archive this Casefile can read.',
+  archive_invalid: 'The installation archive is damaged or was edited; export it again.',
+  archive_revision_unknown:
+    'The archive comes from a newer Casefile. Update this installation first, then import again.',
   bad_request: 'The request could not be parsed.',
   checks_not_passed: 'Not every review check has a positive verdict.',
   closing_not_a_transition: 'A task is closed by an action of its own, not by a status change.',
@@ -29,6 +33,8 @@ export const errors = {
   idempotency_key_reused: 'This idempotency key has already been used by another request.',
   install_key_missing:
     'The password was accepted, but the installation handed out no key. See the ui container log.',
+  installation_not_empty:
+    'Only an installation without queues can take an archive: import into a fresh one.',
   internal_error: 'Internal server error.',
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
   invalid_cursor: 'The page cursor cannot be parsed.',
