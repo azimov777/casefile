@@ -1,8 +1,8 @@
-import { cva } from 'class-variance-authority';
 import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { caseHref, listReturnHref, taskRefHref } from '@/shared/lib';
+import { SegmentedNav, SegmentedNavLink } from '@/shared/ui';
 
 interface TaskNavProps {
   taskKey: string;
@@ -15,29 +15,12 @@ interface TaskNavProps {
    * начать самому, должно быть доступно с любой глубины прокрутки, а не лежать
    * за описью в сотню записей. Что именно это за действие, слой сущности не знает
    * и знать не должен.
+   *
+   * Кнопка сюда приходит размера `sm` (`<Button size="sm">`): переключатель вида
+   * рядом того же размера, и строка стоит вровень.
    */
   action?: ReactNode;
 }
-
-/**
- * Ссылка переключателя вида. Текущий вид взят вариантом, а не состоянием наведения:
- * подсветка выигрывала у наведения и в модуле (`.view[aria-current]` стоял после
- * `.view:hover`), то есть фон текущего вида под курсором не менялся никогда.
- */
-const viewLink = cva(
-  // Отклик на наведение — единственное движение, которое строке позволено: оно
-  // отвечает на действие человека, а не начинается само.
-  'px-3 py-1 no-underline transition-[background-color] duration-(--motion-fast) ease-fast',
-  {
-    variants: {
-      current: {
-        true: 'bg-accent font-semibold text-accent-text',
-        false: 'text-text hover:bg-sunken',
-      },
-    },
-    defaultVariants: { current: false },
-  },
-);
 
 /**
  * Возврат в список и переключение «Карточка — Дело» одной строкой над задачей.
@@ -79,34 +62,27 @@ export function TaskNav({ taskKey, view, action }: TaskNavProps) {
       <span className="inline-flex flex-wrap items-center gap-3">
         {action}
 
-        <span className="inline-flex overflow-hidden rounded-mark border border-line-strong">
-          {/*
-           * Состояние перехода передаётся дальше: уйдя в дело и вернувшись, человек
-           * не должен терять отбор, с которым пришёл из списка.
-           */}
-          <Link
-            className={viewLink({ current: view === 'card' })}
+        {/*
+         * Состояние перехода передаётся дальше: уйдя в дело и вернувшись, человек
+         * не должен терять отбор, с которым пришёл из списка. Размер `sm` — тот же,
+         * что у действия слева: в одной строке они одной высоты (UI-128).
+         */}
+        <SegmentedNav label={t('task.nav.view')} size="sm">
+          <SegmentedNavLink
             to={taskRefHref({ key: taskKey, entryNo: null })}
             state={location.state}
-            aria-current={view === 'card' ? 'page' : undefined}
+            current={view === 'card' && 'page'}
           >
             {t('task.nav.card')}
-          </Link>
-          {/* Разделитель нарисован левой границей второй ссылки: у пары он один,
-              и рисовать его правой границей первой значило бы вынести его за
-              скруглённую рамку группы. */}
-          <Link
-            className={viewLink({
-              current: view === 'case',
-              class: 'border-l border-l-line-strong',
-            })}
+          </SegmentedNavLink>
+          <SegmentedNavLink
             to={caseHref(taskKey)}
             state={location.state}
-            aria-current={view === 'case' ? 'page' : undefined}
+            current={view === 'case' && 'page'}
           >
             {t('task.nav.case')}
-          </Link>
-        </span>
+          </SegmentedNavLink>
+        </SegmentedNav>
       </span>
     </nav>
   );

@@ -161,6 +161,7 @@ export const ui = {
     },
     nav: {
       label: 'Навигация по задаче {{key}}',
+      view: 'Вид задачи',
       backAll: '← Ко всем задачам',
       backFiltered: '← К списку с отбором',
       card: 'Карточка',

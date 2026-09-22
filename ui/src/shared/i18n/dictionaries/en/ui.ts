@@ -167,6 +167,7 @@ export const ui = {
     },
     nav: {
       label: 'Navigation for task {{key}}',
+      view: 'Task view',
       backAll: '← To all tasks',
       backFiltered: '← To the filtered list',
       card: 'Card',

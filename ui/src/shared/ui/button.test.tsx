@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { say } from '@testing/say';
 import { Button } from './button';
+import { controlSize } from './control-size';
 
 /**
  * Состояния кнопки различаются классами утилит: в jsdom вёрстки нет, и вычисленный
@@ -78,5 +79,26 @@ describe('кнопка', () => {
     const classes = classesOf(label);
     expect(classes).toContain('px-1');
     expect(classes).not.toContain('px-4');
+  });
+
+  /*
+   * Размер — вариант по общей шкале, а не классы места вызова (UI-128): кнопка несёт
+   * ровно минимум высоты и кегль своего размера, и тот же минимум у переключателя вида
+   * (`segmented-nav.test.tsx`). Классы места вызова вроде `px-2 py-1 text-meta` давали
+   * каждому месту свою высоту.
+   */
+  it.each(['sm', 'md'] as const)('размер %s берёт высоту и кегль из общей шкалы', (size) => {
+    const label = say.ui('answer.submit');
+    render(<Button size={size}>{label}</Button>);
+
+    const classes = classesOf(label);
+    for (const klass of controlSize[size].split(' ')) expect(classes).toContain(klass);
+  });
+
+  it('по умолчанию обычного размера', () => {
+    const label = say.ui('answer.submit');
+    render(<Button>{label}</Button>);
+
+    expect(classesOf(label)).toContain('min-h-(--ui-control)');
   });
 });

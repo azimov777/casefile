@@ -68,7 +68,7 @@ export function CopyBlock({ label, caption, text }: CopyBlockProps) {
       <div className="flex items-center border-b border-line bg-sunken py-1 pr-1 pl-2">
         <Button
           tone="quiet"
-          className="px-2 py-1 text-meta"
+          size="sm"
           // Имя содержит видимую подпись целиком: голосовое управление находит кнопку
           // по тому, что на ней написано.
           aria-label={

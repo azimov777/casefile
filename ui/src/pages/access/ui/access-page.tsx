@@ -126,7 +126,7 @@ export function AccessPage() {
                   canWrite && !isRevoked(token) ? (
                     <Button
                       tone="quiet"
-                      className="px-2 py-1 text-meta"
+                      size="sm"
                       onClick={() => setFlow({ kind: 'revoke', token })}
                     >
                       {t('revoke.action')}

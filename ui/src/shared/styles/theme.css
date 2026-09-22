@@ -293,6 +293,14 @@
   --ui-row-height: calc(var(--spacing) * 9.5); /* 38px — строка списка */
   --ui-row-head: calc(var(--spacing) * 7.5); /* 30px — её липкая шапка */
   --ui-topbar: calc(var(--spacing) * 10); /* 40px — верхняя полоса оболочки */
+  /*
+   * Шкала элементов управления: кнопка (`Button size`) и переключатель вида
+   * (`SegmentedNav size`) одного размера — одной высоты, поэтому в одной строке они
+   * стоят вровень. Минимум, а не значение: при увеличенном тексте подпись растит
+   * элемент, а не вылезает из него.
+   */
+  --ui-control: calc(var(--spacing) * 8.5); /* 34px — обычная кнопка */
+  --ui-control-sm: calc(var(--spacing) * 7); /* 28px — кнопка в плотной строке */
   --ui-header: calc(var(--spacing) * 12); /* 3rem — высота шапки приложения */
   --ui-side: calc(var(--spacing) * 50); /* 12.5rem — боковая панель очередей */
   --ui-board-column: calc(var(--spacing) * 62); /* 15.5rem — столбец доски */
