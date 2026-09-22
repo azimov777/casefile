@@ -93,6 +93,7 @@ For the best case files, also give your agent the [skill](skill/tracker-agent/SK
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
+| Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
 | Back up your data / restore into a clean install | [`docs/backup-restore.md`](docs/backup-restore.md) |
 
 Ports and other settings live in `~/casefile/.env` — see [`.env.example`](.env.example).
