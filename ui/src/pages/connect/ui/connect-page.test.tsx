@@ -51,10 +51,28 @@ function client(name: string): HTMLElement {
   return screen.getByRole('region', { name });
 }
 
-/** Дождаться фрагментов: адрес пришёл, и раздел «Любой клиент MCP» его показывает. */
+/**
+ * Дождаться фрагментов: адрес пришёл, и раздел клиента по умолчанию — Claude Code —
+ * показывает команду с ним.
+ */
 async function snippetsShown(mcpUrl = ADDRESS): Promise<void> {
-  const any = await screen.findByRole('region', { name: say.ui('snippets.clients.any') });
-  expect(within(any).getByText(mcpUrl)).toBeInTheDocument();
+  const claude = await screen.findByRole('region', {
+    name: say.ui('snippets.clients.claudeCode'),
+  });
+  expect(
+    within(claude).getByText(connectionSnippets({ mcpUrl, labelled: false }).claudeCode),
+  ).toBeInTheDocument();
+}
+
+type ClientName = 'any' | 'claudeCode' | 'codex' | 'json';
+
+/** Выбрать клиент на дорожке — ссылкой, как это делает человек. */
+async function pick(user: ReturnType<typeof userEvent.setup>, name: ClientName): Promise<void> {
+  const nav = screen.getByRole('navigation', { name: say.ui('snippets.clientNav') });
+  await user.click(within(nav).getByRole('link', { name: say.ui(`snippets.clients.${name}`) }));
+  expect(
+    await screen.findByRole('region', { name: say.ui(`snippets.clients.${name}`) }),
+  ).toBeInTheDocument();
 }
 
 describe('экран «Подключить агента»', () => {
@@ -77,18 +95,25 @@ describe('экран «Подключить агента»', () => {
 
     const expected = connectionSnippets({ mcpUrl: ADDRESS, labelled: false });
     await snippetsShown();
-    const any = client(say.ui('snippets.clients.any'));
-    expect(within(any).getByText(expected.headers, exact)).toBeInTheDocument();
     expect(
       within(client(say.ui('snippets.clients.claudeCode'))).getByText(expected.claudeCode),
     ).toBeInTheDocument();
+
+    await pick(user, 'codex');
     const codex = client(say.ui('snippets.clients.codex'));
     expect(within(codex).getByText(expected.codexFile, exact)).toBeInTheDocument();
     expect(within(codex).getByText(expected.codexEnv.bashZsh)).toBeInTheDocument();
     expect(within(codex).getByText(expected.codexEnv.powerShell)).toBeInTheDocument();
+
+    await pick(user, 'json');
     expect(
       within(client(say.ui('snippets.clients.json'))).getByText(expected.json, exact),
     ).toBeInTheDocument();
+
+    await pick(user, 'any');
+    const any = client(say.ui('snippets.clients.any'));
+    expect(within(any).getByText(ADDRESS)).toBeInTheDocument();
+    expect(within(any).getByText(expected.headers, exact)).toBeInTheDocument();
 
     // Запросов, требующих `main`, нет: только чтение, и из записи — ничего.
     expect(sent.filter((call) => !call.startsWith('GET '))).toEqual([]);
@@ -125,19 +150,72 @@ describe('экран «Подключить агента»', () => {
 
     await snippetsShown();
     // Без флажка метки нет ни в одном фрагменте — о ней говорит только объяснение экрана.
-    for (const name of ['any', 'claudeCode', 'codex', 'json'] as const) {
+    const clients: ClientName[] = ['claudeCode', 'codex', 'json', 'any'];
+    for (const name of clients) {
+      await pick(user, name);
       expect(client(say.ui(`snippets.clients.${name}`))).not.toHaveTextContent(LABEL_HEADER);
     }
 
+    await pick(user, 'claudeCode');
     await user.click(screen.getByRole('checkbox', { name: new RegExp(LABEL_HEADER) }));
 
     expect(address.current).toBe('/connect?shared=true');
     const shared = connectionSnippets({ mcpUrl: ADDRESS, labelled: true });
-    expect(screen.getByText(shared.headers, exact)).toBeInTheDocument();
     expect(screen.getByText(shared.claudeCode)).toBeInTheDocument();
-    expect(screen.getByText(shared.codexFile, exact)).toBeInTheDocument();
-    expect(screen.getByText(shared.json, exact)).toBeInTheDocument();
     expect(screen.getByText('nightly_agent')).toBeInTheDocument();
+    // Метка во фрагментах каждого клиента, и смена клиента флажок не снимает.
+    await pick(user, 'codex');
+    expect(address.current).toBe('/connect?shared=true&client=codex');
+    expect(screen.getByText(shared.codexFile, exact)).toBeInTheDocument();
+    await pick(user, 'json');
+    expect(screen.getByText(shared.json, exact)).toBeInTheDocument();
+    await pick(user, 'any');
+    expect(screen.getByText(shared.headers, exact)).toBeInTheDocument();
+  });
+
+  it('клиент — вид в адресе: умолчание Claude Code без параметра, прочие по `?client=`', async () => {
+    installation();
+    const user = userEvent.setup();
+    renderApp('/connect?client=codex');
+
+    const nav = await screen.findByRole('navigation', { name: say.ui('snippets.clientNav') });
+    expect(
+      await screen.findByRole('region', { name: say.ui('snippets.clients.codex') }),
+    ).toBeInTheDocument();
+    // На виду фрагменты одного клиента: соседних разделов в разметке нет.
+    expect(
+      screen.queryByRole('region', { name: say.ui('snippets.clients.claudeCode') }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nav).getByRole('link', { name: say.ui('snippets.clients.codex') }),
+    ).toHaveAttribute('aria-current', 'true');
+
+    await pick(user, 'claudeCode');
+    expect(address.current).toBe('/connect');
+  });
+
+  it('незнакомый клиент в адресе показывает умолчание', async () => {
+    installation();
+    renderApp('/connect?client=vim');
+
+    await snippetsShown();
+  });
+
+  it('шаги подключения идут нумерованным списком по порядку', async () => {
+    installation();
+    renderApp('/connect');
+    await snippetsShown();
+
+    const steps = within(screen.getByRole('list', { name: say.connect('steps') })).getAllByRole(
+      'listitem',
+    );
+    expect(
+      steps.map((step) => within(step).getByRole('heading', { level: 2 }).textContent),
+    ).toEqual([
+      say.connect('token.title'),
+      say.connect('snippets.title'),
+      `${say.connect('skill.title')}${say.connect('skill.optional')}`,
+    ]);
   });
 
   it('вид с меткой открывается по адресу', async () => {
@@ -184,7 +262,9 @@ describe('экран «Подключить агента»', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(say.errors('database_unavailable'));
     // Откуда взять токен и как поставить скил, человек читает и без адреса.
     expect(screen.getByRole('heading', { name: say.connect('token.title') })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: say.connect('skill.title') })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: new RegExp(say.connect('skill.title')) }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: say.ui('query.retry') }));
 

@@ -12,7 +12,6 @@ export const access = {
   cancel: 'Cancel',
 
   actions: {
-    title: 'New access',
     intro:
       'An agent of its own gets a participant and a token: then its entries in cases are signed with its name rather than with the shared agent of this machine. A token issued without a participant is a shared agent token — every request with it signs itself with a label instead.',
     newAgent: 'Register an agent',
@@ -25,13 +24,18 @@ export const access = {
   },
 
   tokens: {
-    title: 'Tokens of the installation',
-    intro: 'The list is visible with any key: reading tokens is open to the task scope as well.',
+    active: 'Active tokens',
+    count_one: '{{count, number}} token',
+    count_other: '{{count, number}} tokens',
     loading: 'Reading the accesses…',
     empty:
       'The installation has no tokens at all — that happens only before the first one is issued.',
-    more: 'Show more',
-    loadingMore: 'Loading…',
+    noActive: 'No active tokens: every issued one has been revoked.',
+    loadingMore: 'Reading the rest of the accesses…',
+    history_one: 'History: {{count, number}} revoked token',
+    history_other: 'History: {{count, number}} revoked tokens',
+    historyIntro:
+      'A revoked token lets no request in anymore. Its records are not deleted: they show who used this key and when.',
   },
 
   agent: {

@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   API,
   accessToken,
@@ -96,6 +96,12 @@ beforeEach(() => {
   });
 });
 
+// Слушатель снимается после каждого теста: иначе они копятся, и запрос следующего теста
+// записывался бы в `sent` столько раз, сколько тестов прошло до него.
+afterEach(() => {
+  server.events.removeAllListeners();
+});
+
 /** Запросы записи: всё, кроме чтения. */
 function writes(): string[] {
   return sent.filter((call) => !call.startsWith('GET '));
@@ -129,11 +135,87 @@ describe('экран «Доступы»', () => {
     expect(within(own).getByText('main')).toBeInTheDocument();
     expect(within(row('local-agent')).getByText(say.ui('token.neverUsed'))).toBeInTheDocument();
 
+    // Отозванный доступ — в истории, а она свёрнута: раскрывается одним нажатием.
+    const toggle = screen.getByRole('button', { name: say.access('tokens.history', { count: 1 }) });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('article', {
+        name: say.ui('token.label', { name: 'проверка 6 сентября' }),
+      }),
+    ).toBeNull();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
     const revoked = row('проверка 6 сентября');
     expect(within(revoked).getByText(say.ui('token.revoked'))).toBeInTheDocument();
     expect(within(revoked).getByText(say.ui('token.shared'))).toBeInTheDocument();
     // Отозванный доступ отзывать нечего: кнопки у него нет.
     expect(within(revoked).queryByRole('button')).toBeNull();
+  });
+
+  it('действующие идут раньше отозванных, даже если выдача их перемешала', async () => {
+    // Порядок выдачи — по времени: отозванный стоит между двумя действующими.
+    installation('main', [UI_TOKEN, REVOKED_TOKEN, AGENT_TOKEN]);
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    const active = await screen.findByRole('region', {
+      name: new RegExp(say.access('tokens.active')),
+    });
+    await within(active).findByRole('article', {
+      name: say.ui('token.label', { name: 'local-agent' }),
+    });
+    // Число действующих — у заголовка, словами для диктора.
+    expect(active).toHaveTextContent(say.access('tokens.count', { count: 2 }));
+    expect(
+      within(active)
+        .getAllByRole('article')
+        .map((item) => item.getAttribute('aria-label')),
+    ).toEqual([
+      say.ui('token.label', { name: 'local-ui' }),
+      say.ui('token.label', { name: 'local-agent' }),
+    ]);
+
+    await user.click(
+      screen.getByRole('button', { name: say.access('tokens.history', { count: 1 }) }),
+    );
+    const articles = screen.getAllByRole('article');
+    // В разметке история идёт после всех действующих.
+    expect(articles.map((item) => item.dataset.revoked ?? 'active')).toEqual([
+      'active',
+      'active',
+      'true',
+    ]);
+  });
+
+  it('список дочитывается сам: действующий ключ со второй страницы стоит среди действующих', async () => {
+    installation('main');
+    const OLD_ACTIVE = accessToken({
+      id: '44444444-4444-4444-4444-444444444444',
+      name: 'давний агент',
+      scope: 'task',
+      participant: 'agent',
+    });
+    server.use(
+      http.get(`${API}/api/v1/tokens`, ({ request }) =>
+        new URL(request.url).searchParams.get('cursor') === 'page-2'
+          ? collection([OLD_ACTIVE])
+          : collection([UI_TOKEN, REVOKED_TOKEN], { has_more: true, next_cursor: 'page-2' }),
+      ),
+    );
+    renderApp('/access');
+
+    const active = await screen.findByRole('region', {
+      name: new RegExp(say.access('tokens.active')),
+    });
+    expect(
+      await within(active).findByRole('article', {
+        name: say.ui('token.label', { name: 'давний агент' }),
+      }),
+    ).toBeInTheDocument();
+    // Кнопки «показать ещё» больше нет: дочитывает экран, а не человек.
+    console.log('SENT', JSON.stringify(sent));
+    expect(sent.filter((call) => call === 'GET /api/v1/tokens')).toHaveLength(2);
   });
 
   it('ключ набора `task`: список виден, действия недоступны с объяснением, запросов записи нет', async () => {

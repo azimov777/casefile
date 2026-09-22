@@ -34,6 +34,18 @@ async function installationUrl(request: APIRequestContext, token: string): Promi
   return body.data.mcp_url;
 }
 
+/**
+ * Выбрать клиент на дорожке над фрагментами — ссылкой, как это делает человек: на виду
+ * фрагменты одного клиента (UI-131).
+ */
+async function pick(page: Page, name: string): Promise<void> {
+  await page
+    .getByRole('navigation', { name: 'Клиент' })
+    .getByRole('link', { name, exact: true })
+    .click();
+  await expect(client(page, name)).toBeVisible();
+}
+
 /** Раздел клиента на экране по его заголовку. */
 function client(page: Page, name: string) {
   return page.getByRole('region', { name, exact: true });
@@ -58,22 +70,32 @@ async function openFromNavigation(page: Page): Promise<void> {
   );
 }
 
-/** Адрес во всех фрагментах — ровно тот, что отдала установка. */
+/**
+ * Адрес во всех фрагментах — ровно тот, что отдала установка. Клиенты перебираются по
+ * дорожке, и в конце выбран снова Claude Code — вид экрана по умолчанию.
+ */
 async function expectAddress(page: Page, mcpUrl: string): Promise<void> {
-  const any = client(page, 'Любой клиент MCP');
-  await expect(any.getByRole('figure', { name: 'URL' }).locator('pre code')).toHaveText(mcpUrl);
-
+  // Умолчание — Claude Code, без параметра в адресе.
   await expect(fragment(page, 'Claude Code')).toContainText(
     ` casefile "${mcpUrl}" --header "Authorization: Bearer <token>"`,
   );
+
+  await pick(page, 'Codex');
   await expect(fragment(page, 'Codex').first()).toContainText(`url = "${mcpUrl}"`);
 
+  await pick(page, 'Любой клиент MCP');
+  const any = client(page, 'Любой клиент MCP');
+  await expect(any.getByRole('figure', { name: 'URL' }).locator('pre code')).toHaveText(mcpUrl);
+
+  await pick(page, 'JSON mcpServers');
   const json = await fragment(page, 'JSON mcpServers').textContent();
   expect(JSON.parse(json ?? '')).toEqual({
     mcpServers: {
       casefile: { type: 'http', url: mcpUrl, headers: { Authorization: 'Bearer <token>' } },
     },
   });
+
+  await pick(page, 'Claude Code');
 }
 
 test('ключ установки: экран из навигации, адрес из ответа установки, копирование в буфер', async ({
@@ -93,16 +115,22 @@ test('ключ установки: экран из навигации, адре�
 
   await page.goto('/tasks');
   await openFromNavigation(page);
-  await expectAddress(page, mcpUrl);
 
-  // Кнопка копирования кладёт в буфер ровно текст своего фрагмента.
+  // Фрагмент под Claude Code копируется одним нажатием — он на виду сразу, без выбора
+  // клиента, — и скопированное совпадает с командой до переделки экрана (UI-131,
+  // проверка 3): форма команды записана здесь литералом, а не взята с экрана.
   const claude = client(page, 'Claude Code');
-  const shown = await fragment(page, 'Claude Code').textContent();
   await claude.getByRole('button', { name: 'Копировать: Команда Claude Code' }).click();
   await expect(
     claude.getByRole('button', { name: 'Скопировано: Команда Claude Code' }),
   ).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(shown);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toBe(
+    `claude mcp add --transport http --scope user casefile "${mcpUrl}" --header "Authorization: Bearer <token>"`,
+  );
+  expect(copied).toBe(await fragment(page, 'Claude Code').textContent());
+
+  await expectAddress(page, mcpUrl);
 
   // Секрета на экране нет: ни ключа сеанса, ни какого-либо иного — только подстановка.
   await expect(page.getByRole('main')).not.toContainText(token);
@@ -142,6 +170,11 @@ test('ключ набора `task`, введённый на `/login`: экран
   await expect(shared).toBeChecked();
   await expect(page).toHaveURL(/\/connect\?shared=true$/);
   await expect(fragment(page, 'Claude Code')).toContainText('--header "X-Actor-Label: <label>"');
+
+  // Выбор клиента метку не снимает и тоже держится адресом.
+  await pick(page, 'Codex');
+  await expect(page).toHaveURL(/\/connect\?shared=true&client=codex$/);
+  await expect(fragment(page, 'Codex').first()).toContainText('"X-Actor-Label" = "<label>"');
 });
 
 test('на экране нет нарушений `axe` ни одного уровня — в обоих видах фрагментов', async ({
@@ -149,9 +182,16 @@ test('на экране нет нарушений `axe` ни одного уро
 }) => {
   await silenceJournal(page);
 
-  for (const path of ['/connect', '/connect?shared=true']) {
+  const views = [
+    ['/connect', 'Claude Code'],
+    ['/connect?shared=true', 'Claude Code'],
+    ['/connect?shared=true&client=codex', 'Codex'],
+    ['/connect?client=json', 'JSON mcpServers'],
+    ['/connect?client=any', 'Любой клиент MCP'],
+  ] as const;
+  for (const [path, name] of views) {
     await page.goto(path);
-    await expect(fragment(page, 'JSON mcpServers')).toBeVisible();
+    await expect(fragment(page, name).first()).toBeVisible();
     await fontsReady(page);
 
     const found = await new AxeBuilder({ page }).analyze();

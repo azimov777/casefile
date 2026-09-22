@@ -303,6 +303,7 @@ export const ui = {
    * фрагменте негде. Названия клиентов — имена продуктов и не переводятся.
    */
   snippets: {
+    clientNav: 'Client',
     clients: {
       any: 'Any MCP client',
       claudeCode: 'Claude Code',

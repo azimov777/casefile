@@ -1,3 +1,4 @@
+export { CLIENT_PARAM, CLIENTS, type Client } from './model/client';
 export { installationKeys, installationQueryOptions, type Installation } from './api/installation';
 export {
   LABEL_HEADER,

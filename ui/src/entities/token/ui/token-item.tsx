@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Activity, Ban, CalendarPlus, UserRound, type LucideIcon } from 'lucide-react';
 import { Badge, RelativeTime } from '@/shared/ui';
 import { cn } from '@/shared/lib';
 import { isRevoked, type Token } from '../api/tokens';
@@ -11,6 +12,12 @@ import { isRevoked, type Token } from '../api/tokens';
  * Строкой-карточкой, а не строкой таблицы: значений шесть, и на узком экране таблица
  * из них либо уезжает вбок, либо схлопывает колонки до нечитаемого. Карточка
  * переносит своё содержимое сама и на любой ширине остаётся одним куском.
+ *
+ * Две строки и место действия справа (UI-131). Первая — что это за ключ: имя, набор,
+ * отметки. Вторая — сведения о нём, каждое со своим знаком: чей, кем выпущен, когда им
+ * ходили; раньше они шли одной сплошной серой строкой, и глазу не за что было
+ * зацепиться. Место действия стоит всегда, есть кнопка или нет: сетка в две колонки
+ * не переносит кнопку на свою строку, и строки с отзывом и без него одной высоты.
  *
  * Ничего не вычисляет: «отозван» — это заполненный `revoked_at`, «общий» — пустой
  * `participant`, а «этот сеанс» приходит снаружи сравнением с `token.id` из
@@ -38,16 +45,16 @@ export function TokenItem({
       data-token-scope={token.scope}
       data-revoked={revoked ? 'true' : undefined}
       className={cn(
-        'flex flex-wrap items-start gap-x-4 gap-y-2 rounded-control border border-line p-3',
-        // Отозванный доступ остаётся в списке историей. Отличается он заливкой и
-        // плашкой, а не прозрачностью: та роняет контраст (`docs/notes/ui.md`).
-        revoked ? 'bg-sunken' : 'bg-surface',
+        'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-block border px-4 py-3',
+        // Отозванный доступ остаётся историей. Отличается он заливкой и плашкой, а не
+        // прозрачностью: та роняет контраст (`docs/notes/ui.md`).
+        revoked ? 'border-line bg-sunken' : 'border-line bg-surface',
       )}
     >
-      <div className="flex min-w-0 flex-col gap-1">
-        <p className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {/* Имя токена написал человек или установка: это данные, а не подпись. */}
-          <span className="font-medium wrap-anywhere text-text">{token.name}</span>
+          <span className="font-semibold wrap-anywhere text-text">{token.name}</span>
 
           <Badge
             mono
@@ -62,39 +69,53 @@ export function TokenItem({
           {revoked ? <Badge tone="dropped">{t('token.revoked')}</Badge> : null}
         </p>
 
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-muted">
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-muted">
           {/* Чей доступ — первое, ради чего список открывают. Общий агентский токен
               не называет никого сам: каждый запрос с ним подписан меткой. */}
-          {shared ? (
-            <span>{t('token.shared')}</span>
-          ) : (
-            <span className="font-mono text-text">{token.participant}</span>
-          )}
+          <Fact icon={UserRound}>
+            {shared ? (
+              t('token.shared')
+            ) : (
+              <span className="font-mono text-text">{token.participant}</span>
+            )}
+          </Fact>
 
-          <span>
-            {author === null ? t('token.issuedByTracker') : t('token.issuedBy', { author })}{' '}
-            <RelativeTime value={token.created_at} />
-          </span>
+          {revoked ? (
+            <Fact icon={Ban}>
+              {t('token.revokedAt')} <RelativeTime value={token.revoked_at} />
+            </Fact>
+          ) : null}
 
           {/* «Ни разу» — целая фраза, а не хвост к «последний раз ходили»: дописанное
               к началу, оно читается как оборванное предложение. */}
-          {token.last_used_at === null || token.last_used_at === undefined ? (
-            <span className="text-faint">{t('token.neverUsed')}</span>
-          ) : (
-            <span>
-              {t('token.lastUsed')} <RelativeTime value={token.last_used_at} />
-            </span>
-          )}
+          <Fact icon={Activity}>
+            {token.last_used_at === null || token.last_used_at === undefined ? (
+              t('token.neverUsed')
+            ) : (
+              <>
+                {t('token.lastUsed')} <RelativeTime value={token.last_used_at} />
+              </>
+            )}
+          </Fact>
 
-          {revoked ? (
-            <span>
-              {t('token.revokedAt')} <RelativeTime value={token.revoked_at} />
-            </span>
-          ) : null}
+          <Fact icon={CalendarPlus}>
+            {author === null ? t('token.issuedByTracker') : t('token.issuedBy', { author })}{' '}
+            <RelativeTime value={token.created_at} />
+          </Fact>
         </p>
       </div>
 
-      {action === undefined ? null : <div className="ml-auto">{action}</div>}
+      <div className="flex min-h-(--ui-control-sm) items-center">{action}</div>
     </article>
+  );
+}
+
+/** Одно сведение о доступе со своим знаком: знак — ориентир глазу, слова — диктору. */
+function Fact({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <Icon className="size-(--ui-mark) shrink-0 text-faint" aria-hidden="true" />
+      <span className="min-w-0">{children}</span>
+    </span>
   );
 }
