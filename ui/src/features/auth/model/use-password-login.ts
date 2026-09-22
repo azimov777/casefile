@@ -14,10 +14,22 @@ import { ApiError, apiClient, CLIENT_ERROR_CODES, reloadInstallToken, unwrap } f
  * Установка, принявшая пароль и всё равно не давшая ключа, — отказ с причиной, а не
  * тихий возврат на тот же экран: иначе человек вводил бы верный пароль по кругу.
  */
+/**
+ * Почта, которой входит форма с одним полем пароля, до экрана входа учётной записью.
+ *
+ * Бэкенд с `TRK-113` входит почтой и паролем, а форма спрашивает только пароль. Паролем
+ * без почты входила одна учётная запись — владельца установки, закрытой
+ * `TRACKER_PASSWORD_HASH`; после обновления это администратор `owner@localhost`. Поле почты
+ * и ключ из ответа входа вместо `/config.json` — задача `UI-122`, и эта константа уходит с ней.
+ */
+const LEGACY_OWNER_EMAIL = 'owner@localhost';
+
 export function usePasswordLogin() {
   return useMutation<string, Error, string>({
     mutationFn: async (password: string) => {
-      await unwrap(apiClient.POST('/api/v1/session', { body: { password } }));
+      await unwrap(
+        apiClient.POST('/api/v1/session', { body: { email: LEGACY_OWNER_EMAIL, password } }),
+      );
       const token = await reloadInstallToken();
       if (token === null) {
         throw new ApiError(
