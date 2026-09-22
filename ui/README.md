@@ -179,7 +179,7 @@ docker run --rm --entrypoint grep tracker-ui:latest -r trk_ /usr/share/nginx/htm
 после входа, экран входа спрашивает пароль, а не токен, и выход закрывает сеанс на
 сервере. Без пароля образ не поднимается, если порт опубликован не на петле
 (`TRACKER_UI_BIND`). Как включить — `../README.md`, «Network mode»; как устроено —
-`../docs/DEVELOPMENT.md`, «Вход по паролю: установка в сети» и `docs/FRONTEND.md`.
+`../docs/DEVELOPMENT.md`, «Учётные записи и вход: установка в сети» и `docs/FRONTEND.md`.
 
 Дев-сервер `pnpm dev` режима пароля не знает: его `/config.json` отдаёт ключ из переменной,
 как локальная установка. Экран пароля проверяется в образе — `e2e/password-login.spec.ts`.
