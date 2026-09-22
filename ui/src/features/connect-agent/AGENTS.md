@@ -8,9 +8,9 @@
 ## Папки
 
 - `api/` — адрес MCP установки: `GET /api/v1/installation`
-- `model/` — тексты фрагментов из адреса, токена или подстановки и признака метки
-- `ui/` — фрагменты под клиенты с кнопками копирования
+- `model/` — тексты фрагментов из адреса, токена или подстановки и признака метки; выбранный клиент в адресе
+- `ui/` — фрагменты выбранного клиента с дорожкой клиентов и кнопками копирования
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `ConnectionSnippets`, `connectionSnippets`, `installationQueryOptions`, `installationKeys`, константы подстановок, имени сервера и переменной окружения, типы `SnippetInput`, `SnippetTexts`, `CodexFormField`, `Installation`
+- `index.ts` — публичный интерфейс среза: `ConnectionSnippets`, `connectionSnippets`, `installationQueryOptions`, `installationKeys`, `CLIENTS`, `CLIENT_PARAM`, тип `Client`, константы подстановок, имени сервера и переменной окружения, типы `SnippetInput`, `SnippetTexts`, `CodexFormField`, `Installation`

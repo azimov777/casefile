@@ -312,6 +312,7 @@ export const ui = {
 
   /** Фрагменты подключения агента к MCP (`features/connect-agent`). */
   snippets: {
+    clientNav: 'Клиент',
     clients: {
       any: 'Любой клиент MCP',
       claudeCode: 'Claude Code',
