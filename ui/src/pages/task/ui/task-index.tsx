@@ -11,7 +11,7 @@ import {
   type EntryHeading,
 } from '@/entities/entry';
 import { cn, useExitHold } from '@/shared/lib';
-import { Button, QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
+import { QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
 
 interface TaskIndexProps {
   taskKey: string;
@@ -27,12 +27,6 @@ interface TaskIndexProps {
    */
   onOpenChange: (no: number | null) => void;
 }
-
-/**
- * Опись длиннее этого читается прокруткой, и по ней имеет смысл прыгать. Короткая
- * видна целиком, и два действия над ней были бы шумом там, где всё и так на экране.
- */
-const LONG_INDEX = 12;
 
 /**
  * Ячейка описи: поля, линия под строкой и выравнивание по верху — одинаковые
@@ -68,8 +62,6 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(openAt === null ? [] : [openAt]),
   );
-  /** Начало описи: сюда возвращает прыжок «в начало», не трогая прокрутку страницы. */
-  const scroller = useRef<HTMLDivElement>(null);
 
   // Ссылка `TRK-42#12` внутри той же карточки меняет адрес, не перемонтируя страницу,
   // поэтому раскрытие следит за параметром, а не только за первым рендером.
@@ -100,65 +92,41 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
 
   if (index.length === 0) return <p className="text-muted italic">{t('index.empty')}</p>;
 
-  // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
-  // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
-  const lastNo = index[index.length - 1]?.no ?? null;
-
   return (
-    /* Прыжки над описью, а не под ней: «к свежей записи» нужно до чтения, а не после. */
-    <div className="flex flex-col gap-2">
-      {index.length > LONG_INDEX && lastNo !== null ? (
-        /*
-         * Два прыжка по описи: к свежей записи и обратно к началу. Свежая раскрывается
-         * и читается точечно — своим запросом на свой номер, а не чтением всего дела
-         * до неё. Прыгает человек, а не экран: живой поток опись не прокручивает.
-         */
-        <div className="flex flex-wrap gap-2">
-          <Button tone="quiet" onClick={() => onOpenChange(lastNo)}>
-            {t('index.toLatest')}
-          </Button>
-          <Button
-            tone="quiet"
-            onClick={() => scroller.current?.scrollIntoView?.({ block: 'start' })}
-          >
-            {t('index.toTop')}
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="overflow-x-auto" ref={scroller}>
-        <table className="w-full border-collapse text-body">
-          <caption className="px-3 pt-2 text-left text-meta text-muted">
-            {t('index.count', { count: index.length })}
-          </caption>
-          <thead>
-            <tr>
-              {INDEX_COLUMNS.map((column) => (
-                <th
-                  key={column}
-                  scope="col"
-                  className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
-                >
-                  {t(`index.columns.${column}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {index.map((heading) => (
-              <IndexRow
-                key={heading.no}
-                taskKey={taskKey}
-                heading={heading}
-                checks={checks}
-                open={expanded.has(heading.no)}
-                scrollTo={openAt === heading.no}
-                onToggle={toggle}
-              />
+    // Число записей и прыжки по описи стоят в шапке блока над таблицей
+    // (`task-page.tsx`, `BLOCK_HEAD`): там же общие поля блока и переход в ленту.
+    <div className="overflow-x-auto">
+      <table
+        className="w-full border-collapse text-body"
+        aria-label={t('index.count', { count: index.length })}
+      >
+        <thead>
+          <tr>
+            {INDEX_COLUMNS.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
+              >
+                {t(`index.columns.${column}`)}
+              </th>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </tr>
+        </thead>
+        <tbody>
+          {index.map((heading) => (
+            <IndexRow
+              key={heading.no}
+              taskKey={taskKey}
+              heading={heading}
+              checks={checks}
+              open={expanded.has(heading.no)}
+              scrollTo={openAt === heading.no}
+              onToggle={toggle}
+            />
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
