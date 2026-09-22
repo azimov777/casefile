@@ -39,7 +39,10 @@ interface Reading {
 
 /**
  * Приводит на экран движение всех трёх родов: переход по цвету живёт на любой кнопке,
- * переход по месту — в раскрытии отбора, `@keyframes` — в шторке.
+ * переход по месту — в раскрытии отбора типов дела, `@keyframes` — в шторке.
+ *
+ * Дело, а не список задач: отбор списка с UI-130 не раскрывается вовсе — условия
+ * живут во всплывающей панели, которая стоит вне потока и места не двигает.
  *
  * Экран узкий: ниже точки `fold` боковая панель уезжает в шторку, а шторка —
  * единственное движение `@keyframes`, до которого можно дойти без подменённого потока.
@@ -49,10 +52,10 @@ interface Reading {
 async function motionOnScreen(page: Page): Promise<void> {
   await silenceJournal(page);
   await page.setViewportSize({ width: 600, height: 900 });
-  await page.goto('/tasks?queue=DEMO');
-  await expect(page.locator('tbody tr').first()).toBeVisible();
+  await page.goto('/tasks/DEMO-1/case');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-1');
 
-  await page.getByRole('button', { name: 'Изменить отбор' }).click();
+  await page.getByRole('button', { name: 'Выбрать типы' }).click();
   await expect(page.locator('[data-reveal="place"]')).toBeVisible();
 
   await page.getByRole('button', { name: /Показать разделы/ }).click();

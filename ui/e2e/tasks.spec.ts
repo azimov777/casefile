@@ -29,7 +29,7 @@ test('отбор по статусу open даёт ровно открытые �
 
   await page.reload();
 
-  // Свёрнутый отбор называет условие словами, не заставляя разворачивать форму.
+  // Строка отбора называет условие словами, не заставляя открывать панель.
   await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('статус open');
 
   // Очередь стоит там, где она теперь живёт, — местом в боковой панели, а не полем
@@ -39,8 +39,12 @@ test('отбор по статусу open даёт ровно открытые �
     'page',
   );
 
-  await page.getByRole('button', { name: 'Изменить отбор' }).click();
-  await expect(page.getByRole('checkbox', { name: 'open' })).toBeChecked();
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Условия отбора задач' })
+      .getByRole('button', { name: 'статус open', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await expect(rows(page)).toHaveCount(open.length);
 });
 
@@ -79,7 +83,7 @@ test('опечатка в запросе объясняется позицией
   await page.goto('/tasks?queue=DEMO');
   await expect(rows(page)).toHaveCount(shown.length);
 
-  await page.getByRole('button', { name: 'Изменить отбор' }).click();
+  await page.getByRole('button', { name: 'Запрос', exact: true }).click();
   await page.getByLabel('Запрос на языке бэкенда').fill('status: opne');
   await page.getByRole('button', { name: 'Применить' }).click();
 
@@ -159,11 +163,15 @@ test('доступность списка задач', async ({ page, request })
   await page.goto('/tasks?queue=DEMO');
   await expect(rows(page)).toHaveCount(shown.length);
 
-  // Форму надо раскрыть: свёрнутую её `axe` не увидит, а проверять надо и её —
-  // сценарий идёт в обеих темах, и поля формы в тёмной проверены только отсюда.
-  await page.getByRole('button', { name: 'Изменить отбор' }).click();
-  await expect(page.getByLabel('Запрос на языке бэкенда')).toBeVisible();
+  // Панель надо открыть: закрытую её `axe` не увидит, а проверять надо и её —
+  // сценарий идёт в обеих темах, и переключатели в тёмной проверены только отсюда.
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Условия отбора задач' })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.keyboard.press('Escape');
 
-  const found = await new AxeBuilder({ page }).analyze();
-  expect(found.violations).toEqual([]);
+  // И режим запроса: его поле живёт вместо поиска и панели.
+  await page.getByRole('button', { name: 'Запрос', exact: true }).click();
+  await expect(page.getByLabel('Запрос на языке бэкенда')).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });

@@ -65,25 +65,25 @@ export const tasks = {
 
   filters: {
     label: 'Отбор задач',
-    expand: 'Изменить отбор',
-    collapse: 'Свернуть отбор',
     conditions: 'Условия отбора',
     allShown: 'показаны все задачи',
     allButArchive: 'показаны все задачи, кроме архива',
     remove: 'Убрать условие: {{condition}}',
     reset: 'Сбросить',
-    formLabel: 'Условия отбора задач',
+    menu: 'Фильтр',
+    menuLabel: 'Условия отбора задач',
     statusLegend: 'Статус',
     priorityLegend: 'Приоритет',
-    boardNote: 'На доске показаны все статусы: каждый своим столбцом.',
+    flagsLegend: 'Признаки',
     assignee: 'Исполнитель',
     assigneePlaceholder: 'имя целиком',
     text: 'Текст',
-    textPlaceholder: 'в названии или описании',
+    textPlaceholder: 'Найти в названии или описании',
     blocked: 'заблокирована',
     withQuestions: 'есть открытые вопросы',
     withRemarks: 'есть неразобранные замечания',
     pending: 'не применено, Enter применит',
+    pendingShort: '↵ применить',
     apply: 'Применить',
 
     archive: {
@@ -110,8 +110,9 @@ export const tasks = {
     },
 
     query: {
+      toggle: 'Запрос',
       label: 'Запрос на языке бэкенда',
-      note: 'отменяет остальной отбор, но не архив',
+      note: 'Запрос заменяет простой отбор; архив по-прежнему решает флажок справа.',
       placeholder: 'queue: DEMO and status: open and blocked: false',
       errorAt: 'Ошибка в символе {{position}}.',
       allowed: 'Допустимо: {{list}}',
