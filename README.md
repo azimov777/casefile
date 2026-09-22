@@ -74,11 +74,14 @@ printed (`http://localhost:8100/mcp` by default) with that header.
 **A second agent, without the terminal.** The board carries the same snippets.
 **Connect an agent** shows this installation's MCP address and ready-made snippets for
 Claude Code, Codex and any client that takes an `mcpServers` JSON — no secret on the
-screen, a placeholder where the token goes. **Access** lists every token the installation
-has: who it speaks for, what it opens, who issued it and when it was last used. From there
+screen, a placeholder where the token goes. **Access** lists your tokens — every token
+of the installation, if you are an administrator: who it speaks for, what it opens, who
+issued it and when it was last used. From there
 you register an agent, issue its own token, copy the snippet with the secret already in
 it — shown once — and revoke it when that agent is done. Give each agent a token of its
-own and its case entries are signed with its name instead of one shared `agent`.
+own and its case entries are signed with its name instead of one shared `agent`. On a
+shared installation every person does this for their own agents, without the
+administrator, and sees and revokes only the tokens they issued or that speak for them.
 
 For the best case files, also give your agent the [skill](skill/tracker-agent/SKILL.md) that teaches the discipline (Claude Code: `~/.claude/skills/tracker-agent/SKILL.md`).
 
@@ -132,7 +135,8 @@ the **administrator** flag, and all it opens is managing people.
 
    It prints Alice's password once; hand it to her. `--admin` makes her an administrator
    too. `account-list` shows everyone, `account-update --disable` locks a person out and
-   revokes every token they hold (their past entries stay signed with their name), and
+   revokes every token they hold or issued to their agents (their past entries stay
+   signed with their name), and
    `account-password` resets a forgotten password. Casefile sends no mail: there is no
    address confirmation and no reset link.
 
@@ -200,7 +204,8 @@ What else to know:
 - **Sessions.** A sign-in lasts 7 days (`TRACKER_SESSION_HOURS`). A session is a token
   with a deadline, kept in the database: restarting the installation does not end it.
   **Sign out** revokes it at once, a changed or reset password ends the person's other
-  sessions, and disabling an account revokes all its tokens.
+  sessions, and disabling an account revokes all its tokens, the ones the person issued
+  to their agents included: enabling it again brings none of them back.
 - **Guessing.** Wrong passwords are counted per address and per email, within a minute.
   After 5 from one address, sign-in answers "try again later" to that address — the right
   password included — until the minute has passed; after 5 for one email, from wherever

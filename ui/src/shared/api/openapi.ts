@@ -149,7 +149,11 @@ export interface paths {
         };
         /**
          * List tokens
-         * @description Все токены установки, включая отозванные: у отозванного заполнено `revoked_at`.
+         * @description Токены, включая отозванные: у отозванного заполнено `revoked_at`.
+         *
+         *     Администратор видит все токены установки, остальные — свои: те, что говорят от их
+         *     имени (`participant`), и те, что они выпустили (`created_by`). `mine=true` сужает до
+         *     своих и администратора.
          *
          *     Секрета в списке нет — в базе лежит только хеш, и восстановить значение неоткуда.
          */
@@ -159,8 +163,12 @@ export interface paths {
          * Issue a token
          * @description Единственный ответ, содержащий секрет токена: второго способа узнать его нет.
          *
-         *     Требует набора `main`. Без `participant` выпускается общий агентский токен: запрос с
-         *     ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.
+         *     Требует набора `main` и учётной записи у выпускающего: выпускает человек, а не агент
+         *     (`403 permission_denied`, `details.reason: account_required`). Ключ от имени другого
+         *     человека выпускает только администратор (`details.reason: foreign_human`); себе,
+         *     агенту-участнику и общий — любой вошедший. Выпущенный токен — свой у выпустившего: он
+         *     видит его в списке и отзывает. Без `participant` выпускается общий агентский токен:
+         *     запрос с ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.
          *
          *     Единственное исключение — повтор с тем же `Idempotency-Key`: он отвечает **тем же**
          *     секретом, потому что ответ первого выпуска сохранён целиком. Иначе повтор запроса,
@@ -188,9 +196,10 @@ export interface paths {
          * Revoke a token
          * @description Отзыв идемпотентен: повторный запрос отвечает так же и ничего не меняет.
          *
-         *     Требует набора `main`. Запись токена остаётся в базе с проставленным `revoked_at` —
-         *     по ней видно, чем ходили раньше. Наружу это выглядит удалением, поэтому `DELETE`
-         *     и `204`.
+         *     Требует набора `main`. Свой токен отзывает любой, чужой — только администратор
+         *     (`403 permission_denied`, `details.reason: not_own_token`). Запись токена остаётся в
+         *     базе с проставленным `revoked_at` — по ней видно, чем ходили раньше. Наружу это
+         *     выглядит удалением, поэтому `DELETE` и `204`.
          */
         delete: operations["revoke_token"];
         options?: never;
@@ -4222,6 +4231,8 @@ export interface operations {
     list_tokens: {
         parameters: {
             query?: {
+                /** @description Only own tokens: those that speak for the caller or were issued by the caller. Changes nothing for a non-administrator, who sees only own tokens anyway */
+                mine?: boolean;
                 /** @description Page size */
                 limit?: number;
                 /** @description Cursor from `meta.next_cursor` of a previous page */

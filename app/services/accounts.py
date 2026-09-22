@@ -18,8 +18,10 @@
 
 ## Что отзывается вместе с чем
 
-- Отключение отзывает **все** неотозванные токены участника: человек ушёл, и ни одна
-  вкладка и ни один выпущенный ему ключ не должны работать. Включение их не возвращает.
+- Отключение отзывает **все** неотозванные свои токены человека — и выданные ему, и
+  выпущенные им своим агентам (`TokenRepository.list_live_owned_by`, решение
+  `TRK-114#13`): человек ушёл, и ни одна вкладка, ни один его ключ и ни один его агент
+  не должны работать. Включение их не возвращает.
 - Сброс пароля администратором и смена своего пароля отзывают **сеансы** — токены со
   сроком (`app/services/login.py`): это «выйти везде». Своя смена оставляет живым токен,
   которым её сделали: человек не должен вылететь из вкладки, где только что сменил пароль.
@@ -75,15 +77,26 @@ async def ensure_admin(session: AsyncSession, actor: Actor, *, action: str) -> N
     установкой никому, и отказ про набор честнее, чем про флаг.
     """
     ensure_scope(actor, TokenScope.MAIN, action=action)
-    if actor == TRACKER_ACTOR:
-        return
-    account = (
-        None
-        if actor.participant is None
-        else await AccountRepository(session).get_by_participant(actor.participant.id)
-    )
-    if account is None or not account.is_admin or account.is_disabled:
+    if not await is_admin(session, actor):
         raise AdminRequiredError(details={"action": action})
+
+
+async def is_admin(session: AsyncSession, actor: Actor) -> bool:
+    """Администратор ли тот, кто зовёт: действующая учётная запись с флагом — или сам трекер.
+
+    Набор не проверяет: это вопрос, а не отказ. Им пользуются и `ensure_admin`, и токены
+    (`app/services/tokens.py`), где администратор видит и отзывает все токены, а не свои.
+    """
+    if actor == TRACKER_ACTOR:
+        return True
+    account = await active_account_of(session, actor)
+    return account is not None and account.is_admin
+
+
+async def active_account_of(session: AsyncSession, actor: Actor) -> Account | None:
+    """Действующая (не отключённая) учётная запись того, кто зовёт, если она есть."""
+    account = await account_of(session, actor.participant)
+    return None if account is None or account.is_disabled else account
 
 
 async def account_of(session: AsyncSession, participant: Participant | None) -> Account | None:
@@ -212,7 +225,7 @@ async def update_account(
         account.is_admin = is_admin
     if disabled is True and not account.is_disabled:
         account.disabled_at = datetime.now(UTC)
-        await _revoke(session, account, sessions_only=False)
+        await _revoke_everything(session, account)
     elif disabled is False:
         account.disabled_at = None
     await session.flush()
@@ -236,7 +249,7 @@ async def reset_password(
         check_new_password(password)
     generated = generate_password() if password is None else None
     account.password_hash = await _hash(password if password is not None else generated)
-    await _revoke(session, account, sessions_only=True)
+    await _revoke_sessions(session, account)
     await session.flush()
     return AccountWithPassword(account=account, password=generated)
 
@@ -274,7 +287,7 @@ async def change_own_password(
             raise CurrentPasswordMismatchError()
     check_new_password(new_password)
     account.password_hash = await _hash(new_password)
-    await _revoke(session, account, sessions_only=True, keep=actor.token_id)
+    await _revoke_sessions(session, account, keep=actor.token_id)
     await session.flush()
     return account
 
@@ -293,17 +306,18 @@ async def _hash(password: str | None) -> str:
     return (await asyncio.to_thread(hash_password, password)).render()
 
 
-async def _revoke(
-    session: AsyncSession,
-    account: Account,
-    *,
-    sessions_only: bool,
-    keep: uuid.UUID | None = None,
+async def _revoke_sessions(
+    session: AsyncSession, account: Account, *, keep: uuid.UUID | None = None
 ) -> None:
-    """Отзывает токены участника учётной записи: все или только сеансы, кроме `keep`."""
+    """Отзывает сеансы браузера учётной записи, кроме `keep`."""
     moment = datetime.now(UTC)
-    tokens = await TokenRepository(session).list_live_of(
-        account.participant_id, sessions_only=sessions_only, keep=keep
-    )
+    tokens = await TokenRepository(session).list_live_sessions_of(account.participant_id, keep=keep)
     for token in tokens:
+        token.revoked_at = moment
+
+
+async def _revoke_everything(session: AsyncSession, account: Account) -> None:
+    """Отзывает все свои токены человека: выданные ему и выпущенные им своим агентам."""
+    moment = datetime.now(UTC)
+    for token in await TokenRepository(session).list_live_owned_by(account.participant):
         token.revoked_at = moment

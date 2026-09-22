@@ -554,10 +554,10 @@ FastAPI. С проверкой в заголовке REST отвечал бы о
 попыток на число процессов.
 **Как правильно:** служба `api` запускается одним процессом, это записано рядом с её
 командой в `docker-compose.prod.yml`. Понадобятся реплики — переносить в базу окна, а не
-сеансы. Отозвать сеанс — отозвать токен; «выйти везде» — `TokenRepository.list_live_of`
-с `sessions_only`. Тесты собирают приложение своё на каждый случай (`create_app`), поэтому
+сеансы. Отозвать сеанс — отозвать токен; «выйти везде» — `TokenRepository.list_live_sessions_of`
+(отключение отзывает больше — все свои токены человека, `list_live_owned_by`, TRK-114). Тесты собирают приложение своё на каждый случай (`create_app`), поэтому
 окна соседних тестов не делятся, а сеансы видны любому приложению на той же базе.
-**Где:** `app/services/login.py`, `PasswordLogin`; `app/services/accounts.py`, `_revoke`;
+**Где:** `app/services/login.py`, `PasswordLogin`; `app/services/accounts.py`, `_revoke_sessions`;
 `app/main.py`, `create_app`; `tests/test_password_login.py`,
 `test_a_session_survives_a_restart_of_the_api`.
 

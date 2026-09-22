@@ -52,6 +52,25 @@ cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/a
 A running session does not pick up a new MCP server by itself: tell the user to restart
 the session (in Claude Code, `/mcp` reconnects).
 
+### Joining an installation someone else runs
+
+If the user does not own the installation but signs in to a shared one (a server where
+people log in with an email and a password), skip steps 1 and 2: there is no installer
+output and no `agent-token` to read. Ask the user to issue a token for you themselves, in
+the board's access screen or with `POST /api/v1/tokens` from their own signed-in session,
+and to name it after this machine or harness so they can tell it apart later. Any person
+with an account can do this without the administrator. Then connect with that token as
+above, using the MCP address the installation publishes.
+
+What the user should know, in one line each:
+
+- The token is theirs: they see it in their list with the time it was last used and can
+  revoke it; other people see and revoke only their own, the administrator sees all.
+- After a revoke your next call is refused with `401 unauthorized`
+  (`details.reason: token_revoked`) — ask for a new token, do not retry.
+- If their account is disabled, every token they issued stops working at once, yours
+  included, and enabling the account again does not bring those tokens back.
+
 ## 4. Install the skill (recommended)
 
 The skill teaches how to keep a good case file. For Claude Code:

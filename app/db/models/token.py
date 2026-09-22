@@ -72,3 +72,14 @@ class Token(BaseModel, CreatedByMixin):
     def is_shared(self) -> bool:
         """Общий агентский токен: автора называет заголовок, а не сам токен."""
         return self.participant_id is None
+
+    def belongs_to(self, participant: Participant) -> bool:
+        """Свой ли это токен участника: говорит от его имени или выпущен им.
+
+        Тот же предикат на стороне базы — `owned_by` в `app/db/repositories/tokens.py`;
+        расходиться им нельзя (`docs/CONCEPT.md`, 3.1; решение `TRK-114#12`). Автор
+        выпуска сверяется целиком — родом и подписью: имя участника неизменяемо, а род
+        `human` у автора бывает только у участника, поэтому метка временного агента с тем
+        же текстом за человека не сойдёт.
+        """
+        return self.participant_id == participant.id or self.created_by == participant.author
