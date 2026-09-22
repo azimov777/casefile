@@ -24,7 +24,7 @@ from app.services.auth import TRACKER_ACTOR, Actor
 #: и поле, добавленное мимо него, обязано уронить тест, а не тихо уехать во фронтенд.
 #: `token` вошёл сюда с доводом, почему это первый кадр (`TRK-65#12`); адрес MCP — нет,
 #: он живёт в `GET /api/v1/installation`.
-BOOTSTRAP_FIELDS = ["open_questions", "participant", "queues", "token"]
+BOOTSTRAP_FIELDS = ["account", "open_questions", "participant", "queues", "token"]
 
 #: Поля токена в первом кадре: чем узнать его в списке и что он открывает. Имя, автор
 #: выпуска и последнее использование сюда не входят — их отдаёт список по тому же `id`.
@@ -44,6 +44,11 @@ async def test_bootstrap_answers_with_the_participant_queues_and_question_count(
     assert sorted(data) == BOOTSTRAP_FIELDS
     assert data["participant"]["name"] == owner.name
     assert data["participant"]["kind"] == owner.kind.value
+    # Учётная запись владельца — администратор: по флагу интерфейс показывает управление
+    # людьми (`CONCEPT.md`, 5.4).
+    assert data["account"]["email"] == "owner@localhost"
+    assert data["account"]["participant"] == owner.name
+    assert data["account"]["is_admin"] is True
     assert [item["key"] for item in data["queues"]] == [queue.key]
     assert data["open_questions"] == 0
 
@@ -111,6 +116,7 @@ async def test_bootstrap_of_a_shared_token_has_no_participant(
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["participant"] is None
+    assert data["account"] is None
     assert data["open_questions"] == 0
     assert [item["key"] for item in data["queues"]] == [task.queue.key]
 

@@ -44,6 +44,10 @@ class Token(BaseModel, CreatedByMixin):
     )
     last_used_at: Mapped[datetime | None] = mapped_column(default=None)
     revoked_at: Mapped[datetime | None] = mapped_column(default=None)
+    # Срок есть только у токена сеанса браузера (`app/services/login.py`): вход по почте
+    # и паролю выпускает его, и после срока он не пускает (`token_expired`). У остальных
+    # токенов срока нет — их отзывают руками.
+    expires_at: Mapped[datetime | None] = mapped_column(default=None)
 
     # Аутентификация всегда идёт от токена к участнику, поэтому связь грузится сразу
     # одним запросом: иначе на каждый запрос к API приходилось бы два обращения к БД.
@@ -56,6 +60,26 @@ class Token(BaseModel, CreatedByMixin):
         return self.revoked_at is not None
 
     @property
+    def is_session(self) -> bool:
+        """Токен сеанса браузера: выпущен входом по почте и паролю и живёт до срока."""
+        return self.expires_at is not None
+
+    def expired_at(self, moment: datetime) -> bool:
+        """Истёк ли срок к этому моменту. Токен без срока не истекает никогда."""
+        return self.expires_at is not None and self.expires_at <= moment
+
+    @property
     def is_shared(self) -> bool:
         """Общий агентский токен: автора называет заголовок, а не сам токен."""
         return self.participant_id is None
+
+    def belongs_to(self, participant: Participant) -> bool:
+        """Свой ли это токен участника: говорит от его имени или выпущен им.
+
+        Тот же предикат на стороне базы — `owned_by` в `app/db/repositories/tokens.py`;
+        расходиться им нельзя (`docs/CONCEPT.md`, 3.1; решение `TRK-114#12`). Автор
+        выпуска сверяется целиком — родом и подписью: имя участника неизменяемо, а род
+        `human` у автора бывает только у участника, поэтому метка временного агента с тем
+        же текстом за человека не сойдёт.
+        """
+        return self.participant_id == participant.id or self.created_by == participant.author

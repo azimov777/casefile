@@ -43,7 +43,7 @@
           "bootstrap"
         ],
         "summary": "Read the first screen",
-        "description": "Текущий участник, его токен с набором, очереди установки и число вопросов к нему.\n\nРовно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки\nзадач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,\nа сведения установки, одинаковые для любого токена, — `GET /api/v1/installation`.\n\n`token` — тот токен, что стоит в заголовке: `id` из `GET /api/v1/tokens` и набор. По\nнабору интерфейс решает, открыта ли запись, по `id` узнаёт свой ключ в списке токенов.\n\nУ общего агентского токена участника нет: `participant` приходит `null`, а\n`open_questions` — ноль, потому что временного агента нельзя адресовать вопросом\n(`docs/CONCEPT.md`, 3.6). Очереди в этом случае отдаются те же самые.",
+        "description": "Текущий участник, его учётная запись, токен с набором, очереди и число вопросов к нему.\n\nРовно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки\nзадач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,\nа сведения установки, одинаковые для любого токена, — `GET /api/v1/installation`.\n\n`token` — тот токен, что стоит в заголовке: `id` из `GET /api/v1/tokens` и набор. По\nнабору интерфейс решает, открыта ли запись, по `id` узнаёт свой ключ в списке токенов.\n\nУ общего агентского токена участника нет: `participant` приходит `null`, а\n`open_questions` — ноль, потому что временного агента нельзя адресовать вопросом\n(`docs/CONCEPT.md`, 3.6). Очереди в этом случае отдаются те же самые.",
         "operationId": "read_bootstrap",
         "security": [
           {
@@ -190,6 +190,234 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DataResponse_InstallationRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/installation/archive": {
+      "get": {
+        "tags": [
+          "installation"
+        ],
+        "summary": "Export the installation",
+        "description": "Все данные установки одним документом — чтобы поднять их в другом Casefile.\n\nТолько администратору (`403 admin_required`): в архиве хеши паролей всех людей и\nхеши всех токенов. Ответ сохраняют как есть и отдают приёму другой установки\n(`POST` этого же адреса). Токены сеансов браузера и ключи идемпотентности не едут\n(`app/services/archive.py`).",
+        "operationId": "export_installation",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_InstallationArchive_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "installation"
+        ],
+        "summary": "Import an installation archive",
+        "description": "Заменяет данные этой установки архивом другой — только пустой и только администратору.\n\nТело — ответ выгрузки как есть. Архив более старой версии доводится миграциями до\nсхемы этой установки; более новой — отказ `409 archive_revision_unknown`. Установка с\nочередями — `409 installation_not_empty`. Ключ интерфейса и ключ агента этой машины\nпереживают приём, одноимённые ключи источника отзываются; сеансы браузера этой\nустановки заканчиваются — войти заново учётной записью из архива.\n\nНе создающий маршрут (`200`, без ключа идемпотентности): повтор после успеха\nполучает `installation_not_empty`, а не второй приём.",
+        "operationId": "import_installation",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationArchiveUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_ArchiveImportRead_"
                 }
               }
             }
@@ -800,7 +1028,7 @@
           "tokens"
         ],
         "summary": "List tokens",
-        "description": "Все токены установки, включая отозванные: у отозванного заполнено `revoked_at`.\n\nСекрета в списке нет — в базе лежит только хеш, и восстановить значение неоткуда.",
+        "description": "Токены, включая отозванные: у отозванного заполнено `revoked_at`.\n\nАдминистратор видит все токены установки, остальные — свои: те, что говорят от их\nимени (`participant`), и те, что они выпустили (`created_by`). `mine=true` сужает до\nсвоих и администратора.\n\nСекрета в списке нет — в базе лежит только хеш, и восстановить значение неоткуда.",
         "operationId": "list_tokens",
         "security": [
           {
@@ -808,6 +1036,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "mine",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only own tokens: those that speak for the caller or were issued by the caller. Changes nothing for a non-administrator, who sees only own tokens anyway",
+              "default": false,
+              "title": "Mine"
+            },
+            "description": "Only own tokens: those that speak for the caller or were issued by the caller. Changes nothing for a non-administrator, who sees only own tokens anyway"
+          },
           {
             "name": "limit",
             "in": "query",
@@ -940,7 +1180,7 @@
           "tokens"
         ],
         "summary": "Issue a token",
-        "description": "Единственный ответ, содержащий секрет токена: второго способа узнать его нет.\n\nТребует набора `main`. Без `participant` выпускается общий агентский токен: запрос с\nним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.\n\nЕдинственное исключение — повтор с тем же `Idempotency-Key`: он отвечает **тем же**\nсекретом, потому что ответ первого выпуска сохранён целиком. Иначе повтор запроса,\nоборвавшегося по сети, оставлял бы действующий токен, которого никто не видел.\nСутки спустя ключ забыт вместе с ответом, и секрета не остаётся нигде.",
+        "description": "Единственный ответ, содержащий секрет токена: второго способа узнать его нет.\n\nТребует набора `main` и учётной записи у выпускающего: выпускает человек, а не агент\n(`403 permission_denied`, `details.reason: account_required`). Ключ от имени другого\nчеловека выпускает только администратор (`details.reason: foreign_human`); себе,\nагенту-участнику и общий — любой вошедший. Выпущенный токен — свой у выпустившего: он\nвидит его в списке и отзывает. Без `participant` выпускается общий агентский токен:\nзапрос с ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.\n\nЕдинственное исключение — повтор с тем же `Idempotency-Key`: он отвечает **тем же**\nсекретом, потому что ответ первого выпуска сохранён целиком. Иначе повтор запроса,\nоборвавшегося по сети, оставлял бы действующий токен, которого никто не видел.\nСутки спустя ключ забыт вместе с ответом, и секрета не остаётся нигде.",
         "operationId": "issue_token",
         "security": [
           {
@@ -1081,7 +1321,7 @@
           "tokens"
         ],
         "summary": "Revoke a token",
-        "description": "Отзыв идемпотентен: повторный запрос отвечает так же и ничего не меняет.\n\nТребует набора `main`. Запись токена остаётся в базе с проставленным `revoked_at` —\nпо ней видно, чем ходили раньше. Наружу это выглядит удалением, поэтому `DELETE`\nи `204`.",
+        "description": "Отзыв идемпотентен: повторный запрос отвечает так же и ничего не меняет.\n\nТребует набора `main`. Свой токен отзывает любой, чужой — только администратор\n(`403 permission_denied`, `details.reason: not_own_token`). Запись токена остаётся в\nбазе с проставленным `revoked_at` — по ней видно, чем ходили раньше. Наружу это\nвыглядит удалением, поэтому `DELETE` и `204`.",
         "operationId": "revoke_token",
         "security": [
           {
@@ -1126,6 +1366,803 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "List accounts",
+        "description": "Все учётные записи установки, отключённые тоже. Только администратору.",
+        "operationId": "list_accounts",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_AccountRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Create an account",
+        "description": "Заводит учётную запись человеку — новому участнику или существующему без неё.\n\nТолько администратору, с набором `main`. Без `password` трекер генерирует пароль сам\nи возвращает его в `password` — единственный раз; писем трекер не шлёт, и пароль\nчеловеку передаёт администратор. Занятая почта — `409 account_email_taken`; участник-\nагент — `422 account_requires_human`; у человека уже есть учётная запись — `409\nparticipant_has_account`; короткий пароль — `422 weak_password`.\n\nПовтор с тем же `Idempotency-Key` отвечает первой учётной записью — с тем же\nсгенерированным паролем, как повтор выпуска токена отвечает тем же секретом.",
+        "operationId": "create_account",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AccountWithPasswordRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Read an account",
+        "description": "Карточка учётной записи. Только администратору; свою человек видит в `bootstrap`.",
+        "operationId": "read_account",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the account",
+              "title": "Account Id"
+            },
+            "description": "Identifier of the account"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AccountRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Update an account",
+        "description": "Меняет почту, флаг администратора и отключение. Только администратору.\n\nОтключение отзывает все токены участника учётной записи; включение их не\nвозвращает. Последнего действующего администратора нельзя ни отключить, ни лишить\nфлага — `409 last_admin`.",
+        "operationId": "update_account",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the account",
+              "title": "Account Id"
+            },
+            "description": "Identifier of the account"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AccountRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/password-reset": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Reset the password of an account",
+        "description": "Задаёт новый пароль — вписанный или сгенерированный — и гасит сеансы учётной записи.\n\nТолько администратору; прежний пароль не спрашивается. Сгенерированный приходит в\n`password` один раз.",
+        "operationId": "reset_password",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the account",
+              "title": "Account Id"
+            },
+            "description": "Identifier of the account"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordReset"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AccountWithPasswordRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/password": {
+      "put": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Change the own password",
+        "description": "Меняет пароль своей учётной записи — той, за чьим участником стоит токен.\n\nПрежний пароль обязателен, если он задан: неверный — `422 current_password_mismatch`.\nЧужая учётная запись — `403 permission_denied` с `details.reason: not_own_account`:\nчужой пароль сбрасывает администратор. Остальные сеансы учётной записи гаснут, токен\nэтого запроса остаётся живым.",
+        "operationId": "change_password",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the account",
+              "title": "Account Id"
+            },
+            "description": "Identifier of the account"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AccountRead_"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token is missing, unknown or revoked",
@@ -4766,15 +5803,15 @@
         "tags": [
           "session"
         ],
-        "summary": "Log in with the owner password",
-        "description": "Проверяет пароль владельца и ставит куку сеанса; с ней `/config.json` отдаёт ключ.\n\nКука `casefile_session` — `HttpOnly`, `SameSite=Strict`, `Path=/`, со сроком сеанса, и\n`Secure`, если запрос пришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).\n\nНеверный пароль — `401 unauthorized` с `details.reason: wrong_password`. Неудачных\nпопыток за окно с этого адреса или со всей установки столько, сколько разрешено, —\n`429 password_attempts_exceeded` с `Retry-After` и `details.scope`, и пароль тогда не\nпроверяется вовсе. Адрес клиента — собеседник TCP, а за nginx установки — его\n`X-Real-IP`; прочим заголовкам с адресом API не верит. Пароля у установки нет — `409\npassword_login_off`.\n\nОтвечает `200`, а не `201`: сеанс не адресуемый ресурс, и повторить вход ключом\nидемпотентности нельзя — такие ключи живут в паре с токеном, а его здесь нет.",
+        "summary": "Sign in with email and password",
+        "description": "Проверяет почту и пароль, выпускает токен сеанса и ставит его секрет в куку.\n\nТокен — набора `main`, участника этой учётной записи, со сроком сеанса; им вкладка\nходит в REST, и записи подписаны именем этого человека. Кука `casefile_session` —\n`HttpOnly`, `SameSite=Strict`, `Path=/`, со сроком сеанса, и `Secure`, если запрос\nпришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).\n\nНеверная почта или пароль — `401 unauthorized` с `details.reason: wrong_credentials`,\nодинаково для незаведённой почты; отключённая учётная запись — `account_disabled`,\nтолько после верного пароля. Неудачных попыток за окно с этого адреса, на эту почту\nили со всей установки столько, сколько разрешено, — `429 password_attempts_exceeded`\nс `Retry-After` и `details.scope`, и пароль тогда не проверяется вовсе. Адрес клиента —\nсобеседник TCP, а за nginx установки — его `X-Real-IP`; прочим заголовкам с адресом\nAPI не верит.\n\nОтвечает `200`, а не `201`: сеанс не адресуемый ресурс, и повторить вход ключом\nидемпотентности нельзя — такие ключи живут в паре с токеном, а его здесь нет.",
         "operationId": "open_session",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordLogin"
+                "$ref": "#/components/schemas/SessionLogin"
               }
             }
           }
@@ -4791,17 +5828,7 @@
             }
           },
           "401": {
-            "description": "Wrong password or no live session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The installation has no owner password",
+            "description": "Wrong email or password, or no live session",
             "content": {
               "application/json": {
                 "schema": {
@@ -4846,8 +5873,8 @@
         "tags": [
           "session"
         ],
-        "summary": "Check the browser session",
-        "description": "Жив ли сеанс из куки: `200` со сроком или `401 unauthorized`.\n\nПричина отказа — в `details.reason`: `missing_session`, `unknown_session` (в том\nчисле после выхода и перезапуска API), `session_expired`. Этим маршрутом nginx\nинтерфейса решает, отдать ли `/config.json`.",
+        "summary": "Read the browser session",
+        "description": "Живой сеанс из куки — с токеном вкладки — или `401 unauthorized`.\n\nТак вкладка после перезагрузки получает свой токен заново: секрет в куке `HttpOnly`,\nскрипту страницы он не виден. Причина отказа — в `details.reason`: `missing_session`,\n`unknown_session` (в том числе после выхода, смены пароля и отключения учётной\nзаписи), `session_expired`.",
         "operationId": "read_session",
         "parameters": [
           {
@@ -4881,17 +5908,7 @@
             }
           },
           "401": {
-            "description": "Wrong password or no live session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The installation has no owner password",
+            "description": "Wrong email or password, or no live session",
             "content": {
               "application/json": {
                 "schema": {
@@ -4936,8 +5953,8 @@
         "tags": [
           "session"
         ],
-        "summary": "Log out",
-        "description": "Гасит сеанс на сервере и стирает куку. Идемпотентен: без сеанса отвечает так же.\n\nКлюч, уже отданный вкладке, выход не отзывает — он отнимает возможность получить\nключ заново (`docs/CONCEPT.md`, 5.4).",
+        "summary": "Sign out",
+        "description": "Отзывает токен сеанса и стирает куку. Идемпотентен: без сеанса отвечает так же.\n\nОтзывается сам токен: вкладка, державшая его, теряет доступ на следующем же запросе,\nа не на перезагрузке (`docs/CONCEPT.md`, 5.4).",
         "operationId": "close_session",
         "parameters": [
           {
@@ -4964,17 +5981,7 @@
             "description": "Successful Response"
           },
           "401": {
-            "description": "Wrong password or no live session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The installation has no owner password",
+            "description": "Wrong email or password, or no live session",
             "content": {
               "application/json": {
                 "schema": {
@@ -5019,6 +6026,258 @@
   },
   "components": {
     "schemas": {
+      "AccountCreate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "description": "Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses",
+            "examples": [
+              "alice@example.com"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{1,63}$",
+            "title": "Name",
+            "description": "Participant name: an existing human without an account, or a new one. Latin snake_case, stored lowercase; it signs every entry the person makes",
+            "examples": [
+              "alice"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Description",
+            "description": "Description of a new participant; ignored for an existing one",
+            "default": "",
+            "examples": [
+              "Разработчик интерфейса"
+            ]
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin",
+            "description": "Make the account an administrator",
+            "default": false
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "description": "New password, 12 to 1024 characters. Omit it and the tracker generates one and returns it once in `password`"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "name"
+        ],
+        "title": "AccountCreate",
+        "description": "Заведение учётной записи администратором.\n\nУчастник с именем `name` уже есть — учётная запись достаётся ему, если он человек и\nсвоей у него ещё нет. Нет — заводится новый участник-человек."
+      },
+      "AccountRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses",
+            "examples": [
+              "alice@example.com"
+            ]
+          },
+          "participant": {
+            "type": "string",
+            "title": "Participant",
+            "description": "Name of the human participant this account signs in as: the name that signs every entry the person makes",
+            "examples": [
+              "alice"
+            ]
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin",
+            "description": "Administrator flag: opens managing accounts and nothing else. It gives no rights on tasks: everyone signed in sees everything"
+          },
+          "has_password": {
+            "type": "boolean",
+            "title": "Has Password",
+            "description": "Whether a password is set. False on the account the installation creates for itself (`owner@localhost`): on the own machine its key arrives without a sign-in"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At",
+            "description": "When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "participant",
+          "is_admin",
+          "has_password",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AccountRead",
+        "description": "Учётная запись в ответе. Хеша пароля здесь нет — есть только признак, задан ли он."
+      },
+      "AccountUpdate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "description": "Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses",
+            "examples": [
+              "alice@example.com"
+            ]
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin",
+            "description": "Grant or take the administrator flag. The last active administrator cannot lose it: `409 last_admin`"
+          },
+          "disabled": {
+            "type": "boolean",
+            "title": "Disabled",
+            "description": "`true` disables the account: it cannot sign in and every token of its participant is revoked. `false` enables it again; revoked tokens stay revoked"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AccountUpdate",
+        "description": "Частичное изменение учётной записи: применяется только переданное.\n\n`null` ни у одного поля смысла не имеет, и схема его не пропустит."
+      },
+      "AccountWithPasswordRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses",
+            "examples": [
+              "alice@example.com"
+            ]
+          },
+          "participant": {
+            "type": "string",
+            "title": "Participant",
+            "description": "Name of the human participant this account signs in as: the name that signs every entry the person makes",
+            "examples": [
+              "alice"
+            ]
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin",
+            "description": "Administrator flag: opens managing accounts and nothing else. It gives no rights on tasks: everyone signed in sees everything"
+          },
+          "has_password": {
+            "type": "boolean",
+            "title": "Has Password",
+            "description": "Whether a password is set. False on the account the installation creates for itself (`owner@localhost`): on the own machine its key arrives without a sign-in"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At",
+            "description": "When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "description": "The password the tracker generated, shown once and stored nowhere in plain text. Null when the administrator typed the password in the request",
+            "examples": [
+              "Zb2yE1hQy0nK4c9oVw3uTg7a"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "participant",
+          "is_admin",
+          "has_password",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AccountWithPasswordRead",
+        "description": "Ответ на заведение и на сброс пароля: единственное место, где виден пароль."
+      },
       "AnswerEntryCreate": {
         "properties": {
           "body": {
@@ -5126,6 +6385,22 @@
             "format": "date-time",
             "title": "Created At"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "answer",
@@ -5201,6 +6476,142 @@
         "title": "AnswerPayload",
         "description": "Ответ на вопрос той же задачи."
       },
+      "ArchiveFormat": {
+        "type": "string",
+        "enum": [
+          "casefile.installation-archive"
+        ],
+        "title": "ArchiveFormat",
+        "description": "Что за документ перед нами. Значение одно: других архивов у трекера нет."
+      },
+      "ArchiveImportRead": {
+        "properties": {
+          "schema_revision": {
+            "type": "string",
+            "title": "Schema Revision",
+            "description": "Revision the archive was taken at",
+            "examples": [
+              "c4a9d31f7e58"
+            ]
+          },
+          "head_revision": {
+            "type": "string",
+            "title": "Head Revision",
+            "description": "Revision this installation brought the data up to",
+            "examples": [
+              "7e3b52a9c1d4"
+            ]
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/ImportedTableRead"
+            },
+            "type": "array",
+            "title": "Tables",
+            "description": "Rows per table in this installation after the import"
+          },
+          "replaced": {
+            "$ref": "#/components/schemas/ReplacedRowsRead",
+            "description": "Rows this installation had before the import and has lost to the archive. Its own machine keys survive (`machine_keys`)"
+          },
+          "machine_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Machine Keys",
+            "description": "Names of this installation's own keys that survived the import: the board's key and the key of this machine's agent, now attached to the archive's participants of the same name",
+            "examples": [
+              [
+                "local-agent",
+                "local-ui"
+              ]
+            ]
+          },
+          "revoked_source_keys": {
+            "type": "integer",
+            "title": "Revoked Source Keys",
+            "description": "Keys of the same names that came in the archive and were revoked here: their secrets live on the machine the archive came from",
+            "examples": [
+              2
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema_revision",
+          "head_revision",
+          "tables",
+          "replaced",
+          "machine_keys",
+          "revoked_source_keys"
+        ],
+        "title": "ArchiveImportRead",
+        "description": "Итог приёма архива."
+      },
+      "ArchiveTableRead": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Table name at the archive's revision",
+            "examples": [
+              "tasks"
+            ]
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns",
+            "description": "Column names; every row lists its values in this order",
+            "examples": [
+              [
+                "id",
+                "key",
+                "title"
+              ]
+            ]
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Rows",
+            "description": "Rows of the table. Each value is the PostgreSQL text form of the column (what `column::text` gives; time in UTC), and null is SQL NULL. The receiving Casefile hands the text back to PostgreSQL as is, so a value never passes through a JSON type",
+            "examples": [
+              [
+                [
+                  "0b9a…",
+                  "TRK-1",
+                  "First task"
+                ]
+              ]
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "columns",
+          "rows"
+        ],
+        "title": "ArchiveTableRead",
+        "description": "Строки одной таблицы установки: значения в порядке `columns`, каждое — текстом."
+      },
       "AssigneeChangedEntryRead": {
         "properties": {
           "id": {
@@ -5268,6 +6679,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",
@@ -5423,6 +6850,17 @@
             ],
             "description": "Participant behind the token; null for a shared agent token, whose author is a temporary agent and has no registry entry"
           },
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Account of that participant: its email and the administrator flag, which opens managing accounts. Null for agents and for people who have no account"
+          },
           "token": {
             "$ref": "#/components/schemas/CurrentTokenRead",
             "description": "The token this request was made with: its `id` and scope. Present for every token, a shared agent one included, where `participant` is null"
@@ -5569,6 +7007,25 @@
         ],
         "title": "ClosingSummaryPayload",
         "description": "Закрывающая сводка: те же четыре части и обязательный `unmeasured`.\n\nТретья модель одной сводки, и каждая отвечает своей роли: `SummaryPartsPayload` —\nчто подшивают посреди работы, `SummaryPayload` — что читают, эта — чем закрывают.\nОбщей быть они не могут: у чтения часть необязательна (дела, закрытые до её\nпоявления), у создания её нет вовсе, у закрытия она обязательна. Схема, обещающая\nклиенту необязательность там, где домен требует, отправила бы его узнавать правила\nиз `422` вместо контракта, — а расхождение границ двух входов трекер уже проходил\n(TRK-76)."
+      },
+      "CollectionResponse_AccountRead_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AccountRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CollectionResponse[AccountRead]"
       },
       "CollectionResponse_EntryRead_": {
         "properties": {
@@ -5727,6 +7184,42 @@
         "title": "CurrentTokenRead",
         "description": "Токен, которым сделан запрос: чем узнать его в списке и что он открывает.\n\nНе `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,\nа список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там."
       },
+      "DataResponse_AccountRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AccountRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[AccountRead]"
+      },
+      "DataResponse_AccountWithPasswordRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AccountWithPasswordRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[AccountWithPasswordRead]"
+      },
+      "DataResponse_ArchiveImportRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ArchiveImportRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[ArchiveImportRead]"
+      },
       "DataResponse_BootstrapRead_": {
         "properties": {
           "data": {
@@ -5750,6 +7243,18 @@
           "data"
         ],
         "title": "DataResponse[EntryRead]"
+      },
+      "DataResponse_InstallationArchive_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InstallationArchive"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[InstallationArchive]"
       },
       "DataResponse_InstallationRead_": {
         "properties": {
@@ -5940,6 +7445,22 @@
             "title": "Title",
             "examples": [
               "Status changed: backlog -> open"
+            ]
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
             ]
           },
           "facts": {
@@ -6158,6 +7679,22 @@
             "format": "date-time",
             "title": "Created At"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "field_changed",
@@ -6282,6 +7819,104 @@
         "title": "HealthResponse",
         "description": "Состояние сервиса. `database` подтверждается реальным запросом, а не наличием конфига."
       },
+      "ImportedTableRead": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "examples": [
+              "entries"
+            ]
+          },
+          "rows": {
+            "type": "integer",
+            "title": "Rows",
+            "examples": [
+              3398
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "rows"
+        ],
+        "title": "ImportedTableRead",
+        "description": "Сколько строк таблицы стоит в установке после приёма."
+      },
+      "InstallationArchive": {
+        "properties": {
+          "format": {
+            "$ref": "#/components/schemas/ArchiveFormat",
+            "description": "What the document is"
+          },
+          "format_version": {
+            "type": "integer",
+            "title": "Format Version",
+            "description": "Layout of this document. It changes only when the layout does; the database schema is `schema_revision`",
+            "examples": [
+              1
+            ]
+          },
+          "schema_revision": {
+            "type": "string",
+            "title": "Schema Revision",
+            "description": "Database migration revision the rows were taken at. A Casefile that knows the revision brings the rows up to its own schema; one that does not (the archive is newer) refuses with `archive_revision_unknown`",
+            "examples": [
+              "7e3b52a9c1d4"
+            ]
+          },
+          "app_version": {
+            "type": "string",
+            "title": "App Version",
+            "description": "Casefile version that took it",
+            "examples": [
+              "0.1.0"
+            ]
+          },
+          "exported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Exported At",
+            "description": "When the archive was taken"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/ArchiveTableRead"
+            },
+            "type": "array",
+            "title": "Tables",
+            "description": "Every table of the installation except the migration version and idempotency keys; browser session tokens are left out of `tokens`"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "format",
+          "format_version",
+          "schema_revision",
+          "app_version",
+          "exported_at",
+          "tables"
+        ],
+        "title": "InstallationArchive",
+        "description": "Архив установки: все её данные на одной ревизии схемы (`docs/moving.md`)."
+      },
+      "InstallationArchiveUpload": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InstallationArchive",
+            "description": "The archive. The body is the response of `GET /api/v1/installation/archive` verbatim, so a saved download is posted back without editing"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "InstallationArchiveUpload",
+        "description": "Тело приёма — ответ выгрузки как есть, вместе с оболочкой `data`."
+      },
       "InstallationRead": {
         "properties": {
           "mcp_url": {
@@ -6394,6 +8029,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",
@@ -6716,23 +8367,58 @@
         "title": "ParticipantUpdate",
         "description": "Частичное обновление: применяется только переданное.\n\nМеняется одно описание. Имя стоит подписью в уже подшитых записях дела, а род\nобъясняет читателю, кто говорит, — переписывать их задним числом значит переписывать\nисторию, поэтому этих полей здесь нет вовсе, и лишнее поле схема отвергает.\n\nУ описания нет осмысленного `null`, поэтому поле объявлено не-nullable: передать\n`null` схема не даст. Молча отбросить его было бы хуже отказа — клиент получил бы\n`200` и уверенность, что поле изменено."
       },
-      "PasswordLogin": {
+      "PasswordChange": {
         "properties": {
-          "password": {
+          "current_password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Password",
+            "description": "The password in force now. Required when the account has one; an account without a password (`has_password: false`) sets its first one without it"
+          },
+          "new_password": {
             "type": "string",
             "maxLength": 1024,
             "minLength": 1,
-            "title": "Password",
-            "description": "The owner password of this installation, as typed. It is checked against `TRACKER_PASSWORD_HASH` and never stored or logged"
+            "title": "New Password",
+            "description": "New password, 12 to 1024 characters"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "password"
+          "new_password"
         ],
-        "title": "PasswordLogin",
-        "description": "Вход по паролю установки. Имени нет: пароль у установки один — владельца."
+        "title": "PasswordChange",
+        "description": "Смена своего пароля: прежний обязателен, если он задан."
+      },
+      "PasswordReset": {
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "description": "New password, 12 to 1024 characters. Omit it and the tracker generates one and returns it once in `password`"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PasswordReset",
+        "description": "Сброс пароля администратором: прежний не спрашивается."
       },
       "PlainEntryCreate": {
         "properties": {
@@ -6853,6 +8539,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",
@@ -7002,6 +8704,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",
@@ -7348,6 +9066,22 @@
             "format": "date-time",
             "title": "Created At"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "remark",
@@ -7382,6 +9116,39 @@
         ],
         "title": "RemarkOutcome",
         "description": "Чем разобрано замечание (`CONCEPT.md`, 3.4).\n\nСписок закрыт и покрывает все четыре судьбы претензии: поправили сразу, приняли в\nработу отдельной задачей, не поняли и ждём уточнения, менять не будем. Свободного\n«прочее» здесь нет намеренно — оно снова сделало бы исход текстом."
+      },
+      "ReplacedRowsRead": {
+        "properties": {
+          "participants": {
+            "type": "integer",
+            "title": "Participants",
+            "examples": [
+              2
+            ]
+          },
+          "tokens": {
+            "type": "integer",
+            "title": "Tokens",
+            "examples": [
+              2
+            ]
+          },
+          "accounts": {
+            "type": "integer",
+            "title": "Accounts",
+            "examples": [
+              1
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "participants",
+          "tokens",
+          "accounts"
+        ],
+        "title": "ReplacedRowsRead",
+        "description": "Сколько строк приёмника заменено архивом: его люди и доступы до приёма."
       },
       "ResolutionEntryCreate": {
         "properties": {
@@ -7489,6 +9256,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",
@@ -7682,6 +9465,22 @@
             "format": "date-time",
             "title": "Created At"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "section_changed",
@@ -7817,21 +9616,64 @@
         "title": "SectionChangedPayload",
         "description": "Правка названия, описания или раздела в `backlog`: «было» и «стало» целиком.\n\nУ точечной правки проверки «целиком» — это тексты самой проверки, а не всего\nсписка, и её номер стоит в `check_no`."
       },
+      "SessionLogin": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 1,
+            "title": "Email",
+            "description": "Email of the account; matching ignores case",
+            "examples": [
+              "alice@example.com"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "description": "Password of the account, as typed. It is never stored or logged"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SessionLogin",
+        "description": "Вход учётной записью: почта и пароль."
+      },
       "SessionRead": {
         "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Secret of the session token: a `main` token of the account's participant, sent as `Authorization: Bearer` on every REST request. The same secret rides in the `HttpOnly` cookie; this is how the tab gets it again after a reload",
+            "examples": [
+              "trk_0oUCtWtA6d9v0j0N1cMBAxk2wKAKopWzvbf_wQ8sDLc"
+            ]
+          },
           "expires_at": {
             "type": "string",
             "format": "date-time",
             "title": "Expires At",
-            "description": "When the session ends, counted from the login (`TRACKER_SESSION_HOURS`). It also ends earlier on logout and when the API process restarts"
+            "description": "When the session and its token end, counted from the sign-in (`TRACKER_SESSION_HOURS`). They end earlier on sign-out, on a password change or reset, and when the account is disabled"
+          },
+          "account": {
+            "$ref": "#/components/schemas/AccountRead",
+            "description": "The account signed in"
           }
         },
         "type": "object",
         "required": [
-          "expires_at"
+          "token",
+          "expires_at",
+          "account"
         ],
         "title": "SessionRead",
-        "description": "Живой сеанс браузера. Секрета здесь нет: он едет только в куке `HttpOnly`."
+        "description": "Живой сеанс: токен вкладки, его срок и учётная запись за ним."
       },
       "StatusChangedEntryRead": {
         "properties": {
@@ -7900,6 +9742,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",
@@ -8122,6 +9980,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",
@@ -9373,6 +11247,19 @@
             "title": "Revoked At",
             "description": "Set when the token is revoked; the record stays for the audit trail"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "Set only on a browser session token, issued by `POST /api/v1/session`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked"
+          },
           "secret": {
             "type": "string",
             "title": "Secret",
@@ -9462,6 +11349,19 @@
             ],
             "title": "Revoked At",
             "description": "Set when the token is revoked; the record stays for the audit trail"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "Set only on a browser session token, issued by `POST /api/v1/session`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked"
           }
         },
         "type": "object",
@@ -9590,6 +11490,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
           },
           "type": {
             "type": "string",

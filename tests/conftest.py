@@ -45,6 +45,7 @@ from app.services import queues as queues_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
+from app.services.setup import ensure_admin_account
 from mcp import ClientSession
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -282,18 +283,23 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def owner(db_session: AsyncSession) -> Participant:
-    """Владелец-человек: от его имени идут запросы в тестах API.
+    """Владелец-человек с учётной записью администратора: от его имени идут запросы API.
 
     Заводится от имени трекера — ровно как это делает первичная инициализация: другого
-    автора на пустой установке не существует.
+    автора на пустой установке не существует. Учётная запись — `owner@localhost`, без
+    пароля, как у установки, заведшей себя сама.
     """
-    return await participants_service.register_participant(
+    participant = await participants_service.register_participant(
         db_session,
         actor=TRACKER_ACTOR,
         kind=ParticipantKind.HUMAN,
         name="owner",
         description="Владелец установки",
     )
+    # И учётная запись администратора, как у владельца настоящей установки
+    # (`app/services/setup.py`): без неё управление людьми отвечало бы `admin_required`.
+    await ensure_admin_account(db_session, participant)
+    return participant
 
 
 @pytest.fixture

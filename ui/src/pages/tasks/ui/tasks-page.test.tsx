@@ -39,12 +39,9 @@ function open(path: string) {
   return renderApp(path);
 }
 
-/**
- * Раскрывает форму отбора: свёрнута по умолчанию, поэтому её поля до этого клика
- * не существуют вовсе — ровно так же, как их не видит человек.
- */
-async function expandFilters(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: say.tasks('filters.expand') }));
+/** Включает режим запроса: поле языка бэкенда появляется только в нём. */
+async function openQuery(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: say.tasks('filters.query.toggle') }));
 }
 
 /** Последний запрос списка. Его отсутствие — ошибка теста, а не проверяемое состояние. */
@@ -84,7 +81,7 @@ function refusedAt(word: string, code: string, details: Record<string, unknown> 
 }
 
 describe('список задач', () => {
-  it('свёрнутый отбор показывает условия чипами, и чип снимается на месте', async () => {
+  it('строка отбора показывает условия чипами, и чип снимается на месте', async () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
@@ -121,18 +118,21 @@ describe('список задач', () => {
     expect(within(conditions).queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('заполненный запрос оставляет один чип: остальное он всё равно отменяет', async () => {
+  it('заполненный запрос открывает режим запроса, и отменённых чипов в нём нет', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&blocked=true&query=status%3A+open');
     await screen.findByText('DEMO-3');
 
-    const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
-    const items = within(conditions).getAllByRole('listitem');
-    expect(items).toHaveLength(1);
-    expect(items[0]).toHaveTextContent(
-      say.tasks('filters.condition.query', { query: 'status: open' }),
+    // Запрос на экране полем, а простой отбор, который он отменяет, чипами не значится:
+    // иначе человек читал бы условия, из которых на выдачу не влияет ни одно.
+    expect(screen.getByLabelText(say.tasks('filters.query.label'))).toHaveValue('status: open');
+    expect(screen.getByRole('button', { name: say.tasks('filters.query.toggle') })).toHaveAttribute(
+      'aria-pressed',
+      'true',
     );
+    expect(screen.queryByRole('list', { name: say.tasks('filters.conditions') })).toBeNull();
+    expect(screen.getByText(say.tasks('filters.query.note'))).toBeInTheDocument();
   });
 
   it('смена отбора объявляется вслух, без перевода фокуса', async () => {
@@ -219,8 +219,7 @@ describe('список задач', () => {
     expect(row).toHaveTextContent(`${say.ui('task.priorityLabel')} critical`);
   });
 
-  it('ожидание видно в строке своим знаком, а отбор по нему собирает очередь человека', async () => {
-    const user = userEvent.setup();
+  it('ожидание видно в строке своим знаком', async () => {
     server.use(
       listing(() =>
         taskPage([
@@ -242,18 +241,8 @@ describe('список задач', () => {
     const working = screen.getByRole('row', { name: /DEMO-6/ });
     expect(shapeOf(waiting)).not.toBe(shapeOf(working));
     expect(shapeOf(waiting)).not.toBe('');
-
-    // «Что ждёт меня» — одно действие: флажок уходит в адрес, в запрос и обратно чипом.
-    await expandFilters(user);
-    await user.click(screen.getByRole('checkbox', { name: 'waiting' }));
-
-    await waitFor(() => {
-      expect(lastRequest().searchParams.getAll('status')).toEqual(['waiting']);
-    });
-    expect(address.current).toContain('status=waiting');
-    expect(screen.getByRole('list', { name: say.tasks('filters.conditions') })).toHaveTextContent(
-      say.tasks('filters.condition.status', { values: 'waiting' }),
-    );
+    // Отбор «что ждёт меня» — один переключатель панели: его нажатие проверяет
+    // `filter-menu.test.tsx`, а путь до адреса и запроса — `e2e/filters.spec.ts`.
   });
 
   it('в задачу ведёт вся строка: клик по ячейке без ссылок уходит в её задачу', async () => {
@@ -392,19 +381,6 @@ describe('список задач', () => {
     expect(request.searchParams.get('query')).toMatch(hidingArchive());
   });
 
-  it('восстанавливает форму из адреса', async () => {
-    const user = userEvent.setup();
-    server.use(listing(() => taskPage([task('DEMO-3')])));
-
-    open('/tasks?queue=DEMO&status=open&assignee=owner');
-    await screen.findByText('DEMO-3');
-    await expandFilters(user);
-
-    expect(screen.getByRole('checkbox', { name: 'open' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'in_progress' })).not.toBeChecked();
-    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toHaveValue('owner');
-  });
-
   it('пока грузит, говорит об этом словами', async () => {
     server.use(
       http.get(`${API}/api/v1/tasks`, async ({ request }) => {
@@ -456,14 +432,14 @@ describe('список задач', () => {
   });
 });
 
-describe('свёрнутый отбор', () => {
+describe('строка отбора', () => {
   it('называет все включённые условия и ни одно не прячет за счётчиком', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&text=токен');
     await screen.findByText('DEMO-3');
 
-    // Форма закрыта: на первом экране списка стоят задачи, а не поля отбора.
+    // Панель закрыта: на первом экране списка стоят задачи, а не поля отбора.
     expect(screen.queryByLabelText(say.tasks('filters.assignee'))).toBeNull();
 
     const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
@@ -493,22 +469,39 @@ describe('свёрнутый отбор', () => {
     expect(screen.queryByRole('button', { name: say.tasks('filters.reset') })).toBeNull();
   });
 
-  it('выбор человека помнится между визитами', async () => {
+  it('выход из режима запроса снимает запрос и возвращает простой отбор из адреса', async () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    const first = open('/tasks');
+    open('/tasks?priority=high&query=status%3A+open');
     await screen.findByText('DEMO-3');
-    await expandFilters(user);
-    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toBeInTheDocument();
-    first.unmount();
+
+    await openQuery(user);
+
+    await waitFor(() => expect(address.current).not.toContain('query='));
+    expect(address.current).toContain('priority=high');
+    expect(screen.queryByLabelText(say.tasks('filters.query.label'))).toBeNull();
+    expect(screen.getByRole('list', { name: say.tasks('filters.conditions') })).toHaveTextContent(
+      say.tasks('filters.condition.priority', { values: 'high' }),
+    );
+  });
+
+  it('поиск по тексту стоит в строке и применяется по Enter', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks');
     await screen.findByText('DEMO-3');
-    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toBeInTheDocument();
+
+    await user.type(screen.getByRole('searchbox', { name: say.tasks('filters.text') }), 'токен');
+    expect(screen.getByText(say.tasks('filters.pending'))).toBeInTheDocument();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(lastRequest().searchParams.get('text')).toBe('токен'));
+    expect(screen.queryByText(say.tasks('filters.pending'))).toBeNull();
   });
 
-  it('отказ разбора раскрывает форму сам: опечатка сделана в поле, которого не видно', async () => {
+  it('ссылка с негодным запросом открывает поле запроса с объяснением', async () => {
     server.use(refusedAt('opne', 'invalid_search_query'));
 
     open('/tasks?query=status: opne');
@@ -533,7 +526,7 @@ describe('поле запроса на языке бэкенда', () => {
 
     open('/tasks');
     await screen.findByText('DEMO-3');
-    await expandFilters(user);
+    await openQuery(user);
 
     await user.type(screen.getByLabelText(say.tasks('filters.query.label')), 'status: opne');
     await user.click(screen.getByRole('button', { name: say.tasks('filters.apply') }));
@@ -556,7 +549,7 @@ describe('поле запроса на языке бэкенда', () => {
 
     open('/tasks');
     await screen.findByText('DEMO-3');
-    await expandFilters(user);
+    await openQuery(user);
 
     // Применять нечего — кнопка выключена, и это видно до всякого ввода.
     expect(screen.getByRole('button', { name: say.tasks('filters.apply') })).toBeDisabled();
@@ -580,7 +573,7 @@ describe('поле запроса на языке бэкенда', () => {
 
     open('/tasks?queue=DEMO&status=open');
     await screen.findByText('DEMO-1');
-    await expandFilters(user);
+    await openQuery(user);
 
     await user.type(screen.getByLabelText(say.tasks('filters.query.label')), 'status: done');
     await user.click(screen.getByRole('button', { name: say.tasks('filters.apply') }));
@@ -798,18 +791,18 @@ describe('порядок и страницы', () => {
     open('/tasks?page=3');
     await screen.findByText('DEMO-101');
 
-    await expandFilters(user);
-    await user.click(screen.getByRole('checkbox', { name: 'open' }));
+    await user.type(screen.getByRole('searchbox', { name: say.tasks('filters.text') }), 'токен');
+    await user.keyboard('{Enter}');
 
     await waitFor(() => {
       expect(lastRequest().searchParams.get('offset')).toBeNull();
     });
-    expect(address.current).toBe('/tasks?status=open');
+    expect(address.current).toBe('/tasks?text=%D1%82%D0%BE%D0%BA%D0%B5%D0%BD');
   });
 });
 
 describe('отбор по замечаниям', () => {
-  it('флажок «есть неразобранные замечания» уходит в адрес и в запрос', async () => {
+  it('признак «есть неразобранные замечания» из адреса уходит в запрос и называется чипом', async () => {
     const asked: URL[] = [];
     server.use(
       http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
@@ -818,19 +811,17 @@ describe('отбор по замечаниям', () => {
         return taskPage([task('DEMO-1')]);
       }),
     );
-    const user = userEvent.setup();
-    open('/tasks');
+    // Нажатие переключателя проверяет `filter-menu.test.tsx`: панель Radix в jsdom
+    // не раскрывается за разумное время (`docs/notes/testing.md`).
+    open('/tasks?remarks=true');
 
     await screen.findByText('DEMO-1');
-    await expandFilters(user);
-    await user.click(screen.getByLabelText(say.tasks('filters.withRemarks')));
-
-    // Отбор живёт в адресе: перезагрузка и присланная ссылка покажут то же самое.
-    await waitFor(() => expect(address.current).toContain('remarks=true'));
     await waitFor(() =>
       expect(asked.at(-1)?.searchParams.get('query')).toMatch(hidingArchive('open_remarks: > 0')),
     );
-    expect(screen.getByLabelText(say.tasks('filters.withRemarks'))).toBeChecked();
+    expect(screen.getByRole('list', { name: say.tasks('filters.conditions') })).toHaveTextContent(
+      say.tasks('filters.condition.remarks'),
+    );
   });
 });
 

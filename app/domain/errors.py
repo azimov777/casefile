@@ -19,6 +19,7 @@
 from app.core.errors import (
     ConflictError,
     NotFoundError,
+    PermissionDeniedError,
     TooManyRequestsError,
     UnauthorizedError,
     ValidationError,
@@ -472,29 +473,97 @@ class IdempotencyKeyReusedError(ConflictError):
     message = "Idempotency key was used for a different request"
 
 
-# --- Вход владельца по паролю ------------------------------------------------------------
+# --- Учётные записи и вход -----------------------------------------------------------
 
 
-class PasswordLoginOffError(ConflictError):
-    """Пароль владельца на установке не задан: входить по паролю не во что.
+class AccountNotFoundError(NotFoundError):
+    """Учётной записи с таким идентификатором или почтой нет."""
 
-    Не `401`: неверного здесь ничего не прислали, у установки просто нет замка
-    (`TRACKER_PASSWORD_HASH` пуст), и ключ интерфейсу она отдаёт без входа. Встретить
-    этот код в работе значит, что nginx интерфейса и API расходятся в режиме —
-    интерфейс считает установку закрытой, а API пароля не знает.
+    code = "account_not_found"
+    message = "Account not found"
+
+
+class AccountEmailTakenError(ConflictError):
+    """Почта уже занята другой учётной записью: адреса уникальны без учёта регистра."""
+
+    code = "account_email_taken"
+    message = "Account email is already taken"
+
+
+class InvalidEmailError(ValidationError):
+    """Почта не похожа на адрес: нет `@`, пустая часть, пробел или слишком длинная."""
+
+    code = "invalid_email"
+    message = "Email is invalid"
+
+
+class WeakPasswordError(ValidationError):
+    """Новый пароль не годится: короче минимума или длиннее потолка.
+
+    `details.reason` называет правило (`too_short`, `too_long`), а `details.min_length` и
+    `details.max_length` — границы. Самого пароля в ответе нет никогда.
     """
 
-    code = "password_login_off"
-    message = "Password login is not set up on this installation"
+    code = "weak_password"
+    message = "Password does not meet the rules"
+
+
+class ParticipantHasAccountError(ConflictError):
+    """У этого участника учётная запись уже есть: у человека она одна."""
+
+    code = "participant_has_account"
+    message = "Participant already has an account"
+
+
+class AccountRequiresHumanError(ValidationError):
+    """Учётную запись заводят только человеку: агенты ходят токенами, входить им некуда."""
+
+    code = "account_requires_human"
+    message = "Only a human participant can have an account"
+
+
+class AdminRequiredError(PermissionDeniedError):
+    """Управление людьми открыто только администратору (`docs/CONCEPT.md`, 5.4).
+
+    Отдельный код, а не общий `permission_denied`: клиенту это другое решение — не
+    перевыпускать токен с другим набором, а спросить администратора. `details.action`
+    называет действие, как у единой точки прав.
+    """
+
+    code = "admin_required"
+    message = "Only an administrator can manage accounts"
+
+
+class LastAdminError(ConflictError):
+    """Действие оставило бы установку без действующего администратора.
+
+    Отключить или лишить флага последнего действующего администратора нельзя: заводить
+    людей и сбрасывать им пароли стало бы некому, кроме команды на сервере.
+    """
+
+    code = "last_admin"
+    message = "The installation must keep at least one active administrator"
+
+
+class CurrentPasswordMismatchError(ValidationError):
+    """Смена своего пароля прислала неверный прежний пароль.
+
+    Не `401`: токен запроса действует, неверно поле тела, и клиент не должен принимать
+    это за конец сеанса.
+    """
+
+    code = "current_password_mismatch"
+    message = "Current password does not match"
 
 
 class PasswordAttemptsExceededError(TooManyRequestsError):
     """Неудачных попыток входа за окно столько, сколько разрешено: пароль не проверяется.
 
-    Окон два: на адрес клиента и общее на установку, с потолком выше (`TRK-98#7`). Какое
-    отказало, говорит `details.scope` — `address` или `installation`; там же `limit`
-    этого окна, `window_seconds` и `retry_after` (через сколько секунд освободится место).
-    То же число секунд несёт заголовок `Retry-After`.
+    Окон три: на адрес клиента, на почту и общий потолок установки, выше обоих
+    (`docs/CONCEPT.md`, 5.4). Какое отказало, говорит `details.scope` — `address`,
+    `account` или `installation`; там же `limit` этого окна, `window_seconds` и
+    `retry_after` (через сколько секунд освободится место). То же число секунд несёт
+    заголовок `Retry-After`.
     """
 
     code = "password_attempts_exceeded"
@@ -502,3 +571,54 @@ class PasswordAttemptsExceededError(TooManyRequestsError):
 
     def response_headers(self) -> dict[str, str]:
         return {"Retry-After": str(self.details["retry_after"])}
+
+
+# --- Перенос установки (TRK-100) ----------------------------------------------------
+
+
+class ArchiveFormatUnsupportedError(ValidationError):
+    """Документ — не архив установки этой раскладки: чужой `format` или `format_version`.
+
+    `details` называет присланные значения и те, что приёмник понимает (`supported`).
+    """
+
+    code = "archive_format_unsupported"
+    message = "This is not an installation archive this Casefile can read"
+
+
+class ArchiveInvalidError(ValidationError):
+    """Архив противоречит сам себе или схеме своей ревизии.
+
+    `details.reason` называет, что не так: `duplicate_table`, `excluded_table`,
+    `bad_columns`, `row_width` — форма документа; `unknown_table`, `missing_table`,
+    `column_mismatch` — таблицы и колонки не те, что у схемы на ревизии архива;
+    `rejected_row` — Postgres не принял значение (`details.error` — его сообщение).
+    Там же `table`, а где уместно — `row`, `expected` и `actual`.
+    """
+
+    code = "archive_invalid"
+    message = "The installation archive is malformed"
+
+
+class ArchiveRevisionUnknownError(ConflictError):
+    """Ревизии схемы архива приёмник не знает: архив снят более новым Casefile.
+
+    Переноса на более старую версию нет — миграции назад не идут (TRK-91#8). Выход —
+    обновить приёмник и повторить приём. `details.schema_revision` — ревизия архива,
+    `details.head` — последняя, которую знает приёмник.
+    """
+
+    code = "archive_revision_unknown"
+    message = "The archive comes from a newer Casefile; update this installation first"
+
+
+class InstallationNotEmptyError(ConflictError):
+    """Приём архива в установку, где уже есть очереди.
+
+    Архив заменяет данные приёмника целиком, а слияния двух трекеров нет: принять его
+    может только пустая установка — свежая, где никто ещё не завёл ни одной очереди.
+    `details.queues` — сколько их на приёмнике.
+    """
+
+    code = "installation_not_empty"
+    message = "Only an installation without queues can take an archive"

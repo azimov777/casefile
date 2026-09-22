@@ -38,6 +38,7 @@ version_conflict`. Проверка двойная: сравнение в Python
 Транзакцию функции не фиксируют: границу держит вход в приложение.
 """
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from typing import Any
@@ -410,10 +411,16 @@ async def close_task(
 
     Очередь изменений занимается первой, до подшивки: под ней задача перечитывается, и
     дальше и номера записей, и факты перехода относятся к одному моменту.
+
+    Всё, что здесь подшито, — одно действие (TRK-118): записи, вердикты, сводка и
+    финальный `status_changed` несут один `action_id`, сгенерированный один раз, до
+    первой подшивки, и переданный явно в каждую — как в `apply_task_changes`, так и в
+    записи выше него.
     """
     ensure_scope(actor, TokenScope.TASK, action="task.close")
     await lock_changes(session, task)
     _ensure_version(task, expected_version)
+    action_id = uuid.uuid4()
 
     filed: list[Entry] = []
     for item in entries:
@@ -426,6 +433,7 @@ async def close_task(
                 title=item.title,
                 body=item.body,
                 refs=item.refs,
+                action_id=action_id,
             )
         )
     for verdict in verdicts:
@@ -437,6 +445,7 @@ async def close_task(
                 check_no=verdict.check_no,
                 outcome=verdict.outcome,
                 evidence=verdict.evidence,
+                action_id=action_id,
             )
         )
     filed.append(
@@ -450,6 +459,7 @@ async def close_task(
             next_step=summary.next_step,
             unmeasured=summary.unmeasured,
             closing=True,
+            action_id=action_id,
         )
     )
 
@@ -461,6 +471,7 @@ async def close_task(
         transition=Transition(to=TaskStatus.DONE, closing=True),
         expected_version=expected_version,
         action="task.close",
+        action_id=action_id,
     )
     # Запись о переходе подшил переход, и наружу он отдаёт её номер, а не саму запись.
     # Дочитывается она здесь, одним запросом по адресу «задача и номер»: ответ закрытия
@@ -480,6 +491,7 @@ async def apply_task_changes(
     transition: Transition | None = None,
     expected_version: int | None = None,
     action: str = "task.update",
+    action_id: uuid.UUID | None = None,
 ) -> TaskMutation:
     """Единая точка изменения задачи. Возвращает список фактических изменений.
 
@@ -493,6 +505,13 @@ async def apply_task_changes(
     прочитанной роутером или инструментом, то есть снимком **до** блокировки. Под
     очередью она перечитывается, и дальше и версия, и статус, и факты перехода
     относятся к одному и тому же моменту, в котором больше никто не пишет.
+
+    `action_id` — признак одного действия (TRK-118): все служебные записи, поданные
+    этим вызовом (хоть семь `section_changed` разом), несут одно значение. `update_task`
+    и `transition_task` вызывают эту функцию без него — тогда она генерирует своё,
+    потому что сама и есть то единственное действие. `close_task` передаёт своё: у
+    финального `status_changed` тот же `action_id`, что у записей, вердиктов и сводки,
+    поданных им до перехода.
     """
     ensure_scope(actor, TokenScope.TASK, action=action)
     await lock_changes(session, task)
@@ -555,6 +574,11 @@ async def apply_task_changes(
     # Номера записей собираются здесь же, а не пересчитываются потом запросом: они
     # известны в момент подшивки, и второй проход по делу ради них был бы запросом за
     # тем, что уже держали в руках.
+    #
+    # `action_id` разрешается один раз, до цикла: сгенерированный внутри цикла достался
+    # бы каждой записи своим значением, и семь правок одним вызовом развалились бы на
+    # семь разных действий — ровно то, чего признак обязан не делать (TRK-118).
+    resolved_action_id = action_id if action_id is not None else uuid.uuid4()
     filed: list[int] = []
     for change in recorded:
         field = TaskField(change.field)
@@ -568,10 +592,16 @@ async def apply_task_changes(
                 from_status=from_status,
                 to_status=to_status,
                 reason=reason,
+                action_id=resolved_action_id,
             )
         elif field is TaskField.ASSIGNEE:
             entry = await case_service.record_assignee_changed(
-                session, task, actor=actor, before=change.before, after=change.after
+                session,
+                task,
+                actor=actor,
+                before=change.before,
+                after=change.after,
+                action_id=resolved_action_id,
             )
         elif field in BACKLOG_ONLY_FIELDS:
             entry = await case_service.record_section_changed(
@@ -582,12 +612,19 @@ async def apply_task_changes(
                 before=change.before,
                 after=change.after,
                 check_no=change.check_no,
+                action_id=resolved_action_id,
             )
         else:
             # Обвязка: сегодня это только `priority`. Ветка без условия намеренно —
             # новое поле карточки получит запись само, а не окажется тихо немым в ленте.
             entry = await case_service.record_field_changed(
-                session, task, actor=actor, field=field, before=change.before, after=change.after
+                session,
+                task,
+                actor=actor,
+                field=field,
+                before=change.before,
+                after=change.after,
+                action_id=resolved_action_id,
             )
         filed.append(entry.no)
     return TaskMutation(task=task, changes=tuple(recorded), entries=tuple(filed))

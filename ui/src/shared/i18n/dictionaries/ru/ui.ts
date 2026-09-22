@@ -2,6 +2,7 @@ import type { components } from '@/shared/api';
 
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
+type LinkKind = components['schemas']['LinkKind'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -47,6 +48,10 @@ export const ui = {
     installation: 'Установка',
     connect: 'Подключить агента',
     access: 'Доступы',
+    // Режим входа по учётным записям (`TRK-113`): люди — администратору, учётная
+    // запись — каждому вошедшему.
+    people: 'Люди',
+    account: 'Моя учётная запись',
     openQuestions_zero: 'Открытых вопросов нет',
     openQuestions_one: '{{count, number}} открытый вопрос',
     openQuestions_few: '{{count, number}} открытых вопроса',
@@ -94,6 +99,19 @@ export const ui = {
   },
 
   /** Представление доступа: строка списка на экране «Доступы» (`entities/token`). */
+  /** Представление учётной записи человека (`entities/account`): карточка в списке людей. */
+  account: {
+    label: 'Учётная запись {{email}}',
+    admin: 'администратор',
+    you: 'вы',
+    disabled: 'отключена',
+    signs: 'подписывается как',
+    createdBy: 'завёл {{author}}',
+    createdByTracker: 'заведена самой установкой',
+    noPassword: 'пароля пока нет',
+    disabledAt: 'вход закрыт',
+  },
+
   token: {
     label: 'Доступ «{{name}}»',
     scopeKind: 'набор',
@@ -158,6 +176,17 @@ export const ui = {
       others_few: 'и ещё {{count, number}} родителя: {{parents, list}}',
       others_many: 'и ещё {{count, number}} родителей: {{parents, list}}',
       others_other: 'и ещё {{count, number}} родителя: {{parents, list}}',
+    },
+    // Заголовок группы связей одного вида (UI-125): подпись рядом с идентификатором
+    // контракта, а не вместо него — сам идентификатор `LinkKindMark` не переводит.
+    links: {
+      kind: {
+        blocked_by: 'Блокируется',
+        blocks: 'Блокирует',
+        parent: 'Родитель',
+        child: 'Дети',
+        relates: 'Связано',
+      } satisfies Record<LinkKind, string>,
     },
     nav: {
       label: 'Навигация по задаче {{key}}',
@@ -283,6 +312,7 @@ export const ui = {
 
   /** Фрагменты подключения агента к MCP (`features/connect-agent`). */
   snippets: {
+    clientNav: 'Клиент',
     clients: {
       any: 'Любой клиент MCP',
       claudeCode: 'Claude Code',

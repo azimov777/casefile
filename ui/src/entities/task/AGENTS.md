@@ -11,12 +11,13 @@
   различает экраны), наборы значений; правило архива складывается с отбором в момент чтения
 - `model/` — архив: закрытые задачи без записей в деле дольше порога — правило представления,
   которое уходит бэкенду строкой языка запросов (UI-97)
-- `ui/` — строка таблицы и заголовки её столбцов, карточка доски, подпись родителя, знаки
+- `ui/` — строка таблицы и заголовки её столбцов, карточка доски, подпись родителя, знаки статуса, приоритета и вида связи
 
 ## Файлы
 
 - `index.ts` — публичный интерфейс среза: `tasksQueryOptions`, `tasksColumnQueryOptions`,
   `tasksTotalQueryOptions`, `fetchTasks`, `taskKeys`, `TASK_STATUSES`, `TASK_PRIORITIES`,
   `TASK_LIST_FIELDS`, `TASK_PAGE_SIZE`, `TASK_COLUMN_PAGE_SIZE`, `TASK_COLUMNS`, `TaskRow`,
-  `ARCHIVE_AFTER_DAYS`, типы `Task`, `TaskFeatures`, `TaskListParams`, `TaskListRequest`,
-  `TaskStatus`, `TaskPriority`
+  `ARCHIVE_AFTER_DAYS`, `StatusMark`, `PriorityMark`, `LinkKindMark`, `LINK_KIND_ORDER`, типы
+  `Task`, `TaskFeatures`, `TaskListParams`, `TaskListRequest`, `TaskStatus`, `TaskPriority`,
+  `LinkKind`, `TaskLink`

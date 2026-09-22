@@ -10,23 +10,33 @@
  * а не разглядывая, каким статусом он приезжает.
  */
 export const errors = {
+  account_email_taken: 'This email is already taken by another account.',
+  account_not_found: 'There is no such account.',
+  account_requires_human: 'Only a person can have an account: agents use tokens.',
   actor_label_required: 'A shared agent token requires a temporary-agent label.',
   actor_not_addressable: 'A temporary agent cannot be addressed with a question.',
+  admin_required: 'Only an administrator can manage people.',
+  archive_format_unsupported: 'This file is not an installation archive this Casefile can read.',
+  archive_invalid: 'The installation archive is damaged or was edited; export it again.',
+  archive_revision_unknown:
+    'The archive comes from a newer Casefile. Update this installation first, then import again.',
   bad_request: 'The request could not be parsed.',
   checks_not_passed: 'Not every review check has a positive verdict.',
   closing_not_a_transition: 'A task is closed by an action of its own, not by a status change.',
   conflict: 'The state of the object does not allow this action.',
+  current_password_mismatch: 'The current password is wrong.',
   cursor_with_offset: 'The page is addressed two ways at once: by cursor and by offset.',
   database_unavailable: 'The database is unavailable.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
   http_error: 'The request failed.',
   idempotency_key_reused: 'This idempotency key has already been used by another request.',
-  install_key_missing:
-    'The password was accepted, but the installation handed out no key. See the ui container log.',
+  installation_not_empty:
+    'Only an installation without queues can take an archive: import into a fresh one.',
   internal_error: 'Internal server error.',
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
   invalid_cursor: 'The page cursor cannot be parsed.',
+  invalid_email: 'This does not look like an email address.',
   invalid_idempotency_key: 'The idempotency key is empty or too long.',
   invalid_journal_cursor: 'The position in the journal feed cannot be parsed.',
   invalid_link_kind: 'There is no such kind of link.',
@@ -39,6 +49,7 @@ export const errors = {
   journal_stream_limit: 'Too many live streams are open. Try again later.',
   journal_too_many_tasks: 'Too many tasks named in one journal filter.',
   journal_wait_too_long: 'The requested wait is longer than allowed.',
+  last_admin: 'The installation must keep at least one active administrator.',
   link_cycle_detected: 'The link would close a ring.',
   link_exists: 'These two tasks are already linked that way.',
   link_not_found: 'There is no such link between tasks.',
@@ -47,12 +58,12 @@ export const errors = {
   method_not_allowed: 'This address does not support that action.',
   network_error: 'The server is unreachable: check that the backend is up.',
   not_found: 'The object was not found.',
+  participant_has_account: 'This person already has an account.',
   participant_name_taken: 'The participant name is taken.',
   participant_not_found: 'There is no participant by that name.',
   participant_required:
     'This is a shared agent token: there is no participant behind it. A person’s token from the participant registry is required.',
   password_attempts_exceeded: 'Too many failed sign-in attempts. Try again later.',
-  password_login_off: 'This installation has no owner password.',
   permission_denied: 'This token is not allowed to do that.',
   queue_key_taken: 'The queue key is taken.',
   queue_not_found: 'There is no queue with that key.',
@@ -76,4 +87,5 @@ export const errors = {
   unauthorized: 'The token is unknown or revoked.',
   validation_error: 'The value breaks a rule of the domain.',
   version_conflict: 'The task changed while you were reading. Refresh the page and try again.',
+  weak_password: 'The password does not fit: it is shorter than 12 characters or too long.',
 } as const;

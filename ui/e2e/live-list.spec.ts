@@ -384,7 +384,11 @@ test.describe('список под живым потоком', () => {
     // Задача с конца страницы: запись вынесет её наверх, и по этому видно, что чтение
     // на возврате её уже принесло.
     const target = (await keys(page)).at(-1) as string;
-    await rows(page).last().getByRole('link').click();
+    // Своя ссылка строки — на названии (`data-link="task"`, `task-row.tsx`). У задачи
+    // с родителем (UI-119) за ней стоит вторая, в родителя: без уточнения `getByRole`
+    // видит обе и падает `strict mode violation`, если последней строкой оказывается
+    // как раз такая задача (UI-136).
+    await rows(page).last().locator('a[data-link="task"]').click();
     await expect(page.getByRole('heading', { level: 1 })).toContainText(target);
 
     const title = 'Запись, сделанная, пока человек читал карточку';

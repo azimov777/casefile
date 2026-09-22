@@ -49,7 +49,7 @@ Casefile gives every task a **case file** — an append-only log the agent write
 - **Built for agents, over MCP.** Agents create and split tasks, record decisions and dead ends, ask you questions, and close with a verdict on every check.
 - **You stay in the loop.** A live board and task pages show what every agent is doing. Answer questions, leave remarks and hand each agent its own access — right from the browser.
 - **Guardrails, not bureaucracy.** No closing without a summary and a passed verdict per check; no starting a blocked task. Nothing else — no sprints, no estimates, no automation.
-- **Yours, on your machine.** Runs locally in Docker and listens on localhost only. Nothing leaves your computer — unless you lock it with a password and put it on your own server ([Network mode](#network-mode)).
+- **Yours, on your machine.** Runs locally in Docker and listens on localhost only. Nothing leaves your computer — unless you turn on sign-in and put it on your own server for your team ([Network mode](#network-mode)).
 
 <div align="center">
 <picture>
@@ -74,11 +74,14 @@ printed (`http://localhost:8100/mcp` by default) with that header.
 **A second agent, without the terminal.** The board carries the same snippets.
 **Connect an agent** shows this installation's MCP address and ready-made snippets for
 Claude Code, Codex and any client that takes an `mcpServers` JSON — no secret on the
-screen, a placeholder where the token goes. **Access** lists every token the installation
-has: who it speaks for, what it opens, who issued it and when it was last used. From there
+screen, a placeholder where the token goes. **Access** lists your tokens — every token
+of the installation, if you are an administrator: who it speaks for, what it opens, who
+issued it and when it was last used. From there
 you register an agent, issue its own token, copy the snippet with the secret already in
 it — shown once — and revoke it when that agent is done. Give each agent a token of its
-own and its case entries are signed with its name instead of one shared `agent`.
+own and its case entries are signed with its name instead of one shared `agent`. On a
+shared installation every person does this for their own agents, without the
+administrator, and sees and revokes only the tokens they issued or that speak for them.
 
 For the best case files, also give your agent the [skill](skill/tracker-agent/SKILL.md) that teaches the discipline (Claude Code: `~/.claude/skills/tracker-agent/SKILL.md`).
 
@@ -90,46 +93,67 @@ For the best case files, also give your agent the [skill](skill/tracker-agent/SK
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
+| Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
 | Back up your data / restore into a clean install | [`docs/backup-restore.md`](docs/backup-restore.md) |
 
 Ports and other settings live in `~/casefile/.env` — see [`.env.example`](.env.example).
 
 ## Network mode
 
-Out of the box Casefile listens on localhost only and hands the board its key without
-asking anyone: fine on your own machine, a leak anywhere else. To reach it from other
-machines, lock it with the **owner password** first. It is one lock for one person — the
-owner of the installation — not user accounts: there is no user name, no second password
-and no roles. People who must not see each other's cases get an installation each.
+Out of the box Casefile listens on localhost only, and you type nothing: the installation
+creates an administrator account for you (`owner@localhost`) and the board signs into it
+by itself. To reach it from other machines, turn on **sign-in**: then everyone signs in
+with their own email and password, and every entry is signed by the person who made it.
+It is one team per installation — everyone signed in sees every task. The only role is
+the **administrator** flag, and all it opens is managing people.
 
-1. Make the password hash. The command asks for the password twice and echoes nothing
-   (12 characters at least):
-
-   ```bash
-   cd ~/casefile
-   docker compose run --rm --no-deps api python -m app.cli password-hash
-   ```
-
-   It prints one line, `TRACKER_PASSWORD_HASH=scrypt:...`. The password itself is stored
-   nowhere.
-
-2. Add to `~/casefile/.env`:
+1. Add to `~/casefile/.env`:
 
    ```bash
-   TRACKER_PASSWORD_HASH=scrypt:...   # the line from step 1
+   CASEFILE_LOGIN=password            # everyone signs in with email and password
    CASEFILE_BIND=0.0.0.0              # publish the board and MCP beyond localhost
    TRACKER_MCP_PUBLIC_URL=http://<server>:8100/mcp   # what agents on other machines use
    ```
 
-3. Run `docker compose up -d` in `~/casefile`.
+2. Run `docker compose up -d` in `~/casefile`.
 
-The board at `http://<server>:8080` now opens with a password screen; after signing in the
-browser gets the key and works as before. Agents keep connecting to MCP with their tokens —
-the password is for the browser only. Issue each agent its own token on the **Access**
-screen; **Connect an agent** shows the address from `TRACKER_MCP_PUBLIC_URL`.
+3. Give yourself a password. The administrator account the installation made has none;
+   this prints a generated one, once:
 
-**Plain HTTP is a hole.** Without TLS the password, the session cookie, the key and the
-agents' tokens cross the network in clear text for anyone on the path to read. Casefile
+   ```bash
+   docker compose run --rm api python -m app.cli account-password --email owner@localhost
+   ```
+
+   Add `--set-password` to type your own instead (12 characters at least, asked twice,
+   no echo). Your email can be changed too:
+   `account-update --email owner@localhost --new-email you@example.com`.
+
+4. Add your teammates — on the board, or on the server:
+
+   ```bash
+   docker compose run --rm api python -m app.cli account-create --email alice@example.com --name alice
+   ```
+
+   It prints Alice's password once; hand it to her. `--admin` makes her an administrator
+   too. `account-list` shows everyone, `account-update --disable` locks a person out and
+   revokes every token they hold or issued to their agents (their past entries stay
+   signed with their name), and
+   `account-password` resets a forgotten password. Casefile sends no mail: there is no
+   address confirmation and no reset link.
+
+The board at `http://<server>:8080` now opens with a sign-in screen. Agents keep
+connecting to MCP with their tokens — sign-in is for people in the browser. Issue each
+agent its own token on the **Access** screen; **Connect an agent** shows the address from
+`TRACKER_MCP_PUBLIC_URL`.
+
+**Coming from the owner password.** An installation locked with `TRACKER_PASSWORD_HASH`
+before accounts existed keeps working after the update: sign-in turns on by itself, and
+the old password becomes the password of the administrator account `owner@localhost` —
+sign in with that email and the same password. The hash in `.env` is no lock any more; it
+is only carried over once, and a password you set later is never overwritten by it.
+
+**Plain HTTP is a hole.** Without TLS the passwords, the session cookies, the keys and
+the agents' tokens cross the network in clear text for anyone on the path to read. Casefile
 does not do TLS itself. Anywhere beyond a network you trust, keep `CASEFILE_BIND=127.0.0.1`
 and put a reverse proxy with TLS in front of both ports — for example Caddy, which gets the
 certificates and sends `X-Forwarded-Proto` by itself:
@@ -171,29 +195,30 @@ is created, so after `docker compose down` check the gateway again. Keep
 `CASEFILE_BIND=127.0.0.1` behind a proxy: Docker Desktop shows **every** connection to a
 port published to the network as `192.168.65.1`, so naming that address would let anyone
 claim any address. Without this line nothing breaks, but everyone behind the proxy shares
-one address — and one guesser holds the owner at "try again later" again.
+one address — and one guesser holds everybody at "try again later" again.
 
 What else to know:
 
-- **No password, no network.** With `CASEFILE_BIND` beyond localhost and no password, the
-  board refuses to start instead of handing the key to the whole network;
+- **No sign-in, no network.** With `CASEFILE_BIND` beyond localhost and sign-in off, the
+  board refuses to start instead of handing the administrator key to the whole network;
   `docker compose logs ui` says why.
-- **Sessions.** A sign-in lasts 7 days (`TRACKER_SESSION_HOURS`). **Sign out** ends the
-  session on the server. Restarting the installation ends every session, and so does a new
-  password (a new hash in `.env` and `docker compose up -d`). A tab that already holds the
-  key keeps working until it reloads; if you think the key leaked, revoke the `local-ui`
-  token on **Access** — the next `docker compose up -d` issues a new one.
-- **Guessing.** After 5 wrong passwords within a minute from one address, sign-in answers
-  "try again later" to that address — the right password included — until the minute has
-  passed; other addresses sign in as usual. On top of that the whole installation takes at
-  most 20 wrong passwords a minute from all addresses together, which is what holds
-  guessing spread over many machines. The price is named: four or more addresses guessing
-  at once keep everyone, you included, at "try again later" for as long as they keep going
-  (an IPv6 client counts as its whole `/64`). Your open sessions and the agents, which use
-  tokens, are not affected. A client is the address that opened the connection, or the one
-  your named proxy reports (above). Docker Desktop hides the address of every connection
-  from the network behind one of its own, so there the board tells clients apart only
-  behind a proxy on the same machine.
+- **Sessions.** A sign-in lasts 7 days (`TRACKER_SESSION_HOURS`). A session is a token
+  with a deadline, kept in the database: restarting the installation does not end it.
+  **Sign out** revokes it at once, a changed or reset password ends the person's other
+  sessions, and disabling an account revokes all its tokens, the ones the person issued
+  to their agents included: enabling it again brings none of them back.
+- **Guessing.** Wrong passwords are counted per address and per email, within a minute.
+  After 5 from one address, sign-in answers "try again later" to that address — the right
+  password included — until the minute has passed; after 5 for one email, from wherever
+  they come, that email waits the same way. Other people sign in as usual. On top of that
+  the whole installation takes at most 100 wrong passwords a minute, to keep guessing
+  from burning the processor; guessing spread over many addresses and many emails that
+  reaches it keeps everyone at "try again later" for as long as it goes on (an IPv6
+  client counts as its whole `/64`). Open sessions and the agents, which use tokens, are
+  not affected. A client is the address that opened the connection, or the one your
+  named proxy reports (above). Docker Desktop hides the address of every connection from
+  the network behind one of its own, so there the board tells clients apart only behind
+  a proxy on the same machine.
 
 ## Under the hood
 

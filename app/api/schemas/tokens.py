@@ -36,6 +36,14 @@ class TokenRead(BaseModel):
         default=None,
         description="Set when the token is revoked; the record stays for the audit trail",
     )
+    expires_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Set only on a browser session token, issued by `POST /api/v1/session`: after "
+            "this moment it answers `401 unauthorized` with `details.reason: token_expired`. "
+            "Null means the token lives until it is revoked"
+        ),
+    )
 
     @field_validator("participant", mode="before")
     @classmethod

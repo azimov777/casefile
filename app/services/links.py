@@ -39,6 +39,7 @@
 (`app/domain/links.py`, `changes_behaviour`).
 """
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -271,7 +272,12 @@ async def _record_on_both_sides(
     связь между теми же задачами с разных сторон, пошли бы по строкам во встречном
     порядке и остановились бы друг о друга. Один и тот же порядок у всех запросов это
     исключает.
+
+    Обе записи — одно действие (TRK-118): `action_id` генерируется один раз, до первой
+    подшивки, и передаётся в обе — иначе у связи в делах двух задач оказались бы два
+    разных признака, хотя интерфейс должен показать её одной группой в каждом деле.
     """
+    action_id = uuid.uuid4()
     sides = (
         (link.source, visible_kind(link.kind, from_source=True), link.target),
         (link.target, visible_kind(link.kind, from_source=False), link.source),
@@ -284,4 +290,5 @@ async def _record_on_both_sides(
             added=added,
             kind=kind,
             other_key=opposite.key,
+            action_id=action_id,
         )

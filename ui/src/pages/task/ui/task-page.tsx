@@ -18,7 +18,7 @@ import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
-import { TaskIndex } from './task-index';
+import { TaskIndex, type TaskIndexHandle } from './task-index';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
 
@@ -128,8 +128,12 @@ export function TaskPage() {
    */
   const [remarkOpen, setRemarkOpen] = useState(false);
 
-  /** Блок «Дело»: якорь прыжка «В начало описи» — верх блока, а не верх таблицы. */
-  const caseSectionRef = useRef<HTMLElement>(null);
+  /**
+   * Прыжок «В начало описи» живёт в шапке блока, а прокручиваемый узел — внутри
+   * `TaskIndex` (UI-126, `scroller`): ручка дотягивается до него, не заводя
+   * второго пути прокрутки.
+   */
+  const indexRef = useRef<TaskIndexHandle>(null);
 
   const openAt = readEntryNo(searchParams.get('entry'));
 
@@ -322,7 +326,7 @@ export function TaskPage() {
             {remarkOpen ? <RemarkForm taskKey={task.key} /> : null}
           </section>
 
-          <section className={block({ kind: 'list' })} aria-labelledby="case" ref={caseSectionRef}>
+          <section className={block({ kind: 'list' })} aria-labelledby="case">
             <div className={BLOCK_HEAD}>
               {/* Заголовок и число записей — одна группа: число читается частью
                   названия блока, а не отдельной строкой между кнопками и таблицей,
@@ -356,17 +360,14 @@ export function TaskPage() {
                 <Button tone="quiet" size="sm" onClick={() => rememberOpen(lastEntryNo)}>
                   {t('index.toLatest')}
                 </Button>
-                <Button
-                  tone="quiet"
-                  size="sm"
-                  onClick={() => caseSectionRef.current?.scrollIntoView?.({ block: 'start' })}
-                >
+                <Button tone="quiet" size="sm" onClick={() => indexRef.current?.scrollToTop()}>
                   {t('index.toTop')}
                 </Button>
               </div>
             ) : null}
 
             <TaskIndex
+              ref={indexRef}
               taskKey={task.key}
               index={index}
               checks={task.checks}

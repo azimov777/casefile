@@ -151,3 +151,26 @@ async def test_last_used_is_throttled(
     await authenticate(db_session, main_secret, now=first + LAST_USED_THROTTLE)
     page = await service.list_tokens(db_session, actor=main_actor)
     assert page.items[0].last_used_at == first + LAST_USED_THROTTLE
+
+
+async def test_an_expired_session_token_stops_working(
+    db_session: AsyncSession, owner: Participant
+) -> None:
+    """Срок бывает только у токена сеанса: после него — `token_expired`, до — обычный вход."""
+    issued = await service.issue_token(
+        db_session,
+        actor=Actor(author=owner.author, scope=TokenScope.MAIN, participant=owner),
+        participant=owner,
+        scope=TokenScope.MAIN,
+        name="browser-session",
+    )
+    deadline = datetime.now(UTC) + timedelta(hours=1)
+    issued.token.expires_at = deadline
+    await db_session.flush()
+
+    before = await authenticate(db_session, issued.secret, now=deadline - timedelta(seconds=1))
+    with pytest.raises(UnauthorizedError) as expired:
+        await authenticate(db_session, issued.secret, now=deadline)
+
+    assert before.author == owner.author
+    assert expired.value.details == {"reason": "token_expired"}

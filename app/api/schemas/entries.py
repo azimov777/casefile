@@ -67,6 +67,12 @@ _REFS_DESCRIPTION = (
 _TITLE_DESCRIPTION = "One line; this is what the case index shows"
 _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the payload"
 _NO_DESCRIPTION = "Number inside the task, from 1; `TRK-42#12`"
+_ACTION_ID_DESCRIPTION = (
+    "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this "
+    "entry: entries of one call share the same value, entries of another call never "
+    "do. A client groups entries by it instead of guessing from a matching "
+    "`created_at`. `null` on entries filed before this field existed"
+)
 
 
 # --- Факты строки описи ---------------------------------------------------------------
@@ -233,6 +239,9 @@ class EntryHeadingRead(BaseModel):
     author: AuthorRead
     created_at: datetime
     title: str = Field(examples=["Status changed: backlog -> open"])
+    action_id: uuid.UUID | None = Field(
+        default=None, examples=[None], description=_ACTION_ID_DESCRIPTION
+    )
     facts: EntryFactsRead = Field(
         description=(
             "Length-bounded facts of the entry: enough to name it in any language "
@@ -512,6 +521,9 @@ class _EntryReadBase(BaseModel):
         default_factory=list, examples=[["TRK-42#3", "TRK-7"]], description=_REFS_DESCRIPTION
     )
     created_at: datetime
+    action_id: uuid.UUID | None = Field(
+        default=None, examples=[None], description=_ACTION_ID_DESCRIPTION
+    )
 
 
 class PlainEntryRead(_EntryReadBase):
@@ -678,6 +690,7 @@ def entry_read(entry: Entry, *, task_key: str) -> EntryRead:
         payload=entry.payload,
         refs=list(entry.refs),
         created_at=entry.created_at,
+        action_id=entry.action_id,
     )
 
 

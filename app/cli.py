@@ -13,10 +13,13 @@
   журнале подъёма контура. Годный ключ другого набора в файле она заменяет;
 - `agent-token` — то же для агента этой машины: токен набора `main` в файле, откуда его
   берёт тот, кто подключает агента к MCP (установщик `install.sh`);
-- `password-hash` — напечатать хеш пароля владельца для `TRACKER_PASSWORD_HASH`: так
-  установку закрывают паролем перед тем, как выставить в сеть (`docs/CONCEPT.md`, 5.4).
-  Пароль спрашивается с терминала без эха (или читается строкой из трубы), наружу уходит
-  только хеш. Базы команда не касается;
+- `account-create`, `account-list`, `account-update`, `account-password` — управление
+  людьми на сервере (`docs/CONCEPT.md`, 5.4): завести учётную запись, увидеть всех,
+  сменить почту, флаг администратора или отключить, сбросить пароль. Те же сценарии, что у
+  REST `/api/v1/accounts`, от имени самого трекера: команду запускает тот, у кого есть
+  доступ к контейнерам, и флага администратора у него не спрашивают. Пароль генерируется
+  и печатается один раз или, с `--set-password`, спрашивается с терминала без эха (из
+  трубы — первой строкой);
 - `demo` — наполнить установку демонстрационными данными: очередь `DEMO`, задачи во всех
   статусах и дела со всеми типами записей. Через API это были бы десятки запросов
   в нужном порядке;
@@ -31,17 +34,18 @@
     docker compose run --rm demo
     docker compose run --rm schema
     docker compose run --rm --entrypoint python api -m app.cli issue-token --scope main
-    docker compose run --rm --no-deps --entrypoint python api -m app.cli password-hash
+    docker compose run --rm --entrypoint python api -m app.cli account-list
 
 Команды идут через `session_scope`: транзакцию фиксирует та же граница, что и у
 HTTP-запроса, отдельной логики коммита здесь нет.
 
 ## Кто печатает секрет, а кто нет
 
-`init` и `issue-token` печатают: секрет читает человек, и другого способа его получить
-нет. `local-token` и `agent-token` не печатают никогда — их вывод уезжает в журнал
-подъёма контура, а секрет в журнале это тот же секрет на виду, от которого весь этот
-путь и уходит. Секрет попадает **только** в файл `--output`, и права на нём `0600`.
+`init`, `issue-token` и сгенерированный пароль `account-create` и `account-password`
+печатают: секрет читает человек, и другого способа его получить нет. `local-token` и
+`agent-token` не печатают никогда — их вывод уезжает в журнал подъёма контура, а секрет
+в журнале это тот же секрет на виду, от которого весь этот путь и уходит. Секрет
+попадает **только** в файл `--output`, и права на нём `0600`.
 """
 
 import argparse
@@ -53,11 +57,14 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.db.models.account import Account
 from app.db.session import dispose_engine, session_scope
-from app.domain.passwords import WeakPasswordError, check_new_password, hash_password
+from app.domain.passwords import PasswordHash, PasswordHashError
 from app.domain.tokens import TokenScope
+from app.services import accounts as accounts_service
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
@@ -164,7 +171,23 @@ async def _local_token(args: argparse.Namespace) -> int:
     Годный ключ другого набора в файле — не повод молчать: сценарий заменяет его ключом
     набора `main` и отзывает прежний (`ensure_local_token`), и файл переписывается.
     """
-    return await _keep_in_file(args, ensure_local_token)
+    try:
+        legacy = _legacy_password_hash()
+    except PasswordHashError as exc:
+        print(f"TRACKER_PASSWORD_HASH is not a password hash: {exc}", file=sys.stderr)
+        return 1
+    return await _keep_in_file(args, ensure_local_token, legacy_password_hash=legacy)
+
+
+def _legacy_password_hash() -> PasswordHash | None:
+    """Прежний пароль установки из `TRACKER_PASSWORD_HASH`, если он задан.
+
+    Его переносит в учётную запись администратора `ensure_local_token`. Испорченная строка
+    — отказ команды, а значит и подъёма интерфейса: молча пропущенная, она оставила бы
+    владельца без пароля, которым он входил. Сообщение называет правило, не значение.
+    """
+    configured = get_settings().password_hash
+    return None if configured is None else PasswordHash.parse(configured.get_secret_value())
 
 
 async def _agent_token(args: argparse.Namespace) -> int:
@@ -172,7 +195,7 @@ async def _agent_token(args: argparse.Namespace) -> int:
     return await _keep_in_file(args, ensure_agent_token)
 
 
-async def _keep_in_file(args: argparse.Namespace, ensure: EnsureToken) -> int:
+async def _keep_in_file(args: argparse.Namespace, ensure: EnsureToken, **extra: object) -> int:
     """Сверяет файл `--output` с установкой и пишет туда секрет, если выпущен новый."""
     path = Path(args.output)
     async with session_scope() as session:
@@ -181,6 +204,7 @@ async def _keep_in_file(args: argparse.Namespace, ensure: EnsureToken) -> int:
             known_secret=_read_secret(path),
             participant_name=args.participant,
             token_name=args.name,
+            **extra,
         )
         if result.secret is not None:
             _write_secret(path, result.secret)
@@ -236,6 +260,12 @@ def _report_local_token(result: LocalToken, path: Path) -> None:
     if result.revoked:
         print(f"revoked:     {result.revoked} previous token(s)")
     print(f"participant: {participant.name} ({participant.kind.value})")
+    if result.account is not None:
+        password = "set" if result.account.password_hash is not None else "none"
+        if result.password_imported:
+            password = "imported from TRACKER_PASSWORD_HASH"
+        admin = "administrator" if result.account.is_admin else "not an administrator"
+        print(f"account:     {result.account.email} ({admin}, password: {password})")
     print(f"token name:  {result.token.name}")
     print(f"token scope: {result.token.scope.value}")
     print(f"file:        {path} (mode 0600, the secret and nothing else)")
@@ -245,33 +275,99 @@ def _report_local_token(result: LocalToken, path: Path) -> None:
     print("       http://localhost:8000/api/v1/bootstrap")
 
 
-async def _password_hash(args: argparse.Namespace) -> int:
-    """Печатает строку `TRACKER_PASSWORD_HASH=...` для `.env` установки.
+def _new_password(args: argparse.Namespace) -> str | None:
+    """Пароль, который человек вписывает сам (`--set-password`), или `None` — сгенерировать.
 
     Пароль не попадает ни в аргументы команды (их видно в списке процессов и в истории
     оболочки), ни в вывод: с терминала он читается без эха и дважды, из трубы — первой
-    строкой. В стандартный вывод уходит ровно одна строка с хешем, пояснения — в поток
-    ошибок, поэтому вывод можно дописать в файл как есть.
+    строкой. Правила длины проверяет сценарий (`weak_password`).
     """
+    if not args.set_password:
+        return None
     if sys.stdin.isatty():
-        password = getpass.getpass("Owner password: ")
+        password = getpass.getpass("New password: ")
         if getpass.getpass("Repeat it: ") != password:
-            print("The two passwords differ; nothing was printed.", file=sys.stderr)
-            return 1
-    else:
-        password = sys.stdin.readline().rstrip("\r\n")
-    try:
-        check_new_password(password)
-    except WeakPasswordError as exc:
-        print(f"weak_password: {exc}", file=sys.stderr)
-        return 1
+            raise SystemExit("The two passwords differ; nothing was changed.")
+        return password
+    return sys.stdin.readline().rstrip("\r\n")
 
-    print(f"TRACKER_PASSWORD_HASH={hash_password(password).render()}")
-    print(
-        "Put this line into .env next to docker-compose.prod.yml and run "
-        "`docker compose up -d`. The password itself is stored nowhere.",
-        file=sys.stderr,
-    )
+
+def _print_account(account: Account, password: str | None = None) -> None:
+    """Учётная запись одной строкой на поле; сгенерированный пароль — отдельно и один раз."""
+    state = "disabled" if account.is_disabled else "active"
+    print(f"account:     {account.email}")
+    print(f"participant: {account.participant.name}")
+    print(f"admin:       {'yes' if account.is_admin else 'no'}")
+    print(f"state:       {state}")
+    print(f"password:    {'set' if account.password_hash is not None else 'none'}")
+    if password is not None:
+        print()
+        print("Generated password, shown once — hand it to the person:")
+        print(f"  {password}")
+
+
+async def _account_create(args: argparse.Namespace) -> int:
+    """Заводит учётную запись: новому участнику-человеку или существующему без неё."""
+    password = _new_password(args)
+    async with session_scope() as session:
+        created = await accounts_service.create_account(
+            session,
+            actor=TRACKER_ACTOR,
+            email=args.email,
+            name=args.name,
+            description=args.description,
+            is_admin=args.admin,
+            password=password,
+        )
+        _print_account(created.account, created.password)
+    return 0
+
+
+async def _account_list(args: argparse.Namespace) -> int:
+    """Все учётные записи установки одной строкой каждая, отключённые тоже."""
+    async with session_scope() as session:
+        cursor: str | None = None
+        while True:
+            page = await accounts_service.list_accounts(session, actor=TRACKER_ACTOR, cursor=cursor)
+            for account in page.items:
+                flags = ["admin"] if account.is_admin else []
+                if account.is_disabled:
+                    flags.append("disabled")
+                if account.password_hash is None:
+                    flags.append("no password")
+                suffix = f"  [{', '.join(flags)}]" if flags else ""
+                print(f"{account.email}  {account.participant.name}{suffix}")
+            if page.next_cursor is None:
+                break
+            cursor = page.next_cursor
+    return 0
+
+
+async def _account_update(args: argparse.Namespace) -> int:
+    """Меняет почту, флаг администратора или отключение учётной записи."""
+    async with session_scope() as session:
+        account = await accounts_service.get_account_by_email(session, args.email)
+        account = await accounts_service.update_account(
+            session,
+            account,
+            actor=TRACKER_ACTOR,
+            email=args.new_email,
+            is_admin=args.admin,
+            disabled=args.disabled,
+        )
+        _print_account(account)
+    return 0
+
+
+async def _account_password(args: argparse.Namespace) -> int:
+    """Сбрасывает пароль учётной записи и гасит её сеансы."""
+    password = _new_password(args)
+    async with session_scope() as session:
+        account = await accounts_service.get_account_by_email(session, args.email)
+        reset = await accounts_service.reset_password(
+            session, account, actor=TRACKER_ACTOR, password=password
+        )
+        _print_account(reset.account, reset.password)
     return 0
 
 
@@ -404,11 +500,61 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     agent.set_defaults(handler=_agent_token)
 
-    password = commands.add_parser(
-        "password-hash",
-        help="Print TRACKER_PASSWORD_HASH for the owner password; asks it without echo",
+    create = commands.add_parser(
+        "account-create",
+        help="Create an account for a new or an existing human participant",
     )
-    password.set_defaults(handler=_password_hash)
+    create.add_argument("--email", required=True, help="Email the person signs in with")
+    create.add_argument(
+        "--name",
+        required=True,
+        help="Participant name: an existing human without an account, or a new one",
+    )
+    create.add_argument("--description", default="", help="Description of a new participant")
+    create.add_argument("--admin", action="store_true", help="Make it an administrator")
+    create.add_argument(
+        "--set-password",
+        action="store_true",
+        help="Ask for the password (no echo; first line of stdin from a pipe) instead of "
+        "generating one",
+    )
+    create.set_defaults(handler=_account_create)
+
+    listing = commands.add_parser("account-list", help="List every account of the installation")
+    listing.set_defaults(handler=_account_list)
+
+    update = commands.add_parser(
+        "account-update", help="Change the email, the administrator flag or disable an account"
+    )
+    update.add_argument("--email", required=True, help="Email of the account to change")
+    update.add_argument("--new-email", default=None, help="New email to sign in with")
+    admin = update.add_mutually_exclusive_group()
+    admin.add_argument("--admin", dest="admin", action="store_const", const=True, default=None)
+    admin.add_argument("--no-admin", dest="admin", action="store_const", const=False)
+    state = update.add_mutually_exclusive_group()
+    state.add_argument(
+        "--disable",
+        dest="disabled",
+        action="store_const",
+        const=True,
+        default=None,
+        help="Disable the account and revoke every token of its participant",
+    )
+    state.add_argument("--enable", dest="disabled", action="store_const", const=False)
+    update.set_defaults(handler=_account_update)
+
+    reset = commands.add_parser(
+        "account-password",
+        help="Reset the password of an account and end its sessions; prints a generated one",
+    )
+    reset.add_argument("--email", required=True, help="Email of the account")
+    reset.add_argument(
+        "--set-password",
+        action="store_true",
+        help="Ask for the password (no echo; first line of stdin from a pipe) instead of "
+        "generating one",
+    )
+    reset.set_defaults(handler=_account_password)
 
     demo = commands.add_parser(
         "demo",

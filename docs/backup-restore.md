@@ -7,6 +7,10 @@ not an orchestrator, and there is no automation in core for this (`docs/CONCEPT.
 Scheduling backups, rotating them, and verifying restores automatically is a job for the
 paid service panel, not the open core.
 
+Moving to another machine without a shell or Postgres — including onto a newer Casefile —
+is [`moving.md`](moving.md): an export and an import over HTTP. This page is the
+operator's route with a shell, for a copy of one database.
+
 Commands below assume the standard install layout (`~/casefile`, `docker-compose.prod.yml`
 + `.env`, as `install.sh`/`install.ps1` lay it out — see the root `README.md`). Run them
 from that directory.

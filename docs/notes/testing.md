@@ -405,3 +405,32 @@ compose build` меняет только образ, а не запущенны�
 решением человека (`docker compose up -d`), а не скрипта слияния.
 **Где:** `scripts/merge-task-branch.sh`, `BUILD_COMMAND` и вызов в `run_the_suite`;
 сторожит `tests/test_merge_script.py`.
+
+## Скрипт слияния гонял только `pytest` — три зелёных слияния подряд не увидели `ruff`/`prettier`, попавших в `main`
+
+**Что:** `scripts/merge-task-branch.sh` до TRK-117 прогонял ровно `docker compose run
+--rm test` — это только `pytest`. Он не вызывал ни `docker compose run --rm lint` (сервис
+за тем же профилем `tools`, что и `test`, `ruff check . && ruff format --check .`), ни
+единой команды из `ui/`, хотя `.github/workflows/ci.yml` гоняет оба набора на каждый PR и
+перед каждой публикацией образов (`images.yml`). TRK-103, TRK-81 и TRK-82 получили
+зелёный скрипт слияния подряд и уехали в `main`, а конвейер `Images` на push `main` и на
+push тега `v0.1.0` упал на обеих проверках `checks` — `ruff` нашёл 7 ошибок в
+`ui/e2e-demo/seed-background.py`, `prettier --check` — неотформатированный
+`ui/e2e-demo/demo-recording.spec.ts` (разобрано и исправлено в TRK-109).
+**Почему важно:** «зелёное слияние» читалось как «будет зелёным и в CI», а на деле
+проверяло только часть того, что проверяет конвейер. Разрыв был тихим — ни один прогон
+локально не падал, красноту увидел только GitHub Actions, когда коммит и тег уже были
+опубликованы, а `Publish` пропущен (`skipped`).
+**Как правильно:** зелёное слияние обязано означать тот же набор проверок, что и
+`checks` из `ci.yml`, кроме сквозных e2e (решение владельца, TRK-110). `docker compose
+run --rm lint` гоняется в `scripts/merge-task-branch.sh` безусловно — конфиг `ruff`
+читает весь смонтированный репозиторий, `ui/` включая, а не только `app/`. `pnpm check` —
+только когда дифф самой ветки (`git diff --name-only HEAD...MERGE_HEAD -- ui/`, не диффа
+смёрженного дерева, где `ui/` есть всегда) трогает `ui/`: он идёт на хосте, требует Node
+рядом с Docker-контуром бэкенда, и большинство веток очереди `TRK` `ui/` не касаются.
+Красные `lint`/`pnpm check` останавливают слияние так же, как красный `pytest` — `git
+merge --abort`, ветка не слита. Сквозные `pnpm e2e` в этот скрипт намеренно не
+добавлялись: они остаются задачей `ui/scripts/merge-task-branch.sh`, которым сливают
+ветки очереди `UI`.
+**Где:** `scripts/merge-task-branch.sh`, `LINT_COMMAND`, `CHECK_COMMAND`,
+`branch_touches_ui` и `run_the_suite`; сторожит `tests/test_merge_script.py`.

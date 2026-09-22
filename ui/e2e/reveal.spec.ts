@@ -215,11 +215,11 @@ function expectVisibleFollowsPlace(name: string, watch: RevealWatch): void {
 }
 
 /**
- * Отбор списка: место — элемент флекс-колонки раздела. Список сортировки в той же строке
- * тоже говорит `aria-expanded` — он отсеян ролью.
+ * Отбор записей дела: место — элемент флекс-колонки раздела. До UI-130 здесь стоял
+ * отбор списка задач; он больше не раскрывается — условия живут во всплывающей панели.
  */
-const TASK_FILTERS: Target = {
-  toggle: 'section[aria-label="Отбор задач"] button[aria-expanded]:not([role="combobox"])',
+const CASE_FILTERS: Target = {
+  toggle: 'section[aria-label="Отбор записей"] button[aria-expanded]',
 };
 
 /** Запись в описи карточки: место — в ячейке таблицы. */
@@ -229,26 +229,24 @@ const INDEX_ENTRY: Target = {
   row: true,
 };
 
-test('отбор списка открывается и сворачивается: видимое содержимое идёт вместе с местом', async ({
+test('отбор дела открывается и сворачивается: видимое содержимое идёт вместе с местом', async ({
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
-  await expect(page.locator('tbody tr').first()).toBeVisible();
+  await page.goto('/tasks/DEMO-1/case');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-1');
   await fontsReady(page);
   await motionsSettled(page);
 
-  const opening = await watchReveal(page, TASK_FILTERS, false);
+  const opening = await watchReveal(page, CASE_FILTERS, false);
   await motionsSettled(page);
-  const closing = await watchReveal(page, TASK_FILTERS, true);
+  const closing = await watchReveal(page, CASE_FILTERS, true);
 
-  report('UI-112 отбор списка, раскрытие', framesReport(opening));
-  report('UI-112 отбор списка, свёртывание', framesReport(closing));
+  report('UI-130 отбор дела, раскрытие', framesReport(opening));
+  report('UI-130 отбор дела, свёртывание', framesReport(closing));
 
   expectVisibleFollowsPlace('раскрытие', opening);
   expectVisibleFollowsPlace('свёртывание', closing);
-  // Обрезание живёт, только пока место едет: в покое объяснение отказа разбора
-  // запроса выходит за нижний край формы, и обрезание срезало бы его.
   expect(opening.frames.at(-1)?.clipped, 'раскрытое место осталось обрезанным').toBe(false);
 });
 

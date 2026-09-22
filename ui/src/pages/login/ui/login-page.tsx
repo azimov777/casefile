@@ -1,15 +1,15 @@
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate } from 'react-router';
 import { useInstallLocked, useSessionExpired, useSessionToken } from '@/entities/session';
-import { LoginForm, PasswordForm } from '@/features/auth';
+import { AccountLoginForm, LoginForm } from '@/features/auth';
 import { LanguageSwitch } from '@/features/switch-language';
 import { Callout } from '@/shared/ui';
 
 export function LoginPage() {
   const token = useSessionToken();
   const expired = useSessionExpired();
-  // Установка, закрытая паролем владельца, спрашивает пароль, а не токен (`TRK-90`):
-  // ключ после входа отдаёт она сама, и токен человеку знать незачем.
+  // Режим входа по учётным записям спрашивает почту и пароль, а не токен (`TRK-113`):
+  // ключ вкладке отдаёт сам вход, и токен человеку знать незачем.
   const locked = useInstallLocked();
   const navigate = useNavigate();
   const { t } = useTranslation('login');
@@ -39,7 +39,7 @@ export function LoginPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-title">{t('title')}</h1>
-            <p className="mt-1 text-meta text-muted">{locked ? t('passwordIntro') : t('intro')}</p>
+            <p className="mt-1 text-meta text-muted">{locked ? t('signInIntro') : t('intro')}</p>
           </div>
           {/* Отрицательное поле гасит внутренний отступ кнопки: подпись встаёт по краю
               карточки, а область нажатия остаётся прежней. */}
@@ -47,11 +47,11 @@ export function LoginPage() {
         </div>
 
         {expired ? (
-          <Callout tone="danger">{locked ? t('passwordExpired') : t('expired')}</Callout>
+          <Callout tone="danger">{locked ? t('signInExpired') : t('expired')}</Callout>
         ) : null}
 
         {locked ? (
-          <PasswordForm onSuccess={() => void navigate('/tasks', { replace: true })} />
+          <AccountLoginForm onSuccess={() => void navigate('/tasks', { replace: true })} />
         ) : (
           <LoginForm onSuccess={() => void navigate('/tasks', { replace: true })} />
         )}

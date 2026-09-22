@@ -41,6 +41,7 @@
 молча считать такую строку адресом нельзя — это опечатка в ссылке, а не URL.
 """
 
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -426,6 +427,10 @@ class EntryHeading:
 
     Значения по умолчанию у `facts` нет: форма фактов следует из типа записи, и «строка
     описи без фактов» — это `NoFacts` с названным типом, а не пропущенный аргумент.
+
+    `action_id` — признак одного действия (TRK-118, `app/db/models/entry.py`): записи
+    одного вызова несут одно значение, разных вызовов — разные. `None` у записей,
+    подшитых до появления этого поля.
     """
 
     no: int
@@ -434,6 +439,7 @@ class EntryHeading:
     created_at: datetime
     title: str
     facts: EntryFacts
+    action_id: uuid.UUID | None
 
 
 # --- Ссылки -------------------------------------------------------------------------

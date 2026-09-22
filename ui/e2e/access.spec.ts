@@ -38,6 +38,11 @@ async function openFromNavigation(page: Page): Promise<void> {
   );
 }
 
+/** Кнопка раскрытия истории отозванных доступов: число в подписи — данные контура. */
+function historyToggle(page: Page) {
+  return page.getByRole('button', { name: /^История: \d+ отозванн/ });
+}
+
 /**
  * Полный список нарушений доступности, снятый **в покое**: без порога серьёзности и
  * после того, как доехали шрифты и переходы цвета.
@@ -140,10 +145,31 @@ test('ключ установки: агент заведён, токен вып�
   await expect(confirm).toContainText('вернуть его нельзя');
   await confirm.getByRole('button', { name: 'Отозвать', exact: true }).click();
 
+  // Отозванный уходит из действующих в историю, а история свёрнута (UI-131).
+  const active = page.getByRole('region', { name: /^Действующие токены/ });
+  await expect(active.getByRole('article', { name: `Доступ «${TOKEN_NAME}»` })).toHaveCount(0);
+  const toggle = historyToggle(page);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(row).toHaveCount(0);
+  expect(await page.locator('article[data-revoked="true"]').count()).toBe(0);
+
+  // Раскрывается одним действием.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
   // Строка помечена отозванной, и кнопки отзыва у неё больше нет.
   await expect(row).toHaveAttribute('data-revoked', 'true');
   await expect(row.getByText('отозван')).toBeVisible();
   await expect(row.getByRole('button', { name: 'Отозвать' })).toHaveCount(0);
+
+  // Действующие идут раньше отозванных: в порядке разметки ни один действующий не стоит
+  // после первого отозванного, хотя выдача установки отдаёт их вперемешку по времени.
+  const order = await page
+    .getByRole('article', { name: /^Доступ «/ })
+    .evaluateAll((items) => items.map((item) => item.getAttribute('data-revoked') === 'true'));
+  expect(order.length).toBeGreaterThan(1);
+  expect(order.indexOf(true)).toBeGreaterThan(0);
+  expect(order.slice(order.indexOf(true)).every(Boolean)).toBe(true);
 
   // Запрос этим токеном отвечает отказом: доступ снят.
   const after = await request.get('/api/v1/bootstrap', {
@@ -199,7 +225,11 @@ test.describe('тёмная тема', () => {
       .getByRole('alertdialog')
       .getByRole('button', { name: 'Отозвать', exact: true })
       .click();
+    // Отозванный уходит в свёрнутую историю; раскрытая, она меряется `axe` тоже.
+    await expect(row).toHaveCount(0);
+    await historyToggle(page).click();
     await expect(row).toHaveAttribute('data-revoked', 'true');
+    expect(await violations(page), 'история отозванных в тёмной теме').toEqual([]);
   });
 });
 

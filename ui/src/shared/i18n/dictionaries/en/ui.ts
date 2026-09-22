@@ -2,6 +2,7 @@ import type { components } from '@/shared/api';
 
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
+type LinkKind = components['schemas']['LinkKind'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -56,6 +57,10 @@ export const ui = {
     installation: 'Installation',
     connect: 'Connect an agent',
     access: 'Access',
+    // Режим входа по учётным записям (`TRK-113`): люди — администратору, учётная
+    // запись — каждому вошедшему.
+    people: 'People',
+    account: 'My account',
     openQuestions_zero: 'No open questions',
     openQuestions_one: '{{count, number}} open question',
     openQuestions_other: '{{count, number}} open questions',
@@ -111,6 +116,19 @@ export const ui = {
    * Подписи самого экрана — в пространстве `access`, здесь только то, чем строка
    * называет себя и свои поля.
    */
+  /** Представление учётной записи человека (`entities/account`): карточка в списке людей. */
+  account: {
+    label: 'Account {{email}}',
+    admin: 'administrator',
+    you: 'you',
+    disabled: 'disabled',
+    signs: 'signs as',
+    createdBy: 'created by {{author}}',
+    createdByTracker: 'created by the installation itself',
+    noPassword: 'no password yet',
+    disabledAt: 'sign-in closed',
+  },
+
   token: {
     label: 'Access {{name}}',
     scopeKind: 'scope',
@@ -164,6 +182,17 @@ export const ui = {
       more: '+{{count, number}}',
       others_one: 'and {{count, number}} more parent: {{parents, list}}',
       others_other: 'and {{count, number}} more parents: {{parents, list}}',
+    },
+    // Заголовок группы связей одного вида (UI-125): подпись рядом с идентификатором
+    // контракта, а не вместо него — сам идентификатор `LinkKindMark` не переводит.
+    links: {
+      kind: {
+        blocked_by: 'Blocked by',
+        blocks: 'Blocks',
+        parent: 'Parent',
+        child: 'Children',
+        relates: 'Related',
+      } satisfies Record<LinkKind, string>,
     },
     nav: {
       label: 'Navigation for task {{key}}',
@@ -303,6 +332,7 @@ export const ui = {
    * фрагменте негде. Названия клиентов — имена продуктов и не переводятся.
    */
   snippets: {
+    clientNav: 'Client',
     clients: {
       any: 'Any MCP client',
       claudeCode: 'Claude Code',

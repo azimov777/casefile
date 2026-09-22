@@ -33,7 +33,7 @@ export interface paths {
         };
         /**
          * Read the first screen
-         * @description Текущий участник, его токен с набором, очереди установки и число вопросов к нему.
+         * @description Текущий участник, его учётная запись, токен с набором, очереди и число вопросов к нему.
          *
          *     Ровно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки
          *     задач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,
@@ -77,6 +77,44 @@ export interface paths {
         get: operations["read_installation"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/installation/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the installation
+         * @description Все данные установки одним документом — чтобы поднять их в другом Casefile.
+         *
+         *     Только администратору (`403 admin_required`): в архиве хеши паролей всех людей и
+         *     хеши всех токенов. Ответ сохраняют как есть и отдают приёму другой установки
+         *     (`POST` этого же адреса). Токены сеансов браузера и ключи идемпотентности не едут
+         *     (`app/services/archive.py`).
+         */
+        get: operations["export_installation"];
+        put?: never;
+        /**
+         * Import an installation archive
+         * @description Заменяет данные этой установки архивом другой — только пустой и только администратору.
+         *
+         *     Тело — ответ выгрузки как есть. Архив более старой версии доводится миграциями до
+         *     схемы этой установки; более новой — отказ `409 archive_revision_unknown`. Установка с
+         *     очередями — `409 installation_not_empty`. Ключ интерфейса и ключ агента этой машины
+         *     переживают приём, одноимённые ключи источника отзываются; сеансы браузера этой
+         *     установки заканчиваются — войти заново учётной записью из архива.
+         *
+         *     Не создающий маршрут (`200`, без ключа идемпотентности): повтор после успеха
+         *     получает `installation_not_empty`, а не второй приём.
+         */
+        post: operations["import_installation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -149,7 +187,11 @@ export interface paths {
         };
         /**
          * List tokens
-         * @description Все токены установки, включая отозванные: у отозванного заполнено `revoked_at`.
+         * @description Токены, включая отозванные: у отозванного заполнено `revoked_at`.
+         *
+         *     Администратор видит все токены установки, остальные — свои: те, что говорят от их
+         *     имени (`participant`), и те, что они выпустили (`created_by`). `mine=true` сужает до
+         *     своих и администратора.
          *
          *     Секрета в списке нет — в базе лежит только хеш, и восстановить значение неоткуда.
          */
@@ -159,8 +201,12 @@ export interface paths {
          * Issue a token
          * @description Единственный ответ, содержащий секрет токена: второго способа узнать его нет.
          *
-         *     Требует набора `main`. Без `participant` выпускается общий агентский токен: запрос с
-         *     ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.
+         *     Требует набора `main` и учётной записи у выпускающего: выпускает человек, а не агент
+         *     (`403 permission_denied`, `details.reason: account_required`). Ключ от имени другого
+         *     человека выпускает только администратор (`details.reason: foreign_human`); себе,
+         *     агенту-участнику и общий — любой вошедший. Выпущенный токен — свой у выпустившего: он
+         *     видит его в списке и отзывает. Без `participant` выпускается общий агентский токен:
+         *     запрос с ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.
          *
          *     Единственное исключение — повтор с тем же `Idempotency-Key`: он отвечает **тем же**
          *     секретом, потому что ответ первого выпуска сохранён целиком. Иначе повтор запроса,
@@ -188,11 +234,121 @@ export interface paths {
          * Revoke a token
          * @description Отзыв идемпотентен: повторный запрос отвечает так же и ничего не меняет.
          *
-         *     Требует набора `main`. Запись токена остаётся в базе с проставленным `revoked_at` —
-         *     по ней видно, чем ходили раньше. Наружу это выглядит удалением, поэтому `DELETE`
-         *     и `204`.
+         *     Требует набора `main`. Свой токен отзывает любой, чужой — только администратор
+         *     (`403 permission_denied`, `details.reason: not_own_token`). Запись токена остаётся в
+         *     базе с проставленным `revoked_at` — по ней видно, чем ходили раньше. Наружу это
+         *     выглядит удалением, поэтому `DELETE` и `204`.
          */
         delete: operations["revoke_token"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List accounts
+         * @description Все учётные записи установки, отключённые тоже. Только администратору.
+         */
+        get: operations["list_accounts"];
+        put?: never;
+        /**
+         * Create an account
+         * @description Заводит учётную запись человеку — новому участнику или существующему без неё.
+         *
+         *     Только администратору, с набором `main`. Без `password` трекер генерирует пароль сам
+         *     и возвращает его в `password` — единственный раз; писем трекер не шлёт, и пароль
+         *     человеку передаёт администратор. Занятая почта — `409 account_email_taken`; участник-
+         *     агент — `422 account_requires_human`; у человека уже есть учётная запись — `409
+         *     participant_has_account`; короткий пароль — `422 weak_password`.
+         *
+         *     Повтор с тем же `Idempotency-Key` отвечает первой учётной записью — с тем же
+         *     сгенерированным паролем, как повтор выпуска токена отвечает тем же секретом.
+         */
+        post: operations["create_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an account
+         * @description Карточка учётной записи. Только администратору; свою человек видит в `bootstrap`.
+         */
+        get: operations["read_account"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update an account
+         * @description Меняет почту, флаг администратора и отключение. Только администратору.
+         *
+         *     Отключение отзывает все токены участника учётной записи; включение их не
+         *     возвращает. Последнего действующего администратора нельзя ни отключить, ни лишить
+         *     флага — `409 last_admin`.
+         */
+        patch: operations["update_account"];
+        trace?: never;
+    };
+    "/api/v1/accounts/{account_id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset the password of an account
+         * @description Задаёт новый пароль — вписанный или сгенерированный — и гасит сеансы учётной записи.
+         *
+         *     Только администратору; прежний пароль не спрашивается. Сгенерированный приходит в
+         *     `password` один раз.
+         */
+        post: operations["reset_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{account_id}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change the own password
+         * @description Меняет пароль своей учётной записи — той, за чьим участником стоит токен.
+         *
+         *     Прежний пароль обязателен, если он задан: неверный — `422 current_password_mismatch`.
+         *     Чужая учётная запись — `403 permission_denied` с `details.reason: not_own_account`:
+         *     чужой пароль сбрасывает администратор. Остальные сеансы учётной записи гаснут, токен
+         *     этого запроса остаётся живым.
+         */
+        put: operations["change_password"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -701,39 +857,43 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Check the browser session
-         * @description Жив ли сеанс из куки: `200` со сроком или `401 unauthorized`.
+         * Read the browser session
+         * @description Живой сеанс из куки — с токеном вкладки — или `401 unauthorized`.
          *
-         *     Причина отказа — в `details.reason`: `missing_session`, `unknown_session` (в том
-         *     числе после выхода и перезапуска API), `session_expired`. Этим маршрутом nginx
-         *     интерфейса решает, отдать ли `/config.json`.
+         *     Так вкладка после перезагрузки получает свой токен заново: секрет в куке `HttpOnly`,
+         *     скрипту страницы он не виден. Причина отказа — в `details.reason`: `missing_session`,
+         *     `unknown_session` (в том числе после выхода, смены пароля и отключения учётной
+         *     записи), `session_expired`.
          */
         get: operations["read_session"];
         put?: never;
         /**
-         * Log in with the owner password
-         * @description Проверяет пароль владельца и ставит куку сеанса; с ней `/config.json` отдаёт ключ.
+         * Sign in with email and password
+         * @description Проверяет почту и пароль, выпускает токен сеанса и ставит его секрет в куку.
          *
-         *     Кука `casefile_session` — `HttpOnly`, `SameSite=Strict`, `Path=/`, со сроком сеанса, и
-         *     `Secure`, если запрос пришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).
+         *     Токен — набора `main`, участника этой учётной записи, со сроком сеанса; им вкладка
+         *     ходит в REST, и записи подписаны именем этого человека. Кука `casefile_session` —
+         *     `HttpOnly`, `SameSite=Strict`, `Path=/`, со сроком сеанса, и `Secure`, если запрос
+         *     пришёл по HTTPS (прокси сообщает это `X-Forwarded-Proto`).
          *
-         *     Неверный пароль — `401 unauthorized` с `details.reason: wrong_password`. Неудачных
-         *     попыток за окно с этого адреса или со всей установки столько, сколько разрешено, —
-         *     `429 password_attempts_exceeded` с `Retry-After` и `details.scope`, и пароль тогда не
-         *     проверяется вовсе. Адрес клиента — собеседник TCP, а за nginx установки — его
-         *     `X-Real-IP`; прочим заголовкам с адресом API не верит. Пароля у установки нет — `409
-         *     password_login_off`.
+         *     Неверная почта или пароль — `401 unauthorized` с `details.reason: wrong_credentials`,
+         *     одинаково для незаведённой почты; отключённая учётная запись — `account_disabled`,
+         *     только после верного пароля. Неудачных попыток за окно с этого адреса, на эту почту
+         *     или со всей установки столько, сколько разрешено, — `429 password_attempts_exceeded`
+         *     с `Retry-After` и `details.scope`, и пароль тогда не проверяется вовсе. Адрес клиента —
+         *     собеседник TCP, а за nginx установки — его `X-Real-IP`; прочим заголовкам с адресом
+         *     API не верит.
          *
          *     Отвечает `200`, а не `201`: сеанс не адресуемый ресурс, и повторить вход ключом
          *     идемпотентности нельзя — такие ключи живут в паре с токеном, а его здесь нет.
          */
         post: operations["open_session"];
         /**
-         * Log out
-         * @description Гасит сеанс на сервере и стирает куку. Идемпотентен: без сеанса отвечает так же.
+         * Sign out
+         * @description Отзывает токен сеанса и стирает куку. Идемпотентен: без сеанса отвечает так же.
          *
-         *     Ключ, уже отданный вкладке, выход не отзывает — он отнимает возможность получить
-         *     ключ заново (`docs/CONCEPT.md`, 5.4).
+         *     Отзывается сам токен: вкладка, державшая его, теряет доступ на следующем же запросе,
+         *     а не на перезагрузке (`docs/CONCEPT.md`, 5.4).
          */
         delete: operations["close_session"];
         options?: never;
@@ -745,6 +905,173 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AccountCreate
+         * @description Заведение учётной записи администратором.
+         *
+         *     Участник с именем `name` уже есть — учётная запись достаётся ему, если он человек и
+         *     своей у него ещё нет. Нет — заводится новый участник-человек.
+         */
+        AccountCreate: {
+            /**
+             * Email
+             * @description Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses
+             * @example alice@example.com
+             */
+            email: string;
+            /**
+             * Name
+             * @description Participant name: an existing human without an account, or a new one. Latin snake_case, stored lowercase; it signs every entry the person makes
+             * @example alice
+             */
+            name: string;
+            /**
+             * Description
+             * @description Description of a new participant; ignored for an existing one
+             * @default
+             * @example Разработчик интерфейса
+             */
+            description: string;
+            /**
+             * Is Admin
+             * @description Make the account an administrator
+             * @default false
+             */
+            is_admin: boolean;
+            /**
+             * Password
+             * @description New password, 12 to 1024 characters. Omit it and the tracker generates one and returns it once in `password`
+             */
+            password?: string | null;
+        };
+        /**
+         * AccountRead
+         * @description Учётная запись в ответе. Хеша пароля здесь нет — есть только признак, задан ли он.
+         */
+        AccountRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Email
+             * @description Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses
+             * @example alice@example.com
+             */
+            email: string;
+            /**
+             * Participant
+             * @description Name of the human participant this account signs in as: the name that signs every entry the person makes
+             * @example alice
+             */
+            participant: string;
+            /**
+             * Is Admin
+             * @description Administrator flag: opens managing accounts and nothing else. It gives no rights on tasks: everyone signed in sees everything
+             */
+            is_admin: boolean;
+            /**
+             * Has Password
+             * @description Whether a password is set. False on the account the installation creates for itself (`owner@localhost`): on the own machine its key arrives without a sign-in
+             */
+            has_password: boolean;
+            /**
+             * Disabled At
+             * @description When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active
+             */
+            disabled_at?: string | null;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AccountUpdate
+         * @description Частичное изменение учётной записи: применяется только переданное.
+         *
+         *     `null` ни у одного поля смысла не имеет, и схема его не пропустит.
+         */
+        AccountUpdate: {
+            /**
+             * Email
+             * @description Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses
+             * @example alice@example.com
+             */
+            email?: string;
+            /**
+             * Is Admin
+             * @description Grant or take the administrator flag. The last active administrator cannot lose it: `409 last_admin`
+             */
+            is_admin?: boolean;
+            /**
+             * Disabled
+             * @description `true` disables the account: it cannot sign in and every token of its participant is revoked. `false` enables it again; revoked tokens stay revoked
+             */
+            disabled?: boolean;
+        };
+        /**
+         * AccountWithPasswordRead
+         * @description Ответ на заведение и на сброс пароля: единственное место, где виден пароль.
+         */
+        AccountWithPasswordRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Email
+             * @description Email the person signs in with; stored lowercase and unique case-insensitively. It is only a sign-in name: the tracker sends no mail and does not confirm addresses
+             * @example alice@example.com
+             */
+            email: string;
+            /**
+             * Participant
+             * @description Name of the human participant this account signs in as: the name that signs every entry the person makes
+             * @example alice
+             */
+            participant: string;
+            /**
+             * Is Admin
+             * @description Administrator flag: opens managing accounts and nothing else. It gives no rights on tasks: everyone signed in sees everything
+             */
+            is_admin: boolean;
+            /**
+             * Has Password
+             * @description Whether a password is set. False on the account the installation creates for itself (`owner@localhost`): on the own machine its key arrives without a sign-in
+             */
+            has_password: boolean;
+            /**
+             * Disabled At
+             * @description When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active
+             */
+            disabled_at?: string | null;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Password
+             * @description The password the tracker generated, shown once and stored nowhere in plain text. Null when the administrator typed the password in the request
+             * @example Zb2yE1hQy0nK4c9oVw3uTg7a
+             */
+            password?: string | null;
+        };
         /**
          * AnswerEntryCreate
          * @description Ответ. Заголовок не принимается: он собирается из ссылки на вопрос.
@@ -824,6 +1151,12 @@ export interface components {
              */
             created_at: string;
             /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -858,6 +1191,86 @@ export interface components {
              * @example 7
              */
             question_no: number;
+        };
+        /**
+         * ArchiveFormat
+         * @description Что за документ перед нами. Значение одно: других архивов у трекера нет.
+         * @enum {string}
+         */
+        ArchiveFormat: "casefile.installation-archive";
+        /**
+         * ArchiveImportRead
+         * @description Итог приёма архива.
+         */
+        ArchiveImportRead: {
+            /**
+             * Schema Revision
+             * @description Revision the archive was taken at
+             * @example c4a9d31f7e58
+             */
+            schema_revision: string;
+            /**
+             * Head Revision
+             * @description Revision this installation brought the data up to
+             * @example 7e3b52a9c1d4
+             */
+            head_revision: string;
+            /**
+             * Tables
+             * @description Rows per table in this installation after the import
+             */
+            tables: components["schemas"]["ImportedTableRead"][];
+            /** @description Rows this installation had before the import and has lost to the archive. Its own machine keys survive (`machine_keys`) */
+            replaced: components["schemas"]["ReplacedRowsRead"];
+            /**
+             * Machine Keys
+             * @description Names of this installation's own keys that survived the import: the board's key and the key of this machine's agent, now attached to the archive's participants of the same name
+             * @example [
+             *       "local-agent",
+             *       "local-ui"
+             *     ]
+             */
+            machine_keys: string[];
+            /**
+             * Revoked Source Keys
+             * @description Keys of the same names that came in the archive and were revoked here: their secrets live on the machine the archive came from
+             * @example 2
+             */
+            revoked_source_keys: number;
+        };
+        /**
+         * ArchiveTableRead
+         * @description Строки одной таблицы установки: значения в порядке `columns`, каждое — текстом.
+         */
+        ArchiveTableRead: {
+            /**
+             * Name
+             * @description Table name at the archive's revision
+             * @example tasks
+             */
+            name: string;
+            /**
+             * Columns
+             * @description Column names; every row lists its values in this order
+             * @example [
+             *       "id",
+             *       "key",
+             *       "title"
+             *     ]
+             */
+            columns: string[];
+            /**
+             * Rows
+             * @description Rows of the table. Each value is the PostgreSQL text form of the column (what `column::text` gives; time in UTC), and null is SQL NULL. The receiving Casefile hands the text back to PostgreSQL as is, so a value never passes through a JSON type
+             * @example [
+             *       [
+             *         "0b9a…",
+             *         "TRK-1",
+             *         "First task"
+             *       ]
+             *     ]
+             */
+            rows: (string | null)[][];
         };
         /**
          * AssigneeChangedEntryRead
@@ -913,6 +1326,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -993,6 +1412,8 @@ export interface components {
         BootstrapRead: {
             /** @description Participant behind the token; null for a shared agent token, whose author is a temporary agent and has no registry entry */
             participant?: components["schemas"]["ParticipantRead"] | null;
+            /** @description Account of that participant: its email and the administrator flag, which opens managing accounts. Null for agents and for people who have no account */
+            account?: components["schemas"]["AccountRead"] | null;
             /** @description The token this request was made with: its `id` and scope. Present for every token, a shared agent one included, where `participant` is null */
             token: components["schemas"]["CurrentTokenRead"];
             /**
@@ -1075,6 +1496,12 @@ export interface components {
              */
             unmeasured: string;
         };
+        /** CollectionResponse[AccountRead] */
+        CollectionResponse_AccountRead_: {
+            /** Data */
+            data: components["schemas"]["AccountRead"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -1137,6 +1564,18 @@ export interface components {
              */
             scope: components["schemas"]["TokenScope"];
         };
+        /** DataResponse[AccountRead] */
+        DataResponse_AccountRead_: {
+            data: components["schemas"]["AccountRead"];
+        };
+        /** DataResponse[AccountWithPasswordRead] */
+        DataResponse_AccountWithPasswordRead_: {
+            data: components["schemas"]["AccountWithPasswordRead"];
+        };
+        /** DataResponse[ArchiveImportRead] */
+        DataResponse_ArchiveImportRead_: {
+            data: components["schemas"]["ArchiveImportRead"];
+        };
         /** DataResponse[BootstrapRead] */
         DataResponse_BootstrapRead_: {
             data: components["schemas"]["BootstrapRead"];
@@ -1144,6 +1583,10 @@ export interface components {
         /** DataResponse[EntryRead] */
         DataResponse_EntryRead_: {
             data: components["schemas"]["EntryRead"];
+        };
+        /** DataResponse[InstallationArchive] */
+        DataResponse_InstallationArchive_: {
+            data: components["schemas"]["InstallationArchive"];
         };
         /** DataResponse[InstallationRead] */
         DataResponse_InstallationRead_: {
@@ -1207,6 +1650,12 @@ export interface components {
              * @example Status changed: backlog -> open
              */
             title: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
@@ -1299,6 +1748,12 @@ export interface components {
              */
             created_at: string;
             /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1367,6 +1822,67 @@ export interface components {
              * @constant
              */
             database: "ok";
+        };
+        /**
+         * ImportedTableRead
+         * @description Сколько строк таблицы стоит в установке после приёма.
+         */
+        ImportedTableRead: {
+            /**
+             * Name
+             * @example entries
+             */
+            name: string;
+            /**
+             * Rows
+             * @example 3398
+             */
+            rows: number;
+        };
+        /**
+         * InstallationArchive
+         * @description Архив установки: все её данные на одной ревизии схемы (`docs/moving.md`).
+         */
+        InstallationArchive: {
+            /** @description What the document is */
+            format: components["schemas"]["ArchiveFormat"];
+            /**
+             * Format Version
+             * @description Layout of this document. It changes only when the layout does; the database schema is `schema_revision`
+             * @example 1
+             */
+            format_version: number;
+            /**
+             * Schema Revision
+             * @description Database migration revision the rows were taken at. A Casefile that knows the revision brings the rows up to its own schema; one that does not (the archive is newer) refuses with `archive_revision_unknown`
+             * @example 7e3b52a9c1d4
+             */
+            schema_revision: string;
+            /**
+             * App Version
+             * @description Casefile version that took it
+             * @example 0.1.0
+             */
+            app_version: string;
+            /**
+             * Exported At
+             * Format: date-time
+             * @description When the archive was taken
+             */
+            exported_at: string;
+            /**
+             * Tables
+             * @description Every table of the installation except the migration version and idempotency keys; browser session tokens are left out of `tokens`
+             */
+            tables: components["schemas"]["ArchiveTableRead"][];
+        };
+        /**
+         * InstallationArchiveUpload
+         * @description Тело приёма — ответ выгрузки как есть, вместе с оболочкой `data`.
+         */
+        InstallationArchiveUpload: {
+            /** @description The archive. The body is the response of `GET /api/v1/installation/archive` verbatim, so a saved download is posted back without editing */
+            data: components["schemas"]["InstallationArchive"];
         };
         /**
          * InstallationRead
@@ -1451,6 +1967,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1647,15 +2169,31 @@ export interface components {
             description?: string;
         };
         /**
-         * PasswordLogin
-         * @description Вход по паролю установки. Имени нет: пароль у установки один — владельца.
+         * PasswordChange
+         * @description Смена своего пароля: прежний обязателен, если он задан.
          */
-        PasswordLogin: {
+        PasswordChange: {
+            /**
+             * Current Password
+             * @description The password in force now. Required when the account has one; an account without a password (`has_password: false`) sets its first one without it
+             */
+            current_password?: string | null;
+            /**
+             * New Password
+             * @description New password, 12 to 1024 characters
+             */
+            new_password: string;
+        };
+        /**
+         * PasswordReset
+         * @description Сброс пароля администратором: прежний не спрашивается.
+         */
+        PasswordReset: {
             /**
              * Password
-             * @description The owner password of this installation, as typed. It is checked against `TRACKER_PASSWORD_HASH` and never stored or logged
+             * @description New password, 12 to 1024 characters. Omit it and the tracker generates one and returns it once in `password`
              */
-            password: string;
+            password?: string | null;
         };
         /**
          * PlainEntryCreate
@@ -1744,6 +2282,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1835,6 +2379,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2058,6 +2608,12 @@ export interface components {
              */
             created_at: string;
             /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2074,6 +2630,27 @@ export interface components {
          * @enum {string}
          */
         RemarkOutcome: "fixed" | "accepted" | "needs_detail" | "declined";
+        /**
+         * ReplacedRowsRead
+         * @description Сколько строк приёмника заменено архивом: его люди и доступы до приёма.
+         */
+        ReplacedRowsRead: {
+            /**
+             * Participants
+             * @example 2
+             */
+            participants: number;
+            /**
+             * Tokens
+             * @example 2
+             */
+            tokens: number;
+            /**
+             * Accounts
+             * @example 1
+             */
+            accounts: number;
+        };
         /**
          * ResolutionEntryCreate
          * @description Резолюция. Заголовок не принимается: он собирается из ссылки на замечание и исхода.
@@ -2152,6 +2729,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2262,6 +2845,12 @@ export interface components {
              */
             created_at: string;
             /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2318,16 +2907,41 @@ export interface components {
             after?: string | string[] | null;
         };
         /**
+         * SessionLogin
+         * @description Вход учётной записью: почта и пароль.
+         */
+        SessionLogin: {
+            /**
+             * Email
+             * @description Email of the account; matching ignores case
+             * @example alice@example.com
+             */
+            email: string;
+            /**
+             * Password
+             * @description Password of the account, as typed. It is never stored or logged
+             */
+            password: string;
+        };
+        /**
          * SessionRead
-         * @description Живой сеанс браузера. Секрета здесь нет: он едет только в куке `HttpOnly`.
+         * @description Живой сеанс: токен вкладки, его срок и учётная запись за ним.
          */
         SessionRead: {
             /**
+             * Token
+             * @description Secret of the session token: a `main` token of the account's participant, sent as `Authorization: Bearer` on every REST request. The same secret rides in the `HttpOnly` cookie; this is how the tab gets it again after a reload
+             * @example trk_0oUCtWtA6d9v0j0N1cMBAxk2wKAKopWzvbf_wQ8sDLc
+             */
+            token: string;
+            /**
              * Expires At
              * Format: date-time
-             * @description When the session ends, counted from the login (`TRACKER_SESSION_HOURS`). It also ends earlier on logout and when the API process restarts
+             * @description When the session and its token end, counted from the sign-in (`TRACKER_SESSION_HOURS`). They end earlier on sign-out, on a password change or reset, and when the account is disabled
              */
             expires_at: string;
+            /** @description The account signed in */
+            account: components["schemas"]["AccountRead"];
         };
         /**
          * StatusChangedEntryRead
@@ -2383,6 +2997,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2513,6 +3133,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3160,6 +3786,11 @@ export interface components {
              */
             revoked_at?: string | null;
             /**
+             * Expires At
+             * @description Set only on a browser session token, issued by `POST /api/v1/session`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked
+             */
+            expires_at?: string | null;
+            /**
              * Secret
              * @description Full token value, shown once and never stored in plain text
              * @example trk_0oUCtWtA6d9v0j0N1cMBAxk2wKAKopWzvbf_wQ8sDLc
@@ -3205,6 +3836,11 @@ export interface components {
              * @description Set when the token is revoked; the record stays for the audit trail
              */
             revoked_at?: string | null;
+            /**
+             * Expires At
+             * @description Set only on a browser session token, issued by `POST /api/v1/session`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked
+             */
+            expires_at?: string | null;
         };
         /**
          * TokenScope
@@ -3299,6 +3935,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3485,6 +4127,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_InstallationRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_installation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_InstallationArchive_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    import_installation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallationArchiveUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_ArchiveImportRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -3875,6 +4675,8 @@ export interface operations {
     list_tokens: {
         parameters: {
             query?: {
+                /** @description Only own tokens: those that speak for the caller or were issued by the caller. Changes nothing for a non-administrator, who sees only own tokens anyway */
+                mine?: boolean;
                 /** @description Page size */
                 limit?: number;
                 /** @description Cursor from `meta.next_cursor` of a previous page */
@@ -4058,6 +4860,503 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_accounts: {
+        parameters: {
+            query?: {
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_AccountRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_account: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_AccountWithPasswordRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_account: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Identifier of the account */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_AccountRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_account: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Identifier of the account */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_AccountRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reset_password: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Identifier of the account */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordReset"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_AccountWithPasswordRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Identifier of the account */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_AccountRead_"];
+                };
             };
             /** @description Token is missing, unknown or revoked */
             401: {
@@ -5791,17 +7090,8 @@ export interface operations {
                     "application/json": components["schemas"]["DataResponse_SessionRead_"];
                 };
             };
-            /** @description Wrong password or no live session */
+            /** @description Wrong email or password, or no live session */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description The installation has no owner password */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5847,7 +7137,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PasswordLogin"];
+                "application/json": components["schemas"]["SessionLogin"];
             };
         };
         responses: {
@@ -5860,17 +7150,8 @@ export interface operations {
                     "application/json": components["schemas"]["DataResponse_SessionRead_"];
                 };
             };
-            /** @description Wrong password or no live session */
+            /** @description Wrong email or password, or no live session */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description The installation has no owner password */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5926,17 +7207,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Wrong password or no live session */
+            /** @description Wrong email or password, or no live session */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description The installation has no owner password */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };

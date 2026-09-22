@@ -21,6 +21,19 @@
 
 Автор всего заведённого — сам трекер (`TRACKER_ACTOR`): участника, который завёл бы
 первого участника, в этот момент ещё не существует.
+
+## Учётная запись администратора заводится здесь же
+
+Человеку, которому установка выпускает ключ интерфейса, она заводит и учётную запись
+администратора (`docs/CONCEPT.md`, 5.4): почта `<имя>@localhost`, без пароля. На своей
+машине этого достаточно — ключ интерфейс получает без входа, и записи подписаны именем
+администратора. Заводит её каждый из трёх сценариев, который заводит этого человека или
+выдаёт ему ключ (`ensure_admin_account`), и на уже работающей установке тоже: так
+учётную запись получает владелец установки, поднятой до учётных записей.
+
+Там же переносится прежний пароль установки: `ensure_local_token` получает хеш
+`TRACKER_PASSWORD_HASH` и кладёт его паролем в эту учётную запись, если пароля у неё ещё
+нет. Прежний пароль продолжает пускать, а заданный позже перенос не перетирает.
 """
 
 from dataclasses import dataclass
@@ -28,11 +41,15 @@ from enum import StrEnum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.account import Account
+from app.db.models.author import created_by_columns
 from app.db.models.participant import Participant
 from app.db.models.token import Token
-from app.db.repositories import ParticipantRepository, TokenRepository
-from app.domain.errors import ParticipantNotFoundError
+from app.db.repositories import AccountRepository, ParticipantRepository, TokenRepository
+from app.domain.accounts import local_admin_email
+from app.domain.errors import AccountEmailTakenError, ParticipantNotFoundError
 from app.domain.participants import ParticipantKind, normalize_participant_name
+from app.domain.passwords import PasswordHash
 from app.domain.tokens import TokenScope, hash_token
 from app.services.auth import TRACKER_ACTOR
 from app.services.participants import register_participant
@@ -89,6 +106,7 @@ async def initialize_installation(
         name=name,
         description=description,
     )
+    await ensure_admin_account(session, owner)
     return await issue_token(
         session,
         actor=TRACKER_ACTOR,
@@ -135,6 +153,11 @@ class LocalToken:
     #: Сколько прежних токенов отозвано этим же действием: одноимённые у того же
     #: участника и, при `RESCOPED`, заменённый токен из файла, как бы он ни назывался.
     revoked: int
+    #: Учётная запись человека, которому выдан ключ интерфейса. Пуста у токена агента
+    #: (`ensure_agent_token`): агенту учётная запись не нужна.
+    account: Account | None = None
+    #: Этим вызовом прежний `TRACKER_PASSWORD_HASH` стал паролем учётной записи.
+    password_imported: bool = False
 
 
 async def ensure_local_token(
@@ -143,8 +166,13 @@ async def ensure_local_token(
     known_secret: str | None,
     participant_name: str = DEFAULT_OWNER_NAME,
     token_name: str = DEFAULT_LOCAL_TOKEN_NAME,
+    legacy_password_hash: PasswordHash | None = None,
 ) -> LocalToken:
     """Приводит установку к состоянию «у интерфейса есть действующий ключ набора `main`».
+
+    И к состоянию «у этого человека есть учётная запись администратора»: её сценарий
+    заводит, если её нет, а `legacy_password_hash` — прежний `TRACKER_PASSWORD_HASH` —
+    кладёт в неё паролем, если пароля у неё ещё нет (раздел модуля).
 
     `known_secret` — то, что вызывающий нашёл в своей постоянной копии (для команды это
     файл; `None` — копии нет). Про файлы сценарий не знает ничего: он отвечает, что с
@@ -177,7 +205,18 @@ async def ensure_local_token(
 
     known = await _kept_token(tokens, known_secret)
     if known is not None and known.scope is LOCAL_TOKEN_SCOPE:
-        return LocalToken(outcome=LocalTokenOutcome.KEPT, token=known, secret=None, revoked=0)
+        assert known.participant is not None  # годный ключ из файла всегда именной
+        account, imported = await ensure_admin_account(
+            session, known.participant, legacy_password_hash
+        )
+        return LocalToken(
+            outcome=LocalTokenOutcome.KEPT,
+            token=known,
+            secret=None,
+            revoked=0,
+            account=account,
+            password_imported=imported,
+        )
 
     # Признак «установка пуста» тот же, что у `initialize_installation`, и по той же
     # причине: участник без токена доступа не даёт. Считается он до выпуска — после
@@ -199,13 +238,22 @@ async def ensure_local_token(
         )
 
     # `known` здесь — либо `None`, либо годный ключ другого набора: его и заменяем.
-    return await _replace_token(
+    replaced = await _replace_token(
         session,
         participant,
         token_name=token_name,
         scope=LOCAL_TOKEN_SCOPE,
         empty=empty,
         predecessor=known,
+    )
+    account, imported = await ensure_admin_account(session, participant, legacy_password_hash)
+    return LocalToken(
+        outcome=replaced.outcome,
+        token=replaced.token,
+        secret=replaced.secret,
+        revoked=replaced.revoked,
+        account=account,
+        password_imported=imported,
     )
 
 
@@ -229,9 +277,10 @@ async def ensure_agent_token(
     - Участник-агент заводится, если его нет, на любой установке. Опечатки в имени
       человека, от которой стережёт `ensure_local_token`, здесь нет: имя называет
       контур, а завести агента этой машины и есть смысл первого запуска.
-    - На пустой установке заводится и владелец-человек, без токена. Установка
-      начинается с человека, и `ensure_local_token`, позванный следом, найдёт его, а не
-      откажет, — порядок двух команд перестаёт иметь значение.
+    - На пустой установке заводится и владелец-человек, без токена, но с учётной
+      записью администратора. Установка начинается с человека, и `ensure_local_token`,
+      позванный следом, найдёт его, а не откажет, — порядок двух команд перестаёт
+      иметь значение.
     """
     tokens = TokenRepository(session)
 
@@ -244,13 +293,14 @@ async def ensure_agent_token(
 
     owner_name = normalize_participant_name(DEFAULT_OWNER_NAME)
     if empty and await participants.get_by_name(owner_name) is None:
-        await register_participant(
+        owner = await register_participant(
             session,
             actor=TRACKER_ACTOR,
             kind=ParticipantKind.HUMAN,
             name=DEFAULT_OWNER_NAME,
             description=DEFAULT_OWNER_DESCRIPTION,
         )
+        await ensure_admin_account(session, owner)
 
     agent = await participants.get_by_name(normalize_participant_name(participant_name))
     if agent is None:
@@ -265,6 +315,41 @@ async def ensure_agent_token(
     return await _replace_token(
         session, agent, token_name=token_name, scope=TokenScope.MAIN, empty=empty
     )
+
+
+async def ensure_admin_account(
+    session: AsyncSession,
+    participant: Participant,
+    legacy_password_hash: PasswordHash | None = None,
+) -> tuple[Account | None, bool]:
+    """Учётная запись администратора человека — заведённая или найденная — и был ли перенос.
+
+    Агенту учётная запись не заводится: `(None, False)`. Уже заведённую сценарий не
+    трогает, кроме одного: пустой пароль получает прежний хеш установки, если он передан.
+    Почта `<имя>@localhost` занята чужой учётной записью — отказ `account_email_taken`, а не
+    тихая другая почта: владелец установки должен знать, чем входить.
+    """
+    if participant.kind is not ParticipantKind.HUMAN:
+        return None, False
+    accounts = AccountRepository(session)
+    account = await accounts.get_by_participant(participant.id)
+    if account is None:
+        email = local_admin_email(participant.name)
+        if await accounts.get_by_email(email) is not None:
+            raise AccountEmailTakenError(details={"email": email})
+        account = await accounts.add(
+            Account(
+                participant=participant,
+                email=email,
+                is_admin=True,
+                **created_by_columns(TRACKER_ACTOR.author),
+            )
+        )
+    if legacy_password_hash is None or account.password_hash is not None:
+        return account, False
+    account.password_hash = legacy_password_hash.render()
+    await session.flush()
+    return account, True
 
 
 async def _kept_token(tokens: TokenRepository, known_secret: str | None) -> Token | None:

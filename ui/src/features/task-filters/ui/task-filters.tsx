@@ -1,13 +1,15 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ARCHIVE_AFTER_DAYS, TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
-import { X } from 'lucide-react';
-import { cn, useExitHold } from '@/shared/lib';
-import { Button, Reveal, Select } from '@/shared/ui';
+import { ARCHIVE_AFTER_DAYS } from '@/entities/task';
+import { ArrowDownUp, Code, ListFilter, Search, X } from 'lucide-react';
+import { cn } from '@/shared/lib';
+import { Button, Popover, PopoverContent, PopoverTrigger, Select } from '@/shared/ui';
 import { TASK_SORTS, type TaskFilters } from '../model/filters';
-import { useFiltersExpanded } from '../model/expanded';
-import { caretLine, type QueryProblem } from '../model/query-problem';
+import { type QueryProblem } from '../model/query-problem';
 import { CONDITION_RESET, describeFilters } from '../model/summary';
+import { FIELD, FIELD_PENDING } from './field';
+import { FilterMenu } from './filter-menu';
+import { PendingMark, QueryProblemHint } from './query-problem-hint';
 
 interface TaskFiltersFormProps {
   filters: TaskFilters;
@@ -17,79 +19,46 @@ interface TaskFiltersFormProps {
   problem: QueryProblem | null;
 }
 
-/** Текстовые поля до отправки: они применяются по «Применить», а не по каждой букве. */
+/** Текстовые поля до отправки: они применяются по Enter, а не по каждой букве. */
 interface Draft {
   assignee: string;
   text: string;
   query: string;
 }
 
-/*
- * Повторяющиеся строки утилит названы, а не скопированы, — по образцу `WIDTHS`
- * в `tasks-table.tsx`. Флажок стоит в разметке пять раз, строка формы три, подпись
- * и сноска по два: копия расходится с оригиналом при первой же правке одного из мест.
- */
-
-/** Флажок отбора: подпись и квадрат стоят в строку и не переносятся посередине. */
-const CHECK = 'inline-flex items-center gap-1 text-body whitespace-nowrap';
-
 /**
- * Флажок в свёрнутой строке: кеглем и тоном порядка, который стоит рядом. Кеглем формы
- * он выпирал бы из строки, где всё остальное — `text-meta`, и спорил бы с условиями.
- */
-const ROW_CHECK = 'inline-flex items-center gap-1 text-meta text-muted whitespace-nowrap';
-
-/** Идентификатор контракта внутри флажка: он мельче подписи рядом. */
-const CODE = 'font-mono text-meta';
-
-/** Строка формы: поля в ней разной высоты и выравниваются по нижнему краю. */
-const LINE = 'flex flex-wrap items-end gap-3';
-
-/** Подпись поля и легенда набора флажков. */
-const LABEL = 'text-label text-muted';
-
-/** Набор флажков в рамке: рамка называет, что статусы и приоритеты — один вопрос. */
-const GROUP =
-  'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-mark border border-line px-2 pt-0 pb-1';
-
-/*
- * Сноска у подписи и примечание доски: одна строка на оба места, потому что в CSS
- * это был один класс. `self-center` здесь не украшение — в строке подписи оно снимает
- * выравнивание по базовой линии, а в колонке формы ставит примечание по центру.
- */
-const NOTE = 'self-center text-meta text-muted italic';
-
-/**
- * Отбор задач: строка с тем, что включено сейчас, и форма под ней.
+ * Отбор задач: строка инструментов и строка того, что включено сейчас.
  *
- * Свёрнута по умолчанию — первый экран списка принадлежит задачам. Свёрнутый вид не
- * прячет отбор, а называет его словами целиком: список, в котором часть условий
- * спрятана, человек принял бы за все задачи.
+ * Ничего не разворачивается: поиск по тексту стоит в строке всегда, остальные условия
+ * добавляются из панели «Фильтр» за один-два щелчка, а включённые названы чипами под
+ * строкой — поимённо и целиком. Список, в котором часть условий спрятана, человек
+ * принял бы за все задачи.
+ *
+ * Язык запросов — отдельный режим той же строки, а не поле рядом с простым отбором:
+ * заполненный запрос отменяет простой отбор целиком (`filtersToListParams`), и два
+ * способа сказать одно и то же рядом спорили бы друг с другом.
  */
 export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFiltersFormProps) {
-  // На доске статус — это столбец, а порядок задан её устройством. Показывать поля,
-  // которые сейчас ни на что не влияют, значит врать: они спрятаны, но из адреса
-  // не стёрты и вернутся вместе с таблицей.
+  // На доске статус — это столбец: отбора по статусу в панели там нет. Из адреса он не
+  // стёрт и вернётся с таблицей.
   const board = filters.view === 'board';
+  const applied = filters.query.trim() !== '';
 
   const [draft, setDraft] = useState(() => toDraft(filters));
-  // Отказ разбора держит форму раскрытой: поле, в котором сделана опечатка, обязано
-  // быть на экране рядом с объяснением — даже если человек в прошлый раз свернул отбор.
-  const [expanded, setExpanded] = useFiltersExpanded(problem !== null);
-  const formId = useId();
-  const problemId = useId();
+  /*
+   * Режим запроса включается кнопкой ещё до того, как в поле что-то напечатано, — это
+   * состояние экрана, а не выдачи. Заполненный запрос держит режим сам: ссылка с
+   * запросом и отказ его разбора обязаны открыться с полем на экране.
+   */
+  const [queryChosen, setQueryChosen] = useState(applied);
+  const querying = queryChosen || applied;
+  const [menuOpen, setMenuOpen] = useState(false);
   const archiveHintId = useId();
   /*
-   * Кнопка раскрытия — якорь фокуса. Снятый чип исчезает вместе со своей кнопкой,
-   * и фокус улетал бы на `body`: следующий Tab начинал бы обход страницы с начала,
-   * то есть человек, снявший условие с клавиатуры, терял бы место.
+   * Кнопка «Фильтр» — якорь фокуса. Снятый чип исчезает вместе со своей кнопкой, и фокус
+   * улетал бы на `body`: следующий Tab начинал бы обход страницы с начала.
    */
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  /*
-   * Форма доживает выход: без этого сворачивание убрало бы её в том же кадре,
-   * и показывать было бы нечего (`useExitHold`).
-   */
-  const reveal = useExitHold(expanded);
+  const menuRef = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation('tasks');
 
   // Отбор меняется и мимо формы: «сбросить», кнопка «назад», открытая ссылка.
@@ -100,12 +69,11 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   const conditions = describeFilters(filters, t);
   const archiveHint = t('filters.archive.hint', { count: ARCHIVE_AFTER_DAYS });
   const pending = pendingFields(draft, filters);
-  const hasDraft = Object.values(pending).some(Boolean);
 
   /**
    * Любое изменение отбора отправляет и напечатанное, но ещё не применённое.
-   * Иначе флажок, поставленный после набора текста, молча стирал бы этот текст:
-   * в адрес он не попал, а форма перечиталась бы из адреса.
+   * Иначе переключатель, нажатый после набора текста, молча стирал бы этот текст:
+   * в адрес он не попал, а поле перечиталось бы из адреса.
    */
   function applyWith(changes: Partial<TaskFilters>) {
     onApply({
@@ -121,100 +89,174 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
     applyWith({});
   }
 
-  function toggle<T extends string>(list: T[], value: T, on: boolean): T[] {
-    return on ? [...list, value] : list.filter((item) => item !== value);
+  /** Выход из режима запроса снимает запрос: простой отбор возвращается таким, каким был. */
+  function toggleQuery() {
+    if (querying) {
+      setQueryChosen(false);
+      if (applied || draft.query !== '') applyWith({ query: '' });
+    } else {
+      setQueryChosen(true);
+    }
   }
 
   return (
-    /*
-     * Промежуток между строкой отбора и формой стоит на самой форме (`mt-2`), а не
-     * `gap-2` на разделе: промежуток между соседями держится, пока стоит сосед, и
-     * свёртывание кончалось бы скачком в восемь пикселей — тем самым рывком, только
-     * поменьше. Внутри обёртки он уезжает вместе с местом и доходит до нуля.
-     */
-    <section className="flex flex-col" aria-label={t('filters.label')}>
-      {/*
-       * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
-       * что первый экран списка платит за отбор, — всё остальное принадлежит задачам.
-       */}
-      <div className="flex flex-wrap items-center gap-2 rounded-control border border-line bg-surface px-3 py-2">
-        <Button
-          ref={toggleRef}
-          tone="quiet"
-          aria-expanded={expanded}
-          aria-controls={formId}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? t('filters.collapse') : t('filters.expand')}
-        </Button>
+    <section className="flex flex-col gap-2" aria-label={t('filters.label')}>
+      {/* Строка инструментов: чем отбирать. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {querying ? (
+          <QueryForm
+            value={draft.query}
+            pending={pending.query}
+            problem={problem}
+            focus={queryChosen && !applied}
+            onChange={(query) => setDraft({ ...draft, query })}
+            onSubmit={submit}
+          />
+        ) : (
+          <>
+            <form className="flex min-w-0 grow basis-56" role="search" onSubmit={submit}>
+              <SearchField
+                value={draft.text}
+                pending={pending.text}
+                onChange={(text) => setDraft({ ...draft, text })}
+              />
+            </form>
 
-        {/* Список, а не абзац: `aria-label` роль абзаца не принимает, и программа
-            чтения с экрана называет число условий вслух — «список из трёх». */}
+            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button ref={menuRef} tone="quiet" size="sm">
+                  <ListFilter className="size-(--ui-mark)" aria-hidden="true" />
+                  {t('filters.menu')}
+                  {/*
+                   * Число условий на кнопке — чтобы связать её с чипами под строкой. Глазам
+                   * хватает цифры, диктору чипы и так называют всё списком.
+                   */}
+                  {conditions.length === 0 ? null : (
+                    <span
+                      className="grid min-w-4 place-items-center rounded-pill bg-accent px-1 text-label leading-[1.4] text-accent-text"
+                      aria-hidden="true"
+                    >
+                      {conditions.length}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-96" aria-label={t('filters.menuLabel')}>
+                <FilterMenu
+                  filters={filters}
+                  board={board}
+                  assignee={draft.assignee}
+                  pending={pending.assignee}
+                  onAssignee={(assignee) => setDraft({ ...draft, assignee })}
+                  onApply={applyWith}
+                />
+              </PopoverContent>
+            </Popover>
+          </>
+        )}
+
         {/*
-         * Условия занимают всё свободное место и переносятся на вторую строку, когда их
-         * много. Ни `overflow: hidden`, ни счётчика «ещё 2»: спрятанное условие — это
-         * отфильтрованный список, который принимают за полный.
+         * Порядок стоит в строке, видимой всегда, и в обоих видах: на доске он упорядочивает
+         * карточки внутри столбцов (UI-130#10). Подпись поля скрыта в `aria-label`, а что
+         * это порядок, говорит знак: подпись вроде «сначала живые в деле» сама его не
+         * называет.
          */}
-        <ul
-          className="flex grow basis-48 flex-wrap items-center gap-x-2 gap-y-1 list-none p-0"
-          aria-label={t('filters.conditions')}
+        <Select
+          className="whitespace-nowrap"
+          label={t('filters.sort.label')}
+          icon={<ArrowDownUp className="size-(--ui-mark) shrink-0 text-faint" aria-hidden="true" />}
+          value={filters.sort}
+          onValueChange={(sort) => applyWith({ sort })}
+          options={TASK_SORTS.map((option) => ({
+            value: option,
+            label: t(`filters.sort.${option}`),
+          }))}
+        />
+
+        <Button
+          tone="quiet"
+          size="sm"
+          // Включённый режим виден и глазу: кнопка «нажата» тем же тоном, что включённое
+          // значение в панели.
+          className="aria-pressed:border-accent aria-pressed:bg-accent-soft"
+          aria-pressed={querying}
+          onClick={toggleQuery}
         >
-          {conditions.length === 0 ? (
-            /*
-             * Без условий выдача всё равно отобрана, пока архив скрыт: «показаны все
-             * задачи» было бы выводом обо всём по отобранной выдаче (`docs/notes/ui.md`).
-             */
-            <li className="text-meta text-muted">
-              {filters.showArchive ? t('filters.allShown') : t('filters.allButArchive')}
-            </li>
-          ) : (
-            conditions.map((condition) => (
+          <Code className="size-(--ui-mark)" aria-hidden="true" />
+          {t('filters.query.toggle')}
+        </Button>
+      </div>
+
+      {/* Строка состояния: что отобрано сейчас. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {querying ? (
+          <p className="text-meta text-muted">{t('filters.query.note')}</p>
+        ) : (
+          /* Список, а не абзац: программа чтения с экрана называет число условий вслух. */
+          <ul
+            className="flex min-w-0 list-none flex-wrap items-center gap-1.5 p-0"
+            aria-label={t('filters.conditions')}
+          >
+            {conditions.length === 0 ? (
               /*
-               * Чип — не кнопка с кнопкой внутри: снятие стоит рядом с текстом условия,
-               * а не вложено в другую мишень. Текст условия читается, а не нажимается:
-               * раскрывает форму по-прежнему одна кнопка слева.
-               *
-               * Пилюля, а не прямоугольник, — чтобы условие отбора не путалось с плашкой
-               * значения в строке списка (решение Д5).
+               * Без условий выдача всё равно отобрана, пока архив скрыт: «показаны все
+               * задачи» было бы выводом обо всём по отобранной выдаче (`docs/notes/ui.md`).
                */
-              <li
-                key={condition.id}
-                className="inline-flex items-center gap-1 rounded-pill border border-line-strong bg-surface pr-1 pl-2 text-mark text-text leading-[1.7] whitespace-nowrap"
-              >
-                <span>{condition.label}</span>
-                <button
-                  type="button"
-                  /*
-                   * `border-current` рядом с `border-none`: без него у кнопки остаётся цвет
-                   * рамки из таблицы браузера (`ButtonBorder` — чёрный днём, белый ночью),
-                   * тогда как `border: none` возвращал его к `currentColor`. Ширина нулевая,
-                   * и глазом разницы нет, а замер вычисленных стилей её видит.
-                   */
-                  className="grid place-items-center rounded-pill border-none border-current bg-transparent p-0 leading-none text-muted transition-[background-color] duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text"
-                  aria-label={t('filters.remove', { condition: condition.label })}
-                  onClick={() => {
-                    applyWith(CONDITION_RESET[condition.id]);
-                    toggleRef.current?.focus();
-                  }}
-                >
-                  <X className="size-(--ui-mark)" aria-hidden="true" />
-                </button>
+              <li className="text-meta text-muted">
+                {filters.showArchive ? t('filters.allShown') : t('filters.allButArchive')}
               </li>
-            ))
-          )}
-        </ul>
+            ) : (
+              conditions.map((condition) => (
+                /*
+                 * Чип — две соседние мишени, а не кнопка в кнопке: текст открывает панель
+                 * фильтра, крестик снимает условие.
+                 */
+                <li
+                  key={condition.id}
+                  className="inline-flex items-center rounded-pill bg-accent-soft text-mark whitespace-nowrap text-text"
+                >
+                  <button
+                    type="button"
+                    className={cn(CHIP_PART, 'py-0.5 pr-1 pl-2.5')}
+                    onClick={() => setMenuOpen(true)}
+                  >
+                    {condition.label}
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(CHIP_PART, 'mr-0.5 grid size-5 place-items-center text-muted')}
+                    aria-label={t('filters.remove', { condition: condition.label })}
+                    onClick={() => {
+                      applyWith(CONDITION_RESET[condition.id]);
+                      menuRef.current?.focus();
+                    }}
+                  >
+                    <X className="size-(--ui-mark)" aria-hidden="true" />
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+
+        {querying || conditions.length === 0 ? null : (
+          <button type="button" className={RESET} onClick={onReset}>
+            {t('filters.reset')}
+          </button>
+        )}
 
         {/*
          * Архив — умолчание списка, а не условие (UI-97): чипом он не значится, крестиком
-         * не снимается и сбросом не возвращается. Флажок стоит в строке, видимой всегда:
-         * архив показывается одним действием, а свёрнутая форма потребовала бы двух.
-         * Что такое архив, флажок говорит подсказкой — и глазам (`title`), и программе
-         * чтения с экрана (`aria-describedby`): слово «архив» само по себе не называет
-         * ни порога, ни того, что в архив попадают только закрытые.
+         * не снимается и сбросом не возвращается. Флажок стоит в строке того, что
+         * показано, — рядом с фразой «все, кроме архива», которую он и меняет.
          */}
-        <label className={ROW_CHECK} title={archiveHint}>
+        <label
+          className="ml-auto inline-flex items-center gap-1.5 text-meta whitespace-nowrap text-muted"
+          title={archiveHint}
+        >
           <input
             type="checkbox"
+            className="size-(--ui-mark) accent-accent"
             checked={filters.showArchive}
             aria-describedby={archiveHintId}
             onChange={(event) => applyWith({ showArchive: event.target.checked })}
@@ -224,302 +266,120 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
         <span id={archiveHintId} className="sr-only">
           {archiveHint}
         </span>
-
-        {/*
-         * Порядок стоит в строке, видимой всегда: колонка времени показывает активность
-         * в деле, и человек обязан видеть, чем объясняется порядок строк, не разворачивая
-         * форму. Подпись поля скрыта в `aria-label`, а не написана рядом: слово
-         * «Сортировка» занимало 85 px строки, которые нужнее списку условий, — а каждая
-         * подпись вроде «сначала живые в деле» говорит за себя и без него.
-         */}
-        {board ? null : (
-          <Select
-            className="whitespace-nowrap"
-            label={t('filters.sort.label')}
-            value={filters.sort}
-            onValueChange={(sort) => applyWith({ sort })}
-            options={TASK_SORTS.map((option) => ({
-              value: option,
-              label: t(`filters.sort.${option}`),
-            }))}
-          />
-        )}
-
-        {conditions.length === 0 ? null : (
-          <Button tone="quiet" onClick={onReset}>
-            {t('filters.reset')}
-          </Button>
-        )}
       </div>
-
-      {reveal.held ? (
-        <Reveal hold={reveal}>
-          <form
-            id={formId}
-            className="mt-2 flex flex-col gap-3 rounded-control border border-line bg-surface px-4 py-3"
-            aria-label={t('filters.formLabel')}
-            onSubmit={submit}
-          >
-            <div className={LINE}>
-              {/*
-               * Очереди здесь нет и не должно быть: она стала местом в интерфейсе и живёт
-               * в боковой панели (UI-38, решение Д25). В форме остались условия, которые
-               * действительно отбор.
-               */}
-              {board ? null : (
-                <fieldset className={GROUP}>
-                  <legend className={LABEL}>{t('filters.statusLegend')}</legend>
-                  {TASK_STATUSES.map((status) => (
-                    <label key={status} className={CHECK}>
-                      <input
-                        type="checkbox"
-                        checked={filters.status.includes(status)}
-                        onChange={(event) =>
-                          applyWith({
-                            status: toggle(filters.status, status, event.target.checked),
-                          })
-                        }
-                      />
-                      <code className={CODE}>{status}</code>
-                    </label>
-                  ))}
-                </fieldset>
-              )}
-
-              <fieldset className={GROUP}>
-                <legend className={LABEL}>{t('filters.priorityLegend')}</legend>
-                {TASK_PRIORITIES.map((priority) => (
-                  <label key={priority} className={CHECK}>
-                    <input
-                      type="checkbox"
-                      checked={filters.priority.includes(priority)}
-                      onChange={(event) =>
-                        applyWith({
-                          priority: toggle(filters.priority, priority, event.target.checked),
-                        })
-                      }
-                    />
-                    <code className={CODE}>{priority}</code>
-                  </label>
-                ))}
-              </fieldset>
-            </div>
-
-            {board ? <p className={NOTE}>{t('filters.boardNote')}</p> : null}
-
-            <div className={LINE}>
-              <DraftField
-                label={t('filters.assignee')}
-                value={draft.assignee}
-                pending={pending.assignee}
-                placeholder={t('filters.assigneePlaceholder')}
-                onChange={(value) => setDraft({ ...draft, assignee: value })}
-              />
-
-              <DraftField
-                label={t('filters.text')}
-                value={draft.text}
-                pending={pending.text}
-                placeholder={t('filters.textPlaceholder')}
-                onChange={(value) => setDraft({ ...draft, text: value })}
-              />
-
-              <label className={CHECK}>
-                <input
-                  type="checkbox"
-                  checked={filters.blocked}
-                  onChange={(event) => applyWith({ blocked: event.target.checked })}
-                />
-                {t('filters.blocked')}
-              </label>
-
-              <label className={CHECK}>
-                <input
-                  type="checkbox"
-                  checked={filters.withQuestions}
-                  onChange={(event) => applyWith({ withQuestions: event.target.checked })}
-                />
-                {t('filters.withQuestions')}
-              </label>
-
-              <label className={CHECK}>
-                <input
-                  type="checkbox"
-                  checked={filters.withRemarks}
-                  onChange={(event) => applyWith({ withRemarks: event.target.checked })}
-                />
-                {t('filters.withRemarks')}
-              </label>
-            </div>
-
-            <div className={LINE}>
-              <DraftField
-                label={t('filters.query.label')}
-                note={t('filters.query.note')}
-                value={draft.query}
-                pending={pending.query}
-                placeholder={t('filters.query.placeholder')}
-                wide
-                invalid={problem !== null}
-                describedBy={problem === null ? undefined : problemId}
-                onChange={(value) => setDraft({ ...draft, query: value })}
-              >
-                {/* Объяснение отказа наложено на страницу, а не встроено в поток: иначе
-                    две сотни пикселей объяснения уводят таблицу вниз ровно тогда, когда
-                    человек хочет сравнить её с тем, что было до опечатки. */}
-                {problem === null ? null : <QueryProblemHint id={problemId} problem={problem} />}
-              </DraftField>
-
-              {/* Кнопка стоит при поле запроса — самом частом черновике — и включается
-                  только тогда, когда есть что применять. Флажки и списки применяются
-                  мгновенно и её не ждут. */}
-              <Button type="submit" disabled={!hasDraft}>
-                {t('filters.apply')}
-              </Button>
-            </div>
-          </form>
-        </Reveal>
-      ) : null}
     </section>
   );
 }
 
-interface DraftFieldProps {
-  label: string;
-  /** Постоянная сноска у подписи: она не появляется по событию и потому ничего не двигает. */
-  note?: string;
-  value: string;
-  /** Напечатано, но ещё не применено: поле само говорит, что ждёт «Применить». */
-  pending: boolean;
-  placeholder: string;
-  wide?: boolean;
-  invalid?: boolean;
-  describedBy?: string;
-  onChange: (value: string) => void;
-  children?: ReactNode;
-}
+/** Часть чипа: своя мишень с откликом на наведение и видимым фокусом. */
+const CHIP_PART =
+  'rounded-pill border-none bg-transparent leading-[1.4] transition-colors duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text focus-visible:outline-2 focus-visible:outline-focus';
+
+/** Сброс — действие-ссылка в строке состояния, а не третья кнопка рядом с двумя. */
+const RESET =
+  'rounded-mark border-none bg-transparent p-0 text-meta text-muted underline underline-offset-2 hover:text-text focus-visible:outline-2 focus-visible:outline-focus';
 
 /**
- * Текстовое поле отбора: применяется по «Применить» или по Enter, а до тех пор
- * говорит о себе, что ещё не применено.
- *
- * Enter работает сам, потому что поле стоит в форме с кнопкой отправки — отдельного
- * обработчика клавиши здесь нет и быть не должно: он разошёлся бы с кнопкой.
+ * Поиск по тексту: самое частое условие стоит в строке всегда. Применяется по Enter —
+ * поле стоит в форме поиска, и отдельного обработчика клавиши нет.
  */
-function DraftField({
-  label,
-  note,
+function SearchField({
   value,
   pending,
-  placeholder,
-  wide = false,
-  invalid = false,
-  describedBy,
   onChange,
-  children,
-}: DraftFieldProps) {
-  const inputId = useId();
+}: {
+  value: string;
+  pending: boolean;
+  onChange: (value: string) => void;
+}) {
   const pendingId = useId();
-  const describedByAll = [describedBy, pending ? pendingId : undefined].filter(
-    (id): id is string => id !== undefined,
-  );
   const { t } = useTranslation('tasks');
 
   return (
-    <div className={`flex flex-col gap-1${wide ? ' grow basis-96' : ''}`}>
-      {/* Подпись связана с полем через `htmlFor`, а не обёрткой: внутрь поля запроса
-          кладётся объяснение отказа с указателем на символ, а `label` вправе держать
-          только строчное содержимое. */}
-      {/*
-       * Сноска и признак черновика стоят рядом с подписью, а не внутри неё: имя поля
-       * для программы чтения с экрана — это текст `label`, и «Запрос на языке бэкенда
-       * отменяет остальной отбор, не применено» именем быть не должно. С полем они
-       * связаны через `aria-describedby` — как пояснение, а не как имя.
-       */}
-      <div className="flex items-baseline gap-2">
-        <label className={LABEL} htmlFor={inputId}>
-          {label}
-        </label>
-        {note === undefined ? null : <span className={NOTE}>{note}</span>}
-        {pending ? (
-          <span className="text-label font-semibold text-attention" id={pendingId}>
-            {t('filters.pending')}
-          </span>
-        ) : null}
-      </div>
-      <div className="relative block">
+    <div className="relative flex min-w-0 grow items-center">
+      <Search
+        className="pointer-events-none absolute left-2 size-(--ui-mark) text-faint"
+        aria-hidden="true"
+      />
+      <input
+        type="search"
+        className={cn(FIELD, 'pl-7', pending ? FIELD_PENDING : 'border-line-strong')}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={t('filters.textPlaceholder')}
+        aria-label={t('filters.text')}
+        aria-describedby={pending ? pendingId : undefined}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      {pending ? <PendingMark id={pendingId} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Режим запроса: строка на языке бэкенда вместо поиска и панели фильтра. Применяется
+ * по Enter или кнопкой; отказ разбора наложен под полем и указывает на символ.
+ */
+function QueryForm({
+  value,
+  pending,
+  problem,
+  focus,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  pending: boolean;
+  problem: QueryProblem | null;
+  /** Режим включён только что нажатой кнопкой: человек пришёл печатать. */
+  focus: boolean;
+  onChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const problemId = useId();
+  const pendingId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation('tasks');
+  const describedBy = [problem === null ? null : problemId, pending ? pendingId : null].filter(
+    (id) => id !== null,
+  );
+
+  // Только при появлении поля: дальше фокус принадлежит человеку.
+  useEffect(() => {
+    if (focus) inputRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <form className="flex min-w-0 grow basis-72 items-center gap-2" onSubmit={onSubmit}>
+      <div className="relative flex min-w-0 grow items-center">
         <input
-          id={inputId}
+          ref={inputRef}
           className={cn(
-            'w-full min-w-40 rounded-mark border bg-surface px-2 py-1 text-body text-text',
-            pending
-              ? // Черновик поля: напечатано, но в адрес ещё не уехало.
-                'border-attention-line shadow-[inset_3px_0_0_var(--color-attention-line)]'
-              : 'border-line-strong',
+            FIELD,
+            // Лигатуры Fira Code склеивают `>=` в «⩾»: человек напечатал бы то, чего
+            // на экране не видит, а указатель отказа мерит символы строки, а не знаки.
+            'font-mono text-meta [font-variant-ligatures:none]',
+            pending ? FIELD_PENDING : 'border-line-strong',
+            'aria-invalid:border-danger',
           )}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
+          placeholder={t('filters.query.placeholder')}
+          aria-label={t('filters.query.label')}
+          aria-invalid={problem !== null}
+          aria-describedby={describedBy.length === 0 ? undefined : describedBy.join(' ')}
           autoComplete="off"
           spellCheck={false}
-          aria-invalid={invalid}
-          aria-describedby={describedByAll.length === 0 ? undefined : describedByAll.join(' ')}
         />
-        {children}
+        {pending ? <PendingMark id={pendingId} /> : null}
+        {problem === null ? null : <QueryProblemHint id={problemId} problem={problem} />}
       </div>
-    </div>
-  );
-}
-
-/**
- * Что сказал бэкенд о негодном отборе: фраза по коду, место в строке и допустимое.
- * Позиция называется и словами, и указателем: указатель виден глазами, слова
- * читаются программой чтения с экрана.
- */
-function QueryProblemHint({ id, problem }: { id: string; problem: QueryProblem }) {
-  /*
-   * `useTranslation` нужен и ради подписки: `problem.message` собран `errorText`,
-   * а тот берёт язык у экземпляра и на смену языка не подписан.
-   */
-  const { t } = useTranslation('tasks');
-
-  return (
-    /*
-     * Объяснение отказа наложено на страницу, а не встроено в поток формы: встроенное
-     * уводило бы таблицу вниз на две сотни пикселей ровно в тот момент, когда человек
-     * правит запрос и сверяется с прошлой выдачей.
-     */
-    <div
-      className="absolute top-[calc(100%+var(--spacing))] left-0 z-5 flex min-w-full max-w-160 flex-col gap-2 rounded-mark border border-danger-line bg-danger-soft px-4 py-3 text-body text-danger shadow-raised"
-      id={id}
-      role="alert"
-    >
-      {/* Две фразы подряд, а не одна склеенная: отказ пришёл от бэкенда по коду,
-          а место ошибки называем мы. */}
-      <p>
-        {problem.message}
-        {problem.position === null
-          ? null
-          : ` ${t('filters.query.errorAt', { position: problem.position + 1 })}`}
-      </p>
-
-      {problem.position === null || problem.query === '' ? null : (
-        <pre
-          className="overflow-x-auto font-mono text-meta leading-[1.2] whitespace-pre"
-          aria-hidden="true"
-        >
-          {`${problem.query}\n${caretLine(problem.query, problem.position)}`}
-        </pre>
-      )}
-
-      {problem.allowed.length === 0 ? null : (
-        <p>{t('filters.query.allowed', { list: problem.allowed.join(', ') })}</p>
-      )}
-
-      {/* Таблица под формой продолжает показывать прошлую удачную выдачу; сказать
-          об этом надо здесь, у отказа, а не полосой над таблицей, которая её сдвинет. */}
-      <p>{t('filters.query.stale')}</p>
-    </div>
+      <Button type="submit" size="sm" disabled={!pending}>
+        {t('filters.apply')}
+      </Button>
+    </form>
   );
 }
 

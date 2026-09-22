@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -13,12 +14,24 @@ import {
 import { cn, useExitHold } from '@/shared/lib';
 import { QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
 
+/** Императивная ручка `TaskIndex`: прыжок «в начало описи» стоит в шапке блока
+ * (`task-page.tsx`, `INDEX_NAV`, UI-127) и дотягивается снаружи ровно до того узла,
+ * куда раньше вела кнопка внутри самой описи, — второго пути прокрутки не заводим. */
+export interface TaskIndexHandle {
+  scrollToTop: () => void;
+}
+
 interface TaskIndexProps {
   taskKey: string;
   index: EntryHeading[];
   /** Обзорные проверки задачи: вердикту нужен текст его проверки. */
   checks: string[];
-  /** Номер записи из адреса: ссылка `TRK-42#12` открывает карточку уже раскрытой. */
+  /**
+   * Номер записи из адреса: ссылка `TRK-42#12` или загрузка страницы с `?entry=N`
+   * открывает карточку уже раскрытой и приводит запись в поле зрения. Собственный
+   * клик по описи меняет тот же параметр (`onOpenChange`), но не через этот проп:
+   * `TaskIndex` отличает пришедшее снаружи от своего клика сам (`internalChange`).
+   */
   openAt: number | null;
   /**
    * Раскрытие записи человеком уходит в адрес. `null` — «раскрытого больше нет»:
@@ -26,6 +39,8 @@ interface TaskIndexProps {
    * в адресе дальше.
    */
   onOpenChange: (no: number | null) => void;
+  /** Ручка на прыжок «в начало описи» — вызывается из шапки блока (`task-page.tsx`). */
+  ref?: Ref<TaskIndexHandle>;
 }
 
 /**
@@ -53,7 +68,7 @@ const CELL = 'border-b border-b-line px-3 py-2 text-left align-top';
 /** Столбцы описи по порядку: подписи к ним живут в словаре (`task.index.columns`). */
 const INDEX_COLUMNS = ['no', 'type', 'author', 'when', 'headline'] as const;
 
-export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: TaskIndexProps) {
+export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }: TaskIndexProps) {
   const { t } = useTranslation('task');
 
   // Раскрытых может быть несколько — сравнивают соседние записи. В адрес уходит
@@ -62,12 +77,41 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(openAt === null ? [] : [openAt]),
   );
+  /**
+   * Запись, к которой ведёт прокрутка. Отдельно от `expanded`: раскрытых бывает
+   * несколько, а прокрутка нужна только той записи, к которой человек **пришёл** —
+   * по ссылке `TRK-42#12` или по загрузке страницы с `?entry=N`. Собственный клик
+   * по описи (`toggle`) адрес тоже меняет, но сюда не попадает: `internalChange`
+   * метит его заранее, и разбор следующего `openAt` эту метку гасит, не трогая
+   * прокрутку. Единственный путь прокрутки — сравнение этого поля с номером записи
+   * в `IndexRow`, без второго условия рядом.
+   */
+  const [scrollTarget, setScrollTarget] = useState<number | null>(null);
+  /** Метка «следующая правка `openAt` — от своего клика, не от прихода снаружи». */
+  const internalChange = useRef(false);
+  /** Начало описи: сюда возвращает прыжок «в начало» — кнопка стоит в шапке блока
+   * (`task-page.tsx`), а дотягивается до этого узла через `TaskIndexHandle`. */
+  const scroller = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToTop: () => scroller.current?.scrollIntoView?.({ block: 'start' }),
+    }),
+    [],
+  );
 
   // Ссылка `TRK-42#12` внутри той же карточки меняет адрес, не перемонтируя страницу,
-  // поэтому раскрытие следит за параметром, а не только за первым рендером.
+  // поэтому раскрытие следит за параметром, а не только за первым рендером. Метка
+  // читается и гасится здесь же, до раннего выхода: иначе клик, закрывший запись,
+  // не названную в адресе (`openAt` не меняется, эффект не перезапускается), оставил
+  // бы метку висеть и погасил бы прокрутку следующего настоящего перехода по ссылке.
   useEffect(() => {
+    const internal = internalChange.current;
+    internalChange.current = false;
     if (openAt === null) return;
     setExpanded((previous) => (previous.has(openAt) ? previous : new Set(previous).add(openAt)));
+    if (!internal) setScrollTarget(openAt);
   }, [openAt]);
 
   const toggle = useCallback(
@@ -85,7 +129,12 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
 
       // Закрыли ту запись, что названа в адресе, — адрес перестаёт её называть;
       // закрыли соседнюю — названная остаётся названной.
-      onOpenChange(closing ? (openAt === no ? null : openAt) : no);
+      const nextOpenAt = closing ? (openAt === no ? null : openAt) : no;
+      // Метка ставится, только если `openAt` и правда меняется: иначе эффект выше
+      // не перезапустится вовсе (тот же номер — тот же `Object.is`), метка останется
+      // висеть и собьёт разбор следующего прихода снаружи.
+      if (nextOpenAt !== openAt) internalChange.current = true;
+      onOpenChange(nextOpenAt);
     },
     [expanded, onOpenChange, openAt],
   );
@@ -94,8 +143,10 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
 
   return (
     // Число записей и прыжки по описи стоят в шапке блока над таблицей
-    // (`task-page.tsx`, `BLOCK_HEAD`): там же общие поля блока и переход в ленту.
-    <div className="overflow-x-auto">
+    // (`task-page.tsx`, `BLOCK_HEAD`/`INDEX_NAV`): там же общие поля блока и переход
+    // в ленту. Ref на прокручиваемый узел — для прыжка «в начало» снаружи (UI-127),
+    // сама прокрутка отдельной записи — `scrollTarget`, ниже (UI-126).
+    <div className="overflow-x-auto" ref={scroller}>
       <table
         className="w-full border-collapse text-body"
         aria-label={t('index.count', { count: index.length })}
@@ -121,7 +172,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
               heading={heading}
               checks={checks}
               open={expanded.has(heading.no)}
-              scrollTo={openAt === heading.no}
+              scrollTo={scrollTarget === heading.no}
               onToggle={toggle}
             />
           ))}
@@ -136,7 +187,11 @@ interface IndexRowProps {
   heading: EntryHeading;
   checks: string[];
   open: boolean;
-  /** Запись, названную в адресе, показать человеку, а не оставить где-то ниже сгиба. */
+  /**
+   * Запись, к которой человек **пришёл** (ссылка, `?entry=N` при загрузке, «К свежей
+   * записи»), показать не ниже сгиба. Собственный клик по описи сюда не попадает —
+   * он только раскрывает: строка остаётся там, где по ней кликнули (UI-126).
+   */
   scrollTo: boolean;
   onToggle: (no: number) => void;
 }

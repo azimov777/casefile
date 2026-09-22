@@ -36,7 +36,23 @@ function AddressProbe() {
  * тот на каждом переходе строит `Request` из недици с `AbortSignal` из jsdom, и они
  * друг друга не принимают. Список маршрутов при этом тот же самый, что у приложения.
  */
-export function renderApp(initialPath = '/', { language = 'en' }: { language?: Language } = {}) {
+export function renderApp(
+  initialPath = '/',
+  {
+    language = 'en',
+    installKey,
+    signIn = false,
+  }: {
+    language?: Language;
+    /**
+     * Ключ, который «отдала установка»: своя машина (`/config.json` → `200`) или, с
+     * `signIn`, токен сеанса режима входа. Без него — установка без ключа.
+     */
+    installKey?: string;
+    /** Режим входа по учётным записям (`TRK-113`): `/config.json` отвечает `401`. */
+    signIn?: boolean;
+  } = {},
+) {
   /*
    * Язык подставляется явно, а не берётся определителем: в jsdom `navigator.language`
    * — `en-US`, и страничный тест зависел бы от среды, в которой запущен, а не от того,
@@ -59,7 +75,11 @@ export function renderApp(initialPath = '/', { language = 'en' }: { language?: L
    * Тест про сам путь ключа начинает настоящее чтение (`loadInstallToken`) до вызова —
    * тогда состояние уже не `unread`, и оснастка в него не вмешивается.
    */
-  if (installConfigState() === 'unread') seedInstallConfig(null);
+  if (installKey !== undefined || signIn) {
+    seedInstallConfig(installKey ?? null, { signIn });
+  } else if (installConfigState() === 'unread') {
+    seedInstallConfig(null);
+  }
 
   const queryClient = new QueryClient({
     defaultOptions: {
