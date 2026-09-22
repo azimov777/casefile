@@ -617,6 +617,14 @@ class HeadingView(BaseModel):
     author: AuthorView
     created_at: datetime
     title: str
+    action_id: str | None = Field(
+        default=None,
+        description=(
+            "Marks the single call that filed this entry: entries of one call share "
+            "the same value, entries of another call never do. `null` on entries "
+            "filed before this field existed"
+        ),
+    )
     facts: FactsView
 
 
@@ -628,6 +636,7 @@ def heading(value: EntryHeading) -> HeadingView:
         author=author(value.author),
         created_at=value.created_at,
         title=value.title,
+        action_id=None if value.action_id is None else str(value.action_id),
         facts=facts(value.facts),
     )
 
@@ -653,6 +662,14 @@ class EntryView(BaseModel):
     payload: dict[str, JsonValue]
     refs: list[str]
     created_at: datetime
+    action_id: str | None = Field(
+        default=None,
+        description=(
+            "Marks the single call that filed this entry: entries of one call share "
+            "the same value, entries of another call never do. `null` on entries "
+            "filed before this field existed"
+        ),
+    )
 
 
 def entry(value: Entry, *, task_key: str) -> EntryView:
@@ -669,6 +686,7 @@ def entry(value: Entry, *, task_key: str) -> EntryView:
         payload=dict(value.payload),
         refs=list(value.refs),
         created_at=value.created_at,
+        action_id=None if value.action_id is None else str(value.action_id),
     )
 
 

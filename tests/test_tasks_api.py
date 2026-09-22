@@ -127,13 +127,24 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     }
     assert len(package["index"]) == 1
     heading = package["index"][0]
-    assert sorted(heading) == ["author", "created_at", "facts", "no", "title", "type"]
+    assert sorted(heading) == [
+        "action_id",
+        "author",
+        "created_at",
+        "facts",
+        "no",
+        "title",
+        "type",
+    ]
     assert heading["no"] == 1
     assert heading["type"] == "created"
     # У заведения называть строкой нечего, кроме самого типа: форма фактов пуста, и в
     # ответе от неё остаётся одна разметка — ни одного ключа «на всякий случай».
     assert heading["facts"] == {"type": "created"}
     assert heading["author"] == {"kind": "human", "signature": "owner"}
+    # Признак действия (TRK-118): у свежесозданной записи он всегда есть, и в этой
+    # задаче единственная запись — значит, единственное действие.
+    assert heading["action_id"] is not None
 
 
 async def test_a_status_at_creation_is_rejected(auth_client: AsyncClient, queue: Queue) -> None:

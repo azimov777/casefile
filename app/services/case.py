@@ -26,8 +26,20 @@
 `done` и `cancelled` запрещают менять поля и связи, но не дело (`CONCEPT.md`, 3.3):
 человек и сторонний агент дописывают в закрытую задачу `note`, `finding` и `answer`.
 Поэтому проверки статуса здесь нет — и это не забытая проверка.
+
+## `action_id` — признак одного действия (TRK-118)
+
+`_append` — точка, где он и присваивается: не передан вызывающим — генерируется
+здесь, `uuid.uuid4()`. Одиночным подшивкам (`add_summary`, `ask`, `record_created` и
+так далее вне пакетной подшивки) этого достаточно — вызов подшивает одну запись, и
+у неё одно значение. Пакетным сценариям (`apply_task_changes`, `close_task` в
+`app/services/tasks.py`, `_record_on_both_sides` в `app/services/links.py`)
+достаточности нет: им нужно одно значение на **все** свои записи, и они генерируют
+его сами, до первого вызова сюда, и передают явно в каждый — подробности в
+`app/db/models/entry.py`.
 """
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -358,6 +370,7 @@ async def append_entry(
     payload: dict[str, Any] | None = None,
     refs: Any = (),
     closing: bool = False,
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Подшивает запись агента: форма проверяется доменом, существование — здесь.
 
@@ -368,6 +381,8 @@ async def append_entry(
     `closing` доезжает до домена как часть контекста: от него зависит состав частей
     сводки. Снаружи его не задают — он приходит от сценария закрытия, который один и
     знает, что подшивает последнюю запись работы.
+
+    `action_id` доезжает до `_append` как есть: не передан — тот сгенерирует его сам.
     """
     ensure_scope(actor, TokenScope.TASK, action="case.append")
     draft = build_entry(
@@ -388,6 +403,7 @@ async def append_entry(
         body=draft.body,
         payload=draft.payload,
         refs=draft.refs,
+        action_id=action_id,
     )
 
 
@@ -404,6 +420,7 @@ async def add_summary(
     closing: bool = False,
     body: Any = "",
     refs: Any = (),
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Справка при передаче: сделано, осталось, что мешает, следующий шаг.
 
@@ -434,6 +451,7 @@ async def add_summary(
         refs=refs,
         payload=payload,
         closing=closing,
+        action_id=action_id,
     )
 
 
@@ -447,6 +465,7 @@ async def ask(
     body: Any = "",
     blocking: Any = None,
     refs: Any = (),
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Вопрос участникам реестра. `blocking` обязателен и значения по умолчанию не имеет."""
     return await append_entry(
@@ -458,6 +477,7 @@ async def ask(
         body=body,
         refs=refs,
         payload={"addressees": addressees, "blocking": blocking},
+        action_id=action_id,
     )
 
 
@@ -469,6 +489,7 @@ async def answer(
     question_no: Any,
     body: Any = "",
     refs: Any = (),
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Ответ на вопрос той же задачи. Ответить может кто угодно, ответов может быть много."""
     return await append_entry(
@@ -479,6 +500,7 @@ async def answer(
         body=body,
         refs=refs,
         payload={"question_no": question_no},
+        action_id=action_id,
     )
 
 
@@ -491,6 +513,7 @@ async def add_verdict(
     outcome: Any,
     evidence: Any = "",
     refs: Any = (),
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Исход одной обзорной проверки. Доказательство — тело записи."""
     return await append_entry(
@@ -501,6 +524,7 @@ async def add_verdict(
         body=evidence,
         refs=refs,
         payload={"check_no": check_no, "outcome": outcome},
+        action_id=action_id,
     )
 
 
@@ -514,6 +538,7 @@ async def resolve(
     continuation: Any = None,
     body: Any = "",
     refs: Any = (),
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Резолюция по замечанию: чем разобрано и куда ушла работа.
 
@@ -530,6 +555,7 @@ async def resolve(
         body=body,
         refs=refs,
         payload={"remark_no": remark_no, "outcome": outcome, "task": continuation},
+        action_id=action_id,
     )
 
 
@@ -542,10 +568,18 @@ async def add_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Запись без нагрузки: `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`."""
     return await append_entry(
-        session, task, actor=actor, type=type, title=title, body=body, refs=refs
+        session,
+        task,
+        actor=actor,
+        type=type,
+        title=title,
+        body=body,
+        refs=refs,
+        action_id=action_id,
     )
 
 
@@ -555,9 +589,18 @@ async def add_entry(
 # проверил. Заголовки — на английском: служебный слой, а не пользовательские данные.
 
 
-async def record_created(session: AsyncSession, task: Task, *, actor: Actor) -> Entry:
+async def record_created(
+    session: AsyncSession, task: Task, *, actor: Actor, action_id: uuid.UUID | None = None
+) -> Entry:
     """Первая страница дела: задача заведена. Нагрузки нет — карточка и есть содержание."""
-    return await _append(session, task, actor=actor, type=EntryType.CREATED, title="Task created")
+    return await _append(
+        session,
+        task,
+        actor=actor,
+        type=EntryType.CREATED,
+        title="Task created",
+        action_id=action_id,
+    )
 
 
 async def record_status_changed(
@@ -568,6 +611,7 @@ async def record_status_changed(
     from_status: TaskStatus,
     to_status: TaskStatus,
     reason: str | None,
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Переход статуса с причиной, если она была: по ней преемник понимает откат.
 
@@ -583,6 +627,7 @@ async def record_status_changed(
         type=EntryType.STATUS_CHANGED,
         title=f"Status changed: {from_status.value} -> {to_status.value}",
         payload={"from": from_status.value, "to": to_status.value, "reason": reason},
+        action_id=action_id,
     )
 
 
@@ -595,6 +640,7 @@ async def record_section_changed(
     before: Any,
     after: Any,
     check_no: int | None = None,
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Правка названия, описания или раздела в `backlog`: «было / стало» целиком.
 
@@ -619,6 +665,7 @@ async def record_section_changed(
         type=EntryType.SECTION_CHANGED,
         title=f"Section changed: {named}",
         payload=payload,
+        action_id=action_id,
     )
 
 
@@ -630,6 +677,7 @@ async def record_field_changed(
     field: TaskField,
     before: Any,
     after: Any,
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Правка обвязки задачи: то, что меняется в любом незакрытом статусе.
 
@@ -649,6 +697,7 @@ async def record_field_changed(
         type=EntryType.FIELD_CHANGED,
         title=f"Field changed: {field.value}",
         payload={"field": field.value, "before": before, "after": after},
+        action_id=action_id,
     )
 
 
@@ -659,6 +708,7 @@ async def record_assignee_changed(
     actor: Actor,
     before: str | None,
     after: str | None,
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Смена исполнителя — единственная правка обвязки, которая подшивается в дело."""
     return await _append(
@@ -668,6 +718,7 @@ async def record_assignee_changed(
         type=EntryType.ASSIGNEE_CHANGED,
         title=f"Assignee changed: {before or 'nobody'} -> {after or 'nobody'}",
         payload={"before": before, "after": after},
+        action_id=action_id,
     )
 
 
@@ -679,6 +730,7 @@ async def record_link_change(
     added: bool,
     kind: LinkKind,
     other_key: str,
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Появление или снятие связи — в дело **этой** стороны, её собственным видом связи.
 
@@ -689,7 +741,8 @@ async def record_link_change(
 
     Порядок двух вызовов важен и задаётся вызывающим: `allocate_no` держит строку задачи
     до конца транзакции, и две подшивки в разном порядке взаимно заблокировались бы
-    (`docs/notes/links.md`).
+    (`docs/notes/links.md`). Обе стороны одной связи делят один `action_id`, который
+    вызывающий (`_record_on_both_sides`) генерирует один раз и передаёт в оба вызова.
     """
     action = "added" if added else "removed"
     return await _append(
@@ -699,6 +752,7 @@ async def record_link_change(
         type=EntryType.LINK_ADDED if added else EntryType.LINK_REMOVED,
         title=f"Link {action}: {kind.value} {other_key}",
         payload={"kind": kind.value, "other": other_key},
+        action_id=action_id,
     )
 
 
@@ -847,11 +901,18 @@ async def _append(
     payload: dict[str, Any] | None = None,
     body: str = "",
     refs: Sequence[str] = (),
+    action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Подшивает запись: номер в задаче выдаётся под блокировкой строки задачи.
 
     Автор раскладывается по колонкам общей функцией `created_by_columns` и берётся
     только из структуры автора действия — второй раскладки в проекте нет.
+
+    `action_id` — признак одного действия (TRK-118, `app/db/models/entry.py`): не
+    передан вызывающим — генерируется здесь и достаётся только этой записи. Пакетная
+    подшивка (`apply_task_changes`, `close_task`, `_record_on_both_sides`) передаёт
+    сюда одно и то же значение на все свои записи — так оно и не оказалось бы вычислено
+    заново на каждой.
 
     Здесь же, и только здесь, журнал получает две вещи, без которых лента (задача 26)
     неверна. Порядок обязателен и объяснён в самих методах:
@@ -877,6 +938,7 @@ async def _append(
         body=body,
         payload=dict(payload or {}),
         refs=list(refs),
+        action_id=action_id if action_id is not None else uuid.uuid4(),
         **created_by_columns(actor.author),
     )
     await repository.add(entry)

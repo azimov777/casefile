@@ -191,6 +191,7 @@ class EntryRepository:
                 Entry.created_by_signature,
                 Entry.created_at,
                 Entry.title,
+                Entry.action_id,
                 _facts_json().label("facts"),
             )
             .where(Entry.task_id == task_id)
@@ -205,6 +206,7 @@ class EntryRepository:
                 created_at=row.created_at,
                 title=row.title,
                 facts=_read_facts(row.type, row.facts),
+                action_id=row.action_id,
             )
             for row in rows
         ]
