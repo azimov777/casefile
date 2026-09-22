@@ -255,6 +255,56 @@ async def test_both_cases_get_the_link_entry_under_their_own_kind(
     ]
 
 
+async def test_both_sides_of_one_link_share_one_action_id(
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Обзорная проверка TRK-118: обе стороны одной связи — одно действие.
+
+    `link_added` в деле обеих задач появляется одним сценарием (`add_link`), и
+    интерфейс обязан показать его одной группой в каждом деле, а не двумя разными.
+    Снятие связи — отдельный вызов и отдельное значение.
+    """
+    first = await make(db_session, task_actor, queue, "первая")
+    second = await make(db_session, task_actor, queue, "вторая")
+
+    await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
+
+    added_first = [
+        entry
+        for entry in await entries(db_session, first, task_actor)
+        if entry.type is EntryType.LINK_ADDED
+    ]
+    added_second = [
+        entry
+        for entry in await entries(db_session, second, task_actor)
+        if entry.type is EntryType.LINK_ADDED
+    ]
+    assert len(added_first) == 1
+    assert len(added_second) == 1
+    assert added_first[0].action_id is not None
+    assert added_first[0].action_id == added_second[0].action_id
+
+    await service.remove_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
+
+    removed_first = [
+        entry
+        for entry in await entries(db_session, first, task_actor)
+        if entry.type is EntryType.LINK_REMOVED
+    ]
+    removed_second = [
+        entry
+        for entry in await entries(db_session, second, task_actor)
+        if entry.type is EntryType.LINK_REMOVED
+    ]
+    assert removed_first[0].action_id is not None
+    assert removed_first[0].action_id == removed_second[0].action_id
+    assert removed_first[0].action_id != added_first[0].action_id, (
+        "снятие связи — другое действие, чем её постановка"
+    )
+
+
 async def test_the_link_entry_is_signed_by_the_author_of_the_action(
     db_session: AsyncSession,
     task_actor: Actor,
