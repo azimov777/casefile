@@ -78,7 +78,15 @@ test('администратор заводит товарища, оба раб�
   await expect(side(mate).getByText(name, { exact: true })).toBeVisible();
   await expect(side(mate).getByRole('link', { name: new RegExp(email) })).toBeVisible();
   expect(await found(mate)).toBe(adminSees);
-  await expect(mate.getByRole('link', { name: 'DEMO-1', exact: true })).toBeVisible();
+  // И первая строка списка та же: порядок один, задачи одни на всю установку.
+  const firstKey = (who: Page) =>
+    who
+      .getByRole('table')
+      .getByRole('row')
+      .nth(1)
+      .getByText(/^DEMO-\d+$/);
+  await page.goto('/tasks');
+  expect(await firstKey(mate).textContent()).toBe(await firstKey(page).textContent());
 
   // Людей неадминистратору нет ни пунктом, ни прямой ссылкой, и список не спрашивается.
   await expect(side(mate).getByRole('link', { name: 'Люди' })).toHaveCount(0);
@@ -94,7 +102,7 @@ test('администратор заводит товарища, оба раб�
   // Выход товарища не трогает администратора: у каждого свой токен и своя кука.
   await side(mate).getByRole('button', { name: 'Выйти' }).click();
   await expect(mate.getByLabel('Почта')).toBeVisible();
-  await page.reload();
+  await page.goto('/people');
   await expect(page.getByRole('article', { name: `Учётная запись ${email}` })).toBeVisible();
   await expect(side(page).getByRole('link', { name: /owner@localhost/ })).toBeVisible();
 
