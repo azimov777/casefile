@@ -63,6 +63,29 @@ class TokenRepository:
         )
         return (await self._session.scalars(statement)).unique().all()
 
+    async def list_live_of(
+        self,
+        participant_id: uuid.UUID,
+        *,
+        sessions_only: bool,
+        keep: uuid.UUID | None = None,
+    ) -> Sequence[Token]:
+        """Неотозванные токены участника — все или только сеансы браузера.
+
+        Нужны учётным записям (`app/services/accounts.py`): отключение отзывает все
+        токены человека, смена и сброс пароля — его сеансы. `keep` — токен, который
+        остаётся живым: смена своего пароля не выбрасывает из той вкладки, где её сделали.
+        """
+        statement = select(Token).where(
+            Token.participant_id == participant_id,
+            Token.revoked_at.is_(None),
+        )
+        if sessions_only:
+            statement = statement.where(Token.expires_at.is_not(None))
+        if keep is not None:
+            statement = statement.where(Token.id != keep)
+        return (await self._session.scalars(statement)).unique().all()
+
     async def add(self, token: Token) -> Token:
         self._session.add(token)
         await self._session.flush()

@@ -41,12 +41,14 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `admin_required` | Only an administrator can manage accounts | Управление людьми открыто только администратору (`docs/CONCEPT.md`, 5.4). |
 | `permission_denied` | Action is not allowed | Действие запрещено. В v1 ролей нет, но точка отказа существует с самого начала. |
 
 ## 404 — не найдено
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `account_not_found` | Account not found | Учётной записи с таким идентификатором или почтой нет. |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
@@ -65,14 +67,16 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `account_email_taken` | Account email is already taken | Почта уже занята другой учётной записью: адреса уникальны без учёта регистра. |
 | `checks_not_passed` | Some checks have no passing verdict recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке положительного вердикта, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
+| `last_admin` | The installation must keep at least one active administrator | Действие оставило бы установку без действующего администратора. |
 | `link_cycle_detected` | Link would create a cycle | Связь замкнула бы кольцо в иерархии или в блокировках. |
 | `link_exists` | Link already exists | Такая связь между этими задачами уже есть. |
+| `participant_has_account` | Participant already has an account | У этого участника учётная запись уже есть: у человека она одна. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
-| `password_login_off` | Password login is not set up on this installation | Пароль владельца на установке не задан: входить по паролю не во что. |
 | `queue_key_taken` | Queue key is already taken | Ключ очереди уже занят: ключи уникальны без учёта регистра. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
@@ -86,11 +90,14 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `account_requires_human` | Only a human participant can have an account | Учётную запись заводят только человеку: агенты ходят токенами, входить им некуда. |
 | `actor_not_addressable` | A temporary agent cannot be an addressee; pass an explicit addressee | Временный агент спрашивает свои вопросы, а адресовать его нельзя. |
+| `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
 | `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
+| `invalid_email` | Email is invalid | Почта не похожа на адрес: нет `@`, пустая часть, пробел или слишком длинная. |
 | `invalid_idempotency_key` | Idempotency key is invalid | Ключ идемпотентности пуст или длиннее допустимого. |
 | `invalid_journal_cursor` | Last-Event-ID is not a journal sequence number | `Last-Event-ID` потока не разбирается как сквозной номер записи. |
 | `invalid_link_kind` | Link kind is invalid | Такого вида связи нет; допустимые перечислены в `details.allowed`. |
@@ -110,6 +117,7 @@
 | `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
 | `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`. |
 | `validation_error` | Validation failed | Входные данные синтаксически корректны, но нарушают правило предметной области. |
+| `weak_password` | Password does not meet the rules | Новый пароль не годится: короче минимума или длиннее потолка. |
 
 ## 429 — слишком часто
 

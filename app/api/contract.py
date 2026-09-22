@@ -66,15 +66,16 @@ ENVELOPE_EXEMPT: dict[tuple[str, str], str] = {
 #: развёртки «без токена — `401`» ровно эти маршруты, а не молча пропущенные.
 TOKEN_EXEMPT: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/session"): (
-        "Password login of the installation owner: the password is what a browser trades "
-        "for the installation key, so there is no token to ask for yet"
+        "Sign-in with email and password: it is what a browser trades for its own session "
+        "token, so there is no token to ask for yet"
     ),
     ("GET", "/api/v1/session"): (
-        "Session check behind nginx `auth_request` for `/config.json`: it reads the session "
-        "cookie, and the browser asking has no token until it passes"
+        "Reads the session cookie and hands the tab its session token after a reload: the "
+        "tab asking has no token until this answers"
     ),
     ("DELETE", "/api/v1/session"): (
-        "Logout ends the cookie session; the token the tab holds is not what is being closed"
+        "Sign-out revokes the session token named by the cookie; it must work from a tab "
+        "whose token has already expired"
     ),
 }
 

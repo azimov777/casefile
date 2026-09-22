@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field
 
+from app.api.schemas.accounts import AccountRead
 from app.api.schemas.participants import ParticipantRead
 from app.api.schemas.queues import QueueRead
 from app.api.schemas.tokens import CurrentTokenRead
@@ -15,6 +16,13 @@ class BootstrapRead(BaseModel):
         description=(
             "Participant behind the token; null for a shared agent token, whose author "
             "is a temporary agent and has no registry entry"
+        ),
+    )
+    account: AccountRead | None = Field(
+        default=None,
+        description=(
+            "Account of that participant: its email and the administrator flag, which "
+            "opens managing accounts. Null for agents and for people who have no account"
         ),
     )
     token: CurrentTokenRead = Field(

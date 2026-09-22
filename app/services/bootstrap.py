@@ -5,7 +5,8 @@
 `GET /queues` и `GET /questions`, но три запроса ради первой отрисовки — это три круга
 задержки и три состояния загрузки в интерфейсе, который ещё ничего не показал.
 
-«Кто я» — это участник **и сам токен**: его набор и идентификатор (TRK-65). Набор —
+«Кто я» — это участник, его учётная запись (TRK-113) **и сам токен**: его набор и
+идентификатор (TRK-65). Набор —
 единственное право в трекере (`CONCEPT.md`, 3.1): по нему интерфейс с первого кадра
 решает, открыта ли запись вообще. Идентификатор — «я» в списке токенов, как имя
 участника — «я» в записях дела: по нему интерфейс узнаёт собственный ключ, отзыв
@@ -23,10 +24,12 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import UnauthorizedError
+from app.db.models.account import Account
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.pagination import MAX_PAGE_SIZE
 from app.domain.tokens import TokenScope
+from app.services import accounts as accounts_service
 from app.services import case as case_service
 from app.services import queues as queues_service
 from app.services.auth import Actor
@@ -39,6 +42,10 @@ class Bootstrap:
     #: Участник за токеном. Пуст у общего агентского токена: за ним стоит временный
     #: агент, которого в реестре нет.
     participant: Participant | None
+    #: Учётная запись участника, если она есть: у агентов и у людей, заведённых до
+    #: учётных записей и не получивших её, — нет. По флагу администратора интерфейс
+    #: решает, показывать ли управление людьми (`CONCEPT.md`, 5.4).
+    account: Account | None
     #: Токен, которым сделан запрос: тот же идентификатор, что в списке токенов. Есть у
     #: любого запроса снаружи, в том числе с общим агентским токеном.
     token_id: uuid.UUID
@@ -78,6 +85,7 @@ async def read_bootstrap(session: AsyncSession, *, actor: Actor) -> Bootstrap:
     )
     return Bootstrap(
         participant=actor.participant,
+        account=await accounts_service.account_of(session, actor.participant),
         token_id=actor.token_id,
         scope=actor.scope,
         queues=page.items,

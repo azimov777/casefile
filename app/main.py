@@ -67,9 +67,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         generate_unique_id_function=generate_operation_id,
     )
     app.state.settings = settings
-    # Сеансы входа по паролю и окно попыток живут столько же, сколько приложение
-    # (`app/services/login.py`). Испорченный `TRACKER_PASSWORD_HASH` роняет здесь сборку,
-    # то есть старт процесса, а не первую попытку входа.
+    # Окна попыток входа живут столько же, сколько приложение (`app/services/login.py`);
+    # сами сеансы — токены со сроком в базе и перезапуск процесса переживают.
     app.state.password_login = PasswordLogin.from_settings(settings)
     # Кому верить адрес клиента для окна попыток (`TRACKER_REAL_IP_FROM`); имена хостов в
     # нём разрешаются при попытке входа, а не здесь — `ui` поднимается позже API.
