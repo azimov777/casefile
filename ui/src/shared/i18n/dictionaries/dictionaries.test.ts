@@ -62,7 +62,8 @@ describe('словари языков', () => {
     // на русском та же. И пример имени участника (UI-106, и у человека — UI-122): имена — латиница
     // `snake_case` на любом языке интерфейса, и переведённый пример показывал бы то,
     // чего бэкенд не примет. И подпись родителя (UI-119): ключ, разделитель, название
-    // и число остальных — подстановки и знаки, слов в них нет.
+    // и число остальных — подстановки и знаки, слов в них нет. И номера крайних записей
+    // группы правок (UI-133): два числа через тире.
     const sameOnPurpose = new Set([
       'access.agent.namePlaceholder',
       'people.create.namePlaceholder',
@@ -74,6 +75,7 @@ describe('словари языков', () => {
       'tasks.board.unknown',
       'ui.error.withCode',
       'ui.entry.headline.resolutionOutcome',
+      'ui.entry.group.range',
       'ui.snippets.clients.claudeCode',
       'ui.snippets.clients.codex',
       'ui.snippets.clients.json',

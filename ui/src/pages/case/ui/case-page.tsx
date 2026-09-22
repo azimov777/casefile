@@ -7,6 +7,7 @@ import {
   ENTRY_TYPES,
   EntryCard,
   caseFeedQueryOptions,
+  groupSectionEdits,
   type Entry,
   type EntryType,
 } from '@/entities/entry';
@@ -15,6 +16,7 @@ import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { readEntryNo } from '@/shared/lib';
 import { CaseFilters } from './case-filters';
+import { SectionEditsGroup } from './section-edits-group';
 
 /**
  * Ширина экрана дела. Число написано числом, а не взято из токенов, намеренно:
@@ -247,7 +249,23 @@ export function CasePage() {
        * `left-2.5` — середина знака.
        */}
       <div className="relative flex flex-col gap-3 pl-8 before:absolute before:top-2 before:bottom-2 before:left-2.5 before:w-px before:bg-line">
-        {entries.map((entry) => {
+        {groupSectionEdits(entries).map((run) => {
+          // Правки разделов одного действия — одной строкой (UI-133). Группа строится по
+          // показанному: правки, разрезанные концом страницы или началом окна `from`,
+          // стоят группой поменьше (или одной записью), пока не подгружен остаток.
+          if (run.kind === 'sections') {
+            return (
+              <SectionEditsGroup
+                key={`group-${run.first}`}
+                first={run.first}
+                last={run.last}
+                entries={run.items}
+                checks={task.data?.task.checks ?? []}
+                wanted={wanted}
+              />
+            );
+          }
+          const entry = run.item;
           // Отклик живёт под тем, на что отвечает: ответ под вопросом, резолюция под
           // замечанием. Отдельной записью он показывается только тогда, когда его
           // записи рядом нет: отбор по типу или окно, начавшееся после неё.

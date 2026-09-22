@@ -8,7 +8,10 @@ import {
   EntryKind,
   entryHeadline,
   entryQueryOptions,
+  groupSectionEdits,
+  sectionEditsHeadline,
   type EntryHeading,
+  type SectionEditsRun,
 } from '@/entities/entry';
 import { cn, useExitHold } from '@/shared/lib';
 import { Button, QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
@@ -83,6 +86,14 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
    * в `IndexRow`, без второго условия рядом.
    */
   const [scrollTarget, setScrollTarget] = useState<number | null>(null);
+  /**
+   * Группы правок разделов, раскрытые человеком, — по номеру первой записи группы.
+   * Группа раскрыта и тогда, когда раскрыта любая её запись: ссылка `TRK-106#8` ведёт
+   * к записи внутри группы, и прятать её за свёрнутой строкой значило бы не довести
+   * человека до того, за чем он шёл (UI-133). Поэтому это не всё состояние группы, а
+   * только её собственный клик; остальное выводится из `expanded`.
+   */
+  const [openGroups, setOpenGroups] = useState<Set<number>>(() => new Set());
   /** Метка «следующая правка `openAt` — от своего клика, не от прихода снаружи». */
   const internalChange = useRef(false);
   /** Начало описи: сюда возвращает прыжок «в начало», не трогая прокрутку страницы. */
@@ -124,6 +135,34 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
       onOpenChange(nextOpenAt);
     },
     [expanded, onOpenChange, openAt],
+  );
+
+  /*
+   * Группа сворачивается целиком: вместе с ней закрываются и раскрытые в ней записи,
+   * иначе она осталась бы раскрытой через них (см. `openGroups`). Если среди них та,
+   * что названа в адресе, адрес перестаёт её называть — как у одиночной записи.
+   */
+  const toggleGroup = useCallback(
+    (first: number, members: number[]) => {
+      const open = openGroups.has(first) || members.some((no) => expanded.has(no));
+      setOpenGroups((previous) => {
+        const next = new Set(previous);
+        if (open) next.delete(first);
+        else next.add(first);
+        return next;
+      });
+      if (!open) return;
+      setExpanded((previous) => {
+        const next = new Set(previous);
+        for (const no of members) next.delete(no);
+        return next;
+      });
+      if (openAt !== null && members.includes(openAt)) {
+        internalChange.current = true;
+        onOpenChange(null);
+      }
+    },
+    [expanded, onOpenChange, openAt, openGroups],
   );
 
   if (index.length === 0) return <p className="text-muted italic">{t('index.empty')}</p>;
@@ -173,21 +212,130 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
             </tr>
           </thead>
           <tbody>
-            {index.map((heading) => (
-              <IndexRow
-                key={heading.no}
-                taskKey={taskKey}
-                heading={heading}
-                checks={checks}
-                open={expanded.has(heading.no)}
-                scrollTo={scrollTarget === heading.no}
-                onToggle={toggle}
-              />
-            ))}
+            {groupSectionEdits(index).map((run) =>
+              run.kind === 'one' ? (
+                <IndexRow
+                  key={run.item.no}
+                  taskKey={taskKey}
+                  heading={run.item}
+                  checks={checks}
+                  open={expanded.has(run.item.no)}
+                  scrollTo={scrollTarget === run.item.no}
+                  onToggle={toggle}
+                />
+              ) : (
+                <GroupRows
+                  key={`group-${run.first}`}
+                  taskKey={taskKey}
+                  run={run}
+                  checks={checks}
+                  open={
+                    openGroups.has(run.first) || run.items.some((item) => expanded.has(item.no))
+                  }
+                  expanded={expanded}
+                  scrollTarget={scrollTarget}
+                  onToggle={toggle}
+                  onToggleGroup={toggleGroup}
+                />
+              ),
+            )}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+interface GroupRowsProps {
+  taskKey: string;
+  run: Extract<SectionEditsRun<EntryHeading>, { kind: 'sections' }>;
+  checks: string[];
+  open: boolean;
+  expanded: Set<number>;
+  scrollTarget: number | null;
+  onToggle: (no: number) => void;
+  onToggleGroup: (first: number, members: number[]) => void;
+}
+
+/**
+ * Правки разделов одного действия: одна строка описи вместо семи (UI-133).
+ *
+ * Строка группы стоит в тех же столбцах, что и запись: номера крайних записей, род,
+ * автор и время действия — у записей одного вызова они одни, — и заголовок-кнопка
+ * «Правка разделов» с именами разделов. Раскрытая группа показывает свои записи
+ * обычными строками описи, со своим раскрытием каждая: записи не исчезают из дела и
+ * остаются адресуемыми по номеру.
+ */
+function GroupRows({
+  taskKey,
+  run,
+  checks,
+  open,
+  expanded,
+  scrollTarget,
+  onToggle,
+  onToggleGroup,
+}: GroupRowsProps) {
+  const { t: brick } = useTranslation('ui');
+  const [head] = run.items;
+  if (head === undefined) return null;
+  const members = run.items.map((item) => item.no);
+  const headline = sectionEditsHeadline(
+    run.items.map((item) => (item.facts.type === 'section_changed' ? item.facts.field : null)),
+    brick,
+  );
+  const cell = open ? cn(CELL, 'bg-sunken') : CELL;
+
+  return (
+    <>
+      <tr data-group={run.actionId}>
+        <th scope="row" className={cn(cell, 'w-[1%] font-mono whitespace-nowrap text-muted')}>
+          {brick('entry.group.range', { first: run.first, last: run.last })}
+        </th>
+        <td className={cell}>
+          <EntryKind type={head.type} />
+        </td>
+        <td className={cell}>
+          <AuthorName author={head.author} />
+        </td>
+        <td className={cn(cell, 'whitespace-nowrap text-muted')}>
+          <RelativeTime value={head.created_at} />
+        </td>
+        <td className={cell}>
+          {/*
+           * Тот же вид кнопки, что у строки записи (`IndexRow`): раскрытие группы и
+           * раскрытие записи — одно действие для человека. Отличие одно — кнопка
+           * флекс-контейнер: строка группы длинная (семь имён разделов), а собранный
+           * заголовок — `inline-flex` с переносом, и в строчной кнопке он целиком
+           * уезжал под треугольник, оставляя его одного на первой строке. Флексом
+           * треугольник — свой элемент слева, заголовок переносится рядом с ним.
+           */}
+          <button
+            type="button"
+            className="flex cursor-pointer items-baseline gap-1 border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▸'] hover:underline aria-expanded:before:content-['▾']"
+            aria-expanded={open}
+            aria-label={brick('entry.group.label', { first: run.first, last: run.last })}
+            onClick={() => onToggleGroup(run.first, members)}
+          >
+            <EntryHeadline headline={headline} linked={false} />
+          </button>
+        </td>
+      </tr>
+      {open
+        ? run.items.map((item) => (
+            <IndexRow
+              key={item.no}
+              taskKey={taskKey}
+              heading={item}
+              checks={checks}
+              open={expanded.has(item.no)}
+              scrollTo={scrollTarget === item.no}
+              onToggle={onToggle}
+              nested
+            />
+          ))
+        : null}
+    </>
   );
 }
 
@@ -197,6 +345,11 @@ interface IndexRowProps {
   checks: string[];
   open: boolean;
   /**
+   * Запись внутри раскрытой группы правок (UI-133): заголовок сдвинут вправо, и
+   * строка читается частью группы над ней, а не соседней записью.
+   */
+  nested?: boolean;
+  /**
    * Запись, к которой человек **пришёл** (ссылка, `?entry=N` при загрузке, «К свежей
    * записи»), показать не ниже сгиба. Собственный клик по описи сюда не попадает —
    * он только раскрывает: строка остаётся там, где по ней кликнули (UI-126).
@@ -205,7 +358,15 @@ interface IndexRowProps {
   onToggle: (no: number) => void;
 }
 
-function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexRowProps) {
+function IndexRow({
+  taskKey,
+  heading,
+  checks,
+  open,
+  nested = false,
+  scrollTo,
+  onToggle,
+}: IndexRowProps) {
   // Заголовок описи собирается из фактов записи подписями пространства `ui`: одна
   // и та же строка стоит и здесь, и в ленте дела.
   const { t: brick } = useTranslation('ui');
@@ -230,7 +391,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
 
   return (
     <>
-      <tr ref={row}>
+      <tr ref={row} data-nested={nested ? '' : undefined}>
         {/* Ширина в 1% сжимает колонку номера по содержимому: остаток ширины таблицы
             забирает заголовок, самая длинная ячейка строки. */}
         <th scope="row" className={cn(cell, 'w-[1%] font-mono text-muted')}>
@@ -247,7 +408,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
         <td className={cn(cell, 'whitespace-nowrap text-muted')}>
           <RelativeTime value={heading.created_at} />
         </td>
-        <td className={cell}>
+        <td className={cn(cell, nested && 'pl-8')}>
           {/*
            * Заголовок записи — кнопка: раскрытие это действие, и с клавиатуры оно
            * тоже нужно. Фон и рамку кнопка называет явно: без объявленного фона
