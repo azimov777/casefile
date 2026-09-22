@@ -6,6 +6,7 @@
 """
 
 from app.db.base import Base, BaseModel
+from app.db.models.account import Account
 from app.db.models.author import CreatedByMixin, created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.idempotency import IdempotencyKey
@@ -16,6 +17,7 @@ from app.db.models.task import Task
 from app.db.models.token import Token
 
 __all__ = [
+    "Account",
     "Base",
     "BaseModel",
     "CreatedByMixin",

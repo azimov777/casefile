@@ -48,6 +48,10 @@ export const ui = {
     installation: 'Установка',
     connect: 'Подключить агента',
     access: 'Доступы',
+    // Режим входа по учётным записям (`TRK-113`): люди — администратору, учётная
+    // запись — каждому вошедшему.
+    people: 'Люди',
+    account: 'Моя учётная запись',
     openQuestions_zero: 'Открытых вопросов нет',
     openQuestions_one: '{{count, number}} открытый вопрос',
     openQuestions_few: '{{count, number}} открытых вопроса',
@@ -95,6 +99,19 @@ export const ui = {
   },
 
   /** Представление доступа: строка списка на экране «Доступы» (`entities/token`). */
+  /** Представление учётной записи человека (`entities/account`): карточка в списке людей. */
+  account: {
+    label: 'Учётная запись {{email}}',
+    admin: 'администратор',
+    you: 'вы',
+    disabled: 'отключена',
+    signs: 'подписывается как',
+    createdBy: 'завёл {{author}}',
+    createdByTracker: 'заведена самой установкой',
+    noPassword: 'пароля пока нет',
+    disabledAt: 'вход закрыт',
+  },
+
   token: {
     label: 'Доступ «{{name}}»',
     scopeKind: 'набор',

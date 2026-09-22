@@ -1,9 +1,10 @@
-"""Пароль владельца установки: хеш scrypt в одну строку и его проверка.
+"""Пароль учётной записи: хеш scrypt в одну строку и его проверка.
 
-Пароль — замок на одну дверь (`docs/CONCEPT.md`, 5.4): он открывает выдачу ключа
-интерфейса браузеру и больше ничего. Сам пароль нигде не хранится: в настройке установки
-лежит только хеш (`TRACKER_PASSWORD_HASH`), а печатает его команда `password-hash`
-(`app/cli.py`).
+Пароль открывает вход учётной записи (`docs/CONCEPT.md`, 5.4). Сам он нигде не
+хранится: в строке учётной записи лежит только хеш (`accounts.password_hash`). Та же
+строка — и формат прежнего пароля установки `TRACKER_PASSWORD_HASH`: подъём переносит
+его в учётную запись администратора как есть (`app/services/setup.py`), поэтому формат
+менять нельзя, не ломая перенос.
 
 ## Почему scrypt, а не SHA-256, как у токенов
 
@@ -14,10 +15,10 @@
 
 ## Почему в строке нет `$`
 
-Привычная запись `$scrypt$...` в `.env` ломается молча: compose подставляет `$имя` в
-значениях файла, и хеш приезжал бы в процесс обрезанным. Разделитель — двоеточие, части —
-base64url без выравнивания: ни одного символа, который compose или оболочка трактуют
-по-своему.
+Строка родилась для `.env` (`TRACKER_PASSWORD_HASH`), где привычная запись `$scrypt$...`
+ломается молча: compose подставляет `$имя` в значениях файла, и хеш приезжал бы в процесс
+обрезанным. Разделитель — двоеточие, части — base64url без выравнивания. В базе это уже не
+важно, но формат один — ради переноса прежнего хеша.
 """
 
 import base64
@@ -26,6 +27,8 @@ import hashlib
 import hmac
 import secrets
 from dataclasses import dataclass
+
+from app.domain.errors import WeakPasswordError
 
 #: Имя схемы — первая часть строки хеша. По ней видно, что лежит в настройке, и её
 #: можно будет сменить, не ломая прежние хеши.
@@ -38,9 +41,9 @@ SCRYPT_N = 2**15
 SCRYPT_R = 8
 SCRYPT_P = 3
 
-#: Потолок стоимости, которую примет проверка. Хеш пишет владелец, но строка приезжает
-#: из файла, и опечатка в `N` не должна превращать каждую попытку входа в гигабайты
-#: памяти процесса API.
+#: Потолок стоимости, которую примет проверка. Перенесённый хеш писал владелец в `.env`,
+#: и опечатка в `N` не должна превращать каждую попытку входа в гигабайты памяти
+#: процесса API.
 MAX_SCRYPT_N = 2**20
 MAX_SCRYPT_R = 32
 MAX_SCRYPT_P = 16
@@ -48,7 +51,7 @@ MAX_SCRYPT_P = 16
 SALT_BYTES = 16
 KEY_BYTES = 32
 
-#: Короче пароль не принимает команда `password-hash`. Перебор ограничен окном
+#: Короче новый пароль не принимается нигде. Перебор ограничен окном
 #: (`app/services/login.py`), но окно держит онлайн-попытки, а не утёкший хеш.
 MIN_PASSWORD_LENGTH = 12
 
@@ -58,14 +61,10 @@ MAX_PASSWORD_LENGTH = 1024
 
 
 class PasswordHashError(ValueError):
-    """Строка не похожа на хеш, напечатанный командой `password-hash`.
+    """Строка не похожа на хеш `scrypt:<n>:<r>:<p>:<соль>:<ключ>`.
 
     Сообщение никогда не содержит саму строку: она уходит в журнал подъёма контура.
     """
-
-
-class WeakPasswordError(ValueError):
-    """Пароль не годится: короче `MIN_PASSWORD_LENGTH` или длиннее потолка."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,10 +88,7 @@ class PasswordHash:
         """Разбирает строку хеша или отказывает с причиной, не называя саму строку."""
         parts = text.strip().split(":")
         if len(parts) != 6 or parts[0] != HASH_SCHEME:
-            raise PasswordHashError(
-                f"expected `{HASH_SCHEME}:<n>:<r>:<p>:<salt>:<key>` as printed by "
-                "`python -m app.cli password-hash`"
-            )
+            raise PasswordHashError(f"expected `{HASH_SCHEME}:<n>:<r>:<p>:<salt>:<key>`")
         _, n_text, r_text, p_text, salt_text, key_text = parts
         try:
             n, r, p = int(n_text), int(r_text), int(p_text)
@@ -109,11 +105,18 @@ class PasswordHash:
 
 
 def check_new_password(password: str) -> None:
-    """Годится ли пароль в новый хеш. Отказ называет правило, а не сам пароль."""
+    """Годится ли пароль в новый хеш. Отказ `weak_password` называет правило, а не пароль."""
+    limits = {"min_length": MIN_PASSWORD_LENGTH, "max_length": MAX_PASSWORD_LENGTH}
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise WeakPasswordError(f"the password must be at least {MIN_PASSWORD_LENGTH} characters")
+        raise WeakPasswordError(
+            f"The password must be at least {MIN_PASSWORD_LENGTH} characters",
+            details={"reason": "too_short", **limits},
+        )
     if len(password) > MAX_PASSWORD_LENGTH:
-        raise WeakPasswordError(f"the password must be at most {MAX_PASSWORD_LENGTH} characters")
+        raise WeakPasswordError(
+            f"The password must be at most {MAX_PASSWORD_LENGTH} characters",
+            details={"reason": "too_long", **limits},
+        )
 
 
 def hash_password(

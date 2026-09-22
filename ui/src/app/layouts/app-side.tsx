@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
-import { Inbox, KeyRound, Plug } from 'lucide-react';
+import { Inbox, KeyRound, Plug, UserRound, Users } from 'lucide-react';
 import { bootstrapQueryOptions, useInstallKey, useInstallLocked } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
@@ -31,6 +31,13 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation('ui');
 
   const queues = bootstrap.data?.queues ?? [];
+  /*
+   * Учётная запись и люди — только в режиме входа (`TRK-113`). На своей машине владелец
+   * тоже администратор (`owner@localhost`), но там человек один, пароля у него нет и
+   * заводить некого: пункты были бы шумом (`TRK-91#39`). Люди — только администратору:
+   * флаг приходит в первом кадре, и пункт, который кончился бы `403`, не показывается.
+   */
+  const account = locked ? (bootstrap.data?.account ?? null) : null;
   const place = readPlace(location.pathname, searchParams);
   const onList = location.pathname === '/tasks';
 
@@ -132,6 +139,13 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
           <KeyRound className="size-(--ui-mark) shrink-0" aria-hidden="true" />
           {t('app.access')}
         </NavLink>
+
+        {account?.is_admin === true ? (
+          <NavLink to="/people" onClick={onNavigate} className={sectionLink}>
+            <Users className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+            {t('app.people')}
+          </NavLink>
+        ) : null}
       </nav>
 
       <div className="mt-auto flex flex-col items-start gap-1 border-t border-line px-2 pt-2 text-mark">
@@ -147,14 +161,31 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
           </span>
         )}
 
+        {/* Почта — имя входа: по ней человек узнаёт, под какой учётной записью сидит,
+            когда в одном браузере бывают разные люди. Переход к своей учётной записи —
+            там смена пароля. */}
+        {account === null ? null : (
+          <NavLink
+            to="/account"
+            onClick={onNavigate}
+            className={(state) => cn(sectionLink(state), '-mx-2 max-w-full')}
+            title={t('app.account')}
+          >
+            <UserRound className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+            <span className="sr-only">{t('app.account')}: </span>
+            <span className="min-w-0 break-all">{account.email}</span>
+          </NavLink>
+        )}
+
         {/*
          * Выхода нет там, где выйти некуда. Ключ от установки человек не вводил
          * и ввести не сможет: нажатие вернуло бы его на тот же экран через секунду —
          * конфигурацию читают заново при каждой загрузке вкладки. Там, где людей
          * несколько, конфигурации с ключом нет, и кнопка стоит как стояла.
          *
-         * Установка, закрытая паролем, ключ тоже отдаёт сама, но за паролем: выход там
-         * закрывает сеанс, и без пароля ключа больше не будет (`TRK-90`).
+         * В режиме входа по учётным записям ключ тоже «от установки» — токен сеанса,
+         * который отдал вход, — но выход там закрывает сеанс на сервере, и без почты и
+         * пароля ключа больше не будет (`TRK-113`).
          */}
         {fromInstall && !locked ? null : (
           <Button tone="quiet" size="sm" onClick={logout}>

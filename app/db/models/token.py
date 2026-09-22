@@ -44,6 +44,10 @@ class Token(BaseModel, CreatedByMixin):
     )
     last_used_at: Mapped[datetime | None] = mapped_column(default=None)
     revoked_at: Mapped[datetime | None] = mapped_column(default=None)
+    # Срок есть только у токена сеанса браузера (`app/services/login.py`): вход по почте
+    # и паролю выпускает его, и после срока он не пускает (`token_expired`). У остальных
+    # токенов срока нет — их отзывают руками.
+    expires_at: Mapped[datetime | None] = mapped_column(default=None)
 
     # Аутентификация всегда идёт от токена к участнику, поэтому связь грузится сразу
     # одним запросом: иначе на каждый запрос к API приходилось бы два обращения к БД.
@@ -54,6 +58,15 @@ class Token(BaseModel, CreatedByMixin):
     @property
     def is_revoked(self) -> bool:
         return self.revoked_at is not None
+
+    @property
+    def is_session(self) -> bool:
+        """Токен сеанса браузера: выпущен входом по почте и паролю и живёт до срока."""
+        return self.expires_at is not None
+
+    def expired_at(self, moment: datetime) -> bool:
+        """Истёк ли срок к этому моменту. Токен без срока не истекает никогда."""
+        return self.expires_at is not None and self.expires_at <= moment
 
     @property
     def is_shared(self) -> bool:

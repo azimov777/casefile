@@ -7,6 +7,7 @@
 from fastapi import APIRouter
 
 from app.api.deps import ActorDep, SessionDep
+from app.api.schemas.accounts import AccountRead
 from app.api.schemas.bootstrap import BootstrapRead
 from app.api.schemas.common import DataResponse
 from app.api.schemas.participants import ParticipantRead
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/bootstrap", tags=["bootstrap"])
 
 @router.get("", summary="Read the first screen")
 async def read_bootstrap(session: SessionDep, actor: ActorDep) -> DataResponse[BootstrapRead]:
-    """Текущий участник, его токен с набором, очереди установки и число вопросов к нему.
+    """Текущий участник, его учётная запись, токен с набором, очереди и число вопросов к нему.
 
     Ровно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки
     задач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,
@@ -40,6 +41,7 @@ async def read_bootstrap(session: SessionDep, actor: ActorDep) -> DataResponse[B
                 if state.participant is None
                 else ParticipantRead.model_validate(state.participant)
             ),
+            account=(None if state.account is None else AccountRead.model_validate(state.account)),
             token=CurrentTokenRead(id=state.token_id, scope=state.scope),
             queues=[QueueRead.model_validate(queue) for queue in state.queues],
             open_questions=state.open_questions,

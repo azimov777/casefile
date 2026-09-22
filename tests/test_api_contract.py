@@ -32,6 +32,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.contract import (
     BODYLESS_STATUS_CODES,
@@ -44,6 +45,7 @@ from app.api.contract import (
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
+from app.db.repositories import AccountRepository
 from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
 
 #: Значение-затычка для развёртки без токена: до параметров дело не доходит, потому что
@@ -286,15 +288,20 @@ def _substitute(path: str, values: dict[str, str]) -> str:
 
 
 @pytest.fixture
-async def sample(owner: Participant, queue: Queue, task: Task) -> dict[str, str]:
+async def sample(
+    db_session: AsyncSession, owner: Participant, queue: Queue, task: Task
+) -> dict[str, str]:
     """Настоящие значения для каждого параметра пути.
 
     Значения настоящие, а не выдуманные: развёртка с токеном обязана получать `200`, и
     подставленный от балды ключ дал бы `404`, то есть проверял бы обработку ошибки
     вместо формы успешного ответа.
     """
+    account = await AccountRepository(db_session).get_by_participant(owner.id)
+    assert account is not None  # фикстура владельца заводит ему учётную запись
     return {
         "participant_name": owner.name,
+        "account_id": str(account.id),
         "queue_key": queue.key,
         "task_key": task.key,
         # У только что заведённой задачи в деле одна запись — `created` с номером 1.

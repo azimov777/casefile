@@ -1,20 +1,11 @@
 import createClient, { type Middleware } from 'openapi-fetch';
 import type { paths } from './openapi';
+import { apiBaseUrl } from './base-url';
 import { ApiError, CLIENT_ERROR_CODES } from './error';
 import { refreshInstallToken } from './install-config';
 import { authorizationHeader, clearToken, getInstallToken, getToken } from './token';
 
-/**
- * Клиент API. Базовый адрес пуст: и dev-сервер Vite, и nginx в образе проксируют
- * `/api` на бэкенд, поэтому запрос всегда идёт на свой источник. Так токен не уезжает
- * в чужой источник и не нужен CORS.
- */
-/**
- * Источник API. Пуст в браузере — и dev-сервер Vite, и nginx проксируют `/api`
- * на бэкенд. Назван отдельно, потому что живой поток открывается не этим клиентом:
- * SSE с заголовком авторизации требует своего `fetch` (`features/live-journal`).
- */
-export const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? '';
+export { apiBaseUrl };
 
 /**
  * Отправляет запрос и один раз переспрашивает установку, если ей же выданный ключ
@@ -45,7 +36,19 @@ async function fetchWithInstallKey(request: Request): Promise<Response> {
 
   const fresh = await refreshInstallToken(install);
   const header = fresh === null ? null : authorizationHeader(fresh);
-  if (header === null) return response;
+  if (header === null) {
+    /*
+     * Установка ключа больше не даёт: в режиме входа — сеанс кончился, закрыт выходом в
+     * соседней вкладке, сбросом пароля или отключением учётной записи. Ключ вкладки к
+     * этому моменту уже забыт (`refreshInstallToken`), и перехватчик ниже отказ не
+     * заметит — он смотрит на действующий ключ. Поэтому о конце сеанса говорится здесь:
+     * иначе человек оказался бы на экране входа без объяснения, почему.
+     */
+    if (getToken() === null) {
+      for (const listener of expiredListeners) listener();
+    }
+    return response;
+  }
 
   retryable.headers.set('Authorization', header);
   return globalThis.fetch(retryable);

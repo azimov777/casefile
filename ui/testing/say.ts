@@ -22,6 +22,8 @@ export const say = {
   case: i18n.getFixedT(null, 'case'),
   connect: i18n.getFixedT(null, 'connect'),
   access: i18n.getFixedT(null, 'access'),
+  account: i18n.getFixedT(null, 'account'),
+  people: i18n.getFixedT(null, 'people'),
   questions: i18n.getFixedT(null, 'questions'),
   errors: i18n.getFixedT(null, 'errors'),
 };

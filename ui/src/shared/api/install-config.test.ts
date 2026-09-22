@@ -1,12 +1,12 @@
 import { HttpResponse, http } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONFIG } from '@testing/msw/responses';
+import { API, CONFIG, failure } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import {
+  adoptSessionToken,
   installLocked,
   loadInstallToken,
   refreshInstallToken,
-  reloadInstallToken,
 } from './install-config';
 import { getInstallToken, getToken, setToken } from './token';
 
@@ -156,75 +156,109 @@ describe('перечитывание после `401`', () => {
   });
 });
 
-describe('установка, закрытая паролем владельца', () => {
-  /** Отвечает, как образ интерфейса в режиме пароля: без сеанса `401`, с ним — ключ. */
-  function lockedInstall(session: { open: boolean }) {
+describe('режим входа по учётным записям', () => {
+  const SESSION = 'trk_session_of_this_browser';
+  /** Сколько раз спрашивали сеанс по куке. */
+  let sessionAsked = 0;
+
+  /**
+   * Отвечает, как образ интерфейса в режиме входа и API за ним: `/config.json` всегда
+   * `401 {"login":"password"}` и ключа не даёт никому, а `GET /api/v1/session` отдаёт
+   * токен, пока сеанс жив. Кука здесь — флаг подмены: `HttpOnly` скрипту не видна, и
+   * интерфейс о ней не знает ничего; саму куку проверяет `e2e/account-login.spec.ts`.
+   */
+  function signInMode(session: { open: boolean }) {
+    sessionAsked = 0;
     server.use(
       http.get(CONFIG, () => {
         asked += 1;
+        return HttpResponse.json({ login: 'password' }, { status: 401 });
+      }),
+      http.get(`${API}/api/v1/session`, () => {
+        sessionAsked += 1;
         return session.open
-          ? HttpResponse.json({ token: INSTALL, login: 'password' })
-          : HttpResponse.json({ login: 'password' }, { status: 401 });
+          ? HttpResponse.json({
+              data: {
+                token: SESSION,
+                expires_at: '2026-09-25T12:00:00Z',
+                account: { email: 'alice@example.com' },
+              },
+            })
+          : failure('unauthorized', 401, 'No session', { reason: 'missing_session' });
       }),
     );
   }
 
-  it('`401` с полем `login` — ключа нет, установка закрыта, и это не ошибка', async () => {
-    lockedInstall({ open: false });
+  it('без сеанса ключа нет, режим входа виден, и это не ошибка', async () => {
+    signInMode({ open: false });
 
     expect(await loadInstallToken()).toBeNull();
     expect(installLocked()).toBe(true);
     expect(getToken()).toBeNull();
+    expect(sessionAsked).toBe(1);
   });
 
-  it('после входа перечитывается заново, хотя за эту загрузку уже спрашивали', async () => {
-    const session = { open: false };
-    lockedInstall(session);
-    await loadInstallToken();
+  it('живой сеанс на загрузке вкладки — ключ из `GET /api/v1/session`, и только в памяти', async () => {
+    signInMode({ open: true });
 
-    session.open = true;
-
-    expect(await reloadInstallToken()).toBe(INSTALL);
-    expect(getInstallToken()).toBe(INSTALL);
+    expect(await loadInstallToken()).toBe(SESSION);
+    expect(getInstallToken()).toBe(SESSION);
     expect(installLocked()).toBe(true);
-    expect(asked).toBe(2);
-    // Ключ за паролем тоже только в памяти вкладки.
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
   });
 
-  it('открытый сеанс на загрузке вкладки — ключ сразу, и замок всё равно виден', async () => {
-    lockedInstall({ open: true });
+  it('ключ из ответа входа принимается без похода в сеть', async () => {
+    signInMode({ open: false });
+    await loadInstallToken();
+    const before = { config: asked, session: sessionAsked };
 
-    expect(await loadInstallToken()).toBe(INSTALL);
+    adoptSessionToken(SESSION);
+
+    expect(getToken()).toBe(SESSION);
+    expect(getInstallToken()).toBe(SESSION);
+    expect({ config: asked, session: sessionAsked }).toEqual(before);
+    expect(window.localStorage.getItem('tracker.token')).toBeNull();
+  });
+
+  it('`200` с полем `token` в режиме входа ключом не считается', async () => {
+    server.use(
+      http.get(CONFIG, () => HttpResponse.json({ token: INSTALL, login: 'password' })),
+      http.get(`${API}/api/v1/session`, () =>
+        failure('unauthorized', 401, 'No session', { reason: 'missing_session' }),
+      ),
+    );
+
+    expect(await loadInstallToken()).toBeNull();
     expect(installLocked()).toBe(true);
   });
 
-  it('сеанс кончился посреди работы — перечитывание после `401` ведёт на вход', async () => {
+  it('сеанс кончился посреди работы — переспрашивание после `401` ведёт на вход', async () => {
     const session = { open: true };
-    lockedInstall(session);
+    signInMode(session);
     await loadInstallToken();
 
     session.open = false;
 
-    expect(await refreshInstallToken(INSTALL)).toBeNull();
+    expect(await refreshInstallToken(SESSION)).toBeNull();
     expect(installLocked()).toBe(true);
   });
 
-  it('`404` у установки без пароля замка не ставит', async () => {
+  it('`404` у установки без режима входа его не ставит и сеанс не спрашивает', async () => {
+    signInMode({ open: true });
     answers(null);
 
     await loadInstallToken();
 
     expect(installLocked()).toBe(false);
+    expect(sessionAsked).toBe(0);
   });
 
-  it('оборванная сеть о замке не говорит ничего: прежнее знание остаётся', async () => {
-    const session = { open: true };
-    lockedInstall(session);
+  it('оборванная сеть о режиме не говорит ничего: прежнее знание остаётся', async () => {
+    signInMode({ open: true });
     await loadInstallToken();
     server.use(http.get(CONFIG, () => HttpResponse.error()));
 
-    expect(await refreshInstallToken(INSTALL)).toBeNull();
+    expect(await refreshInstallToken(SESSION)).toBeNull();
     expect(installLocked()).toBe(true);
   });
 });

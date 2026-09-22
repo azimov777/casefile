@@ -13,16 +13,21 @@
 #   отвечает nginx только адресам петли (UI-107). Порт при этом обязан быть опубликован
 #   на петле (`TRACKER_UI_BIND`): иначе ключ набора `main` получил бы всякий в сети, кто
 #   пришлёт `Host: localhost`, — от `curl` проверка `Host` не защищает;
-# - с паролем (`TRACKER_UI_LOGIN=password`) — ключ отдаётся только после входа: nginx
-#   спрашивает API (`auth_request` на `GET /api/v1/session`), жив ли сеанс из куки, а
-#   без сеанса отвечает `401 {"login":"password"}` — по нему интерфейс рисует форму
-#   пароля. Проверки `Host` нет: границу держит кука, а сервер отвечает любому своему
-#   имени и за любым прокси.
+# - вход по учётным записям (`TRACKER_UI_LOGIN=password`, TRK-113) — общего ключа нет:
+#   `/config.json` отвечает всем `401 {"login":"password"}`, по нему интерфейс рисует
+#   форму входа по почте и паролю, а свой токен каждый получает от API входом
+#   (`POST /api/v1/session`) и после перезагрузки — по куке (`GET /api/v1/session`).
+#   Проверки `Host` нет: ключа, который она берегла, здесь не отдают, а сервер отвечает
+#   любому своему имени и за любым прокси.
 #
 # Третий файл — кто клиент, в любом режиме (TRK-98#6): прокси перед установкой, которым
 # nginx верит `X-Forwarded-For` (`TRACKER_UI_TRUSTED_PROXIES`, адреса и сети через
 # запятую). Пусто — никому: клиент это тот, кто открыл соединение, и адрес его написать
 # нельзя. По адресу клиента API считает попытки входа по паролю.
+#
+# Режим выбирает контур, а не адрес публикации: установку за прокси на той же машине
+# публикуют на петле, и вывод из адреса раздал бы ключ администратора всему, что проходит
+# через прокси.
 set -eu
 
 dir=/etc/nginx/casefile
@@ -72,13 +77,16 @@ fi
 case $login in
   password)
     cat >"$dir/host-guard.conf" <<'CONF'
-# Режим пароля: проверки Host нет, границу держит кука сеанса (access-mode.sh).
+# Режим входа: проверки Host нет, общего ключа здесь не отдают (access-mode.sh).
 CONF
+    # Тело ответа — контракт с интерфейсом (`src/shared/api/install-config.ts`): по нему он
+    # рисует форму входа, а не поле токена. Без тела `401` значил бы для него «ключа нет».
     cat >"$dir/config-guard.conf" <<'CONF'
-auth_request /_casefile/session;
-error_page 401 = @login_required;
+# Режим входа: общего ключа нет, свой токен каждый получает входом (access-mode.sh).
+default_type application/json;
+return 401 '{"login":"password"}';
 CONF
-    echo "$0: password login is on: /config.json is served after a password login only"
+    echo "$0: account login is on: /config.json hands out no key, everyone signs in with email and password"
     ;;
   '')
     case $bind in
@@ -87,9 +95,9 @@ CONF
         # Отказ подняться, а не тихий запуск: работающий интерфейс здесь раздавал бы
         # ключ установки всей сети. Сообщение по-английски — его читает владелец
         # установки в `docker compose logs ui`, как и README.
-        echo "$0: the board is published on $bind, not on this machine only, and the installation has no owner password." >&2
-        echo "$0: refusing to start: it would hand the installation key to anyone who can reach the port." >&2
-        echo "$0: set TRACKER_PASSWORD_HASH (python -m app.cli password-hash) or CASEFILE_BIND=127.0.0.1; see README, Network mode." >&2
+        echo "$0: the board is published on $bind, not on this machine only, and account login is off." >&2
+        echo "$0: refusing to start: it would hand the administrator key to anyone who can reach the port." >&2
+        echo "$0: set CASEFILE_LOGIN=password or CASEFILE_BIND=127.0.0.1; see README, Network mode." >&2
         exit 1
         ;;
     esac

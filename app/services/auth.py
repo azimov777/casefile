@@ -97,6 +97,13 @@ async def authenticate(
             message="Token is unknown or revoked",
             details={"reason": "token_revoked"},
         )
+    if token.expired_at(moment):
+        # Срок бывает только у токена сеанса браузера (`app/services/login.py`): вышел
+        # срок — вышел и сеанс, и вкладке пора войти заново, а не перевыпускать ключ.
+        raise UnauthorizedError(
+            message="Token has expired",
+            details={"reason": "token_expired"},
+        )
 
     actor = Actor(
         author=_author(token, label),
