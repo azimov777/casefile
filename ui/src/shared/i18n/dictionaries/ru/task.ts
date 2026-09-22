@@ -17,6 +17,12 @@ export const task = {
   assignment: 'Задание',
   links: 'Связи',
   noLinks: 'Связей нет.',
+  linkGroup: {
+    count_one: '{{count, number}} задача',
+    count_few: '{{count, number}} задачи',
+    count_many: '{{count, number}} задач',
+    count_other: '{{count, number}} задачи',
+  },
 
   header: {
     assignee: 'исполнитель',

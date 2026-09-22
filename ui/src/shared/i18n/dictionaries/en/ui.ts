@@ -2,6 +2,7 @@ import type { components } from '@/shared/api';
 
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
+type LinkKind = components['schemas']['LinkKind'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -164,6 +165,17 @@ export const ui = {
       more: '+{{count, number}}',
       others_one: 'and {{count, number}} more parent: {{parents, list}}',
       others_other: 'and {{count, number}} more parents: {{parents, list}}',
+    },
+    // Заголовок группы связей одного вида (UI-125): подпись рядом с идентификатором
+    // контракта, а не вместо него — сам идентификатор `LinkKindMark` не переводит.
+    links: {
+      kind: {
+        blocked_by: 'Blocked by',
+        blocks: 'Blocks',
+        parent: 'Parent',
+        child: 'Children',
+        relates: 'Related',
+      } satisfies Record<LinkKind, string>,
     },
     nav: {
       label: 'Navigation for task {{key}}',

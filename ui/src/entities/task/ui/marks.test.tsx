@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { say } from '@testing/say';
 import { TASK_PRIORITIES, TASK_STATUSES } from '../api/tasks';
+import { LINK_KIND_ORDER, LinkKindMark } from './link-kind';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
 
@@ -92,5 +93,41 @@ describe('знак приоритета', () => {
 
     // Ради этого задача и заведена: рядом стоящие колонки различаются до чтения слова.
     expect(statuses.filter((shape) => priorities.includes(shape))).toEqual([]);
+  });
+});
+
+describe('знак вида связи (UI-125)', () => {
+  it('у каждого вида контракта своя форма, и две формы не совпадают', () => {
+    // Список берётся из порядка групп, а не переписывается здесь: вид, добавленный
+    // в контракт и забытый в `LINK_KIND_ORDER`, роняет сборку сам, а не тихо
+    // остаётся без знака.
+    const shapes = LINK_KIND_ORDER.map((kind) => {
+      const { container, unmount } = render(<LinkKindMark kind={kind} />);
+      const shape = shapeOf(container);
+      unmount();
+      return shape;
+    });
+
+    expect(new Set(shapes).size).toBe(LINK_KIND_ORDER.length);
+  });
+
+  it('идентификатор контракта стоит моноширинным и не обрезается', () => {
+    render(<LinkKindMark kind="blocked_by" />);
+
+    // Сам идентификатор — текст без сокращения, ровно как в контракте.
+    expect(screen.getByText('blocked_by')).toHaveClass('font-mono');
+  });
+
+  it('подпись на языке человека стоит рядом с идентификатором, а не вместо него', () => {
+    render(<LinkKindMark kind="blocked_by" />);
+
+    expect(screen.getByText('blocked_by')).toBeInTheDocument();
+    expect(screen.getByText(say.ui('task.links.kind.blocked_by'))).toBeInTheDocument();
+  });
+
+  it('у каждого вида своя подпись: перепутать группы нельзя даже на слух', () => {
+    const captions = LINK_KIND_ORDER.map((kind) => say.ui(`task.links.kind.${kind}`));
+
+    expect(new Set(captions).size).toBe(LINK_KIND_ORDER.length);
   });
 });

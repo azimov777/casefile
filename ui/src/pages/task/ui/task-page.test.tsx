@@ -20,6 +20,7 @@ import {
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
+import type { TaskLink } from '@/entities/task';
 import { setToken } from '@/shared/api';
 
 /** Адреса всех запросов прогона: по ним видно, что лишних не было. */
@@ -397,6 +398,73 @@ describe('карточка задачи', () => {
       'href',
       '/tasks',
     );
+  });
+});
+
+describe('блок «Связи» (UI-125)', () => {
+  const AUTHOR = { kind: 'agent', signature: 'demo_agent' } as const;
+  const WHEN = '2026-09-01T10:00:00Z';
+
+  function linksOf(...kinds: TaskLink['kind'][]): TaskLink[] {
+    return kinds.map((kind, index) => ({
+      kind,
+      other: {
+        key: `DEMO-${index + 2}`,
+        title: `Задача вида ${kind} №${index}`,
+        status: index % 2 === 0 ? 'in_progress' : 'done',
+      },
+      author: AUTHOR,
+      created_at: WHEN,
+    }));
+  }
+
+  it('вид связи стоит заголовком группы со счётчиком, а не плашкой слева', async () => {
+    server.use(
+      packageOf('DEMO-6', {
+        links: linksOf('blocked_by', 'blocked_by', 'child', 'relates'),
+      }),
+      entries('DEMO-6'),
+    );
+
+    renderApp('/tasks/DEMO-6');
+    await screen.findByRole('heading', { name: /DEMO-6/ });
+
+    const section = screen.getByRole('heading', { name: say.task('links') }).closest('section');
+
+    // Три группы — три заголовка, каждый ровно один раз: под ним все задачи вида.
+    const groupHeadings = within(section as HTMLElement).getAllByRole('heading', { level: 3 });
+    expect(groupHeadings).toHaveLength(3);
+
+    const blockedByHeading = groupHeadings.find((node) => node.textContent?.includes('blocked_by'));
+    expect(blockedByHeading).toBeDefined();
+    // Идентификатор контракта рядом с подписью на языке человека — не вместо неё.
+    expect(blockedByHeading).toHaveTextContent('blocked_by');
+    expect(blockedByHeading).toHaveTextContent(say.ui('task.links.kind.blocked_by'));
+    // Счётчик группы считает её собственные задачи, а не связи целиком.
+    expect(blockedByHeading).toHaveTextContent(say.task('linkGroup.count', { count: 2 }));
+
+    // Порядок групп значимый: то, что держит задачу, стоит первым.
+    const order = groupHeadings.map((node) => node.textContent ?? '');
+    expect(order.findIndex((text) => text.includes('blocked_by'))).toBe(0);
+    expect(order.findIndex((text) => text.includes('relates'))).toBe(order.length - 1);
+
+    // Прежней плашки слева больше нет: у знака вида связи своя разметка.
+    expect(section?.querySelector('[data-mark="link-kind"]')).not.toBeNull();
+  });
+
+  it('статус связанной задачи нарисован тем же знаком, что в таблице задач', async () => {
+    server.use(packageOf('DEMO-6', { links: linksOf('child') }), entries('DEMO-6'));
+
+    renderApp('/tasks/DEMO-6');
+    await screen.findByRole('heading', { name: /DEMO-6/ });
+
+    const section = screen.getByRole('heading', { name: say.task('links') }).closest('section');
+    const statusMark = within(section as HTMLElement)
+      .getByText('in_progress')
+      .closest('[data-mark="status"]');
+
+    // Тот же знак, что в шапке карточки и в строке списка: форма, а не голая плашка.
+    expect(statusMark?.querySelector('svg')).not.toBeNull();
   });
 });
 

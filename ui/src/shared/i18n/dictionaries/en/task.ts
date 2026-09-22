@@ -17,6 +17,10 @@ export const task = {
   assignment: 'Assignment',
   links: 'Links',
   noLinks: 'There are no links.',
+  linkGroup: {
+    count_one: '{{count, number}} task',
+    count_other: '{{count, number}} tasks',
+  },
 
   header: {
     assignee: 'assignee',
