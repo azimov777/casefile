@@ -1,7 +1,7 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { liveJournal } from '@testing/live-journal';
 import {
   API,
@@ -287,6 +287,52 @@ describe('карточка задачи', () => {
     expect(
       await screen.findByRole('button', { name: /Список допустимого собирается по типу поля/ }),
     ).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('раскрытие и сворачивание записи кликом не прокручивает, а переход по адресу — прокручивает (UI-126)', async () => {
+    server.use(packageOf('DEMO-4'), entries('DEMO-4'));
+    const user = userEvent.setup();
+    // В jsdom `scrollIntoView` — заглушка (`testing/setup.ts`); здесь она подменена
+    // шпионом, чтобы отличить «не звали вовсе» от «позвали и он ничего не сделал».
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+
+    renderApp('/tasks/DEMO-4');
+    const heading = await screen.findByRole('button', {
+      name: /Список допустимого собирается по типу поля/,
+    });
+
+    // Раньше `scrollIntoView({ block: 'center' })` срабатывал на каждом клике: адрес
+    // раскрытия и адрес перехода по ссылке `TRK-42#12` писались одним и тем же
+    // параметром, и запись отличить было нечем.
+    await user.click(heading);
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-4?entry=4'));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    // Закрытие той же записи — тот же путь и то же требование.
+    await user.click(heading);
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-4'));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    scrollIntoView.mockRestore();
+  });
+
+  it('переход по адресу с номером записи по-прежнему прокручивает к ней (UI-126)', async () => {
+    server.use(packageOf('DEMO-4'), entries('DEMO-4'));
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+
+    renderApp('/tasks/DEMO-4?entry=4');
+    await screen.findByRole('button', {
+      name: /Список допустимого собирается по типу поля/,
+    });
+
+    // Единственный оставшийся путь прокрутки: приход снаружи, не собственный клик.
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+
+    scrollIntoView.mockRestore();
   });
 
   it('в длинной описи «К свежей записи» раскрывает последнюю и читает только её', async () => {
