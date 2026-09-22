@@ -191,7 +191,7 @@ test.describe('первый экран списка', () => {
     await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
 
-    // Форма свёрнута, но отбор не спрятан: свёрнутая строка называет его словами.
+    // Панель закрыта, но отбор не спрятан: строка состояния называет его словами.
     await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText(
       `текст «${MARKER}»`,
     );
@@ -229,25 +229,15 @@ test.describe('первый экран списка', () => {
     await page.goto(LIST);
     await expect(rows(page)).toHaveCount(TASKS);
 
-    await page.getByRole('button', { name: 'Изменить отбор' }).click();
-    /*
-     * Форма раскрывается движением, и замер, снятый посреди него, ловит недоехавшую
-     * форму, а не сдвиг от объяснения: таблица «уезжает» ровно на остаток раскрытия.
-     * Ждать надо конца движения, а не «немного» (`docs/notes/testing.md`, «Геометрию
-     * меряют после того, как раскрытие доехало»).
-     */
-    await page
-      .getByRole('region', { name: 'Отбор задач' })
-      .evaluate((node) =>
-        Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
-      );
+    // Режим запроса сменяет строку поиска полем запроса той же высоты.
+    await page.getByRole('button', { name: 'Запрос', exact: true }).click();
     await fontsReady(page);
     const before = await topOf(rows(page).first());
 
     const field = page.getByLabel('Запрос на языке бэкенда');
     await field.fill('status: opne');
     // Черновик говорит о себе сам, до всякого применения.
-    await expect(page.getByText('не применено, Enter применит')).toBeVisible();
+    await expect(page.getByText('↵ применить')).toBeVisible();
     await field.press('Enter');
 
     const problem = page.getByRole('alert');

@@ -195,8 +195,9 @@ describe('доска', () => {
       expect(url.searchParams.getAll('status').length).toBeLessThanOrEqual(1);
       // Исполнитель — общий фильтр, он действует и на доске.
       expect(url.searchParams.getAll('assignee')).toEqual(['owner']);
-      // Порядок внутри столбца задан доской: свежие в деле сверху.
-      expect(url.searchParams.getAll('sort')).toEqual(['-last_entry_at']);
+      // Порядок тот же, что выбран в таблице: он упорядочивает карточки внутри
+      // столбца (UI-130#10), а не подменяется порядком доски.
+      expect(url.searchParams.getAll('sort')).toEqual(['key']);
     }
     expect(requestsFor('open')).toHaveLength(1);
   });
@@ -213,12 +214,10 @@ describe('доска', () => {
     const request = seen.at(-1) as URL;
     expect(request.searchParams.getAll('assignee')).toEqual(['owner']);
 
-    // Отбор пережил смену режима: свёрнутая строка называет его, а форма — хранит.
+    // Отбор пережил смену режима: строка состояния называет его чипом.
     expect(screen.getByRole('list', { name: say.tasks('filters.conditions') })).toHaveTextContent(
       say.tasks('filters.condition.assignee', { value: 'owner' }),
     );
-    await user.click(screen.getByRole('button', { name: say.tasks('filters.expand') }));
-    expect(screen.getByLabelText(say.tasks('filters.assignee'))).toHaveValue('owner');
   });
 });
 

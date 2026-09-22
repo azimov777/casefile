@@ -57,26 +57,26 @@ export const tasks = {
 
   filters: {
     label: 'Task selection',
-    expand: 'Change the selection',
-    collapse: 'Collapse the selection',
     conditions: 'Selection conditions',
     allShown: 'all tasks are shown',
     // Без условий, но с умолчанием архива: «показаны все» было бы неправдой.
     allButArchive: 'all tasks but the archive are shown',
     remove: 'Remove the condition: {{condition}}',
     reset: 'Reset',
-    formLabel: 'Task selection conditions',
+    menu: 'Filter',
+    menuLabel: 'Task selection conditions',
     statusLegend: 'Status',
     priorityLegend: 'Priority',
-    boardNote: 'The board shows every status: each in its own column.',
+    flagsLegend: 'Signals',
     assignee: 'Assignee',
     assigneePlaceholder: 'the whole name',
     text: 'Text',
-    textPlaceholder: 'in the title or the description',
+    textPlaceholder: 'Find in the title or the description',
     blocked: 'blocked',
     withQuestions: 'has open questions',
     withRemarks: 'has unresolved remarks',
     pending: 'not applied, Enter applies it',
+    pendingShort: '↵ apply',
     apply: 'Apply',
 
     archive: {
@@ -102,8 +102,9 @@ export const tasks = {
     },
 
     query: {
+      toggle: 'Query',
       label: 'Query in the backend language',
-      note: 'cancels the rest of the selection, but not the archive',
+      note: 'The query replaces the simple selection; the archive is still up to the checkbox on the right.',
       // Пример на языке запросов бэкенда, а не фраза: он одинаков на любом языке
       // (освобождён в `dictionaries.test.ts`).
       placeholder: 'queue: DEMO and status: open and blocked: false',

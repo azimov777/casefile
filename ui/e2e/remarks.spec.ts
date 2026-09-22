@@ -54,11 +54,9 @@ test('признак «замечаний» стоит в строке спис�
   const row = page.getByRole('row').filter({ hasText: 'DEMO-1' });
   await expect(row.getByText('1 замечание без разбора')).toBeVisible();
 
-  // Флажок отбора оставляет только задачи с неразобранными замечаниями.
-  await page.getByRole('button', { name: 'Изменить отбор' }).click();
-  // Клик, а не `check()`: флажок управляется адресом, и после клика форма
-  // перерисовывается из нового адреса — состояние проверяется отдельно, по нему же.
-  await page.getByLabel('есть неразобранные замечания').click();
+  // Признак в панели отбора оставляет только задачи с неразобранными замечаниями.
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  await page.getByRole('button', { name: 'есть неразобранные замечания' }).click();
   await expect(page).toHaveURL(/remarks=true/);
   await expect(page.getByRole('row').filter({ hasText: 'DEMO-' })).toHaveCount(1);
 

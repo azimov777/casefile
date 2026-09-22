@@ -166,6 +166,13 @@ describe('перевод отбора в параметры запроса', () 
     expect(filtersToListParams(filters({ view: 'board', page: 3 })).offset).toBeUndefined();
   });
 
+  it('порядок на доске тот же, что выбран в таблице: он сортирует карточки в столбцах', () => {
+    // До UI-130 доска подменяла выбор человека своим порядком (UI-130#10).
+    expect(filtersToListParams(filters({ view: 'board', sort: '-priority' })).sort).toEqual([
+      '-priority',
+    ]);
+  });
+
   it('курсора в параметрах таблицы нет вовсе: он и смещение вместе — отказ бэкенда', () => {
     expect(filtersToListParams(filters({ page: 3 }))).not.toHaveProperty('cursor');
   });

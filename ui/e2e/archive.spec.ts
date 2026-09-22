@@ -217,9 +217,9 @@ test('экран без событий потока не шлёт лишних �
   await page.goto('/tasks?queue=DEMO');
   await expect(rows(page).first()).toBeVisible();
   const tableAfterLoad = calls.length;
-  // Перерисовки без чтения: раскрыть и свернуть отбор, навести на строку.
-  await page.getByRole('button', { name: 'Изменить отбор' }).click();
-  await page.getByRole('button', { name: 'Свернуть отбор' }).click();
+  // Перерисовки без чтения: открыть и закрыть панель отбора, навести на строку.
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  await page.keyboard.press('Escape');
   await rows(page).first().hover();
   await page.waitForTimeout(REST);
   const tableAfterRest = calls.length;

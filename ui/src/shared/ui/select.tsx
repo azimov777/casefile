@@ -16,10 +16,15 @@ interface SelectProps {
   /** Подпись для программы чтения с экрана: у поля отбора нет видимой подписи. */
   label: string;
   options: { value: string; label: string }[];
+  /**
+   * Знак перед значением: говорит, *что* выбирают, когда подпись поля скрыта
+   * (`aria-label`), а само значение — фраза вроде «сначала живые в деле».
+   */
+  icon?: ReactNode;
   className?: string;
 }
 
-export function Select({ value, onValueChange, label, options, className }: SelectProps) {
+export function Select({ value, onValueChange, label, options, icon, className }: SelectProps) {
   return (
     <SelectPrimitive.Root value={value} onValueChange={onValueChange}>
       <SelectPrimitive.Trigger
@@ -36,6 +41,7 @@ export function Select({ value, onValueChange, label, options, className }: Sele
           className,
         )}
       >
+        {icon}
         <span className="truncate">
           <SelectPrimitive.Value />
         </span>

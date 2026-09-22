@@ -24,3 +24,5 @@ export { Select } from './select';
 export { Sheet } from './sheet';
 export { RelativeTime } from './relative-time';
 export { TaskText } from './task-text';
+export { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from './popover';
+export { ToggleGroup, ToggleGroupItem } from './toggle-group';
