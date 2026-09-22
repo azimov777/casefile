@@ -58,6 +58,13 @@ export function TasksBoard({ params, explained, collapsed, onToggle }: TasksBoar
    * снова выросла» здесь нет. Всё, что ниже ряда столбцов, раздаёт уже флексбокс:
    * ряд забирает остаток (`flex-1` при `min-h-0`).
    *
+   * Вычитается `--ui-board-tail` (1rem), а не общий хвост страницы `--ui-page-tail`
+   * (3rem): тот рассчитан на экраны, которые прокручиваются сами и заканчиваются
+   * пустотой после последнего блока, а у доски высота и так точная — вторая пустота
+   * под ней читалась бы лишним полем (UI-129, было около 48 px пустой полосы под
+   * полосой прокрутки столбцов). `app-shell.tsx` подменяет хвост оболочки этим же
+   * токеном по признаку `data-board` ниже — источник нижнего края доски один.
+   *
    * `pin-scope` — шкала прокрутки, по которой заголовки столбцов ниже точки остановки
    * держатся у верха окна (UI-94, см. заголовок в `BoardColumn`). Объявлена здесь,
    * а не на ряду, и это условие: шкала считается от ближайшего порта прокрутки, у доски
@@ -98,8 +105,11 @@ export function TasksBoard({ params, explained, collapsed, onToggle }: TasksBoar
   return (
     <div
       ref={boardRef}
+      // Признак для `app-shell.tsx`: только по нему оболочка меняет свой нижний
+      // край с общего хвоста страницы на хвост доски (`has-[[data-board]]`, UI-129).
+      data-board=""
       style={
-        { '--ui-board-height': `calc(100dvh - ${top}px - var(--ui-page-tail))` } as CSSProperties
+        { '--ui-board-height': `calc(100dvh - ${top}px - var(--ui-board-tail))` } as CSSProperties
       }
       className="pin-scope flex flex-col fold:h-(--ui-board-height)"
     >
