@@ -3,11 +3,28 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.participant import Participant
 from app.db.models.token import Token
 from app.db.pagination import Page, paginate
+
+
+def owned_by(owner: Participant) -> ColumnElement[bool]:
+    """Свои токены участника: говорят от его имени или выпущены им.
+
+    Зеркало `Token.belongs_to` на стороне базы — предикат один и живёт парой
+    (`docs/CONCEPT.md`, 3.1). Пространство (TRK-107) добавится сюда ещё одним условием.
+    """
+    author = owner.author
+    return or_(
+        Token.participant_id == owner.id,
+        and_(
+            Token.created_by_kind == author.kind,
+            Token.created_by_signature == author.signature,
+        ),
+    )
 
 
 class TokenRepository:
@@ -31,10 +48,20 @@ class TokenRepository:
     async def list_page(
         self,
         *,
+        owner: Participant | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Token]:
-        return await paginate(self._session, select(Token), Token, limit=limit, cursor=cursor)
+        """Страница токенов установки — всех или только своих у `owner`."""
+        statement = select(Token)
+        if owner is not None:
+            statement = statement.where(owned_by(owner))
+        return await paginate(self._session, statement, Token, limit=limit, cursor=cursor)
+
+    async def list_live_owned_by(self, owner: Participant) -> Sequence[Token]:
+        """Неотозванные свои токены участника: их отзывает отключение его учётной записи."""
+        statement = select(Token).where(owned_by(owner), Token.revoked_at.is_(None))
+        return (await self._session.scalars(statement)).unique().all()
 
     async def any_exists(self) -> bool:
         """Есть ли в установке хоть один токен.
@@ -63,25 +90,24 @@ class TokenRepository:
         )
         return (await self._session.scalars(statement)).unique().all()
 
-    async def list_live_of(
+    async def list_live_sessions_of(
         self,
         participant_id: uuid.UUID,
         *,
-        sessions_only: bool,
         keep: uuid.UUID | None = None,
     ) -> Sequence[Token]:
-        """Неотозванные токены участника — все или только сеансы браузера.
+        """Неотозванные сеансы браузера участника.
 
-        Нужны учётным записям (`app/services/accounts.py`): отключение отзывает все
-        токены человека, смена и сброс пароля — его сеансы. `keep` — токен, который
-        остаётся живым: смена своего пароля не выбрасывает из той вкладки, где её сделали.
+        Нужны учётным записям (`app/services/accounts.py`): смена и сброс пароля отзывают
+        сеансы человека (отключение отзывает больше — `list_live_owned_by`). `keep` —
+        токен, который остаётся живым: смена своего пароля не выбрасывает из той вкладки,
+        где её сделали.
         """
         statement = select(Token).where(
             Token.participant_id == participant_id,
             Token.revoked_at.is_(None),
+            Token.expires_at.is_not(None),
         )
-        if sessions_only:
-            statement = statement.where(Token.expires_at.is_not(None))
         if keep is not None:
             statement = statement.where(Token.id != keep)
         return (await self._session.scalars(statement)).unique().all()

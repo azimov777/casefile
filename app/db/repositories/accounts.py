@@ -2,10 +2,11 @@
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.account import Account
+from app.db.models.participant import Participant
 from app.db.pagination import Page, paginate
 
 
@@ -27,6 +28,26 @@ class AccountRepository:
     async def get_by_participant(self, participant_id: uuid.UUID) -> Account | None:
         statement = select(Account).where(Account.participant_id == participant_id)
         return (await self._session.scalars(statement)).unique().one_or_none()
+
+    async def any_disabled(self, *, participant_ids: set[uuid.UUID], names: set[str]) -> bool:
+        """Отключена ли учётная запись хоть одного из названных людей — по участнику или имени.
+
+        Нужна аутентификации (`app/services/auth.py`): токен не пускает, пока отключён его
+        человек — тот, от чьего имени он говорит, или тот, кто его выпустил. Выпустившего
+        знает только подпись автора, поэтому второй способ назвать человека — имя.
+        """
+        if not participant_ids and not names:
+            return False
+        statement = (
+            select(Account.id)
+            .join(Participant, Account.participant_id == Participant.id)
+            .where(
+                Account.disabled_at.is_not(None),
+                or_(Participant.id.in_(participant_ids), Participant.name.in_(names)),
+            )
+            .limit(1)
+        )
+        return await self._session.scalar(statement) is not None
 
     async def count_active_admins(self) -> int:
         """Сколько действующих (не отключённых) администраторов на установке."""

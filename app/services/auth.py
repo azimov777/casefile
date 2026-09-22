@@ -24,8 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.db.models.token import Token
-from app.db.repositories import TokenRepository
-from app.domain.authors import TRACKER, Author, label_author
+from app.db.repositories import AccountRepository, TokenRepository
+from app.domain.authors import TRACKER, Author, AuthorKind, label_author
 from app.domain.errors import ActorLabelRequiredError
 from app.domain.tokens import TokenScope, hash_token
 
@@ -105,6 +105,15 @@ async def authenticate(
             details={"reason": "token_expired"},
         )
 
+    if await _person_disabled(session, token):
+        # Отключение отзывает токены человека (`app/services/accounts.py`), но не мешает
+        # выпустить ему новый — командой на сервере, администратором, подъёмом
+        # `local-token`. Такой ключ не пускает, пока человека не включат (`TRK-114#13`).
+        raise UnauthorizedError(
+            message="The account behind this token is disabled",
+            details={"reason": "account_disabled"},
+        )
+
     actor = Actor(
         author=_author(token, label),
         scope=token.scope,
@@ -113,6 +122,25 @@ async def authenticate(
     )
     _touch(token, moment)
     return actor
+
+
+async def _person_disabled(session: AsyncSession, token: Token) -> bool:
+    """Отключена ли учётная запись человека этого токена: того, от чьего имени он говорит,
+    или того, кто его выпустил.
+
+    Токен, за которым человека нет вовсе (агент, выпущенный трекером), базу не трогает:
+    эту цену платит только токен, связанный с человеком.
+    """
+    participant_ids = (
+        {token.participant.id}
+        if token.participant is not None and token.participant.author.kind is AuthorKind.HUMAN
+        else set()
+    )
+    issuer = token.created_by
+    names = {issuer.signature} if issuer.kind is AuthorKind.HUMAN and issuer.signature else set()
+    return await AccountRepository(session).any_disabled(
+        participant_ids=participant_ids, names=names
+    )
 
 
 def _author(token: Token, label: str | None) -> Author:
