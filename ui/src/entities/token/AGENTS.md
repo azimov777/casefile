@@ -6,9 +6,9 @@
 
 ## Папки
 
-- `api/` — тип токена, признак отзыва и список установки страницами по курсору
+- `api/` — тип токена, признаки отзыва, сеанса, жизни и принадлежности и список токенов (все или свои) страницами по курсору
 - `ui/` — строка доступа: чей, что открывает, кем выпущен, когда им ходили, отозван ли
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `tokensQueryOptions`, `tokenKeys`, `isRevoked`, `TOKEN_PAGE_SIZE`, `TokenItem`, типы `Token`, `TokenScope`
+- `index.ts` — публичный интерфейс среза: `tokensQueryOptions`, `tokenKeys`, `isRevoked`, `isSession`, `isLive`, `belongsTo`, `TOKEN_PAGE_SIZE`, `TokenItem`, типы `Token`, `TokenScope`

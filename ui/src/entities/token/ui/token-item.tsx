@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Activity, Ban, CalendarPlus, UserRound, type LucideIcon } from 'lucide-react';
+import { Activity, Ban, CalendarPlus, Hourglass, UserRound, type LucideIcon } from 'lucide-react';
 import { Badge, RelativeTime } from '@/shared/ui';
 import { cn } from '@/shared/lib';
-import { isRevoked, type Token } from '../api/tokens';
+import { isRevoked, isSession, type Token } from '../api/tokens';
 
 /**
  * Один доступ установки: чей он, что открывает, кем и когда выпущен, когда им ходили
@@ -79,6 +79,13 @@ export function TokenItem({
               <span className="font-mono text-text">{token.participant}</span>
             )}
           </Fact>
+
+          {/* Срок есть только у сеанса входа: ключ агента живёт до отзыва. */}
+          {isSession(token) && !revoked ? (
+            <Fact icon={Hourglass}>
+              {t('token.expiresAt')} <RelativeTime value={token.expires_at} />
+            </Fact>
+          ) : null}
 
           {revoked ? (
             <Fact icon={Ban}>
