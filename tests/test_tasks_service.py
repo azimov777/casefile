@@ -453,6 +453,96 @@ async def test_the_trim_and_the_assignee_leave_an_entry_each(
     assert {entry.type for entry in added} == {EntryType.ASSIGNEE_CHANGED, EntryType.FIELD_CHANGED}
 
 
+# --- Признак одного действия (TRK-118) -------------------------------------------------
+
+
+async def test_one_update_files_all_seven_sections_with_one_action_id(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """Обзорная проверка 1 TRK-118: один `update_task` — одно значение признака.
+
+    Семь разделов правятся одним вызовом, как это делает агент, заполняющий задачу
+    целиком: все семь `section_changed` обязаны нести одно и то же значение, а
+    следующий вызов — другое.
+    """
+    mutation = await service.update_task(
+        db_session,
+        task,
+        actor=task_actor,
+        changes=TaskChanges(
+            title="Новое название",
+            description="Новое описание",
+            goal="Новая цель",
+            context="Новый контекст",
+            constraints="Новые ограничения",
+            output="Новый результат",
+            checks=["Проверка раз", "Проверка два"],
+        ),
+    )
+    assert len(mutation.changes) == 7
+
+    filed = (await entries(db_session, task))[-7:]
+    assert len(filed) == 7
+    assert {entry.type for entry in filed} == {EntryType.SECTION_CHANGED}
+    action_ids = {entry.action_id for entry in filed}
+    assert len(action_ids) == 1, "семь записей одного вызова обязаны нести одно значение"
+    assert None not in action_ids
+
+    second = await service.update_task(
+        db_session, task, actor=task_actor, changes=TaskChanges(goal="Ещё одна цель")
+    )
+    assert len(second.changes) == 1
+    latest = (await entries(db_session, task))[-1]
+    assert latest.action_id is not None
+    assert latest.action_id not in action_ids, "следующий вызов обязан получить другое значение"
+
+
+async def test_a_close_files_entries_verdicts_summary_and_the_transition_with_one_action_id(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """Обзорная проверка 2 TRK-118: записи одного `close_task` несут одно значение.
+
+    Записи, вердикты, сводка и финальный `status_changed` — одна транзакция входа
+    приложения (`docs/notes/db.md`), и признак обязан связать их так же, как связал бы
+    настоящий номер транзакции, — но независимо от него (`app/db/models/entry.py`).
+    """
+    await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
+    before_ids = {entry.action_id for entry in await entries(db_session, task)}
+
+    closure = await service.close_task(
+        db_session,
+        task,
+        actor=task_actor,
+        entries=[
+            case_service.EntryFiling(type=EntryType.DECISION, title="Решение перед закрытием")
+        ],
+        verdicts=[
+            case_service.VerdictFiling(check_no=check_no, outcome="passed")
+            for check_no in range(1, len(task.checks) + 1)
+        ],
+        summary=case_service.SummaryFiling(
+            done="Сделано",
+            remaining="Осталось",
+            blockers="нет",
+            next_step="дальше",
+            unmeasured="Живая проверка не гонялась, риск считаю теоретическим",
+        ),
+    )
+
+    assert task.status is TaskStatus.DONE
+    assert {entry.type for entry in closure.entries} == {
+        EntryType.DECISION,
+        EntryType.VERDICT,
+        EntryType.SUMMARY,
+        EntryType.STATUS_CHANGED,
+    }
+    action_ids = {entry.action_id for entry in closure.entries}
+    assert len(action_ids) == 1, "записи, вердикты, сводка и переход — одно действие"
+    (action_id,) = action_ids
+    assert action_id is not None
+    assert action_id not in before_ids, "закрытие обязано получить значение, отличное от прежних"
+
+
 async def test_sending_the_current_values_changes_nothing(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:

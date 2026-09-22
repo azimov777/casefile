@@ -319,7 +319,15 @@ async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_
     }
     assert [heading["no"] for heading in data["index"]] == [1, 2, 3, 4, 5, 6]
     for heading in data["index"]:
-        assert sorted(heading) == ["author", "created_at", "facts", "no", "title", "type"]
+        assert sorted(heading) == [
+            "action_id",
+            "author",
+            "created_at",
+            "facts",
+            "no",
+            "title",
+            "type",
+        ]
 
 
 # --- Чтение записей -------------------------------------------------------------------
@@ -345,6 +353,8 @@ async def test_entries_are_read_by_number_type_and_position(
     one = await auth_client.get("/api/v1/tasks/TRK-1/entries/2")
     assert one.status_code == 200, one.text
     assert one.json()["data"]["payload"] == SUMMARY
+    # Признак действия (TRK-118): запись целиком (лента, `read_entries`) несёт его же.
+    assert one.json()["data"]["action_id"] is not None
 
     missing = await auth_client.get("/api/v1/tasks/TRK-1/entries/99")
     assert missing.status_code == 404
