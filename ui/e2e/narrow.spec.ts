@@ -347,14 +347,22 @@ test('на карточке замечание доступно до описи 
   await page.goto('/tasks/DEMO-3');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-3');
 
-  // Порядок чтения, а не только вид: блок замечаний стоит в разметке до описи дела.
-  const order = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('main section[aria-labelledby]')).map((node) =>
-      node.getAttribute('aria-labelledby'),
-    ),
-  );
-  expect(order.indexOf('remarks')).toBeGreaterThan(-1);
-  expect(order.indexOf('remarks')).toBeLessThan(order.indexOf('case'));
+  /*
+   * Порядок чтения, а не только вид: блок замечаний стоит в разметке до описи дела.
+   * Сверяется по заголовкам, а не по `aria-labelledby` секций: у DEMO-3 сводка,
+   * вопросы и замечания пусты и делят одну слитую рамку без `aria-labelledby`
+   * (UI-132) — заголовок при этом остаётся `<h2>` независимо от того, пуст блок
+   * или нет.
+   */
+  const remarksBeforeCase = await page.evaluate(() => {
+    const heading = (text: string) =>
+      Array.from(document.querySelectorAll('main h2')).find((node) => node.textContent === text);
+    const remarks = heading('Замечания');
+    const caseHeading = heading('Дело');
+    if (remarks === undefined || caseHeading === undefined) return false;
+    return Boolean(remarks.compareDocumentPosition(caseHeading) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  expect(remarksBeforeCase).toBe(true);
 
   // И то же самое — одним действием из липкой навигации, с любой глубины прокрутки.
   await page.mouse.wheel(0, 4000);
