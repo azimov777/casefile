@@ -6,7 +6,7 @@
 # `docker-compose.yml`). Отдельной стадией, а не `COPY --from=<образ>`: бот обновлений
 # читает только строки FROM, и версия внутри `COPY --from` осталась бы без обновлений
 # (`.github/dependabot.yml`).
-FROM ghcr.io/astral-sh/uv:0.12.13 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.17 AS uv
 
 FROM python:3.14-slim
 
