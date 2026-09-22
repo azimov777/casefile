@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { silenceJournal } from './contour';
+import { fontsReady, motionSettled, silenceJournal } from './contour';
 
 /** Строка описи по заголовку записи: номер записи зависит от истории задачи, заголовок — нет. */
 function entryRow(page: Page, title: string) {
@@ -93,6 +93,86 @@ test('адрес с номером записи открывает карточ�
     'aria-expanded',
     'true',
   );
+});
+
+/*
+ * UI-126: раскрытие записи в описи не должно дёргать прокрутку. Раньше `IndexRow`
+ * звал `scrollIntoView({ block: 'center' })` на каждом клике — не только при
+ * переходе по ссылке `TRK-42#12`, ради которого движение и было написано, — потому
+ * что раскрытие руками тоже пишет номер записи в адрес (`rememberOpen`), и следующая
+ * отрисовка видела тот же признак, что и переход по ссылке.
+ *
+ * DEMO-1 — единственная задача демо с длинной описью (за порогом `LONG_INDEX`, отсюда
+ * кнопка «К свежей записи») и записью `section_changed` «Правка раздела goal» —
+ * тем самым примером, которым описан дефект.
+ */
+test('раскрытие записи в длинной описи не двигает прокрутку: строка остаётся, где по ней кликнули', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.goto('/tasks/DEMO-1');
+  await fontsReady(page);
+
+  // Опись действительно длинная: короткая кнопки прыжков не показывает вовсе
+  // (`в короткой описи прыжков нет` выше).
+  await expect(page.getByRole('button', { name: 'К свежей записи' })).toBeVisible();
+
+  const row = entryRow(page, 'Правка раздела goal');
+  const button = row.getByRole('button', { name: 'Правка раздела goal' });
+
+  /** Положение строки в документе — не в окне: важно, не съехала ли сама прокрутка. */
+  async function documentTop(): Promise<number> {
+    const box = await row.boundingBox();
+    return box === null ? -1 : box.y + (await page.evaluate(() => window.scrollY));
+  }
+
+  await expect(row).toBeVisible();
+  const target = (await documentTop()) - (page.viewportSize()?.height ?? 720) / 2;
+  // «Прокрутить к середине»: запись видна примерно посередине окна, а не у края, —
+  // положение, которое центрирующий прыжок обязан был бы менять, а не удержать.
+  await page.evaluate((y) => window.scrollTo(0, Math.max(0, y)), target);
+
+  const before = { scrollY: await page.evaluate(() => window.scrollY), top: await documentTop() };
+  expect(before.top).toBeGreaterThan(0);
+
+  await button.click();
+
+  // Тело раскрытой записи пришло и видно целиком — раньше, чем судить о прокрутке.
+  await expect(page.getByText('Было', { exact: true })).toBeVisible();
+  await expect(page.getByText('Стало', { exact: true })).toBeVisible();
+  // Само раскрытие едет строками сетки (`Reveal`): движение обязано улечься до замера,
+  // иначе кадр посреди хода — это шум, а не то, что человек видит в покое.
+  await motionSettled(page.locator('[data-reveal="place"]'));
+
+  const after = { scrollY: await page.evaluate(() => window.scrollY), top: await documentTop() };
+  expect(Math.abs(after.scrollY - before.scrollY)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(1);
+
+  // Свернуть обратно — тот же путь, то же требование: закрытие тоже не прыгает.
+  await button.click();
+  await expect(page.getByText('Было', { exact: true })).toBeHidden();
+  await motionSettled(page.locator('tbody'));
+  expect(
+    Math.abs((await page.evaluate(() => window.scrollY)) - before.scrollY),
+  ).toBeLessThanOrEqual(1);
+});
+
+test('переход по ссылке на запись в конце длинной описи по-прежнему приводит её в поле зрения', async ({
+  page,
+}) => {
+  await page.goto('/tasks/DEMO-1');
+  // Второе, неразобранное замечание — гарантированно последняя запись дела DEMO-1
+  // (`_remarks_on_done` дописывает его последним), а значит и последняя строка
+  // длинной описи: без прокрутки её не видно ни при какой высоте окна.
+  const title = 'В отказе не видно, какой именно номер не был выдан';
+  const last = entryRow(page, title);
+  const no = (await last.getByRole('rowheader').innerText()).trim();
+
+  await page.goto(`/tasks/DEMO-1?entry=${no}`);
+
+  const opened = entryRow(page, title).getByRole('button', { name: title });
+  await expect(opened).toHaveAttribute('aria-expanded', 'true');
+  await expect(opened).toBeInViewport();
 });
 
 test('обзорные проверки нумерованы с единицы, как их считает вердикт', async ({ page }) => {
