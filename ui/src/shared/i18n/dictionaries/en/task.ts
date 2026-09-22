@@ -27,10 +27,6 @@ export const task = {
     unassigned: 'not assigned',
     updated: 'Updated',
     created: 'Created',
-    transitions: 'Possible transitions',
-    transitionsTitle:
-      'Where the task may go by the status table. The checks of a transition are counted at the moment of the transition',
-    noTransitions: 'nowhere: the status is final',
   },
 
   sections: {

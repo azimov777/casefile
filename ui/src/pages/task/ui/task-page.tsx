@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -42,17 +42,22 @@ const SCREEN = 'flex max-w-(--ui-page-max) flex-col gap-4';
  * доходили бы до краёв. Одинаковая рамка на каждом блоке уравнивала главное и
  * справочное, хотя карточку открывают ради первого.
  *
- * `empty` — пустой блок занимает строку, а не карточку в полный рост: заголовок и
- * честное «ничего нет» встают рядом. Два пустых блока подряд — «Сводки ещё нет» и
- * «Вопросов без ответа нет» — иначе съедали первый экран целиком, ничего на нём
- * не сообщив. Сама честность пустого состояния при этом остаётся: текст на месте.
+ * `empty` — рамка на подряд идущий пробег пустых состояний, а не на каждое из
+ * них: у задачи без сводки, вопросов и замечаний все три раньше рисовали свою
+ * рамку подряд, и три рамки съедали первый экран целиком, ничего на нём не
+ * сообщив (UI-132). Заголовок и честное «ничего нет» каждого пустого состояния
+ * встают своей строкой внутри этой одной рамки — `renderCardBlocks` ниже решает,
+ * какие соседние состояния пустые и сшивает только их. Непустое состояние рядом
+ * не трогает: оно остаётся отдельным `full`-блоком на своём месте, и заметность
+ * его не падает. Сама честность пустого состояния при этом остаётся: текст на
+ * месте, просто не в собственной рамке.
  */
 const block = cva('flex rounded-control border border-line bg-surface', {
   variants: {
     kind: {
       full: 'flex-col gap-3 p-3',
       list: 'flex-col gap-0',
-      empty: 'flex-row flex-wrap items-baseline gap-3 px-3 py-2',
+      empty: 'flex-col gap-1 px-3 py-2',
     },
   },
   defaultVariants: { kind: 'full' },
@@ -104,6 +109,9 @@ const NOTICE_LIST = 'flex list-none flex-col gap-3 p-0';
 
 /** Честное «ничего нет»: курсив вместо прочерка — его читают, а не сканируют. */
 const EMPTY = 'text-muted italic';
+
+/** Одна строка пустого состояния внутри слитой рамки `empty`: заголовок и текст на одной базовой линии. */
+const EMPTY_ROW = 'flex flex-row flex-wrap items-baseline gap-2';
 
 /**
  * Карточка задачи: один запрос пакета преемника на открытие экрана
@@ -184,14 +192,129 @@ export function TaskPage() {
     );
   }
 
-  const { task, features, transitions, summary, links, index, remarks } = pkg.data;
+  const { task, features, summary, links, index, remarks } = pkg.data;
   const questions = withHeld(pkg.data.questions, answering.held, (question) =>
     questionId(task.key, question),
   );
 
-  const summaryKind = summary == null ? 'empty' : 'full';
-  const questionsKind = questions.length === 0 ? 'empty' : 'full';
-  const remarksKind = remarks.length === 0 && !remarkOpen ? 'empty' : 'full';
+  /*
+   * Три блока левой колонки — сводка, вопросы, замечания — решают порознь, пусты ли
+   * они, а рисует их `renderCardBlocks`: подряд идущие пустые сшиваются в одну рамку
+   * (`block`, kind `empty`, выше), а непустой остаётся своим `full`-блоком на месте.
+   */
+  const cardBlocks: CardBlock[] = [];
+
+  if (summary == null) {
+    cardBlocks.push({
+      empty: true,
+      key: 'summary',
+      id: 'summary',
+      title: t('summary'),
+      text: t('noSummary'),
+    });
+  } else {
+    cardBlocks.push({
+      empty: false,
+      key: 'summary',
+      node: (
+        <section key="summary" className={block()} aria-labelledby="summary">
+          <h2 className={blockTitle()} id="summary">
+            {t('summary')}
+          </h2>
+          <EntryBody entry={summary} />
+        </section>
+      ),
+    });
+  }
+
+  if (questions.length === 0) {
+    cardBlocks.push({
+      empty: true,
+      key: 'questions',
+      id: 'questions',
+      title: t('questions'),
+      text: t('noQuestions'),
+    });
+  } else {
+    cardBlocks.push({
+      empty: false,
+      key: 'questions',
+      node: (
+        <section key="questions" className={block()} aria-labelledby="questions">
+          <h2 className={blockTitle()} id="questions">
+            {t('questions')}
+          </h2>
+          <ul className={NOTICE_LIST}>
+            {questions.map((question, at) => (
+              /* Красным здесь только то, что действительно держит работу, —
+                 открытый вопрос. */
+              <li key={question.no} className={`${NOTICE} border-danger-line bg-danger-soft`}>
+                <p className="font-semibold">
+                  {task.key}#{question.no} · {question.title}
+                </p>
+                <EntryBody entry={question} />
+                <QuestionAnswer
+                  taskKey={task.key}
+                  question={question}
+                  at={at}
+                  answering={answering}
+                  askedFor={openAt === question.no}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ),
+    });
+  }
+
+  const remarksEmpty = remarks.length === 0 && !remarkOpen;
+  if (remarksEmpty) {
+    cardBlocks.push({
+      empty: true,
+      key: 'remarks',
+      id: 'remarks',
+      title: t('remarks'),
+      text: t('noRemarks'),
+    });
+  } else {
+    cardBlocks.push({
+      empty: false,
+      key: 'remarks',
+      node: (
+        <section key="remarks" className={block()} aria-labelledby="remarks">
+          <h2 className={blockTitle()} id="remarks">
+            {t('remarks')}
+          </h2>
+          {remarks.length === 0 ? (
+            <p className={EMPTY}>{t('noRemarks')}</p>
+          ) : (
+            <ul className={NOTICE_LIST}>
+              {remarks.map((remark) => (
+                /*
+                 * Замечание выделено тоном внимания, а не опасности: оно правит курс,
+                 * но ничего не останавливает (`../docs/CONCEPT.md`, 3.4).
+                 */
+                <li key={remark.no} className={`${NOTICE} border-attention-line bg-attention-soft`}>
+                  <p className="font-semibold">
+                    {task.key}#{remark.no} · {remark.title}
+                  </p>
+                  <EntryBody entry={remark} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {/*
+           * Форма свёрнута, пока её не попросили: поле в пять строк стоит около 180
+           * пикселей экрана, и платить за него должен тот, кто пришёл писать. Открыть
+           * её можно на задаче в любом статусе, включая закрытую: именно на сделанное
+           * человек и смотрит, когда говорит «вышло не то».
+           */}
+          {remarkOpen ? <RemarkForm taskKey={task.key} /> : null}
+        </section>
+      ),
+    });
+  }
 
   // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
   // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
@@ -219,7 +342,7 @@ export function TaskPage() {
           )
         }
       />
-      <TaskHeader task={task} features={features} transitions={transitions} />
+      <TaskHeader task={task} features={features} />
 
       {/*
        * Две колонки, каждая своим потоком, и делятся они на точке `card` (80rem).
@@ -240,91 +363,20 @@ export function TaskPage() {
        */}
       <div className="flex flex-col gap-4 card:flex-row card:items-start">
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
-          <section className={block({ kind: summaryKind })} aria-labelledby="summary">
-            <h2 className={blockTitle({ kind: summaryKind })} id="summary">
-              {t('summary')}
-            </h2>
-            {summary == null ? (
-              <p className={EMPTY}>{t('noSummary')}</p>
-            ) : (
-              <EntryBody entry={summary} />
-            )}
-          </section>
-
-          <section className={block({ kind: questionsKind })} aria-labelledby="questions">
-            <h2 className={blockTitle({ kind: questionsKind })} id="questions">
-              {t('questions')}
-            </h2>
-            {questions.length === 0 ? (
-              <p className={EMPTY}>{t('noQuestions')}</p>
-            ) : (
-              <ul className={NOTICE_LIST}>
-                {questions.map((question, at) => (
-                  /* Красным здесь только то, что действительно держит работу, —
-                     открытый вопрос. */
-                  <li key={question.no} className={`${NOTICE} border-danger-line bg-danger-soft`}>
-                    <p className="font-semibold">
-                      {task.key}#{question.no} · {question.title}
-                    </p>
-                    <EntryBody entry={question} />
-                    <QuestionAnswer
-                      taskKey={task.key}
-                      question={question}
-                      at={at}
-                      answering={answering}
-                      askedFor={openAt === question.no}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
           {/*
-           * Замечания стоят до описи, а не после неё: это второй способ, каким человек
-           * участвует в работе, и единственный, который начинает он сам
-           * (`../docs/CONCEPT.md`, 3.4). В правой колонке они оказывались за
-           * всей описью в порядке чтения — на узком экране на 3527-м пикселе, — то есть
-           * дальше всего от человека лежало ровно то, ради чего он сюда приходит.
+           * Сводка, вопросы и замечания стоят до описи, а не после неё: это то, ради
+           * чего карточку открывают, и единственный способ, каким человек участвует
+           * в работе сам (`../docs/CONCEPT.md`, 3.4). В правой колонке они оказывались
+           * за всей описью в порядке чтения — на узком экране на 3527-м пикселе, — то
+           * есть дальше всего от человека лежало ровно то, ради чего он сюда приходит.
            * Порядок задаёт разметка, а не `order`: Tab и программа чтения с экрана
            * идут по ней, а не по тому, как блоки расставлены на экране.
            *
-           * Форма не привязана к элементу выдачи и переживает перечитывание пакета —
-           * в отличие от формы ответа, которая уходит вместе со своим вопросом.
+           * Форма замечания не привязана к элементу выдачи и переживает перечитывание
+           * пакета — в отличие от формы ответа, которая уходит вместе со своим
+           * вопросом.
            */}
-          <section className={block({ kind: remarksKind })} aria-labelledby="remarks">
-            <h2 className={blockTitle({ kind: remarksKind })} id="remarks">
-              {t('remarks')}
-            </h2>
-            {remarks.length === 0 ? (
-              <p className={EMPTY}>{t('noRemarks')}</p>
-            ) : (
-              <ul className={NOTICE_LIST}>
-                {remarks.map((remark) => (
-                  /*
-                   * Замечание выделено тоном внимания, а не опасности: оно правит курс,
-                   * но ничего не останавливает (`../docs/CONCEPT.md`, 3.4).
-                   */
-                  <li
-                    key={remark.no}
-                    className={`${NOTICE} border-attention-line bg-attention-soft`}
-                  >
-                    <p className="font-semibold">
-                      {task.key}#{remark.no} · {remark.title}
-                    </p>
-                    <EntryBody entry={remark} />
-                  </li>
-                ))}
-              </ul>
-            )}
-            {/*
-             * Форма свёрнута, пока её не попросили: поле в пять строк стоит около 180
-             * пикселей экрана, и платить за него должен тот, кто пришёл писать. Открыть
-             * её можно на задаче в любом статусе, включая закрытую: именно на сделанное
-             * человек и смотрит, когда говорит «вышло не то».
-             */}
-            {remarkOpen ? <RemarkForm taskKey={task.key} /> : null}
-          </section>
+          {renderCardBlocks(cardBlocks)}
 
           <section className={block({ kind: 'list' })} aria-labelledby="case">
             <div className={BLOCK_HEAD}>
@@ -397,6 +449,66 @@ export function TaskPage() {
       </div>
     </main>
   );
+}
+
+/** Непустой блок левой колонки: уже собранная разметка, ключ на месте. */
+interface FullCardBlock {
+  empty: false;
+  key: string;
+  node: ReactNode;
+}
+
+/** Пустой блок левой колонки: род и честный текст, разметку решает `renderCardBlocks`. */
+interface EmptyCardBlock {
+  empty: true;
+  key: string;
+  id: string;
+  title: string;
+  text: string;
+}
+
+type CardBlock = FullCardBlock | EmptyCardBlock;
+
+/**
+ * Рисует блоки левой колонки по порядку и сшивает подряд идущие пустые в одну рамку
+ * (UI-132): у задачи без сводки, вопросов и замечаний три отдельных «ничего нет» не
+ * рисуют трёх рамок, а рамку — одну, со всеми тремя строками внутри. Непустой блок
+ * прерывает пробег и остаётся своим `full`-блоком на месте: заметность его не падает.
+ */
+function renderCardBlocks(blocks: CardBlock[]): ReactNode[] {
+  const rendered: ReactNode[] = [];
+  let run: EmptyCardBlock[] = [];
+
+  const flushRun = () => {
+    if (run.length === 0) return;
+    rendered.push(
+      <div
+        key={`empty-${run.map((item) => item.key).join('-')}`}
+        className={block({ kind: 'empty' })}
+      >
+        {run.map((item) => (
+          <div key={item.key} className={EMPTY_ROW}>
+            <h2 className={blockTitle({ kind: 'empty' })} id={item.id}>
+              {item.title}
+            </h2>
+            <p className={EMPTY}>{item.text}</p>
+          </div>
+        ))}
+      </div>,
+    );
+    run = [];
+  };
+
+  for (const item of blocks) {
+    if (item.empty) run.push(item);
+    else {
+      flushRun();
+      rendered.push(item.node);
+    }
+  }
+  flushRun();
+
+  return rendered;
 }
 
 /** Номер записи из адреса. Мусор — то же самое, что его отсутствие. */

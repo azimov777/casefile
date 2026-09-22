@@ -142,38 +142,34 @@ test.describe('карточка задачи на широком экране', 
     expect(overflowing).toEqual([]);
   });
 
-  test('пустые блоки не съедают первый экран', async ({ page, request }) => {
-    const key = await makeTask(request, 'Задача без сводки и без вопросов');
+  test('пустые сводка, вопросы и замечания не рисуют трёх рамок и не съедают первый экран (UI-132)', async ({
+    page,
+    request,
+  }) => {
+    const key = await makeTask(request, 'Задача без сводки, вопросов и замечаний');
     await silenceJournal(page);
     await page.goto(`/tasks/${key}`);
-
-    const summary = page.locator('section').filter({ hasText: 'Сводки ещё нет' }).first();
-    const questions = page
-      .locator('section')
-      .filter({ hasText: 'Вопросов без ответа нет' })
-      .first();
 
     // Честность пустого состояния на месте: тексты никуда не делись.
-    await expect(summary).toBeVisible();
-    await expect(questions).toBeVisible();
+    await expect(page.getByText('Сводки ещё нет', { exact: false })).toBeVisible();
+    await expect(page.getByText('Вопросов без ответа нет', { exact: false })).toBeVisible();
+    await expect(page.getByText('Неразобранных замечаний нет', { exact: false })).toBeVisible();
 
-    const together =
-      ((await summary.boundingBox())?.height ?? 0) + ((await questions.boundingBox())?.height ?? 0);
-    expect(together).toBeLessThan((await viewportHeight(page)) / 4);
-  });
+    // Свежая задача не рисует три отдельных рамки: ровно одна секция несёт все три
+    // заголовка сразу, потому что подряд идущие пустые состояния сшиты в одну (UI-132).
+    // Ни у одной из трёх больше нет собственной рамки с `aria-labelledby`.
+    await expect(page.locator('[aria-labelledby="summary"]')).toHaveCount(0);
+    await expect(page.locator('[aria-labelledby="questions"]')).toHaveCount(0);
+    await expect(page.locator('[aria-labelledby="remarks"]')).toHaveCount(0);
 
-  test('возможные переходы не кликабельны и не получают фокус', async ({ page, request }) => {
-    const key = await makeTask(request, 'Задача ради проверки справки о переходах');
-    await silenceJournal(page);
-    await page.goto(`/tasks/${key}`);
-
-    const transitions = page
-      .locator('dd')
-      .filter({ hasText: /^(open|in_progress|done)/ })
-      .first();
-    await expect(transitions).toBeVisible();
-    // Переходы человек не делает (`CONCEPT.md`, 7): ни кнопки, ни ссылки, ни фокуса.
-    await expect(transitions.locator('button, a, [tabindex]')).toHaveCount(0);
+    const frame = page
+      .locator('main div')
+      .filter({ hasText: 'Сводки ещё нет' })
+      .filter({ hasText: 'Вопросов без ответа нет' })
+      .filter({ hasText: 'Неразобранных замечаний нет' })
+      .last();
+    await expect(frame).toBeVisible();
+    expect((await frame.boundingBox())?.height ?? 0).toBeLessThan((await viewportHeight(page)) / 4);
   });
 });
 

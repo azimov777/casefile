@@ -420,16 +420,6 @@ describe('карточка задачи', () => {
     expect(header).toHaveTextContent(new RegExp(`${say.task('header.assignee')}\\s+\\S+`));
   });
 
-  it('возможные переходы остаются справкой: ни роли, ни фокуса', async () => {
-    server.use(packageOf('DEMO-4'));
-    renderApp('/tasks/DEMO-4');
-
-    const transitions = await screen.findByText('done, open, cancelled');
-    // Переходы человек не делает (`CONCEPT.md`, 7): это текст, а не кнопки.
-    expect(transitions.tagName).toBe('DD');
-    expect(transitions.querySelector('button, a, [tabindex]')).toBeNull();
-  });
-
   it('на несуществующей задаче объясняет по коду и зовёт обратно к списку', async () => {
     server.use(
       http.get(`${API}/api/v1/tasks/DEMO-999`, () =>
@@ -444,6 +434,67 @@ describe('карточка задачи', () => {
       'href',
       '/tasks',
     );
+  });
+});
+
+describe('пустые состояния сводки, вопросов и замечаний (UI-132)', () => {
+  it('все три пустых сшиты в одну рамку, а не рисуют по своей на каждое', async () => {
+    server.use(packageOf('DEMO-4', { summary: null }));
+    renderApp('/tasks/DEMO-4');
+
+    // Заголовки остаются на месте и честными: пустое состояние не молчит.
+    await screen.findByText(say.task('noSummary'));
+    expect(screen.getByText(say.task('noQuestions'))).toBeInTheDocument();
+    expect(screen.getByText(say.task('noRemarks'))).toBeInTheDocument();
+
+    // Три отдельных рамки исчезают (правило замены задачи): ни одна из трёх больше
+    // не стоит собственной секцией `aria-labelledby`…
+    expect(document.querySelector('section[aria-labelledby="summary"]')).toBeNull();
+    expect(document.querySelector('section[aria-labelledby="questions"]')).toBeNull();
+    expect(document.querySelector('section[aria-labelledby="remarks"]')).toBeNull();
+
+    // …а их строки делят один и тот же общий контейнер.
+    const summaryRow = screen.getByText(say.task('noSummary')).closest('div');
+    const questionsRow = screen.getByText(say.task('noQuestions')).closest('div');
+    const remarksRow = screen.getByText(say.task('noRemarks')).closest('div');
+    const frame = summaryRow?.parentElement;
+    expect(frame).not.toBeNull();
+    expect(questionsRow?.parentElement).toBe(frame);
+    expect(remarksRow?.parentElement).toBe(frame);
+  });
+
+  it('непустой блок между двумя пустыми остаётся своей секцией и не сшивает их через себя', async () => {
+    server.use(
+      packageOf('DEMO-4', {
+        summary: null,
+        questions: [questionEntry(5, 'DEMO-4')],
+        features: {
+          blocked: false,
+          open_questions: 1,
+          open_blocking_questions: 1,
+          last_summary_at: null,
+        },
+      }),
+    );
+    renderApp('/tasks/DEMO-4');
+
+    // Вопрос непуст — своя секция, заметность не падает: тело вопроса и форма ответа
+    // видны без клика (та же проверка, что и без соседних пустых блоков).
+    const questions = (await screen.findByRole('heading', { name: say.task('questions') })).closest(
+      'section',
+    );
+    expect(questions).not.toBeNull();
+    expect(questions?.getAttribute('aria-labelledby')).toBe('questions');
+
+    // Сводка и замечания вокруг него остаются пустыми, но не соседями друг другу —
+    // между ними стоит непустой блок вопросов, поэтому сшиваются только подряд идущие
+    // пустые: сводка и замечания получают каждая свою (разную) рамку.
+    expect(document.querySelector('section[aria-labelledby="summary"]')).toBeNull();
+    expect(document.querySelector('section[aria-labelledby="remarks"]')).toBeNull();
+    const summaryRow = screen.getByText(say.task('noSummary')).closest('div');
+    const remarksRow = screen.getByText(say.task('noRemarks')).closest('div');
+    expect(summaryRow?.parentElement).not.toBeNull();
+    expect(summaryRow?.parentElement).not.toBe(remarksRow?.parentElement);
   });
 });
 
@@ -520,13 +571,22 @@ describe('порядок чтения карточки', () => {
     renderApp('/tasks/DEMO-6');
     await screen.findByRole('heading', { name: say.task('remarks') });
 
-    // Порядок разметки и есть порядок чтения: Tab и программа чтения с экрана идут
-    // по нему, а не по тому, как блоки расставлены на широком экране.
-    const order = Array.from(document.querySelectorAll('main section[aria-labelledby]')).map(
-      (node) => node.getAttribute('aria-labelledby'),
-    );
-    expect(order.indexOf('remarks')).toBeLessThan(order.indexOf('case'));
-    expect(order.indexOf('summary')).toBeLessThan(order.indexOf('remarks'));
+    /*
+     * Порядок разметки и есть порядок чтения: Tab и программа чтения с экрана идут
+     * по нему, а не по тому, как блоки расставлены на широком экране. Сверяется по
+     * заголовкам, а не по `aria-labelledby` секций: у DEMO-6 вопросы и замечания
+     * пусты и делят одну слитую рамку без `aria-labelledby` (UI-132) — заголовок
+     * при этом остаётся `<h2>` независимо от того, пуст блок или нет.
+     */
+    const remarksHeading = screen.getByRole('heading', { name: say.task('remarks') });
+    const caseHeading = screen.getByRole('heading', { name: say.task('case') });
+    const summaryHeading = screen.getByRole('heading', { name: say.task('summary') });
+    expect(
+      remarksHeading.compareDocumentPosition(caseHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      summaryHeading.compareDocumentPosition(remarksHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     // Кнопка одна и живёт в навигации: второго пути к форме нет.
     const nav = screen.getByRole('navigation', {
@@ -634,24 +694,15 @@ describe('замечание к задаче', () => {
     expect(posts).toHaveLength(1);
   });
 
-  it('на закрытой задаче форма есть, а переходов и правки разделов нет', async () => {
+  it('на закрытой задаче форма есть, а правки разделов нет', async () => {
     withRemarks({ task: taskDetails('DEMO-6', { status: 'done' }), transitions: [] });
     renderApp('/tasks/DEMO-6');
 
     expect(
       await screen.findByRole('button', { name: say.ui('remark.submit') }),
     ).toBeInTheDocument();
-    /*
-     * Роль человека не расширяется (`CONCEPT.md`, 7): статусы двигают агенты.
-     * Проверяется место, где переходы названы, а не список слов: раньше здесь стояли
-     * русские имена кнопок («перевести», «изменить статус»), и после переезда подписей
-     * они перестали что-либо ловить — на английском экране их нет по определению.
-     * Переходы обязаны остаться справкой: ни мишени, ни поля в их строке нет.
-     */
-    const transitions = screen.getByText(say.task('header.transitions')).closest('div');
-    expect(transitions).not.toBeNull();
-    expect(within(transitions as HTMLElement).queryByRole('button')).toBeNull();
-    expect(within(transitions as HTMLElement).queryByRole('link')).toBeNull();
+    // Роль человека не расширяется (`CONCEPT.md`, 7): закрытая задача не открывает
+    // правку разделов задания.
     expect(screen.queryByRole('textbox', { name: say.task('sections.goal') })).toBeNull();
   });
 
