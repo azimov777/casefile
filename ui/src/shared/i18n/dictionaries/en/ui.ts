@@ -56,6 +56,10 @@ export const ui = {
     installation: 'Installation',
     connect: 'Connect an agent',
     access: 'Access',
+    // Режим входа по учётным записям (`TRK-113`): люди — администратору, учётная
+    // запись — каждому вошедшему.
+    people: 'People',
+    account: 'My account',
     openQuestions_zero: 'No open questions',
     openQuestions_one: '{{count, number}} open question',
     openQuestions_other: '{{count, number}} open questions',
@@ -111,6 +115,19 @@ export const ui = {
    * Подписи самого экрана — в пространстве `access`, здесь только то, чем строка
    * называет себя и свои поля.
    */
+  /** Представление учётной записи человека (`entities/account`): карточка в списке людей. */
+  account: {
+    label: 'Account {{email}}',
+    admin: 'administrator',
+    you: 'you',
+    disabled: 'disabled',
+    signs: 'signs as',
+    createdBy: 'created by {{author}}',
+    createdByTracker: 'created by the installation itself',
+    noPassword: 'no password yet',
+    disabledAt: 'sign-in closed',
+  },
+
   token: {
     label: 'Access {{name}}',
     scopeKind: 'scope',

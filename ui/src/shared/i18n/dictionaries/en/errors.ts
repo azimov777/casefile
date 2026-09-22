@@ -27,8 +27,6 @@ export const errors = {
   entry_not_found: 'This task has no entry with that number.',
   http_error: 'The request failed.',
   idempotency_key_reused: 'This idempotency key has already been used by another request.',
-  install_key_missing:
-    'The password was accepted, but the installation handed out no key. See the ui container log.',
   internal_error: 'Internal server error.',
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
   invalid_cursor: 'The page cursor cannot be parsed.',

@@ -44,12 +44,28 @@ test('открыл адрес — вижу задачи, ничего не вв�
 
   // Выхода нет: человек не входил, и возвращать его на тот же экран незачем.
   await expect(side(page).getByRole('button', { name: 'Выйти' })).toHaveCount(0);
+  // И управления людьми с учётной записью нет (UI-122): владелец своей машины — тоже
+  // администратор `owner@localhost`, но человек тут один, и пункты были бы шумом.
+  await expect(side(page).getByRole('link', { name: 'Люди' })).toHaveCount(0);
+  await expect(side(page).getByRole('link', { name: /Моя учётная запись/ })).toHaveCount(0);
+  await expect(side(page).getByText('owner@localhost')).toHaveCount(0);
 
   // Ключ живёт в памяти вкладки: перезагрузка спросит установку заново.
   expect(await page.evaluate(() => window.localStorage.getItem('tracker.token'))).toBeNull();
 
   // Живой поток подхватил тот же ключ: заголовок собирается одной функцией на все пути.
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+});
+
+test('своя машина: адреса людей и учётной записи не существуют, вход не спрашивается', async ({
+  page,
+}) => {
+  for (const path of ['/people', '/account']) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { name: 'Страница не найдена' })).toBeVisible();
+    expect(page.url()).toContain(path);
+    await expect(page.getByLabel('Почта')).toHaveCount(0);
+  }
 });
 
 test('медленная конфигурация не даёт вспышки входа', async ({ page }) => {
