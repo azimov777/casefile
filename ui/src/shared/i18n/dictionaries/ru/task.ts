@@ -29,10 +29,6 @@ export const task = {
     unassigned: 'не назначен',
     updated: 'Обновлена',
     created: 'Заведена',
-    transitions: 'Возможные переходы',
-    transitionsTitle:
-      'Куда задача может уйти по таблице статусов. Проверки перехода считаются в момент перехода',
-    noTransitions: 'никуда: статус конечный',
   },
 
   sections: {

@@ -6,22 +6,19 @@ import {
   TaskFeatureMarks,
   type TaskDetails,
   type TaskFeatures,
-  type TaskStatus,
 } from '@/entities/task';
 import { RelativeTime } from '@/shared/ui';
 
 interface TaskHeaderProps {
   task: TaskDetails;
   features: TaskFeatures;
-  /** Куда задача может уйти по таблице статусов. Справка, а не кнопки: двигают агенты. */
-  transitions: TaskStatus[];
 }
 
 /** Отсутствующее значение: курсив вместо прочерка — его читают, а не сканируют. */
 const EMPTY = 'text-muted italic';
 
 /** Шапка карточки: где задача стоит и чья она. */
-export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
+export function TaskHeader({ task, features }: TaskHeaderProps) {
   const { t } = useTranslation('task');
 
   return (
@@ -87,24 +84,6 @@ export function TaskHeader({ task, features, transitions }: TaskHeaderProps) {
           <dt className="text-muted">{t('header.created')}</dt>
           <dd>
             <RelativeTime value={task.created_at} />
-          </dd>
-        </div>
-        <div className="flex items-baseline gap-2">
-          <dt className="text-muted" title={t('header.transitionsTitle')}>
-            {t('header.transitions')}
-          </dt>
-          {/*
-           * Возможные переходы — справка, и выглядеть должны справкой. Плашками они
-           * читались как кнопки, которых нет и не будет: статусы двигают агенты
-           * (`CONCEPT.md`, 7), а человек их только видит. Поэтому обычный текст
-           * моноширинным, через запятую.
-           */}
-          <dd className="font-mono text-muted">
-            {transitions.length === 0 ? (
-              <span className={EMPTY}>{t('header.noTransitions')}</span>
-            ) : (
-              transitions.join(', ')
-            )}
           </dd>
         </div>
       </dl>
