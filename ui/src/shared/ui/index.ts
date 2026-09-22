@@ -1,5 +1,6 @@
 export { Badge, type BadgeTone } from './badge';
 export { Button } from './button';
+export { type ControlSize } from './control-size';
 export { Callout } from './callout';
 export { Input } from './input';
 export { Composer } from './composer';
@@ -18,6 +19,7 @@ export {
 export { QueryState, type QueryLike } from './query-state';
 export { Receipt } from './receipt';
 export { Reveal } from './reveal';
+export { SegmentedNav, SegmentedNavLink } from './segmented-nav';
 export { Select } from './select';
 export { Sheet } from './sheet';
 export { RelativeTime } from './relative-time';

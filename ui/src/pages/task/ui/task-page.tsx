@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
+import { MessageSquarePlus } from 'lucide-react';
 import { EntryBody, type Question } from '@/entities/entry';
 import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
@@ -182,7 +183,12 @@ export function TaskPage() {
         view="card"
         action={
           remarkOpen ? null : (
-            <Button onClick={() => setRemarkOpen(true)}>{brick('remark.submit')}</Button>
+            // Главное действие строки — акцентом и со знаком, но размером строки: рядом
+            // стоит переключатель вида того же `sm`, и они одной высоты (UI-128).
+            <Button size="sm" onClick={() => setRemarkOpen(true)}>
+              <MessageSquarePlus className="size-(--ui-mark)" aria-hidden="true" />
+              {brick('remark.submit')}
+            </Button>
           )
         }
       />

@@ -96,6 +96,7 @@ const NOT_IN_CODE: Record<string, string> = {
   DropdownMenu: 'Radix: у нас взят только `Select`, родня названа как таковая',
   DropdownMenuCheckboxItem: 'компонент shadcn/ui из эталона, который мы не взяли',
   Popover: 'Radix: у нас взят только `Select`, родня названа как таковая',
+  ToggleGroup: 'компонент shadcn/ui, названный как невзятый: переключатель вида остался ссылками',
   bodyUsed: 'поле `Request` в браузере: им объяснено, почему повтор снимает клон заранее',
   elementFromPoint: 'API браузера',
   cacheInBuiltFormats: 'поле i18next, названное как его умолчание: своего значения мы не ставим',

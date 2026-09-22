@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { silenceJournal } from './contour';
+import { fontsReady, silenceJournal } from './contour';
 
 test('возврат в список не теряет отбор, с которым человек ушёл', async ({ page }) => {
   await silenceJournal(page);
@@ -132,4 +132,54 @@ test('из входящей ссылка «Все задачи» ведёт ко
   await section.click();
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByRole('link', { name: 'Доска' })).toBeVisible();
+});
+
+/*
+ * Действие и переключатель вида в липкой строке задачи — одной высоты и на одной
+ * оси (UI-128): до правки кнопка была 33.6 px, переключатель 28, и строка читалась
+ * как «кнопки разных размеров». Обе ширины, потому что на узкой группа переносится.
+ */
+for (const width of [1440, 390]) {
+  test(`действие и переключатель «Карточка — Дело» одной высоты и вровень на ${width}`, async ({
+    page,
+  }) => {
+    await silenceJournal(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/tasks/DEMO-1');
+
+    const remark = page.getByRole('button', { name: 'Оставить замечание' });
+    const toggle = page.getByRole('navigation', { name: 'Вид задачи' });
+    await expect(remark).toBeVisible();
+    await fontsReady(page);
+
+    const [a, b] = await Promise.all([remark.boundingBox(), toggle.boundingBox()]);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    if (a === null || b === null) return;
+    expect(Math.abs(a.height - b.height)).toBeLessThan(0.5);
+    expect(Math.abs(a.y + a.height / 2 - (b.y + b.height / 2))).toBeLessThan(0.5);
+  });
+}
+
+test('«Карточка → Дело → назад» браузера возвращает карточку и её подсветку', async ({ page }) => {
+  await silenceJournal(page);
+  await page.goto('/tasks/DEMO-1');
+
+  const toggle = page.getByRole('navigation', { name: 'Вид задачи' });
+  await toggle.getByRole('link', { name: 'Дело', exact: true }).click();
+  await expect(page).toHaveURL(/\/tasks\/DEMO-1\/case$/);
+  await expect(toggle.getByRole('link', { name: 'Дело', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/tasks\/DEMO-1$/);
+  await expect(toggle.getByRole('link', { name: 'Карточка', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  await page.goForward();
+  await expect(page).toHaveURL(/\/tasks\/DEMO-1\/case$/);
 });

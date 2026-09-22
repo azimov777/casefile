@@ -157,7 +157,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
          * закрывает сеанс, и без пароля ключа больше не будет (`TRK-90`).
          */}
         {fromInstall && !locked ? null : (
-          <Button tone="quiet" className="px-2 py-1 text-meta" onClick={logout}>
+          <Button tone="quiet" size="sm" onClick={logout}>
             {t('app.signOut')}
           </Button>
         )}

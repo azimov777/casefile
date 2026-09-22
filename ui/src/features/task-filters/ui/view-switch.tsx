@@ -1,8 +1,8 @@
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { tasksHref } from '../model/href';
 import type { TaskView } from '../model/filters';
-import { cn } from '@/shared/lib';
+import { SegmentedNav, SegmentedNavLink } from '@/shared/ui';
 
 /** Порядок видов. Подписи к ним живут в словаре (`tasks.view`), а не рядом. */
 const VIEWS: TaskView[] = ['table', 'board'];
@@ -24,36 +24,23 @@ export function ViewSwitch({ view }: { view: TaskView }) {
   const { t } = useTranslation('tasks');
 
   return (
-    <nav
-      aria-label={t('view.label')}
-      className="inline-flex items-center gap-px rounded-control border border-line-strong p-px"
-    >
-      {VIEWS.map((option) => {
-        const current = option === view;
-
-        return (
-          <Link
-            key={option}
-            to={tasksHref(searchParams, { view: option })}
-            /*
-             * `aria-current="true"`, а не `page`: оба вида — одна и та же страница
-             * списка, и «текущая страница» сказало бы неправду. Здесь текущий
-             * элемент набора, а не текущий раздел.
-             */
-            aria-current={current ? 'true' : undefined}
-            className={cn(
-              'rounded-[calc(var(--radius-control)-1px)] px-3 py-1 text-meta no-underline',
-              'transition-colors duration-(--motion-fast) ease-fast',
-              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-              current
-                ? 'bg-accent-soft font-semibold text-accent-strong'
-                : 'text-muted hover:bg-sunken hover:text-text',
-            )}
-          >
-            {t(`view.${option}`)}
-          </Link>
-        );
-      })}
-    </nav>
+    // Размер `sm`: переключатель стоит в верхней полосе рядом с выбором языка и
+    // состоянием потока — плотной строкой, а не формой.
+    <SegmentedNav label={t('view.label')} size="sm">
+      {VIEWS.map((option) => (
+        <SegmentedNavLink
+          key={option}
+          to={tasksHref(searchParams, { view: option })}
+          /*
+           * `aria-current="true"`, а не `page`: оба вида — одна и та же страница
+           * списка, и «текущая страница» сказало бы неправду. Здесь текущий
+           * элемент набора, а не текущий раздел.
+           */
+          current={option === view && 'true'}
+        >
+          {t(`view.${option}`)}
+        </SegmentedNavLink>
+      ))}
+    </SegmentedNav>
   );
 }
