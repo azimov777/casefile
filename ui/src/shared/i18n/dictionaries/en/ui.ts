@@ -241,6 +241,8 @@ export const ui = {
       status: 'Status',
       withReason: '· with a reason',
       sectionEdited: 'Section edit',
+      /** Правки разделов одного действия одной строкой (UI-133): дальше имена разделов. */
+      sectionsEdited: 'Sections edited',
       fieldEdited: 'Field edit',
       assignee: 'Assignee',
       linkAdded: 'Link',
@@ -270,6 +272,14 @@ export const ui = {
     copy: 'Copy {{reference}}',
     copied: 'copied',
     clipboardUnavailable: 'clipboard unavailable',
+    /** Группа правок разделов одного действия (UI-133). */
+    group: {
+      range: '{{first}}–{{last}}',
+      label: 'Entries {{first}}–{{last}}: sections edited in one action',
+      expand_one: 'Show {{count, number}} edit',
+      expand_other: 'Show {{count, number}} edits',
+      collapse: 'Hide edits',
+    },
   },
 
   /** Живой поток: состояние связи, полоса обновлений и уведомление о вопросе. */

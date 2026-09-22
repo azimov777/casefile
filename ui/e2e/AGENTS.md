@@ -8,7 +8,7 @@
 сценарий просто открывает адрес и видит задачи. Сценариям запасного пути (экран входа)
 установка без ключа выдаётся поимённо — `installWithoutKey` в `contour.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts` и `link-groups.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts` и `section-edits.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -152,6 +152,10 @@ invalid_search_query`); ограничение снято (TRK-21).
   групп, ни один идентификатор не обрезан на 1440 и 390 px, статус связанной задачи тем
   же знаком, что в таблице; снимки светлой и тёмной темы в выводе прогона; заводит задачи
   сам и отменяет их в `finally`, проект «запись»
+- `section-edits.spec.ts` — правки разделов одним действием (UI-133): две пачки по семь правок
+  одной строкой в описи и одной группой в ленте, `?entry=N` раскрывает группу и ведёт к записи N,
+  на 1440 и 390 px документ не шире окна, `axe` на ленте; заводит задачу сам и отменяет её после
+  файла, проект «запись»
 - `task-list-screen.spec.ts` — первый экран списка: сколько строк видно, липкая шапка, отказ разбора без сдвига,
   активность в деле и порядок по ней, пересылка адреса, ширина названия на 900 px; заводит задачи сам,
   проект «запись»

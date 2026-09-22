@@ -34,6 +34,11 @@ export {
   type Headline,
   type HeadlinePart,
 } from './model/headline';
+export {
+  groupSectionEdits,
+  sectionEditsHeadline,
+  type SectionEditsRun,
+} from './model/section-edits';
 export { AuthorName } from './ui/author-name';
 export { EntryBody } from './ui/entry-body';
 export { EntryCard } from './ui/entry-card';

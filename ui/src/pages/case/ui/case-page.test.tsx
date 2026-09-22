@@ -1,7 +1,7 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   API,
   bootstrap,
@@ -342,5 +342,79 @@ describe('дело лентой', () => {
     const target = await screen.findByLabelText('DEMO-1#4');
     expect(target).toHaveAttribute('data-highlighted');
     expect(screen.getByLabelText('DEMO-1#5')).not.toHaveAttribute('data-highlighted');
+  });
+});
+
+describe('лента: правки разделов одного действия (UI-133)', () => {
+  const ACTION = '55555555-5555-4555-8555-555555555555';
+  const FIELDS = ['title', 'goal', 'checks'] as const;
+
+  /** Заведение, три правки одним `update_task` (записи 2–4) и решение после них. */
+  function edited(): Entry[] {
+    const sections = FIELDS.map((field, offset): Entry => {
+      const base = entryOfType(offset + 2, 'DEMO-1', 'section_changed');
+      if (base.type !== 'section_changed') throw new Error('section_changed expected');
+      return {
+        ...base,
+        action_id: ACTION,
+        payload: { ...base.payload, field, before: `Было ${field}`, after: `Стало ${field}` },
+      };
+    });
+    return [
+      { ...entryOfType(1, 'DEMO-1', 'created'), action_id: 'aaaa' },
+      ...sections,
+      { ...entryOfType(5, 'DEMO-1', 'decision'), action_id: 'bbbb' },
+    ];
+  }
+
+  function group() {
+    return screen.getByRole('region', { name: say.ui('entry.group.label', { first: 2, last: 4 }) });
+  }
+
+  it('правки стоят одной строкой, их пары «было / стало» — только по раскрытию', async () => {
+    const entries = edited();
+    server.use(feed(entries), longCase(entries));
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-1/case');
+
+    await screen.findByLabelText('DEMO-1#5');
+    // В ленте две записи и группа, а не пять записей.
+    expect(cards().map((card) => card.getAttribute('aria-label'))).toEqual([
+      'DEMO-1#1',
+      'DEMO-1#5',
+    ]);
+    const toggle = within(group()).getByRole('button', {
+      name: say.ui('entry.group.expand', { count: 3 }),
+    });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    for (const field of FIELDS) expect(within(group()).getByText(field)).toBeInTheDocument();
+    expect(screen.queryByText('Стало goal')).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(within(group()).getAllByRole('article')).toHaveLength(FIELDS.length);
+    expect(screen.getByText('Стало goal')).toBeInTheDocument();
+    // Записи в группе остаются адресуемыми по номеру.
+    expect(screen.getByLabelText('DEMO-1#3')).toHaveAttribute('id', 'entry-3');
+
+    await user.click(within(group()).getByRole('button', { name: say.ui('entry.group.collapse') }));
+    expect(within(group()).queryAllByRole('article')).toHaveLength(0);
+  });
+
+  it('?entry=3 раскрывает группу, помечает именно запись 3 и прокручивает к ней', async () => {
+    const entries = edited();
+    server.use(feed(entries), longCase(entries));
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+    renderApp('/tasks/DEMO-1/case?entry=3');
+
+    const target = await screen.findByLabelText('DEMO-1#3');
+    expect(target).toHaveAttribute('data-highlighted');
+    expect(screen.getByLabelText('DEMO-1#2')).not.toHaveAttribute('data-highlighted');
+    expect(
+      within(group()).getByRole('button', { name: say.ui('entry.group.collapse') }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    await waitFor(() => expect(scrollIntoView.mock.contexts).toContain(target));
+    scrollIntoView.mockRestore();
   });
 });

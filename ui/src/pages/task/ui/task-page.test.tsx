@@ -21,7 +21,7 @@ import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import type { TaskLink } from '@/entities/task';
-import { setToken } from '@/shared/api';
+import { setToken, type components } from '@/shared/api';
 
 /** Адреса всех запросов прогона: по ним видно, что лишних не было. */
 let seen: string[] = [];
@@ -683,5 +683,118 @@ describe('замечание к задаче', () => {
     expect(screen.getAllByLabelText(say.ui('remark.fieldLabel'))[0]).toHaveValue(
       'Недописанное замечание',
     );
+  });
+});
+
+describe('опись: правки разделов одного действия (UI-133)', () => {
+  const ACTION = '55555555-5555-4555-8555-555555555555';
+  const FIELDS: components['schemas']['TaskField'][] = [
+    'title',
+    'description',
+    'goal',
+    'context',
+    'constraints',
+    'output',
+    'checks',
+  ];
+
+  /** Заведение, семь правок одним `update_task` (записи 2–8) и решение после них. */
+  function grouped(key: string) {
+    return packageOf(key, {
+      index: [
+        heading(1, { type: 'created' }, 'Task created', { action_id: 'aaaa' }),
+        ...FIELDS.map((field, offset) =>
+          heading(offset + 2, { type: 'section_changed', field }, `Section changed: ${field}`, {
+            action_id: ACTION,
+          }),
+        ),
+        heading(9, { type: 'decision' }, 'Решение после правки', { action_id: 'bbbb' }),
+      ],
+    });
+  }
+
+  function nestedRows() {
+    return Array.from(document.querySelectorAll('tr[data-nested]'));
+  }
+
+  it('семь правок стоят одной строкой, раскрываются кликом и адрес не трогают', async () => {
+    server.use(grouped('DEMO-8'), entries('DEMO-8'));
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8');
+
+    const group = await screen.findByRole('button', {
+      name: say.ui('entry.group.label', { first: 2, last: 8 }),
+    });
+    expect(group).toHaveAttribute('aria-expanded', 'false');
+    // Строк описи три: заведение, группа, решение — а не девять.
+    const table = screen.getByRole('table', { name: say.task('index.count', { count: 9 }) });
+    expect(within(table).getAllByRole('row')).toHaveLength(1 + 3);
+    expect(nestedRows()).toHaveLength(0);
+    // Заголовок группы называет все разделы идентификаторами контракта.
+    for (const field of FIELDS) expect(within(group).getByText(field)).toBeInTheDocument();
+
+    await user.click(group);
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    expect(nestedRows()).toHaveLength(FIELDS.length);
+    expect(address.current).toBe('/tasks/DEMO-8');
+    // Раскрытие группы читает не тела, а только опись: тела — по клику на запись.
+    expect(entriesCalls()).toHaveLength(0);
+
+    await user.click(group);
+    expect(nestedRows()).toHaveLength(0);
+  });
+
+  it('?entry=4 раскрывает группу, раскрывает именно запись 4 и приводит её в поле зрения', async () => {
+    server.use(grouped('DEMO-8'), entries('DEMO-8'));
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+    renderApp('/tasks/DEMO-8?entry=4');
+
+    const group = await screen.findByRole('button', {
+      name: say.ui('entry.group.label', { first: 2, last: 8 }),
+    });
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    const rows = nestedRows();
+    const opened = rows.filter(
+      (row) => row.querySelector('button')?.getAttribute('aria-expanded') === 'true',
+    );
+    expect(opened.map((row) => row.querySelector('th')?.textContent)).toEqual(['4']);
+    await waitFor(() => expect(entriesCalls().some((url) => url.includes('nos=4'))).toBe(true));
+    // Прокручивается строка записи 4, а не группа.
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(opened[0]);
+    scrollIntoView.mockRestore();
+  });
+
+  it('свёрнутая группа уносит из адреса номер своей записи', async () => {
+    server.use(grouped('DEMO-8'), entries('DEMO-8'));
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8?entry=4');
+
+    const group = await screen.findByRole('button', {
+      name: say.ui('entry.group.label', { first: 2, last: 8 }),
+    });
+    await user.click(group);
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-8'));
+    expect(group).toHaveAttribute('aria-expanded', 'false');
+    expect(nestedRows()).toHaveLength(0);
+  });
+
+  it('правки без признака действия стоят по одной, как раньше', async () => {
+    server.use(
+      packageOf('DEMO-8', {
+        index: [2, 3].map((no) =>
+          heading(no, { type: 'section_changed', field: 'goal' }, 'Section changed: goal'),
+        ),
+      }),
+      entries('DEMO-8'),
+    );
+    renderApp('/tasks/DEMO-8');
+    const table = await screen.findByRole('table', {
+      name: say.task('index.count', { count: 2 }),
+    });
+    expect(within(table).getAllByRole('row')).toHaveLength(1 + 2);
+    expect(document.querySelector('tr[data-group]')).toBeNull();
   });
 });
