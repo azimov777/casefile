@@ -68,10 +68,12 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `account_email_taken` | Account email is already taken | Почта уже занята другой учётной записью: адреса уникальны без учёта регистра. |
+| `archive_revision_unknown` | The archive comes from a newer Casefile; update this installation first | Ревизии схемы архива приёмник не знает: архив снят более новым Casefile. |
 | `checks_not_passed` | Some checks have no passing verdict recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке положительного вердикта, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
+| `installation_not_empty` | Only an installation without queues can take an archive | Приём архива в установку, где уже есть очереди. |
 | `last_admin` | The installation must keep at least one active administrator | Действие оставило бы установку без действующего администратора. |
 | `link_cycle_detected` | Link would create a cycle | Связь замкнула бы кольцо в иерархии или в блокировках. |
 | `link_exists` | Link already exists | Такая связь между этими задачами уже есть. |
@@ -92,6 +94,8 @@
 |---|---|---|
 | `account_requires_human` | Only a human participant can have an account | Учётную запись заводят только человеку: агенты ходят токенами, входить им некуда. |
 | `actor_not_addressable` | A temporary agent cannot be an addressee; pass an explicit addressee | Временный агент спрашивает свои вопросы, а адресовать его нельзя. |
+| `archive_format_unsupported` | This is not an installation archive this Casefile can read | Документ — не архив установки этой раскладки: чужой `format` или `format_version`. |
+| `archive_invalid` | The installation archive is malformed | Архив противоречит сам себе или схеме своей ревизии. |
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
 | `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. |

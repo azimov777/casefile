@@ -3,6 +3,11 @@
 Адрес БД берётся из настроек приложения, но его можно переопределить
 (`alembic -x database_url=...` или `config.set_main_option`) — этим пользуются тесты,
 которые применяют миграции к отдельной тестовой базе.
+
+Третий путь — готовое соединение в `config.attributes["connection"]`: так приём архива
+установки (`app/db/archive.py`) гоняет миграции во временной схеме внутри своей
+транзакции, а не в отдельном подключении. Тогда же `version_table_schema` называет
+схему таблицы версии.
 """
 
 import asyncio
@@ -51,13 +56,14 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection: Connection) -> None:
+def do_run_migrations(connection: Connection, version_table_schema: str | None = None) -> None:
     """Синхронная часть: Alembic работает с обычным Connection внутри run_sync."""
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
+        version_table_schema=version_table_schema,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -77,6 +83,10 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        do_run_migrations(connection, config.attributes.get("version_table_schema"))
+        return
     asyncio.run(run_async_migrations())
 
 

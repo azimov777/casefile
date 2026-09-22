@@ -571,3 +571,54 @@ class PasswordAttemptsExceededError(TooManyRequestsError):
 
     def response_headers(self) -> dict[str, str]:
         return {"Retry-After": str(self.details["retry_after"])}
+
+
+# --- Перенос установки (TRK-100) ----------------------------------------------------
+
+
+class ArchiveFormatUnsupportedError(ValidationError):
+    """Документ — не архив установки этой раскладки: чужой `format` или `format_version`.
+
+    `details` называет присланные значения и те, что приёмник понимает (`supported`).
+    """
+
+    code = "archive_format_unsupported"
+    message = "This is not an installation archive this Casefile can read"
+
+
+class ArchiveInvalidError(ValidationError):
+    """Архив противоречит сам себе или схеме своей ревизии.
+
+    `details.reason` называет, что не так: `duplicate_table`, `excluded_table`,
+    `bad_columns`, `row_width` — форма документа; `unknown_table`, `missing_table`,
+    `column_mismatch` — таблицы и колонки не те, что у схемы на ревизии архива;
+    `rejected_row` — Postgres не принял значение (`details.error` — его сообщение).
+    Там же `table`, а где уместно — `row`, `expected` и `actual`.
+    """
+
+    code = "archive_invalid"
+    message = "The installation archive is malformed"
+
+
+class ArchiveRevisionUnknownError(ConflictError):
+    """Ревизии схемы архива приёмник не знает: архив снят более новым Casefile.
+
+    Переноса на более старую версию нет — миграции назад не идут (TRK-91#8). Выход —
+    обновить приёмник и повторить приём. `details.schema_revision` — ревизия архива,
+    `details.head` — последняя, которую знает приёмник.
+    """
+
+    code = "archive_revision_unknown"
+    message = "The archive comes from a newer Casefile; update this installation first"
+
+
+class InstallationNotEmptyError(ConflictError):
+    """Приём архива в установку, где уже есть очереди.
+
+    Архив заменяет данные приёмника целиком, а слияния двух трекеров нет: принять его
+    может только пустая установка — свежая, где никто ещё не завёл ни одной очереди.
+    `details.queues` — сколько их на приёмнике.
+    """
+
+    code = "installation_not_empty"
+    message = "Only an installation without queues can take an archive"
