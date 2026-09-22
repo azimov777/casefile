@@ -20,6 +20,16 @@ target=/usr/share/nginx/html/config.json
 token=${TRACKER_UI_TOKEN:-}
 token_file=${TRACKER_UI_TOKEN_FILE:-/run/secrets/ui-token}
 
+# Режим входа по учётным записям (`TRACKER_UI_LOGIN=password`, `access-mode.sh`): общего
+# ключа нет, и файла с ним не будет вовсе — даже если том с ключом администратора
+# подключён. nginx на `/config.json` всё равно отвечает `401`, но ключ, которого нет на
+# диске, не отдаст и ошибка в конфигурации.
+if [ "${TRACKER_UI_LOGIN:-}" = password ]; then
+  rm -f "$target"
+  echo "$0: вход по учётным записям — общего ключа нет, /config.json не создан"
+  exit 0
+fi
+
 if [ -z "$token" ] && [ -f "$token_file" ]; then
   # Файл содержит только секрет и без перевода строки в конце (команда бэкенда
   # `local-token`). Подстановка команды срезает перевод строки, если он всё же появится:
@@ -47,16 +57,8 @@ case $token in
     ;;
 esac
 
-# С паролем владельца (`TRACKER_UI_LOGIN=password`, `access-mode.sh`) файл называет и
-# режим: nginx отдаёт его только после входа, и по полю `login` интерфейс узнаёт, что
-# выход здесь есть — ключ пришёл от установки, но за паролем.
-login_field=
-if [ "${TRACKER_UI_LOGIN:-}" = password ]; then
-  login_field=',"login":"password"'
-fi
-
 # Секрет не печатается никогда: вывод этого скрипта уходит в журнал контейнера, а его
 # читают и показывают.
-printf '{"token":"%s"%s}' "$token" "$login_field" >"$target"
+printf '{"token":"%s"}' "$token" >"$target"
 chmod 0644 "$target"
 echo "$0: ключ установки положен в $target"

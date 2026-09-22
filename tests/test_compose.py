@@ -466,8 +466,9 @@ def test_the_prod_contour_writes_nothing_onto_the_host() -> None:
 #: проброс интерфейса, проброс MCP и то, что контур сообщает интерфейсу для сторожа.
 BIND = "${CASEFILE_BIND:-127.0.0.1}"
 
-#: Режим интерфейса выводится из той же подстановки, что уходит в API.
-UI_LOGIN = "TRACKER_UI_LOGIN: ${TRACKER_PASSWORD_HASH:+password}"
+#: Режим входа интерфейса: явная настройка владельца, а у установки, закрытой прежним
+#: паролем, — та же подстановка, что уходит в API (TRK-113).
+UI_LOGIN = "TRACKER_UI_LOGIN: ${CASEFILE_LOGIN:-${TRACKER_PASSWORD_HASH:+password}}"
 UI_BIND = f"TRACKER_UI_BIND: {BIND}"
 
 
@@ -502,11 +503,12 @@ def test_the_prod_contour_publishes_both_ports_on_one_bind_address() -> None:
 
 
 def test_the_ui_learns_the_mode_and_the_bind_from_the_same_substitutions() -> None:
-    """Режим пароля и адрес публикации доходят до `ui` теми же подстановками, что до API.
+    """Режим входа и адрес публикации доходят до `ui` теми же подстановками, что до API.
 
-    Режим выводится из `TRACKER_PASSWORD_HASH` — той же переменной, что уходит в API
-    общим окружением. Разойдись они, интерфейс спросил бы пароль, которого API не знает,
-    или отдал бы ключ без входа там, где API пароль знает.
+    Режим включает `CASEFILE_LOGIN`, а без неё — `TRACKER_PASSWORD_HASH`, та же
+    переменная, что уходит в API общим окружением и переносится там в учётную запись
+    администратора. Разойдись они, установка, закрытая прежним паролем, после обновления
+    отдала бы ключ администратора без входа.
     """
     text = COMPOSE_FILES["prod"].read_text(encoding="utf-8")
     described = [line.strip() for line in _services(text)[UI_SERVICE]]
@@ -518,11 +520,11 @@ def test_the_ui_learns_the_mode_and_the_bind_from_the_same_substitutions() -> No
 
 
 def test_both_contours_hand_the_password_hash_to_the_application() -> None:
-    """Хеш пароля объявлен общим окружением в обоих контурах с пустым умолчанием.
+    """Прежний хеш пароля объявлен общим окружением в обоих контурах с пустым умолчанием.
 
     Значение из командной строки (`TRACKER_PASSWORD_HASH=... docker compose up`) видит
     только подстановка; не объявленное здесь, оно дошло бы до режима интерфейса и не
-    дошло бы до API.
+    дошло бы до шага `local-token`, который переносит его в учётную запись.
     """
     for contour, path in COMPOSE_FILES.items():
         declared = [

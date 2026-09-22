@@ -29,9 +29,9 @@ server {
     # отказать. Список — адреса петли (`localhost`, `127.0.0.1`, `[::1]`; порт `$host`
     # уже не несёт).
     #
-    # С паролем владельца правила нет (TRK-90#7): сервер отвечает любому своему имени и за
-    # любым прокси, а ключ страница чужого домена не получит и так — куки сеанса этого
-    # источника у неё нет, и `/config.json` ей не отдаётся.
+    # В режиме входа по учётным записям правила нет (TRK-90#7, TRK-113): сервер отвечает
+    # любому своему имени и за любым прокси, а общего ключа, который правило берегло, здесь
+    # не отдают никому.
     include /etc/nginx/casefile/host-guard.conf;
 
     # Кто клиент (TRK-98#6). По умолчанию — тот, кто открыл соединение (`$remote_addr`).
@@ -48,9 +48,9 @@ server {
     # запрос к несуществующему файлу получил бы `200` и разметку index.html, и «ключа
     # нет» отличалось бы от «ключ есть» только тем, разбирается ли тело.
     #
-    # С паролем владельца файл отдаётся только живому сеансу: `auth_request` спрашивает
-    # API (`/_casefile/session` ниже), а отказ приходит `401 {"login":"password"}`
-    # (`@login_required`). Без пароля условия нет. Условие пишет `docker/access-mode.sh`.
+    # В режиме входа по учётным записям файла нет, а ответ всем — `401
+    # {"login":"password"}`: общего ключа нет, свой токен каждый получает от API входом
+    # по почте и паролю. Условие пишет `docker/access-mode.sh`.
     #
     # `no-store` — чтобы ключ приезжал заново на каждой загрузке вкладки: контур вправе
     # перевыпустить его, а ответ из кэша вернул бы только что отказавший.
@@ -58,29 +58,6 @@ server {
         include /etc/nginx/casefile/config-guard.conf;
         try_files $uri =404;
         add_header Cache-Control 'no-store' always;
-    }
-
-    # Подзапрос `auth_request`: жив ли сеанс из куки (`GET /api/v1/session`). Снаружи не
-    # виден (`internal`). Метод назван явно: подзапрос наследует метод исходного, и
-    # `HEAD /config.json` иначе ушёл бы в API маршрутом, которого там нет. Тело не нужно —
-    # API решает по куке, а она едет в заголовках исходного запроса.
-    location = /_casefile/session {
-        internal;
-        proxy_pass ${TRACKER_API_URL}/api/v1/session;
-        proxy_method GET;
-        proxy_pass_request_body off;
-        proxy_set_header Content-Length "";
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $casefile_forwarded_proto;
-    }
-
-    # Ответ «ключ — после входа по паролю». Тело — контракт с интерфейсом
-    # (`src/shared/api/install-config.ts`): по нему он рисует форму пароля, а не поле
-    # токена. Без тела `401` значил бы для него то же, что «ключа нет».
-    location @login_required {
-        default_type application/json;
-        add_header Cache-Control 'no-store' always;
-        return 401 '{"login":"password"}';
     }
 
     # Одностраничное приложение: любой путь, кроме файла, отдаёт index.html —
