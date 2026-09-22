@@ -1,0 +1,187 @@
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { fontsReady, motionSettled, readE2eToken, silenceJournal } from './contour';
+
+/**
+ * Блок «Связи» насыщенной задачей (UI-125): несколько видов, по нескольку задач
+ * в одной группе, длинное название среди них. Таких связей в демо нет — оно держит
+ * по одной связи на вид (`app/services/demo.py`), — поэтому сценарий заводит их сам
+ * и потому идёт в проекте «запись», как `parents-long.spec.ts`.
+ *
+ * Пример, который был поводом задачи, — настоящая TRK-106 (`relates` и пять детей) —
+ * снять здесь нельзя: контур сценария — своя пустая установка, а не установка
+ * владельца или общий дев-контур (`docs/CONVENTIONS.md`, «Слияние ветки задачи в
+ * main» и правила рабочего дерева). Сценарий строит равносильный пример сам.
+ */
+
+const token = readE2eToken();
+
+function auth() {
+  return { Authorization: `Bearer ${token}` };
+}
+
+async function create(request: APIRequestContext, title: string): Promise<string> {
+  const response = await request.post('/api/v1/tasks', {
+    headers: auth(),
+    data: {
+      queue: 'DEMO',
+      title,
+      description: 'Заведена сквозным тестом UI-125: насыщенный блок «Связи».',
+    },
+  });
+  expect(response.status()).toBe(201);
+  return ((await response.json()) as { data: { key: string } }).data.key;
+}
+
+/** Ставит связь `subject <kind> other` со стороны `subject` — тем же путём, что агент. */
+async function link(
+  request: APIRequestContext,
+  subject: string,
+  kind: string,
+  other: string,
+): Promise<void> {
+  const response = await request.post(`/api/v1/tasks/${subject}/links`, {
+    headers: auth(),
+    data: { kind, other },
+  });
+  expect(response.status(), `${subject} ${kind} ${other}`).toBe(201);
+}
+
+/**
+ * Уборка — лучшее усилие: контур этого сценария одноразовый и в конце гасится целиком
+ * (`docker compose down -v`), а отказ уборки не должен топить проверку рисунка блока.
+ * Дети — раньше `subject`: он для них родитель, и родитель с незакрытыми детьми не
+ * закрывается (`parents-long.spec.ts`).
+ */
+async function cancel(request: APIRequestContext, key: string): Promise<void> {
+  const response = await request.post(`/api/v1/tasks/${key}/transition`, {
+    headers: auth(),
+    data: { to: 'cancelled', reason: 'Уборка сквозного теста UI-125' },
+  });
+  if (!response.ok()) {
+    await test.info().attach(`уборка ${key} не удалась`, {
+      body: await response.text(),
+      contentType: 'text/plain',
+    });
+  }
+}
+
+function linksSection(page: Page): Locator {
+  return page.getByRole('region', { name: 'Связи' });
+}
+
+function groupHeadings(page: Page): Locator {
+  return linksSection(page).getByRole('heading', { level: 3 });
+}
+
+const LONG_CHILD_TITLE =
+  'Задача этого вида связи с названием такой длины, что на узком экране ей есть, где перенестись: src/pages/task/ui/task-links.tsx';
+
+test('насыщенный блок «Связи»: заголовок группы со счётчиком, ничего не обрезано, статус знаком', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+
+  const subject = await create(request, 'Подопытная задача блока «Связи» (UI-125)');
+  const blockerA = await create(request, 'Первый блокер подопытной задачи');
+  const blockerB = await create(request, 'Второй блокер подопытной задачи');
+  const blocked = await create(request, 'Задача, которую держит подопытная');
+  const parent = await create(request, 'Родитель подопытной задачи');
+  const childA = await create(request, 'Первый ребёнок подопытной задачи');
+  const childB = await create(request, 'Второй ребёнок подопытной задачи');
+  const childC = await create(request, LONG_CHILD_TITLE);
+  const related = await create(request, 'Просто связанная задача');
+
+  try {
+    await link(request, subject, 'blocked_by', blockerA);
+    await link(request, subject, 'blocked_by', blockerB);
+    await link(request, subject, 'blocks', blocked);
+    await link(request, subject, 'parent', parent);
+    await link(request, subject, 'child', childA);
+    await link(request, subject, 'child', childB);
+    await link(request, subject, 'child', childC);
+    await link(request, subject, 'relates', related);
+
+    await silenceJournal(page);
+
+    for (const width of [1440, 390] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/tasks/${subject}`);
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(subject);
+      await fontsReady(page);
+
+      const headings = groupHeadings(page);
+      await expect(headings).toHaveCount(5);
+
+      // Порядок групп по значимости: то, что держит задачу, стоит первым, необязывающая
+      // связь `relates` — последней (владелец, UI-125).
+      const order = await headings.evaluateAll((nodes) =>
+        nodes.map((node) => node.querySelector('.font-mono')?.textContent ?? ''),
+      );
+      expect(order, `порядок групп на ${width}px`).toEqual([
+        'blocked_by',
+        'blocks',
+        'parent',
+        'child',
+        'relates',
+      ]);
+
+      // Счётчик группы — её собственные задачи, не связи целиком.
+      await expect(headings.nth(0)).toContainText('2 задачи'); // blocked_by
+      await expect(headings.nth(1)).toContainText('1 задача'); // blocks
+      await expect(headings.nth(2)).toContainText('1 задача'); // parent
+      await expect(headings.nth(3)).toContainText('3 задачи'); // child
+      await expect(headings.nth(4)).toContainText('1 задача'); // relates
+
+      // Ни один идентификатор вида связи не обрезан — ни на широком экране, ни на узком.
+      const marks = linksSection(page).locator('[data-mark="link-kind"]');
+      const clipped = await marks.evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const mono = node.querySelector('.font-mono') as HTMLElement;
+          return { text: mono.textContent, clipped: mono.scrollWidth > mono.clientWidth };
+        }),
+      );
+      for (const item of clipped) {
+        expect(item.clipped, `${width}px, ${JSON.stringify(item)}`).toBe(false);
+      }
+
+      // Все три ребёнка перечислены под общим заголовком — ни один не потерялся
+      // за счётчиком, а самый длинный ключ виден целиком, не многоточием.
+      for (const key of [childA, childB, childC]) {
+        await expect(linksSection(page).getByRole('link', { name: key })).toBeVisible();
+      }
+
+      // Статус связанной задачи — тем же знаком, что в таблице задач: форма, а не
+      // голая плашка (`StatusMark`, `data-mark="status"`), и у него есть рисунок.
+      const statusMark = linksSection(page)
+        .locator('li')
+        .filter({ hasText: blockerA })
+        .locator('[data-mark="status"]');
+      await expect(statusMark).toBeVisible();
+      await expect(statusMark.locator('svg')).toHaveCount(1);
+
+      const lightShot = await linksSection(page).screenshot({
+        path: test.info().outputPath(`link-groups-${width}-light.png`),
+      });
+      await test.info().attach(`связи ${width}px светлая`, {
+        body: lightShot,
+        contentType: 'image/png',
+      });
+
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await motionSettled(linksSection(page));
+      const darkShot = await linksSection(page).screenshot({
+        path: test.info().outputPath(`link-groups-${width}-dark.png`),
+      });
+      await test.info().attach(`связи ${width}px тёмная`, {
+        body: darkShot,
+        contentType: 'image/png',
+      });
+      await page.emulateMedia({ colorScheme: 'light' });
+    }
+  } finally {
+    for (const key of [childA, childB, childC]) await cancel(request, key);
+    await cancel(request, subject);
+    for (const key of [blockerA, blockerB, blocked, parent, related]) await cancel(request, key);
+  }
+});
