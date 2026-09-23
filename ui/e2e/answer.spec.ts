@@ -252,3 +252,52 @@ test('ответ не схлопывает блок открытых вопро�
   await expect(receipt.getByText('Строка ответа номер 1.')).toBeVisible();
   await expect(receipt.getByText('Строка ответа номер 10.')).toBeVisible();
 });
+
+/**
+ * История вопросов (UI-147): отвеченный вопрос уходит из входящей, но не пропадает —
+ * в истории он стоит вместе с ответом и ссылкой `KEY#N` на запись ответа.
+ *
+ * Свой вопрос, а не демонстрационный, по той же причине, что и у замеров выше; ответ
+ * на него даётся формой входящей, то есть он же и убирает за собой.
+ */
+test('отвеченный вопрос уходит из входящей и виден в истории с ответом', async ({
+  page,
+  request,
+}) => {
+  const title = 'Вопрос для истории вопросов';
+  const question = await askOwner(request, 'DEMO-3', title, 'Ответ на него ищут в истории.');
+  const reference = `DEMO-3#${question.no}`;
+  const answer = 'Ответ, который обязан найтись в истории.';
+
+  await page.goto('/questions');
+  const inInbox = page.getByRole('article', { name: `Вопрос ${reference}` });
+  await expect(inInbox).toBeVisible();
+  await inInbox.getByRole('button', { name: 'Ответить' }).click();
+  await inInbox.getByLabel(/^Ответ$/).fill(answer);
+  await inInbox.getByRole('button', { name: 'Ответить' }).click();
+  const receipt = page.getByRole('region', { name: `Ответ на ${reference} подшит` });
+  await expect(receipt).toBeVisible();
+  const answerHref = await receipt.getByRole('link', { name: /^DEMO-3#\d+$/ }).getAttribute('href');
+  const answerNo = /entry=(\d+)/.exec(answerHref ?? '')?.[1] ?? '';
+  expect(answerNo).not.toBe('');
+
+  // Входящая, прочитанная заново, вопроса больше не знает.
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
+  await expect(page.getByRole('article', { name: `Вопрос ${reference}` })).toHaveCount(0);
+
+  // История — одним действием с того же экрана, и её вид живёт в адресе.
+  await page.getByRole('link', { name: 'История вопросов' }).click();
+  await expect(page).toHaveURL(/\/questions\?view=history$/);
+
+  const inHistory = page.getByRole('article', { name: `Вопрос ${reference}` });
+  await expect(inHistory).toBeVisible();
+  await expect(inHistory).toHaveAttribute('data-answered', 'true');
+  await expect(inHistory.getByText('отвечен')).toBeVisible();
+  await expect(inHistory.getByText(answer)).toBeVisible();
+  const link = inHistory.getByRole('link', { name: `DEMO-3#${answerNo}` });
+  await expect(link).toHaveAttribute('href', `/tasks/DEMO-3?entry=${answerNo}`);
+
+  // Отвечать из истории нельзя.
+  await expect(inHistory.getByRole('button', { name: 'Ответить' })).toHaveCount(0);
+});

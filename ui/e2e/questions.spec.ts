@@ -10,6 +10,37 @@ test('доступность входящей', async ({ page }) => {
   expect(result.violations).toEqual([]);
 });
 
+test('доступность истории вопросов', async ({ page }) => {
+  await page.goto('/questions?view=history');
+  await expect(page.getByRole('heading', { name: 'Вопросы и ответы' })).toBeVisible();
+  await expect(page.getByRole('article').first()).toBeVisible();
+
+  const result = await new AxeBuilder({ page }).analyze();
+  expect(result.violations).toEqual([]);
+});
+
+test('без параметров экран показывает входящую, а история — второй вид', async ({ page }) => {
+  await page.goto('/questions');
+
+  // Первый экран — прежняя входящая: открытые вопросы ко мне и мои замечания.
+  const views = page.getByRole('navigation', { name: 'Вид входящей' });
+  await expect(views.getByRole('link', { name: 'Ждут ответа' })).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Мои замечания без разбора' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Вопросы и ответы' })).toHaveCount(0);
+  // Во входящей только открытые: отмеченных отвеченными строк здесь нет.
+  await expect(page.locator('article[data-answered="true"]')).toHaveCount(0);
+
+  // «Назад» из истории возвращает к входящей: вид — это переход, а не форма.
+  await views.getByRole('link', { name: 'История вопросов' }).click();
+  await expect(page.getByRole('heading', { name: 'Вопросы и ответы' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
+});
+
 test('входящая показывает адресованный вопрос и отбирает блокирующие', async ({ page }) => {
   await page.goto('/questions');
 
