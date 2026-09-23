@@ -98,10 +98,20 @@ class JournalWakeup:
         logger.info("Journal listener connected to channel %s", self._channel)
 
     async def close(self) -> None:
-        """Закрывает соединение слушателя. Идемпотентна."""
+        """Закрывает соединение слушателя. Идемпотентна.
+
+        Колбэк завершения снимается **до** закрытия, а не подавляется флагом на время
+        закрытия: `_call_termination_listeners` кладёт его в очередь `loop.call_soon`
+        и возвращает управление — сам колбэк срабатывает на следующем обороте цикла
+        событий, уже после того, как этот метод вернулся. Флаг, взведённый на время
+        `await connection.close()` и снятый сразу после, снимался бы раньше, чем
+        колбэк успевает проверить его, и WARNING всё равно звучал бы на штатной
+        остановке. Снятая же подписка не сработает вовсе — не важно, на каком обороте.
+        """
         connection, self._connection = self._connection, None
         if connection is None:
             return
+        connection.remove_termination_listener(self._on_termination)
         with contextlib.suppress(Exception):
             await connection.remove_listener(self._channel, self._on_notify)
         with contextlib.suppress(Exception):
@@ -170,6 +180,8 @@ class JournalWakeup:
         self.wake_all()
 
     def _on_termination(self, connection: object) -> None:
+        # `close()` снимает эту подписку до закрытия — значит, добравшийся сюда вызов
+        # обязан быть настоящим обрывом, а не штатной остановкой (TRK-126).
         logger.warning(
             "Journal listener on %s lost its connection; waits fall back to polling",
             self._channel,
