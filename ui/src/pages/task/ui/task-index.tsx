@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -14,7 +15,14 @@ import {
   type SectionEditsRun,
 } from '@/entities/entry';
 import { cn, useExitHold } from '@/shared/lib';
-import { Button, QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
+import { QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
+
+/** Императивная ручка `TaskIndex`: прыжок «в начало описи» стоит в шапке блока
+ * (`task-page.tsx`, `INDEX_NAV`, UI-127) и дотягивается снаружи ровно до того узла,
+ * куда раньше вела кнопка внутри самой описи, — второго пути прокрутки не заводим. */
+export interface TaskIndexHandle {
+  scrollToTop: () => void;
+}
 
 interface TaskIndexProps {
   taskKey: string;
@@ -34,13 +42,9 @@ interface TaskIndexProps {
    * в адресе дальше.
    */
   onOpenChange: (no: number | null) => void;
+  /** Ручка на прыжок «в начало описи» — вызывается из шапки блока (`task-page.tsx`). */
+  ref?: Ref<TaskIndexHandle>;
 }
-
-/**
- * Опись длиннее этого читается прокруткой, и по ней имеет смысл прыгать. Короткая
- * видна целиком, и два действия над ней были бы шумом там, где всё и так на экране.
- */
-const LONG_INDEX = 12;
 
 /**
  * Ячейка описи: поля, линия под строкой и выравнивание по верху — одинаковые
@@ -67,7 +71,7 @@ const CELL = 'border-b border-b-line px-3 py-2 text-left align-top';
 /** Столбцы описи по порядку: подписи к ним живут в словаре (`task.index.columns`). */
 const INDEX_COLUMNS = ['no', 'type', 'author', 'when', 'headline'] as const;
 
-export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: TaskIndexProps) {
+export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }: TaskIndexProps) {
   const { t } = useTranslation('task');
 
   // Раскрытых может быть несколько — сравнивают соседние записи. В адрес уходит
@@ -96,8 +100,17 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
   const [openGroups, setOpenGroups] = useState<Set<number>>(() => new Set());
   /** Метка «следующая правка `openAt` — от своего клика, не от прихода снаружи». */
   const internalChange = useRef(false);
-  /** Начало описи: сюда возвращает прыжок «в начало», не трогая прокрутку страницы. */
+  /** Начало описи: сюда возвращает прыжок «в начало» — кнопка стоит в шапке блока
+   * (`task-page.tsx`), а дотягивается до этого узла через `TaskIndexHandle`. */
   const scroller = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToTop: () => scroller.current?.scrollIntoView?.({ block: 'start' }),
+    }),
+    [],
+  );
 
   // Ссылка `TRK-42#12` внутри той же карточки меняет адрес, не перемонтируя страницу,
   // поэтому раскрытие следит за параметром, а не только за первым рендером. Метка
@@ -167,81 +180,57 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
 
   if (index.length === 0) return <p className="text-muted italic">{t('index.empty')}</p>;
 
-  // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
-  // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
-  const lastNo = index[index.length - 1]?.no ?? null;
-
   return (
-    /* Прыжки над описью, а не под ней: «к свежей записи» нужно до чтения, а не после. */
-    <div className="flex flex-col gap-2">
-      {index.length > LONG_INDEX && lastNo !== null ? (
-        /*
-         * Два прыжка по описи: к свежей записи и обратно к началу. Свежая раскрывается
-         * и читается точечно — своим запросом на свой номер, а не чтением всего дела
-         * до неё. Прыгает человек, а не экран: живой поток опись не прокручивает.
-         */
-        <div className="flex flex-wrap gap-2">
-          <Button tone="quiet" onClick={() => onOpenChange(lastNo)}>
-            {t('index.toLatest')}
-          </Button>
-          <Button
-            tone="quiet"
-            onClick={() => scroller.current?.scrollIntoView?.({ block: 'start' })}
-          >
-            {t('index.toTop')}
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="overflow-x-auto" ref={scroller}>
-        <table className="w-full border-collapse text-body">
-          <caption className="px-3 pt-2 text-left text-meta text-muted">
-            {t('index.count', { count: index.length })}
-          </caption>
-          <thead>
-            <tr>
-              {INDEX_COLUMNS.map((column) => (
-                <th
-                  key={column}
-                  scope="col"
-                  className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
-                >
-                  {t(`index.columns.${column}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {groupSectionEdits(index).map((run) =>
-              run.kind === 'one' ? (
-                <IndexRow
-                  key={run.item.no}
-                  taskKey={taskKey}
-                  heading={run.item}
-                  checks={checks}
-                  open={expanded.has(run.item.no)}
-                  scrollTo={scrollTarget === run.item.no}
-                  onToggle={toggle}
-                />
-              ) : (
-                <GroupRows
-                  key={`group-${run.first}`}
-                  taskKey={taskKey}
-                  run={run}
-                  checks={checks}
-                  open={
-                    openGroups.has(run.first) || run.items.some((item) => expanded.has(item.no))
-                  }
-                  expanded={expanded}
-                  scrollTarget={scrollTarget}
-                  onToggle={toggle}
-                  onToggleGroup={toggleGroup}
-                />
-              ),
-            )}
-          </tbody>
-        </table>
-      </div>
+    // Число записей и прыжки по описи стоят в шапке блока над таблицей
+    // (`task-page.tsx`, `BLOCK_HEAD`/`INDEX_NAV`): там же общие поля блока и переход
+    // в ленту. Ref на прокручиваемый узел — для прыжка «в начало» снаружи (UI-127),
+    // сама прокрутка отдельной записи — `scrollTarget`, ниже (UI-126).
+    <div className="overflow-x-auto" ref={scroller}>
+      <table
+        className="w-full border-collapse text-body"
+        aria-label={t('index.count', { count: index.length })}
+      >
+        <thead>
+          <tr>
+            {INDEX_COLUMNS.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
+              >
+                {t(`index.columns.${column}`)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {groupSectionEdits(index).map((run) =>
+            run.kind === 'one' ? (
+              <IndexRow
+                key={run.item.no}
+                taskKey={taskKey}
+                heading={run.item}
+                checks={checks}
+                open={expanded.has(run.item.no)}
+                scrollTo={scrollTarget === run.item.no}
+                onToggle={toggle}
+              />
+            ) : (
+              <GroupRows
+                key={`group-${run.first}`}
+                taskKey={taskKey}
+                run={run}
+                checks={checks}
+                open={openGroups.has(run.first) || run.items.some((item) => expanded.has(item.no))}
+                expanded={expanded}
+                scrollTarget={scrollTarget}
+                onToggle={toggle}
+                onToggleGroup={toggleGroup}
+              />
+            ),
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

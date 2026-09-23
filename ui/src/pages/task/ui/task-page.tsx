@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -18,7 +18,7 @@ import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
-import { TaskIndex } from './task-index';
+import { TaskIndex, type TaskIndexHandle } from './task-index';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
 
@@ -86,6 +86,21 @@ const blockTitle = cva('', {
 const BLOCK_HEAD =
   'flex flex-wrap items-baseline justify-between gap-3 border-b border-b-line px-3 pt-3 pb-2';
 
+/**
+ * Прыжки по описи: своя строка под шапкой, тем же левым полем, что у заголовка над
+ * ней и у ячеек таблицы под ней (`px-3`, тот же, что в `BLOCK_HEAD` и в `CELL`
+ * `task-index.tsx`) — один источник поля вместо разъехавшихся частных отступов
+ * (UI-127). Своей нижней линии нет: линию между шапкой и телом уже держит
+ * `BLOCK_HEAD`, а это его продолжение, а не отдельная секция.
+ */
+const INDEX_NAV = 'flex flex-wrap gap-2 px-3 pt-2';
+
+/**
+ * Опись длиннее этого читается прокруткой, и по ней имеет смысл прыгать. Короткая
+ * видна целиком, и два действия над ней были бы шумом там, где всё и так на экране.
+ */
+const LONG_INDEX = 12;
+
 /** Плитка открытого вопроса и разобранного замечания: рамка, заливка, свои поля. */
 const NOTICE = 'flex flex-col gap-2 rounded-mark border p-3';
 
@@ -120,6 +135,13 @@ export function TaskPage() {
    * зависит, показывать ли блок строкой (пусто и форма свёрнута) или карточкой.
    */
   const [remarkOpen, setRemarkOpen] = useState(false);
+
+  /**
+   * Прыжок «В начало описи» живёт в шапке блока, а прокручиваемый узел — внутри
+   * `TaskIndex` (UI-126, `scroller`): ручка дотягивается до него, не заводя
+   * второго пути прокрутки.
+   */
+  const indexRef = useRef<TaskIndexHandle>(null);
 
   const openAt = readEntryNo(searchParams.get('entry'));
 
@@ -294,6 +316,11 @@ export function TaskPage() {
     });
   }
 
+  // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
+  // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
+  const lastEntryNo = index.at(-1)?.no ?? null;
+  const showIndexNav = index.length > LONG_INDEX && lastEntryNo !== null;
+
   return (
     <main className={SCREEN}>
       {/*
@@ -353,14 +380,46 @@ export function TaskPage() {
 
           <section className={block({ kind: 'list' })} aria-labelledby="case">
             <div className={BLOCK_HEAD}>
-              <h2 className="text-screen" id="case">
-                {t('case')}
-              </h2>
-              {/* Переход в ленту живёт в липкой навигации сверху: здесь он был на
+              {/* Заголовок и число записей — одна группа: число читается частью
+                  названия блока, а не отдельной строкой между кнопками и таблицей,
+                  как было раньше. */}
+              <span className="inline-flex flex-wrap items-baseline gap-3">
+                <h2 className="text-screen" id="case">
+                  {t('case')}
+                </h2>
+                {index.length > 0 ? (
+                  <span className="text-meta text-muted">
+                    {t('index.count', { count: index.length })}
+                  </span>
+                ) : null}
+              </span>
+
+              {/* Переход в ленту живёт и в липкой навигации сверху: здесь он был на
               1300-м пикселе прокрутки и находился только теми, кто дочитал. */}
               <Link to={caseHref(task.key)}>{t('openCase')}</Link>
             </div>
+
+            {showIndexNav ? (
+              /*
+               * Два прыжка по описи: к свежей записи и обратно к началу. Свежая
+               * раскрывается и читается точечно — своим запросом на свой номер, а не
+               * чтением всего дела до неё. Прыгает человек, а не экран: живой поток
+               * опись не прокручивает. Левый край — тот же, что у заголовка и у первой
+               * колонки таблицы (`INDEX_NAV`), а не голый край блока. Размер `sm` —
+               * кнопка в подписи блока по шкале `control-size.ts`.
+               */
+              <div className={INDEX_NAV}>
+                <Button tone="quiet" size="sm" onClick={() => rememberOpen(lastEntryNo)}>
+                  {t('index.toLatest')}
+                </Button>
+                <Button tone="quiet" size="sm" onClick={() => indexRef.current?.scrollToTop()}>
+                  {t('index.toTop')}
+                </Button>
+              </div>
+            ) : null}
+
             <TaskIndex
+              ref={indexRef}
               taskKey={task.key}
               index={index}
               checks={task.checks}

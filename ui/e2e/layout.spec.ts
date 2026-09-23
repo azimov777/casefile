@@ -77,6 +77,24 @@ async function busyTask(request: APIRequestContext): Promise<string> {
   return key;
 }
 
+/**
+ * Задача с делом длиннее `LONG_INDEX` (12 записей, `task-page.tsx`): опись
+ * показывает прыжки по себе, и есть с чем сверять левый край (UI-127).
+ */
+async function longCaseTask(request: APIRequestContext): Promise<string> {
+  const key = await makeTask(request, 'Задача с длинной описью ради проверки шапки блока «Дело»');
+
+  for (let index = 0; index < 14; index += 1) {
+    await addEntry(request, key, {
+      type: 'note',
+      title: `Запись ${index + 1} ради длинной описи`,
+      body: 'Тело записи: в описи видно только заголовок.',
+    });
+  }
+
+  return key;
+}
+
 test.describe('карточка задачи на широком экране', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -184,5 +202,134 @@ test.describe('карточка задачи на узком экране', () =
       client: document.documentElement.clientWidth,
     }));
     expect(scroll.width).toBe(scroll.client);
+  });
+});
+
+test.describe('шапка блока «Дело»', () => {
+  test('число записей, прыжки по описи и переход в ленту стоят вровень с заголовком и первой колонкой (UI-127)', async ({
+    page,
+    request,
+  }) => {
+    const key = await longCaseTask(request);
+    await silenceJournal(page);
+    await page.goto(`/tasks/${key}`);
+
+    const section = page.locator('section[aria-labelledby="case"]');
+    const title = page.locator('#case');
+    const toLatest = section.getByRole('button', { name: 'К свежей записи' });
+    const toTop = section.getByRole('button', { name: 'В начало описи' });
+    const openCase = section.getByRole('link', { name: 'Открыть всё дело лентой' });
+    const firstColumn = section.getByRole('columnheader').first();
+
+    await expect(toLatest).toBeVisible();
+    await expect(toTop).toBeVisible();
+
+    /**
+     * Левый край заголовка, обеих кнопок описи и первой колонки таблицы — одно и то
+     * же число: у всех один источник поля (`BLOCK_HEAD`, `INDEX_NAV`, `CELL`), а не
+     * свои `px-3` россыпью. Справа за тем же полем стоит переход в ленту. Числа идут
+     * в дело задачи, а не только в исход теста: `console.log` — их не нужно
+     * пересчитывать из отчёта Playwright.
+     *
+     * У заголовка и у кнопок поле держит родитель (`BLOCK_HEAD`/`INDEX_NAV`), а у
+     * своей рамки-box они его не несут — их `boundingBox().x` и есть видимый край.
+     * У ячейки `th` наоборот: поле — её собственный `px-3` (`CELL`), и рамка ячейки
+     * начинается на крае таблицы, без отступа. Сравнивать нужно не рамку ячейки,
+     * а край её текста — рамку плюс её же `padding-left`.
+     */
+    async function measure() {
+      const [sectionBox, titleBox, latestBox, topBox, columnBox, linkBox, columnPadding] =
+        await Promise.all([
+          section.boundingBox(),
+          title.boundingBox(),
+          toLatest.boundingBox(),
+          toTop.boundingBox(),
+          firstColumn.boundingBox(),
+          openCase.boundingBox(),
+          firstColumn.evaluate((node) => parseFloat(getComputedStyle(node).paddingLeft)),
+        ]);
+      for (const box of [sectionBox, titleBox, latestBox, topBox, columnBox, linkBox]) {
+        expect(box).not.toBeNull();
+      }
+      return {
+        section: sectionBox!,
+        title: titleBox!,
+        toLatest: latestBox!,
+        toTop: topBox!,
+        firstColumnText: (columnBox!.x as number) + columnPadding,
+        openCase: linkBox!,
+      };
+    }
+
+    async function assertAligned(label: string) {
+      const box = await measure();
+
+      // Левый край: заголовок, первая кнопка строки прыжков (она открывает строку —
+      // вторая идёт правее по той же строке, а не своим отступом) и текст первой
+      // колонки совпадают до пикселя.
+      expect(box.toLatest.x).toBeCloseTo(box.title.x, 0);
+      expect(box.firstColumnText).toBeCloseTo(box.title.x, 0);
+
+      // Вторая кнопка строки не съезжает за пределы блока и не наезжает на первую:
+      // она правее первой на её ширину плюс зазор строки (`gap-2`, 8px).
+      expect(box.toTop.x).toBeGreaterThan(box.toLatest.x + box.toLatest.width);
+
+      // Ничто не упирается в рамку блока: слева и справа — то же поле, что у
+      // заголовка и у ячеек таблицы (`px-3`), а не голый край рамки.
+      const leftField = box.title.x - box.section.x;
+      const rightField = box.section.x + box.section.width - (box.openCase.x + box.openCase.width);
+      expect(leftField).toBeGreaterThanOrEqual(8);
+      expect(rightField).toBeCloseTo(leftField, 0);
+
+      console.log(`[UI-127 ${label}]`, {
+        sectionX: box.section.x,
+        titleX: box.title.x,
+        toLatestX: box.toLatest.x,
+        toTopX: box.toTop.x,
+        firstColumnTextX: box.firstColumnText,
+        openCaseRight: box.openCase.x + box.openCase.width,
+        leftField,
+        rightField,
+      });
+    }
+
+    /**
+     * Снимок для дела: `locator.screenshot()` перед съёмкой сам подкручивает узел
+     * так, что его верх упирается в самый верх области прокрутки, — а туда же
+     * прибита липкая `TaskNav`, и она перекрывает шапку блока на снимке. Ручная
+     * прокрутка этого не лечит: тот же внутренний скролл сотрёт её перед съёмкой.
+     * Поэтому здесь `page.screenshot({ clip })` по свежему прямоугольнику блока
+     * после собственной прокрутки с запасом на высоту навигации — сам вызов уже
+     * ничего не подкручивает.
+     */
+    async function screenshotHead(path: string) {
+      await section.scrollIntoViewIfNeeded();
+      // Липкая навигация задачи, а не переключатель вида и не справка о разделах:
+      // у неё своя подпись (`task.nav.label`, `TaskNav`).
+      const nav = page.getByRole('navigation', { name: /Навигация по задаче/ });
+      const navBox = await nav.boundingBox();
+      if (navBox !== null) {
+        await page.evaluate((dy) => window.scrollBy(0, dy), -(navBox.height + 8));
+      }
+      const clip = await section.boundingBox();
+      expect(clip).not.toBeNull();
+      await page.screenshot({ path: test.info().outputPath(path), clip: clip! });
+    }
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await assertAligned('1440 светлая');
+    await screenshotHead('case-head-1440-light.png');
+
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await assertAligned('1440 тёмная');
+    await screenshotHead('case-head-1440-dark.png');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await assertAligned('390 тёмная');
+    await screenshotHead('case-head-390-dark.png');
+
+    await page.emulateMedia({ colorScheme: 'light' });
+    await assertAligned('390 светлая');
+    await screenshotHead('case-head-390-light.png');
   });
 });
