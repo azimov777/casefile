@@ -45,6 +45,10 @@ COPY --chown=tracker:tracker app ./app
 # `tracker-discipline` и берёт из него `instructions`. Без этой строки процесс MCP падает
 # на старте, а не молча отдаёт пустую дисциплину (`app/mcp/skill.py`).
 COPY --chown=tracker:tracker skill ./skill
+# Файл установки того же выпуска, что и образ: установщик и служба `updater` берут его
+# отсюда, а не с main на GitHub, — так файл и образы установки никогда не расходятся
+# (`docker-compose.prod.yml`, служба `updater`). Процессу он не нужен.
+COPY --chown=tracker:tracker docker-compose.prod.yml ./
 # Точка монтирования томов с ключами (`docker-compose.prod.yml`, `ui-key` и `agent-key`).
 # Каталог заводится здесь и отдаётся пользователю образа: пустой именованный том при
 # первом монтировании берёт владельца и права у каталога образа, а каталог, которого в

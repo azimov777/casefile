@@ -131,4 +131,4 @@ header names the exact variables.
 ## 7. Report to the user
 
 In one short message: the board URL, that you are connected, and that Casefile updates
-itself every time Docker starts. To remove it later: `docker compose down -v` in `~/casefile`.
+itself to each new release (it checks every hour). To remove it later: `docker compose down -v` in `~/casefile`.

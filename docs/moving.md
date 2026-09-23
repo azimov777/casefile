@@ -11,7 +11,7 @@ still use [`backup-restore.md`](backup-restore.md); that procedure is unchanged.
 ## What you need
 
 - **The old installation, running.** Update it first if it is behind — it updates itself
-  every time Docker starts, or run the install line again.
+  to each new release within the hour, or run the install line again.
 - **An administrator.** On your own machine that is you: the board signs you in as the
   administrator `owner@localhost` without asking. On a server with sign-in turned on it is
   an account with the administrator flag. Export and import are refused to everyone else

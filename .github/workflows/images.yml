@@ -1,19 +1,26 @@
-# Образы для установок: каждый коммит main после зелёных проверок становится
-# `ghcr.io/<владелец>/casefile` и `ghcr.io/<владелец>/casefile-ui` с тегами `latest` и
-# `sha-<коммит>`, для amd64 и arm64. Их берёт `docker-compose.prod.yml`, а служба
-# `updater` установки подтягивает `latest` на каждом старте Docker.
+# Образы для установок, для amd64 и arm64: `ghcr.io/<владелец>/casefile` и
+# `ghcr.io/<владелец>/casefile-ui`. Их берёт `docker-compose.prod.yml`.
 #
-# Пуш тега `v*` добавляет к тем же образам номер версии без `v` (`v0.1.0` → `0.1.0`):
-# `docker/metadata-action` берёт его из семвера тега (`type=semver`), а `latest` при этом
-# не трогается — `enable={{is_default_branch}}` истинно только для пуша в default branch,
-# и тег веткой не является. Так установку можно закрепить на выпуске через
-# `CASEFILE_VERSION=0.1.0` в `.env` (`docker-compose.prod.yml`), а не только на `latest`.
+# Новая версия для установок — только выпуск с git-тегом. Пуш тега `vX.Y.Z` публикует
+# образы под номером версии без `v` (`v0.2.0` → `0.2.0`, `type=semver`) и под подвижным
+# тегом канала выпусков `stable`. На `stable` по умолчанию стоит каждая установка, и её
+# служба `updater` раз в час сверяет именно его. Пре-релиз (`v0.3.0-rc.1`) получает только
+# свой номер: `stable` он не двигает.
+#
+# Каждый коммит main после зелёных проверок публикуется под `latest` и `sha-<коммит>` —
+# для разработки и для тех, кто сам закрепил установку на `latest`; установки на
+# умолчаниях его не видят. `flavor: latest=false` — чтобы `latest` не двигал и тег
+# выпуска: у `docker/metadata-action` по умолчанию `type=semver` добавляет `latest` сам.
+#
+# Выпуск публикуется так: сначала `git push origin vX.Y.Z` и дождаться образов, потом
+# main. В обратном порядке обновлятор прежних установок (до TRK-119 он брал compose-файл с
+# main) успел бы взять файл, который зовёт `stable`, раньше, чем `stable` появится.
 #
 # Проверки — вызовом `ci.yml`, а не параллельным workflow: публикация обязана ждать их
-# исхода, иначе красный коммит разъехался бы по всем установкам.
+# исхода, иначе красный выпуск разъехался бы по всем установкам.
 #
-# Метку `org.opencontainers.image.source` ставит `docker/metadata-action`; по ней
-# обновлятор установки находит и убирает висящие образы проекта — и только их.
+# Метку `org.opencontainers.image.version` ставит `docker/metadata-action`; по ней
+# обновлятор установки пишет в лог, на какой выпуск перешёл и на какой вернуться.
 #
 # Пакеты ghcr.io, опубликованные впервые, приватны: один раз после первого прогона их
 # делают публичными в настройках пакета на GitHub, иначе установщик без входа в реестр
@@ -30,7 +37,8 @@ on:
 permissions:
   contents: read
 
-# Новый коммит отменяет публикацию предыдущего: `latest` всё равно станет последним.
+# Новый коммит отменяет публикацию предыдущего: `latest` всё равно станет последним. У тега
+# своя группа: выпуск не отменяется коммитом main.
 concurrency:
   group: images-${{ github.ref }}
   cancel-in-progress: true
@@ -76,10 +84,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          flavor: |
+            latest=false
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
             type=semver,pattern={{version}}
+            type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
 
       - uses: docker/build-push-action@v6
         with:

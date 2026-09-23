@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh 
 irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
-All you need is Docker. The board opens at **http://localhost:8080**, and the installer prints the one command that connects your agent. Casefile updates itself every time Docker starts.
+All you need is Docker. The board opens at **http://localhost:8080**, and the installer prints the one command that connects your agent. Casefile updates itself to each new release: it checks once an hour and whenever Docker starts.
 
 **Or let your agent do it.** Paste this into Claude Code, Codex or Cursor:
 
@@ -91,12 +91,32 @@ For the best case files, also give your agent the [skill](skill/tracker-agent/SK
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.2.0` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
 | Back up your data / restore into a clean install | [`docs/backup-restore.md`](docs/backup-restore.md) |
 
 Ports and other settings live in `~/casefile/.env` — see [`.env.example`](.env.example).
+
+### Updates
+
+A new version of Casefile is a release: a git tag `vX.Y.Z` with its images on ghcr.io
+under the version and under the `stable` channel. Every installation follows `stable`
+by default. It checks when Docker starts and then once an hour, at a slightly random
+minute, so a release reaches it within about an hour and ten minutes, with nothing to
+restart. Commits to `main` without a tag never reach an installation. The update
+recreates the Casefile containers and keeps your data in its volumes. An agent in the
+middle of an MCP call when that happens gets a dropped connection and has to retry.
+
+The first release on this channel is 0.2.0; until it is out, there is nothing to update
+to. An installation from before it (on `latest`) moves to `stable` by itself the next
+time Docker starts, and from then on checks every hour. If you set
+`CASEFILE_VERSION=latest` in `.env` yourself, remove the line to follow releases.
+
+`CASEFILE_UPDATE_INTERVAL` sets how often to check (hours, or `30m`; `0` means only
+when Docker starts). If an update fails to start, `docker compose logs updater` names
+the version to go back to.
 
 ## Network mode
 
