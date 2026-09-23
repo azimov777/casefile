@@ -105,7 +105,7 @@ describe('полосы прокрутки — одно место на весь 
     expect(/height:\s*var\(--ui-scrollbar\)\s*;/.test(bar!.body), bar!.body).toBe(true);
   });
 
-  it('своя полоса: каждая заливка — токен темы или прозрачность, ни одного литерала', () => {
+  it('своя полоса: каждая заливка — токен темы, составной `--ui-*` поверх него, или прозрачность, ни одного литерала', () => {
     const painted = webkitRules().flatMap((rule) =>
       [...rule.body.matchAll(/background:\s*([^;]+);/g)].map((found) => ({
         selector: rule.selector,
@@ -114,9 +114,19 @@ describe('полосы прокрутки — одно место на весь 
     );
 
     expect(painted.length, 'ползунок ничем не покрашен').toBeGreaterThan(0);
+    /*
+     * `--ui-*` допущен рядом с `--color-*` с UI-157: ползунок красится полупрозрачным
+     * `--ui-scrollbar-thumb` (`theme.css`), а не токеном темы напрямую — прозрачность
+     * не выражается самим `--color-*`, ей нужен `color-mix(…, transparent)`, и этому
+     * составному выражению место в `theme.css` рядом с `--ui-scrollbar` (шириной),
+     * а не здесь строкой на месте: та же причина, что развела число и токен выше.
+     * Ссылка обязана остаться простым `var(...)` — само выражение при этом стережёт
+     * не этот тест, а то, что оно всего одно на токен и живёт в одном файле.
+     */
     expect(
       painted.filter(
-        (paint) => paint.value !== 'transparent' && !/^var\(--color-[\w-]+\)$/.test(paint.value),
+        (paint) =>
+          paint.value !== 'transparent' && !/^var\(--(?:color|ui)-[\w-]+\)$/.test(paint.value),
       ),
     ).toEqual([]);
   });
