@@ -230,8 +230,11 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
          * не снимается и сбросом не возвращается. Флажок стоит в строке того, что
          * показано, — рядом с фразой «все, кроме архива», которую он и меняет.
          */}
+        {/* Минимум высоты только на телефоне (`max-fold:`): подпись кликабельна и
+            мишень — вся строка label, а не голый флажок 13px, но и она на 390 px
+            не дотягивала до 24px (UI-154). */}
         <label
-          className="ml-auto inline-flex items-center gap-1.5 text-meta whitespace-nowrap text-muted"
+          className="ml-auto inline-flex items-center gap-1.5 text-meta whitespace-nowrap text-muted max-fold:min-h-(--ui-tap)"
           title={archiveHint}
         >
           <input

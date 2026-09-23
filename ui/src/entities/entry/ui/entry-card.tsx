@@ -158,7 +158,13 @@ function CopyReference({ reference }: { reference: string }) {
          * `currentColor`. Рамки не видно ни там ни там, но замер вычисленных стилей
          * видит разницу — и следующий перевод начнётся с разбора этих трёх строк.
          */
-        className="border-none border-current bg-transparent p-0 font-mono text-label text-muted hover:text-text hover:underline"
+        /*
+         * `min-h`, а не паддинг: паддинг раздвинул бы фон под текстом, а у кнопки
+         * фона нет — только область нажатия. Только на телефоне (`max-fold:`): на
+         * столе строка была уже высотой в 28px соседней шкалы, а на 390 px кнопка
+         * была голой строкой текста — 132×17 (UI-154).
+         */
+        className="inline-flex items-center border-none border-current bg-transparent p-0 font-mono text-label text-muted max-fold:min-h-(--ui-tap) hover:text-text hover:underline"
         onClick={() => void copy()}
       >
         {t('entry.copy', { reference })}

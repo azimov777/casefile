@@ -61,12 +61,21 @@ export function ConnectionSnippets({ mcpUrl, token, labelled }: SnippetInput) {
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {/* Смена клиента — смена вида, а не шаг истории: `replace`, как у флажка метки.
-          На телефоне четыре клиента в строку не входят, и перенос дорожки ломал её на
-          ряд и хвост; поэтому там она сеткой два на два, а шире — одной строкой. */}
+      {/*
+       * Смена клиента — смена вида, а не шаг истории: `replace`, как у флажка метки.
+       * На телефоне четыре клиента в строку не входят, и перенос дорожки ломал её на
+       * ряд и хвост; поэтому там она сеткой два на два, а шире — одной строкой.
+       *
+       * `auto-rows`: сетка, в отличие от строки дорожки, высоту ряда не наследует —
+       * `items-stretch` тянет ссылку по высоте ряда, а сам ряд по умолчанию высотой
+       * в своё содержимое, и без минимума вкладка была 16px вместо положенных 34
+       * (UI-154). Значение — то же, что даёт `SegmentedNav` без `size` (`md`,
+       * `--ui-control`): свой размер сетке не выдумываю, а вкладку короче содержимого
+       * `minmax` не сделает — длинное имя клиента по-прежнему растит ряд.
+       */}
       <SegmentedNav
         label={t('snippets.clientNav')}
-        className="grid grid-cols-2 self-stretch fold:inline-flex fold:self-start"
+        className="grid auto-rows-[minmax(var(--ui-control),auto)] grid-cols-2 self-stretch fold:inline-flex fold:auto-rows-auto fold:self-start"
       >
         {CLIENTS.map((item) => (
           <SegmentedNavLink

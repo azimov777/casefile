@@ -107,7 +107,10 @@ export function ConnectPage() {
           <Text>
             <Trans t={t} i18nKey="snippets.intro" values={values} components={code} />
           </Text>
-          <label className="inline-flex cursor-pointer items-center gap-2 self-start text-meta">
+          {/* Минимум высоты только на телефоне (`max-fold:`): та же мишень, что у
+              флажков отбора (UI-154) — подпись кликабельна, но и вся строка label
+              на 390 px не дотягивала до 24px. */}
+          <label className="inline-flex cursor-pointer items-center gap-2 self-start text-meta max-fold:min-h-(--ui-tap)">
             <input
               type="checkbox"
               checked={shared}

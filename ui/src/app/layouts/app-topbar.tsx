@@ -161,6 +161,14 @@ function Crumbs({ place }: { place: Place }) {
               className={cn(
                 'truncate text-muted no-underline hover:text-accent hover:underline',
                 part.mono ? 'font-mono' : '',
+                /*
+                 * Минимум и высоты, и ширины — только на телефоне (`max-fold:`):
+                 * крошка «UI» (ключ очереди из двух знаков, моноширинным) мерилась
+                 * 14×18 на 390 px (UI-154). На столе крошка была бы шире своего
+                 * текста, а строка — плотнее соседних, ровно то, что запрещает
+                 * `ui/docs/CONCEPT.md`, §6.
+                 */
+                'inline-flex items-center max-fold:min-h-(--ui-tap) max-fold:min-w-(--ui-tap)',
               )}
             >
               {part.label}
