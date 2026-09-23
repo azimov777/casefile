@@ -26,7 +26,7 @@ from app.mcp.arguments import (
     QueueTitleChangeArg,
 )
 from app.mcp.idempotency import Once
-from app.mcp.toolset import Toolset
+from app.mcp.toolset import FILING, OVERWRITING_UPDATE, READ_ONLY, Toolset
 from app.services import participants as participants_service
 from app.services import queues as queues_service
 
@@ -36,7 +36,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def get_queue(key: QueueKeyArg) -> views.QueueView:
         """Очередь с описанием — общим контекстом всех её задач: где лежит код, на какие
         документы смотреть, чего не делать.
@@ -46,7 +46,7 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             return views.queue(await queues_service.read_queue(session, key, actor=actor))
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def list_queues(
         limit: LimitArg = None,
         cursor: CursorArg = None,
@@ -65,7 +65,7 @@ def register(tools: Toolset) -> None:
                 next_cursor=page.next_cursor,
             )
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def list_participants(
         limit: LimitArg = None,
         cursor: CursorArg = None,
@@ -84,7 +84,7 @@ def register(tools: Toolset) -> None:
                 next_cursor=page.next_cursor,
             )
 
-    @tools.tool(scope=TokenScope.MAIN, creating=True)
+    @tools.tool(annotations=FILING, scope=TokenScope.MAIN, creating=True)
     async def create_queue(
         key: QueueKeyArg,
         title: QueueTitleArg,
@@ -111,7 +111,7 @@ def register(tools: Toolset) -> None:
                 build=create,
             )
 
-    @tools.tool(scope=TokenScope.MAIN)
+    @tools.tool(annotations=OVERWRITING_UPDATE, scope=TokenScope.MAIN)
     async def update_queue(
         key: QueueKeyArg,
         title: QueueTitleChangeArg = None,
@@ -130,7 +130,7 @@ def register(tools: Toolset) -> None:
                 )
             )
 
-    @tools.tool(scope=TokenScope.MAIN, creating=True)
+    @tools.tool(annotations=FILING, scope=TokenScope.MAIN, creating=True)
     async def register_participant(
         kind: ParticipantKindArg,
         name: ParticipantNameArg,
@@ -157,7 +157,7 @@ def register(tools: Toolset) -> None:
                 build=create,
             )
 
-    @tools.tool(scope=TokenScope.MAIN)
+    @tools.tool(annotations=OVERWRITING_UPDATE, scope=TokenScope.MAIN)
     async def update_participant(
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg,

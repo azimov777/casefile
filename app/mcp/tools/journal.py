@@ -22,7 +22,7 @@ from app.mcp.arguments import (
     LimitArg,
     TimeoutArg,
 )
-from app.mcp.toolset import Toolset
+from app.mcp.toolset import READ_ONLY, Toolset
 from app.services import journal as journal_service
 
 
@@ -31,7 +31,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def wait_journal(
         after: AfterArg = JOURNAL_START,
         task: JournalTaskArg = None,

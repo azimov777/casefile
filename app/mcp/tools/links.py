@@ -18,7 +18,7 @@ from app.mcp.arguments import (
     TaskKeyArg,
 )
 from app.mcp.idempotency import Once
-from app.mcp.toolset import Toolset
+from app.mcp.toolset import FILING, Toolset
 from app.services import links as links_service
 from app.services import tasks as tasks_service
 
@@ -27,7 +27,7 @@ def register(tools: Toolset) -> None:
     """Объявляет инструменты набора `task` по связям."""
     runtime = tools.runtime
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def link(
         key: TaskKeyArg,
         kind: LinkKindArg,
@@ -65,7 +65,7 @@ def register(tools: Toolset) -> None:
                 build=add,
             )
 
-    @tools.tool()
+    @tools.tool(annotations=FILING)
     async def unlink(
         key: TaskKeyArg, kind: LinkKindArg, other: OtherTaskKeyArg
     ) -> views.UnlinkView:
