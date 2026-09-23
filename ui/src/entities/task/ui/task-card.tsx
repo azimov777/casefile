@@ -45,8 +45,9 @@ export function TaskCard({ task }: { task: Task }) {
       <TaskParents parents={task.parents ?? []} raised />
 
       <div className="flex items-center justify-between gap-2">
-        {/* Ключ не поднят над растяжкой: клик по нему ведёт в ту же задачу. */}
-        <span className="font-mono text-meta">{task.key}</span>
+        {/* Ключ не поднят над растяжкой: клик по нему ведёт в ту же задачу.
+            `whitespace-nowrap` держит его целым на переносе (UI-151). */}
+        <span className="font-mono text-meta whitespace-nowrap">{task.key}</span>
         <PriorityMark priority={task.priority} withName={false} />
       </div>
 

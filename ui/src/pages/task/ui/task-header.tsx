@@ -65,7 +65,8 @@ export function TaskHeader({ task, features, links }: TaskHeaderProps) {
               </span>
               <Link to={`/tasks/${parent.other.key}`}>
                 <span className="sr-only">{brick('task.parents.label')} </span>
-                <span className="font-mono">{parent.other.key}</span> {parent.other.title}
+                <span className="font-mono whitespace-nowrap">{parent.other.key}</span>{' '}
+                {parent.other.title}
               </Link>
             </Fragment>
           ))}
@@ -74,7 +75,9 @@ export function TaskHeader({ task, features, links }: TaskHeaderProps) {
         {/* Междустрочие названия шире, чем у заголовков вообще (1.25 в сбросе): название
             задачи бывает в три строки, и на кегле 19 px они слипались. */}
         <h1 className="text-title leading-[1.3]">
-          <span className="font-mono text-muted">{task.key}</span> {task.title}
+          {/* `whitespace-nowrap` держит ключ целым, если заголовок переносится сразу
+              после него (UI-151). */}
+          <span className="font-mono text-muted whitespace-nowrap">{task.key}</span> {task.title}
         </h1>
       </div>
 

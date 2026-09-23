@@ -37,8 +37,12 @@ export function Receipt({ label, headline, taskKey, entryNo, body, onClose }: Re
     >
       <p className="mb-2 flex items-baseline gap-3">
         <span className="font-semibold text-positive">{headline}</span>
-        {/* Номер записи — из ответа сервера: по этой ссылке запись действительно лежит. */}
-        <Link className="font-mono text-meta" to={taskRefHref({ key: taskKey, entryNo })}>
+        {/* Номер записи — из ответа сервера: по этой ссылке запись действительно лежит.
+            `whitespace-nowrap` не даёт ключу разорваться по дефису (UI-151). */}
+        <Link
+          className="font-mono text-meta whitespace-nowrap"
+          to={taskRefHref({ key: taskKey, entryNo })}
+        >
           {taskKey}#{entryNo}
         </Link>
       </p>
