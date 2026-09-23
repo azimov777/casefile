@@ -349,7 +349,7 @@ export function TaskPage() {
           )
         }
       />
-      <TaskHeader task={task} features={features} />
+      <TaskHeader task={task} features={features} links={links} />
 
       {/*
        * Две колонки, каждая своим потоком, и делятся они на точке `card` (80rem).

@@ -61,11 +61,22 @@ interface PriorityMarkProps {
   priority: string | null | undefined;
   /** Там, где имени нет (карточка доски), оно уходит в доступное имя, а не пропадает. */
   withName?: boolean;
+  /**
+   * Говорить ли диктору род значения («статус», «приоритет») перед ним. Выключают там,
+   * где род уже назван видимой подписью рядом — `dt` полосы свойств карточки (UI-143):
+   * иначе диктор прочёл бы его дважды подряд.
+   */
+  labelled?: boolean;
   className?: string;
 }
 
 /** Приоритет задачи: высота столбиков, а не вторая серая плашка рядом со статусом. */
-export function PriorityMark({ priority, withName = true, className }: PriorityMarkProps) {
+export function PriorityMark({
+  priority,
+  withName = true,
+  labelled = true,
+  className,
+}: PriorityMarkProps) {
   const { t } = useTranslation('ui');
 
   if (priority === null || priority === undefined || priority === '') return null;
@@ -82,7 +93,7 @@ export function PriorityMark({ priority, withName = true, className }: PriorityM
       <svg viewBox="0 0 24 24" fill="none" className="size-(--ui-mark) shrink-0" aria-hidden="true">
         {shape}
       </svg>
-      <span className="sr-only">{t('task.priorityLabel')} </span>
+      {labelled ? <span className="sr-only">{t('task.priorityLabel')} </span> : null}
       <span className={withName ? 'font-mono text-mark' : 'sr-only'}>{priority}</span>
     </span>
   );

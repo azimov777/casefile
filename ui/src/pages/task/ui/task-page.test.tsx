@@ -84,8 +84,13 @@ describe('карточка задачи', () => {
 
     // Знак несёт форму, род значения — текстом рядом: без него диктор читал бы
     // подряд четыре значения и не сказал бы, что из них чем является (решение Д7).
-    expect(header).toHaveTextContent(`${say.ui('task.statusLabel')} in_progress`);
-    expect(header).toHaveTextContent(`${say.ui('task.priorityLabel')} normal`);
+    // С UI-143 род назван видимой подписью `dt` полосы свойств, а не скрытым текстом.
+    const valueOf = (label: string) =>
+      within(header)
+        .getAllByRole('term')
+        .find((term) => term.textContent === label)?.nextElementSibling?.textContent;
+    expect(valueOf(say.task('header.status'))).toBe('in_progress');
+    expect(valueOf(say.task('header.priority'))).toBe('normal');
   });
 
   it('рисуется одним запросом пакета, без запросов за телами записей', async () => {
@@ -403,21 +408,31 @@ describe('карточка задачи', () => {
     expect(list).toHaveTextContent('Незнакомое поле отвечает списком допустимых');
   });
 
-  it('в шапке четыре рода значений различаются формой, а не подписью внутри плашки', async () => {
+  it('в шапке значения состояния и времени подписаны парами «подпись — значение» (UI-143)', async () => {
     server.use(packageOf('DEMO-4'));
     renderApp('/tasks/DEMO-4');
 
     const heading = await screen.findByRole('heading', { name: /DEMO-4/ });
     const header = heading.closest('header') as HTMLElement;
 
-    // Статус и приоритет — знаки со своей формой (решение Д7), и род остаётся
-    // слышен диктору.
-    expect(header).toHaveTextContent(new RegExp(`${say.ui('task.statusLabel')}\\s+in_progress`));
-    expect(header).toHaveTextContent(new RegExp(`${say.ui('task.priorityLabel')}\\s+\\S+`));
+    // Полоса свойств — список определений: род значения назван видимой подписью `dt`,
+    // значение — формой в `dd` (решение Д7 о формах остаётся).
+    const pairs = Object.fromEntries(
+      within(header)
+        .getAllByRole('term')
+        .map((term) => [term.textContent, term.nextElementSibling?.textContent ?? '']),
+    );
+    expect(pairs[say.task('header.status')]).toBe('in_progress');
+    expect(pairs[say.task('header.priority')]).toMatch(/^\S+$/);
+    expect(pairs[say.task('header.assignee')]).toMatch(/\S/);
+    expect(pairs).toHaveProperty(say.task('header.updated'));
+    expect(pairs).toHaveProperty(say.task('header.created'));
 
-    // Исполнитель — имя с аватаром, а не плашка: это единственная строка про
-    // человека, и плашка уравнивала её со статусом.
-    expect(header).toHaveTextContent(new RegExp(`${say.task('header.assignee')}\\s+\\S+`));
+    // Скрытое «статус»/«приоритет» знака не повторяет видимую подпись: диктор не
+    // читает род значения дважды.
+    expect(header).not.toHaveTextContent(
+      new RegExp(`${say.ui('task.statusLabel')}\\s+in_progress`),
+    );
   });
 
   it('на несуществующей задаче объясняет по коду и зовёт обратно к списку', async () => {

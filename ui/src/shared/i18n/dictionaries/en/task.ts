@@ -23,7 +23,12 @@ export const task = {
   },
 
   header: {
-    assignee: 'assignee',
+    // Подписи полосы свойств карточки (UI-143): род значения назван видимо, а не только
+    // диктору, — владелец выбрал полосу с подписями (UI-143#10).
+    status: 'Status',
+    priority: 'Priority',
+    assignee: 'Assignee',
+    flags: 'Flags',
     unassigned: 'not assigned',
     updated: 'Updated',
     created: 'Created',
