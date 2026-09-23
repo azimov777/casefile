@@ -111,8 +111,17 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
      */
     case 'status_changed':
       if (entry.payload.reason == null || entry.payload.reason === '') return null;
+      /*
+       * Не `BLOCK` (`flex flex-col`): здесь единственный ребёнок — строка текста, а не
+       * несколько блоков, которые надо развести отступом. `TaskText` разбирает причину
+       * на текстовые узлы и ссылки `KEY#N` и отдаёт их фрагментом без обёртки; во
+       * флекс-колонке каждый узел — текст до ссылки, сама ссылка, текст после —
+       * становится своим флекс-элементом и переносится строкой, и «(», ссылка «)»
+       * причины вида «текст (KEY#N)» вставали друг под другом (UI-159). Обычный `<p>`
+       * оставляет их строчным потоком, как в абзаце.
+       */
       return (
-        <p className={BLOCK}>
+        <p className="wrap-anywhere">
           <TaskText>{entry.payload.reason}</TaskText>
         </p>
       );

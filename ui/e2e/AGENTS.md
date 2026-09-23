@@ -8,7 +8,7 @@
 сценарий просто открывает адрес и видит задачи. Сценариям запасного пути (экран входа)
 установка без ключа выдаётся поимённо — `installWithoutKey` в `contour.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts` и `moving.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts` и `moving.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -184,6 +184,10 @@ invalid_search_query`); ограничение снято (TRK-21).
   у каждой ссылки `getClientRects().length === 1`; вне markdown (опись — заголовок «Ответ
   на», таблица, шапка карточки) — тем же замером через вычисленный `white-space: nowrap`;
   заводит задачи и записи сам, проект «запись»
+- `reason-line.spec.ts` — причина перехода со ссылкой `KEY#N` в одну строку, а не тремя
+  разными (UI-159): вертикаль текста до ссылки, самой ссылки и текста после неё
+  совпадает и в ленте дела, и в раскрытой строке описи; заводит задачу и переводит её
+  сам, проект «запись»
 - `moving.spec.ts` — перенос установки (UI-135): администратор скачивает архив кнопкой,
   принимает его на второй, полностью пустой установке (своя `db`/`api`/`ui` под именем
   `<проект>-moving-target`, гасится сама) — итог на экране, та же очередь и те же задачи
