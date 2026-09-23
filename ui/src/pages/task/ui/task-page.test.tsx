@@ -735,6 +735,72 @@ describe('замечание к задаче', () => {
       'Недописанное замечание',
     );
   });
+
+  it('«Отмена» на пустой форме сворачивает её без вопроса (UI-142)', async () => {
+    withRemarks();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('remark.submit') }));
+    expect(screen.getByLabelText(say.ui('remark.fieldLabel'))).toHaveValue('');
+
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    // Никакого вопроса — форма ушла сразу, и на месте снова кнопка «Оставить замечание».
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.queryByLabelText(say.ui('remark.fieldLabel'))).toBeNull();
+    const nav = screen.getByRole('navigation', {
+      name: say.ui('task.nav.label', { key: 'DEMO-6' }),
+    });
+    expect(within(nav).getByRole('button', { name: say.ui('remark.submit') })).toBeInTheDocument();
+  });
+
+  it('«Отмена» на непустом черновике спрашивает и выбрасывает его по подтверждению (UI-142)', async () => {
+    withRemarks();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('remark.submit') }));
+    await user.type(
+      screen.getByLabelText(say.ui('remark.fieldLabel')),
+      'Возможно, что-то упустил.',
+    );
+
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    // Форма ещё на экране: вопрос задан, а не выполнен сам собой.
+    const dialog = await screen.findByRole('alertdialog', {
+      name: say.ui('composer.discardTitle'),
+    });
+    expect(screen.getByLabelText(say.ui('remark.fieldLabel'))).toHaveValue(
+      'Возможно, что-то упустил.',
+    );
+
+    await user.click(
+      within(dialog).getByRole('button', { name: say.ui('composer.discardConfirm') }),
+    );
+
+    // Свернулась, и черновик пропал не только из вида: открыв форму заново, поле пусто.
+    expect(screen.queryByLabelText(say.ui('remark.fieldLabel'))).toBeNull();
+    await user.click(await screen.findByRole('button', { name: say.ui('remark.submit') }));
+    expect(screen.getByLabelText(say.ui('remark.fieldLabel'))).toHaveValue('');
+  });
+
+  it('«Продолжить писать» закрывает вопрос и оставляет черновик как был (UI-142)', async () => {
+    withRemarks();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('remark.submit') }));
+    await user.type(screen.getByLabelText(say.ui('remark.fieldLabel')), 'Ещё дописываю.');
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: say.ui('composer.keepWriting') }));
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByLabelText(say.ui('remark.fieldLabel'))).toHaveValue('Ещё дописываю.');
+  });
 });
 
 describe('опись: правки разделов одного действия (UI-133)', () => {

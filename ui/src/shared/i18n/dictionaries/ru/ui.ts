@@ -88,6 +88,12 @@ export const ui = {
     preview: 'Предпросмотр',
     hidePreview: 'Скрыть предпросмотр',
     agentView: 'Как это увидит агент',
+    cancel: 'Отмена',
+    close: 'Закрыть',
+    discardTitle: 'Выбросить черновик?',
+    discardDescription: 'Написанное исчезнет и не восстановится.',
+    discardConfirm: 'Выбросить',
+    keepWriting: 'Продолжить писать',
   },
   receipt: {
     close: 'Закрыть',

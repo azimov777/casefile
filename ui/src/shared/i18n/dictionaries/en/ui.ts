@@ -95,6 +95,12 @@ export const ui = {
     preview: 'Preview',
     hidePreview: 'Hide preview',
     agentView: 'This is what the agent will see',
+    cancel: 'Cancel',
+    close: 'Close',
+    discardTitle: 'Discard the draft?',
+    discardDescription: 'What you wrote will be lost and cannot be restored.',
+    discardConfirm: 'Discard',
+    keepWriting: 'Keep writing',
   },
   receipt: {
     close: 'Close',

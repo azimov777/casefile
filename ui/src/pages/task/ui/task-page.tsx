@@ -310,7 +310,9 @@ export function TaskPage() {
            * её можно на задаче в любом статусе, включая закрытую: именно на сделанное
            * человек и смотрит, когда говорит «вышло не то».
            */}
-          {remarkOpen ? <RemarkForm taskKey={task.key} /> : null}
+          {remarkOpen ? (
+            <RemarkForm taskKey={task.key} onCancel={() => setRemarkOpen(false)} />
+          ) : null}
         </section>
       ),
     });
