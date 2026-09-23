@@ -185,7 +185,9 @@ function Inbox() {
            * одной строке с ним: в строке он поднимал заголовок левой половины на два
            * пикселя относительно правой, и колонки переставали начинаться на одной линии.
            */}
-          <label className="inline-flex cursor-pointer items-center gap-2">
+          {/* Минимум высоты только на телефоне (`max-fold:`): подпись кликабельна,
+              но и вся строка label на 390 px не дотягивала до 24px (UI-154). */}
+          <label className="inline-flex cursor-pointer items-center gap-2 max-fold:min-h-(--ui-tap)">
             <input
               type="checkbox"
               checked={blocking}

@@ -65,7 +65,13 @@ export function TaskNav({ taskKey, view, action }: TaskNavProps) {
          * куда попадёт, и мочь открыть это в новой вкладке. Когда отбора в памяти нет
          * — вход был прямой, — ссылка честно зовёт ко всем задачам и так и называется.
          */}
-        <Link className="whitespace-nowrap" to={back ?? '/tasks'}>
+        {/* `inline-flex items-center` и минимум высоты только на телефоне
+            (`max-fold:`): на столе ссылка была уже строки навигации, а на 390 px
+            была голой строкой текста высотой 18px (UI-154). */}
+        <Link
+          className="inline-flex items-center whitespace-nowrap max-fold:min-h-(--ui-tap)"
+          to={back ?? '/tasks'}
+        >
           {back === null ? t('task.nav.backAll') : t('task.nav.backFiltered')}
         </Link>
 

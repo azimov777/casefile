@@ -327,7 +327,9 @@ function GroupRows({
            */}
           <button
             type="button"
-            className="flex cursor-pointer items-baseline gap-1 border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▸'] hover:underline aria-expanded:before:content-['▾']"
+            // Минимум высоты только на телефоне (`max-fold:`): на столе строка уже
+            // выше 24px, а на 390 px кнопка была голой строкой текста (UI-154).
+            className="flex cursor-pointer items-baseline gap-1 border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▸'] max-fold:min-h-(--ui-tap) hover:underline aria-expanded:before:content-['▾']"
             aria-expanded={open}
             aria-label={brick('entry.group.label', { first: run.first, last: run.last })}
             onClick={() => onToggleGroup(run.first, members)}
@@ -442,7 +444,16 @@ function IndexRow({
            */}
           <button
             type="button"
-            className="cursor-pointer border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▸_'] hover:underline aria-expanded:before:content-['▾_']"
+            /*
+             * `min-h`, а не `flex`: кнопка — обычный `inline-block` браузера, и
+             * минимум высоты работает на нём и без флекса. Флекс превратил бы
+             * псевдоэлемент-треугольник в отдельный элемент строки рядом с текстом
+             * (как у кнопки группы ниже) и мог сдвинуть перенос длинного заголовка —
+             * здесь он остаётся приставкой прямо перед текстом. Только на телефоне
+             * (`max-fold:`): на столе строка описи уже выше 24px, а на 390 px кнопка
+             * была голой строкой текста (UI-154).
+             */
+            className="cursor-pointer border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▸_'] max-fold:min-h-(--ui-tap) hover:underline aria-expanded:before:content-['▾_']"
             aria-expanded={open}
             onClick={() => onToggle(heading.no)}
           >
