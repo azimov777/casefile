@@ -2,7 +2,7 @@ import type { MouseEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { RelativeTime } from '@/shared/ui';
-import { listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
+import { cn, listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
 import { TaskFeatureMarks } from './feature-marks';
 import { PriorityMark } from './priority-mark';
@@ -30,6 +30,15 @@ import { TaskParents } from './task-parents';
  * Высота строки задана токеном и не зависит от содержимого: список сканируют
  * взглядом сверху вниз, и строка, выросшая от длинного значения, ломает ритм там,
  * где содержания не прибавилось (решение Д4).
+ *
+ * **Там, где таблице не хватает места, та же строка — карточка** (UI-134). Ветку
+ * выбирает запрос к контейнеру таблицы (`@max-list:`, порог `--container-list`,
+ * `pages/tasks/ui/tasks-table.tsx`): строка становится флексом с переносом, и ячейки
+ * встают в порядке разметки — ключ и название первой строкой, статус, исполнитель,
+ * приоритет, признаки и активность второй. Название там не режется многоточием, а
+ * переносится до трёх строк: на телефоне нет подсказки по наведению, и урезанное
+ * название было бы потерей, а не плотностью. Высота там от содержимого — ритм держат
+ * одинаковые поля карточек, а не токен высоты.
  */
 export function TaskRow({ task }: { task: Task }) {
   // Адрес списка целиком, вместе с отбором: он поедет в задачу состоянием перехода.
@@ -39,6 +48,7 @@ export function TaskRow({ task }: { task: Task }) {
   const features = task.features ?? null;
   const activity = features?.last_entry_at ?? null;
   const title = task.title ?? '';
+  const unassigned = task.assignee === null || task.assignee === undefined;
   const href = taskRefHref({ key: task.key, entryNo: null });
 
   /**
@@ -86,14 +96,28 @@ export function TaskRow({ task }: { task: Task }) {
      * вокруг самой подписи.
      */
     <tr
-      className="h-(--ui-row-height) cursor-pointer border-t border-line hover:bg-sunken has-[[data-link=task]:focus-visible]:outline-2 has-[[data-link=task]:focus-visible]:-outline-offset-2 has-[[data-link=task]:focus-visible]:outline-focus"
+      className={cn(
+        'h-(--ui-row-height) cursor-pointer border-t border-line hover:bg-sunken has-[[data-link=task]:focus-visible]:outline-2 has-[[data-link=task]:focus-visible]:-outline-offset-2 has-[[data-link=task]:focus-visible]:outline-focus',
+        /*
+         * Карточка: флекс с переносом. Название берёт основой 70% строки, и справа от
+         * него статусу места нет — он и всё следующее уходят второй строкой. Первая
+         * карточка без верхней линии: шапки над ней на экране нет, и линия легла бы
+         * второй рядом с рамкой таблицы.
+         */
+        '@max-list:flex @max-list:h-auto @max-list:flex-wrap @max-list:items-baseline @max-list:gap-x-3 @max-list:gap-y-1.5 @max-list:px-3 @max-list:py-2.5 @max-list:first:border-t-0',
+      )}
       onClick={openTask}
       onAuxClick={openTaskAside}
     >
-      <th scope="row" className="px-3 text-left font-normal font-mono text-mark text-faint">
+      <th
+        scope="row"
+        className="px-3 text-left font-normal font-mono text-mark text-faint @max-list:shrink-0 @max-list:px-0"
+      >
         {task.key}
       </th>
-      <td className="max-w-0 overflow-hidden px-3">
+      {/* `max-w-0` держит название в ширине столбца таблицы; в карточке столбца нет,
+          и ширину задаёт основа флекса. */}
+      <td className="max-w-0 overflow-hidden px-3 @max-list:max-w-none @max-list:min-w-0 @max-list:grow @max-list:basis-7/10 @max-list:px-0">
         {/*
          * Родитель стоит в ячейке названия, справа, а не своим столбцом (UI-119): у
          * большинства строк родителя нет, и столбец под него стоял бы пустым, отнимая
@@ -103,7 +127,9 @@ export function TaskRow({ task }: { task: Task }) {
          * растёт (решение Д4). Подпись берёт не больше двух пятых ячейки, остальное
          * — название; тесно обоим, и многоточием уступают оба.
          */}
-        <div className="flex items-center gap-3">
+        {/* В карточке родитель встаёт под название, а не справа от него: места
+            справа нет, и обе подписи урезались бы многоточием. */}
+        <div className="flex items-center gap-3 @max-list:flex-col @max-list:items-start @max-list:gap-1">
           <Link
             data-link="task"
             className="min-w-0 flex-1 text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
@@ -118,18 +144,28 @@ export function TaskRow({ task }: { task: Task }) {
           >
             {/* Урезанное многоточием название отдаёт полный текст подсказкой:
                 обрезание без доступа к скрытому — потеря данных, а не плотность. */}
-            <span className="block truncate" title={title}>
+            <span
+              className="block truncate @max-list:line-clamp-3 @max-list:whitespace-normal @max-list:wrap-anywhere"
+              title={title}
+            >
               {title}
             </span>
           </Link>
-          <TaskParents parents={task.parents ?? []} className="max-w-2/5 shrink-0" />
+          <TaskParents
+            parents={task.parents ?? []}
+            className="max-w-2/5 shrink-0 @max-list:max-w-full"
+          />
         </div>
       </td>
-      <td className="px-3">
+      <td className="px-3 @max-list:px-0">
         <StatusMark status={task.status} />
       </td>
-      <td className="px-3 text-mark text-faint">
-        {task.assignee === null || task.assignee === undefined ? (
+      {/* Пустой исполнитель в карточке не рисуется вовсе: прочерк между знаками
+          статуса и приоритета читался бы как разделитель, а не как «никого». */}
+      <td
+        className={cn('px-3 text-mark text-faint @max-list:px-0', unassigned && '@max-list:hidden')}
+      >
+        {unassigned ? (
           <span aria-hidden="true">—</span>
         ) : (
           /* Курсор текстовый: имя исполнителя из списка выделяют и копируют, и рука
@@ -138,10 +174,10 @@ export function TaskRow({ task }: { task: Task }) {
           <span className="cursor-text">{task.assignee}</span>
         )}
       </td>
-      <td className="px-3">
+      <td className="px-3 @max-list:px-0">
         <PriorityMark priority={task.priority} />
       </td>
-      <td className="px-3">
+      <td className="px-3 @max-list:px-0">
         <span className="flex items-center gap-2">
           {features === null ? null : <TaskFeatureMarks features={features} />}
         </span>
@@ -149,7 +185,9 @@ export function TaskRow({ task }: { task: Task }) {
       {/* Единственное время в строке: когда в дело последний раз что-то подшивали.
           `updated_at` отсюда убран — он двигался и от правки карточки, и человек
           не мог сказать, чем два относительных времени в соседних ячейках различаются. */}
-      <td className="px-3 text-right text-mark text-faint whitespace-nowrap">
+      {/* В карточке активность прижата вправо второй строки — туда же, где она стоит
+          в таблице. */}
+      <td className="px-3 text-right text-mark text-faint whitespace-nowrap @max-list:ml-auto @max-list:px-0">
         {activity === null ? (
           <span aria-hidden="true">{t('task.emptyCase')}</span>
         ) : (
