@@ -1184,6 +1184,11 @@ function edges(page: Page) {
       const sign = node.querySelector('[data-edge]');
       const box = node.getBoundingClientRect();
       const mark = sign?.getBoundingClientRect() ?? null;
+      // Внутренние края столбца — до них достаёт содержимое, а не рамка целиком:
+      // `clientLeft`/`clientWidth` уже без границы и без своей полосы прокрутки
+      // (UI-116) — тот же расчёт, что у `heads()` для заголовка (UI-145).
+      const insideLeft = box.left + node.clientLeft;
+      const insideRight = insideLeft + node.clientWidth;
       return {
         status: node.getAttribute('aria-label') as string,
         // Есть ли что прокручивать — и сколько.
@@ -1200,6 +1205,11 @@ function edges(page: Page) {
         // прокрутки (UI-116) отъедает от рамки столбца `--ui-scrollbar`, и знак,
         // живущий внутри области прокрутки, туда не достаёт и не должен.
         width: mark === null ? null : Math.round(node.clientWidth - mark.width),
+        // Каждый край по отдельности, а не только их разница: одинаковая ширина
+        // при сдвинутых обоих краях в одну сторону совпала бы (UI-145) — разница
+        // осталась бы нулевой, а знак всё равно стоял бы не там.
+        left: mark === null ? null : Math.round(mark.left - insideLeft),
+        right: mark === null ? null : Math.round(mark.right - insideRight),
       };
     });
   });
@@ -1259,6 +1269,17 @@ test('знак края есть у переполненного столбца 
     // Высота знака — нижнее поле столбца: место, где содержимое бывает только
     // на прокрутке.
     expect(seen.height, report).toBe(12);
+    /*
+     * Каждый край по отдельности (UI-145): при видимой полосе прокрутки столбца
+     * знак обязан совпадать с внутренними краями столбца, а не просто иметь ту же
+     * ширину, — сдвинутый на равную величину с обеих сторон дал бы `width: 0` и
+     * прошёл бы прежнюю проверку, оставшись при этом не там, где стоит столбец.
+     */
+    // `?? NaN`, а не `?? 0`: у переполненного столбца (цикл уже отфильтрован по
+    // `over > 0`) знак обязан стоять, и `null` здесь — не «совпало», а падение
+    // проверки, которое `NaN <= 1` и даёт.
+    expect(Math.abs(seen.left ?? Number.NaN), report).toBeLessThanOrEqual(1);
+    expect(Math.abs(seen.right ?? Number.NaN), report).toBeLessThanOrEqual(1);
   }
 
   /*
