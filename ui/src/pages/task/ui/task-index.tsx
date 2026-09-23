@@ -197,7 +197,10 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }:
     [expanded, onOpenChange, openAt, openGroups],
   );
 
-  if (index.length === 0) return <p className="text-muted italic">{t('index.empty')}</p>;
+  // Пустая опись стоит в той же поверхности-списке без полей, что и таблица, и поле
+  // ей нужно то же, что у ячейки (`CELL`): без него «записей нет» прижималось к рамке
+  // блока (UI-141).
+  if (index.length === 0) return <p className="px-3 py-2 text-muted italic">{t('index.empty')}</p>;
 
   return (
     // Число записей и прыжки по описи стоят в шапке блока над таблицей

@@ -185,3 +185,73 @@ test('насыщенный блок «Связи»: заголовок груп�
     for (const key of [blockerA, blockerB, blocked, parent, related]) await cancel(request, key);
   }
 });
+
+/** Поля тела блока «Связи»: от рамки до первой строки слева, от линии заголовка сверху, до рамки снизу. */
+async function bodyInsets(page: Page): Promise<{ left: number; top: number; bottom: number }> {
+  return linksSection(page).evaluate((region) => {
+    const heading = region.querySelector('h2') as HTMLElement;
+    // Тело — следующий за заголовком узел; строки — его прямые потомки (группы или «связей нет»).
+    const body = heading.nextElementSibling as HTMLElement;
+    const first = body.firstElementChild as HTMLElement;
+    const last = body.lastElementChild as HTMLElement;
+    const frame = region.getBoundingClientRect();
+    const style = getComputedStyle(region);
+    const inner = {
+      left: frame.left + parseFloat(style.borderLeftWidth),
+      bottom: frame.bottom - parseFloat(style.borderBottomWidth),
+    };
+    // Строка списка — `li` (ключ, название, статус), а у пустого блока — сам текст.
+    const row = (region.querySelector('li') ?? first).getBoundingClientRect();
+    return {
+      left: row.left - inner.left,
+      top: first.getBoundingClientRect().top - heading.getBoundingClientRect().bottom,
+      bottom: inner.bottom - last.getBoundingClientRect().bottom,
+    };
+  });
+}
+
+test('пустой блок «Связи» держит те же поля, что непустой список (UI-141)', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+
+  const lonely = await create(request, 'Задача без связей (UI-141)');
+  const linked = await create(request, 'Задача с одной связью (UI-141)');
+  const other = await create(request, 'Связанная задача (UI-141)');
+
+  try {
+    await link(request, linked, 'relates', other);
+    await silenceJournal(page);
+
+    for (const width of [1440, 390] as const) {
+      await page.setViewportSize({ width, height: 900 });
+
+      await page.goto(`/tasks/${linked}`);
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(linked);
+      await fontsReady(page);
+      await linksSection(page).scrollIntoViewIfNeeded();
+      const list = await bodyInsets(page);
+
+      await page.goto(`/tasks/${lonely}`);
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(lonely);
+      await expect(linksSection(page).getByText('Связей нет.')).toBeVisible();
+      await fontsReady(page);
+      await linksSection(page).scrollIntoViewIfNeeded();
+      const empty = await bodyInsets(page);
+
+      // Поле непустое: текст не прижат к рамке — и ровно то же, что у строк списка.
+      expect(list.left, `${width}px, список`).toBeGreaterThan(4);
+      for (const side of ['left', 'top', 'bottom'] as const) {
+        expect(
+          Math.abs(empty[side] - list[side]),
+          `${width}px, ${side}: пусто ${empty[side]}, список ${list[side]}`,
+        ).toBeLessThanOrEqual(0.5);
+      }
+    }
+  } finally {
+    await cancel(request, other);
+    await cancel(request, linked);
+    await cancel(request, lonely);
+  }
+});
