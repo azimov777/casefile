@@ -18,6 +18,8 @@ READY = {
     "constraints": "Счётчик не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
+    # В работу задачу берёт исполнитель (`CONCEPT.md`, 3.3): запросы идут от `owner`.
+    "assignee": "owner",
 }
 
 
@@ -249,7 +251,7 @@ async def test_the_assignee_changes_in_progress_but_not_in_done(
     assert changed.json()["data"]["assignee"] == "release_bot"
     last = (await case(auth_client, "TRK-1"))[-1]
     assert last["type"] == "assignee_changed"
-    assert last["payload"] == {"before": None, "after": "release_bot"}
+    assert last["payload"] == {"before": "owner", "after": "release_bot"}
 
     await move(auth_client, "TRK-1", "done")
     refused = await auth_client.patch("/api/v1/tasks/TRK-1", json={"assignee": None})

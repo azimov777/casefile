@@ -296,3 +296,24 @@ task_field_locked`, хотя ничего не изменилось бы.
 **Где:** `app/domain/case.py`, `SUMMARY_PARTS`, `CLOSING_SUMMARY_PARTS`, `EntryContext`,
 `_summary_payload`; `app/services/case.py`, `add_summary`; `app/services/tasks.py`,
 `close_task`.
+
+## Вход в `in_progress` сверяет исполнителя с подписью, и в тестах задачу надо кому-то поручить
+
+**Что:** с TRK-123 переход в `in_progress` проходит, только если `assignee` задачи совпадает
+с подписью просящего (`Actor.author.signature` — имя участника токена или метка
+`X-Actor-Label`), без учёта регистра. Без исполнителя — `assignee_required`, с чужим —
+`assignee_mismatch`. У самого трекера (`TRACKER_ACTOR`) подписи нет, и в работу он задачу
+не возьмёт ни при каком исполнителе.
+**Почему важно:** тест или сценарий, которые заводят задачу без `assignee` и ведут её
+по цепочке, раньше проходили, а теперь падают на входе в работу — с кодом, который не
+похож на предмет теста. Так упало около пятидесяти тестов разом. Гонки в
+`tests/test_mutation_races.py` переводили задачу от имени трекера — им понадобился
+актёр с меткой.
+**Как правильно:** задачу, которую тест берёт в работу, заводить с исполнителем — тем, от
+чьего имени идут запросы: фикстура `task` поручена `owner`, помощники `make` ставят
+`assignee=actor.author.signature`, тела REST — `"assignee": "owner"`. В демо задачу с
+меткой исполнителя в работу берёт временный агент под этой меткой. Доменный помощник
+`facts` в `tests/test_domain_tasks.py` по умолчанию кладёт совпавшие `claude`/`claude` —
+как и прочие факты, «заполненный и не мешающий».
+**Где:** `app/domain/tasks.py`, `check_taken_by_assignee`; `app/services/tasks.py`,
+`_transition_facts` (параметр `requester`); `tests/conftest.py`, фикстура `task`.

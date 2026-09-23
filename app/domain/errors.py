@@ -345,6 +345,32 @@ class TaskBlockedError(ConflictError):
     message = "Task has an open blocker"
 
 
+class AssigneeRequiredError(ConflictError):
+    """Вход в `in_progress` у задачи без исполнителя.
+
+    В работу задачу берёт её исполнитель (`CONCEPT.md`, 3.3), и задача без него
+    не называет, кому поручена. Конфликт состояния, а не ошибка формы: тот же переход
+    пройдёт, когда исполнитель будет назначен. Сам трекер его не назначает — это
+    автоматика, а трекер журнал.
+    """
+
+    code = "assignee_required"
+    message = "Task has no assignee"
+
+
+class AssigneeMismatchError(ConflictError):
+    """Вход в `in_progress` не от исполнителя задачи.
+
+    Исполнитель и подпись того, кто переводит (имя участника токена или метка
+    временного агента), лежат в `details.assignee` и `details.requester`: отказ говорит,
+    кому задача поручена и кто просит. Сессии под одним именем правило не различает —
+    сравниваются подписи (`CONCEPT.md`, 3.3).
+    """
+
+    code = "assignee_mismatch"
+    message = "Task is assigned to someone else"
+
+
 class TaskHasUnclosedChildrenError(ConflictError):
     """Закрытие задачи при детях не в `done` и не в `cancelled`.
 

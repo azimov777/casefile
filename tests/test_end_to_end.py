@@ -114,6 +114,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
             "queue": queue.key,
             "title": "Ключ задачи сгорает на отклонённом запросе",
             "description": "Номер выдаётся до валидации тела",
+            "assignee": "owner",
             **SECTIONS,
         },
     )
@@ -195,6 +196,7 @@ async def test_a_task_goes_the_whole_way_through_mcp(
             queue=queue_key,
             title="Ключ задачи сгорает на отклонённом запросе",
             description="Номер выдаётся до валидации тела",
+            assignee="owner",
             sections=SECTIONS,
         )
         key = created["key"]
@@ -265,6 +267,7 @@ async def test_a_blocking_question_takes_the_task_out_of_the_candidates(
         queue=queue,
         title="Удалять ли дела отменённых задач",
         description="Решение принимает владелец, не агент",
+        assignee=task_actor.author.signature,
         **SECTIONS,
     )
     key = task.key

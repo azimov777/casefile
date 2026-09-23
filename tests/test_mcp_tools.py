@@ -406,11 +406,13 @@ async def test_search_tasks_understands_the_query_language_and_the_arguments_ali
             open_blocking_questions=0,
             open_remarks=0,
         )
+        by_assignee = await call(session, "search_tasks", assignee=["owner"])
         empty_assignee = await call(session, "search_tasks", assignee=["empty()"])
 
     assert by_query == by_arguments
     assert [item["key"] for item in by_query["items"]] == [open_task.key]
-    assert open_task.key in [item["key"] for item in empty_assignee["items"]]
+    assert open_task.key in [item["key"] for item in by_assignee["items"]]
+    assert open_task.key not in [item["key"] for item in empty_assignee["items"]]
 
 
 async def test_search_tasks_asks_about_the_tasks_the_session_names(
@@ -760,6 +762,7 @@ async def test_the_short_answer_is_an_order_of_magnitude_smaller(
         constraints=REALISTIC_SECTION,
         output=REALISTIC_SECTION,
         checks=[REALISTIC_SECTION, REALISTIC_SECTION],
+        assignee=actor.author.signature,
     )
     await tasks_service.transition_task(db_session, big, actor=actor, to="open")
     for number in range(20):
@@ -1160,6 +1163,7 @@ async def test_a_verdict_gates_the_move_to_done(
             "create_task",
             queue="TRK",
             title="Задача из двух проверок",
+            assignee="owner",
             description="Проверки закрываются вердиктами",
             sections={
                 "goal": "Цель",
@@ -1229,6 +1233,7 @@ async def closing_task(mcp_session: Connect, task_secret: str, queue: Queue) -> 
             "create_task",
             queue="TRK",
             title="Задача под закрытие",
+            assignee="owner",
             description="Две проверки, артефакт и сводка",
             sections={
                 "goal": "Цель",

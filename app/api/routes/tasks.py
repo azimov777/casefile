@@ -294,8 +294,11 @@ async def transition_task(
     последнего входа в него (`409 summary_required`); `in_progress → done` —
     положительного последнего вердикта по каждой проверке, подшитого после последнего
     входа в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в
-    `details.checks` парами `check_no` и `reason`). Вход в
-    `in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в
+    `details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только
+    исполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи
+    (имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с
+    `details.assignee` и `details.requester`. Вход в
+    `in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в
     `details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и
     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
     Переход подшивает `status_changed` с `from`, `to` и `reason`.

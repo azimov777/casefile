@@ -117,7 +117,9 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     candidate = await _candidate_task(session, queue, agent=agent)
     waiting = await _waiting_task(session, queue, agent=agent, human=human)
     child = await _child_task(session, queue, agent=agent, parent=in_progress)
-    checking = await _checking_task(session, queue, agent=agent, blocker=in_progress)
+    checking = await _checking_task(
+        session, queue, agent=agent, temporary=temporary, blocker=in_progress
+    )
     cancelled = await _cancelled_task(session, queue, agent=agent)
 
     # Человек правит курс: замечание к уже закрытой задаче и его разбор. Одно замечание
@@ -550,7 +552,7 @@ async def _child_task(session: AsyncSession, queue: Queue, *, agent: Actor, pare
 
 
 async def _checking_task(
-    session: AsyncSession, queue: Queue, *, agent: Actor, blocker: Task
+    session: AsyncSession, queue: Queue, *, agent: Actor, temporary: Actor, blocker: Task
 ) -> Task:
     """Задача в работе на обзорных проверках: одна пройдена, вторая провалена.
 
@@ -578,7 +580,9 @@ async def _checking_task(
         assignee=DEMO_LABEL,
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
-    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
+    # В работу задачу берёт её исполнитель — временный агент под меткой (`CONCEPT.md`,
+    # 3.3): другой подписи вход в `in_progress` не пустил бы.
+    await tasks_service.transition_task(session, task, actor=temporary, to=TaskStatus.IN_PROGRESS)
     await case_service.add_verdict(
         session,
         task,

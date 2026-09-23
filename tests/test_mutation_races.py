@@ -42,20 +42,26 @@ from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.queue import Queue
 from app.db.models.task import Task
-from app.domain.authors import TRACKER
+from app.domain.authors import TRACKER, label_author
 from app.domain.case import EntryType
 from app.domain.links import LinkKind
 from app.domain.tasks import TaskStatus
+from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
-from app.services.auth import TRACKER_ACTOR
+from app.services.auth import TRACKER_ACTOR, Actor
 
 #: Сколько тест ждёт, прежде чем решить, что вторая транзакция действительно встала в
 #: очередь. На исправном коде она стоит на блокировке, на сломанном — успевает всё.
 SETTLE = 0.5
 
 QUEUE_KEY = "MUTRACE"
+
+#: Кто переводит в гонке. Не сам трекер: в `in_progress` задачу берёт только её
+#: исполнитель (`CONCEPT.md`, 3.3), а у трекера подписи нет. Метка — чтобы не заводить
+#: участника ради гонки, которая проверяет очередь изменений, а не реестр.
+RACER = Actor(author=label_author("racer"), scope=TokenScope.TASK)
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +101,7 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
             title="Переводимая задача",
             description="Её и переводят в гонке",
             status=TaskStatus.IN_PROGRESS,
+            assignee=RACER.author.signature,
             **created_by_columns(TRACKER),
         )
         child = Task(
@@ -185,7 +192,7 @@ async def _transition(
         task = await session.get(Task, task_id)
         assert task is not None
         try:
-            await tasks_service.transition_task(session, task, actor=TRACKER_ACTOR, to=to)
+            await tasks_service.transition_task(session, task, actor=RACER, to=to)
         except AppError as error:
             return error.code
         await session.commit()

@@ -272,7 +272,9 @@ def register(tools: Toolset) -> None:
         подшитой после последнего входа в него (`summary_required`); `in_progress →
         done` без положительного последнего вердикта по каждой проверке, подшитого
         после последнего входа в `in_progress` (`checks_not_passed`); вход в
-        `in_progress` при открытом блокере (`task_blocked`); закрытие (`done` или
+        `in_progress` без исполнителя (`assignee_required`) или не от него
+        (`assignee_mismatch`: исполнитель и подпись просящего в `details`) и при
+        открытом блокере (`task_blocked`); закрытие (`done` или
         `cancelled`) при незакрытых детях (`task_has_unclosed_children`). В отказе —
         что именно мешает. Ни в `waiting`, ни из него трекер не переводит сам: оба хода
         делает вызывающий.

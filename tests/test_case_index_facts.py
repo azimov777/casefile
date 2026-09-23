@@ -53,6 +53,8 @@ async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) ->
         constraints="constraints",
         output="output",
         checks=["check"],
+        # В работу задачу берёт исполнитель (`CONCEPT.md`, 3.3): им назначен автор.
+        assignee=actor.author.signature,
     )
 
 
@@ -129,12 +131,12 @@ async def test_an_assignee_change_carries_both_names(
     task = await make(db_session, task_actor, queue, "assignee case")
 
     await tasks_service.update_task(
-        db_session, task, actor=task_actor, changes=TaskChanges(assignee="owner")
+        db_session, task, actor=task_actor, changes=TaskChanges(assignee="release_bot")
     )
 
     facts = facts_of(await index_of(db_session, task_actor, task), EntryType.ASSIGNEE_CHANGED)
     # Имена участников ограничены по длине, поэтому видны прямо в описи.
-    assert (facts.assignee_from, facts.assignee_to) == (None, "owner")
+    assert (facts.assignee_from, facts.assignee_to) == ("owner", "release_bot")
 
 
 async def test_a_section_change_carries_the_field_name_and_nothing_else(

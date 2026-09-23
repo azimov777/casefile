@@ -406,8 +406,8 @@ async def test_the_assignee_changes_in_any_open_status_but_not_in_a_closed_one(
     assert task.assignee == "release_bot"
     last = (await entries(db_session, task))[-1]
     assert last.type is EntryType.ASSIGNEE_CHANGED
-    assert last.payload == {"before": None, "after": "release_bot"}
-    assert last.title == "Assignee changed: nobody -> release_bot"
+    assert last.payload == {"before": "owner", "after": "release_bot"}
+    assert last.title == "Assignee changed: owner -> release_bot"
 
     await move(db_session, task, task_actor, TaskStatus.DONE)
     with pytest.raises(TaskClosedError) as error:
@@ -553,7 +553,7 @@ async def test_sending_the_current_values_changes_nothing(
         db_session,
         task,
         actor=task_actor,
-        changes=TaskChanges(title=task.title, checks=list(task.checks), assignee=None),
+        changes=TaskChanges(title=task.title, checks=list(task.checks), assignee=task.assignee),
     )
 
     assert not mutation.changed

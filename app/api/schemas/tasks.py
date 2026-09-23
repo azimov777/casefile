@@ -45,7 +45,8 @@ _CHECKS_DESCRIPTION = (
 )
 _ASSIGNEE_DESCRIPTION = (
     "Participant name or temporary agent label; free text the tracker never validates "
-    "against the registry"
+    "against the registry. Only the assignee can move the task into `in_progress`: "
+    "the caller's signature (participant name or agent label) must match it, case-insensitively"
 )
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
 

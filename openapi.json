@@ -3682,7 +3682,7 @@
           "tasks"
         ],
         "summary": "Move a task to another status",
-        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nположительного последнего вердикта по каждой проверке, подшитого после последнего\nвхода в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в\n`in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.\n\nЦель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу\nодной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.",
+        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nположительного последнего вердикта по каждой проверке, подшитого после последнего\nвхода в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только\nисполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи\n(имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с\n`details.assignee` и `details.requester`. Вход в\n`in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.\n\nЦель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу\nодной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.",
         "operationId": "transition_task",
         "security": [
           {
@@ -10467,7 +10467,7 @@
               }
             ],
             "title": "Assignee",
-            "description": "Participant name or temporary agent label; free text the tracker never validates against the registry",
+            "description": "Participant name or temporary agent label; free text the tracker never validates against the registry. Only the assignee can move the task into `in_progress`: the caller's signature (participant name or agent label) must match it, case-insensitively",
             "examples": [
               "release_bot"
             ]
@@ -10835,7 +10835,7 @@
               }
             ],
             "title": "Assignee",
-            "description": "Participant name or temporary agent label; free text the tracker never validates against the registry",
+            "description": "Participant name or temporary agent label; free text the tracker never validates against the registry. Only the assignee can move the task into `in_progress`: the caller's signature (participant name or agent label) must match it, case-insensitively",
             "examples": [
               "release_bot"
             ]
@@ -11249,7 +11249,7 @@
               }
             ],
             "title": "Assignee",
-            "description": "Participant name or temporary agent label; free text the tracker never validates against the registry. Pass null to unassign",
+            "description": "Participant name or temporary agent label; free text the tracker never validates against the registry. Only the assignee can move the task into `in_progress`: the caller's signature (participant name or agent label) must match it, case-insensitively. Pass null to unassign",
             "examples": [
               "release_bot"
             ]
@@ -11531,7 +11531,7 @@
           "main"
         ],
         "title": "TokenScope",
-        "description": "Набор токена — единственное право в трекере.\n\nРолей, владельцев и разрешений по роду участника нет и не будет (`CONCEPT.md`, 6):\nлюбую запись и любой переход может сделать кто угодно, а набор отделяет рабочий цикл\nагента от управления установкой.\n\n| Набор | Открывает |\n|---|---|\n| `task` | Рабочий цикл: задачи, дело, связи, поиск, лента, чтение реестров. |\n| `main` | То же плюс запись очередей, участников и токенов. |"
+        "description": "Набор токена — единственное право в трекере.\n\nРолей, владельцев и разрешений по роду участника нет и не будет (`CONCEPT.md`, 6):\nлюбую запись и любой переход может сделать кто угодно, а набор отделяет рабочий цикл\nагента от управления установкой. Вход в `in_progress` только исполнителю — проверка\nперехода в домене (`check_taken_by_assignee`), а не право.\n\n| Набор | Открывает |\n|---|---|\n| `task` | Рабочий цикл: задачи, дело, связи, поиск, лента, чтение реестров. |\n| `main` | То же плюс запись очередей, участников и токенов. |"
       },
       "VerdictEntryCreate": {
         "properties": {

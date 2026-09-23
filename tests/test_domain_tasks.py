@@ -6,6 +6,8 @@
 import pytest
 
 from app.domain.errors import (
+    AssigneeMismatchError,
+    AssigneeRequiredError,
     ChecksNotPassedError,
     ClosingNotATransitionError,
     InvalidTaskKeyError,
@@ -61,6 +63,8 @@ def facts(
     blockers: tuple[str, ...] | None = (),
     children: tuple[str, ...] | None = (),
     closing: bool = True,
+    assignee: str | None = "claude",
+    requester: str | None = "claude",
 ) -> TransitionFacts:
     """Факты перехода, у которых по умолчанию сошлось всё, кроме проверяемого.
 
@@ -81,6 +85,8 @@ def facts(
         open_blockers=blockers,
         unclosed_children=children,
         closing=closing,
+        assignee=assignee,
+        requester=requester,
     )
 
 
@@ -281,7 +287,7 @@ def test_the_section_check_only_guards_the_move_into_open() -> None:
 
 def test_the_check_list_is_the_extension_point() -> None:
     """Следующие задачи добавляют проверки в список, а не в таблицу."""
-    assert len(TRANSITION_CHECKS) == 7
+    assert len(TRANSITION_CHECKS) == 8
     assert all(callable(check) for check in TRANSITION_CHECKS)
 
 
@@ -566,6 +572,8 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
                 sections=FILLED,
                 checks=("первая",),
                 has_summary_since_in_progress=True,
+                assignee="claude",
+                requester="claude",
             )
         )
 
@@ -589,3 +597,109 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
         )
 
     assert children.value.details["reason"] == "children_not_collected"
+
+
+# --- Вход в работу только исполнителю (TRK-123) -----------------------------------------
+
+
+@pytest.mark.parametrize("from_status", [TaskStatus.OPEN, TaskStatus.WAITING])
+def test_a_task_without_an_assignee_does_not_go_into_work(from_status: TaskStatus) -> None:
+    """Без исполнителя задача в работу не идёт — и с `open`, и на возврате из `waiting`."""
+    with pytest.raises(AssigneeRequiredError) as error:
+        ensure_transition_allowed(facts(from_status, TaskStatus.IN_PROGRESS, assignee=None))
+
+    assert error.value.code == "assignee_required"
+    assert error.value.status_code == 409
+    assert error.value.details == {
+        "key": "TRK-1",
+        "from": from_status.value,
+        "to": "in_progress",
+    }
+
+
+@pytest.mark.parametrize("from_status", [TaskStatus.OPEN, TaskStatus.WAITING])
+def test_someone_other_than_the_assignee_cannot_take_the_task(from_status: TaskStatus) -> None:
+    """Отказ называет обоих: кому задача поручена и кто просит."""
+    with pytest.raises(AssigneeMismatchError) as error:
+        ensure_transition_allowed(
+            facts(from_status, TaskStatus.IN_PROGRESS, assignee="alice", requester="claude")
+        )
+
+    assert error.value.code == "assignee_mismatch"
+    assert error.value.status_code == 409
+    assert error.value.details["assignee"] == "alice"
+    assert error.value.details["requester"] == "claude"
+
+
+def test_the_assignee_is_compared_with_the_signature_regardless_of_case() -> None:
+    """Подпись канонична (нижний регистр), `assignee` — свободная строка: `Claude` тот же."""
+    ensure_transition_allowed(
+        facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, assignee=" Claude ", requester="claude")
+    )
+
+
+def test_a_requester_without_a_signature_is_not_the_assignee() -> None:
+    """Сам трекер подписи не имеет и в работу задачу не берёт."""
+    with pytest.raises(AssigneeMismatchError) as error:
+        ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, requester=None))
+
+    assert error.value.details["requester"] is None
+
+
+def test_the_assignee_is_checked_only_on_the_way_into_work() -> None:
+    """Задачи, уже стоящие в работе, правило не трогает: чужой ведёт, откатывает, отменяет."""
+    ensure_transition_allowed(
+        facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, assignee=None, requester="alice")
+    )
+    ensure_transition_allowed(
+        facts(
+            TaskStatus.IN_PROGRESS,
+            TaskStatus.OPEN,
+            reason="второй взгляд",
+            assignee="claude",
+            requester="alice",
+        )
+    )
+    ensure_transition_allowed(facts(TaskStatus.BACKLOG, TaskStatus.OPEN, assignee=None))
+
+
+def test_the_assignee_is_asked_before_the_blockers() -> None:
+    """Сначала «кто», потом «когда»: не исполнителю не называют чужие блокеры."""
+    with pytest.raises(AssigneeMismatchError):
+        ensure_transition_allowed(
+            facts(
+                TaskStatus.OPEN,
+                TaskStatus.IN_PROGRESS,
+                assignee="alice",
+                blockers=("TRK-2",),
+            )
+        )
+
+
+def test_unfilled_assignee_facts_forbid_the_way_into_work() -> None:
+    """Незаполненные факты исполнителя запрещают вход, а не пропускают его."""
+    with pytest.raises(AssigneeRequiredError):
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.OPEN,
+                to_status=TaskStatus.IN_PROGRESS,
+                reason=None,
+                sections=FILLED,
+                checks=("первая",),
+                open_blockers=(),
+            )
+        )
+    with pytest.raises(AssigneeMismatchError):
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.OPEN,
+                to_status=TaskStatus.IN_PROGRESS,
+                reason=None,
+                sections=FILLED,
+                checks=("первая",),
+                open_blockers=(),
+                assignee="claude",
+            )
+        )
