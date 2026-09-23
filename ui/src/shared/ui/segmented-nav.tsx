@@ -79,7 +79,25 @@ export function SegmentedNavLink({ current, children, ...rest }: SegmentedNavLin
           : 'bg-surface font-semibold text-text shadow-raised',
       )}
     >
-      {children}
+      {/*
+       * Место под жирное начертание держит невидимый дубль подписи в той же ячейке
+       * сетки (UI-144). Текущий сегмент набран жирным, а жирное шире: без дубля ширина
+       * сегмента зависела бы от того, текущий ли он, и дорожка «Карточка / Дело» на
+       * двух страницах была бы разной ширины — переключатель ездил бы под курсором на
+       * доли пикселя. Дубль скрыт и от диктора (`aria-hidden`), и от глаза (`invisible`):
+       * имя ссылки остаётся одним словом.
+       */}
+      <span className="inline-grid">
+        <span className="col-start-1 row-start-1 inline-flex items-center justify-center">
+          {children}
+        </span>
+        <span
+          className="invisible col-start-1 row-start-1 inline-flex items-center justify-center font-semibold"
+          aria-hidden="true"
+        >
+          {children}
+        </span>
+      </span>
     </Link>
   );
 }

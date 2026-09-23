@@ -335,9 +335,14 @@ export function TaskPage() {
           remarkOpen ? null : (
             // Главное действие строки — акцентом и со знаком, но размером строки: рядом
             // стоит переключатель вида того же `sm`, и они одной высоты (UI-128).
+            //
+            // На телефоне подпись уходит диктору, на виду остаётся знак — тот же приём,
+            // что у переключателя списка (UI-134): со словами строка «назад, вид,
+            // действие» в 390 px не помещалась, и действие уезжало второй строкой,
+            // переставая стоять вровень с переключателем (UI-144).
             <Button size="sm" onClick={() => setRemarkOpen(true)}>
               <MessageSquarePlus className="size-(--ui-mark)" aria-hidden="true" />
-              {brick('remark.submit')}
+              <span className="max-fold:sr-only">{brick('remark.submit')}</span>
             </Button>
           )
         }
