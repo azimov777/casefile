@@ -84,9 +84,12 @@ test('администратор скачивает архив и принима
 }) => {
   // Источник — общая демо-установка контура, тем же ключом, что у любого читающего
   // сценария: /moving открыт администратору владельца без единого действия входа.
+  // Счётчик задач — примета списка, а не экрана переноса, поэтому снимается на /tasks.
+  await page.goto('/tasks');
+  const sourceQueues = await found(page);
+
   await page.goto('/moving');
   await expect(page.getByRole('heading', { level: 1, name: 'Перенос установки' })).toBeVisible();
-  const sourceQueues = await found(page);
 
   const download = await Promise.all([
     page.waitForEvent('download'),
@@ -94,9 +97,10 @@ test('администратор скачивает архив и принима
   ]).then(([download]) => download);
   const filename = download.suggestedFilename();
   expect(filename).toMatch(/^casefile-archive-\d{4}-\d{2}-\d{2}\.json$/);
-  const downloaded = await download.path();
-  if (downloaded === null) throw new Error('файл архива не сохранён');
-  const archivePath: string = downloaded;
+  // `download.path()` лежит под именем Playwright, а не под тем, что предложил экран:
+  // приёмник должен увидеть то самое имя файла, что показывает диалог подтверждения.
+  const archivePath = test.info().outputPath(filename);
+  await download.saveAs(archivePath);
 
   // Приёмник — вторая, пустая установка (`beforeAll`): свой браузерный контекст со
   // своим адресом (`baseURL` — относительные переходы дальше идут в неё), свой ключ
@@ -134,9 +138,13 @@ test('администратор скачивает архив и принима
   // Повторный приём того же архива — установка больше не пустая.
   await target.goto('/moving');
   const secondConfirm = await chooseAndConfirm();
-  await expect(secondConfirm.getByRole('alert')).toHaveText(
-    'Принять архив может только установка без очередей — принимайте в свежую.',
-  );
+  // Предупреждение окна тоже `role="alert"` (тот же `tone="danger"`, что у отказа), и
+  // ролью в окне на этот момент — два элемента; отказ поэтому ищется текстом.
+  await expect(
+    secondConfirm.getByText(
+      'Принять архив может только установка без очередей — принимайте в свежую.',
+    ),
+  ).toBeVisible();
   await expect(secondConfirm).toBeVisible();
 
   await targetContext.close();
