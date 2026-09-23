@@ -107,7 +107,7 @@ export function TaskCard({ task }: { task: Task }) {
         {features?.last_entry_at === null || features?.last_entry_at === undefined ? (
           <span className="italic">{t('task.emptyCase')}</span>
         ) : (
-          <RelativeTime value={features.last_entry_at} />
+          <RelativeTime value={features.last_entry_at} plain />
         )}
       </div>
 

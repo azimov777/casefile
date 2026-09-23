@@ -22,6 +22,8 @@ import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import type { TaskLink } from '@/entities/task';
 import { setToken, type components } from '@/shared/api';
+import { currentLanguage } from '@/shared/i18n';
+import { exactTime } from '@/shared/lib';
 
 /** Адреса всех запросов прогона: по ним видно, что лишних не было. */
 let seen: string[] = [];
@@ -91,6 +93,39 @@ describe('карточка задачи', () => {
         .find((term) => term.textContent === label)?.nextElementSibling?.textContent;
     expect(valueOf(say.task('header.status'))).toBe('in_progress');
     expect(valueOf(say.task('header.priority'))).toBe('normal');
+  });
+
+  it('точное время создания открывается нажатием, без наведения, и тем же нажатием прячется (UI-153)', async () => {
+    const user = userEvent.setup();
+    server.use(packageOf('DEMO-6'), entries('DEMO-6'));
+
+    renderApp('/tasks/DEMO-6');
+    const heading = await screen.findByRole('heading', { name: /DEMO-6/ });
+    const header = heading.closest('header') as HTMLElement;
+
+    // Время создания — кнопка в своей строке шапки: на телефоне наведения нет, и
+    // подсказка `title` одна до точного времени не довела бы.
+    const created = within(header).getByText(say.task('header.created'))
+      .parentElement as HTMLElement;
+    const time = within(created).getByRole('button');
+    const stamp = (time.querySelector('time') as HTMLElement).getAttribute('dateTime') as string;
+    const exact = exactTime(stamp, currentLanguage());
+    expect(exact).not.toBe('');
+    expect(time).toHaveAttribute('aria-pressed', 'false');
+    expect(time).not.toHaveTextContent(exact);
+
+    await user.click(time);
+    expect(time).toHaveAttribute('aria-pressed', 'true');
+    expect(time).toHaveTextContent(exact);
+
+    await user.click(time);
+    expect(time).toHaveAttribute('aria-pressed', 'false');
+    expect(time).not.toHaveTextContent(exact);
+
+    // С клавиатуры то же: фокус на времени и Enter.
+    time.focus();
+    await user.keyboard('{Enter}');
+    expect(time).toHaveTextContent(exact);
   });
 
   it('рисуется одним запросом пакета, без запросов за телами записей', async () => {
@@ -981,7 +1016,7 @@ describe('опись: правки разделов одного действи�
     expect(group).toHaveAttribute('aria-expanded', 'true');
     const rows = nestedRows();
     const opened = rows.filter(
-      (row) => row.querySelector('button')?.getAttribute('aria-expanded') === 'true',
+      (row) => row.querySelector('button[aria-expanded]')?.getAttribute('aria-expanded') === 'true',
     );
     expect(opened.map((row) => row.querySelector('th')?.textContent)).toEqual(['4']);
     await waitFor(() => expect(entriesCalls().some((url) => url.includes('nos=4'))).toBe(true));

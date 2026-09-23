@@ -78,6 +78,8 @@ export const tasks = {
 
     archive: {
       label: 'show the archive',
+      // Имя кнопки со знаком вопроса, раскрывающей пояснение (UI-153).
+      explain: 'What the archive is',
       // Что такое архив — словами и числом из кода (`ARCHIVE_AFTER_DAYS`), а не
       // вписанным в строку: порог живёт в одном месте.
       hint_one:

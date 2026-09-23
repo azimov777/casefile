@@ -87,6 +87,27 @@ describe('боковая панель', () => {
     expect(all).toHaveAttribute('href', '/tasks?view=board&status=open');
   });
 
+  it('длинное название очереди видно целиком, переносом, а не только в подсказке', async () => {
+    const title = 'Трекер: интерфейс человека, который ведут агенты, и его доводка';
+    const base = bootstrap();
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () =>
+        data(bootstrap({ queues: [{ ...base.queues[0]!, key: 'UI', title }] })),
+      ),
+    );
+    renderApp('/tasks');
+
+    const link = await screen.findByRole('link', { name: new RegExp(title) });
+    /*
+     * Наведения на телефоне нет (UI-153): подсказка `title` не в счёт. Название стоит в
+     * пункте текстом целиком и переносится, а многоточием не режется. Ширину jsdom не
+     * считает, поэтому проверяется то, чем обрезка задаётся: классом `truncate`.
+     */
+    const shown = within(link).getByText(title);
+    expect(shown).not.toHaveClass('truncate');
+    expect(shown).toHaveClass('wrap-anywhere');
+  });
+
   it('во входящей помечен раздел, а не очередь', async () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
     server.use(http.get(`${API}/api/v1/questions`, () => collection([])));
