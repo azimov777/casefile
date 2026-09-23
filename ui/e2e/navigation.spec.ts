@@ -174,6 +174,54 @@ for (const width of [1440, 390]) {
   });
 }
 
+/*
+ * Переключатель «Карточка / Дело» стоит на одних координатах на обеих страницах (UI-144).
+ * Раньше он жался к правому краю строки, а правый край у карточки (100rem, с кнопкой
+ * замечания) и у дела (64rem, без неё) разный: на 1440 он переезжал с x 1291 на 1115,
+ * на 390 — со второй строки на первую, и второй клик промахивался. Замер — до пикселя
+ * и по обеим ссылкам, а не только по дорожке: жирный текущий сегмент шире обычного, и
+ * без резерва под жирное «Дело» ездило бы на доли пикселя внутри неподвижной дорожки.
+ * Переход — кликом по самому переключателю, как у человека, туда и обратно.
+ */
+for (const width of [1440, 390]) {
+  test(`переключатель «Карточка — Дело» не двигается при переходе на ${width}`, async ({
+    page,
+  }) => {
+    await silenceJournal(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/tasks/DEMO-1');
+
+    const toggle = page.getByRole('navigation', { name: 'Вид задачи' });
+    const card = toggle.getByRole('link', { name: 'Карточка', exact: true });
+    const caseLink = toggle.getByRole('link', { name: 'Дело', exact: true });
+    // Карточка догружает шапку и блоки; мерить до них — мерить не ту страницу.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await fontsReady(page);
+
+    const measure = async () => {
+      await layoutSettled(toggle);
+      return Promise.all([toggle.boundingBox(), card.boundingBox(), caseLink.boundingBox()]);
+    };
+
+    const onCard = await measure();
+    await caseLink.click();
+    await expect(page).toHaveURL(/\/tasks\/DEMO-1\/case$/);
+    await expect(caseLink).toHaveAttribute('aria-current', 'page');
+    await fontsReady(page);
+    const onCase = await measure();
+
+    await card.click();
+    await expect(page).toHaveURL(/\/tasks\/DEMO-1$/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await fontsReady(page);
+    const backOnCard = await measure();
+
+    for (const box of onCard) expect(box).not.toBeNull();
+    expect(onCase).toEqual(onCard);
+    expect(backOnCard).toEqual(onCard);
+  });
+}
+
 test('«Карточка → Дело → назад» браузера возвращает карточку и её подсветку', async ({ page }) => {
   await silenceJournal(page);
   await page.goto('/tasks/DEMO-1');

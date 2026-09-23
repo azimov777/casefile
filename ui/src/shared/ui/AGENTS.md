@@ -29,7 +29,7 @@ WAI-ARIA (меню, списки, диалоги) приходят из shadcn/u
 - `popover.tsx` — всплывающая панель у кнопки на Radix Popover: `Esc`, щелчок мимо, возврат
   фокуса и переворот у края окна; внутри — обычные поля, а не пункты меню
 - `query-state.tsx` — состояние запроса вместо данных: загрузка, отказ с повтором, пустота
-- `segmented-nav.tsx` — переключатель вида: `<SegmentedNav label size>` с `<SegmentedNavLink to state current>` — ссылки `react-router` на утопленной дорожке, текущий вид плашкой и `aria-current` (`page` или `true`); не `ToggleGroup`, потому что смена вида — переход, а не выбор в форме
+- `segmented-nav.tsx` — переключатель вида: `<SegmentedNav label size>` с `<SegmentedNavLink to state current>` — ссылки `react-router` на утопленной дорожке, текущий вид плашкой и `aria-current` (`page` или `true`), место под жирное держит невидимый дубль подписи; не `ToggleGroup`, потому что смена вида — переход, а не выбор в форме
 - `segmented-nav.test.tsx` — виды остаются ссылками, текущий назван `aria-current`, высота из шкалы кнопки
 - `select.tsx` — выпадающий список на Radix: стрелки, `Esc` и возврат фокуса готовыми;
   знак перед значением (`icon`), когда подпись поля скрыта
