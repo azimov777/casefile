@@ -88,7 +88,6 @@ interface EntryKindProps {
 
 /** Род записи: знак и идентификатор типа из контракта рядом. */
 export function EntryKind({ type, withName = true, className }: EntryKindProps) {
-  const Icon = KIND_ICON[type];
   const { t } = useTranslation('ui');
 
   return (
@@ -96,10 +95,25 @@ export function EntryKind({ type, withName = true, className }: EntryKindProps) 
       data-mark="kind"
       className={cn('inline-flex items-center gap-1.5 whitespace-nowrap', className)}
     >
-      <Icon className={cn('size-(--ui-mark) shrink-0', KIND_COLOR[type])} aria-hidden="true" />
+      <EntryTypeIcon type={type} />
       {/* Название словами — для диктора: `section_changed` вслух не читается. */}
       <span className="sr-only">{t(`entry.type.${type}`)}: </span>
       <span className={withName ? 'font-mono text-mark text-muted' : 'sr-only'}>{type}</span>
     </span>
+  );
+}
+
+/**
+ * Только знак рода, без идентификатора и подписи для диктора: панель отбора записей
+ * дела (UI-137) ставит его рядом со своим собственным `<code>{type}</code>` внутри
+ * кнопки переключателя и не должна тащить вместе с ним весь `EntryKind`.
+ */
+export function EntryTypeIcon({ type, className }: { type: EntryType; className?: string }) {
+  const Icon = KIND_ICON[type];
+  return (
+    <Icon
+      className={cn('size-(--ui-mark) shrink-0', KIND_COLOR[type], className)}
+      aria-hidden="true"
+    />
   );
 }

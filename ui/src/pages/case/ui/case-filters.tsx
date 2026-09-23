@@ -1,9 +1,18 @@
-import { useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
-import { ENTRY_TYPES, isServiceEntry, type EntryType } from '@/entities/entry';
-import { useExitHold } from '@/shared/lib';
-import { Button, Reveal } from '@/shared/ui';
+import { ListFilter } from 'lucide-react';
+import { ENTRY_TYPES, type EntryType } from '@/entities/entry';
+import {
+  Button,
+  FilterChip,
+  FilterChipList,
+  FilterCountBadge,
+  FilterResetButton,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/shared/ui';
+import { CaseFilterMenu } from './case-filter-menu';
 
 interface CaseFiltersProps {
   selected: EntryType[];
@@ -11,32 +20,23 @@ interface CaseFiltersProps {
 }
 
 /**
- * Отбор по типам записей: строка с тем, что отобрано, и восемнадцать флажков под ней.
+ * Отбор по типам записей: строка инструментов с кнопкой «Фильтр» и строка состояния
+ * с чипами отобранного — тот же вид, что у отбора задач (UI-130, UI-137). До этой задачи
+ * здесь стояла кнопка «Выбрать типы» и восемнадцать системных флажков под ней в
+ * раскрывающемся в потоке вёрстки месте: два экрана с одним смыслом обязаны выглядеть
+ * одинаково, а не расходиться каждый своей формой.
  *
- * Перечня типов здесь нет: он приходит из `ENTRY_TYPES`, собранного из перечисления
- * контракта, а «служебный ли тип» решает `isServiceEntry` — та же причина, по которой
- * доска не знает списка статусов.
- *
- * Флажки свёрнуты по умолчанию (UI-26). Развёрнутыми они занимали около 150 px до
- * первой записи дела — а дело человек открывает читать, а не отбирать. Свёрнут при
- * этом только *перечень типов*: выбранные типы названы поимённо чипами, и ни одного
- * не спрятано за счётчиком — список, часть условий которого не видна, принимают
- * за полное дело.
+ * Условия одни — типы записи, — поэтому в отличие от отбора задач здесь нет ни поиска,
+ * ни сортировки, ни режима запроса: только кнопка «Фильтр» и то, что ею отобрано.
  */
 export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
-  const [expanded, setExpanded] = useState(false);
-  const typesId = useId();
+  const [open, setOpen] = useState(false);
   /*
-   * Кнопка раскрытия — якорь фокуса: снятый чип исчезает вместе со своей кнопкой,
-   * и фокус улетел бы на `body`. Тот же приём, что в отборе задач.
+   * Кнопка «Фильтр» — якорь фокуса: снятый чип исчезает вместе со своей кнопкой, и фокус
+   * улетел бы на `body`. Тот же приём, что в отборе задач.
    */
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  /* Перечень доживает выход: свёртывание иначе убрало бы его в том же кадре. */
-  const reveal = useExitHold(expanded);
+  const menuRef = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation('case');
-
-  const agentTypes = ENTRY_TYPES.filter((type) => !isServiceEntry(type));
-  const serviceTypes = ENTRY_TYPES.filter(isServiceEntry);
 
   /*
    * Порядок чипов — порядок контракта, а не порядок нажатий: иначе один и тот же
@@ -44,122 +44,53 @@ export function CaseFilters({ selected, onChange }: CaseFiltersProps) {
    */
   const chosen = ENTRY_TYPES.filter((type) => selected.includes(type));
 
-  function toggle(type: EntryType, on: boolean) {
-    onChange(on ? [...selected, type] : selected.filter((item) => item !== type));
-  }
-
-  /** Группа целиком: включена, когда выбраны все её типы. */
-  function chooseGroup(group: EntryType[]) {
-    const all = group.every((type) => selected.includes(type));
-    onChange(all ? [] : group);
+  function remove(type: EntryType) {
+    onChange(selected.filter((item) => item !== type));
   }
 
   return (
-    /*
-     * Промежуток между строкой отбора и перечнем стоит на самом перечне (`mt-2`),
-     * а не `gap-2` на разделе: промежуток между соседями держится, пока стоит сосед,
-     * и свёртывание кончалось бы скачком в восемь пикселей. Внутри обёртки он уезжает
-     * вместе с местом и доходит до нуля. Тот же приём, что в отборе задач.
-     */
-    <section className="flex flex-col" aria-label={t('filters.label')}>
-      {/*
-       * Свёрнутый вид: одна строка, которая называет весь отбор. Её высота и есть то,
-       * что дело платит за отбор, — всё остальное принадлежит записям. Тот же язык, что
-       * у строки отбора списка задач: два экрана с одним смыслом обязаны выглядеть
-       * одинаково.
-       */}
-      <div className="flex flex-wrap items-center gap-2 rounded-control border border-line bg-surface px-3 py-2">
-        <Button
-          ref={toggleRef}
-          tone="quiet"
-          aria-expanded={expanded}
-          aria-controls={typesId}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? t('filters.collapse') : t('filters.expand')}
-        </Button>
+    <section className="flex flex-col gap-2" aria-label={t('filters.label')}>
+      {/* Строка инструментов: чем отбирать. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button ref={menuRef} tone="quiet" size="sm">
+              <ListFilter className="size-(--ui-mark)" aria-hidden="true" />
+              {t('filters.menu')}
+              {chosen.length === 0 ? null : <FilterCountBadge count={chosen.length} />}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-96" aria-label={t('filters.menuLabel')}>
+            <CaseFilterMenu selected={selected} onChange={onChange} />
+          </PopoverContent>
+        </Popover>
+      </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button tone="quiet" onClick={() => chooseGroup(agentTypes)}>
-            {t('filters.agentEntries')}
-          </Button>
-          <Button tone="quiet" onClick={() => chooseGroup(serviceTypes)}>
-            {t('filters.serviceEntries')}
-          </Button>
-        </div>
-
-        {/* Список, а не абзац: программа чтения с экрана называет число отобранных
-            типов вслух, а `aria-label` роль абзаца не принимает.
-
-            Отобранные типы занимают свободное место (`flex-[1_1_12rem]`) и переносятся
-            на вторую строку, когда их много. Ни `overflow: hidden`, ни счётчика
-            «ещё 5»: спрятанное условие — это отфильтрованное дело, которое принимают
-            за полное. */}
-        <ul
-          className="flex flex-[1_1_12rem] flex-wrap items-center gap-x-2 gap-y-1 list-none p-0"
-          aria-label={t('filters.chosen')}
-        >
+      {/* Строка состояния: что отобрано сейчас. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <FilterChipList label={t('filters.chosen')}>
           {chosen.length === 0 ? (
             <li className="text-meta text-muted">{t('filters.allShown')}</li>
           ) : (
             chosen.map((type) => (
-              // Чип типа: имя из контракта моноширинным, кнопка рядом снимает его
-              // с отбора. Строка не переносится — имя типа читают целиком.
-              <li
+              <FilterChip
                 key={type}
-                className="inline-flex items-center gap-1 rounded-pill border border-line-strong bg-surface pr-1 pl-2 text-mark leading-[1.7] whitespace-nowrap text-text"
-              >
-                <code>{type}</code>
-                <button
-                  type="button"
-                  /*
-                   * Переход назван свойством, а не `transition-colors`: движется
-                   * только заливка, цвет знака меняется сразу — так это и было
-                   * написано в модуле. Фон назван явно: у `<button>` без
-                   * объявленного фона браузер рисует свой `ButtonFace`
-                   * (`docs/notes/ui.md`).
-                   */
-                  className="grid place-items-center rounded-pill border-none bg-transparent p-0 leading-none text-muted transition-[background-color] duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text"
-                  aria-label={t('filters.remove', { type })}
-                  onClick={() => {
-                    toggle(type, false);
-                    toggleRef.current?.focus();
-                  }}
-                >
-                  <X className="size-(--ui-mark)" aria-hidden="true" />
-                </button>
-              </li>
+                label={<code>{type}</code>}
+                removeLabel={t('filters.remove', { type })}
+                onOpen={() => setOpen(true)}
+                onRemove={() => {
+                  remove(type);
+                  menuRef.current?.focus();
+                }}
+              />
             ))
           )}
-        </ul>
+        </FilterChipList>
 
         {chosen.length === 0 ? null : (
-          <Button tone="quiet" onClick={() => onChange([])}>
-            {t('filters.reset')}
-          </Button>
+          <FilterResetButton onClick={() => onChange([])}>{t('filters.reset')}</FilterResetButton>
         )}
       </div>
-
-      {reveal.held ? (
-        <Reveal hold={reveal}>
-          <fieldset
-            id={typesId}
-            className="mt-2 flex flex-wrap gap-x-3 gap-y-2 rounded-control border border-line bg-surface px-4 py-3"
-          >
-            <legend className="text-meta text-muted">{t('filters.legend')}</legend>
-            {ENTRY_TYPES.map((type) => (
-              <label key={type} className="inline-flex cursor-pointer items-center gap-1 text-meta">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(type)}
-                  onChange={(event) => toggle(type, event.target.checked)}
-                />
-                <code>{type}</code>
-              </label>
-            ))}
-          </fieldset>
-        </Reveal>
-      ) : null}
     </section>
   );
 }

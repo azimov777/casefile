@@ -43,4 +43,4 @@ export { AuthorName } from './ui/author-name';
 export { EntryBody } from './ui/entry-body';
 export { EntryCard } from './ui/entry-card';
 export { EntryHeadline } from './ui/entry-headline';
-export { EntryKind } from './ui/entry-kind';
+export { EntryKind, EntryTypeIcon } from './ui/entry-kind';
