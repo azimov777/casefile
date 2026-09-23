@@ -169,6 +169,24 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
   const { language } = useLanguage();
 
   /*
+   * Высота заголовка — дорожке прокрутки столбца, чтобы не идти вдоль его подписи
+   * (UI-157). Измеряется, а не считается константой: заголовок растягивает
+   * увеличенный текст (200%, `narrow.spec.ts`) и перенос длинного статуса, и число
+   * из `rem` разошлось бы с ними при первой же правке кегля.
+   */
+  const head = useRef<HTMLHeadingElement>(null);
+  const [headHeight, setHeadHeight] = useState(0);
+  useLayoutEffect(() => {
+    const node = head.current;
+    if (node === null) return;
+    const measure = () => setHeadHeight(node.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(() => window.requestAnimationFrame(measure));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  /*
    * Раскрытый столбец читает карточки страницами, свёрнутый — только своё число.
    * Свёрнуты по умолчанию двое (`done`, `cancelled`), и вычитывать их выдачу ради
    * одного числа в заголовке значило бы читать сотню строк, которых никто не просил.
@@ -277,6 +295,11 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
         (!reveal.held || empty) && 'border-dashed bg-transparent',
       )}
       aria-label={status}
+      // Дорожка прокрутки читает эту переменную через `[data-board-column]`
+      // (`reset.css`, UI-157) — атрибут, а не сам класс, потому что метит место,
+      // где сидит именно этот приём, а не любой прокручиваемый узел проекта.
+      data-board-column=""
+      style={{ '--ui-board-head': `${headHeight}px` } as CSSProperties}
     >
       {/*
        * Боковые поля столбца носит эта прослойка, а не сам столбец, — и это не вкус,
@@ -380,6 +403,7 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
          * — под ним нечему проезжать, а заливка сделала бы из пунктирной рамки плашку.
          */}
         <h2
+          ref={head}
           className={cn(
             'z-2 -mx-3 rounded-t-control px-3 pt-3 pb-2 text-body max-fold:pin-top fold:sticky fold:top-0',
             !reveal.held || empty ? 'bg-transparent' : 'bg-sunken shadow-sticky',

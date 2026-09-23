@@ -60,6 +60,17 @@ function measure(page: Page, status: string) {
     const token = getComputedStyle(probe).color;
     probe.remove();
 
+    // Тот же приём для цвета ползунка (UI-157): пробный узел с той же заливкой,
+    // что назначает `reset.css`, а не переписанное сюда числом имя цвета — иначе
+    // `oklab(…)`, который печатает вычисленный стиль, разошёлся бы с процентом
+    // прозрачности в `theme.css` молча.
+    const thumbProbe = document.createElement('div');
+    thumbProbe.style.cssText =
+      'position:absolute;top:0;left:0;background-color:var(--ui-scrollbar-thumb)';
+    document.body.append(thumbProbe);
+    const thumbToken = getComputedStyle(thumbProbe).backgroundColor;
+    thumbProbe.remove();
+
     const room = (node: HTMLElement, style: CSSStyleDeclaration) => ({
       // Граница входит в `offsetWidth` наравне с полосой — её надо вычесть, иначе
       // мерилась бы рамка столбца, а не полоса.
@@ -77,9 +88,11 @@ function measure(page: Page, status: string) {
 
     const mineStyle = getComputedStyle(mine);
     const rowStyle = getComputedStyle(row);
+    const head = mine.querySelector('h2') as HTMLElement;
     return {
       declared,
       token,
+      thumbToken,
       // Столбец переполнен по вертикали, ряд — вбок: иначе полосе неоткуда взяться.
       columnOver: mine.scrollHeight - mine.clientHeight,
       rowOver: row.scrollWidth - row.clientWidth,
@@ -91,6 +104,13 @@ function measure(page: Page, status: string) {
       rowHeight: getComputedStyle(row, '::-webkit-scrollbar').height,
       columnThumb: getComputedStyle(mine, '::-webkit-scrollbar-thumb').backgroundColor,
       rowThumb: getComputedStyle(row, '::-webkit-scrollbar-thumb').backgroundColor,
+      // Верхняя граница дорожки столбца — не выше нижнего края заголовка (UI-157):
+      // высота заголовка и отступ дорожки, назначенный тем же замером
+      // (`[data-board-column]`, `reset.css`).
+      headHeight: head.getBoundingClientRect().height,
+      trackMarginTop: Number.parseFloat(
+        getComputedStyle(mine, '::-webkit-scrollbar-track').marginTop,
+      ),
       // Стандартная пара под `@supports not selector(::-webkit-scrollbar)` до этого
       // движка доходить не должна: увидев её, он погасил бы наш ползунок (UI-116#28).
       standardWidth: mineStyle.scrollbarWidth,
@@ -130,8 +150,21 @@ test('полосу рисуем мы: толщина наша, цвет полз
   expect(measured.declared, report).toBeLessThan(SYSTEM_SCROLLBAR);
 
   // Цвет ползунка — точное значение токена темы, своё в каждой теме.
-  expect(measured.columnThumb, report).toBe(measured.token);
-  expect(measured.rowThumb, report).toBe(measured.token);
+  expect(measured.columnThumb, report).toBe(measured.thumbToken);
+  expect(measured.rowThumb, report).toBe(measured.thumbToken);
+
+  /*
+   * Верхняя граница дорожки столбца не выше нижнего края его заголовка (UI-157):
+   * отступ дорожки — не меньше высоты заголовка. Строгое «не меньше», а не
+   * равенство: `margin-top` целое число CSS-пикселей, а высота заголовка —
+   * дробная (шрифт), и округление обязано идти в пользу заголовка, а не полосы,
+   * которая тогда зашла бы на подпись на доли пикселя.
+   */
+  expect(measured.trackMarginTop, report).toBeGreaterThanOrEqual(Math.floor(measured.headHeight));
+  // И не заметно больше — иначе дорожка ушла бы вниз в пустоту под заголовком,
+  // забрав у полосы место, которое ей не мешало (запас — сама сборка `margin-top`
+  // целым числом, `Math.ceil` от дробной высоты).
+  expect(measured.trackMarginTop, report).toBeLessThanOrEqual(Math.ceil(measured.headHeight) + 1);
 });
 
 /**
@@ -168,4 +201,114 @@ test('запасной путь: стандартная пара примени�
 
   // И она же гасит наш ползунок: место, которое он занимал, больше не наше.
   expect(fallback.columnBar).not.toBe(fallback.declared);
+});
+
+/**
+ * Отношение контраста по WCAG — то же число, которое считает `axe` (формула
+ * повторена в нескольких сквозных файлах проекта, своей общей утилиты для неё нет).
+ */
+function contrast(front: string, back: string): number {
+  const channel = (part: number) => {
+    const value = part / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (color: string) => {
+    const [r, g, b] = (color.match(/[\d.]+/g) ?? []).map(Number) as [number, number, number];
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+  const first = luminance(front);
+  const second = luminance(back);
+  return (
+    Math.round(((Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)) * 100) / 100
+  );
+}
+
+/**
+ * Контраст ползунка к фону столбца ниже прежнего, но не ниже порога органа
+ * управления (UI-157). Владелец в Safari 18.6 назвал полосу слишком выразительной;
+ * прежний сплошной `--color-faint` держал контраст далеко с запасом от порога
+ * (WCAG 1.4.11, 3.0) — числа записаны находкой в деле задачи, а не только здесь,
+ * потому что «до» этот прогон, идущий на уже поправленном коде, снять не может.
+ *
+ * `getComputedStyle` возвращает ползунок в `oklab(…)`, потому что в этом цветовом
+ * пространстве смешан токен (`theme.css`): цвет читается через канву, а не разбором
+ * строки — `oklab` не раскладывается на компоненты той же регуляркой, что `rgb`.
+ */
+test('контраст ползунка ниже прежнего, но не ниже порога органа управления', async ({
+  page,
+  request,
+}) => {
+  const status = await board(page, request);
+
+  const measured = await page.evaluate((scrolled) => {
+    const sections = Array.from(document.querySelectorAll('section[aria-label]')).filter(
+      (node) => node.getAttribute('aria-label') !== 'Отбор задач',
+    ) as HTMLElement[];
+    const mine = sections.find((node) => node.getAttribute('aria-label') === scrolled) as Element;
+
+    /*
+     * Ползунок полупрозрачен (UI-157), и его настоящий цвет на экране — не свой
+     * канал сам по себе, а смесь с тем, что под ним: рисуем на канве сперва
+     * непрозрачную поверхность, потом полупрозрачный ползунок поверх неё (то же
+     * «source-over», которым рисует сам браузер), и читаем итог — только тогда
+     * числа отвечают на вопрос «что видно», а не «чем красили».
+     */
+    const onto = (back: string, front: string) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+      ctx.fillStyle = back;
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.fillStyle = front;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+
+    const surfaces = () => {
+      const probe = document.createElement('div');
+      document.body.append(probe);
+      const read = (cls: string) => {
+        probe.className = cls;
+        const color = getComputedStyle(probe).backgroundColor;
+        return color;
+      };
+      const result = {
+        ground: read('bg-ground'),
+        surface: read('bg-surface'),
+        sunken: read('bg-sunken'),
+      };
+      probe.remove();
+      return result;
+    };
+
+    const thumb = getComputedStyle(mine, '::-webkit-scrollbar-thumb').backgroundColor;
+    const back = surfaces();
+    return {
+      thumb: {
+        ground: onto(back.ground, thumb),
+        surface: onto(back.surface, thumb),
+        sunken: onto(back.sunken, thumb),
+      },
+      surfaces: back,
+    };
+  }, status);
+
+  const ratios = {
+    ground: contrast(measured.thumb.ground, measured.surfaces.ground),
+    surface: contrast(measured.thumb.surface, measured.surfaces.surface),
+    sunken: contrast(measured.thumb.sunken, measured.surfaces.sunken),
+  };
+  const report = JSON.stringify({ ...measured, ratios });
+  console.log(`[UI-157 контраст ${status}]`, report);
+  await test.info().attach(`контраст ползунка (${status})`, {
+    body: report,
+    contentType: 'application/json',
+  });
+
+  // Порог органа управления — WCAG 1.4.11, 3.0 (тот же, что `theme.test.ts` держит
+  // для сплошного `--color-faint`, но у полупрозрачного ползунка своей проверки
+  // не было).
+  expect(Math.min(ratios.ground, ratios.surface, ratios.sunken), report).toBeGreaterThanOrEqual(3);
 });
