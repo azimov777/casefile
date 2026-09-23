@@ -60,7 +60,26 @@ interface TaskIndexProps {
  * четыре стороны, и три из них перестали бы быть `currentColor`. Ширина у них нулевая,
  * на экране этого не видно — а в вычисленном стиле видно, и замер это ловит.
  */
-const CELL = 'border-b border-b-line px-3 py-2 text-left align-top';
+const CELL =
+  'border-b border-b-line px-3 py-2 text-left align-top @max-index:border-b-0 @max-index:p-0';
+
+/**
+ * Строка описи там, где пяти столбцам не хватает места (`--container-index`, UI-134):
+ * та же `<tr>` становится флексом с переносом, и ячейки встают в порядке разметки —
+ * номер, род, автор и время первой строкой, заголовок второй (он берёт всю ширину,
+ * `HEADLINE`). Время прижато вправо (`ml-auto`): не поместившись в первую строку
+ * рядом с длинным родом и автором, оно уходит к правому краю, а не висит слева одно. Поля и линию под строкой в этой ветке несёт строка, а не ячейка: у
+ * ячеек флекса своих линий быть не должно, иначе под первой строкой карточки легла бы
+ * вторая черта.
+ *
+ * До UI-134 узкая опись была таблицей в прокрутке вбок: на 390 px заголовок записи —
+ * то, ради чего опись читают, — стоял целиком за правым краем.
+ */
+const ROW =
+  '@max-index:flex @max-index:flex-wrap @max-index:items-baseline @max-index:gap-x-3 @max-index:gap-y-1 @max-index:border-b @max-index:border-b-line @max-index:px-3 @max-index:py-2';
+
+/** Ячейка заголовка: в карточке — вся вторая строка. */
+const HEADLINE = '@max-index:basis-full';
 
 /**
  * Опись дела: заголовок каждой записи, тело — по клику.
@@ -185,12 +204,13 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }:
     // (`task-page.tsx`, `BLOCK_HEAD`/`INDEX_NAV`): там же общие поля блока и переход
     // в ленту. Ref на прокручиваемый узел — для прыжка «в начало» снаружи (UI-127),
     // сама прокрутка отдельной записи — `scrollTarget`, ниже (UI-126).
-    <div className="overflow-x-auto" ref={scroller}>
+    <div className="@container overflow-x-auto" ref={scroller}>
       <table
-        className="w-full border-collapse text-body"
+        className="w-full border-collapse text-body @max-index:block"
         aria-label={t('index.count', { count: index.length })}
       >
-        <thead>
+        {/* В карточках шапка остаётся диктору: по ней он называет столбец ячейки. */}
+        <thead className="@max-index:sr-only">
           <tr>
             {INDEX_COLUMNS.map((column) => (
               <th
@@ -203,7 +223,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }:
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="@max-index:block">
           {groupSectionEdits(index).map((run) =>
             run.kind === 'one' ? (
               <IndexRow
@@ -277,8 +297,11 @@ function GroupRows({
 
   return (
     <>
-      <tr data-group={run.actionId}>
-        <th scope="row" className={cn(cell, 'w-[1%] font-mono whitespace-nowrap text-muted')}>
+      <tr data-group={run.actionId} className={cn(ROW, open && 'bg-sunken')}>
+        <th
+          scope="row"
+          className={cn(cell, 'w-[1%] @max-index:w-auto font-mono whitespace-nowrap text-muted')}
+        >
           {brick('entry.group.range', { first: run.first, last: run.last })}
         </th>
         <td className={cell}>
@@ -287,10 +310,10 @@ function GroupRows({
         <td className={cell}>
           <AuthorName author={head.author} />
         </td>
-        <td className={cn(cell, 'whitespace-nowrap text-muted')}>
+        <td className={cn(cell, 'whitespace-nowrap text-muted @max-index:ml-auto')}>
           <RelativeTime value={head.created_at} />
         </td>
-        <td className={cell}>
+        <td className={cn(cell, HEADLINE)}>
           {/*
            * Тот же вид кнопки, что у строки записи (`IndexRow`): раскрытие группы и
            * раскрытие записи — одно действие для человека. Отличие одно — кнопка
@@ -380,10 +403,14 @@ function IndexRow({
 
   return (
     <>
-      <tr ref={row} data-nested={nested ? '' : undefined}>
+      <tr
+        ref={row}
+        data-nested={nested ? '' : undefined}
+        className={cn(ROW, open && 'bg-sunken', nested && '@max-index:pl-8')}
+      >
         {/* Ширина в 1% сжимает колонку номера по содержимому: остаток ширины таблицы
             забирает заголовок, самая длинная ячейка строки. */}
-        <th scope="row" className={cn(cell, 'w-[1%] font-mono text-muted')}>
+        <th scope="row" className={cn(cell, 'w-[1%] @max-index:w-auto font-mono text-muted')}>
           {heading.no}
         </th>
         <td className={cell}>
@@ -394,10 +421,10 @@ function IndexRow({
         <td className={cell}>
           <AuthorName author={heading.author} />
         </td>
-        <td className={cn(cell, 'whitespace-nowrap text-muted')}>
+        <td className={cn(cell, 'whitespace-nowrap text-muted @max-index:ml-auto')}>
           <RelativeTime value={heading.created_at} />
         </td>
-        <td className={cn(cell, nested && 'pl-8')}>
+        <td className={cn(cell, HEADLINE, nested && 'pl-8')}>
           {/*
            * Заголовок записи — кнопка: раскрытие это действие, и с клавиатуры оно
            * тоже нужно. Фон и рамку кнопка называет явно: без объявленного фона
@@ -431,14 +458,17 @@ function IndexRow({
       </tr>
 
       {details.held ? (
-        <tr>
+        <tr className="@max-index:block">
           {/*
            * Поля ячейки переехали внутрь обёртки (`p-0` снаружи, `px-3 py-2` внутри):
            * снаружи они держали бы высоту и свёрнутое состояние нулём бы не стало.
            * Линия под строкой и заливка остаются на ячейке — они видны и на нулевой
            * высоте ровно один кадр, пока строка уходит.
            */}
-          <td className={cn(CELL, 'bg-sunken p-0')} colSpan={5}>
+          <td
+            className={cn(CELL, 'bg-sunken p-0 @max-index:block @max-index:border-b')}
+            colSpan={5}
+          >
             <Reveal hold={details}>
               <div className="px-3 py-2">
                 <EntryDetails

@@ -35,7 +35,7 @@ export const THEME_SCALES = {
    * класса, и спор двух минимумов решил бы порядок в собранном CSS. Та же ловушка,
    * что была с кеглем, только по другому свойству.
    */
-  container: ['list'],
+  container: ['list', 'index'],
 } as const;
 
 const twMerge = extendTailwindMerge({
