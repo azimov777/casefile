@@ -291,6 +291,30 @@ def test_the_summary_section_names_the_decomposition_trigger(skill_text: str) ->
     assert "parent=key" in brief, "выжимка не зовёт заводить детей: `create_task(..., parent=key)`"
 
 
+def _before(text: str, first: str, second: str) -> bool:
+    """`first` встречается в тексте раньше `second`, и оба есть."""
+    return first in text and second in text and text.index(first) < text.index(second)
+
+
+def test_entering_a_task_assigns_yourself_before_taking_it_into_work(skill_text: str) -> None:
+    """TRK-123: в `in_progress` задачу переводит только исполнитель.
+
+    Трекер откажет не исполнителю, но отказ — последняя защита, а не способ узнать
+    правило: агент по скилу назначает себя сам и только потом берёт задачу в работу.
+    Правило держится и во входе, и в «Кратко», которое уезжает в `instructions`.
+    """
+    for name in ("Вход в задачу", "Кратко"):
+        text = section(skill_text, name)
+        assert _before(text, 'update_task(key, {"assignee"', 'transition(key, "in_progress")'), (
+            f'раздел «{name}» перестал назначать себя до `transition(key, "in_progress")`'
+        )
+
+    entering = section(skill_text, "Вход в задачу")
+    assert "assignee_required" in entering
+    assert "assignee_mismatch" in entering
+    assert "не перезаписывай" in entering, "скил перестал запрещать молча отнимать чужую задачу"
+
+
 # --- Описания инструментов против скила -----------------------------------------------
 
 #: Абзац описания говорит про ожидание ответа, если в нём есть и ответ, и ожидание.
