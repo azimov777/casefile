@@ -16,7 +16,10 @@
 #   D. новый образ под `latest` и новый compose-файл «в main» установку не трогают;
 #   E. закреплённый `CASEFILE_VERSION` и `CASEFILE_AUTO_UPDATE=false` останавливают
 #      обновление, а снятое выключение его возвращает;
-#   F. повторный запуск `install.sh` берёт compose-файл из образа выпуска.
+#   F. повторный запуск `install.sh` берёт compose-файл из образа выпуска;
+#   G. выпуск, у которого api не проходит проверку здоровья, откатывается на прежний, данные
+#      на месте; следующие проверки его не пробуют и не пересоздают служб; следующий выпуск
+#      после него доходит как обычно (TRK-122).
 #
 # Час ожидания сокращён: `CASEFILE_UPDATE_INTERVAL` берётся из `CHECK_INTERVAL` (по
 # умолчанию `1m`), разброс — до шестой доли, как и у часа. Каждая фаза кончается
@@ -63,7 +66,8 @@ cleanup() {
   dc logs --no-color -t updater updater-renew >"$EVIDENCE/compose-logs.txt" 2>&1
   dc down -v --remove-orphans >/dev/null 2>&1
   docker rm -f "$P-registry" "$P-web" >/dev/null 2>&1
-  docker images --format '{{.Repository}}:{{.Tag}}' | grep "^$REG/" | xargs docker rmi >/dev/null 2>&1
+  docker images --format '{{.Repository}}:{{.Tag}}' | grep -e "^$REG/" -e "^casefile-updater/$P/" |
+    xargs docker rmi >/dev/null 2>&1
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -84,12 +88,23 @@ sleep 2
 # Выпуск: образ дерева с меткой версии — у каждого выпуска свой Id. Второй
 # аргумент — compose-файл, который выпуск несёт в себе (по умолчанию файл дерева).
 # Локальная копия после push удаляется: иначе `pull` скачивать нечего.
+# `BROKEN=1` — выпуск, у которого API отвечает 500 на всё, и проверка здоровья `api` не
+# проходит никогда; `migrate` и MCP у него те же, что у рабочего.
 publish() {
   local version=$1 compose=${2:-$ROOT/docker-compose.prod.yml} tags=("${@:3}") ctx
   ctx=$(mktemp -d)
   cp "$compose" "$ctx/docker-compose.prod.yml"
   printf 'FROM %s\nLABEL org.opencontainers.image.version=%s\nCOPY docker-compose.prod.yml /app/\n' \
     "$P-build/casefile" "$version" >"$ctx/Dockerfile"
+  if [ -n "${BROKEN:-}" ]; then
+    cat >"$ctx/main.py" <<'PY'
+async def app(scope, receive, send):
+    if scope["type"] == "http":
+        await send({"type": "http.response.start", "status": 500, "headers": []})
+        await send({"type": "http.response.body", "body": b"broken on purpose"})
+PY
+    echo 'COPY main.py /app/app/main.py' >>"$ctx/Dockerfile"
+  fi
   docker build -q -t "$REG/casefile:$version" "$ctx" >/dev/null
   printf 'FROM %s\nLABEL org.opencontainers.image.version=%s\n' \
     "$P-build/casefile-ui" "$version" | docker build -q -t "$REG/casefile-ui:$version" - >/dev/null
@@ -263,6 +278,10 @@ note "E passed"
 # --- F. Повторный запуск установщика --------------------------------------------------------
 
 say "F. install.sh again, compose file from the release image"
+# Обновлятор — на время установщика остановлен: иначе его проверка, пришедшаяся на миг без
+# файла, сочла бы службы устаревшими и звала бы `up` наперегонки с установщиком (TRK-122,
+# прогон live-1). Запустит его `up` самого установщика.
+docker stop "$(dc ps -q updater)" >/dev/null
 rm "$DIR/docker-compose.prod.yml"
 CASEFILE_DIR=$DIR sh "$ROOT/install.sh" </dev/null >"$EVIDENCE/F-install.txt" 2>&1 ||
   { cat "$EVIDENCE/F-install.txt"; fail "install.sh failed"; }
@@ -271,5 +290,49 @@ cmp -s "$DIR/docker-compose.prod.yml" "$ROOT/docker-compose.prod.yml" ||
   fail "install.sh did not take the compose file of the release"
 sed -i.bak 's/Bearer [^"]*/Bearer <token>/' "$EVIDENCE/F-install.txt" && rm "$EVIDENCE/F-install.txt.bak"
 note "F passed"
+
+# --- G. Выпуск, который не поднялся ---------------------------------------------------------
+
+say "G. release 0.3.0 under stable, its api never gets healthy"
+services >"$EVIDENCE/G-before.txt"
+BROKEN=1 publish 0.3.0 "" stable
+bad_api=$(release_id casefile 0.3.0)
+rolled_back() { dc logs --no-color updater 2>/dev/null | grep -q "rolled back to 0.2.2"; }
+wait_for 900 rolled_back || fail "no rollback logged"
+on_release "$r3_api" "$r3_ui" || fail "services are not back on 0.2.2"
+api "http://127.0.0.1:$UI_PORT/api/v1/queues/KEEP" | tee "$EVIDENCE/G-data.json" | grep -q '"KEEP"' ||
+  fail "the queue created before the updates is gone after the rollback"
+[ "$(docker image inspect -f '{{.Id}}' "casefile-updater/$P/api:failed")" = "$bad_api" ] ||
+  fail "the failed release is not remembered"
+services | tee "$EVIDENCE/G-after-rollback.txt"
+dc logs --no-color -t updater >"$EVIDENCE/G-rollback-updater.log"
+grep -E "failed to start|rolled back" "$EVIDENCE/G-rollback-updater.log" | tee -a "$EVIDENCE/run.log"
+note "G: rolled back to 0.2.2, data in place"
+
+say "G. two checks without a new release leave the failed one alone"
+seen=$(checks_logged "did not start here before")
+wait_for 300 more_checks "did not start here before" "$((seen + 1))" ||
+  fail "the checks after the rollback did not report the failed release"
+services >"$EVIDENCE/G-idle-after.txt"
+diff "$EVIDENCE/G-after-rollback.txt" "$EVIDENCE/G-idle-after.txt" ||
+  fail "a check after the rollback recreated a service"
+[ "$(docker image inspect -f '{{.Id}}' "$REG/casefile:stable")" = "$r3_api" ] ||
+  fail "the local stable tag is left on the failed release"
+dc logs --no-color -t updater >"$EVIDENCE/G-idle-updater.log"
+note "G: Created unchanged, the failed release is not tried again"
+
+say "G. release 0.3.1 under stable after the failed one"
+publish 0.3.1 "" stable
+r4_api=$(release_id casefile 0.3.1) r4_ui=$(release_id casefile-ui 0.3.1)
+wait_for 600 on_release "$r4_api" "$r4_ui" || fail "0.3.1 did not arrive after the failed 0.3.0"
+api "http://127.0.0.1:$UI_PORT/api/v1/queues/KEEP" | grep -q '"KEEP"' || fail "the queue is gone"
+# Службы уже на 0.3.1, а обновлятор ещё ждёт их здоровья: свои теги он снимает после.
+updated() { dc logs --no-color updater 2>/dev/null | grep -q "updated to 0.3.1"; }
+wait_for 300 updated || fail "no successful update to 0.3.1 logged"
+[ -z "$(docker images --format '{{.Repository}}:{{.Tag}}' | grep "^casefile-updater/$P/")" ] ||
+  fail "the updater kept its tags after a good release"
+services | tee "$EVIDENCE/G-next.txt"
+dc logs --no-color -t updater >"$EVIDENCE/G-next-updater.log"
+note "G passed"
 
 say "all phases passed"
