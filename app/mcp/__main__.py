@@ -7,9 +7,28 @@
 нельзя ставить в очередь к обычным запросам фронтенда. Плюс сервер обязан подниматься и
 масштабироваться отдельно: агентов может быть десять при одном фронтенде и наоборот.
 
-Транспорт — streamable HTTP: он же несёт нотификации, поэтому stdio здесь не годится.
-Адрес по умолчанию `0.0.0.0:8100/mcp`, настраивается `TRACKER_MCP_HOST`,
-`TRACKER_MCP_PORT` и `TRACKER_MCP_PATH`.
+## Два транспорта: HTTP основной, stdio — альтернатива
+
+**Streamable HTTP** — путь установки: одна служба на всех агентов, токен в заголовке
+`Authorization` каждого запроса. Адрес по умолчанию `0.0.0.0:8100/mcp`, настраивается
+`TRACKER_MCP_HOST`, `TRACKER_MCP_PORT` и `TRACKER_MCP_PATH`.
+
+**stdio** (`python -m app.mcp --stdio`) — тот же сервер, который клиент запускает сам как
+дочерний процесс и говорит с ним через stdin/stdout: для клиентов и каталогов, умеющих
+только команду (Glama гоняет её под `mcp-proxy`, TRK-125). Инструменты, промпт и ответы те
+же; база та же — процесс ходит в неё, как и HTTP-служба, по `TRACKER_DATABASE_URL`.
+Нотификации сервера протокол несёт и по stdio, `wait_journal` работает так же.
+
+Заголовков у сообщения stdio нет, поэтому процесс представляется одним токеном
+`TRACKER_MCP_TOKEN` на всё время жизни: он становится заголовком `Authorization` процесса
+(`Runtime.headers`) и проходит тот же разбор, что и в HTTP. Без токена процесс не
+стартует — в этом режиме без него не прошёл бы ни один вызов, и клиенту честнее показать
+причину сразу, чем отвечать `unauthorized` на каждый. Метки временного агента
+(`X-Actor-Label`) в stdio нет: токен процесса — токен одного участника.
+
+stdout в этом режиме занят протоколом целиком. Журнал и так пишет в stderr
+(`app/core/logging.py`), и печатать в stdout здесь нельзя ничего: строка, не являющаяся
+JSON-RPC, ломает разбор у клиента.
 
 Процесс поднимается **до** миграций: схемы в первые секунды контура может не быть. В базу
 при старте он не ходит вовсе, поэтому непромигрированную базу переживает без единой
@@ -42,6 +61,7 @@ HTTP-сервера, и его жизненный цикл (`app/main.py`) зд�
 ожидания проверял бы опрос вместо оповещения.
 """
 
+import argparse
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -49,11 +69,12 @@ from contextlib import asynccontextmanager
 import uvicorn
 from starlette.applications import Starlette
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.shutdown import shutdown
 from app.db.session import dispose_engine
 from app.db.wakeup import journal_wakeup
+from app.mcp.runtime import Runtime
 from app.mcp.server import create_server
 
 logger = get_logger("mcp")
@@ -80,6 +101,35 @@ async def journal_listener(dsn: str | None = None) -> AsyncIterator[None]:
         yield
     finally:
         await journal_wakeup.close()
+
+
+def stdio_headers(settings: Settings) -> dict[str, str]:
+    """Заголовки процесса stdio из `TRACKER_MCP_TOKEN`; без токена процесс не стартует.
+
+    `SystemExit` со строкой печатает её в stderr и завершает процесс с кодом 1 — это и
+    есть отказ, который клиент stdio показывает человеку. stdout при этом не тронут.
+    """
+    token = settings.mcp_token.get_secret_value().strip() if settings.mcp_token else ""
+    if not token:
+        raise SystemExit(
+            "TRACKER_MCP_TOKEN is required for --stdio: a stdio message carries no "
+            "Authorization header, so the process presents this token on every call"
+        )
+    return {"authorization": f"Bearer {token}"}
+
+
+async def run_stdio() -> None:
+    """Поднимает тот же сервер на stdin/stdout и работает, пока клиент не закроет вход."""
+    settings = get_settings()
+    configure_logging(debug=settings.debug)
+    server = create_server(runtime=Runtime(headers=stdio_headers(settings)), settings=settings)
+    logger.info("MCP server speaking over stdio")
+    try:
+        async with journal_listener():
+            await server.run_stdio_async()
+    finally:
+        await dispose_engine()
+        logger.info("MCP server stopped")
 
 
 async def run() -> None:
@@ -137,5 +187,17 @@ def _watching_shutdown(application: Starlette) -> Starlette:
     return application
 
 
+def main(argv: list[str] | None = None) -> None:
+    """Разбирает ключ транспорта и запускает сервер: без ключа — HTTP, как прежде."""
+    parser = argparse.ArgumentParser(prog="python -m app.mcp", description="Tracker MCP server")
+    parser.add_argument(
+        "--stdio",
+        action="store_true",
+        help="Speak MCP over stdin/stdout instead of HTTP; the token comes from TRACKER_MCP_TOKEN",
+    )
+    args = parser.parse_args(argv)
+    asyncio.run(run_stdio() if args.stdio else run())
+
+
 if __name__ == "__main__":
-    asyncio.run(run())
+    main()

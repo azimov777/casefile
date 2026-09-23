@@ -90,6 +90,10 @@ class Runtime:
     """Всё, что нужно инструменту помимо его собственных аргументов."""
 
     sessions: SessionFactory = session_scope
+    #: Заголовки процесса — для транспорта, у сообщений которого своих нет (stdio). Берутся,
+    #: только когда у сообщения нет HTTP-запроса вовсе; запрос без `Authorization` ими не
+    #: дополняется — это по-прежнему `missing_token`. В HTTP поле пустое.
+    headers: Mapping[str, str] | None = None
 
     @asynccontextmanager
     async def call(self) -> AsyncIterator[tuple[AsyncSession, Actor]]:
@@ -131,6 +135,8 @@ class Runtime:
         порядок оставил бы часть изменений записанной.
         """
         headers = _headers.get()
+        if headers is None:
+            headers = self.headers
         async with self.sessions() as session:
             actor = await authenticate(
                 session,

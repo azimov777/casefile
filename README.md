@@ -87,6 +87,23 @@ installer printed a different address, that address instead:
 }
 ```
 
+**Over stdio, as an alternative.** Streamable HTTP above is the main way in. A client
+that can only launch a command and talk to it over stdin/stdout gets the same server
+that way: it starts a short-lived container of your installation, attached to the
+installation's database — same tools, same token, same case. The token goes in the
+client's environment, not on the command line:
+
+```bash
+claude mcp add --scope user casefile-stdio --env TRACKER_MCP_TOKEN=<token> -- \
+  docker compose -f ~/casefile/docker-compose.prod.yml run --rm --no-deps -T \
+  -e TRACKER_MCP_TOKEN mcp python -m app.mcp --stdio
+```
+
+The installation has to be up: the stdio process brings no database of its own. Each
+client session is a process of its own, so HTTP stays the lighter choice wherever the
+client supports it. An installation image older than the stdio mode answers
+`unrecognized arguments: --stdio` — update it first.
+
 **A second agent, without the terminal.** The board carries the same snippets.
 **Connect an agent** shows this installation's MCP address and ready-made snippets for
 Claude Code, Codex and any client that takes an `mcpServers` JSON — no secret on the
