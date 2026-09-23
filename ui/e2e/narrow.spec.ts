@@ -412,3 +412,122 @@ test('сводка на узком экране идёт подписью над
   }
 });
 
+/**
+ * Экраны телефона (UI-134): владелец назвал телефон полноценной целью (UI-134#3), и на
+ * 390×844 ни один экран не прячет содержимое за прокруткой вбок. Доска названа
+ * отдельно: её ряд столбцов прокручивается вбок намеренно (UI-94) — столбец доски
+ * на телефоне это ширина окна за вычетом соседа, выглядывающего справа.
+ */
+const PHONE_SCREENS = [
+  '/tasks?queue=DEMO',
+  '/tasks',
+  '/tasks?queue=DEMO&view=board',
+  '/tasks/DEMO-1',
+  '/tasks/DEMO-6',
+  '/tasks/DEMO-1/case',
+  '/questions',
+];
+
+/** Прокручиваемые вбок узлы, у которых есть что прятать: `overflow-x` и ширина вместе. */
+async function sideScrollers(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>('body *'))
+      .filter((node) => {
+        const overflowX = getComputedStyle(node).overflowX;
+        const scrolls = overflowX === 'auto' || overflowX === 'scroll';
+        // Ряд столбцов доски — родитель её секций-столбцов — прокручивается намеренно.
+        const lanes = node.querySelector(':scope > section[aria-label]') !== null;
+        return scrolls && node.scrollWidth - node.clientWidth > 1 && !lanes;
+      })
+      .map((node) => `${node.tagName.toLowerCase()} ${node.className}`.slice(0, 120)),
+  );
+}
+
+test.describe('телефон 390×844', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('ни один экран не прячет содержимое за прокруткой вбок', async ({ page }) => {
+    await silenceJournal(page);
+
+    for (const address of PHONE_SCREENS) {
+      await page.goto(address);
+      await expect(page.getByRole('main')).toBeVisible();
+      // Ждём само содержимое: опись, строки и карточки приходят после оболочки.
+      await expect(page.getByRole('main').getByRole('link').first()).toBeVisible();
+      await fontsReady(page);
+
+      expect
+        .soft(
+          await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          `${address}: scrollWidth <= innerWidth`,
+        )
+        .toBe(true);
+      expect.soft(await sideScrollers(page), address).toEqual([]);
+    }
+  });
+
+  test('верхняя полоса списка стоит одной строкой', async ({ page }) => {
+    await silenceJournal(page);
+
+    for (const address of ['/tasks?queue=DEMO', '/tasks', '/tasks?queue=DEMO&view=board']) {
+      await page.goto(address);
+      await expect(page.getByRole('main')).toBeVisible();
+      await fontsReady(page);
+
+      // Кнопка разделов открывает полосу слева, состояние потока закрывает её справа:
+      // одна строка — это когда они стоят в одном ряду. До UI-134 переключатель вида,
+      // язык и поток уходили вторым рядом под крошки.
+      const opener = await page.getByRole('button', { name: /Показать разделы/ }).boundingBox();
+      const live = await page
+        .getByRole('banner')
+        .getByText(/на связи|подключаемся|нет связи/)
+        .boundingBox();
+      expect(live?.y ?? 0, address).toBeLessThan((opener?.y ?? 0) + (opener?.height ?? 0));
+
+      // Переключатель вида остаётся тем же набором ссылок с теми же именами: слово
+      // ушло диктору, на виду — знак.
+      const view = page.getByRole('navigation', { name: 'Вид списка' });
+      await expect(view.getByRole('link', { name: 'Таблица' })).toBeVisible();
+      await expect(view.getByRole('link', { name: 'Доска' })).toBeVisible();
+      expect(await overflow(page), address).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('опись дела в карточке — строки-карточки: заголовок записи в окне', async ({ page }) => {
+    await silenceJournal(page);
+    await page.goto('/tasks/DEMO-1');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-1');
+    await fontsReady(page);
+
+    const index = page.getByRole('table', { name: /В деле \d+ запис/ });
+    await expect(index).toBeVisible();
+
+    const rows = await index.locator('tbody > tr').evaluateAll((nodes) =>
+      nodes.map((row) => {
+        const cells = Array.from(row.children).map((cell) => cell.getBoundingClientRect());
+        const first = cells[0];
+        const headline = cells.at(-1);
+        return {
+          display: getComputedStyle(row).display,
+          right: Math.max(...cells.map((cell) => cell.right)),
+          // Заголовок — вторая строка карточки: под номером, а не справа от него.
+          below: first !== undefined && headline !== undefined && headline.top >= first.bottom - 1,
+        };
+      }),
+    );
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.display).toBe('flex');
+      expect(row.right).toBeLessThanOrEqual(390);
+      expect(row.below).toBe(true);
+    }
+
+    // Раскрытие записи по-прежнему работает и тело записи стоит в окне.
+    const button = index.getByRole('button', { expanded: false }).first();
+    await button.click();
+    await expect(index.getByRole('button', { expanded: true }).first()).toBeVisible();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    expect(await sideScrollers(page)).toEqual([]);
+  });
+});
