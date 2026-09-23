@@ -9,6 +9,14 @@ import {
 } from '@/entities/task';
 
 /**
+ * Поля тела блока. Связи — список внутри поверхности карточки (решение Д11): у
+ * блока-списка своих полей нет, иначе строки не доходили бы до краёв, и поля держит
+ * тело. Одно на оба состояния — список и честное «связей нет»: пустое состояние без
+ * них стояло вплотную к рамке и читалось как выпавшее из панели (UI-141).
+ */
+const BODY = 'p-3';
+
+/**
  * Связи с обеих сторон, сгруппированные видом (UI-125). Вид назван от лица этой
  * задачи, статус связанной задачи — тем же знаком, что и в таблице задач
  * (`StatusMark`): именно из `blocked_by` на незакрытую задачу бэкенд считает
@@ -22,7 +30,13 @@ import {
 export function TaskLinks({ links }: { links: TaskLink[] }) {
   const { t } = useTranslation('task');
 
-  if (links.length === 0) return <p className="text-muted italic">{t('noLinks')}</p>;
+  if (links.length === 0) {
+    return (
+      <div className={BODY}>
+        <p className="text-muted italic">{t('noLinks')}</p>
+      </div>
+    );
+  }
 
   const byKind = new Map<LinkKind, TaskLink[]>();
   for (const link of links) {
@@ -32,11 +46,7 @@ export function TaskLinks({ links }: { links: TaskLink[] }) {
   }
 
   return (
-    /*
-     * Связи — список внутри поверхности карточки (решение Д11), поэтому свои поля
-     * держит он сам: у блока-списка их нет, иначе строки не доходили бы до краёв.
-     */
-    <div className="flex flex-col gap-4 p-3">
+    <div className={`flex flex-col gap-4 ${BODY}`}>
       {LINK_KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => {
         // Непусто по самому фильтру строкой выше: `byKind.has(kind)` уже это проверил.
         const group = byKind.get(kind) as TaskLink[];
