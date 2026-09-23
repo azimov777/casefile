@@ -143,9 +143,10 @@ case "$*" in
   "inspect -f {{range .Mounts}}"*) cat "$SCENE/directory" ;;
   "compose pull"*) exit "$(cat "$SCENE/pull" 2>/dev/null || echo 0)" ;;
   "compose config")
-    printf 'name: test\nservices:\n  api:\n    depends_on:\n      db:\n        condition: service_healthy\n'
-    printf '    image: registry/casefile:stable\n  db:\n    image: postgres:17-alpine\n'
-    printf '  mcp:\n    image: registry/casefile:stable\n  ui:\n    image: registry/casefile-ui:stable\n' ;;
+    printf 'name: test\nservices:\n  api:\n    depends_on:\n      db:\n'
+    printf '        condition: service_healthy\n    image: registry/casefile:stable\n'
+    printf '  db:\n    image: postgres:17-alpine\n  mcp:\n    image: registry/casefile:stable\n'
+    printf '  ui:\n    image: registry/casefile-ui:stable\n' ;;
   "compose -f "*) exit 0 ;;
   "image inspect -f {{.Id}} "*) echo "$(cat "$SCENE/wanted")" ;;
   "image inspect "*) echo 0.2.0 ;;
