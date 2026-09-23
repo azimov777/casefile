@@ -2,10 +2,19 @@ import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { tasksHref } from '../model/href';
 import type { TaskView } from '../model/filters';
+import { Columns3, Rows3, type LucideIcon } from 'lucide-react';
 import { SegmentedNav, SegmentedNavLink } from '@/shared/ui';
 
 /** Порядок видов. Подписи к ним живут в словаре (`tasks.view`), а не рядом. */
 const VIEWS: TaskView[] = ['table', 'board'];
+
+/**
+ * Знак вида — для узкого экрана. Там подпись уходит диктору (`max-fold:sr-only`), а на
+ * виду остаётся знак: переключатель со словами, язык и состояние потока вместе с
+ * крошками в одну строку 390 px не помещались, и полоса ломалась надвое (UI-134).
+ * Выше точки остановки знака нет — там стоят слова, как и стояли.
+ */
+const ICONS: Record<TaskView, LucideIcon> = { table: Rows3, board: Columns3 };
 
 /**
  * Переключатель вида: та же выдача таблицей или доской.
@@ -38,9 +47,15 @@ export function ViewSwitch({ view }: { view: TaskView }) {
            */
           current={option === view && 'true'}
         >
-          {t(`view.${option}`)}
+          <ViewIcon view={option} />
+          <span className="max-fold:sr-only">{t(`view.${option}`)}</span>
         </SegmentedNavLink>
       ))}
     </SegmentedNav>
   );
+}
+
+function ViewIcon({ view }: { view: TaskView }) {
+  const Icon = ICONS[view];
+  return <Icon className="size-(--ui-mark) fold:hidden" aria-hidden="true" />;
 }
