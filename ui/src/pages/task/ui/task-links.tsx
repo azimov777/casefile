@@ -46,33 +46,55 @@ export function TaskLinks({ links }: { links: TaskLink[] }) {
   }
 
   return (
-    <div className={`flex flex-col gap-4 ${BODY}`}>
+    /*
+     * Одна сетка на весь блок, два столбца: ключ и всё остальное (UI-148). Группы,
+     * списки и строки — её подсетки (`subgrid`), поэтому столбец ключа один на все
+     * связи блока: ширину ему задаёт самый длинный ключ, и название с отметкой
+     * статуса у всех строк начинаются с одного и того же края.
+     *
+     * Прежде строка была гибким рядом с переносом: короткое название вставало рядом
+     * с ключом и статусом в одну линию, длинное — ключ, название и статус тремя
+     * строками, а зазор между связями (4 px) был меньше зазора внутри связи (8 px), и
+     * статус одной связи читался вместе с ключом следующей. Теперь у каждой строки
+     * одна форма: ключ слева, название справа от него переносится в своём столбце,
+     * статус всегда под названием. Граница между связями — линия и поле с обеих её
+     * сторон: вместе они больше любого зазора внутри строки.
+     */
+    <div className={`grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-5 ${BODY}`}>
       {LINK_KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => {
         // Непусто по самому фильтру строкой выше: `byKind.has(kind)` уже это проверил.
         const group = byKind.get(kind) as TaskLink[];
 
         return (
-          <section key={kind} className="flex flex-col gap-2">
+          <section key={kind} className="col-span-2 grid grid-cols-subgrid gap-y-2">
             {/*
              * Заголовок группы — вид связи, а не число: счётчик стоит рядом с ним,
              * а не выносится в отдельную строку, иначе на узком экране он читался
              * бы как ещё одна, третья строка. `LinkKindMark` не обрезает идентификатор
              * контракта (`ui/docs/CONCEPT.md`, 6) — он остаётся моноширинным целиком.
              */}
-            <h3 className="flex flex-wrap items-baseline gap-2">
+            <h3 className="col-span-2 flex flex-wrap items-baseline gap-2">
               <LinkKindMark kind={kind} />
               <span className="text-meta text-muted">
                 {t('linkGroup.count', { count: group.length })}
               </span>
             </h3>
-            <ul className="flex list-none flex-col gap-1 p-0">
+            <ul className="col-span-2 grid list-none grid-cols-subgrid divide-y divide-line p-0">
               {group.map((link) => (
-                <li key={link.other.key} className="flex flex-wrap items-baseline gap-2">
+                /*
+                 * Ключ и название стоят на одной базовой линии первой строки; статус —
+                 * во второй, под названием, у любой длины названия. Название
+                 * переносится в своём столбце и не обрезается (`ui/docs/CONCEPT.md`, 6).
+                 */
+                <li
+                  key={link.other.key}
+                  className="col-span-2 grid grid-cols-subgrid items-baseline gap-y-1 py-2 first:pt-0 last:pb-0"
+                >
                   <Link className="font-mono" to={`/tasks/${link.other.key}`}>
                     {link.other.key}
                   </Link>
-                  <span className="text-muted">{link.other.title}</span>
-                  <StatusMark status={link.other.status} />
+                  <span className="min-w-0 break-words text-muted">{link.other.title}</span>
+                  <StatusMark className="col-start-2" status={link.other.status} />
                 </li>
               ))}
             </ul>

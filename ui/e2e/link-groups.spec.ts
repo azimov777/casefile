@@ -73,10 +73,45 @@ function groupHeadings(page: Page): Locator {
   return linksSection(page).getByRole('heading', { level: 3 });
 }
 
+/**
+ * Вертикальные зазоры блока «Связи» по содержимому строк: `inside` — между частями одной
+ * связи, стоящими друг под другом (ключ, название, статус), `between` — от низа
+ * содержимого связи до верха содержимого следующей в той же группе. Меряются части,
+ * а не `li`: поля и линия строки — это и есть граница, её и сравнивают.
+ */
+async function rowGaps(page: Page): Promise<{ inside: number[]; between: number[] }> {
+  return linksSection(page).evaluate((region) => {
+    const inside: number[] = [];
+    const between: number[] = [];
+    for (const list of Array.from(region.querySelectorAll('ul'))) {
+      const rows = Array.from(list.children).map((row) =>
+        Array.from(row.children)
+          .map((part) => part.getBoundingClientRect())
+          .sort((a, b) => a.top - b.top),
+      );
+      rows.forEach((parts, at) => {
+        for (let i = 1; i < parts.length; i += 1) {
+          const above = Math.max(...parts.slice(0, i).map((part) => part.bottom));
+          // Часть на той же линии, что предыдущая, — не «под ней»: зазора нет.
+          if (parts[i].top >= above) inside.push(parts[i].top - above);
+        }
+        const next = rows[at + 1];
+        if (next !== undefined) {
+          between.push(
+            Math.min(...next.map((part) => part.top)) -
+              Math.max(...parts.map((part) => part.bottom)),
+          );
+        }
+      });
+    }
+    return { inside, between };
+  });
+}
+
 const LONG_CHILD_TITLE =
   'Задача этого вида связи с названием такой длины, что на узком экране ей есть, где перенестись: src/pages/task/ui/task-links.tsx';
 
-test('насыщенный блок «Связи»: заголовок группы со счётчиком, ничего не обрезано, статус знаком', async ({
+test('насыщенный блок «Связи»: заголовок группы со счётчиком, ничего не обрезано, строки одной формы', async ({
   page,
   request,
 }) => {
@@ -159,6 +194,25 @@ test('насыщенный блок «Связи»: заголовок груп�
         .locator('[data-mark="status"]');
       await expect(statusMark).toBeVisible();
       await expect(statusMark.locator('svg')).toHaveCount(1);
+
+      // Одна форма у каждой строки (UI-148): статус у всех связей блока начинается
+      // с одного и того же левого края, как бы ни было длинно название.
+      const statusLefts = await linksSection(page)
+        .locator('li [data-mark="status"]')
+        .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().left));
+      expect(statusLefts.length, `${width}px`).toBe(8);
+      expect(
+        Math.max(...statusLefts) - Math.min(...statusLefts),
+        `${width}px, левые края статусов: ${statusLefts.join(', ')}`,
+      ).toBeLessThanOrEqual(0.5);
+
+      // Граница между связями видна сразу: зазор между соседними связями группы больше
+      // любого зазора внутри одной связи (закон близости).
+      const gaps = await rowGaps(page);
+      expect(
+        Math.min(...gaps.between),
+        `${width}px, между: ${gaps.between.join(', ')}; внутри: ${gaps.inside.join(', ')}`,
+      ).toBeGreaterThan(Math.max(...gaps.inside));
 
       const lightShot = await linksSection(page).screenshot({
         path: test.info().outputPath(`link-groups-${width}-light.png`),
