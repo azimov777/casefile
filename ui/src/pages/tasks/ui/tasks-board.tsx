@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { ChevronRight } from 'lucide-react';
 import {
   StatusMark,
   TASK_STATUSES,
@@ -412,15 +413,43 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
           <button
             type="button"
             /*
-             * Знак раскрытия рисуется псевдоэлементом, а не узлом разметки: это
-             * оформление кнопки, и диктору его читать незачем — состояние он берёт
-             * из `aria-expanded`. Границы и заливки у кнопки нет вовсе, но названы
-             * они явно: без этого браузер рисует свои `ButtonBorder` и `ButtonFace`.
+             * Границы и заливки у кнопки нет вовсе, но названы они явно: без этого
+             * браузер рисует свои `ButtonBorder` и `ButtonFace`.
+             *
+             * `items-center`, а не `items-baseline` (стояло здесь до UI-158): строка
+             * смешивает текст (счётчик) со значками (`StatusMark`, знак раскрытия
+             * ниже), а `items-baseline` выравнивает каждого соседа по его **собственной**
+             * базовой линии — метрике конкретного шрифта, которая у значка и у текста
+             * разная и держится не на оптическом центре подписи, а на метриках
+             * начертания. Замерено: с `items-baseline` значок раскрытия стоял на −1.6 px
+             * от центра счётчика, форма `StatusMark` — на −3.5 px (сам того не показывая
+             * на глаз явной поломкой, в отличие от знака раскрытия, — и владелец
+             * назвал только его); с `items-center` у обоих ровно 0. Строка и так
+             * держит высоту по своему самому высокому ребёнку (`StatusMark`), поэтому
+             * мишень нажатия не уменьшилась.
              */
-            className="flex w-full items-baseline gap-2 border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▾'] aria-[expanded=false]:before:content-['▸']"
+            className="flex w-full items-center gap-2 border-none border-current bg-transparent p-0 text-left text-text"
             aria-expanded={open}
             onClick={() => onToggle(status, !open)}
           >
+            {/*
+             * Знак раскрытия — узел, а не псевдоэлемент с символом треугольника, как
+             * было до UI-158: диктору его по-прежнему не нужно читать (состояние он
+             * берёт из `aria-expanded`, `aria-hidden` на месте), но символ был строчным
+             * текстом со своими шрифтовыми метриками, а не значком заданного размера —
+             * измерить его положение `getBoundingClientRect` тоже было нельзя, у
+             * псевдоэлемента такого метода нет. `block`, как у иконок `Select`
+             * (UI-146): без него `svg` остаётся строчным заменяемым элементом на
+             * базовой линии текста, потому что Preflight в проекте не подключён.
+             *
+             * Одна иконка, а не два символа треугольника: поворот на 90° при раскрытии
+             * — то же оформление, что и было (закрыто — вправо, раскрыто — вниз), но
+             * без второго узла разметки под второе состояние.
+             */}
+            <ChevronRight
+              className={cn('block size-(--ui-mark) shrink-0 text-muted', open && 'rotate-90')}
+              aria-hidden="true"
+            />
             {/* Тот же знак, что в списке и на карточке: где бы человек ни
               увидел `in_progress`, это один и тот же полукруг (решение Д20). */}
             <StatusMark status={status} className="font-mono" />

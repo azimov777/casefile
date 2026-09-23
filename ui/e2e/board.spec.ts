@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { contractStatuses, fontsReady, silenceJournal, tasksByStatus } from './contour';
 
 function column(page: Page, status: string) {
@@ -145,6 +145,48 @@ test('закрытые и отменённые свёрнуты, показыв�
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await expect(column(page, status).getByRole('article').first()).toBeVisible();
   }
+});
+
+/**
+ * Смещение значка раскрытия столбца относительно оси подписи статуса: центр `svg`
+ * знака (он первый в разметке — сам значок раскрытия, не форма `StatusMark`) минус
+ * центр строки имени статуса (`.text-mark`, видимый текст `StatusMark` — «backlog»,
+ * «in_progress» — то, что задача называет «подписью статуса»; не `.font-mono` —
+ * тот же класс несёт и обёртка `StatusMark` целиком, шире одной строки), UI-158.
+ * Тот же общий метод замера, что у шеврона `Select` (UI-146, `e2e/filters.spec.ts`),
+ * — только сравнение не с собой в другом месте, а с соседом по той же строке
+ * заголовка.
+ */
+function toggleOffset(toggle: Locator): Promise<number> {
+  return toggle.evaluate((node) => {
+    const icon = node.querySelector('svg') as Element;
+    const label = node.querySelector('.text-mark') as Element;
+    const iconBox = icon.getBoundingClientRect();
+    const labelBox = label.getBoundingClientRect();
+    return (iconBox.top + iconBox.bottom) / 2 - (labelBox.top + labelBox.bottom) / 2;
+  });
+}
+
+test('значок раскрытия столбца стоит на одной оси с подписью статуса, раскрытым и свёрнутым (UI-158)', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const toggle = column(page, 'backlog').getByRole('button');
+  const offsets: Record<string, number> = {};
+
+  offsets.open = Math.round((await toggleOffset(toggle)) * 100) / 100;
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  offsets.collapsed = Math.round((await toggleOffset(toggle)) * 100) / 100;
+
+  const report = JSON.stringify(offsets);
+  expect(Math.abs(offsets.open), report).toBeLessThanOrEqual(1);
+  expect(Math.abs(offsets.collapsed), report).toBeLessThanOrEqual(1);
 });
 
 test('столбец ожидания развёрнут, а знак в его заголовке тот же, что в строке списка', async ({
