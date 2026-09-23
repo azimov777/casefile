@@ -69,6 +69,8 @@
 |---|---|---|
 | `account_email_taken` | Account email is already taken | Почта уже занята другой учётной записью: адреса уникальны без учёта регистра. |
 | `archive_revision_unknown` | The archive comes from a newer Casefile; update this installation first | Ревизии схемы архива приёмник не знает: архив снят более новым Casefile. |
+| `assignee_mismatch` | Task is assigned to someone else | Вход в `in_progress` не от исполнителя задачи. |
+| `assignee_required` | Task has no assignee | Вход в `in_progress` у задачи без исполнителя. |
 | `checks_not_passed` | Some checks have no passing verdict recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке положительного вердикта, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |

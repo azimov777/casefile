@@ -82,6 +82,7 @@ async def ready(session: AsyncSession, actor: Actor, queue: Queue, *, checks: li
         constraints="Ограничения",
         output="Выход",
         checks=checks,
+        assignee=actor.author.signature,
     )
     await take(session, task, actor)
     await service.add_summary(session, task, actor=actor, **SUMMARY)

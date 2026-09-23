@@ -46,6 +46,7 @@ async def with_checks(mcp_session: Connect, task_secret: str, queue: Queue) -> s
             queue="TRK",
             title="Правка проверки",
             description="Проверка сформулирована невыполнимо",
+            assignee="owner",
             sections={
                 "goal": "цель",
                 "context": "контекст",

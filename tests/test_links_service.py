@@ -37,6 +37,8 @@ async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) ->
         constraints="ограничения",
         output="выход",
         checks=["проверка"],
+        # В работу задачу берёт исполнитель (`CONCEPT.md`, 3.3): им назначен автор.
+        assignee=actor.author.signature,
     )
 
 

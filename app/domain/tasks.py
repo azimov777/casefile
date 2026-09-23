@@ -35,6 +35,8 @@ from enum import StrEnum
 from typing import Any
 
 from app.domain.errors import (
+    AssigneeMismatchError,
+    AssigneeRequiredError,
     ChecksNotPassedError,
     ClosingNotATransitionError,
     InvalidQueueKeyError,
@@ -556,6 +558,13 @@ class TransitionFacts:
     #: `False` по умолчанию — незаполненный факт запрещает переход в `done`, а не
     #: пропускает его: перевод статуса отдельным ходом закрытием не является.
     closing: bool = False
+    #: Исполнитель задачи **после** применения полей этого вызова. `None` — исполнителя
+    #: нет, и вход в `in_progress` запрещён: незаполненный факт читается так же.
+    assignee: str | None = None
+    #: Подпись того, кто переводит: имя участника токена или метка временного агента
+    #: (`Actor.author.signature`). `None` — подписи нет (сам трекер) или факт не
+    #: передали; ни то, ни другое не исполнитель, и вход в `in_progress` запрещён.
+    requester: str | None = None
 
 
 #: Одна проверка перехода: молчит, если всё в порядке, иначе бросает доменную ошибку со
@@ -701,6 +710,34 @@ def check_verdicts_before_done(facts: TransitionFacts) -> None:
     )
 
 
+def check_taken_by_assignee(facts: TransitionFacts) -> None:
+    """`* → in_progress`: переводит исполнитель задачи, и он у неё есть.
+
+    Решение владельца 2026-09-23 (`CONCEPT.md`, 3.3, `TRK-123`): у задачи в работе
+    всегда видно, кому её поручили. Сравниваются подписи — имя участника или метка
+    временного агента, — без учёта регистра: подпись уже канонична (нижний регистр), а
+    `assignee` — свободная строка, и `Claude` в ней тот же участник. Сессии под одним
+    именем правило не различает, и это принято владельцем как достаточное.
+
+    Исключений по роду и по флагу администратора нет: чужую задачу берут, переназначив
+    её, и смена исполнителя остаётся в деле. Задачи, уже стоящие в `in_progress`, не
+    задеты — проверка висит на входе, в том числе на возврате из `waiting`.
+    """
+    if facts.to_status is not TaskStatus.IN_PROGRESS:
+        return
+    details: dict[str, Any] = {
+        "key": facts.key,
+        "from": facts.from_status.value,
+        "to": facts.to_status.value,
+    }
+    if facts.assignee is None:
+        raise AssigneeRequiredError(details=details)
+    if facts.requester is None or facts.assignee.strip().lower() != facts.requester.lower():
+        raise AssigneeMismatchError(
+            details={**details, "assignee": facts.assignee, "requester": facts.requester},
+        )
+
+
 def check_no_open_blockers(facts: TransitionFacts) -> None:
     """`* → in_progress`: ни одной связи `blocked_by` на незакрытую задачу.
 
@@ -799,6 +836,9 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     check_sections_filled_before_open,
     check_summary_before_leaving_in_progress,
     check_verdicts_before_done,
+    # Перед блокерами: сначала «кто», потом «когда». Не исполнителю незачем знать, чем
+    # заблокирована чужая задача, — ему отвечают тем, что задача не его.
+    check_taken_by_assignee,
     check_no_open_blockers,
     check_children_closed_before_closing,
 )

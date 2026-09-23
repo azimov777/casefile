@@ -551,7 +551,14 @@ async def apply_task_changes(
         to_status = parse_status(transition.to)
         reason = normalize_reason(transition.reason)
         ensure_transition_allowed(
-            await _transition_facts(session, task, to_status, reason, closing=transition.closing)
+            await _transition_facts(
+                session,
+                task,
+                to_status,
+                reason,
+                requester=actor.author.signature,
+                closing=transition.closing,
+            )
         )
         status_change = (task.status, to_status, reason)
         recorded.append(
@@ -657,6 +664,7 @@ async def _transition_facts(
     to_status: TaskStatus,
     reason: str | None,
     *,
+    requester: str | None,
     closing: bool = False,
 ) -> TransitionFacts:
     """Собирает факты для проверок перехода из состояния задачи, дела и связей.
@@ -706,6 +714,11 @@ async def _transition_facts(
         open_blockers=blockers,
         unclosed_children=children,
         closing=closing,
+        # Исполнитель — уже после полей этого вызова: переход проверяется после их
+        # применения. Оба факта дешёвые и нужны только входу в `in_progress`, но
+        # кладутся всегда: считать их незачем, а проверка сама смотрит на `to_status`.
+        assignee=task.assignee,
+        requester=requester,
     )
 
 

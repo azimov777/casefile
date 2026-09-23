@@ -256,7 +256,9 @@ async def test_the_shape_from_the_hint_finds_what_the_structured_filter_finds(
     opened = await open_task(
         db_session, task_actor, await make(db_session, task_actor, queue, "открытая")
     )
-    working = await make(db_session, task_actor, queue, "в работе")
+    working = await make(
+        db_session, task_actor, queue, "в работе", assignee=task_actor.author.signature
+    )
     working = await open_task(db_session, task_actor, working)
     working = (
         await tasks_service.transition_task(
