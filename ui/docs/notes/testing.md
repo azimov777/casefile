@@ -766,3 +766,51 @@ kind=PARENT)`) читаются так, будто `kind` переворачив
 показано чипом и ушло в запрос. Открытие, `Esc` и возврат фокуса проверяет сквозной тест.
 **Где:** `src/features/task-filters/ui/filter-menu.test.tsx`; `e2e/filters.spec.ts`,
 «приоритет, исполнитель и признак ставятся из панели и переживают перезагрузку чипами».
+
+## `userEvent.upload` молча пропускает файл мимо `accept` поля
+
+**Что:** `<input type="file" accept="application/json,.json">` — у `@testing-library/user-event`
+`upload(input, file)` сверяет `file.type`/имя с `accept` тем же правилом, что браузерный
+диалог выбора файла, и **не** ставит файл, если он не подходит: `input.files` остаётся
+пустым, `change` не летит, обработчик не зовётся — без единой ошибки в тесте.
+**Почему важно:** страничный тест «выбранный файл не JSON» с `new File([...], 'notes.txt',
+{ type: 'text/plain' })` падал на `findByRole('alert')` таймаутом — казалось, что экран не
+показывает отказ, хотя на деле `chooseFile` не запускался вовсе: файл текстового типа не
+прошёл фильтр `accept="application/json,.json"`. `fireEvent.change` эту сверку не делает
+и файл ставит всегда — расхождение с `userEvent.upload` уводило в сторону.
+**Как правильно:** файл для теста подбирать под `accept` элемента (тип и/или расширение),
+даже когда важно только содержимое, а не сам факт выбора: `type: 'application/json'`,
+имя `*.json` — с любым содержимым внутри.
+**Где:** `src/pages/moving/ui/moving-page.test.tsx`, «выбранный файл — не JSON»;
+`src/pages/moving/ui/moving-page.tsx`, `MovingPage` (поле `accept`).
+
+## `Callout tone="danger"` держит `role="alert"` всегда — два предупреждения в одном окне сталкиваются
+
+**Что:** `Callout` ставит `role="alert"` по одному условию — `tone === 'danger'`, без
+разбора, статичный это текст (предупреждение на всё время жизни окна) или разовое
+сообщение отказа. Окно, где рядом стоят такие два `Callout` (постоянное предупреждение о
+необратимости и отказ запроса под ним), несёт `role="alert"` дважды одновременно — тот же
+образец, что уже был у `RevokeDialog` (`ownKey` + `failed`).
+**Почему важно:** `getByRole('alert')`/`findByRole('alert')` без уточнения падает
+`TestingLibraryElementError: Found multiple elements with the role "alert"`, как только оба
+условия выполняются разом — а из одного вызова непонятно, который из двух подразумевался.
+**Как правильно:** искать отказ по тексту (`getByText(...)`), а не по голой роли, там, где
+в окне уже есть постоянный `Callout tone="danger"`; голая роль годится только пока в окне
+ровно одно предупреждение.
+**Где:** `src/features/manage-installation/ui/import-dialog.tsx`; `src/shared/ui/callout.tsx`,
+`Callout`; `e2e/moving.spec.ts`, «повторный приём».
+
+## jsdom не даёт `Blob.text()` и `URL.createObjectURL` — реальный API, а не заглушка нужна
+
+**Что:** в отличие от `ResizeObserver`/`IntersectionObserver` (которых в jsdom нет вовсе и
+заглушка законно пустая), `Blob.prototype.text` и `URL.createObjectURL`/`revokeObjectURL`
+браузер даёт по-настоящему, и код, который их зовёт (выбор и сохранение файла архива
+установки), обязан получить настоящее поведение, а не пустышку: `.text()` должен вернуть
+содержимое файла, а не `undefined`.
+**Почему важно:** голая заглушка (`() => Promise.resolve('')`) прошла бы `pnpm check`, но
+проверяла бы не то, что делает код, — разбор содержимого файла остался бы непроверенным.
+**Как правильно:** `Blob.prototype.text` — через `FileReader.readAsText` (в jsdom он
+работает по-настоящему); `URL.createObjectURL`/`revokeObjectURL` — заглушка законно
+пустая: адрес объекта в jsdom всё равно ничем не открыть, и что код с ним делает,
+проверяет сам тест (`vi.spyOn`), а не подмена.
+**Где:** `testing/setup.ts`.

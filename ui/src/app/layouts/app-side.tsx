@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
-import { Inbox, KeyRound, Plug, UserRound, Users } from 'lucide-react';
+import { ArrowLeftRight, Inbox, KeyRound, Plug, UserRound, Users } from 'lucide-react';
 import { bootstrapQueryOptions, useInstallKey, useInstallLocked } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
@@ -38,6 +38,14 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
    * флаг приходит в первом кадре, и пункт, который кончился бы `403`, не показывается.
    */
   const account = locked ? (bootstrap.data?.account ?? null) : null;
+  /*
+   * Перенос установки (UI-135) решает флаг администратора сам по себе, не связанный
+   * с режимом входа: на своей машине владелец тоже администратор (`owner@localhost`,
+   * `is_admin: true`), а перенос ему нужен ровно там же, где и на сервере с учётными
+   * записями, — поэтому `isAdmin` читается всегда, а не только при `locked`, в отличие
+   * от `account` выше, которую здесь показывают лишь в режиме входа.
+   */
+  const isAdmin = bootstrap.data?.account?.is_admin === true;
   const place = readPlace(location.pathname, searchParams);
   const onList = location.pathname === '/tasks';
 
@@ -139,6 +147,15 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
           <KeyRound className="size-(--ui-mark) shrink-0" aria-hidden="true" />
           {t('app.access')}
         </NavLink>
+
+        {/* Перенос — тоже действие над установкой целиком, и тоже только
+            администратору (`403 admin_required` у обеих операций, UI-135). */}
+        {isAdmin ? (
+          <NavLink to="/moving" onClick={onNavigate} className={sectionLink}>
+            <ArrowLeftRight className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+            {t('app.moving')}
+          </NavLink>
+        ) : null}
 
         {account?.is_admin === true ? (
           <NavLink to="/people" onClick={onNavigate} className={sectionLink}>

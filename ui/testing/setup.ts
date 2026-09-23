@@ -27,6 +27,25 @@ Element.prototype.releasePointerCapture ??= () => {};
 Element.prototype.scrollIntoView ??= () => {};
 
 /*
+ * `Blob.prototype.text` и `URL.createObjectURL`/`revokeObjectURL` в jsdom нет, а на
+ * них стоит выбор и сохранение файла архива установки (`features/manage-installation`):
+ * `file.text()` разбирает выбранный файл, `createObjectURL` даёт ссылку на скачивание.
+ * Заглушка чинит падение среды, а не даёт настоящей загрузки файла — читает выбранный
+ * файл через `FileReader` (в jsdom он есть по-настоящему), а адрес объекта не более
+ * чем строка-плейсхолдер: что с ней делает код, проверяет сам тест.
+ */
+Blob.prototype.text ??= function (this: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error as Error);
+    reader.readAsText(this);
+  });
+};
+URL.createObjectURL ??= () => 'blob:jsdom-stub';
+URL.revokeObjectURL ??= () => {};
+
+/*
  * `ResizeObserver` в jsdom нет вовсе, а доска задач считает им свою высоту: она
  * пересчитывается, когда над ней вырастает раскрытая форма отбора
  * (`src/pages/tasks/ui/tasks-board.tsx`). Заглушка чинит падение среды, а не даёт
