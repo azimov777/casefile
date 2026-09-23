@@ -7,16 +7,21 @@
 # и печатает, куда открыть интерфейс и чем подключить агента. Повторный запуск —
 # это обновление: свежий compose-файл, свежие образы, данные остаются в томах.
 #
-# Нужен только Docker с Compose v2. Всё остальное — образы из ghcr.io, которые
-# собирает конвейер из каждого коммита main. Секретов скрипт не спрашивает: ключ
-# интерфейса и токен агента выпускает сама установка (`docker-compose.prod.yml`).
+# Нужен только Docker с Compose v2. Всё остальное — образы из ghcr.io, которые конвейер
+# публикует на каждый выпуск с git-тегом (канал `stable`). Compose-файл берётся из образа
+# того же выпуска, а не с main: файл и образы установки всегда одного выпуска. Секретов
+# скрипт не спрашивает: ключ интерфейса и токен агента выпускает сама установка
+# (`docker-compose.prod.yml`).
 #
 # Вывод для человека — по-английски, как и вся страница проекта на GitHub.
 #
 # Переменные (все необязательны):
-#   CASEFILE_DIR     каталог установки, по умолчанию ~/casefile
-#   CASEFILE_SOURCE  откуда брать файлы установки, по умолчанию raw-адрес main на GitHub;
-#                    годится и file:// — так установщик проверяют до публикации
+#   CASEFILE_DIR       каталог установки, по умолчанию ~/casefile
+#   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777; годится и свой
+#                      реестр — так установщик проверяют до публикации
+#   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
+# Обе последние записываются в `.env` новой установки; без них действует `.env`
+# существующей установки, а без него — умолчания compose-файла.
 #
 # Всё тело — в `main`, который зовётся последней строкой. Запущенный через `| sh`
 # скрипт читается из трубы по мере исполнения, и любая команда, читающая stdin, съела бы
@@ -27,23 +32,12 @@
 set -eu
 
 DIR=${CASEFILE_DIR:-"$HOME/casefile"}
-SOURCE=${CASEFILE_SOURCE:-https://raw.githubusercontent.com/azimov777/casefile/main}
 COMPOSE=docker-compose.prod.yml
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 fail() {
   printf 'casefile: %s\n' "$*" >&2
   exit 1
-}
-
-fetch() {
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$1" -o "$2"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q "$1" -O "$2"
-  else
-    fail "curl or wget is required to download $1"
-  fi
 }
 
 # Значение переменной из `.env` установки или умолчание: порты в итоговом сообщении
@@ -74,18 +68,32 @@ main() {
   cd "$DIR"
 
   bold "Installing Casefile into $DIR"
-  fetch "$SOURCE/$COMPOSE" "$COMPOSE.download"
-  mv "$COMPOSE.download" "$COMPOSE"
 
   # `.env` заводится один раз и дальше принадлежит человеку: повторный запуск его не
   # трогает. COMPOSE_FILE — чтобы в этом каталоге работал просто `docker compose logs`;
-  # CASEFILE_COMPOSE_URL — откуда службе updater освежать compose-файл.
+  # реестр и выпуск — только если их назвали установщику, иначе действуют умолчания файла.
   if [ ! -f .env ]; then
     {
       echo "COMPOSE_FILE=$COMPOSE"
-      echo "CASEFILE_COMPOSE_URL=$SOURCE/$COMPOSE"
+      [ -z "${CASEFILE_REGISTRY:-}" ] || echo "CASEFILE_REGISTRY=$CASEFILE_REGISTRY"
+      [ -z "${CASEFILE_VERSION:-}" ] || echo "CASEFILE_VERSION=$CASEFILE_VERSION"
     } >.env
   fi
+
+  # Compose-файл лежит в образе выпуска (`docker/Dockerfile.prod`); тем же путём его берёт
+  # служба updater. Выпусков раньше 0.2.0 в канале нет, и файла в них тоже нет.
+  # Выбор тот же, что у compose: окружение, затем `.env`, затем умолчание файла.
+  registry=${CASEFILE_REGISTRY:-$(setting CASEFILE_REGISTRY ghcr.io/azimov777)}
+  image="$registry/casefile:${CASEFILE_VERSION:-$(setting CASEFILE_VERSION stable)}"
+  docker pull --quiet "$image" </dev/null >/dev/null ||
+    fail "could not download $image; check the network, or the release name in CASEFILE_VERSION"
+  holder=$(docker create --pull never "$image" </dev/null) || fail "could not open $image"
+  copied=0
+  docker cp "$holder:/app/$COMPOSE" "$COMPOSE.download" </dev/null >/dev/null || copied=$?
+  docker rm "$holder" </dev/null >/dev/null
+  [ "$copied" -eq 0 ] ||
+    fail "$image carries no $COMPOSE; releases before 0.2.0 cannot be installed this way"
+  mv "$COMPOSE.download" "$COMPOSE"
 
   bold "Starting Casefile (the first run downloads the images)..."
   docker compose pull --quiet </dev/null
@@ -123,7 +131,7 @@ main() {
   echo "  URL     $mcp_url"
   echo "  Header  Authorization: Bearer $token"
   echo
-  echo "Updates arrive by themselves every time Docker starts. Files and data: $DIR"
+  echo "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $DIR"
 }
 
 main "$@"

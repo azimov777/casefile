@@ -6,14 +6,18 @@
 # каталог установки (`%USERPROFILE%\casefile`), поднимает контур и печатает, куда открыть
 # интерфейс и чем подключить агента. Повторный запуск — это обновление.
 #
+# Compose-файл, как и в `install.sh`, берётся из образа выпуска (канал `stable`), а не с main.
+#
 # Переменные (все необязательны):
-#   CASEFILE_DIR     каталог установки
-#   CASEFILE_SOURCE  откуда брать файлы установки, по умолчанию raw-адрес main на GitHub
+#   CASEFILE_DIR       каталог установки
+#   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777
+#   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
+# Обе последние записываются в `.env` новой установки; без них действует `.env`
+# существующей установки, а без него — умолчания compose-файла.
 
 $ErrorActionPreference = 'Stop'
 
 $Dir = if ($env:CASEFILE_DIR) { $env:CASEFILE_DIR } else { Join-Path $HOME 'casefile' }
-$Source = if ($env:CASEFILE_SOURCE) { $env:CASEFILE_SOURCE } else { 'https://raw.githubusercontent.com/azimov777/casefile/main' }
 $Compose = 'docker-compose.prod.yml'
 
 function Fail([string] $Message) {
@@ -61,17 +65,33 @@ New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 Set-Location $Dir
 
 Write-Host "Installing Casefile into $Dir" -ForegroundColor White
-$ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest -UseBasicParsing -Uri "$Source/$Compose" -OutFile "$Compose.download"
-Move-Item -Force "$Compose.download" $Compose
 
 # `.env` заводится один раз и дальше принадлежит человеку. Пишется без BOM: `Set-Content
 # -Encoding UTF8` в PowerShell 5.1 ставит его в начало файла, и compose прочитал бы первую
-# переменную с невидимым символом в имени.
+# переменную с невидимым символом в имени. Реестр и выпуск — только если их назвали.
 if (-not (Test-Path .env)) {
-    $lines = @("COMPOSE_FILE=$Compose", "CASEFILE_COMPOSE_URL=$Source/$Compose")
+    $lines = @("COMPOSE_FILE=$Compose")
+    if ($env:CASEFILE_REGISTRY) { $lines += "CASEFILE_REGISTRY=$env:CASEFILE_REGISTRY" }
+    if ($env:CASEFILE_VERSION) { $lines += "CASEFILE_VERSION=$env:CASEFILE_VERSION" }
     [System.IO.File]::WriteAllLines((Join-Path $Dir '.env'), $lines)
 }
+
+# Compose-файл лежит в образе выпуска (`docker/Dockerfile.prod`); тем же путём его берёт
+# служба updater. Выбор образа тот же, что у compose: окружение, затем `.env`, затем
+# умолчание файла. Файл копирует `docker cp` байт в байт: вывод внешней команды PowerShell
+# перекодировал бы, и русские комментарии файла разошлись бы с файлом в образе.
+$registry = if ($env:CASEFILE_REGISTRY) { $env:CASEFILE_REGISTRY } else { Get-Setting 'CASEFILE_REGISTRY' 'ghcr.io/azimov777' }
+$version = if ($env:CASEFILE_VERSION) { $env:CASEFILE_VERSION } else { Get-Setting 'CASEFILE_VERSION' 'stable' }
+$image = "$registry/casefile:$version"
+& docker pull --quiet $image *> $null
+if ($LASTEXITCODE -ne 0) { Fail "could not download $image; check the network, or the release name in CASEFILE_VERSION" }
+$holder = (& docker create --pull never $image | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $holder) { Fail "could not open $image" }
+& docker cp "${holder}:/app/$Compose" "$Compose.download" *> $null
+$copied = $LASTEXITCODE
+& docker rm $holder *> $null
+if ($copied -ne 0) { Fail "$image carries no $Compose; releases before 0.2.0 cannot be installed this way" }
+Move-Item -Force "$Compose.download" $Compose
 
 Write-Host 'Starting Casefile (the first run downloads the images)...' -ForegroundColor White
 Invoke-Docker compose pull --quiet
@@ -110,4 +130,4 @@ Write-Host 'Any other MCP client (Codex, Cursor, ...):' -ForegroundColor White
 Write-Host "  URL     $mcpUrl"
 Write-Host "  Header  Authorization: Bearer $token"
 Write-Host ''
-Write-Host "Updates arrive by themselves every time Docker starts. Files and data: $Dir"
+Write-Host "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $Dir"

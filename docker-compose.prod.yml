@@ -1,10 +1,13 @@
 # Casefile на этой машине: всё, что нужно трекеру, поднимается одной командой —
 #   docker compose -f docker-compose.prod.yml up -d
 #
-# Продакшен-контур из готовых образов: их собирает конвейер из каждого коммита main
-# (`.github/workflows/images.yml`) и публикует в ghcr.io. Исходников, томов с кодом и
-# сборки здесь нет — поэтому тот же файл работает и из клона репозитория, и из каталога
-# установки, куда его кладёт установщик одной строкой (`install.sh`, `install.ps1`).
+# Продакшен-контур из готовых образов: их собирает конвейер (`.github/workflows/images.yml`)
+# и публикует в ghcr.io — выпуск с git-тегом `vX.Y.Z` под номером версии и под подвижным
+# тегом канала выпусков `stable`, каждый коммит main под `latest`. Исходников, томов с
+# кодом и сборки здесь нет — поэтому тот же файл работает и из клона репозитория, и из
+# каталога установки, куда его кладёт установщик одной строкой (`install.sh`,
+# `install.ps1`). Сам этот файл тоже едет в образе выпуска (`/app/docker-compose.prod.yml`):
+# установщик и обновлятор берут его оттуда, и файл всегда того же выпуска, что и образы.
 # Секции `build:` нет намеренно: в каталоге установки относительный контекст сборки
 # означал бы чужой каталог пользователя целиком.
 #
@@ -13,9 +16,10 @@
 # томов. Миграции — init-контейнер, а не часть старта приложения: несколько реплик,
 # применяющих их одновременно, дают гонку (`docs/CONVENTIONS.md`, «Запуск»).
 #
-# Автообновление — служба `updater` в конце файла: на каждом своём старте, то есть при
-# каждом старте Docker, она тянет образы последнего коммита main и пересоздаёт службы;
-# данные остаются в томах. Выключается `CASEFILE_AUTO_UPDATE=false` в `.env`.
+# Автообновление — служба `updater` в конце файла: при каждом старте Docker и дальше раз в
+# час она сверяет образы канала выпусков и, если вышел новый выпуск, пересоздаёт службы;
+# данные остаются в томах. Выключается `CASEFILE_AUTO_UPDATE=false` в `.env`, закрепляется
+# на выпуске `CASEFILE_VERSION=X.Y.Z`.
 #
 # Наружу смотрят два порта: интерфейс (он же REST через прокси `/api`) и MCP для агентов.
 # База и API видны лишь внутри сети compose. Оба порта публикуются на `CASEFILE_BIND` —
@@ -61,8 +65,9 @@ x-app-environment: &app-environment
 
 x-app-service: &app-service
   # Образ бэкенда один на все его процессы. Реестр и тег задаются переменными, чтобы
-  # установку можно было держать на своей копии образа или на выпуске, а не на `latest`.
-  image: ${CASEFILE_REGISTRY:-ghcr.io/azimov777}/casefile:${CASEFILE_VERSION:-latest}
+  # установку можно было держать на своей копии образа или закрепить на выпуске. Умолчание —
+  # канал выпусков `stable`: коммит main без тега до установки не доходит.
+  image: ${CASEFILE_REGISTRY:-ghcr.io/azimov777}/casefile:${CASEFILE_VERSION:-stable}
   # Настройки установки правятся в `.env` рядом с этим файлом — тем же способом и тем же
   # набором переменных, что и в дев-контуре. Файл читает compose на хосте: внутрь образа
   # он не копируется. `required: false` — без файла контур поднимается на умолчаниях.
@@ -74,6 +79,11 @@ x-app-service: &app-service
   depends_on:
     db:
       condition: service_healthy
+
+# Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
+# Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
+# значение, когда служба поменялась (`tests/test_auto_update.py`).
+x-updater-revision: &updater-revision "1285abd038bf"
 
 services:
   db:
@@ -185,7 +195,7 @@ services:
       start_period: 10s
 
   ui:
-    image: ${CASEFILE_REGISTRY:-ghcr.io/azimov777}/casefile-ui:${CASEFILE_VERSION:-latest}
+    image: ${CASEFILE_REGISTRY:-ghcr.io/azimov777}/casefile-ui:${CASEFILE_VERSION:-stable}
     # Ключ образ берёт из файла (`ui/docker/config-json.sh`), а не из переменной: секрет не
     # появляется в окружении контейнера, а том подключён только на чтение.
     environment:
@@ -228,22 +238,38 @@ services:
         condition: service_healthy
       local-token:
         condition: service_completed_successfully
+      # Не нужна интерфейсу, а привязана к нему, чтобы её запускал любой `up` этих служб, в
+      # том числе `up -d db api mcp ui` обновлятора прежних выпусков (служба `updater-renew`),
+      # `required: false`: служба, которая не поднялась, не держит интерфейс.
+      updater-renew:
+        condition: service_started
+        required: false
 
   # Автообновление. Контейнеры с `restart: unless-stopped` Docker поднимает сам при своём
   # старте, но на прежних образах: `pull_policy` действует только на `docker compose up`.
   # Поэтому обновляет отдельная служба — при каждом своём старте, то есть при каждом
-  # старте Docker, и по желанию раз в `CASEFILE_UPDATE_INTERVAL` часов.
+  # старте Docker, и дальше раз в `CASEFILE_UPDATE_INTERVAL` (умолчание — час).
   #
-  # Цикл: освежить этот файл по `CASEFILE_COMPOSE_URL` (задаёт установщик; из клона
-  # репозитория файл не трогается), скачать образы Casefile и, если что-то изменилось,
-  # `up -d` и уборка висящих образов проекта. Себя служба в `up` не называет: пересоздав
-  # себя, она оборвала бы собственную команду на середине. Нет сети — служба пишет об
-  # этом и оставляет всё как есть.
+  # Новая версия — только выпуск с git-тегом: служба сверяет тег `CASEFILE_VERSION`, по
+  # умолчанию канал выпусков `stable`, который конвейер двигает только на тег `vX.Y.Z`
+  # (`.github/workflows/images.yml`). Коммит main без тега уходит под `latest` и сюда не
+  # доходит. Закреплённый `CASEFILE_VERSION=X.Y.Z` не движется вовсе.
+  #
+  # Цикл: `pull` образов Casefile; из свежего образа `api` достать этот файл его выпуска и,
+  # если он другой, записать поверх; если что-то изменилось — `up -d` и уборка образов,
+  # которые служили до обновления. Себя служба в `up` не называет: пересоздав себя, она
+  # оборвала бы собственную команду на середине, — её заменяет `updater-renew`. Нет сети —
+  # служба пишет об этом и оставляет всё как есть.
+  #
+  # `pull`, а не отдельный запрос к манифесту: `pull` неизменного тега и есть запрос
+  # манифеста, а образ всё равно нужен локально — достать из него этот файл. Раз в час два
+  # образа — далеко от лимитов анонимного ghcr.io. Проверки идут не по часам, а от старта
+  # службы, с разбросом до шестой доли интервала: установки не приходят в реестр разом.
   #
   # `up` только при изменении — не экономия, а обход: compose внутри видит `.env` по
   # пути `/project/.env`, а путь `env_file` входит в хеш конфигурации службы. Безусловный
-  # `up` отсюда пересоздавал бы службы приложения на каждом старте Docker, хотя не
-  # изменилось ничего (TRK-58).
+  # `up` отсюда пересоздавал бы службы приложения на каждой проверке, хотя не изменилось
+  # ничего (TRK-58).
   #
   # Сокет Docker — это права root на машине, и они даны этой службе сознательно: без них
   # обновлять контейнеры нечем. Кому это не подходит, выключает службу переменной
@@ -261,8 +287,10 @@ services:
     environment:
       COMPOSE_FILE: docker-compose.prod.yml
       CASEFILE_AUTO_UPDATE: ${CASEFILE_AUTO_UPDATE:-true}
-      CASEFILE_UPDATE_INTERVAL: ${CASEFILE_UPDATE_INTERVAL:-0}
-      CASEFILE_COMPOSE_URL: ${CASEFILE_COMPOSE_URL:-}
+      CASEFILE_UPDATE_INTERVAL: ${CASEFILE_UPDATE_INTERVAL:-1}
+    # По этой метке `updater-renew` узнаёт обновлятор прежнего выпуска.
+    labels:
+      casefile.updater.revision: *updater-revision
     restart: unless-stopped
     # На `docker compose up` служба стартует последней, когда контур уже поднят: иначе два
     # compose — подъёма и её собственный — создавали бы одни и те же контейнеры наперегонки.
@@ -278,41 +306,88 @@ services:
       - sh
       - -c
       - |
-        log() { echo "casefile-updater: $$*"; }
+        log() { printf 'casefile-updater: %s\n' "$$*"; }
 
-        # Печатает `changed`, если compose-файл заменён свежим.
+        # Проект compose — тот, в котором запущен этот контейнер, а не `name:` файла:
+        # установка, поднятая под другим именем, иначе обновляла бы чужую.
+        COMPOSE_PROJECT_NAME=$$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$$(hostname)") || exit 1
+        export COMPOSE_PROJECT_NAME
+
+        # Секунды между проверками: число — часы, `30m` — минуты, `90s` — секунды.
+        # 0 или непонятное значение — только проверка на старте.
+        period() {
+          case "$$CASEFILE_UPDATE_INTERVAL" in
+            *s) n=$${CASEFILE_UPDATE_INTERVAL%s} k=1 ;;
+            *m) n=$${CASEFILE_UPDATE_INTERVAL%m} k=60 ;;
+            *h) n=$${CASEFILE_UPDATE_INTERVAL%h} k=3600 ;;
+            *) n=$$CASEFILE_UPDATE_INTERVAL k=3600 ;;
+          esac
+          case "$$n" in
+            '' | *[!0-9]*) echo 0 ;;
+            *) echo "$$((n * k))" ;;
+          esac
+        }
+
+        # Образ службы по этому файлу. Не `config --images <служба>`: та печатает и образы
+        # всех её зависимостей.
+        image_of() {
+          docker compose config |
+            awk -v s="$$1" '/^  [^ ]/ { cur = $$1 } cur == s ":" && /^    image: / { print $$2; exit }'
+        }
+
+        # Выпуск образа по метке, которую ставит конвейер; у своей сборки её нет.
+        version() {
+          docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$$1" 2>/dev/null
+        }
+
+        # Печатает `changed`, если этот файл заменён файлом из образа выпуска.
         refresh_compose() {
-          [ -n "$$CASEFILE_COMPOSE_URL" ] || return 0
-          if wget -q -T 30 -O /tmp/compose.yml "$$CASEFILE_COMPOSE_URL" &&
+          image=$$(image_of api)
+          [ -n "$$image" ] || return 0
+          if docker run --rm --pull never --network none --entrypoint cat "$$image" \
+            /app/docker-compose.prod.yml >/tmp/compose.yml 2>/dev/null &&
             docker compose -f /tmp/compose.yml --project-directory /project config --quiet; then
             if ! cmp -s /tmp/compose.yml "$$COMPOSE_FILE"; then
               # Запись поверх, а не замена файла: владелец и права остаются хозяйскими.
               cat /tmp/compose.yml >"$$COMPOSE_FILE"
-              log "compose file updated from $$CASEFILE_COMPOSE_URL" >&2
+              log "compose file updated from $$image" >&2
               echo changed
             fi
           else
-            log "could not refresh the compose file, keeping the current one" >&2
+            log "no usable compose file in $$image, keeping the current one" >&2
           fi
         }
 
         # Успех — какая-то служба не запущена или запущена не на том образе, что сейчас
-        # стоит под её тегом.
+        # стоит под тегом, который ей задаёт этот файл. Сверка с тегом файла, а не с тегом
+        # контейнера: иначе смена канала или закрепление выпуска не применялись бы.
         outdated() {
           for service in api mcp ui; do
             container=$$(docker compose ps -q "$$service")
             [ -n "$$container" ] || return 0
             running=$$(docker inspect -f '{{.Image}}' "$$container")
-            tag=$$(docker inspect -f '{{.Config.Image}}' "$$container")
-            current=$$(docker image inspect -f '{{.Id}}' "$$tag" 2>/dev/null) || return 0
-            [ "$$running" = "$$current" ] || return 0
+            wanted=$$(docker image inspect -f '{{.Id}}' "$$(image_of "$$service")" 2>/dev/null) || return 0
+            [ "$$running" = "$$wanted" ] || return 0
           done
           return 1
         }
 
+        # Образы, на которых службы работают сейчас: после обновления их убирают.
+        running_images() {
+          for service in api mcp ui; do
+            container=$$(docker compose ps -q "$$service")
+            [ -z "$$container" ] || docker inspect -f '{{.Image}}' "$$container"
+          done | sort -u
+        }
+
         update() {
-          changed=$$(refresh_compose)
           if ! docker compose pull --quiet api ui; then
+            log "could not pull images (offline?), keeping the current ones"
+            return 0
+          fi
+          changed=$$(refresh_compose)
+          # Новый файл может звать другие образы — их тоже скачать до `up`.
+          if [ -n "$$changed" ] && ! docker compose pull --quiet api ui; then
             log "could not pull images (offline?), keeping the current ones"
             return 0
           fi
@@ -320,30 +395,108 @@ services:
             log "already up to date"
             return 0
           fi
+          previous=$$(running_images)
+          api=$$(docker compose ps -q api)
+          before=$$([ -z "$$api" ] || version "$$(docker inspect -f '{{.Image}}' "$$api")")
+          image=$$(image_of api)
           if docker compose up -d db api mcp ui; then
-            log "updated"
+            after=$$(version "$$image")
+            log "updated to $${after:-$$image}"
           else
             log "services failed to start after the update, see: docker compose logs"
+            [ -z "$$before" ] ||
+              log "to go back, put CASEFILE_VERSION=$$before into .env and run: docker compose up -d"
           fi
-          docker image prune -f \
-            --filter "label=org.opencontainers.image.source=https://github.com/azimov777/casefile" \
-            >/dev/null 2>&1 || true
+          # Образ, который ещё служит или носит другое имя, `rmi` без `-f` не тронет.
+          for image in $$previous; do
+            docker rmi "$$image" >/dev/null 2>&1 || true
+          done
         }
 
         trap 'exit 0' TERM INT
         if [ "$$CASEFILE_AUTO_UPDATE" = "false" ]; then
           log "auto-update is off (CASEFILE_AUTO_UPDATE=false)"
-        else
-          update
+          while :; do sleep 86400 & wait $$!; done
+        fi
+        update
+        seconds=$$(period)
+        if [ "$$seconds" -eq 0 ]; then
+          log "periodic checks are off (CASEFILE_UPDATE_INTERVAL=$$CASEFILE_UPDATE_INTERVAL), next check at the next Docker start"
+          while :; do sleep 86400 & wait $$!; done
         fi
         while :; do
-          if [ "$$CASEFILE_AUTO_UPDATE" != "false" ] && [ "$$CASEFILE_UPDATE_INTERVAL" -gt 0 ] 2>/dev/null; then
-            sleep "$$((CASEFILE_UPDATE_INTERVAL * 3600))" & wait $$!
-            update
-          else
-            sleep 86400 & wait $$!
-          fi
+          jitter=$$(($$(od -An -N2 -tu2 /dev/urandom) % (seconds / 6 + 1)))
+          sleep "$$((seconds + jitter))" & wait $$!
+          update
         done
+
+  # Замена самого обновлятора. `updater` не пересоздаёт себя, поэтому его новая команда из
+  # выпуска иначе не доехала бы до установки никогда — ни раз в час, ни при старте Docker:
+  # контейнер живёт со своей командой до ручного `docker compose up`. Эта разовая служба —
+  # зависимость `ui`, поэтому её запускает всякий `up` этих служб, и прежде всего
+  # `up -d db api mcp ui` самого обновлятора — в том числе обновлятора прежних выпусков,
+  # который ничего о ней не знает. Так установки, стоявшие на `latest`, переходят на канал
+  # выпусков сами: прежний обновлятор берёт этот файл, поднимает службы на `stable`, а эта
+  # служба затем меняет его на обновлятор из файла.
+  #
+  # Обновлятор меняется, только если его метка ревизии не та, что здесь, и только если
+  # `up` зовёт он: в нём сейчас идёт `docker`. Тогда служба ждёт, пока он кончит, и
+  # пересоздаёт его. Если он спит, `up` зовёт установщик или человек, и обновлятор
+  # пересоздаст их же `up`; два compose разом кончились бы ошибкой имени контейнера.
+  # Ревизию сверяет тест с хешем определения `updater` (`tests/test_auto_update.py`): поменял
+  # службу — поменяй метку.
+  #
+  # Каталога установки здесь нет, только сокет: службу создаёт compose изнутри обновлятора,
+  # а там `.` — это `/project`, которого демон не знает, и монтирование не состоялось бы
+  # (`docs/notes/docker.md`). Путь каталога со стороны демона служба берёт у самого
+  # обновлятора — источник его `/project` — и зовёт `up` из разового контейнера, где
+  # каталог смонтирован по этому же пути: тогда и `.:/project` нового обновлятора
+  # разрешается в путь, который демон знает.
+  updater-renew:
+    image: docker:29-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CASEFILE_UPDATER_REVISION: *updater-revision
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        log() { printf 'casefile-updater-renew: %s\n' "$$*"; }
+
+        project=$$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$$(hostname)") || exit 0
+        updater=$$(docker ps -q --filter "label=com.docker.compose.project=$$project" \
+          --filter label=com.docker.compose.service=updater)
+        [ -n "$$updater" ] || exit 0
+        have=$$(docker inspect -f '{{index .Config.Labels "casefile.updater.revision"}}' "$$updater")
+        [ "$$have" != "$$CASEFILE_UPDATER_REVISION" ] || exit 0
+
+        busy() {
+          docker top "$$updater" -o pid,comm 2>/dev/null |
+            awk 'NR > 1 && $$2 ~ /^docker/ { found = 1 } END { exit !found }'
+        }
+        busy || exit 0
+        # Предел — полчаса: столько не идёт ни одно обновление.
+        i=0
+        while busy && [ "$$i" -lt 360 ]; do
+          sleep 5
+          i=$$((i + 1))
+        done
+
+        directory=$$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' "$$updater")
+        case "$$directory" in
+          /*) ;;
+          *)
+            log "cannot tell where the installation lives ($$directory); run the installer again to get the new updater"
+            exit 0
+            ;;
+        esac
+        log "replacing the updater of an earlier release"
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          -v "$$directory:$$directory" -w "$$directory" \
+          -e COMPOSE_PROJECT_NAME="$$project" -e COMPOSE_FILE=docker-compose.prod.yml \
+          docker:29-cli docker compose up -d --no-deps updater
 
 volumes:
   pgdata:
