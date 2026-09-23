@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { taskRefHref } from '@/shared/lib';
+import { cn, taskRefHref } from '@/shared/lib';
 import type { Headline, HeadlinePart } from '../model/headline';
 
 /**
@@ -37,6 +37,16 @@ interface EntryHeadlineProps {
  */
 const IDENTIFIER = 'font-mono text-meta';
 
+/**
+ * Ключ задачи или записи: тот же `IDENTIFIER`, но с `whitespace-nowrap` — заголовок
+ * собирается словами и идентификаторами во `inline-flex flex-wrap`
+ * (`EntryHeadline` выше), и на переносе строки браузер вправе разорвать ключ по
+ * дефису так же, как обычное слово (UI-151). Другие идентификаторы (`id`, статусы,
+ * виды связи) этой судьбы не разделяют: они не ссылки в трекере и не то, что «диктуют
+ * вслух и ищут глазами» (`ui/docs/CONCEPT.md`, §6) — только ключ и ссылка на запись.
+ */
+const KEY = cn(IDENTIFIER, 'whitespace-nowrap');
+
 function Piece({ part, linked }: { part: HeadlinePart; linked: boolean }) {
   switch (part.kind) {
     case 'words':
@@ -45,19 +55,19 @@ function Piece({ part, linked }: { part: HeadlinePart; linked: boolean }) {
       return <code className={IDENTIFIER}>{part.text}</code>;
     case 'task':
       return linked ? (
-        <Link className={IDENTIFIER} to={`/tasks/${part.key}`}>
+        <Link className={KEY} to={`/tasks/${part.key}`}>
           {part.key}
         </Link>
       ) : (
-        <code className={IDENTIFIER}>{part.key}</code>
+        <code className={KEY}>{part.key}</code>
       );
     case 'entry':
       return linked ? (
-        <Link className={IDENTIFIER} to={taskRefHref({ key: part.key, entryNo: part.no })}>
+        <Link className={KEY} to={taskRefHref({ key: part.key, entryNo: part.no })}>
           {part.key}#{part.no}
         </Link>
       ) : (
-        <code className={IDENTIFIER}>
+        <code className={KEY}>
           {part.key}#{part.no}
         </code>
       );

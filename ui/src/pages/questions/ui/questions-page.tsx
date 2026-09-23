@@ -281,8 +281,13 @@ function RemarkRow({ remark }: { remark: Remark }) {
     <article className="flex flex-col gap-2 rounded-control border border-attention-line bg-surface p-3">
       <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
         {/* Подпись `KEY#N` и адрес собираются одним правилом: ссылка, называющая
-            запись, обязана её и открывать (`shared/lib`, `taskRefHref`). */}
-        <Link className="font-mono" to={taskRefHref({ key: remark.task_key, entryNo: remark.no })}>
+            запись, обязана её и открывать (`shared/lib`, `taskRefHref`). `whitespace-nowrap`
+            держит ключ целым на переносе шапки — `flex-wrap` рядом с ним переносит
+            саму подпись как один блок, а не ломает её посередине (UI-151). */}
+        <Link
+          className="font-mono whitespace-nowrap"
+          to={taskRefHref({ key: remark.task_key, entryNo: remark.no })}
+        >
           {remark.task_key}#{remark.no}
         </Link>
         <Badge tone="attention">{t('awaitingResolution')}</Badge>
@@ -353,7 +358,7 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
     >
       <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
         <Link
-          className="font-mono"
+          className="font-mono whitespace-nowrap"
           to={taskRefHref({ key: question.task_key, entryNo: question.no })}
         >
           {question.task_key}#{question.no}

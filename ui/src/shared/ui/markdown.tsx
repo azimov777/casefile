@@ -27,6 +27,13 @@ export function Markdown({ children }: { children: string }) {
      * `pre` эта строка не трогает: у него собственный `white-space: pre` из UA-таблицы
      * стилей, где точек переноса нет вовсе, и он остаётся при своей горизонтальной
      * прокрутке (`Preformatted`, `overflow-x-auto`).
+     *
+     * Ключ задачи при этом не рвётся по дефису (UI-151): его ссылка несёт собственный
+     * `whitespace-nowrap` (`TASK_REF_LINK_CLASS`, `remarkTaskRefs` ниже) — это другое
+     * свойство, не то же самое, что унаследованный `overflow-wrap: anywhere`, и оно
+     * запрещает перенос внутри ссылки целиком, точку переноса ставить некуда независимо
+     * от значения `overflow-wrap`. Ключ либо помещается на строке целиком, либо целиком
+     * уходит на следующую.
      */
     <div className="[&>:first-child]:mt-0 [&>:last-child]:mb-0 wrap-anywhere">
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkTaskRefs]} components={NODES}>
@@ -73,11 +80,25 @@ const HEADING = 'mt-3 mb-2 text-body font-bold';
 /** Рамка у ячеек одна на обе роли: заголовок столбца отличается весом `<th>`, а не линией. */
 const CELL = 'border border-line px-3 py-1 text-left';
 
-/** Внутренняя ссылка идёт роутером, внешняя — обычной ссылкой в новую вкладку. */
-function Anchor({ href, children }: ComponentProps<'a'>) {
-  if (href !== undefined && href.startsWith('/')) return <Link to={href}>{children}</Link>;
+/**
+ * Внутренняя ссылка идёт роутером, внешняя — обычной ссылкой в новую вкладку.
+ *
+ * `className` принимается и передаётся дальше не украшения ради: это единственный
+ * канал, которым `remarkTaskRefs` (ниже) помечает ссылку на ключ задачи — сама она
+ * узнаёт об этом только по `data.hProperties.className` разобранного узла, а
+ * `react-markdown` доносит его сюда обычным пропом (UI-151). Обычная ссылка markdown
+ * этот проп не несёт и продолжает переноситься как текст вокруг нее.
+ */
+function Anchor({ href, className, children }: ComponentProps<'a'>) {
+  if (href !== undefined && href.startsWith('/')) {
+    return (
+      <Link to={href} className={className}>
+        {children}
+      </Link>
+    );
+  }
   return (
-    <a href={href} target="_blank" rel="noreferrer noopener">
+    <a href={href} className={className} target="_blank" rel="noreferrer noopener">
       {children}
     </a>
   );
@@ -171,7 +192,26 @@ interface MdastNode {
   value?: string;
   url?: string;
   children?: MdastNode[];
+  /**
+   * Указание `mdast-util-to-hast`, как узел лечь в html: `hProperties` она сливает
+   * поверх собственных свойств узла (`href` у ссылки остаётся), не заменяя их
+   * (`unist-util-visit`-совместимый контракт `mdast-util-to-hast`, `applyData`). Этим
+   * путём ссылка на ключ задачи получает свой `className` до того, как до неё
+   * доберётся `react-markdown` — тот отдаёт `hProperties` компоненту обычным пропом.
+   */
+  data?: { hProperties?: { className?: string } };
 }
+
+/**
+ * Ключ задачи короткий (до ~12 знаков, контекст UI-151) и не должен переноситься по
+ * дефису посреди себя: браузер вправе перенести строку после «UI-» так же, как после
+ * любого другого дефиса (UAX #14), и ключ разваливается на «UI-» и «137#11» на разных
+ * строках — не находится ни поиском глазами, ни копированием (`CONCEPT.md`, §6).
+ * `whitespace-nowrap` не расширяет строку: ключ и без переноса короче слова с
+ * `overflow-wrap: anywhere` из соседнего решения этого же файла (UI-150) — он либо
+ * помещается целиком, либо целиком уходит на следующую строку.
+ */
+const TASK_REF_LINK_CLASS = 'whitespace-nowrap';
 
 /**
  * Превращает `TRK-42` и `TRK-42#12` в тексте разметки в ссылки приложения.
@@ -217,6 +257,7 @@ function visit(node: MdastNode): void {
               type: 'link',
               url: taskRefHref(part.ref),
               children: [{ type: 'text', value: part.value }],
+              data: { hProperties: { className: TASK_REF_LINK_CLASS } },
             },
       );
     }

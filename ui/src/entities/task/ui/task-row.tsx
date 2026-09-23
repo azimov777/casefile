@@ -109,9 +109,11 @@ export function TaskRow({ task }: { task: Task }) {
       onClick={openTask}
       onAuxClick={openTaskAside}
     >
+      {/* `whitespace-nowrap` держит ключ целым: столбец узкий, и без него браузер
+          вправе перенести строку по дефису внутри ключа (UI-151). */}
       <th
         scope="row"
-        className="px-3 text-left font-normal font-mono text-mark text-faint @max-list:shrink-0 @max-list:px-0"
+        className="px-3 text-left font-normal font-mono text-mark whitespace-nowrap text-faint @max-list:shrink-0 @max-list:px-0"
       >
         {task.key}
       </th>

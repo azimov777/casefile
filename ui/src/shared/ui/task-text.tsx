@@ -13,7 +13,10 @@ export function TaskText({ children }: { children: string }) {
           part.value
         ) : (
           // Ключ по позиции: части одной строки не переупорядочиваются и не удаляются.
-          <Link key={index} to={taskRefHref(part.ref)}>
+          // `whitespace-nowrap` не даёт ключу разорваться по дефису на переносе строки —
+          // тот же приём и по той же причине, что у ссылки на ключ в markdown
+          // (`shared/ui/markdown.tsx`, `TASK_REF_LINK_CLASS`, UI-151).
+          <Link key={index} to={taskRefHref(part.ref)} className="whitespace-nowrap">
             {part.value}
           </Link>
         ),
