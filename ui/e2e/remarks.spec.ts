@@ -22,8 +22,14 @@ test('неразобранное замечание видно на карточ
       .getByRole('navigation', { name: /Навигация по задаче/ })
       .getByRole('button', { name: 'Оставить замечание' }),
   ).toBeVisible();
-  // Именно плашка шапки: слово `done` встречается и в теле сводки, и в описи.
-  await expect(page.getByText('статус done')).toBeVisible();
+  // Именно статус шапки: слово `done` встречается и в теле сводки, и в описи. С UI-143
+  // он стоит значением под подписью «Статус» в полосе свойств.
+  await expect(
+    page
+      .locator('main header dl > div')
+      .filter({ has: page.getByRole('term').getByText('Статус', { exact: true }) })
+      .getByRole('definition'),
+  ).toHaveText('done');
 });
 
 test('разбор стоит под своим замечанием, называет исход словами и ведёт в продолжение', async ({

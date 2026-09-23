@@ -87,11 +87,22 @@ interface StatusMarkProps {
    * а уходит в доступное имя: иначе диктор прочёл бы пустоту.
    */
   withName?: boolean;
+  /**
+   * Говорить ли диктору род значения («статус», «приоритет») перед ним. Выключают там,
+   * где род уже назван видимой подписью рядом — `dt` полосы свойств карточки (UI-143):
+   * иначе диктор прочёл бы его дважды подряд.
+   */
+  labelled?: boolean;
   className?: string;
 }
 
 /** Статус задачи: форма, а не плашка. Имя из контракта стоит рядом моноширинным. */
-export function StatusMark({ status, withName = true, className }: StatusMarkProps) {
+export function StatusMark({
+  status,
+  withName = true,
+  labelled = true,
+  className,
+}: StatusMarkProps) {
   const { t } = useTranslation('ui');
 
   if (status === null || status === undefined || status === '') return null;
@@ -118,7 +129,7 @@ export function StatusMark({ status, withName = true, className }: StatusMarkPro
         {shape}
       </svg>
       {/* Пробел после подписи обязателен: диктор иначе прочёл бы «статусopen». */}
-      <span className="sr-only">{t('task.statusLabel')} </span>
+      {labelled ? <span className="sr-only">{t('task.statusLabel')} </span> : null}
       <span
         className={
           withName

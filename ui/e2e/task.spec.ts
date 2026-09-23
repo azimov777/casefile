@@ -275,3 +275,79 @@ test('ответ на вопрос стоит под вопросом, а яко
   const highlighted = page.getByRole('article').filter({ hasText: '#4' }).first();
   await expect(highlighted).toBeVisible();
 });
+
+/*
+ * Шапка карточки читается группами (UI-143, вариант B из UI-143#10). Раньше очередь,
+ * название, строка статуса и строка дат стояли на одном шаге 8 px, и статус был
+ * одинаково близок к названию и к датам. Теперь состояние и время — одна полоса
+ * свойств между линиями, где время отделено явным разрывом в правом конце полосы,
+ * а строка действий отделена от шапки сильнее любого зазора внутри неё. DEMO-5 — с
+ * родителем в строке «где», DEMO-1 — с признаками в полосе.
+ */
+for (const key of ['DEMO-1', 'DEMO-5']) {
+  test(`шапка ${key} на 1440: группы разведены, статус не спорит с датами`, async ({ page }) => {
+    await silenceJournal(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/tasks/${key}`);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(key);
+    await fontsReady(page);
+
+    const box = async (selector: string) => {
+      const found = await page.locator(selector).first().boundingBox();
+      expect(found, selector).not.toBeNull();
+      return found as { x: number; y: number; width: number; height: number };
+    };
+    /** Ячейка полосы по её подписи: `div` с `dt` внутри. */
+    const cell = async (label: string) => {
+      const found = await page
+        .locator('main header dl > div')
+        .filter({ has: page.getByRole('term').getByText(label, { exact: true }) })
+        .boundingBox();
+      expect(found, label).not.toBeNull();
+      return found as { x: number; y: number; width: number; height: number };
+    };
+
+    const nav = await box('main > nav');
+    const where = await box('main header p');
+    const title = await box('main header h1');
+    const strip = await box('main header dl');
+    const status = await cell('Статус');
+    const priority = await cell('Приоритет');
+    const assignee = await cell('Исполнитель');
+    const updated = await cell('Обновлена');
+
+    // Зазоры внутри шапки: «где» → название, название → полоса.
+    const inside = [title.y - (where.y + where.height), strip.y - (title.y + title.height)];
+    const navGap = where.y - (nav.y + nav.height);
+    expect(Math.min(...inside)).toBeGreaterThanOrEqual(0);
+    expect(navGap).toBeGreaterThan(Math.max(...inside));
+
+    // Статус и время — в полосе, ограниченной линиями сверху и снизу.
+    const borders = await page
+      .locator('main header dl')
+      .evaluate((node) => [
+        getComputedStyle(node).borderTopWidth,
+        getComputedStyle(node).borderBottomWidth,
+      ]);
+    expect(borders.map((width) => parseFloat(width))).toEqual([1, 1]);
+    for (const part of [status, updated]) {
+      expect(part.y).toBeGreaterThanOrEqual(strip.y);
+      expect(part.y + part.height).toBeLessThanOrEqual(strip.y + strip.height);
+    }
+
+    // Время отделено от состояния явным разрывом: он больше шага между ячейками
+    // состояния по меньшей мере вчетверо.
+    const step = priority.x - (status.x + status.width);
+    const lastState = Math.max(
+      ...(await page
+        .locator('main header dl > div')
+        .evaluateAll((cells) =>
+          cells
+            .filter((c) => !/Обновлена|Заведена/.test(c.querySelector('dt')?.textContent ?? ''))
+            .map((c) => c.getBoundingClientRect().right),
+        )),
+    );
+    expect(assignee.x).toBeGreaterThan(priority.x);
+    expect(updated.x - lastState).toBeGreaterThan(step * 4);
+  });
+}
