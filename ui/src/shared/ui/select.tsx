@@ -45,8 +45,22 @@ export function Select({ value, onValueChange, label, options, icon, className }
         <span className="truncate">
           <SelectPrimitive.Value />
         </span>
+        {/*
+         * `block` на самой иконке, а не только на обёртке `SelectPrimitive.Icon`:
+         * обёртка — прямой потомок `inline-flex`-ряда и блокируется флексбоксом сама
+         * (CSS Display, «blockification»), а вложенный `<svg>` — нет, он остаётся
+         * строчным заменяемым элементом со своим `vertical-align: baseline`. Разметки
+         * без Preflight это касается напрямую: без сброса `svg { display: block }`
+         * браузер подгоняет низ иконки под базовую линию текста, а не её центр под
+         * центр строки, и от нижнего поля шрифта («descent») иконка визуально всплывает
+         * на 2–3 px выше подписи (замерено: −2.5 px у обоих `Select` разом — общая
+         * причина одна, хотя на глаз заметно только там, где рядом нет второй иконки,
+         * которая бы тот же сдвиг маскировала, — у выбора языка, UI-146). `block`
+         * убирает иконку из строчного контекста: её рамка перестаёт расти под
+         * `line-height`, и `items-center` ряда центрирует её как есть.
+         */}
         <SelectPrimitive.Icon>
-          <ChevronDown className="size-(--ui-mark) text-faint" aria-hidden="true" />
+          <ChevronDown className="block size-(--ui-mark) text-faint" aria-hidden="true" />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
 
@@ -80,7 +94,9 @@ function Item({ value, children }: { value: string; children: ReactNode }) {
     >
       <span className="w-(--ui-mark) shrink-0">
         <SelectPrimitive.ItemIndicator>
-          <Check className="size-(--ui-mark) text-accent" aria-hidden="true" />
+          {/* Та же причина и то же лекарство, что у шеврона выше: без `block` галочка
+            строчная и всплывает над центром строки (замерено: −3 px). */}
+          <Check className="block size-(--ui-mark) text-accent" aria-hidden="true" />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

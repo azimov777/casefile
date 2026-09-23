@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { fontsReady, silenceJournal } from './contour';
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -167,4 +167,51 @@ test('на доске тот же порядок: выбранный уходи�
   await expect(page).toHaveURL(/sort=-priority/);
   await expect.poll(() => sorts.length).toBeGreaterThan(0);
   expect(new Set(sorts)).toEqual(new Set(['-priority']));
+});
+
+/**
+ * Смещение шеврона `Select` относительно оптической оси подписи: центр последнего
+ * `svg` внутри триггера (шеврон — всегда последний, `select.tsx`) минус центр строки
+ * значения. Ноль — шеврон стоит на оси; метод общий для любого `Select`, не только
+ * языка (UI-146).
+ */
+function chevronOffset(trigger: Locator): Promise<number> {
+  return trigger.evaluate((node) => {
+    const svgs = Array.from(node.querySelectorAll('svg'));
+    const chevron = svgs[svgs.length - 1] as Element;
+    const value = node.querySelector('span.truncate') as Element;
+    const chevronBox = chevron.getBoundingClientRect();
+    const valueBox = value.getBoundingClientRect();
+    return (chevronBox.top + chevronBox.bottom) / 2 - (valueBox.top + valueBox.bottom) / 2;
+  });
+}
+
+test('шеврон выбора языка стоит на одной оси с подписью, как и шеврон сортировки (UI-146)', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.locator('tbody tr').first()).toBeVisible();
+  /*
+   * Замер снят после `document.fonts.ready` (`docs/notes/ui.md`, «Замер геометрии
+   * снимается после document.fonts.ready»): до этого текст набран запасной
+   * гарнитурой, и метрика строки отличается от той, что видит человек.
+   */
+  await fontsReady(page);
+
+  const language = page.getByRole('combobox', { name: 'Язык интерфейса' });
+  const sort = page.getByRole('combobox', { name: 'Сортировка' });
+  await expect(language).toBeVisible();
+  await expect(sort).toBeVisible();
+
+  const offsets = {
+    language: Math.round((await chevronOffset(language)) * 100) / 100,
+    sort: Math.round((await chevronOffset(sort)) * 100) / 100,
+  };
+  const report = JSON.stringify(offsets);
+
+  // Оба шеврона — один и тот же `Select`, и держатся одним правилом: расхождение
+  // с осью подписи не больше пикселя у обоих, не только у того, где его заметили.
+  expect(Math.abs(offsets.language), report).toBeLessThanOrEqual(1);
+  expect(Math.abs(offsets.sort), report).toBeLessThanOrEqual(1);
 });
