@@ -4,9 +4,12 @@ import type { TFunction } from 'i18next';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import {
+  AuthorName,
+  questionHistoryQueryOptions,
   questionsQueryOptions,
   remarksQueryOptions,
   type Question,
+  type QuestionAnswer,
   type Remark,
 } from '@/entities/entry';
 import { bootstrapQueryOptions } from '@/entities/session';
@@ -17,8 +20,30 @@ import {
   withHeld,
   type Answering,
 } from '@/features/answer-question';
-import { Badge, Button, Markdown, QueryState, RelativeTime } from '@/shared/ui';
+import {
+  Badge,
+  Button,
+  Markdown,
+  QueryState,
+  RelativeTime,
+  SegmentedNav,
+  SegmentedNavLink,
+} from '@/shared/ui';
 import { taskRefHref } from '@/shared/lib';
+
+/**
+ * Экран вопросов: входящая первым экраном, история вопросов — вторым уровнем.
+ *
+ * Вид живёт в адресе (`view=history`), как любой отбор: ссылку на историю можно
+ * переслать, а «назад» браузера возвращает к входящей. Без параметра — входящая, та
+ * же, что была до истории (UI-147): открытые вопросы ко мне и мои замечания. Виды —
+ * отдельные компоненты, а не ветки одного: у каждого свои запросы, и входящая не
+ * должна читать свою выдачу, пока человек листает историю.
+ */
+export function QuestionsPage() {
+  const [searchParams] = useSearchParams();
+  return searchParams.get('view') === 'history' ? <QuestionHistory /> : <Inbox />;
+}
 
 /**
  * Входящая: две половины одной картины — вопросы, которых ждут от человека, и
@@ -30,7 +55,7 @@ import { taskRefHref } from '@/shared/lib';
  * подпись берётся из первого кадра: страница знает, кто вошёл, а бэкенд по замечанию
  * не догадывается.
  */
-export function QuestionsPage() {
+function Inbox() {
   const [searchParams, setSearchParams] = useSearchParams();
   const bootstrap = useQuery(bootstrapQueryOptions());
 
@@ -101,6 +126,8 @@ export function QuestionsPage() {
             половин две, а искать свои замечания человек приходит именно сюда. */}
         <p className="mt-1 text-meta text-muted">{t('intro')}</p>
       </div>
+
+      <QuestionsViewSwitch view="inbox" />
 
       <form
         className="flex flex-wrap items-end gap-4 rounded-control border border-line bg-surface px-4 py-3"
@@ -392,6 +419,269 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
           <Button onClick={() => setOpen(true)}>{brick('answer.open')}</Button>
         </div>
       )}
+    </article>
+  );
+}
+
+/** Вид экрана вопросов: входящая или история. */
+type QuestionsView = 'inbox' | 'history';
+
+const VIEWS: QuestionsView[] = ['inbox', 'history'];
+
+/**
+ * Адрес вида поверх текущего отбора. Очередь переезжает между видами — человек
+ * смотрит одну и ту же очередь двумя способами, — а условия, которых у другого вида
+ * нет, снимаются: «только блокирующие» принадлежит входящей, «кому угодно» — истории,
+ * и молча унесённые в чужой вид, они вернулись бы при обратном переходе как отбор,
+ * которого человек не видел.
+ */
+function viewSearch(params: URLSearchParams, view: QuestionsView): string {
+  const next = new URLSearchParams(params);
+  if (view === 'history') {
+    next.set('view', 'history');
+    next.delete('blocking');
+  } else {
+    next.delete('view');
+    next.delete('to');
+  }
+  const query = next.toString();
+  return query === '' ? '' : `?${query}`;
+}
+
+/**
+ * Переключатель «входящая / история»: ссылки, а не радиогруппа — вид живёт в адресе,
+ * и его смена это переход (`src/shared/ui/segmented-nav.tsx`). Входящая стоит первой и
+ * остаётся видом по умолчанию: история — второй уровень, за которым приходят реже.
+ */
+function QuestionsViewSwitch({ view }: { view: QuestionsView }) {
+  const [searchParams] = useSearchParams();
+  const { t } = useTranslation('questions');
+
+  return (
+    <SegmentedNav label={t('view.label')} className="self-start">
+      {VIEWS.map((option) => (
+        <SegmentedNavLink
+          key={option}
+          to={{ search: viewSearch(searchParams, option) }}
+          // Оба вида — одна страница `/questions`, поэтому `true`, а не `page`.
+          current={option === view && 'true'}
+        >
+          {t(`view.${option}`)}
+        </SegmentedNavLink>
+      ))}
+    </SegmentedNav>
+  );
+}
+
+/**
+ * История вопросов: все вопросы с ответами, от свежих к старым (UI-147).
+ *
+ * Ответы и порядок отдаёт бэкенд одной выдачей (`order=newest`, `answers` у строки,
+ * TRK-120): собирать ответы из дел по задаче — запрос на строку, а переворачивать
+ * страницу на клиенте — ставить вторую страницу выше первой. Адресат по умолчанию —
+ * тот, кто смотрит; флажок снимает это условие (`to=anyone` в адресе,
+ * `any_addressee` в запросе).
+ *
+ * Отвечать отсюда нельзя намеренно: это не расширение роли человека, а просмотр.
+ * Открытый вопрос виден и здесь, но форма ответа у него — во входящей.
+ */
+function QuestionHistory() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const bootstrap = useQuery(bootstrapQueryOptions());
+  const { t } = useTranslation('questions');
+  const { t: brick } = useTranslation('ui');
+
+  const queue = searchParams.get('queue') ?? '';
+  const anyone = searchParams.get('to') === 'anyone';
+
+  const params = useMemo(
+    () => ({
+      ...(queue === '' ? {} : { queue }),
+      ...(anyone ? { any_addressee: true } : {}),
+    }),
+    [queue, anyone],
+  );
+  const history = useInfiniteQuery(questionHistoryQueryOptions(params));
+  const items = history.data?.pages.flatMap((page) => page.items) ?? [];
+
+  function apply(changes: { queue?: string; anyone?: boolean }) {
+    const updated = new URLSearchParams(searchParams);
+    if (changes.queue !== undefined) {
+      if (changes.queue === '') updated.delete('queue');
+      else updated.set('queue', changes.queue);
+    }
+    if (changes.anyone !== undefined) {
+      if (changes.anyone) updated.set('to', 'anyone');
+      else updated.delete('to');
+    }
+    setSearchParams(updated, { replace: true });
+  }
+
+  return (
+    <main className="flex flex-col gap-4">
+      <div>
+        <h1 className="text-title">{brick('app.inbox')}</h1>
+        <p className="mt-1 text-meta text-muted">{t('historyIntro')}</p>
+      </div>
+
+      <QuestionsViewSwitch view="history" />
+
+      <form
+        className="flex flex-wrap items-end gap-4 rounded-control border border-line bg-surface px-4 py-3"
+        aria-label={t('historyFilterLabel')}
+      >
+        <label className="flex flex-col gap-1">
+          <span className="text-meta text-muted">{t('queue')}</span>
+          {/* Фон и цвет названы явно по той же причине, что и во входящей. */}
+          <select
+            className="rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
+            value={queue}
+            onChange={(event) => apply({ queue: event.target.value })}
+          >
+            <option value="">{t('allQueues')}</option>
+            {(bootstrap.data?.queues ?? []).map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.key} — {item.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="inline-flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={!anyone}
+            onChange={(event) => apply({ anyone: !event.target.checked })}
+          />
+          {t('onlyMine')}
+        </label>
+      </form>
+
+      {/* Заголовок раздела нужен не глазу, а уровням: строки истории — `h3`, и без
+          `h2` между ними и `h1` дерево заголовков пропускало бы уровень (`axe`). */}
+      <section aria-labelledby="history-section" className="flex flex-col gap-3">
+        <h2 className="text-screen" id="history-section">
+          {t('historyTitle')}
+        </h2>
+
+        <QueryState
+          query={history}
+          loading={t('loadingHistory')}
+          empty={
+            items.length === 0
+              ? queue === ''
+                ? anyone
+                  ? t('noHistoryAnyone')
+                  : t('noHistory')
+                : emptyByFilter([t('condition.queue', { queue })], () => apply({ queue: '' }), t)
+              : undefined
+          }
+        />
+
+        <ul className="flex list-none flex-col gap-3 p-0">
+          {items.map((question) => (
+            <li key={questionId(question)}>
+              <HistoryRow question={question} />
+            </li>
+          ))}
+        </ul>
+
+        {history.hasNextPage ? (
+          <Button
+            onClick={() => void history.fetchNextPage()}
+            disabled={history.isFetchingNextPage}
+          >
+            {history.isFetchingNextPage ? t('loadingMore') : t('more')}
+          </Button>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+/**
+ * Вопрос в истории: откуда, кто спросил и кого, о чём — и ответы под ним.
+ *
+ * Открыт вопрос или отвечен, говорит `answers` из выдачи: пустой список бэкенд
+ * называет открытым вопросом (`docs/FRONTEND.md`, «История вопросов»), и клиент здесь
+ * ничего не считает сам. Кромка и плашка «блокирующий» — только у открытого: у
+ * отвеченного вопроса работа уже не стоит, и красное соврало бы о положении дел.
+ */
+function HistoryRow({ question }: { question: Question }) {
+  const { t } = useTranslation('questions');
+  const { t: brick } = useTranslation('ui');
+  const reference = questionId(question);
+  // `answers` в схеме необязателен только по форме: у поля есть значение по
+  // умолчанию, и генератор типов делает его `?`. Выдача несёт его всегда.
+  const answers = question.answers ?? [];
+  const open = answers.length === 0;
+  const blocking = open && question.payload.blocking;
+
+  return (
+    <article
+      className={blocking ? `${QUESTION_CARD} ${BLOCKING_EDGE}` : QUESTION_CARD}
+      data-answered={open ? 'false' : 'true'}
+      data-blocking={blocking ? 'true' : undefined}
+      aria-label={t('questionLabel', { reference })}
+    >
+      <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
+        <Link
+          className="font-mono"
+          to={taskRefHref({ key: question.task_key, entryNo: question.no })}
+        >
+          {reference}
+        </Link>
+        {open ? (
+          <Badge tone="attention">{t('awaitingAnswer')}</Badge>
+        ) : (
+          <Badge tone="positive">{t('answered')}</Badge>
+        )}
+        {blocking ? <Badge tone="danger">{brick('entry.blocking')}</Badge> : null}
+        <AuthorName author={question.author} />
+        <RelativeTime value={question.created_at} />
+      </header>
+
+      <h3 className="text-screen">{question.title}</h3>
+      {/* Адресат назван: в истории вопрос бывает задан не мне — флажок снимается. */}
+      <p className="text-meta text-muted">
+        {t('addressees', { names: question.payload.addressees.join(', ') })}
+      </p>
+      <Markdown>{question.body}</Markdown>
+
+      {open ? (
+        <p className="text-muted italic">{t('noAnswerYet')}</p>
+      ) : (
+        // Ответы вложены в вопрос тем же приёмом, что и в деле: сдвиг и полоса слева.
+        <ul
+          className="ml-4 flex list-none flex-col gap-3 border-l-2 border-l-line-strong p-0 pl-3"
+          aria-label={t('answersLabel', { reference })}
+        >
+          {answers.map((answer) => (
+            <li key={answer.no}>
+              <HistoryAnswer answer={answer} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
+/** Ответ под вопросом: ссылка `KEY#N` ведёт к самой записи ответа в деле. */
+function HistoryAnswer({ answer }: { answer: QuestionAnswer }) {
+  const { t } = useTranslation('questions');
+  const reference = `${answer.task_key}#${answer.no}`;
+
+  return (
+    <article className="flex flex-col gap-1" aria-label={t('answerLabel', { reference })}>
+      <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
+        <Link className="font-mono" to={taskRefHref({ key: answer.task_key, entryNo: answer.no })}>
+          {reference}
+        </Link>
+        <AuthorName author={answer.author} />
+        <RelativeTime value={answer.created_at} />
+      </header>
+      <Markdown>{answer.body}</Markdown>
     </article>
   );
 }

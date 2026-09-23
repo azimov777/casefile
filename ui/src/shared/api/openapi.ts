@@ -733,11 +733,13 @@ export interface paths {
          * List questions
          * @description Вопросы всех задач с фильтрами; по умолчанию — открытые вопросы текущего участника.
          *
-         *     Порядок — от самого старого: дольше всех ждёт ответа тот, кого задали первым.
-         *     Ответ на вопрос убирает его из выдачи, потому что открытость считается по делу, а
-         *     не хранится флагом. Адресовать можно только участника реестра, поэтому запрос общим
-         *     агентским токеном без явного `addressee` — `422 actor_not_addressable`: пустой
-         *     список молча соврал бы, что вопросов не пришло.
+         *     Порядок по умолчанию — от самого старого: дольше всех ждёт ответа тот, кого задали
+         *     первым; `order=newest` переворачивает его для истории. Ответ на вопрос убирает его
+         *     из выдачи открытых, потому что открытость считается по делу, а не хранится флагом;
+         *     с `open=false` вопрос остаётся и несёт свои ответы в `answers`. Адресовать можно
+         *     только участника реестра, поэтому запрос общим агентским токеном без явного
+         *     `addressee` и без `any_addressee` — `422 actor_not_addressable`: пустой список
+         *     молча соврал бы, что вопросов не пришло.
          */
         get: operations["list_questions"];
         put?: never;
@@ -1193,6 +1195,83 @@ export interface components {
             question_no: number;
         };
         /**
+         * AnsweredQuestionRead
+         * @description Вопрос в выдаче поперёк задач (`GET /api/v1/questions`) вместе с ответами.
+         *
+         *     Отдельная модель, а не поле у `QuestionEntryRead`: в деле задачи ответ — своя
+         *     запись рядом с вопросом, и вложить его туда значило бы отдать одну запись дважды.
+         *     Здесь дела рядом нет, и без вложения клиенту пришлось бы собирать ответы запросом
+         *     на каждую задачу.
+         */
+        AnsweredQuestionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the task, from 1; `TRK-42#12`
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * Type
+             * @constant
+             */
+            type: "question";
+            payload: components["schemas"]["QuestionPayload"];
+            /**
+             * Answers
+             * @description `answer` entries of the same task that point at this question, by entry number. The first one closed the question, the rest add to it. Empty means the question is still open
+             */
+            answers?: components["schemas"]["AnswerEntryRead"][];
+        };
+        /**
          * ArchiveFormat
          * @description Что за документ перед нами. Значение одно: других архивов у трекера нет.
          * @enum {string}
@@ -1502,6 +1581,12 @@ export interface components {
             data: components["schemas"]["AccountRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        /** CollectionResponse[AnsweredQuestionRead] */
+        CollectionResponse_AnsweredQuestionRead_: {
+            /** Data */
+            data: components["schemas"]["AnsweredQuestionRead"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -1512,12 +1597,6 @@ export interface components {
         CollectionResponse_ParticipantRead_: {
             /** Data */
             data: components["schemas"]["ParticipantRead"][];
-            meta?: components["schemas"]["PageMeta"];
-        };
-        /** CollectionResponse[QuestionEntryRead] */
-        CollectionResponse_QuestionEntryRead_: {
-            /** Data */
-            data: components["schemas"]["QuestionEntryRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
         /** CollectionResponse[QueueRead] */
@@ -2413,6 +2492,16 @@ export interface components {
              */
             blocking?: boolean | null;
         };
+        /**
+         * QuestionOrder
+         * @description Порядок выдачи вопросов поперёк задач (`GET /api/v1/questions`).
+         *
+         *     Два порядка — два вопроса человека. «Входящая» идёт от старых: дольше всех ждёт
+         *     ответа тот, кого спросили первым, и он обязан стоять сверху. История идёт от свежих:
+         *     там ищут недавний разговор, а не долг, и первым экраном нужно последнее.
+         * @enum {string}
+         */
+        QuestionOrder: "oldest" | "newest";
         /**
          * QuestionPayload
          * @description Вопрос участникам реестра.
@@ -6706,12 +6795,16 @@ export interface operations {
             query?: {
                 /** @description Participant the question is addressed to; matching ignores case. Defaults to the participant whose token made the request */
                 addressee?: string | null;
+                /** @description true drops the addressee filter and returns questions to anyone. Not accepted together with `addressee` (`422 addressee_with_any_addressee`) */
+                any_addressee?: boolean;
                 /** @description Queue key of the question's task; matching ignores case */
                 queue?: string | null;
                 /** @description Keep only questions that do (or do not) block the work */
                 blocking?: boolean | null;
                 /** @description true (the default) keeps only questions with no answer yet; false drops the filter and returns every question, answered or not. To read the questions of one task use its case with `types=question` */
                 open?: boolean;
+                /** @description `oldest` (the default) puts the longest-waiting question first, as an inbox needs; `newest` puts the latest first, as a history needs. A cursor only continues the order it was issued in */
+                order?: components["schemas"]["QuestionOrder"];
                 /** @description Page size */
                 limit?: number;
                 /** @description Cursor from `meta.next_cursor` of a previous page */
@@ -6732,7 +6825,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CollectionResponse_QuestionEntryRead_"];
+                    "application/json": components["schemas"]["CollectionResponse_AnsweredQuestionRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

@@ -13,9 +13,11 @@ export {
 } from './api/entries';
 export {
   QUESTION_PAGE_SIZE,
+  questionHistoryQueryOptions,
   questionKeys,
   questionsQueryOptions,
   type Question,
+  type QuestionAnswer,
   type QuestionListParams,
 } from './api/questions';
 export {

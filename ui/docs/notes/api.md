@@ -243,3 +243,15 @@
 (`isLive`), и принадлежность строки считать тем же предикатом, что бэкенд, —
 `belongsTo`; причину отказа читать `denialReason` и объяснять словами экрана.
 **Где:** `src/entities/token/api/tokens.ts`, `isSession`, `isLive`, `belongsTo`; `src/features/manage-access/model/problem.ts`, `denialReason`.
+
+## Поле ответа со значением по умолчанию генерируется необязательным
+
+**Что:** у строки `GET /api/v1/questions` поле `answers` бэкенд отдаёт всегда, но в
+схеме у него `default_factory=list`, и `openapi-typescript` делает его `answers?:` —
+в типе `Question` (`AnsweredQuestionRead`) ответы выглядят так, будто их может не быть.
+**Почему важно:** читая `question.answers.length`, код не соберётся, а подставив «на
+всякий случай» свою логику открытости, экран начнёт считать за бэкенд: открытым вопрос
+называет пустой список, и других признаков открытости в строке нет.
+**Как правильно:** брать `question.answers ?? []` и считать вопрос открытым ровно тогда,
+когда список пуст; у выдачи открытых вопросов (`open=true`) он пуст всегда.
+**Где:** `src/pages/questions/ui/questions-page.tsx`, `HistoryRow`; `../app/api/schemas/entries.py`, `AnsweredQuestionRead`.

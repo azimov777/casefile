@@ -64,6 +64,7 @@ from app.domain.case import (
     EntryHeading,
     EntryRef,
     EntryType,
+    QuestionOrder,
     TaskRef,
     VerdictOutcome,
     build_entry,
@@ -74,6 +75,7 @@ from app.domain.case import (
 )
 from app.domain.errors import (
     ActorNotAddressableError,
+    AddresseeWithAnyAddresseeError,
     EntryFieldsInvalidError,
     EntryNotFoundError,
 )
@@ -107,6 +109,20 @@ class TaskEntry:
 
     entry: Entry
     task_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class AnsweredQuestion:
+    """Вопрос из выдачи поперёк задач вместе с ответами на него.
+
+    Ответы едут со страницей, а не отдельным запросом клиента на каждую задачу: история
+    вопросов без них бессмысленна, а собирать их по делам — запрос на строку. Пустой
+    список означает «ответа нет», то есть вопрос открыт.
+    """
+
+    entry: Entry
+    task_key: str
+    answers: list[Entry]
 
 
 async def list_entries(
@@ -231,37 +247,59 @@ async def list_questions(
     actor: Actor,
     addressee: str | None = None,
     queue: Queue | None = None,
+    any_addressee: bool = False,
     blocking: bool | None = None,
     open_only: bool = True,
+    order: QuestionOrder = QuestionOrder.OLDEST,
     limit: int | None = None,
     cursor: str | None = None,
-) -> Page[TaskEntry]:
-    """«Входящая»: вопросы поперёк задач с фильтрами (`CONCEPT.md`, 3.6).
+) -> Page[AnsweredQuestion]:
+    """«Входящая» и история: вопросы поперёк задач с фильтрами (`CONCEPT.md`, 3.6).
 
     Адресат по умолчанию — участник, чьим токеном сделан запрос. У общего агентского
     токена участника нет, и адресовать временного агента нельзя вовсе: пустой список
     в этом случае молча соврал бы, что вопросов не пришло, поэтому это отказ.
+    `any_addressee` снимает условие адресата явно — тогда и отказывать не в чем; вместе
+    с названным адресатом это противоречие, а не уточнение, и тоже отказ.
 
     Названный адресат ищется в реестре, а не подставляется в фильтр как есть: опечатка
     в имени иначе дала бы пустую «входящую», неотличимую от отсутствия вопросов.
+
+    Каждый вопрос едет с ответами на него — вторым запросом на всю страницу; у выдачи
+    одних открытых вопросов ответов нет, и этот запрос не делается.
     """
     ensure_scope(actor, TokenScope.TASK, action="question.list")
-    if addressee is None:
+    name: str | None
+    if any_addressee:
+        if addressee is not None:
+            raise AddresseeWithAnyAddresseeError(details={"addressee": addressee})
+        name = None
+    elif addressee is None:
         if actor.participant is None:
             raise ActorNotAddressableError(details={"signature": actor.author.signature})
         name = actor.participant.name
     else:
         name = (await participants_service.get_participant(session, addressee)).name
-    page = await EntryRepository(session).questions_page(
+    repository = EntryRepository(session)
+    page = await repository.questions_page(
         addressee=name,
         queue_id=queue.id if queue is not None else None,
         blocking=blocking,
         open_only=open_only,
+        order=order,
         limit=limit,
         cursor=cursor,
     )
+    # У открытых вопросов ответов нет по определению открытости: второй запрос
+    # «входящей» ничего бы не нашёл, и платить за него незачем.
+    answers = {} if open_only else await repository.answers_to([e for e, _ in page.items])
     return Page(
-        items=[TaskEntry(entry=entry, task_key=key) for entry, key in page.items],
+        items=[
+            AnsweredQuestion(
+                entry=entry, task_key=key, answers=answers.get((entry.task_id, entry.no), [])
+            )
+            for entry, key in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 

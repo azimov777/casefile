@@ -14,10 +14,12 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep
 from app.api.schemas.common import CollectionResponse
-from app.api.schemas.entries import QuestionEntryRead, entry_read
+from app.api.schemas.entries import AnsweredQuestionRead, entry_read
 from app.db.pagination import DEFAULT_PAGE_SIZE
+from app.domain.case import QuestionOrder
 from app.services import case as case_service
 from app.services import queues as queues_service
+from app.services.case import AnsweredQuestion
 
 router = APIRouter(prefix="/questions", tags=["questions"])
 
@@ -29,6 +31,15 @@ AddresseeQuery = Annotated[
             "to the participant whose token made the request"
         ),
         examples=["owner"],
+    ),
+]
+AnyAddresseeQuery = Annotated[
+    bool,
+    Query(
+        description=(
+            "true drops the addressee filter and returns questions to anyone. Not "
+            "accepted together with `addressee` (`422 addressee_with_any_addressee`)"
+        ),
     ),
 ]
 QueueQuery = Annotated[
@@ -51,37 +62,63 @@ OpenQuery = Annotated[
     ),
 ]
 
+OrderQuery = Annotated[
+    QuestionOrder,
+    Query(
+        description=(
+            "`oldest` (the default) puts the longest-waiting question first, as an inbox "
+            "needs; `newest` puts the latest first, as a history needs. A cursor only "
+            "continues the order it was issued in"
+        ),
+    ),
+]
+
 
 @router.get("", summary="List questions")
 async def list_questions(
     session: SessionDep,
     actor: ActorDep,
     addressee: AddresseeQuery = None,
+    any_addressee: AnyAddresseeQuery = False,
     queue: QueueQuery = None,
     blocking: BlockingQuery = None,
     open_only: OpenQuery = True,
+    order: OrderQuery = QuestionOrder.OLDEST,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
-) -> CollectionResponse[QuestionEntryRead]:
+) -> CollectionResponse[AnsweredQuestionRead]:
     """Вопросы всех задач с фильтрами; по умолчанию — открытые вопросы текущего участника.
 
-    Порядок — от самого старого: дольше всех ждёт ответа тот, кого задали первым.
-    Ответ на вопрос убирает его из выдачи, потому что открытость считается по делу, а
-    не хранится флагом. Адресовать можно только участника реестра, поэтому запрос общим
-    агентским токеном без явного `addressee` — `422 actor_not_addressable`: пустой
-    список молча соврал бы, что вопросов не пришло.
+    Порядок по умолчанию — от самого старого: дольше всех ждёт ответа тот, кого задали
+    первым; `order=newest` переворачивает его для истории. Ответ на вопрос убирает его
+    из выдачи открытых, потому что открытость считается по делу, а не хранится флагом;
+    с `open=false` вопрос остаётся и несёт свои ответы в `answers`. Адресовать можно
+    только участника реестра, поэтому запрос общим агентским токеном без явного
+    `addressee` и без `any_addressee` — `422 actor_not_addressable`: пустой список
+    молча соврал бы, что вопросов не пришло.
     """
     page = await case_service.list_questions(
         session,
         actor=actor,
         addressee=addressee,
+        any_addressee=any_addressee,
         queue=None if queue is None else await queues_service.get_queue(session, queue),
         blocking=blocking,
         open_only=open_only,
+        order=order,
         limit=limit,
         cursor=cursor,
     )
-    return CollectionResponse[QuestionEntryRead].of(
-        [entry_read(item.entry, task_key=item.task_key) for item in page.items],
+    return CollectionResponse[AnsweredQuestionRead].of(
+        [answered_question_read(item) for item in page.items],
         next_cursor=page.next_cursor,
+    )
+
+
+def answered_question_read(item: AnsweredQuestion) -> AnsweredQuestionRead:
+    """Строка выдачи: вопрос тем же сборщиком, что и в деле, плюс его ответы."""
+    question = entry_read(item.entry, task_key=item.task_key)
+    return AnsweredQuestionRead(
+        **question.model_dump(by_alias=True),
+        answers=[entry_read(answer, task_key=item.task_key) for answer in item.answers],
     )

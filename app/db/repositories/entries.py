@@ -28,6 +28,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.db.models.entry import Entry
 from app.db.models.task import Task
 from app.db.pagination import (
+    InvalidCursorError,
     Page,
     decode_sort_cursor,
     encode_sort_cursor,
@@ -47,6 +48,7 @@ from app.domain.case import (
     LinkFacts,
     NoFacts,
     QuestionFacts,
+    QuestionOrder,
     RemarkOutcome,
     ResolutionFacts,
     SectionChangedFacts,
@@ -314,14 +316,20 @@ class EntryRepository:
         queue_id: uuid.UUID | None = None,
         blocking: bool | None = None,
         open_only: bool = True,
+        order: QuestionOrder = QuestionOrder.OLDEST,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[tuple[Entry, str]]:
-        """Вопросы всех задач с фильтрами — «входящая» участника.
+        """Вопросы всех задач с фильтрами — «входящая» участника и её история.
 
-        Порядок — сквозной `seq` по возрастанию: дольше всех ждёт ответа самый старый
-        вопрос, и он обязан быть первым. `seq` монотонен и уникален, поэтому страницы
-        не теряют и не задваивают записи при подшивке новых.
+        Порядок — сквозной `seq`: по возрастанию во «входящей» (дольше всех ждёт ответа
+        самый старый вопрос, и он обязан быть первым), по убыванию в истории. `seq`
+        монотонен и уникален, поэтому страницы не теряют и не задваивают записи при
+        подшивке новых: в порядке «от свежих» новый вопрос встаёт перед первой
+        страницей, а не посреди уже прочитанных.
+
+        Курсор несёт порядок, в котором выдан: с курсором другого порядка страница
+        пришла бы не та, о которой думает клиент, поэтому это `invalid_cursor`.
 
         Отдаёт пары «запись, ключ задачи»: у записи связи с задачей нет, только
         `task_id`, а читающему вопрос нужен адрес, по которому идти за делом.
@@ -336,16 +344,58 @@ class EntryRepository:
             statement = statement.where(blocking_is(blocking))
         if open_only:
             statement = _unanswered(statement)
+        newest = order is QuestionOrder.NEWEST
         if cursor is not None:
-            (after_seq,), _ = decode_sort_cursor(cursor, arity=1)
-            statement = statement.where(Entry.seq > after_seq)
-        statement = statement.order_by(Entry.seq).limit(size + 1)
+            (after_seq, cursor_order), _ = decode_sort_cursor(cursor, arity=2)
+            if cursor_order != order.value:
+                raise InvalidCursorError(
+                    details={"cursor": cursor, "reason": "sort_mismatch", "expected": order.value}
+                )
+            statement = statement.where(Entry.seq < after_seq if newest else Entry.seq > after_seq)
+        statement = statement.order_by(Entry.seq.desc() if newest else Entry.seq).limit(size + 1)
         rows = [(entry, key) for entry, key in await self._session.execute(statement)]
         if len(rows) <= size:
             return Page(items=rows, next_cursor=None)
         page = rows[:size]
         last_entry = page[-1][0]
-        return Page(items=page, next_cursor=encode_sort_cursor([last_entry.seq], last_entry.id))
+        return Page(
+            items=page,
+            next_cursor=encode_sort_cursor([last_entry.seq, order.value], last_entry.id),
+        )
+
+    async def answers_to(
+        self, questions: Sequence[Entry]
+    ) -> dict[tuple[uuid.UUID, int], list[Entry]]:
+        """Ответы на перечисленные вопросы — одним запросом на всю страницу.
+
+        Ключ — пара «задача, номер вопроса»: ответ ссылается на вопрос номером
+        `question_no` внутри той же задачи, а номера в разных задачах совпадают. Отбор
+        в SQL идёт по двум наборам независимо (задачи и номера), и лишние пары, которые
+        такой отбор пропускает, отбрасываются здесь: условие на пары кортежами по JSONB
+        индекс не взял бы, а страница вопросов короткая.
+
+        Ответы каждого вопроса — по номеру записи: первый ответ закрыл вопрос, остальные
+        его дополняют (`CONCEPT.md`, 3.4). Вопрос без ответа в словаре не появляется.
+        """
+        wanted = {(question.task_id, question.no) for question in questions}
+        if not wanted:
+            return {}
+        question_no = Entry.payload["question_no"].as_integer()
+        statement = (
+            select(Entry)
+            .where(
+                Entry.type == EntryType.ANSWER,
+                Entry.task_id.in_({task_id for task_id, _ in wanted}),
+                question_no.in_({no for _, no in wanted}),
+            )
+            .order_by(Entry.task_id, Entry.no)
+        )
+        answers: dict[tuple[uuid.UUID, int], list[Entry]] = {}
+        for answer in await self._session.scalars(statement):
+            pair = (answer.task_id, int(answer.payload["question_no"]))
+            if pair in wanted:
+                answers.setdefault(pair, []).append(answer)
+        return answers
 
     async def remarks_page(
         self,
