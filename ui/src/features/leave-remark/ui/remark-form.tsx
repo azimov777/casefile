@@ -8,6 +8,11 @@ import { remarkTitle, useLeaveRemark } from '../model/use-leave-remark';
 
 interface RemarkFormProps {
   taskKey: string;
+  /**
+   * Отмена: черновик уже выброшен, форме остаётся только свернуться. Родитель решает,
+   * как это выглядит, — на карточке задачи форма попросту размонтируется.
+   */
+  onCancel: () => void;
 }
 
 /**
@@ -24,7 +29,7 @@ interface RemarkFormProps {
  * (`remarkTitle`). Человеку, который увидел «вышло не то», надо сказать это одним
  * действием, а не заполнить два поля.
  */
-export function RemarkForm({ taskKey }: RemarkFormProps) {
+export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
   const remark = useLeaveRemark();
   const [filed, setFiled] = useState<{ entryNo: number; body: string } | null>(null);
   const fields = remark.error instanceof ApiError ? remark.error.fields : null;
@@ -55,6 +60,7 @@ export function RemarkForm({ taskKey }: RemarkFormProps) {
       placeholder={t('remark.placeholder')}
       problem={fields?.body ?? fields?.title}
       isPending={remark.isPending}
+      onCancel={onCancel}
       failure={
         remark.isError ? (
           <>
