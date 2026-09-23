@@ -4,6 +4,7 @@ import { AccountPage } from '@/pages/account';
 import { CasePage } from '@/pages/case';
 import { ConnectPage } from '@/pages/connect';
 import { LoginPage } from '@/pages/login';
+import { MovingPage } from '@/pages/moving';
 import { PeoplePage } from '@/pages/people';
 import { QuestionsPage } from '@/pages/questions';
 import { TaskPage } from '@/pages/task';
@@ -29,6 +30,7 @@ export const routes: RouteObject[] = [
           { path: 'questions', element: <QuestionsPage /> },
           { path: 'connect', element: <ConnectPage /> },
           { path: 'access', element: <AccessPage /> },
+          { path: 'moving', element: <MovingPage /> },
           {
             element: <RequireSignInMode />,
             children: [

@@ -57,6 +57,9 @@ export const ui = {
     installation: 'Installation',
     connect: 'Connect an agent',
     access: 'Access',
+    // Перенос — тоже действие над установкой целиком, и тоже только администратору
+    // (UI-135): moving the whole installation elsewhere, not day-to-day access.
+    moving: 'Move installation',
     // Режим входа по учётным записям (`TRK-113`): люди — администратору, учётная
     // запись — каждому вошедшему.
     people: 'People',
@@ -142,6 +145,7 @@ export const ui = {
     lastUsed: 'last used',
     neverUsed: 'never used yet',
     revokedAt: 'revocation:',
+    expiresAt: 'session ends',
   },
 
   /** Представление задачи: строка списка, карточка доски, знаки и навигация. */

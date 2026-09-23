@@ -124,19 +124,35 @@ function Crumbs({ place }: { place: Place }) {
   const parts = crumbsOf(place, t);
 
   return (
+    /*
+     * Основа нулевая, а рост — весь остаток (UI-134). Крошки не решают, переносить ли
+     * полосу: перенос вызывает только правая группа, которой и правда не хватило места
+     * (увеличенный текст, узкое окно). Если на строку не хватает самих крошек — в
+     * мгновение «подключаемся», самое длинное из состояний потока, — они уступают
+     * многоточием, а не уводят вниз всю правую группу, чтобы вернуть её через секунду.
+     */
     <p
-      className="flex min-w-0 items-center gap-1.5 text-meta text-muted"
+      className="flex min-w-0 grow basis-0 items-center gap-1.5 text-meta text-muted"
       aria-label={t('app.whereAmI')}
     >
       {parts.map((part, index) => (
         <Fragment key={part.label}>
           {index === 0 ? null : (
-            <span aria-hidden="true" className="text-line-strong">
+            <span
+              aria-hidden="true"
+              className={cn('text-line-strong', part.wide && 'max-fold:hidden')}
+            >
               /
             </span>
           )}
           {part.to === undefined ? (
-            <span className={cn('truncate', part.mono ? 'font-mono text-text' : '')}>
+            <span
+              className={cn(
+                'truncate',
+                part.mono ? 'font-mono text-text' : '',
+                part.wide && 'max-fold:hidden',
+              )}
+            >
               {part.label}
             </span>
           ) : (
@@ -161,6 +177,12 @@ interface Crumb {
   /** Ссылка — только у того, куда человек может вернуться. Текущее место не ссылка. */
   to?: string;
   mono?: boolean;
+  /**
+   * Только выше точки остановки `fold`. Ниже неё крошка повторяла бы заголовок
+   * страницы прямо под собой («Задачи»), а место в полосе нужно переключателю вида
+   * (UI-134). Со ссылкой такая крошка не бывает: ссылку прятать нельзя.
+   */
+  wide?: boolean;
 }
 
 function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
@@ -178,7 +200,10 @@ function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
   if (place.section === 'tasks') {
     // На самом списке очередь — уже текущее место: ссылка вела бы туда же, откуда
     // человек смотрит, и по дороге стирала бы остальной отбор.
-    return [{ ...queue, to: undefined }, { label: t('app.crumbTasks') }];
+    return [
+      { ...queue, to: undefined },
+      { label: t('app.crumbTasks'), wide: true },
+    ];
   }
 
   if (place.taskKey === null) return [queue];

@@ -1,6 +1,9 @@
 export {
   TOKEN_PAGE_SIZE,
+  belongsTo,
+  isLive,
   isRevoked,
+  isSession,
   tokenKeys,
   tokensQueryOptions,
   type Token,

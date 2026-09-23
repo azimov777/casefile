@@ -15,7 +15,7 @@ export const errors = {
   account_requires_human: 'Only a person can have an account: agents use tokens.',
   actor_label_required: 'A shared agent token requires a temporary-agent label.',
   actor_not_addressable: 'A temporary agent cannot be addressed with a question.',
-  admin_required: 'Only an administrator can manage people.',
+  admin_required: 'Only an administrator of this installation can do this.',
   archive_format_unsupported: 'This file is not an installation archive this Casefile can read.',
   archive_invalid: 'The installation archive is damaged or was edited; export it again.',
   archive_revision_unknown:

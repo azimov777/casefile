@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog, Input, QueryState } from '@/shared/ui';
 import { participantsQueryOptions, type IssuedToken, type TokenScope } from '../api/access';
-import { complainsAbout } from '../model/problem';
+import { complainsAbout, denialReason } from '../model/problem';
 import { useIssueToken } from '../model/use-access-actions';
 
 /**
@@ -25,14 +25,24 @@ const SCOPES: TokenScope[] = ['task', 'main'];
  *
  * Секрет из ответа сюда не оседает: он уходит вызывающему (`onIssued`), а тот
  * показывает его один раз и забывает при закрытии окна (`UI-106#18`).
+ *
+ * Выбор «за кого» у человека без флага администратора не называет других людей: ключ
+ * от чужого имени бэкенд ему не выпустит (`foreign_human`, TRK-114#12), а пункт,
+ * который наверняка кончится отказом, в выборе — ловушка, а не возможность.
  */
 export function IssueDialog({
   participant,
+  me,
+  admin,
   onClose,
   onIssued,
 }: {
   /** Кому выпускаем, если участник уже выбран снаружи: после «Завести агента». */
   participant: string | null;
+  /** Имя человека этого сеанса: себе ключ выпускает любой. */
+  me: string | null;
+  /** Флаг администратора учётной записи: ему открыты и чужие люди. */
+  admin: boolean;
   onClose: () => void;
   onIssued: (issued: IssuedToken) => void;
 }) {
@@ -48,9 +58,12 @@ export function IssueDialog({
   const scopeName = useId();
   const { t } = useTranslation('access');
 
-  const known = participants.data ?? [];
+  const known = (participants.data ?? []).filter(
+    (item) => admin || item.kind !== 'human' || item.name === me,
+  );
   const failed = issue.error !== null && issue.error !== undefined;
   const badName = complainsAbout(issue.error, 'name');
+  const denied = denialReason(issue.error);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,7 +198,12 @@ export function IssueDialog({
 
         {failed ? (
           <Callout tone="danger">
-            {errorMessage(issue.error)} {badName ? t('issue.nameRule') : t('issue.retrySafe')}
+            {errorMessage(issue.error)}{' '}
+            {denied !== null
+              ? t(`denied.${denied}`)
+              : badName
+                ? t('issue.nameRule')
+                : t('issue.retrySafe')}
           </Callout>
         ) : null}
       </form>

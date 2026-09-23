@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { Token } from '@/entities/token';
 import { errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog } from '@/shared/ui';
+import { denialReason } from '../model/problem';
 import { useRevokeToken } from '../model/use-access-actions';
 
 /**
@@ -28,6 +29,7 @@ export function RevokeDialog({
   const revoke = useRevokeToken();
   const { t } = useTranslation('access');
   const failed = revoke.error !== null && revoke.error !== undefined;
+  const denied = denialReason(revoke.error);
 
   return (
     <Dialog
@@ -54,7 +56,11 @@ export function RevokeDialog({
         </Button>
       </div>
 
-      {failed ? <Callout tone="danger">{errorMessage(revoke.error)}</Callout> : null}
+      {failed ? (
+        <Callout tone="danger">
+          {errorMessage(revoke.error)} {denied === null ? null : t(`denied.${denied}`)}
+        </Callout>
+      ) : null}
     </Dialog>
   );
 }
