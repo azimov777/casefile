@@ -69,7 +69,23 @@ claude mcp add --transport http --scope user casefile http://localhost:8100/mcp 
 ```
 
 Any other MCP client works the same way: streamable HTTP at the MCP address the installer
-printed (`http://localhost:8100/mcp` by default) with that header.
+printed (`http://localhost:8100/mcp` by default) with that header. Clients that take an
+`mcpServers` JSON (Cursor, VS Code and others) use this — fill in your token and, if your
+installer printed a different address, that address instead:
+
+```json
+{
+  "mcpServers": {
+    "casefile": {
+      "type": "http",
+      "url": "http://localhost:8100/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+```
 
 **A second agent, without the terminal.** The board carries the same snippets.
 **Connect an agent** shows this installation's MCP address and ready-made snippets for
@@ -84,6 +100,43 @@ shared installation every person does this for their own agents, without the
 administrator, and sees and revokes only the tokens they issued or that speak for them.
 
 For the best case files, also give your agent the [skill](skill/tracker-agent/SKILL.md) that teaches the discipline (Claude Code: `~/.claude/skills/tracker-agent/SKILL.md`).
+
+## Tools
+
+Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`):
+
+**Tasks**
+- `get_task` — everything about a task in one call: card, links, computed flags, latest summary, open questions, unresolved remarks, case index and status transitions
+- `search_tasks` — search tasks by a query-language string, by individual filters, or both combined
+- `create_task` — create a task in `backlog`, where every new task starts
+- `update_task` — update only the fields you pass; anything left out stays untouched
+- `transition` — move a task to another status along the built-in transition table
+- `close_task` — file entries, verdicts and the final summary, and move the task to `done` — all in one call and one transaction
+
+**Case**
+- `read_entries` — full bodies of case entries, with payload, in order
+- `add_summary` — file a summary: a hand-off briefing for the case
+- `add_entry` — file a plain entry: a decision, attempt, finding, artifact, remark or note
+- `ask` — ask registered participants a question
+- `answer` — answer a question filed on the same task
+- `resolve` — resolve a remark on a task: how it turned out and where the follow-up work went
+- `add_verdict` — file the outcome of one review check
+
+**Links**
+- `link` — link two tasks and file `link_added` in both their cases
+- `unlink` — remove a link and file `link_removed` in both tasks' cases
+
+**Queues & participants**
+- `get_queue` — a queue with its description: the shared context for all its tasks
+- `list_queues` — every queue in the installation: key and title
+- `list_participants` — the participant registry — who a question can be addressed to
+- `create_queue` — create a queue (requires the `main` token scope)
+- `update_queue` — rename a queue or change its description (requires the `main` token scope)
+- `register_participant` — register a person or a permanent agent (requires the `main` token scope)
+- `update_participant` — change a participant's description (requires the `main` token scope)
+
+**Journal**
+- `wait_journal` — journal entries after a given sequence number, waiting for new ones if there aren't any yet
 
 ## Everyday
 
