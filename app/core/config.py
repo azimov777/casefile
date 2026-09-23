@@ -134,6 +134,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Токен транспорта stdio (`python -m app.mcp --stdio`). У сообщения stdio нет HTTP-запроса,
+    # а значит, и заголовка `Authorization`: процесс представляется одним токеном на всё время
+    # жизни. В HTTP не читается вовсе — там токен приходит с каждым запросом. `SecretStr` — по
+    # той же причине, что у `password_hash` ниже.
+    mcp_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "API token the MCP server presents on every call when it runs over stdio "
+            "(`python -m app.mcp --stdio`): a stdio message has no HTTP headers to carry "
+            "one. Required in that mode, ignored over HTTP"
+        ),
+    )
+
     # --- Вход по почте и паролю -----------------------------------------------------
     # Учётные записи живут в базе (`docs/CONCEPT.md`, 5.4). Здесь — только прежний пароль
     # установки, который переносится в учётную запись администратора, и срок сеанса.
