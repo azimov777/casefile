@@ -61,7 +61,12 @@ export function RelativeTime({ value, fallback = '—', plain = false }: Relativ
   return (
     <button
       type="button"
-      className="cursor-pointer border-none border-current bg-transparent p-0 text-left decoration-dotted underline-offset-2 hover:underline"
+      /*
+       * `inline-flex items-center` и минимум высоты только на телефоне (`max-fold:`,
+       * `--ui-tap`, UI-154): голая строка текста была мишенью 71×18, мельче обязательных
+       * 24 px (WCAG 2.5.8). На столе плотность важнее, и там кнопка остаётся строкой.
+       */
+      className="inline-flex cursor-pointer items-center border-none border-current bg-transparent p-0 text-left decoration-dotted underline-offset-2 max-fold:min-h-(--ui-tap) hover:underline"
       aria-pressed={exactShown}
       onClick={() => setExactShown((shown) => !shown)}
     >
