@@ -4,7 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { ChevronRight } from 'lucide-react';
 import { bootstrapQueryOptions } from '@/entities/session';
-import { TokenItem, isRevoked, tokensQueryOptions, type Token } from '@/entities/token';
+import {
+  TokenItem,
+  belongsTo,
+  isLive,
+  isRevoked,
+  isSession,
+  tokensQueryOptions,
+  type Token,
+} from '@/entities/token';
 import {
   CLIENT_PARAM,
   ConnectionSnippets,
@@ -18,7 +26,23 @@ import {
   type IssuedToken,
 } from '@/features/manage-access';
 import { cn, useExitHold } from '@/shared/lib';
-import { Badge, Button, Callout, QueryState, Reveal } from '@/shared/ui';
+import {
+  Badge,
+  Button,
+  Callout,
+  QueryState,
+  Reveal,
+  SegmentedNav,
+  SegmentedNavLink,
+} from '@/shared/ui';
+
+/**
+ * Параметр адреса вида списка у администратора: `?tokens=mine` — только свои, без
+ * параметра — все токены установки. Вид живёт в адресе (`docs/CONVENTIONS.md`,
+ * «Состояние»), а у умолчания параметра нет: у одного вида не бывает двух адресов.
+ */
+const TOKENS_PARAM = 'tokens';
+const MINE = 'mine';
 
 /**
  * Что человек делает на экране прямо сейчас. Одно окно за раз: заведение участника,
@@ -35,39 +59,56 @@ type Flow =
   | { kind: 'revoke'; token: Token };
 
 /**
- * Экран «Доступы»: все токены установки, заведение агента, выпуск и отзыв.
+ * Экран «Доступы»: ключи агентов и сеансы входа, заведение агента, выпуск и отзыв.
  *
- * Действующие ключи — сверху и на виду, отозванные — свёрнутой историей под ними
- * (UI-131). Отозванных на живой установке большинство, и перемешанные с действующими по
- * времени они заслоняли то, ради чего экран открывают: какие ключи сейчас пускают.
- * Делит список заполненный `revoked_at` (`isRevoked`), а не счёт на клиенте.
+ * Чьи токены на экране, решает бэкенд (TRK-114#12): человеку без флага администратора —
+ * свои (говорящие от его имени и выпущенные им), администратору — все токены установки,
+ * а дорожка «Все / Мои» сужает до своих и его (`mine=true`). Экран этого не вычисляет —
+ * он только называет, что показано.
+ *
+ * Три части. Действующие ключи — сверху и на виду; сеансы входа по почте (`expires_at`
+ * заполнен) — своим разделом, только живые: это не доступ агента, а след каждого входа,
+ * и среди ключей агентов они заслоняли бы то, ради чего экран открывают; отозванные
+ * ключи — свёрнутой историей (UI-131). Закончившиеся сеансы не показываются вовсе.
  * Колонка та же, что у «Подключить агента»: `--ui-column-max` по центру области содержимого.
  *
  * Чтобы «действующие» были полными, список дочитывается до конца сам: действующий ключ,
  * выпущенный давно, мог стоять на второй странице выдачи, и кнопка «Показать ещё» под
  * историей его бы прятала. Доступов на установке — десятки, а не тысячи.
  *
- * Список виден любым ключом — чтение токенов открыто набору `task` тоже. Запись
- * открыта, когда ключ сеанса набора `main` (`GET /api/v1/bootstrap` → `token.scope`),
- * и решает это набор, а не отказ: действия, которые ответили бы `403`, не
- * показываются доступными, и запросов записи с ключом `task` экран не делает вовсе.
- * Ввода ключа здесь нет и не будет — решение `UI-104#7`.
+ * Право решает первый кадр (`GET /api/v1/bootstrap`), а не отказ: действия, которые
+ * ответили бы `403`, не показываются доступными, и запросов записи впустую экран не
+ * делает. Выпуск и заведение агента — ключу набора `main` за человеком с учётной
+ * записью (`account_required`); отзыв — своей строки всегда, чужой — только
+ * администратору (`not_own_token`). Ввода ключа здесь нет и не будет — решение `UI-104#7`.
  */
 export function AccessPage() {
   const bootstrap = useQuery(bootstrapQueryOptions());
-  const tokens = useInfiniteQuery(tokensQueryOptions());
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Параметр шлётся как есть и до первого кадра: не администратору он ничего не меняет,
+  // а администратор не получит сперва чужой вид, а потом свой.
+  const mine = searchParams.get(TOKENS_PARAM) === MINE;
+  const tokens = useInfiniteQuery(tokensQueryOptions({ mine }));
   const [flow, setFlow] = useState<Flow>({ kind: 'none' });
   const [historyOpen, setHistoryOpen] = useState(false);
   const history = useExitHold(historyOpen);
-  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation('access');
   const { t: brick } = useTranslation('ui');
 
   const session = bootstrap.data?.token ?? null;
-  const canWrite = session?.scope === 'main';
+  const me = bootstrap.data?.participant?.name ?? null;
+  const account = bootstrap.data?.account ?? null;
+  const admin = account?.is_admin === true;
+  /** Видит ли экран все токены установки, а не только свои. */
+  const everyone = admin && !mine;
+  const canRevoke = session?.scope === 'main';
+  const canWrite = canRevoke && account !== null;
+
   const items = tokens.data?.pages.flatMap((page) => page.items) ?? [];
-  const active = items.filter((token) => !isRevoked(token));
-  const revoked = items.filter(isRevoked);
+  const keys = items.filter((token) => !isSession(token));
+  const active = keys.filter((token) => !isRevoked(token));
+  const revoked = keys.filter(isRevoked);
+  const sessions = items.filter((token) => isSession(token) && isLive(token));
   const complete = tokens.isSuccess && !tokens.hasNextPage;
 
   const { hasNextPage, isFetchingNextPage, isError, fetchNextPage } = tokens;
@@ -96,10 +137,20 @@ export function AccessPage() {
 
   const closedId = useId();
   const activeId = useId();
+  const sessionsId = useId();
   const historyId = useId();
 
+  /** Вид списка администратора в адресе: прочие параметры остаются как были. */
+  function viewSearch(onlyMine: boolean): string {
+    const updated = new URLSearchParams(searchParams);
+    if (onlyMine) updated.set(TOKENS_PARAM, MINE);
+    else updated.delete(TOKENS_PARAM);
+    const search = updated.toString();
+    return search === '' ? '' : `?${search}`;
+  }
+
   function revokeAction(token: Token) {
-    return canWrite && !isRevoked(token) ? (
+    return canRevoke && !isRevoked(token) && (admin || belongsTo(token, me)) ? (
       <Button tone="quiet" size="sm" onClick={() => setFlow({ kind: 'revoke', token })}>
         {t('revoke.action')}
       </Button>
@@ -111,8 +162,31 @@ export function AccessPage() {
       <div className="flex flex-col gap-1">
         {/* Название раздела одно на панель и на заголовок экрана. */}
         <h1 className="text-title">{brick('app.access')}</h1>
-        <p className="text-body text-muted">{t('intro')}</p>
+        <p className="text-body text-muted">{everyone ? t('intro') : t('introMine')}</p>
       </div>
+
+      {/* Дорожка — только администратору: остальным бэкенд отдаёт свои, и второго вида
+          у них нет. */}
+      {admin ? (
+        <SegmentedNav label={t('view.label')} className="self-start">
+          <SegmentedNavLink
+            to={{ search: viewSearch(false) }}
+            replace
+            preventScrollReset
+            current={everyone ? 'true' : false}
+          >
+            {t('view.all')}
+          </SegmentedNavLink>
+          <SegmentedNavLink
+            to={{ search: viewSearch(true) }}
+            replace
+            preventScrollReset
+            current={everyone ? false : 'true'}
+          >
+            {t('view.mine')}
+          </SegmentedNavLink>
+        </SegmentedNav>
+      ) : null}
 
       <section aria-labelledby={activeId} className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -155,17 +229,25 @@ export function AccessPage() {
          * ничего: «запись закрыта» о неизвестном — это выдумка, а не состояние.
          */}
         {session === null || canWrite ? null : (
-          <Callout id={closedId}>{t('closed.text', { scope: session.scope })}</Callout>
+          <Callout id={closedId}>
+            {canRevoke ? t('closed.noAccount') : t('closed.text', { scope: session.scope })}
+          </Callout>
         )}
         <QueryState query={bootstrap} loading={t('closed.loading')} compact />
 
         <QueryState
           query={tokens}
           loading={t('tokens.loading')}
-          empty={items.length === 0 ? t('tokens.empty') : undefined}
+          empty={
+            complete && keys.length === 0
+              ? everyone
+                ? t('tokens.empty')
+                : t('tokens.emptyMine')
+              : undefined
+          }
         />
 
-        {complete && items.length > 0 && active.length === 0 ? (
+        {complete && keys.length > 0 && active.length === 0 ? (
           <p className="text-body text-muted">{t('tokens.noActive')}</p>
         ) : null}
 
@@ -173,6 +255,20 @@ export function AccessPage() {
 
         {hasNextPage ? <p className="text-meta text-muted">{t('tokens.loadingMore')}</p> : null}
       </section>
+
+      {sessions.length === 0 ? null : (
+        <section aria-labelledby={sessionsId} className="flex min-w-0 flex-col gap-3">
+          <h2 id={sessionsId} className="flex items-center gap-2 text-screen">
+            {t('sessions.title')}
+            <Badge>
+              <span className="sr-only">{t('sessions.count', { count: sessions.length })}</span>
+              <span aria-hidden="true">{sessions.length}</span>
+            </Badge>
+          </h2>
+          <p className="text-meta text-muted">{t('sessions.intro')}</p>
+          <TokenList tokens={sessions} session={session?.id ?? null} action={revokeAction} />
+        </section>
+      )}
 
       {revoked.length === 0 ? null : (
         <section aria-labelledby={historyId} className="flex min-w-0 flex-col">
@@ -217,6 +313,8 @@ export function AccessPage() {
       {flow.kind === 'issue' ? (
         <IssueDialog
           participant={flow.participant}
+          me={me}
+          admin={admin}
           onClose={() => setFlow({ kind: 'none' })}
           onIssued={(issued) => setFlow({ kind: 'secret', issued })}
         />

@@ -21,7 +21,7 @@ import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import type { TaskLink } from '@/entities/task';
-import { setToken } from '@/shared/api';
+import { setToken, type components } from '@/shared/api';
 
 /** Адреса всех запросов прогона: по ним видно, что лишних не было. */
 let seen: string[] = [];
@@ -420,16 +420,6 @@ describe('карточка задачи', () => {
     expect(header).toHaveTextContent(new RegExp(`${say.task('header.assignee')}\\s+\\S+`));
   });
 
-  it('возможные переходы остаются справкой: ни роли, ни фокуса', async () => {
-    server.use(packageOf('DEMO-4'));
-    renderApp('/tasks/DEMO-4');
-
-    const transitions = await screen.findByText('done, open, cancelled');
-    // Переходы человек не делает (`CONCEPT.md`, 7): это текст, а не кнопки.
-    expect(transitions.tagName).toBe('DD');
-    expect(transitions.querySelector('button, a, [tabindex]')).toBeNull();
-  });
-
   it('на несуществующей задаче объясняет по коду и зовёт обратно к списку', async () => {
     server.use(
       http.get(`${API}/api/v1/tasks/DEMO-999`, () =>
@@ -444,6 +434,67 @@ describe('карточка задачи', () => {
       'href',
       '/tasks',
     );
+  });
+});
+
+describe('пустые состояния сводки, вопросов и замечаний (UI-132)', () => {
+  it('все три пустых сшиты в одну рамку, а не рисуют по своей на каждое', async () => {
+    server.use(packageOf('DEMO-4', { summary: null }));
+    renderApp('/tasks/DEMO-4');
+
+    // Заголовки остаются на месте и честными: пустое состояние не молчит.
+    await screen.findByText(say.task('noSummary'));
+    expect(screen.getByText(say.task('noQuestions'))).toBeInTheDocument();
+    expect(screen.getByText(say.task('noRemarks'))).toBeInTheDocument();
+
+    // Три отдельных рамки исчезают (правило замены задачи): ни одна из трёх больше
+    // не стоит собственной секцией `aria-labelledby`…
+    expect(document.querySelector('section[aria-labelledby="summary"]')).toBeNull();
+    expect(document.querySelector('section[aria-labelledby="questions"]')).toBeNull();
+    expect(document.querySelector('section[aria-labelledby="remarks"]')).toBeNull();
+
+    // …а их строки делят один и тот же общий контейнер.
+    const summaryRow = screen.getByText(say.task('noSummary')).closest('div');
+    const questionsRow = screen.getByText(say.task('noQuestions')).closest('div');
+    const remarksRow = screen.getByText(say.task('noRemarks')).closest('div');
+    const frame = summaryRow?.parentElement;
+    expect(frame).not.toBeNull();
+    expect(questionsRow?.parentElement).toBe(frame);
+    expect(remarksRow?.parentElement).toBe(frame);
+  });
+
+  it('непустой блок между двумя пустыми остаётся своей секцией и не сшивает их через себя', async () => {
+    server.use(
+      packageOf('DEMO-4', {
+        summary: null,
+        questions: [questionEntry(5, 'DEMO-4')],
+        features: {
+          blocked: false,
+          open_questions: 1,
+          open_blocking_questions: 1,
+          last_summary_at: null,
+        },
+      }),
+    );
+    renderApp('/tasks/DEMO-4');
+
+    // Вопрос непуст — своя секция, заметность не падает: тело вопроса и форма ответа
+    // видны без клика (та же проверка, что и без соседних пустых блоков).
+    const questions = (await screen.findByRole('heading', { name: say.task('questions') })).closest(
+      'section',
+    );
+    expect(questions).not.toBeNull();
+    expect(questions?.getAttribute('aria-labelledby')).toBe('questions');
+
+    // Сводка и замечания вокруг него остаются пустыми, но не соседями друг другу —
+    // между ними стоит непустой блок вопросов, поэтому сшиваются только подряд идущие
+    // пустые: сводка и замечания получают каждая свою (разную) рамку.
+    expect(document.querySelector('section[aria-labelledby="summary"]')).toBeNull();
+    expect(document.querySelector('section[aria-labelledby="remarks"]')).toBeNull();
+    const summaryRow = screen.getByText(say.task('noSummary')).closest('div');
+    const remarksRow = screen.getByText(say.task('noRemarks')).closest('div');
+    expect(summaryRow?.parentElement).not.toBeNull();
+    expect(summaryRow?.parentElement).not.toBe(remarksRow?.parentElement);
   });
 });
 
@@ -520,13 +571,22 @@ describe('порядок чтения карточки', () => {
     renderApp('/tasks/DEMO-6');
     await screen.findByRole('heading', { name: say.task('remarks') });
 
-    // Порядок разметки и есть порядок чтения: Tab и программа чтения с экрана идут
-    // по нему, а не по тому, как блоки расставлены на широком экране.
-    const order = Array.from(document.querySelectorAll('main section[aria-labelledby]')).map(
-      (node) => node.getAttribute('aria-labelledby'),
-    );
-    expect(order.indexOf('remarks')).toBeLessThan(order.indexOf('case'));
-    expect(order.indexOf('summary')).toBeLessThan(order.indexOf('remarks'));
+    /*
+     * Порядок разметки и есть порядок чтения: Tab и программа чтения с экрана идут
+     * по нему, а не по тому, как блоки расставлены на широком экране. Сверяется по
+     * заголовкам, а не по `aria-labelledby` секций: у DEMO-6 вопросы и замечания
+     * пусты и делят одну слитую рамку без `aria-labelledby` (UI-132) — заголовок
+     * при этом остаётся `<h2>` независимо от того, пуст блок или нет.
+     */
+    const remarksHeading = screen.getByRole('heading', { name: say.task('remarks') });
+    const caseHeading = screen.getByRole('heading', { name: say.task('case') });
+    const summaryHeading = screen.getByRole('heading', { name: say.task('summary') });
+    expect(
+      remarksHeading.compareDocumentPosition(caseHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      summaryHeading.compareDocumentPosition(remarksHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     // Кнопка одна и живёт в навигации: второго пути к форме нет.
     const nav = screen.getByRole('navigation', {
@@ -634,24 +694,15 @@ describe('замечание к задаче', () => {
     expect(posts).toHaveLength(1);
   });
 
-  it('на закрытой задаче форма есть, а переходов и правки разделов нет', async () => {
+  it('на закрытой задаче форма есть, а правки разделов нет', async () => {
     withRemarks({ task: taskDetails('DEMO-6', { status: 'done' }), transitions: [] });
     renderApp('/tasks/DEMO-6');
 
     expect(
       await screen.findByRole('button', { name: say.ui('remark.submit') }),
     ).toBeInTheDocument();
-    /*
-     * Роль человека не расширяется (`CONCEPT.md`, 7): статусы двигают агенты.
-     * Проверяется место, где переходы названы, а не список слов: раньше здесь стояли
-     * русские имена кнопок («перевести», «изменить статус»), и после переезда подписей
-     * они перестали что-либо ловить — на английском экране их нет по определению.
-     * Переходы обязаны остаться справкой: ни мишени, ни поля в их строке нет.
-     */
-    const transitions = screen.getByText(say.task('header.transitions')).closest('div');
-    expect(transitions).not.toBeNull();
-    expect(within(transitions as HTMLElement).queryByRole('button')).toBeNull();
-    expect(within(transitions as HTMLElement).queryByRole('link')).toBeNull();
+    // Роль человека не расширяется (`CONCEPT.md`, 7): закрытая задача не открывает
+    // правку разделов задания.
     expect(screen.queryByRole('textbox', { name: say.task('sections.goal') })).toBeNull();
   });
 
@@ -683,5 +734,118 @@ describe('замечание к задаче', () => {
     expect(screen.getAllByLabelText(say.ui('remark.fieldLabel'))[0]).toHaveValue(
       'Недописанное замечание',
     );
+  });
+});
+
+describe('опись: правки разделов одного действия (UI-133)', () => {
+  const ACTION = '55555555-5555-4555-8555-555555555555';
+  const FIELDS: components['schemas']['TaskField'][] = [
+    'title',
+    'description',
+    'goal',
+    'context',
+    'constraints',
+    'output',
+    'checks',
+  ];
+
+  /** Заведение, семь правок одним `update_task` (записи 2–8) и решение после них. */
+  function grouped(key: string) {
+    return packageOf(key, {
+      index: [
+        heading(1, { type: 'created' }, 'Task created', { action_id: 'aaaa' }),
+        ...FIELDS.map((field, offset) =>
+          heading(offset + 2, { type: 'section_changed', field }, `Section changed: ${field}`, {
+            action_id: ACTION,
+          }),
+        ),
+        heading(9, { type: 'decision' }, 'Решение после правки', { action_id: 'bbbb' }),
+      ],
+    });
+  }
+
+  function nestedRows() {
+    return Array.from(document.querySelectorAll('tr[data-nested]'));
+  }
+
+  it('семь правок стоят одной строкой, раскрываются кликом и адрес не трогают', async () => {
+    server.use(grouped('DEMO-8'), entries('DEMO-8'));
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8');
+
+    const group = await screen.findByRole('button', {
+      name: say.ui('entry.group.label', { first: 2, last: 8 }),
+    });
+    expect(group).toHaveAttribute('aria-expanded', 'false');
+    // Строк описи три: заведение, группа, решение — а не девять.
+    const table = screen.getByRole('table', { name: say.task('index.count', { count: 9 }) });
+    expect(within(table).getAllByRole('row')).toHaveLength(1 + 3);
+    expect(nestedRows()).toHaveLength(0);
+    // Заголовок группы называет все разделы идентификаторами контракта.
+    for (const field of FIELDS) expect(within(group).getByText(field)).toBeInTheDocument();
+
+    await user.click(group);
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    expect(nestedRows()).toHaveLength(FIELDS.length);
+    expect(address.current).toBe('/tasks/DEMO-8');
+    // Раскрытие группы читает не тела, а только опись: тела — по клику на запись.
+    expect(entriesCalls()).toHaveLength(0);
+
+    await user.click(group);
+    expect(nestedRows()).toHaveLength(0);
+  });
+
+  it('?entry=4 раскрывает группу, раскрывает именно запись 4 и приводит её в поле зрения', async () => {
+    server.use(grouped('DEMO-8'), entries('DEMO-8'));
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+    renderApp('/tasks/DEMO-8?entry=4');
+
+    const group = await screen.findByRole('button', {
+      name: say.ui('entry.group.label', { first: 2, last: 8 }),
+    });
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    const rows = nestedRows();
+    const opened = rows.filter(
+      (row) => row.querySelector('button')?.getAttribute('aria-expanded') === 'true',
+    );
+    expect(opened.map((row) => row.querySelector('th')?.textContent)).toEqual(['4']);
+    await waitFor(() => expect(entriesCalls().some((url) => url.includes('nos=4'))).toBe(true));
+    // Прокручивается строка записи 4, а не группа.
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(opened[0]);
+    scrollIntoView.mockRestore();
+  });
+
+  it('свёрнутая группа уносит из адреса номер своей записи', async () => {
+    server.use(grouped('DEMO-8'), entries('DEMO-8'));
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8?entry=4');
+
+    const group = await screen.findByRole('button', {
+      name: say.ui('entry.group.label', { first: 2, last: 8 }),
+    });
+    await user.click(group);
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-8'));
+    expect(group).toHaveAttribute('aria-expanded', 'false');
+    expect(nestedRows()).toHaveLength(0);
+  });
+
+  it('правки без признака действия стоят по одной, как раньше', async () => {
+    server.use(
+      packageOf('DEMO-8', {
+        index: [2, 3].map((no) =>
+          heading(no, { type: 'section_changed', field: 'goal' }, 'Section changed: goal'),
+        ),
+      }),
+      entries('DEMO-8'),
+    );
+    renderApp('/tasks/DEMO-8');
+    const table = await screen.findByRole('table', {
+      name: say.task('index.count', { count: 2 }),
+    });
+    expect(within(table).getAllByRole('row')).toHaveLength(1 + 2);
+    expect(document.querySelector('tr[data-group]')).toBeNull();
   });
 });

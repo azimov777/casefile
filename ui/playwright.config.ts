@@ -55,13 +55,13 @@ export default defineConfig({
     {
       name: 'светлая',
       testIgnore:
-        /(access|answer|board-column|case-readable|case-latest|link-groups|live|live-board|live-list|paging|layout|task-list-screen|remark|people|parents-long|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|link-groups|live|live-board|live-list|paging|layout|task-list-screen|remark|people|parents-long|section-edits|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
       testIgnore:
-        /(access|answer|board-column|case-readable|case-latest|link-groups|live|live-board|live-list|paging|layout|task-list-screen|remark|people|parents-long|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|link-groups|live|live-board|live-list|paging|layout|task-list-screen|remark|people|parents-long|section-edits|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
     },
     {
@@ -90,7 +90,7 @@ export default defineConfig({
     {
       name: 'запись',
       testMatch:
-        /(access|answer|board-column|case-readable|case-latest|link-groups|live|live-board|live-list|paging|layout|task-list-screen|remark|people|parents-long)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|link-groups|live|live-board|live-list|paging|layout|task-list-screen|remark|people|parents-long|section-edits)\.spec\.ts/,
       // По одному пишущему сценарию за раз: они меняют одну и ту же демо-установку,
       // и параллельно каждый видел бы следы соседа.
       fullyParallel: false,

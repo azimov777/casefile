@@ -128,6 +128,7 @@ export const ui = {
     lastUsed: 'последний раз ходили',
     neverUsed: 'им ещё не ходили',
     revokedAt: 'отзыв:',
+    expiresAt: 'сеанс закончится',
   },
 
   /** Представление задачи: строка списка, карточка доски, знаки и навигация. */
@@ -235,6 +236,7 @@ export const ui = {
       status: 'Статус',
       withReason: '· с причиной',
       sectionEdited: 'Правка раздела',
+      sectionsEdited: 'Правка разделов',
       fieldEdited: 'Правка поля',
       assignee: 'Исполнитель',
       linkAdded: 'Связь',
@@ -263,6 +265,15 @@ export const ui = {
     copy: 'Скопировать {{reference}}',
     copied: 'скопировано',
     clipboardUnavailable: 'буфер обмена недоступен',
+    group: {
+      range: '{{first}}–{{last}}',
+      label: 'Записи {{first}}–{{last}}: правка разделов одним действием',
+      expand_one: 'Показать {{count, number}} правку',
+      expand_few: 'Показать {{count, number}} правки',
+      expand_many: 'Показать {{count, number}} правок',
+      expand_other: 'Показать {{count, number}} правки',
+      collapse: 'Свернуть правки',
+    },
   },
 
   /** Живой поток: состояние связи, полоса обновлений и уведомление о вопросе. */

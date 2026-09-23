@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -8,10 +9,20 @@ import {
   EntryKind,
   entryHeadline,
   entryQueryOptions,
+  groupSectionEdits,
+  sectionEditsHeadline,
   type EntryHeading,
+  type SectionEditsRun,
 } from '@/entities/entry';
 import { cn, useExitHold } from '@/shared/lib';
-import { Button, QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
+import { QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
+
+/** Императивная ручка `TaskIndex`: прыжок «в начало описи» стоит в шапке блока
+ * (`task-page.tsx`, `INDEX_NAV`, UI-127) и дотягивается снаружи ровно до того узла,
+ * куда раньше вела кнопка внутри самой описи, — второго пути прокрутки не заводим. */
+export interface TaskIndexHandle {
+  scrollToTop: () => void;
+}
 
 interface TaskIndexProps {
   taskKey: string;
@@ -31,13 +42,9 @@ interface TaskIndexProps {
    * в адресе дальше.
    */
   onOpenChange: (no: number | null) => void;
+  /** Ручка на прыжок «в начало описи» — вызывается из шапки блока (`task-page.tsx`). */
+  ref?: Ref<TaskIndexHandle>;
 }
-
-/**
- * Опись длиннее этого читается прокруткой, и по ней имеет смысл прыгать. Короткая
- * видна целиком, и два действия над ней были бы шумом там, где всё и так на экране.
- */
-const LONG_INDEX = 12;
 
 /**
  * Ячейка описи: поля, линия под строкой и выравнивание по верху — одинаковые
@@ -64,7 +71,7 @@ const CELL = 'border-b border-b-line px-3 py-2 text-left align-top';
 /** Столбцы описи по порядку: подписи к ним живут в словаре (`task.index.columns`). */
 const INDEX_COLUMNS = ['no', 'type', 'author', 'when', 'headline'] as const;
 
-export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: TaskIndexProps) {
+export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }: TaskIndexProps) {
   const { t } = useTranslation('task');
 
   // Раскрытых может быть несколько — сравнивают соседние записи. В адрес уходит
@@ -83,10 +90,27 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
    * в `IndexRow`, без второго условия рядом.
    */
   const [scrollTarget, setScrollTarget] = useState<number | null>(null);
+  /**
+   * Группы правок разделов, раскрытые человеком, — по номеру первой записи группы.
+   * Группа раскрыта и тогда, когда раскрыта любая её запись: ссылка `TRK-106#8` ведёт
+   * к записи внутри группы, и прятать её за свёрнутой строкой значило бы не довести
+   * человека до того, за чем он шёл (UI-133). Поэтому это не всё состояние группы, а
+   * только её собственный клик; остальное выводится из `expanded`.
+   */
+  const [openGroups, setOpenGroups] = useState<Set<number>>(() => new Set());
   /** Метка «следующая правка `openAt` — от своего клика, не от прихода снаружи». */
   const internalChange = useRef(false);
-  /** Начало описи: сюда возвращает прыжок «в начало», не трогая прокрутку страницы. */
+  /** Начало описи: сюда возвращает прыжок «в начало» — кнопка стоит в шапке блока
+   * (`task-page.tsx`), а дотягивается до этого узла через `TaskIndexHandle`. */
   const scroller = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToTop: () => scroller.current?.scrollIntoView?.({ block: 'start' }),
+    }),
+    [],
+  );
 
   // Ссылка `TRK-42#12` внутри той же карточки меняет адрес, не перемонтируя страницу,
   // поэтому раскрытие следит за параметром, а не только за первым рендером. Метка
@@ -126,68 +150,181 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange }: Task
     [expanded, onOpenChange, openAt],
   );
 
+  /*
+   * Группа сворачивается целиком: вместе с ней закрываются и раскрытые в ней записи,
+   * иначе она осталась бы раскрытой через них (см. `openGroups`). Если среди них та,
+   * что названа в адресе, адрес перестаёт её называть — как у одиночной записи.
+   */
+  const toggleGroup = useCallback(
+    (first: number, members: number[]) => {
+      const open = openGroups.has(first) || members.some((no) => expanded.has(no));
+      setOpenGroups((previous) => {
+        const next = new Set(previous);
+        if (open) next.delete(first);
+        else next.add(first);
+        return next;
+      });
+      if (!open) return;
+      setExpanded((previous) => {
+        const next = new Set(previous);
+        for (const no of members) next.delete(no);
+        return next;
+      });
+      if (openAt !== null && members.includes(openAt)) {
+        internalChange.current = true;
+        onOpenChange(null);
+      }
+    },
+    [expanded, onOpenChange, openAt, openGroups],
+  );
+
   if (index.length === 0) return <p className="text-muted italic">{t('index.empty')}</p>;
 
-  // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
-  // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
-  const lastNo = index[index.length - 1]?.no ?? null;
-
   return (
-    /* Прыжки над описью, а не под ней: «к свежей записи» нужно до чтения, а не после. */
-    <div className="flex flex-col gap-2">
-      {index.length > LONG_INDEX && lastNo !== null ? (
-        /*
-         * Два прыжка по описи: к свежей записи и обратно к началу. Свежая раскрывается
-         * и читается точечно — своим запросом на свой номер, а не чтением всего дела
-         * до неё. Прыгает человек, а не экран: живой поток опись не прокручивает.
-         */
-        <div className="flex flex-wrap gap-2">
-          <Button tone="quiet" onClick={() => onOpenChange(lastNo)}>
-            {t('index.toLatest')}
-          </Button>
-          <Button
-            tone="quiet"
-            onClick={() => scroller.current?.scrollIntoView?.({ block: 'start' })}
-          >
-            {t('index.toTop')}
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="overflow-x-auto" ref={scroller}>
-        <table className="w-full border-collapse text-body">
-          <caption className="px-3 pt-2 text-left text-meta text-muted">
-            {t('index.count', { count: index.length })}
-          </caption>
-          <thead>
-            <tr>
-              {INDEX_COLUMNS.map((column) => (
-                <th
-                  key={column}
-                  scope="col"
-                  className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
-                >
-                  {t(`index.columns.${column}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {index.map((heading) => (
+    // Число записей и прыжки по описи стоят в шапке блока над таблицей
+    // (`task-page.tsx`, `BLOCK_HEAD`/`INDEX_NAV`): там же общие поля блока и переход
+    // в ленту. Ref на прокручиваемый узел — для прыжка «в начало» снаружи (UI-127),
+    // сама прокрутка отдельной записи — `scrollTarget`, ниже (UI-126).
+    <div className="overflow-x-auto" ref={scroller}>
+      <table
+        className="w-full border-collapse text-body"
+        aria-label={t('index.count', { count: index.length })}
+      >
+        <thead>
+          <tr>
+            {INDEX_COLUMNS.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className={cn(CELL, 'text-meta font-semibold whitespace-nowrap text-muted')}
+              >
+                {t(`index.columns.${column}`)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {groupSectionEdits(index).map((run) =>
+            run.kind === 'one' ? (
               <IndexRow
-                key={heading.no}
+                key={run.item.no}
                 taskKey={taskKey}
-                heading={heading}
+                heading={run.item}
                 checks={checks}
-                open={expanded.has(heading.no)}
-                scrollTo={scrollTarget === heading.no}
+                open={expanded.has(run.item.no)}
+                scrollTo={scrollTarget === run.item.no}
                 onToggle={toggle}
               />
-            ))}
-          </tbody>
-        </table>
-      </div>
+            ) : (
+              <GroupRows
+                key={`group-${run.first}`}
+                taskKey={taskKey}
+                run={run}
+                checks={checks}
+                open={openGroups.has(run.first) || run.items.some((item) => expanded.has(item.no))}
+                expanded={expanded}
+                scrollTarget={scrollTarget}
+                onToggle={toggle}
+                onToggleGroup={toggleGroup}
+              />
+            ),
+          )}
+        </tbody>
+      </table>
     </div>
+  );
+}
+
+interface GroupRowsProps {
+  taskKey: string;
+  run: Extract<SectionEditsRun<EntryHeading>, { kind: 'sections' }>;
+  checks: string[];
+  open: boolean;
+  expanded: Set<number>;
+  scrollTarget: number | null;
+  onToggle: (no: number) => void;
+  onToggleGroup: (first: number, members: number[]) => void;
+}
+
+/**
+ * Правки разделов одного действия: одна строка описи вместо семи (UI-133).
+ *
+ * Строка группы стоит в тех же столбцах, что и запись: номера крайних записей, род,
+ * автор и время действия — у записей одного вызова они одни, — и заголовок-кнопка
+ * «Правка разделов» с именами разделов. Раскрытая группа показывает свои записи
+ * обычными строками описи, со своим раскрытием каждая: записи не исчезают из дела и
+ * остаются адресуемыми по номеру.
+ */
+function GroupRows({
+  taskKey,
+  run,
+  checks,
+  open,
+  expanded,
+  scrollTarget,
+  onToggle,
+  onToggleGroup,
+}: GroupRowsProps) {
+  const { t: brick } = useTranslation('ui');
+  const [head] = run.items;
+  if (head === undefined) return null;
+  const members = run.items.map((item) => item.no);
+  const headline = sectionEditsHeadline(
+    run.items.map((item) => (item.facts.type === 'section_changed' ? item.facts.field : null)),
+    brick,
+  );
+  const cell = open ? cn(CELL, 'bg-sunken') : CELL;
+
+  return (
+    <>
+      <tr data-group={run.actionId}>
+        <th scope="row" className={cn(cell, 'w-[1%] font-mono whitespace-nowrap text-muted')}>
+          {brick('entry.group.range', { first: run.first, last: run.last })}
+        </th>
+        <td className={cell}>
+          <EntryKind type={head.type} />
+        </td>
+        <td className={cell}>
+          <AuthorName author={head.author} />
+        </td>
+        <td className={cn(cell, 'whitespace-nowrap text-muted')}>
+          <RelativeTime value={head.created_at} />
+        </td>
+        <td className={cell}>
+          {/*
+           * Тот же вид кнопки, что у строки записи (`IndexRow`): раскрытие группы и
+           * раскрытие записи — одно действие для человека. Отличие одно — кнопка
+           * флекс-контейнер: строка группы длинная (семь имён разделов), а собранный
+           * заголовок — `inline-flex` с переносом, и в строчной кнопке он целиком
+           * уезжал под треугольник, оставляя его одного на первой строке. Флексом
+           * треугольник — свой элемент слева, заголовок переносится рядом с ним.
+           */}
+          <button
+            type="button"
+            className="flex cursor-pointer items-baseline gap-1 border-none border-current bg-transparent p-0 text-left text-text before:text-muted before:content-['▸'] hover:underline aria-expanded:before:content-['▾']"
+            aria-expanded={open}
+            aria-label={brick('entry.group.label', { first: run.first, last: run.last })}
+            onClick={() => onToggleGroup(run.first, members)}
+          >
+            <EntryHeadline headline={headline} linked={false} />
+          </button>
+        </td>
+      </tr>
+      {open
+        ? run.items.map((item) => (
+            <IndexRow
+              key={item.no}
+              taskKey={taskKey}
+              heading={item}
+              checks={checks}
+              open={expanded.has(item.no)}
+              scrollTo={scrollTarget === item.no}
+              onToggle={onToggle}
+              nested
+            />
+          ))
+        : null}
+    </>
   );
 }
 
@@ -197,6 +334,11 @@ interface IndexRowProps {
   checks: string[];
   open: boolean;
   /**
+   * Запись внутри раскрытой группы правок (UI-133): заголовок сдвинут вправо, и
+   * строка читается частью группы над ней, а не соседней записью.
+   */
+  nested?: boolean;
+  /**
    * Запись, к которой человек **пришёл** (ссылка, `?entry=N` при загрузке, «К свежей
    * записи»), показать не ниже сгиба. Собственный клик по описи сюда не попадает —
    * он только раскрывает: строка остаётся там, где по ней кликнули (UI-126).
@@ -205,7 +347,15 @@ interface IndexRowProps {
   onToggle: (no: number) => void;
 }
 
-function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexRowProps) {
+function IndexRow({
+  taskKey,
+  heading,
+  checks,
+  open,
+  nested = false,
+  scrollTo,
+  onToggle,
+}: IndexRowProps) {
   // Заголовок описи собирается из фактов записи подписями пространства `ui`: одна
   // и та же строка стоит и здесь, и в ленте дела.
   const { t: brick } = useTranslation('ui');
@@ -230,7 +380,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
 
   return (
     <>
-      <tr ref={row}>
+      <tr ref={row} data-nested={nested ? '' : undefined}>
         {/* Ширина в 1% сжимает колонку номера по содержимому: остаток ширины таблицы
             забирает заголовок, самая длинная ячейка строки. */}
         <th scope="row" className={cn(cell, 'w-[1%] font-mono text-muted')}>
@@ -247,7 +397,7 @@ function IndexRow({ taskKey, heading, checks, open, scrollTo, onToggle }: IndexR
         <td className={cn(cell, 'whitespace-nowrap text-muted')}>
           <RelativeTime value={heading.created_at} />
         </td>
-        <td className={cell}>
+        <td className={cn(cell, nested && 'pl-8')}>
           {/*
            * Заголовок записи — кнопка: раскрытие это действие, и с клавиатуры оно
            * тоже нужно. Фон и рамку кнопка называет явно: без объявленного фона

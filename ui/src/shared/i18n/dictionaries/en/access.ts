@@ -9,6 +9,14 @@ export const access = {
   intro:
     'Every access to this installation: whose key it is, what it opens, who issued it and when it was last used. Tokens are never deleted — an access is taken away by revoking it, and the revoked one stays here as history.',
   close: 'Close',
+  introMine:
+    'Your accesses: keys you issued to your agents, keys that speak for you, and your sign-in sessions. Nobody else’s are here — an administrator sees every access of the installation. Tokens are never deleted: an access is taken away by revoking it, and the revoked one stays here as history.',
+
+  view: {
+    label: 'Whose tokens are shown',
+    all: 'All tokens of the installation',
+    mine: 'Mine',
+  },
   cancel: 'Cancel',
 
   actions: {
@@ -21,6 +29,8 @@ export const access = {
   closed: {
     loading: 'Asking the installation what this session’s key opens…',
     text: 'Writing is closed: this session runs on a key of the {{scope}} scope, and registering participants, issuing and revoking tokens take a key of the main scope. A local installation hands the interface such a key by itself; a key entered on the sign-in screen is whatever it was issued as.',
+    noAccount:
+      'Issuing is closed: this session runs on an agent’s key, and only a person with an account of their own issues keys and registers agents — otherwise a key issued by an agent would belong to nobody and outlive the disabling of whoever gave it. This session can still revoke its own keys.',
   },
 
   tokens: {
@@ -30,12 +40,31 @@ export const access = {
     loading: 'Reading the accesses…',
     empty:
       'The installation has no tokens at all — that happens only before the first one is issued.',
+    emptyMine:
+      'You have no agent keys yet. Issue one here — and get a ready connection line right away.',
     noActive: 'No active tokens: every issued one has been revoked.',
     loadingMore: 'Reading the rest of the accesses…',
     history_one: 'History: {{count, number}} revoked token',
     history_other: 'History: {{count, number}} revoked tokens',
     historyIntro:
       'A revoked token lets no request in anymore. Its records are not deleted: they show who used this key and when.',
+  },
+
+  sessions: {
+    title: 'Sign-in sessions',
+    count_one: '{{count, number}} session',
+    count_other: '{{count, number}} sessions',
+    intro:
+      'Sign-ins to the interface with email and password. A session lives until it ends or is revoked — revoking signs that device out of the interface. Sessions that have ended are not shown here.',
+  },
+
+  denied: {
+    account_required:
+      'Only a person with an account of their own can issue keys: this session runs on an agent’s key.',
+    foreign_human:
+      'Only an administrator issues a key on behalf of another person. Issue a key to yourself, to your agent, or a shared agent one.',
+    not_own_token:
+      'This is not your key: only an administrator of the installation revokes someone else’s.',
   },
 
   agent: {
