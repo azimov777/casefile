@@ -1184,6 +1184,11 @@ function edges(page: Page) {
       const sign = node.querySelector('[data-edge]');
       const box = node.getBoundingClientRect();
       const mark = sign?.getBoundingClientRect() ?? null;
+      // Внутренние края столбца — до них достаёт содержимое, а не рамка целиком:
+      // `clientLeft`/`clientWidth` уже без границы и без своей полосы прокрутки
+      // (UI-116) — тот же расчёт, что у `heads()` для заголовка (UI-145).
+      const insideLeft = box.left + node.clientLeft;
+      const insideRight = insideLeft + node.clientWidth;
       return {
         status: node.getAttribute('aria-label') as string,
         // Есть ли что прокручивать — и сколько.
@@ -1200,6 +1205,11 @@ function edges(page: Page) {
         // прокрутки (UI-116) отъедает от рамки столбца `--ui-scrollbar`, и знак,
         // живущий внутри области прокрутки, туда не достаёт и не должен.
         width: mark === null ? null : Math.round(node.clientWidth - mark.width),
+        // Каждый край по отдельности, а не только их разница: одинаковая ширина
+        // при сдвинутых обоих краях в одну сторону совпала бы (UI-145) — разница
+        // осталась бы нулевой, а знак всё равно стоял бы не там.
+        left: mark === null ? null : Math.round(mark.left - insideLeft),
+        right: mark === null ? null : Math.round(mark.right - insideRight),
       };
     });
   });
@@ -1259,6 +1269,17 @@ test('знак края есть у переполненного столбца 
     // Высота знака — нижнее поле столбца: место, где содержимое бывает только
     // на прокрутке.
     expect(seen.height, report).toBe(12);
+    /*
+     * Каждый край по отдельности (UI-145): при видимой полосе прокрутки столбца
+     * знак обязан совпадать с внутренними краями столбца, а не просто иметь ту же
+     * ширину, — сдвинутый на равную величину с обеих сторон дал бы `width: 0` и
+     * прошёл бы прежнюю проверку, оставшись при этом не там, где стоит столбец.
+     */
+    // `?? NaN`, а не `?? 0`: у переполненного столбца (цикл уже отфильтрован по
+    // `over > 0`) знак обязан стоять, и `null` здесь — не «совпало», а падение
+    // проверки, которое `NaN <= 1` и даёт.
+    expect(Math.abs(seen.left ?? Number.NaN), report).toBeLessThanOrEqual(1);
+    expect(Math.abs(seen.right ?? Number.NaN), report).toBeLessThanOrEqual(1);
   }
 
   /*
@@ -1380,7 +1401,8 @@ test('знак края читается в своей теме и не съед
       y: box.top + box.height * 0.5,
     }));
     return {
-      background: getComputedStyle(sign).backgroundColor,
+      backgroundImage: getComputedStyle(sign).backgroundImage,
+      backgroundColor: getComputedStyle(sign).backgroundColor,
       column: getComputedStyle(node).backgroundColor,
       card: getComputedStyle(cards[0] as Element).backgroundColor,
       shadow: getComputedStyle(sign).boxShadow,
@@ -1422,41 +1444,49 @@ test('знак края читается в своей теме и не съед
   expect(measured.position, report).toBe('sticky');
   expect(measured.raised, report).toBeGreaterThan(measured.inCard);
   expect(measured.through, report).toBe(measured.points);
-  // Заливка своя и непрозрачная: сквозь `rgba(…, 0)` карточка просвечивала бы, и знак
-  // читался бы «кончилось» ровно там, где не кончилось.
-  expect(measured.background, report).not.toMatch(/, ?0\)$/);
-  expect(measured.background, report).toBe(measured.column);
+  // Заливки в старом смысле у знака больше нет (UI-145) — он рисуется затуханием.
+  expect(measured.backgroundColor, report).toMatch(/, ?0\)$/);
 
   /*
-   * Знак нарисован цветом дважды: линией у своего верхнего края и тенью над ней.
-   * Контраст считается у линии и к обеим поверхностям, на которые она ложится: к
-   * карточке, которая уходит под край, и к заливке столбца — в промежутке между
-   * карточками. Второе и есть худший случай: карточка кончилась у самого края, и под
-   * линией нет ничего, кроме заливки.
+   * Знак — симметричное затухание одним цветом, без жёсткой линии и тени (UI-145):
+   * `from-transparent via-<цвет> to-transparent`. Оба конца обязаны быть честно
+   * прозрачными — иначе у затухания осталась бы своя резкая граница, ровно та, которую
+   * убирали, — а середина (пик, `via`) несёт весь контраст без ослабления в своей же
+   * точке.
    */
-  const colors = (measured.shadow.match(/rgba?\([^)]*\)/g) ?? []).filter(
-    // Tailwind собирает `box-shadow` из своих пустых слоёв (кольцо, внутренняя тень)
-    // и нашего: прозрачные слои — не цвет, которым что-то нарисовано.
-    (color) => !/, ?0\)$/.test(color),
+  const stops = [...measured.backgroundImage.matchAll(/(rgba?\([^)]*\))\s*(\d+)%/g)].map(
+    ([, color, at]) => ({ color, at: Number(at) }),
   );
-  expect(colors.length, report).toBe(2);
+  expect(stops.length, report).toBe(3);
+  expect(stops[0]?.at, report).toBe(0);
+  expect(stops[0]?.color, report).toMatch(/, ?0\)$/);
+  expect(stops[2]?.at, report).toBe(100);
+  expect(stops[2]?.color, report).toMatch(/, ?0\)$/);
+  expect(stops[1]?.at, report).toBe(50);
+  expect(stops[1]?.color, report).not.toMatch(/, ?0\)$/);
+
+  /*
+   * Контраст считается у пика затухания (он один, `via`, и не ослаблен затуханием в
+   * своей же точке) к обеим поверхностям, на которые ложится знак: к карточке, которая
+   * уходит под край, и к заливке столбца — в промежутке между карточками. Второе и есть
+   * худший случай прежнего знака: карточка кончилась у самого края, и под пиком нет
+   * ничего, кроме заливки.
+   */
+  const peak = stops[1]?.color as string;
   const ratios = {
-    card: contrast(colors[0] as string, measured.card),
-    column: contrast(colors[0] as string, measured.column),
+    card: contrast(peak, measured.card),
+    column: contrast(peak, measured.column),
   };
-  await test.info().attach(`контраст линии знака (${status})`, {
-    body: JSON.stringify(
-      { line: colors[0], card: measured.card, column: measured.column, ratios },
-      null,
-      2,
-    ),
+  await test.info().attach(`контраст пика затухания (${status})`, {
+    body: JSON.stringify({ peak, card: measured.card, column: measured.column, ratios }, null, 2),
     contentType: 'application/json',
   });
   /*
    * Порог — не AA для текста: знак не текст и не элемент управления, а оформление
    * границы, и держится он на тех же линиях, что и все границы в проекте. Порог
-   * стережёт другое: линия `--t-line` давала поверх заливки 1.06 в светлой теме
-   * и 1.10 в тёмной и не была видна вовсе, а сильная линия даёт не меньше 1.29.
+   * стережёт другое: `--color-sunken` (свой цвет столбца) даёт с заливкой карточки
+   * только 1.14 и не был бы виден вовсе, а `--color-line-strong` даёт не меньше 1.29 —
+   * тот же порядок, что держала прежняя жёсткая линия до UI-145.
    */
   expect(
     Math.min(ratios.card, ratios.column),
