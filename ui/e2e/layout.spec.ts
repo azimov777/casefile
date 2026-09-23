@@ -219,7 +219,12 @@ test.describe('шапка блока «Дело»', () => {
     const toLatest = section.getByRole('button', { name: 'К свежей записи' });
     const toTop = section.getByRole('button', { name: 'В начало описи' });
     const openCase = section.getByRole('link', { name: 'Открыть всё дело лентой' });
-    const firstColumn = section.getByRole('columnheader').first();
+    /*
+     * Первая колонка — по номеру первой записи, а не по заголовку столбца: на 390 px
+     * опись раскладывается строками-карточками, и шапка таблицы там только у диктора
+     * (`sr-only`, UI-134). Номер записи виден на обеих ширинах.
+     */
+    const firstColumn = section.getByRole('rowheader').first();
 
     await expect(toLatest).toBeVisible();
     await expect(toTop).toBeVisible();
@@ -235,7 +240,8 @@ test.describe('шапка блока «Дело»', () => {
      * своей рамки-box они его не несут — их `boundingBox().x` и есть видимый край.
      * У ячейки `th` наоборот: поле — её собственный `px-3` (`CELL`), и рамка ячейки
      * начинается на крае таблицы, без отступа. Сравнивать нужно не рамку ячейки,
-     * а край её текста — рамку плюс её же `padding-left`.
+     * а край её текста — рамку плюс её же `padding-left`. В карточке описи (390 px)
+     * поле несёт строка (`ROW`), у ячейки оно ноль, и та же сумма даёт край текста.
      */
     async function measure() {
       const [sectionBox, titleBox, latestBox, topBox, columnBox, linkBox, columnPadding] =

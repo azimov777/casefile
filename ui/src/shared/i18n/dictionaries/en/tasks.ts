@@ -22,9 +22,6 @@ export const tasks = {
     'There are no tasks on this page: {{count, number}} tasks match these conditions, and they are all on earlier pages',
 
   table: {
-    // Имя рамки, а не таблицы: оно есть только там, где рамка и правда прокручивается
-    // вбок (UI-91).
-    scrollable: 'Tasks, the table scrolls sideways',
     caption_one: '{{count, number}} task on this page',
     caption_other: '{{count, number}} tasks on this page',
   },
