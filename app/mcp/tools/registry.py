@@ -38,10 +38,11 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(annotations=READ_ONLY)
     async def get_queue(key: QueueKeyArg) -> views.QueueView:
-        """Очередь с описанием — общим контекстом всех её задач: где лежит код, на какие
-        документы смотреть, чего не делать.
+        """Отдаёт очередь по ключу: название и описание — общий контекст всех её задач:
+        где лежит код, на какие документы смотреть, чего не делать.
 
         В карточке задачи от очереди только ключ и название; описание отдаёт этот вызов.
+        Ключи очередей установки, если они не известны, даёт `list_queues`.
         """
         async with runtime.call() as (session, actor):
             return views.queue(await queues_service.read_queue(session, key, actor=actor))
@@ -51,7 +52,7 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.QueueRefView]:
-        """Все очереди установки: ключ и название.
+        """Отдаёт все очереди установки: ключ и название.
 
         Описания здесь нет: у выбранной очереди его отдаёт `get_queue`, а в списке оно
         стоило бы контекста больше, чем сам выбор.
@@ -70,7 +71,7 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.ParticipantView]:
-        """Реестр участников: кому можно адресовать вопрос.
+        """Отдаёт реестр участников: кому можно адресовать вопрос.
 
         Люди и постоянные агенты одним списком. Временных агентов здесь нет и быть не
         может — они не регистрируются, и адресовать их нельзя.
@@ -141,6 +142,9 @@ def register(tools: Toolset) -> None:
 
         Имя хранится в нижнем регистре и дальше неизменяемо: оно стоит подписью в уже
         подшитых записях дела. Токен участнику выпускают через REST.
+
+        Имя уже в реестре — отказ `participant_name_taken`; описание существующего
+        участника меняет `update_participant`.
         """
         async with runtime.call() as (session, actor):
 

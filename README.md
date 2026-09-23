@@ -145,7 +145,7 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `unlink` — remove a link and file `link_removed` in both tasks' cases
 
 **Queues & participants**
-- `get_queue` — a queue with its description: the shared context for all its tasks
+- `get_queue` — return a queue by key: its title and description, the shared context for all its tasks
 - `list_queues` — every queue in the installation: key and title
 - `list_participants` — the participant registry — who a question can be addressed to
 - `create_queue` — create a queue (requires the `main` token scope)

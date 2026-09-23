@@ -437,3 +437,25 @@ TRK-35) безопасно само по себе: сутки сосуществ
 **Где:** `app/mcp/toolset.py`, `READ_ONLY`, `FILING`, `IDEMPOTENT_TASK_UPDATE`,
 `OVERWRITING_UPDATE`, `Toolset`, `tool`; `tests/test_mcp_tools.py`, `TOOL_ANNOTATIONS`,
 `test_every_tool_carries_honest_protocol_annotations`.
+
+## Сосед называется одной безличной фразой и только там, где выбор реален
+
+**Что:** описание инструмента начинается с действия («Отдаёт очередь по ключу…», а не
+«Очередь с описанием…»), а где у агента есть реальная развилка между двумя
+инструментами, одна фраза называет соседа: `read_entries` ↔ `wait_journal`,
+`search_tasks` → `get_task`, `add_entry`/`add_summary`/`add_verdict`/`transition` →
+`close_task`, `register_participant` → `update_participant`, `get_queue` → `list_queues`
+(TRK-129; разбор Glama TDQS в TRK-127#5).
+**Почему важно:** выбор инструмента агент делает по описаниям из `tools/list`, и
+описание без глагола или без соседа оставляет его угадывать. Фраза о соседе обязана быть
+правдой домена: у `transition` стояло «`in_progress → done` без вердикта —
+`checks_not_passed`», хотя в `done` он не ведёт вовсе — `closing_not_a_transition`
+проверяется раньше вердиктов.
+**Как правильно:** соседа называть безлично («— `wait_journal`», «даёт `list_queues`»):
+повелительное «бери `X`» ловит `test_no_tool_description_tells_the_agent_what_to_do_next`.
+Где развилки нет (`link`/`unlink`, `create_task`), фразы нет: описания едут в контекст
+каждого вызова. Меняя первую строку докстринга, поправить её английский пересказ в
+`README.md`, раздел `## Tools` (тест сверяет только имена, текст — нет).
+**Где:** `app/mcp/tools/registry.py`, `get_queue`; `app/mcp/tools/case.py`,
+`read_entries`; `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/tasks.py`,
+`transition`; `app/domain/tasks.py`, `check_done_is_reached_by_closing`.
