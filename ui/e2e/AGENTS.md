@@ -8,7 +8,7 @@
 сценарий просто открывает адрес и видит задачи. Сценариям запасного пути (экран входа)
 установка без ключа выдаётся поимённо — `installWithoutKey` в `contour.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts` и `moving.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `long-word.spec.ts` и `moving.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -160,6 +160,11 @@ invalid_search_query`); ограничение снято (TRK-21).
   одной строкой в описи и одной группой в ленте, `?entry=N` раскрывает группу и ведёт к записи N,
   на 1440 и 390 px документ не шире окна, `axe` на ленте; заводит задачу сам и отменяет её после
   файла, проект «запись»
+- `long-word.spec.ts` — длинное слово и встроенный код без единой точки переноса (UI-150):
+  вопрос с 200-символьным словом и длинным адресом в code-спане на карточке, в деле и во
+  входящей на 390 px не тянет документ вбок и не обрезан многоточием; блок кода (`pre`)
+  при этом остаётся при своей горизонтальной прокрутке; заводит задачу сам и отменяет её
+  в `finally`, проект «запись»
 - `moving.spec.ts` — перенос установки (UI-135): администратор скачивает архив кнопкой,
   принимает его на второй, полностью пустой установке (своя `db`/`api`/`ui` под именем
   `<проект>-moving-target`, гасится сама) — итог на экране, та же очередь и те же задачи
