@@ -549,8 +549,11 @@ export interface paths {
          *     последнего входа в него (`409 summary_required`); `in_progress → done` —
          *     положительного последнего вердикта по каждой проверке, подшитого после последнего
          *     входа в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в
-         *     `details.checks` парами `check_no` и `reason`). Вход в
-         *     `in_progress` отклоняется при открытом блокере (`409 task_blocked`, их ключи в
+         *     `details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только
+         *     исполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи
+         *     (имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с
+         *     `details.assignee` и `details.requester`. Вход в
+         *     `in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в
          *     `details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и
          *     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
          *     Переход подшивает `status_changed` с `from`, `to` и `reason`.
@@ -3418,7 +3421,7 @@ export interface components {
             checks?: string[];
             /**
              * Assignee
-             * @description Participant name or temporary agent label; free text the tracker never validates against the registry
+             * @description Participant name or temporary agent label; free text the tracker never validates against the registry. Only the assignee can move the task into `in_progress`: the caller's signature (participant name or agent label) must match it, case-insensitively
              * @example release_bot
              */
             assignee?: string | null;
@@ -3639,7 +3642,7 @@ export interface components {
             status: components["schemas"]["TaskStatus"];
             /**
              * Assignee
-             * @description Participant name or temporary agent label; free text the tracker never validates against the registry
+             * @description Participant name or temporary agent label; free text the tracker never validates against the registry. Only the assignee can move the task into `in_progress`: the caller's signature (participant name or agent label) must match it, case-insensitively
              * @example release_bot
              */
             assignee: string | null;
@@ -3794,7 +3797,7 @@ export interface components {
             check?: components["schemas"]["CheckUpdate"];
             /**
              * Assignee
-             * @description Participant name or temporary agent label; free text the tracker never validates against the registry. Pass null to unassign
+             * @description Participant name or temporary agent label; free text the tracker never validates against the registry. Only the assignee can move the task into `in_progress`: the caller's signature (participant name or agent label) must match it, case-insensitively. Pass null to unassign
              * @example release_bot
              */
             assignee?: string | null;
@@ -3937,7 +3940,8 @@ export interface components {
          *
          *     Ролей, владельцев и разрешений по роду участника нет и не будет (`CONCEPT.md`, 6):
          *     любую запись и любой переход может сделать кто угодно, а набор отделяет рабочий цикл
-         *     агента от управления установкой.
+         *     агента от управления установкой. Вход в `in_progress` только исполнителю — проверка
+         *     перехода в домене (`check_taken_by_assignee`), а не право.
          *
          *     | Набор | Открывает |
          *     |---|---|

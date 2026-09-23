@@ -22,6 +22,8 @@ export const errors = {
   archive_invalid: 'The installation archive is damaged or was edited; export it again.',
   archive_revision_unknown:
     'The archive comes from a newer Casefile. Update this installation first, then import again.',
+  assignee_mismatch: 'The task is assigned to someone else.',
+  assignee_required: 'The task has no assignee.',
   bad_request: 'The request could not be parsed.',
   checks_not_passed: 'Not every review check has a positive verdict.',
   closing_not_a_transition: 'A task is closed by an action of its own, not by a status change.',
