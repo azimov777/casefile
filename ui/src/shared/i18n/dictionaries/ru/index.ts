@@ -4,6 +4,7 @@ import { caseScreen } from './case';
 import { connect } from './connect';
 import { errors } from './errors';
 import { login } from './login';
+import { moving } from './moving';
 import { people } from './people';
 import { questions } from './questions';
 import { task } from './task';
@@ -18,6 +19,7 @@ export const ru = {
   connect,
   errors,
   login,
+  moving,
   people,
   questions,
   task,

@@ -15,7 +15,7 @@ export const errors = {
   account_requires_human: 'Учётную запись заводят только человеку: агенты ходят токенами.',
   actor_label_required: 'Общий агентский токен требует метки временного агента.',
   actor_not_addressable: 'Временного агента нельзя адресовать вопросом.',
-  admin_required: 'Управлять людьми может только администратор.',
+  admin_required: 'Это может сделать только администратор установки.',
   archive_format_unsupported: 'Это не архив установки, который понимает этот Casefile.',
   archive_invalid: 'Архив установки повреждён или правлен руками — выгрузите его заново.',
   archive_revision_unknown:
