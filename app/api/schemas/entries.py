@@ -561,6 +561,25 @@ class AnswerEntryRead(_EntryReadBase):
     payload: AnswerPayload
 
 
+class AnsweredQuestionRead(QuestionEntryRead):
+    """Вопрос в выдаче поперёк задач (`GET /api/v1/questions`) вместе с ответами.
+
+    Отдельная модель, а не поле у `QuestionEntryRead`: в деле задачи ответ — своя
+    запись рядом с вопросом, и вложить его туда значило бы отдать одну запись дважды.
+    Здесь дела рядом нет, и без вложения клиенту пришлось бы собирать ответы запросом
+    на каждую задачу.
+    """
+
+    answers: list[AnswerEntryRead] = Field(
+        default_factory=list,
+        description=(
+            "`answer` entries of the same task that point at this question, by entry "
+            "number. The first one closed the question, the rest add to it. Empty means "
+            "the question is still open"
+        ),
+    )
+
+
 class VerdictEntryRead(_EntryReadBase):
     """Вердикт по обзорной проверке. Тело записи — доказательство."""
 

@@ -4832,7 +4832,7 @@
           "questions"
         ],
         "summary": "List questions",
-        "description": "Вопросы всех задач с фильтрами; по умолчанию — открытые вопросы текущего участника.\n\nПорядок — от самого старого: дольше всех ждёт ответа тот, кого задали первым.\nОтвет на вопрос убирает его из выдачи, потому что открытость считается по делу, а\nне хранится флагом. Адресовать можно только участника реестра, поэтому запрос общим\nагентским токеном без явного `addressee` — `422 actor_not_addressable`: пустой\nсписок молча соврал бы, что вопросов не пришло.",
+        "description": "Вопросы всех задач с фильтрами; по умолчанию — открытые вопросы текущего участника.\n\nПорядок по умолчанию — от самого старого: дольше всех ждёт ответа тот, кого задали\nпервым; `order=newest` переворачивает его для истории. Ответ на вопрос убирает его\nиз выдачи открытых, потому что открытость считается по делу, а не хранится флагом;\nс `open=false` вопрос остаётся и несёт свои ответы в `answers`. Адресовать можно\nтолько участника реестра, поэтому запрос общим агентским токеном без явного\n`addressee` и без `any_addressee` — `422 actor_not_addressable`: пустой список\nмолча соврал бы, что вопросов не пришло.",
         "operationId": "list_questions",
         "security": [
           {
@@ -4860,6 +4860,18 @@
               "title": "Addressee"
             },
             "description": "Participant the question is addressed to; matching ignores case. Defaults to the participant whose token made the request"
+          },
+          {
+            "name": "any_addressee",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "true drops the addressee filter and returns questions to anyone. Not accepted together with `addressee` (`422 addressee_with_any_addressee`)",
+              "default": false,
+              "title": "Any Addressee"
+            },
+            "description": "true drops the addressee filter and returns questions to anyone. Not accepted together with `addressee` (`422 addressee_with_any_addressee`)"
           },
           {
             "name": "queue",
@@ -4911,6 +4923,17 @@
               "title": "Open"
             },
             "description": "true (the default) keeps only questions with no answer yet; false drops the filter and returns every question, answered or not. To read the questions of one task use its case with `types=question`"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/QuestionOrder",
+              "description": "`oldest` (the default) puts the longest-waiting question first, as an inbox needs; `newest` puts the latest first, as a history needs. A cursor only continues the order it was issued in",
+              "default": "oldest"
+            },
+            "description": "`oldest` (the default) puts the longest-waiting question first, as an inbox needs; `newest` puts the latest first, as a history needs. A cursor only continues the order it was issued in"
           },
           {
             "name": "limit",
@@ -4972,7 +4995,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CollectionResponse_QuestionEntryRead_"
+                  "$ref": "#/components/schemas/CollectionResponse_AnsweredQuestionRead_"
                 }
               }
             }
@@ -6476,6 +6499,123 @@
         "title": "AnswerPayload",
         "description": "Ответ на вопрос той же задачи."
       },
+      "AnsweredQuestionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "question",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/QuestionPayload"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerEntryRead"
+            },
+            "type": "array",
+            "title": "Answers",
+            "description": "`answer` entries of the same task that point at this question, by entry number. The first one closed the question, the rest add to it. Empty means the question is still open"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "AnsweredQuestionRead",
+        "description": "Вопрос в выдаче поперёк задач (`GET /api/v1/questions`) вместе с ответами.\n\nОтдельная модель, а не поле у `QuestionEntryRead`: в деле задачи ответ — своя\nзапись рядом с вопросом, и вложить его туда значило бы отдать одну запись дважды.\nЗдесь дела рядом нет, и без вложения клиенту пришлось бы собирать ответы запросом\nна каждую задачу."
+      },
       "ArchiveFormat": {
         "type": "string",
         "enum": [
@@ -7027,6 +7167,25 @@
         ],
         "title": "CollectionResponse[AccountRead]"
       },
+      "CollectionResponse_AnsweredQuestionRead_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AnsweredQuestionRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CollectionResponse[AnsweredQuestionRead]"
+      },
       "CollectionResponse_EntryRead_": {
         "properties": {
           "data": {
@@ -7064,25 +7223,6 @@
           "data"
         ],
         "title": "CollectionResponse[ParticipantRead]"
-      },
-      "CollectionResponse_QuestionEntryRead_": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/QuestionEntryRead"
-            },
-            "type": "array",
-            "title": "Data"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/PageMeta"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "CollectionResponse[QuestionEntryRead]"
       },
       "CollectionResponse_QueueRead_": {
         "properties": {
@@ -8787,6 +8927,15 @@
         ],
         "title": "QuestionFactsRead",
         "description": "Вопрос: кому адресован и держит ли работу."
+      },
+      "QuestionOrder": {
+        "type": "string",
+        "enum": [
+          "oldest",
+          "newest"
+        ],
+        "title": "QuestionOrder",
+        "description": "Порядок выдачи вопросов поперёк задач (`GET /api/v1/questions`).\n\nДва порядка — два вопроса человека. «Входящая» идёт от старых: дольше всех ждёт\nответа тот, кого спросили первым, и он обязан стоять сверху. История идёт от свежих:\nтам ищут недавний разговор, а не долг, и первым экраном нужно последнее."
       },
       "QuestionPayload": {
         "properties": {

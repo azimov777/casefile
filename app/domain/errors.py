@@ -269,6 +269,17 @@ class ActorNotAddressableError(ValidationError):
     message = "A temporary agent cannot be an addressee; pass an explicit addressee"
 
 
+class AddresseeWithAnyAddresseeError(ValidationError):
+    """В выдаче вопросов назван адресат и тут же снято условие адресата.
+
+    Отказ, а не выбор одного из двух: запрос противоречит сам себе, и любое молчаливое
+    предпочтение отдало бы клиенту не тот список, о котором он думает.
+    """
+
+    code = "addressee_with_any_addressee"
+    message = "Questions are filtered either by addressee or by any addressee, not by both"
+
+
 # --- Связи ----------------------------------------------------------------------------
 
 

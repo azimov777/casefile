@@ -17,9 +17,10 @@ from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.db.session import transaction
 from app.domain.authors import label_author
-from app.domain.case import EntryType
+from app.domain.case import EntryType, QuestionOrder
 from app.domain.errors import (
     ActorNotAddressableError,
+    AddresseeWithAnyAddresseeError,
     ChecksNotPassedError,
     EntryFieldsInvalidError,
     EntryNotFoundError,
@@ -594,6 +595,37 @@ async def test_the_inbox_keeps_only_open_questions_of_the_addressee(
         db_session, actor=task_actor, addressee="reviewer", blocking=True
     )
     assert after.items == []
+
+
+async def test_the_question_history_runs_newest_first_with_answers(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """История вопросов: от свежих, с ответами, без условия адресата."""
+    older = await service.ask(
+        db_session, task, actor=task_actor, addressees=["owner"], title="Раньше", blocking=False
+    )
+    await service.ask(
+        db_session, task, actor=task_actor, addressees=["owner"], title="Позже", blocking=False
+    )
+    answer = await service.answer(
+        db_session, task, actor=task_actor, question_no=older.no, body="Ответ"
+    )
+
+    page = await service.list_questions(
+        db_session,
+        actor=task_actor,
+        any_addressee=True,
+        open_only=False,
+        order=QuestionOrder.NEWEST,
+    )
+
+    assert [item.entry.title for item in page.items] == ["Позже", "Раньше"]
+    assert [[a.no for a in item.answers] for item in page.items] == [[], [answer.no]]
+
+    with pytest.raises(AddresseeWithAnyAddresseeError):
+        await service.list_questions(
+            db_session, actor=task_actor, addressee="owner", any_addressee=True
+        )
 
 
 async def test_the_inbox_of_a_temporary_agent_is_a_refusal_rather_than_an_empty_list(

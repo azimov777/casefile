@@ -94,6 +94,7 @@
 |---|---|---|
 | `account_requires_human` | Only a human participant can have an account | Учётную запись заводят только человеку: агенты ходят токенами, входить им некуда. |
 | `actor_not_addressable` | A temporary agent cannot be an addressee; pass an explicit addressee | Временный агент спрашивает свои вопросы, а адресовать его нельзя. |
+| `addressee_with_any_addressee` | Questions are filtered either by addressee or by any addressee, not by both | В выдаче вопросов назван адресат и тут же снято условие адресата. |
 | `archive_format_unsupported` | This is not an installation archive this Casefile can read | Документ — не архив установки этой раскладки: чужой `format` или `format_version`. |
 | `archive_invalid` | The installation archive is malformed | Архив противоречит сам себе или схеме своей ревизии. |
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
