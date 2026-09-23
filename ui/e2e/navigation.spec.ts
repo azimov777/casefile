@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { fontsReady, silenceJournal } from './contour';
+import { fontsReady, layoutSettled, silenceJournal } from './contour';
 
 test('возврат в список не теряет отбор, с которым человек ушёл', async ({ page }) => {
   await silenceJournal(page);
@@ -52,6 +52,19 @@ test('переключение «Карточка — Дело» видно с �
   await page.keyboard.press('End');
   await page.mouse.wheel(0, 20_000);
   await expect(toggle).toBeInViewport();
+
+  /*
+   * `fontsReady` одного вызова недостаточно: вторая подшрифтовка Fira Code
+   * (кириллический диапазон отдельным файлом) грузится лениво и может стартовать
+   * уже после того, как `document.fonts.ready` разрешился, — замерено, что запрос
+   * приходит прямо во время `click()`. Раскладка от неё шевелится (`scroll y=`
+   * прыгало на сотни пикселей несколькими раундами подряд в пределах одного
+   * клика, UI-139), и клик, попавший в этот момент, промахивается мимо переехавшей
+   * ссылки — адрес остаётся прежним, будто нажатия не было. Ждать поэтому нужно не
+   * шрифт (о котором заранее знать нельзя), а сам факт: положение цели перестало
+   * меняться (`e2e/contour.ts`, `layoutSettled`).
+   */
+  await layoutSettled(toggle);
 
   await toggle.click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-1$/);
