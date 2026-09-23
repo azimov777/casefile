@@ -142,6 +142,7 @@ export const ui = {
     lastUsed: 'last used',
     neverUsed: 'never used yet',
     revokedAt: 'revocation:',
+    expiresAt: 'session ends',
   },
 
   /** Представление задачи: строка списка, карточка доски, знаки и навигация. */
