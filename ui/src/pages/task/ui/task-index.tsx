@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
   AuthorName,
+  CopyEntryLink,
   EntryBody,
   EntryHeadline,
   EntryKind,
@@ -427,7 +428,12 @@ function IndexRow({
           <AuthorName author={heading.author} />
         </td>
         <td className={cn(cell, 'whitespace-nowrap text-muted @max-index:ml-auto')}>
-          <RelativeTime value={heading.created_at} />
+          <RelativeTime value={heading.created_at} />{' '}
+          {/* Ссылка на запись — в ячейке времени, а не номера: номер называет строку
+              для диктора (`rowheader`), и кнопка в нём вошла бы в имя каждой строки.
+              Здесь она стоит столбцом на столе и у правого края первой строки на
+              телефоне, как «Скопировать KEY#N» в ленте дела (UI-155). */}
+          <CopyEntryLink taskKey={taskKey} no={heading.no} />
         </td>
         <td className={cn(cell, HEADLINE, nested && 'pl-8')}>
           {/*

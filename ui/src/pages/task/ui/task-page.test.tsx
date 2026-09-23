@@ -981,7 +981,7 @@ describe('опись: правки разделов одного действи�
     expect(group).toHaveAttribute('aria-expanded', 'true');
     const rows = nestedRows();
     const opened = rows.filter(
-      (row) => row.querySelector('button')?.getAttribute('aria-expanded') === 'true',
+      (row) => row.querySelector('button[aria-expanded]')?.getAttribute('aria-expanded') === 'true',
     );
     expect(opened.map((row) => row.querySelector('th')?.textContent)).toEqual(['4']);
     await waitFor(() => expect(entriesCalls().some((url) => url.includes('nos=4'))).toBe(true));

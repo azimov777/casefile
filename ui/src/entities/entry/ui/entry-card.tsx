@@ -6,6 +6,7 @@ import type { Entry } from '../api/entries';
 import { isServiceEntry } from '../api/entries';
 import { entryHeadline, factsOfEntry } from '../model/headline';
 import { AuthorName } from './author-name';
+import { CopyEntryLink } from './copy-entry-link';
 import { EntryBody } from './entry-body';
 import { EntryHeadline } from './entry-headline';
 import { EntryKind } from './entry-kind';
@@ -93,6 +94,7 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
         <AuthorName author={entry.author} />
         <RelativeTime value={entry.created_at} />
         <CopyReference reference={reference} />
+        <CopyEntryLink taskKey={entry.task_key} no={entry.no} />
       </header>
 
       {/*
