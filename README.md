@@ -11,6 +11,7 @@ with a fresh context and zero memory, picks up exactly where the last one stoppe
 ![MCP server](https://img.shields.io/badge/MCP-server-8A2BE2)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-Docker-2496ED)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Glama score](https://glama.ai/mcp/servers/azimov777/casefile/badges/score.svg)](https://glama.ai/mcp/servers/azimov777/casefile)
 
 </div>
 
