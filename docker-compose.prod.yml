@@ -83,7 +83,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "1285abd038bf"
+x-updater-revision: &updater-revision "b26f11d0a12a"
 
 services:
   db:
@@ -261,6 +261,13 @@ services:
   # оборвала бы собственную команду на середине, — её заменяет `updater-renew`. Нет сети —
   # служба пишет об этом и оставляет всё как есть.
   #
+  # Выпуск, который не поднялся (`up` упал или api, mcp, ui не стали здоровыми за три
+  # минуты), откатывается: перед `up` служба держит образы прежнего выпуска под своими
+  # локальными тегами `casefile-updater/<проект>/…:previous` и копию этого файла, при
+  # неудаче возвращает на них службы без `migrate` и помечает упавший выпуск тегами
+  # `…:failed`. Пока под тегом канала стоит он же, проверки его не пробуют, а следующий
+  # выпуск идёт как обычно (TRK-122, `docs/notes/docker.md`).
+  #
   # `pull`, а не отдельный запрос к манифесту: `pull` неизменного тега и есть запрос
   # манифеста, а образ всё равно нужен локально — достать из него этот файл. Раз в час два
   # образа — далеко от лимитов анонимного ghcr.io. Проверки идут не по часам, а от старта
@@ -358,15 +365,25 @@ services:
           fi
         }
 
+        # Id образа, на котором служба работает; пусто — её контейнера нет.
+        running_of() {
+          container=$$(docker compose ps -q "$$1")
+          [ -z "$$container" ] || docker inspect -f '{{.Image}}' "$$container"
+        }
+
+        # Id образа, который сейчас стоит под тегом, заданным службе этим файлом.
+        wanted_of() {
+          docker image inspect -f '{{.Id}}' "$$(image_of "$$1")" 2>/dev/null
+        }
+
         # Успех — какая-то служба не запущена или запущена не на том образе, что сейчас
         # стоит под тегом, который ей задаёт этот файл. Сверка с тегом файла, а не с тегом
         # контейнера: иначе смена канала или закрепление выпуска не применялись бы.
         outdated() {
           for service in api mcp ui; do
-            container=$$(docker compose ps -q "$$service")
-            [ -n "$$container" ] || return 0
-            running=$$(docker inspect -f '{{.Image}}' "$$container")
-            wanted=$$(docker image inspect -f '{{.Id}}' "$$(image_of "$$service")" 2>/dev/null) || return 0
+            running=$$(running_of "$$service")
+            [ -n "$$running" ] || return 0
+            wanted=$$(wanted_of "$$service") || return 0
             [ "$$running" = "$$wanted" ] || return 0
           done
           return 1
@@ -375,9 +392,64 @@ services:
         # Образы, на которых службы работают сейчас: после обновления их убирают.
         running_images() {
           for service in api mcp ui; do
-            container=$$(docker compose ps -q "$$service")
-            [ -z "$$container" ] || docker inspect -f '{{.Image}}' "$$container"
+            running_of "$$service"
           done | sort -u
+        }
+
+        # Свои локальные теги обновлятора: `previous` — выпуск, с которого идёт обновление,
+        # `failed` — выпуск, который здесь не поднялся. containerd удаляет образ вместе с
+        # последним именем, и без `previous` прежнего выпуска после `pull` уже не было бы.
+        # Проект в имени: установки на одной машине тегов не делят.
+        kept() { echo "casefile-updater/$$COMPOSE_PROJECT_NAME/$$1"; }
+
+        # Успех — под тегами файла стоит ровно тот выпуск (api и ui), что уже не поднялся.
+        failed_again() {
+          failed_api=$$(docker image inspect -f '{{.Id}}' "$$(kept api:failed)" 2>/dev/null) || return 1
+          failed_ui=$$(docker image inspect -f '{{.Id}}' "$$(kept ui:failed)" 2>/dev/null) || return 1
+          [ "$$(wanted_of api)" = "$$failed_api" ] && [ "$$(wanted_of ui)" = "$$failed_ui" ]
+        }
+
+        # Теги файла — обратно на образы, на которых службы работают: иначе `pull` оставил
+        # бы под ними упавший выпуск, и его поднял бы первый же ручной `docker compose up`.
+        hold_back() {
+          for service in api ui; do
+            running=$$(running_of "$$service")
+            [ -z "$$running" ] || docker tag "$$running" "$$(image_of "$$service")"
+          done
+        }
+
+        # Успех — api, mcp и ui здоровы. Сам `up` падает только на нездоровом api (от него
+        # зависит ui), здоровье mcp и ui ждётся здесь. Предел — три минуты: дольше проверки
+        # здоровья служб не тянутся.
+        settled() {
+          i=0
+          while [ "$$i" -lt 36 ]; do
+            states=$$(for service in api mcp ui; do
+              container=$$(docker compose ps -q "$$service")
+              if [ -n "$$container" ]; then
+                docker inspect -f '{{.State.Health.Status}}' "$$container"
+              else
+                echo missing
+              fi
+            done | sort -u)
+            case "$$states" in
+              healthy) return 0 ;;
+              *unhealthy* | *missing*) return 1 ;;
+            esac
+            sleep 5
+            i=$$((i + 1))
+          done
+          return 1
+        }
+
+        # Службы — обратно на прежний выпуск: его образы под тегами `previous`, его файл —
+        # в копии. Без `migrate` и остальных разовых шагов (`--no-deps`): упавший выпуск мог
+        # продвинуть схему, а `alembic upgrade head` прежнего кода её ревизии не знает.
+        roll_back() {
+          [ -z "$$changed" ] || cat /tmp/previous-compose.yml >"$$COMPOSE_FILE"
+          docker tag "$$(kept api:previous)" "$$(image_of api)" &&
+            docker tag "$$(kept ui:previous)" "$$(image_of ui)" &&
+            docker compose up -d --no-deps db api mcp ui && settled
         }
 
         update() {
@@ -385,6 +457,14 @@ services:
             log "could not pull images (offline?), keeping the current ones"
             return 0
           fi
+          # Выпуск, который здесь уже не поднялся, не пробуется снова — до следующего.
+          if failed_again; then
+            hold_back
+            failed=$$(version "$$(kept api:failed)")
+            log "$${failed:-the release on this tag} did not start here before; waiting for the next release"
+            return 0
+          fi
+          cp "$$COMPOSE_FILE" /tmp/previous-compose.yml
           changed=$$(refresh_compose)
           # Новый файл может звать другие образы — их тоже скачать до `up`.
           if [ -n "$$changed" ] && ! docker compose pull --quiet api ui; then
@@ -396,18 +476,33 @@ services:
             return 0
           fi
           previous=$$(running_images)
-          api=$$(docker compose ps -q api)
-          before=$$([ -z "$$api" ] || version "$$(docker inspect -f '{{.Image}}' "$$api")")
+          running=$$(running_of api)
+          before=$$([ -z "$$running" ] || version "$$running")
+          for service in api ui; do
+            running=$$(running_of "$$service")
+            [ -z "$$running" ] || docker tag "$$running" "$$(kept "$$service:previous")"
+          done
           image=$$(image_of api)
-          if docker compose up -d db api mcp ui; then
-            after=$$(version "$$image")
+          after=$$(version "$$image")
+          if docker compose up -d db api mcp ui && settled; then
             log "updated to $${after:-$$image}"
+            docker rmi "$$(kept api:failed)" >/dev/null 2>&1 || true
+            docker rmi "$$(kept ui:failed)" >/dev/null 2>&1 || true
           else
-            log "services failed to start after the update, see: docker compose logs"
-            [ -z "$$before" ] ||
-              log "to go back, put CASEFILE_VERSION=$$before into .env and run: docker compose up -d"
+            log "$${after:-$$image} failed to start, see: docker compose logs; going back to $${before:-the previous release}"
+            docker tag "$$image" "$$(kept api:failed)"
+            docker tag "$$(image_of ui)" "$$(kept ui:failed)"
+            if roll_back; then
+              log "rolled back to $${before:-the previous release}; $${after:-this release} will not be tried again, only the next release"
+            else
+              log "could not go back either, see: docker compose logs"
+              [ -z "$$before" ] ||
+                log "to go back by hand, put CASEFILE_VERSION=$$before into .env and run: docker compose up -d"
+            fi
           fi
           # Образ, который ещё служит или носит другое имя, `rmi` без `-f` не тронет.
+          docker rmi "$$(kept api:previous)" >/dev/null 2>&1 || true
+          docker rmi "$$(kept ui:previous)" >/dev/null 2>&1 || true
           for image in $$previous; do
             docker rmi "$$image" >/dev/null 2>&1 || true
           done
