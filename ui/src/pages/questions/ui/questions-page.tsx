@@ -418,6 +418,7 @@ function QuestionRow({ question, at, answering }: QuestionRowProps) {
           onBegin={() => answering.begin(id, question, at)}
           onFailed={() => answering.fail(id)}
           onAnswered={(result) => answering.complete(id, result)}
+          onCancel={() => setOpen(false)}
         />
       ) : (
         <div>
