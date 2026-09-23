@@ -49,7 +49,7 @@ from app.mcp.arguments import (
     VersionArg,
 )
 from app.mcp.idempotency import Once
-from app.mcp.toolset import Toolset
+from app.mcp.toolset import FILING, IDEMPOTENT_TASK_UPDATE, READ_ONLY, Toolset
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import queues as queues_service
@@ -64,7 +64,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def get_task(key: TaskKeyArg) -> views.TaskPackageView:
         """Всё о задаче одним вызовом: карточка, связи с обеих сторон, вычисляемые
         признаки, последняя сводка, открытые вопросы, неразобранные замечания, опись
@@ -81,7 +81,7 @@ def register(tools: Toolset) -> None:
                 await tasks_service.read_task_package(session, key, actor=actor)
             )
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def search_tasks(
         query: QueryArg = None,
         key: KeysArg = None,
@@ -145,7 +145,7 @@ def register(tools: Toolset) -> None:
                 next_cursor=outcome.page.next_cursor,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def create_task(
         queue: QueueKeyArg,
         title: TaskTitleArg,
@@ -222,7 +222,7 @@ def register(tools: Toolset) -> None:
                 build=create,
             )
 
-    @tools.tool()
+    @tools.tool(annotations=IDEMPOTENT_TASK_UPDATE)
     async def update_task(
         key: TaskKeyArg,
         changes: TaskChanges,
@@ -260,7 +260,7 @@ def register(tools: Toolset) -> None:
             )
             return views.mutation(mutation)
 
-    @tools.tool()
+    @tools.tool(annotations=FILING)
     async def transition(
         key: TaskKeyArg,
         to: TaskStatusArg,
@@ -292,7 +292,7 @@ def register(tools: Toolset) -> None:
             )
             return views.mutation(mutation)
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def close_task(
         key: TaskKeyArg,
         summary: ClosingSummaryArg,

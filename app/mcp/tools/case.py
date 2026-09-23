@@ -44,7 +44,7 @@ from app.mcp.arguments import (
     VerdictOutcomeArg,
 )
 from app.mcp.idempotency import Once
-from app.mcp.toolset import Toolset
+from app.mcp.toolset import FILING, READ_ONLY, Toolset
 from app.services import case as case_service
 from app.services import tasks as tasks_service
 
@@ -54,7 +54,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def read_entries(
         key: TaskKeyArg,
         nos: EntryNosArg = None,
@@ -86,7 +86,7 @@ def register(tools: Toolset) -> None:
                 next_cursor=page.next_cursor,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def add_summary(
         key: TaskKeyArg,
         done: SummaryDoneArg,
@@ -134,7 +134,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def add_entry(
         key: TaskKeyArg,
         type: EntryTypeArg,
@@ -184,7 +184,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def ask(
         key: TaskKeyArg,
         addressees: AddresseesArg,
@@ -234,7 +234,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def answer(
         key: TaskKeyArg,
         question_no: QuestionNoArg,
@@ -270,7 +270,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def resolve(
         key: TaskKeyArg,
         remark_no: RemarkNoArg,
@@ -321,7 +321,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def add_verdict(
         key: TaskKeyArg,
         check_no: CheckNoArg,

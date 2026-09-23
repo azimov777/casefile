@@ -396,3 +396,44 @@ TRK-35) безопасно само по себе: сутки сосуществ
 Живой прогон под `mcp-proxy` (как у каталога Glama) — в деле TRK-125.
 **Где:** `app/mcp/__main__.py` (`run_stdio`, `stdio_headers`); `app/mcp/runtime.py`
 (`Runtime.headers`); `tests/test_mcp_stdio.py`.
+
+## Аннотации протокола ставятся по поведению вызова, а не по метрике каталога
+
+**Что:** каждый инструмент объявляет `ToolAnnotations` (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`) явным аргументом `Toolset.tool(annotations=...)` — без
+него сборка сервера падает `TypeError`, тем же способом, каким `creating=True` требует
+аргумент ключа идемпотентности. Четыре готовые формы — `READ_ONLY`, `FILING`,
+`IDEMPOTENT_TASK_UPDATE`, `OVERWRITING_UPDATE` — в шапке `app/mcp/toolset.py`; своя форма
+нужна инструменту, чьё поведение не совпадает ни с одной.
+**Почему важно:** клиент решает по этим хинтам, что вызывать без подтверждения (Glama TDQS
+и Claude Code смотрят на `readOnlyHint`; TRK-127#6). Заведомо неверная аннотация хуже
+отсутствующей: клиент один раз доверится ей и один раз ошибётся молча.
+**Как правильно:** по каждому хинту разбор ниже.
+- `readOnlyHint` — инструмент не пишет в базу вовсе: `get_task`, `search_tasks`,
+  `get_queue`, `list_queues`, `list_participants`, `read_entries`, `wait_journal`.
+  `wait_journal` сюда попадает тоже: долгое ожидание — не запись, а чтение с таймаутом,
+  и оно не меняет состояние установки ни разу, сколько бы новых записей ни появилось за
+  время ожидания у других.
+- `destructiveHint` — по тому, переживает ли прежнее значение правку. Дело задачи —
+  журнал: `update_task` и `transition` хранят `before`/`after` в `section_changed`,
+  `field_changed`, `status_changed`, а `unlink` — сам факт снятия в `link_removed` на
+  обеих сторонах, поэтому все они `false`. У очереди и участника такого журнала нет
+  (`app/db/models/queue.py`, `app/db/models/participant.py`: простые колонки без
+  истории), и `update_queue`/`update_participant` переписывают название и описание без
+  следа — это `destructiveHint: true` в буквальном смысле протокола, вопреки тому, что
+  можно было бы предположить по аналогии с `update_task`.
+- `idempotentHint` — по тому, меняет ли состояние **повтор без ключа идемпотентности**
+  (это не то же самое, что идемпотентность по `idempotency_key`, `docs/CONCEPT.md`, 4.5).
+  `update_task` не подшивает запись и не поднимает версию, если присланное совпадает с
+  текущим (`app/services/tasks.py`, `apply_task_changes`, `_same`) — `true`. У
+  `update_queue`/`update_participant` то же значение второй раз не меняет результат —
+  тоже `true`, хотя они и разрушают. Все инструменты `creating=True`, `transition` и
+  `unlink` — `false`: без ключа второй вызов либо заводит второй объект/запись
+  (`create_task`, `add_entry`, `link`…), либо отказывает конфликтом или неприменимым
+  переходом (`link` — `LinkExistsError`, `transition` — в таблице переходов нет
+  самоходов, `unlink` — `LinkNotFoundError`).
+- `openWorldHint` — `false` у всех: сервер целиком работает с закрытым миром данных
+  своей установки и никогда не обращается наружу.
+**Где:** `app/mcp/toolset.py`, `READ_ONLY`, `FILING`, `IDEMPOTENT_TASK_UPDATE`,
+`OVERWRITING_UPDATE`, `Toolset`, `tool`; `tests/test_mcp_tools.py`, `TOOL_ANNOTATIONS`,
+`test_every_tool_carries_honest_protocol_annotations`.
