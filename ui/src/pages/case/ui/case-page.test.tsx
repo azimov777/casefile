@@ -17,13 +17,7 @@ import {
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
-import {
-  ENTRY_TYPES,
-  factsOfEntry,
-  isServiceEntry,
-  type Entry,
-  type EntryType,
-} from '@/entities/entry';
+import { ENTRY_TYPES, factsOfEntry, type Entry, type EntryType } from '@/entities/entry';
 import { setToken } from '@/shared/api';
 
 let seen: URL[] = [];
@@ -112,41 +106,27 @@ describe('дело лентой', () => {
     expect(seen[0]?.searchParams.getAll('types')).toEqual([]);
   });
 
-  it('отбор «служебные» оставляет только записи трекера', async () => {
-    server.use(feed());
-    renderApp('/tasks/DEMO-1/case');
-    await screen.findByText(say.case('end', { count: ENTRY_TYPES.length }));
-
-    await userEvent
-      .setup()
-      .click(screen.getByRole('button', { name: say.case('filters.serviceEntries') }));
-
-    const service = ENTRY_TYPES.filter(isServiceEntry);
-    expect(await screen.findByText(say.case('end', { count: service.length }))).toBeInTheDocument();
-    expect(seen.at(-1)?.searchParams.getAll('types').sort()).toEqual([...service].sort());
-  });
-
-  it('перечень типов свёрнут, а отобранные типы названы поимённо', async () => {
-    const user = userEvent.setup();
+  /*
+   * Открытие панели «Фильтр» сюда не заходит: `Popover` Radix в jsdom раскрывается
+   * десятки секунд под нагрузкой (`docs/notes/testing.md`). Нажатия внутри панели
+   * проверяет `case-filter-menu.test.tsx`, рендеря её саму без всплывающего слоя;
+   * открытие, `Esc` и возврат фокуса — сквозной `e2e/case-latest.spec.ts`.
+   */
+  it('отобранные типы названы поимённо без раскрытия панели', async () => {
     server.use(feed());
 
     renderApp('/tasks/DEMO-1/case?type=summary&type=decision');
     await screen.findByText(say.case('end', { count: 2 }));
 
-    // Восемнадцати флажков на первом экране дела нет: они занимали место до первой
-    // записи, а дело открывают читать.
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
-    // Но что отобрано — видно словами, а не счётчиком «выбрано 2».
+    // Что отобрано — видно словами в строке состояния, панель открывать не нужно.
     const chosen = screen.getByRole('list', { name: say.case('filters.chosen') });
     expect(within(chosen).getAllByRole('listitem')).toHaveLength(2);
     expect(chosen).toHaveTextContent('decision');
     expect(chosen).toHaveTextContent('summary');
 
-    // Раскрытие даёт все типы контракта, каждый — обычный флажок с подписью.
-    await user.click(screen.getByRole('button', { name: say.case('filters.expand') }));
-    expect(screen.getAllByRole('checkbox')).toHaveLength(ENTRY_TYPES.length);
-    expect(screen.getByRole('checkbox', { name: 'summary' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'attempt' })).not.toBeChecked();
+    // Кнопка «Фильтр» стоит в строке инструментов и сама по себе ничего не раскрывает.
+    expect(screen.getByRole('button', { name: say.case('filters.menu') })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('тип снимается своим чипом, и отбор остаётся в адресе', async () => {

@@ -141,7 +141,7 @@ test('дело: подписи ленты английские, содержан
   await page.goto('/tasks/DEMO-1/case');
 
   await expect(page.getByRole('heading', { name: 'Case DEMO-1' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Choose the types' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Filter', exact: true })).toBeVisible();
 
   const entry = page.locator('article[data-type="summary"]').first();
   await expect(entry).toBeVisible();

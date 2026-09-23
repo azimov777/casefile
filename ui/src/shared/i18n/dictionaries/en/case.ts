@@ -28,14 +28,13 @@ export const caseScreen = {
 
   filters: {
     label: 'Entry selection',
-    expand: 'Choose the types',
-    collapse: 'Collapse the types',
+    menu: 'Filter',
+    menuLabel: 'Entry types',
     agentEntries: 'Agent entries',
     serviceEntries: 'Service entries',
     chosen: 'Chosen entry types',
     allShown: 'all entries are shown',
     remove: 'Remove the type: {{type}}',
-    reset: 'All entries',
-    legend: 'Entry types',
+    reset: 'Reset',
   },
 } as const;

@@ -2,6 +2,13 @@ export { Badge, type BadgeTone } from './badge';
 export { Button } from './button';
 export { type ControlSize } from './control-size';
 export { Callout } from './callout';
+export {
+  FilterChip,
+  FilterChipList,
+  FilterCountBadge,
+  FilterGroup,
+  FilterResetButton,
+} from './filter-chip';
 export { Input } from './input';
 export { Composer } from './composer';
 export { CopyBlock } from './copy-block';

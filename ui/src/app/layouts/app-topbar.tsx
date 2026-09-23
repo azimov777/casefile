@@ -9,6 +9,7 @@ import { ViewSwitch, readFilters, tasksHref } from '@/features/task-filters';
 import { LiveStatus, type LiveJournal } from '@/features/live-journal';
 import { LanguageSwitch } from '@/features/switch-language';
 import { cn } from '@/shared/lib';
+import { Button } from '@/shared/ui';
 import { readPlace, type Place } from './place';
 
 /**
@@ -48,10 +49,18 @@ export function AppTopbar({
        * кнопка «показать разделы» показывала бы то, что и так видно (решение Д27).
        * Скрыта `hidden`, а не `display:none` через медиазапрос в другом файле, — чтобы
        * условие стояло там же, где кнопка.
+       *
+       * Шкала кнопок `Button` (UI-128), а не свой набор классов: у прежней ручной
+       * кнопки фон не был назван явно, и браузер рисовал поверх неё свой `ButtonFace` —
+       * тот самый серый прямоугольник со снимка (UI-137#11; `docs/notes/ui.md`,
+       * «Кнопка без объявленного фона получает `ButtonFace` браузера»). Тон `quiet`
+       * называет фон явно (`bg-transparent`) и размер `sm` — тот же, что у остальных
+       * плотных кнопок верхней полосы (`control-size.ts`: «`sm` — ... верхняя полоса»).
        */}
-      <button
+      <Button
         ref={openerRef}
-        type="button"
+        tone="quiet"
+        size="sm"
         /*
          * Кнопка говорит и о том, что за ней ждёт: на узком экране счётчик вопросов
          * уехал в панель вместе со всем остальным, а «меня спрашивают» — то, ради чего
@@ -61,12 +70,7 @@ export function AppTopbar({
         // нечего, и обходить склонение двоеточием не приходится.
         aria-label={t('app.showSections', { count: waiting })}
         onClick={onOpenSide}
-        className={cn(
-          'relative grid size-9 shrink-0 place-items-center rounded-control border border-line-strong text-muted',
-          'transition-colors duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-          'fold:hidden',
-        )}
+        className="relative shrink-0 px-1.5 fold:hidden"
       >
         <PanelLeft className="size-(--ui-mark)" aria-hidden="true" />
         {waiting > 0 ? (
@@ -75,7 +79,7 @@ export function AppTopbar({
             className="absolute -top-px -right-px size-2 rounded-pill bg-attention ring-2 ring-surface"
           />
         ) : null}
-      </button>
+      </Button>
 
       <Crumbs place={place} />
 

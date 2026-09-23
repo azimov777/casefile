@@ -319,7 +319,13 @@ test.describe('дело читается по-русски', () => {
     const before = await page
       .locator('article[data-type]')
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-type') ?? ''));
-    await page.getByRole('button', { name: 'Служебные' }).click();
+
+    // Тип отбирается из панели «Фильтр» (UI-137): подпись группы ставит её целиком.
+    await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'Типы записей' })
+      .getByRole('button', { name: 'Служебные', exact: true })
+      .click();
     await expect(page.locator('article[data-type="note"]')).toHaveCount(0);
 
     const after = await page

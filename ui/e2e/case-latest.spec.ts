@@ -97,49 +97,49 @@ function watchFeed(page: Page): URL[] {
 }
 
 test.describe('дело длиннее страницы', () => {
-  test('перечень типов свёрнут, а отобранное названо поимённо', async ({ page, request }) => {
+  test('панель «Фильтр» ставит типы подряд, перезагрузка их не теряет', async ({
+    page,
+    request,
+  }) => {
     const key = await seed(request);
     await silenceJournal(page);
     await page.goto(`/tasks/${key}/case`);
 
-    // Восемнадцати флажков до первой записи нет.
-    await expect(page.getByRole('checkbox')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Выбрать типы' }).click();
-    await expect(page.getByRole('checkbox')).toHaveCount(18);
-
-    // Отбор виден словами, а не счётчиком, и живёт в адресе.
-    // `click`, а не `check`: флажок управляется адресом страницы, и его состояние
-    // возвращается на кадр позже клика — строгая проверка `check` этого не ждёт.
-    await page.getByRole('checkbox', { name: 'note' }).click();
-    await expect(page.getByRole('checkbox', { name: 'note' })).toBeChecked();
+    // Панели до нажатия нет вовсе — она вне потока, как и у отбора задач (UI-130).
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+    const menu = page.getByRole('dialog', { name: 'Типы записей' });
+    await menu.getByRole('button', { name: 'note', exact: true }).click();
     await expect(page).toHaveURL(/type=note/);
     const chosen = page.getByRole('list', { name: 'Отобранные типы записей' });
     await expect(chosen.getByRole('listitem')).toHaveCount(1);
     await expect(chosen).toContainText('note');
 
-    // Флажки достижимы клавиатурой: обход табом от кнопки раскрытия доходит до
-    // первого из них, и пробел его переключает. Шаги считаются до совпадения, а не
-    // задаются числом: между кнопкой и флажками стоят группы и чипы, и их количество
-    // зависит от того, что отобрано.
-    await page.getByRole('button', { name: 'Свернуть типы' }).focus();
-    const first = page.getByRole('checkbox', { name: 'summary' });
-    for (
-      let step = 0;
-      step < 8 && !(await first.evaluate((node) => node === document.activeElement));
-      step += 1
-    ) {
-      await page.keyboard.press('Tab');
-    }
-    await expect(first).toBeFocused();
-    await page.keyboard.press('Space');
-    await expect(first).toBeChecked();
+    // Панель не закрывается от нажатия: второй тип ставится следом.
+    await menu.getByRole('button', { name: 'summary', exact: true }).click();
     await expect(page).toHaveURL(/type=summary/);
+    await expect(chosen.getByRole('listitem')).toHaveCount(2);
 
-    // Свёрнутый вид отбор не прячет: чипы остаются на месте, и оба типа названы.
-    await page.getByRole('button', { name: 'Свернуть типы' }).click();
-    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    // `Esc` закрывает панель и возвращает фокус на кнопку — это приходит с Radix.
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Фильтр', exact: true })).toBeFocused();
+
+    await page.reload();
+
+    // Выбор пережил перезагрузку, и чипы видны без открытия панели.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(chosen).toContainText('note');
     await expect(chosen).toContainText('summary');
+    await expect(page).toHaveURL(/type=note/);
+    await expect(page).toHaveURL(/type=summary/);
+
+    // Панель по-прежнему показывает то же самое нажатым.
+    await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+    await expect(menu.getByRole('button', { name: 'note', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
   test('к свежей записи ведёт одно действие, а не листание всего дела', async ({

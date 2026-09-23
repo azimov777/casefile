@@ -209,8 +209,12 @@ test('доступность ленты дела', async ({ page }) => {
   const closed = await new AxeBuilder({ page }).analyze();
   expect(closed.violations).toEqual([]);
 
-  // И с раскрытым отбором по типам: у флажков свои подписи и своя группа.
-  await page.getByRole('button', { name: 'Записи агента' }).click();
+  // И с открытой панелью «Фильтр»: у переключателей свои подписи и свои группы.
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Типы записей' })
+    .getByRole('button', { name: 'Записи агента', exact: true })
+    .click();
   await expect(page.getByRole('article').first()).toBeVisible();
 
   const filtered = await new AxeBuilder({ page }).analyze();
@@ -248,8 +252,12 @@ test('лента дела: все типы записей, отбор и отв�
   // Одна страница ленты — один запрос записей.
   expect(calls).toHaveLength(1);
 
-  // Отбор «Служебные» оставляет только записи трекера.
-  await page.getByRole('button', { name: 'Служебные' }).click();
+  // Отбор «Служебные» из панели «Фильтр» (UI-137) оставляет только записи трекера.
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Типы записей' })
+    .getByRole('button', { name: 'Служебные', exact: true })
+    .click();
   await expect(page.getByRole('article')).not.toHaveCount(total);
   await expect(page.getByText('created').first()).toBeVisible();
   await expect(page.getByRole('article').filter({ hasText: 'decision' })).toHaveCount(0);

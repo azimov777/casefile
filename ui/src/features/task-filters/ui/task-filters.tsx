@@ -1,9 +1,19 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ARCHIVE_AFTER_DAYS } from '@/entities/task';
-import { ArrowDownUp, Code, ListFilter, Search, X } from 'lucide-react';
+import { ArrowDownUp, Code, ListFilter, Search } from 'lucide-react';
 import { cn } from '@/shared/lib';
-import { Button, Popover, PopoverContent, PopoverTrigger, Select } from '@/shared/ui';
+import {
+  Button,
+  FilterChip,
+  FilterChipList,
+  FilterCountBadge,
+  FilterResetButton,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Select,
+} from '@/shared/ui';
 import { TASK_SORTS, type TaskFilters } from '../model/filters';
 import { type QueryProblem } from '../model/query-problem';
 import { CONDITION_RESET, describeFilters } from '../model/summary';
@@ -131,14 +141,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                    * Число условий на кнопке — чтобы связать её с чипами под строкой. Глазам
                    * хватает цифры, диктору чипы и так называют всё списком.
                    */}
-                  {conditions.length === 0 ? null : (
-                    <span
-                      className="grid min-w-4 place-items-center rounded-pill bg-accent px-1 text-label leading-[1.4] text-accent-text"
-                      aria-hidden="true"
-                    >
-                      {conditions.length}
-                    </span>
-                  )}
+                  {conditions.length === 0 ? null : <FilterCountBadge count={conditions.length} />}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-96" aria-label={t('filters.menuLabel')}>
@@ -192,11 +195,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
         {querying ? (
           <p className="text-meta text-muted">{t('filters.query.note')}</p>
         ) : (
-          /* Список, а не абзац: программа чтения с экрана называет число условий вслух. */
-          <ul
-            className="flex min-w-0 list-none flex-wrap items-center gap-1.5 p-0"
-            aria-label={t('filters.conditions')}
-          >
+          <FilterChipList label={t('filters.conditions')}>
             {conditions.length === 0 ? (
               /*
                * Без условий выдача всё равно отобрана, пока архив скрыт: «показаны все
@@ -207,42 +206,23 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
               </li>
             ) : (
               conditions.map((condition) => (
-                /*
-                 * Чип — две соседние мишени, а не кнопка в кнопке: текст открывает панель
-                 * фильтра, крестик снимает условие.
-                 */
-                <li
+                <FilterChip
                   key={condition.id}
-                  className="inline-flex items-center rounded-pill bg-accent-soft text-mark whitespace-nowrap text-text"
-                >
-                  <button
-                    type="button"
-                    className={cn(CHIP_PART, 'py-0.5 pr-1 pl-2.5')}
-                    onClick={() => setMenuOpen(true)}
-                  >
-                    {condition.label}
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(CHIP_PART, 'mr-0.5 grid size-5 place-items-center text-muted')}
-                    aria-label={t('filters.remove', { condition: condition.label })}
-                    onClick={() => {
-                      applyWith(CONDITION_RESET[condition.id]);
-                      menuRef.current?.focus();
-                    }}
-                  >
-                    <X className="size-(--ui-mark)" aria-hidden="true" />
-                  </button>
-                </li>
+                  label={condition.label}
+                  removeLabel={t('filters.remove', { condition: condition.label })}
+                  onOpen={() => setMenuOpen(true)}
+                  onRemove={() => {
+                    applyWith(CONDITION_RESET[condition.id]);
+                    menuRef.current?.focus();
+                  }}
+                />
               ))
             )}
-          </ul>
+          </FilterChipList>
         )}
 
         {querying || conditions.length === 0 ? null : (
-          <button type="button" className={RESET} onClick={onReset}>
-            {t('filters.reset')}
-          </button>
+          <FilterResetButton onClick={onReset}>{t('filters.reset')}</FilterResetButton>
         )}
 
         {/*
@@ -270,14 +250,6 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
     </section>
   );
 }
-
-/** Часть чипа: своя мишень с откликом на наведение и видимым фокусом. */
-const CHIP_PART =
-  'rounded-pill border-none bg-transparent leading-[1.4] transition-colors duration-(--motion-fast) ease-fast hover:bg-sunken hover:text-text focus-visible:outline-2 focus-visible:outline-focus';
-
-/** Сброс — действие-ссылка в строке состояния, а не третья кнопка рядом с двумя. */
-const RESET =
-  'rounded-mark border-none bg-transparent p-0 text-meta text-muted underline underline-offset-2 hover:text-text focus-visible:outline-2 focus-visible:outline-focus';
 
 /**
  * Поиск по тексту: самое частое условие стоит в строке всегда. Применяется по Enter —

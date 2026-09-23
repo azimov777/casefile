@@ -32,14 +32,13 @@ export const caseScreen = {
 
   filters: {
     label: 'Отбор записей',
-    expand: 'Выбрать типы',
-    collapse: 'Свернуть типы',
+    menu: 'Фильтр',
+    menuLabel: 'Типы записей',
     agentEntries: 'Записи агента',
     serviceEntries: 'Служебные',
     chosen: 'Отобранные типы записей',
     allShown: 'показаны все записи',
     remove: 'Убрать тип: {{type}}',
-    reset: 'Все записи',
-    legend: 'Типы записей',
+    reset: 'Сбросить',
   },
 } as const;

@@ -1,9 +1,9 @@
-import { useId, type FormEvent, type ReactNode } from 'react';
+import { useId, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CircleHelp, Flag, Lock } from 'lucide-react';
 import { PriorityMark, StatusMark, TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { cn } from '@/shared/lib';
-import { ToggleGroup, ToggleGroupItem } from '@/shared/ui';
+import { FilterGroup, ToggleGroup, ToggleGroupItem } from '@/shared/ui';
 import { type TaskFilters } from '../model/filters';
 import { FIELD, FIELD_PENDING } from './field';
 import { PendingMark } from './query-problem-hint';
@@ -61,7 +61,7 @@ export function FilterMenu({
     <div className="flex flex-col gap-3">
       {/* На доске статус — это столбец: отбирать по нему ещё и здесь значило бы врать. */}
       {board ? null : (
-        <Group label={t('filters.statusLegend')}>
+        <FilterGroup label={t('filters.statusLegend')}>
           {(labelId) => (
             <ToggleGroup
               aria-labelledby={labelId}
@@ -76,10 +76,10 @@ export function FilterMenu({
               ))}
             </ToggleGroup>
           )}
-        </Group>
+        </FilterGroup>
       )}
 
-      <Group label={t('filters.priorityLegend')}>
+      <FilterGroup label={t('filters.priorityLegend')}>
         {(labelId) => (
           <ToggleGroup
             aria-labelledby={labelId}
@@ -93,9 +93,9 @@ export function FilterMenu({
             ))}
           </ToggleGroup>
         )}
-      </Group>
+      </FilterGroup>
 
-      <Group label={t('filters.flagsLegend')}>
+      <FilterGroup label={t('filters.flagsLegend')}>
         {(labelId) => (
           <ToggleGroup
             aria-labelledby={labelId}
@@ -119,7 +119,7 @@ export function FilterMenu({
             })}
           </ToggleGroup>
         )}
-      </Group>
+      </FilterGroup>
 
       <form className="flex flex-col gap-1.5" onSubmit={submit}>
         <label className="text-label text-muted" htmlFor={assigneeId}>
@@ -139,20 +139,6 @@ export function FilterMenu({
           {pending ? <PendingMark id={pendingId} /> : null}
         </div>
       </form>
-    </div>
-  );
-}
-
-/** Одно условие панели: подпись над группой, связанная с ней по `aria-labelledby`. */
-function Group({ label, children }: { label: string; children: (labelId: string) => ReactNode }) {
-  const labelId = useId();
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span id={labelId} className="text-label text-muted">
-        {label}
-      </span>
-      {children(labelId)}
     </div>
   );
 }
