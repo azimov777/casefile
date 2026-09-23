@@ -803,6 +803,98 @@ describe('замечание к задаче', () => {
   });
 });
 
+describe('вопрос на карточке: отмена ответа (UI-156)', () => {
+  function withQuestion(overrides = {}) {
+    server.use(
+      packageOf('DEMO-4', {
+        questions: [questionEntry(4, 'DEMO-4')],
+        features: {
+          blocked: false,
+          open_questions: 1,
+          open_blocking_questions: 1,
+          last_summary_at: null,
+        },
+        ...overrides,
+      }),
+      entries('DEMO-4'),
+    );
+  }
+
+  it('«Отмена» на пустой форме сворачивает её без вопроса', async () => {
+    withQuestion();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-4');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue('');
+
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    // Никакого вопроса — форма ушла сразу, и на месте снова кнопка «Ответить».
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.queryByLabelText(say.ui('answer.fieldLabel'))).toBeNull();
+    expect(screen.getByRole('button', { name: say.ui('answer.open') })).toBeInTheDocument();
+  });
+
+  it('«Отмена» на непустом черновике спрашивает и выбрасывает его по подтверждению', async () => {
+    withQuestion();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-4');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'Хочу проверить отмену.');
+
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    const dialog = await screen.findByRole('alertdialog', {
+      name: say.ui('composer.discardTitle'),
+    });
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue(
+      'Хочу проверить отмену.',
+    );
+
+    await user.click(
+      within(dialog).getByRole('button', { name: say.ui('composer.discardConfirm') }),
+    );
+
+    // Свернулась, и черновик пропал не только из вида: открыв форму заново, поле пусто.
+    expect(screen.queryByLabelText(say.ui('answer.fieldLabel'))).toBeNull();
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue('');
+  });
+
+  it('«Продолжить писать» закрывает диалог и оставляет черновик как был', async () => {
+    withQuestion();
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-4');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'Ещё дописываю.');
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: say.ui('composer.keepWriting') }));
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue('Ещё дописываю.');
+  });
+
+  it('адрес, называющий вопрос, раскрывает форму сразу — «Отмена» сворачивает её как обычно', async () => {
+    withQuestion();
+    const user = userEvent.setup();
+    // `askedFor`: адрес называет именно этот вопрос, форма раскрыта без клика.
+    renderApp('/tasks/DEMO-4?entry=4');
+
+    expect(await screen.findByLabelText(say.ui('answer.fieldLabel'))).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    // Параметр `?entry=4` не тронут, но повторно форму принудительно не раскрывает:
+    // на месте кнопка «Ответить», а не молчаливый повторный показ формы.
+    expect(screen.queryByLabelText(say.ui('answer.fieldLabel'))).toBeNull();
+    expect(screen.getByRole('button', { name: say.ui('answer.open') })).toBeInTheDocument();
+  });
+});
+
 describe('опись: правки разделов одного действия (UI-133)', () => {
   const ACTION = '55555555-5555-4555-8555-555555555555';
   const FIELDS: components['schemas']['TaskField'][] = [

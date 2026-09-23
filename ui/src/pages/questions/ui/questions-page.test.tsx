@@ -374,6 +374,69 @@ describe('входящая и ответ', () => {
   });
 });
 
+describe('входящая: отмена ответа (UI-156)', () => {
+  it('«Отмена» на пустой форме сворачивает её без вопроса', async () => {
+    inbox();
+    const user = userEvent.setup();
+    renderApp('/questions');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue('');
+
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    // Никакого вопроса — форма ушла сразу, и на месте снова кнопка «Ответить».
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.queryByLabelText(say.ui('answer.fieldLabel'))).toBeNull();
+    expect(screen.getByRole('button', { name: say.ui('answer.open') })).toBeInTheDocument();
+  });
+
+  it('«Отмена» на непустом черновике спрашивает и выбрасывает его по подтверждению', async () => {
+    inbox();
+    const user = userEvent.setup();
+    renderApp('/questions');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'Хочу проверить отмену.');
+
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    const dialog = await screen.findByRole('alertdialog', {
+      name: say.ui('composer.discardTitle'),
+    });
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue(
+      'Хочу проверить отмену.',
+    );
+
+    await user.click(
+      within(dialog).getByRole('button', { name: say.ui('composer.discardConfirm') }),
+    );
+
+    // Свернулась, и черновик пропал не только из вида: открыв форму заново, поле пусто.
+    expect(screen.queryByLabelText(say.ui('answer.fieldLabel'))).toBeNull();
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue('');
+
+    expect(posts()).toHaveLength(0);
+  });
+
+  it('«Продолжить писать» закрывает диалог и оставляет черновик как был', async () => {
+    inbox();
+    const user = userEvent.setup();
+    renderApp('/questions');
+
+    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'Ещё дописываю.');
+    await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: say.ui('composer.keepWriting') }));
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveValue('Ещё дописываю.');
+  });
+});
+
 describe('входящая: мои замечания', () => {
   /** Входящая, где вопросов нет, а замечания есть: две половины экрана независимы. */
   function inboxWithRemarks() {

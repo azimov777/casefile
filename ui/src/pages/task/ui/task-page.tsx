@@ -585,6 +585,7 @@ function QuestionAnswer({ taskKey, question, at, answering, askedFor }: Question
       onBegin={() => answering.begin(id, question, at)}
       onFailed={() => answering.fail(id)}
       onAnswered={(result) => answering.complete(id, result)}
+      onCancel={() => setOpen(false)}
     />
   );
 }

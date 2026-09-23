@@ -18,6 +18,16 @@ interface AnswerFormProps {
   onAnswered?: (answered: Answered) => void;
   /** Отправка не удалась: закрепление можно снять, черновик остаётся в форме. */
   onFailed?: () => void;
+  /**
+   * Отменить: черновик уже выброшен, форме остаётся только свернуться. Обязателен,
+   * не необязателен, как у `RemarkForm` (`UI-142`) — форма всегда монтируется под
+   * условием (`open` в обоих местах показа), и без обязательного `onCancel` третье
+   * место могло бы забыть его передать, разойдясь с первыми двумя (`docs/notes/ui.md`,
+   * «Одинаковый переход, собранный в двух местах, расходится на первом же условии»).
+   * Родитель решает, как выглядит свёртывание: оба места монтирования прячут форму
+   * за кнопкой «Ответить», симметрично открытию.
+   */
+  onCancel: () => void;
 }
 
 /**
@@ -37,6 +47,7 @@ export function AnswerForm({
   onBegin,
   onAnswered,
   onFailed,
+  onCancel,
 }: AnswerFormProps) {
   const answer = useAnswerQuestion();
   const fields = answer.error instanceof ApiError ? answer.error.fields : null;
@@ -58,6 +69,7 @@ export function AnswerForm({
       placeholder={t('answer.placeholder')}
       problem={fields?.body}
       isPending={answer.isPending}
+      onCancel={onCancel}
       failure={
         answer.isError ? (
           // Две фразы подряд: первая пришла отказом от бэкенда, вторая — наша.
