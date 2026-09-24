@@ -282,6 +282,8 @@ export const ui = {
     copy: 'Copy {{reference}}',
     copied: 'copied',
     clipboardUnavailable: 'clipboard unavailable',
+    copyLink: 'Copy link to entry #{{no}}',
+    linkCopied: 'Link to the entry copied',
     /** Группа правок разделов одного действия (UI-133). */
     group: {
       range: '{{first}}–{{last}}',
