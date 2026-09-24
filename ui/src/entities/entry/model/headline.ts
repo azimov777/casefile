@@ -141,6 +141,15 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
               : t('entry.headline.linkRemoved'),
           ),
           ...(facts.link_kind == null ? [] : [id(facts.link_kind)]),
+          /*
+           * Вид назван от лица этой задачи: `parent DEMO-9` в деле программы значит
+           * «эта задача — родитель DEMO-9». Фразой идентификатор читается наоборот
+           * («родитель — DEMO-9»), поэтому у иерархии роль второй задачи сказана
+           * словами перед её ключом (UI-166). Идентификатор остаётся как есть.
+           */
+          ...(facts.link_kind === 'parent' || facts.link_kind === 'child'
+            ? [words(t(`entry.headline.linkRole.${facts.link_kind}`))]
+            : []),
           ...(facts.other_key == null ? [] : [{ kind: 'task' as const, key: facts.other_key }]),
         ],
       };

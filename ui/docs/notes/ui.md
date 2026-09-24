@@ -3178,3 +3178,25 @@ CSS-токен высоты — токен пишется ровно один р
 **Где:** `src/pages/task/ui/task-index.tsx` (`EntryDetails`),
 `src/entities/entry/ui/author-name.tsx`, `src/entities/entry/ui/entry-body.tsx` (`Side`),
 `src/pages/moving/ui/moving-page.tsx`, дело UI-140#7.
+
+## Вид связи — роль открытой задачи, а подпись группы — роль перечисленных
+
+**Что:** в `links` карточки и в фактах `link_added`/`link_removed` вид называет роль
+**своей** задачи: у программы `kind: parent, other: DEMO-9` значит «программа — родитель
+DEMO-9». Блок «Связи» ставит подпись над списком **других** задач, поэтому под `parent`
+стоят дочерние, а под `child` — родитель. До UI-166 словарь переводил вид напрямую
+(`parent` — «Родитель», `child` — «Дети»), и у ребёнка родитель стоял под «Дети», а знак
+«вверх» — над детьми. Тот же обратный прочёт сидел и в сквозном `e2e/link-groups.spec.ts`:
+он заводил подопытной трёх «детей» связью `child`, то есть трёх родителей.
+**Почему важно:** идентификатор, прочитанный фразой («parent DEMO-9»), говорит обратное
+контракту, и ошибка выглядит правдоподобно — её не видно, пока не открыть карточку
+ребёнка. У `blocks`/`blocked_by`/`relates` фраза идентификатора читается верно, у
+`parent`/`child` — нет.
+**Как правильно:** подпись группы — кем перечисленные приходятся открытой задаче
+(`task.links.kind`); в заголовке записи о связи роль второй задачи словами перед её
+ключом (`entry.headline.linkRole`). Родитель открытой задачи — связи `child`
+(`TaskHeader`), её дети — связи `parent`. Сквозной `e2e/hierarchy.spec.ts` проверяет обе
+стороны на двух языках.
+**Где:** `src/entities/task/ui/link-kind.tsx` (`LINK_KIND_ORDER`),
+`src/entities/entry/model/headline.ts` (`entryHeadline`), `src/pages/task/ui/task-header.tsx`
+(`TaskHeader`), `../app/domain/links.py` (`LinkKind`), дело UI-166#5.

@@ -8,7 +8,7 @@
 сценарий просто открывает адрес и видит задачи. Сценариям запасного пути (экран входа)
 установка без ключа выдаётся поимённо — `installWithoutKey` в `contour.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts` и `moving.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts` и `moving.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -174,6 +174,10 @@ invalid_search_query`); ограничение снято (TRK-21).
   края, зазор между связями больше зазора внутри связи; снимки светлой и тёмной темы в
   выводе прогона; пустой блок (UI-141) замером держит те же поля от рамки, что и
   непустой список; заводит задачи
+  сам и отменяет их в `finally`, проект «запись»
+- `hierarchy.spec.ts` — программа с двумя детьми на русском и английском (UI-166): у программы
+  дети под «Дочерние задачи», у ребёнка программа — родитель в шапке и в блоке «Связи», запись
+  о связи в деле каждой называет роль второй задачи со своей стороны; заводит задачи
   сам и отменяет их в `finally`, проект «запись»
 - `section-edits.spec.ts` — правки разделов одним действием (UI-133): две пачки по семь правок
   одной строкой в описи и одной группой в ленте, `?entry=N` раскрывает группу и ведёт к записи N,
