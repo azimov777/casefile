@@ -3,6 +3,7 @@ import { account } from './account';
 import { caseScreen } from './case';
 import { connect } from './connect';
 import { errors } from './errors';
+import { fieldReasons } from './field-reasons';
 import { login } from './login';
 import { moving } from './moving';
 import { people } from './people';
@@ -19,7 +20,7 @@ import { ui } from './ui';
  * Новое пространство имён добавляется двумя строками — импортом и полем; их набор
  * задан программой UI-76: `login`, `tasks`, `task`, `case`, `questions`, `errors`, `ui`;
  * `connect` добавила UI-105, `access` — UI-106, `account` и `people` — UI-122,
- * `moving` — UI-135.
+ * `moving` — UI-135, `fieldReasons` — UI-165.
  *
  * Пространство `case` названо в файле `caseScreen`: `case` — ключевое слово, и
  * переменной с таким именем не бывает. Имя пространства при этом `case` — оно живёт
@@ -31,6 +32,7 @@ export const en = {
   case: caseScreen,
   connect,
   errors,
+  fieldReasons,
   login,
   moving,
   people,

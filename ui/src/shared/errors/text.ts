@@ -25,6 +25,20 @@ export function errorText(code: string, fallback = ''): string {
 }
 
 /**
+ * Текст причины у поля для человека, по коду `details.fields[].reason`
+ * (`shared/api/error.ts`, `ApiError.fields`).
+ *
+ * Источник — пространство `fieldReasons` словарей языков. В отличие от `errorText`,
+ * полноту словаря никто не проверяет: бэкенд не поставляет закрытый список причин
+ * (`app/domain/fields.py`), и запасной текст называет сам код вместо того, чтобы
+ * ронять сборку за неизвестную причину.
+ */
+export function fieldReasonText(reason: string): string {
+  const translated = i18n.t(reason, { ns: 'fieldReasons', defaultValue: '' });
+  return translated !== '' ? translated : i18n.t('error.unknownFieldReason', { reason });
+}
+
+/**
  * Текст для человека по любому брошенному значению: отказ бэкенда, обрыв сети,
  * исключение в коде.
  *

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ApiError } from '../api';
 import { LANGUAGES, dictionaries, en, i18n, ru } from '../i18n';
-import { errorMessage, errorText } from './text';
+import { errorMessage, errorText, fieldReasonText } from './text';
 
 /**
  * Справочник кодов бэкенда собирается из его кода командой, значит его можно сверять,
@@ -78,6 +78,50 @@ describe.each(LANGUAGES)('errorText на языке %s', (language) => {
   it('неизвестный код без фразы бэкенда всё равно называет код', () => {
     expect(errorText('brand_new_code')).toBe(
       dictionary.ui.error.unknownCode.replace('{{code}}', 'brand_new_code'),
+    );
+  });
+});
+
+/*
+ * В отличие от `errors`, `fieldReasons` не обязан покрывать причины бэкенда целиком
+ * (`shared/i18n/dictionaries/ru/field-reasons.ts`), поэтому здесь нет проверки
+ * полноты со справочником — только качество того, что в словаре есть, и запасной
+ * текст для причины, которой в нём нет.
+ */
+describe('словарь причин у поля', () => {
+  it('русские тексты на русском и заканчиваются точкой', () => {
+    for (const [reason, text] of Object.entries(ru.fieldReasons)) {
+      expect(text, reason).toMatch(/[А-Яа-яЁё]/);
+      expect(text, reason).toMatch(/[.:]$/);
+    }
+  });
+
+  it('английские тексты без кириллицы и заканчиваются точкой', () => {
+    for (const [reason, text] of Object.entries(en.fieldReasons)) {
+      expect(text, reason).not.toMatch(/[А-Яа-яЁё]/);
+      expect(text, reason).toMatch(/[.:]$/);
+    }
+  });
+});
+
+describe.each(LANGUAGES)('fieldReasonText на языке %s', (language) => {
+  const dictionary = dictionaries[language];
+
+  beforeAll(() => {
+    void i18n.changeLanguage(language);
+  });
+
+  afterAll(() => {
+    void i18n.changeLanguage('en');
+  });
+
+  it('берёт текст по коду причины', () => {
+    expect(fieldReasonText('too_long')).toBe(dictionary.fieldReasons.too_long);
+  });
+
+  it('причина без перевода называет сам код в запасном тексте', () => {
+    expect(fieldReasonText('brand_new_reason')).toBe(
+      dictionary.ui.error.unknownFieldReason.replace('{{reason}}', 'brand_new_reason'),
     );
   });
 });
