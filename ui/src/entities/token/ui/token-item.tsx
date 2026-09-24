@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Activity, Ban, CalendarPlus, Hourglass, UserRound, type LucideIcon } from 'lucide-react';
 import { Badge, RelativeTime } from '@/shared/ui';
@@ -38,6 +38,11 @@ export function TokenItem({
   const revoked = isRevoked(token);
   const author = token.created_by.signature ?? null;
   const shared = token.participant === null || token.participant === undefined;
+  const scopeHint = t(token.scope === 'main' ? 'token.scopeMain' : 'token.scopeTask');
+  const scopeHintId = useId();
+  // Что открывает набор, человек узнаёт нажатием на плашку, а не только наведением
+  // (UI-163): на телефоне подсказки `title` нет вовсе.
+  const [scopeShown, setScopeShown] = useState(false);
 
   return (
     <article
@@ -56,17 +61,41 @@ export function TokenItem({
           {/* Имя токена написал человек или установка: это данные, а не подпись. */}
           <span className="font-semibold wrap-anywhere text-text">{token.name}</span>
 
-          <Badge
-            mono
-            kind={t('token.scopeKind')}
-            tone={token.scope === 'main' ? 'attention' : 'neutral'}
-            title={t(token.scope === 'main' ? 'token.scopeMain' : 'token.scopeTask')}
+          {/*
+           * Плашка набора — кнопка-раскрытие, как пояснение к архиву в отборе списка
+           * (UI-153): строка пояснения встаёт под первой строкой карточки. Карточка не
+           * плотная строка таблицы, и нажатие по ней никуда не ведёт — занять его
+           * можно. Кнопка без своего вида: рамку и фон снимает явно
+           * (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`
+           * браузера»), на телефоне мишень не ниже `--ui-tap` (UI-154).
+           */}
+          <button
+            type="button"
+            className="inline-flex min-w-0 cursor-pointer items-center border-none border-current bg-transparent p-0 max-fold:min-h-(--ui-tap) max-fold:min-w-(--ui-tap)"
+            aria-label={t('token.scopeExplain', { scope: token.scope })}
+            aria-expanded={scopeShown}
+            aria-controls={scopeHintId}
+            onClick={() => setScopeShown((shown) => !shown)}
           >
-            {token.scope}
-          </Badge>
+            <Badge
+              mono
+              kind={t('token.scopeKind')}
+              tone={token.scope === 'main' ? 'attention' : 'neutral'}
+              title={scopeHint}
+            >
+              {token.scope}
+            </Badge>
+          </button>
 
           {current ? <Badge tone="progress">{t('token.thisSession')}</Badge> : null}
           {revoked ? <Badge tone="dropped">{t('token.revoked')}</Badge> : null}
+        </p>
+
+        {/* Узел стоит всегда: на него указывает `aria-controls` кнопки. Прячет его
+            атрибут `hidden`, а не утилита: у строки нет своего `display`, и правило
+            браузера `[hidden]` ничем не перебито (preflight не подключён). */}
+        <p id={scopeHintId} className="text-meta text-muted" hidden={!scopeShown}>
+          {scopeHint}
         </p>
 
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-muted">
