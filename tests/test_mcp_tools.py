@@ -165,6 +165,73 @@ async def test_an_unknown_token_is_refused_before_the_list_is_built(
     assert "unauthorized" in str(failure.value)
 
 
+# --- Аннотации протокола (TRK-128) -----------------------------------------------------
+
+#: Ожидаемые `(readOnlyHint, destructiveHint, idempotentHint)` каждого инструмента.
+#: `openWorldHint` сюда не входит — он один и тот же (`False`) у всех и проверяется
+#: отдельной строкой: сервер работает с данными установки, а не с внешним миром, ни в
+#: одном инструменте. Правило по каждому хинту — `docs/notes/mcp.md`, «Аннотации
+#: протокола ставятся по поведению вызова».
+TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
+    # Читающие: ничего не меняют, повтор всегда безопасен.
+    "get_task": (True, False, True),
+    "search_tasks": (True, False, True),
+    "get_queue": (True, False, True),
+    "list_queues": (True, False, True),
+    "list_participants": (True, False, True),
+    "read_entries": (True, False, True),
+    "wait_journal": (True, False, True),
+    # Подшивающие и переводящие: дело только дописывается — не разрушают, — но без
+    # ключа идемпотентности повтор с теми же аргументами не гарантирует то же
+    # состояние: заводит вторую запись/объект или отказывает конфликтом или
+    # неприменимым переходом.
+    "create_task": (False, False, False),
+    "create_queue": (False, False, False),
+    "register_participant": (False, False, False),
+    "add_entry": (False, False, False),
+    "add_summary": (False, False, False),
+    "ask": (False, False, False),
+    "answer": (False, False, False),
+    "resolve": (False, False, False),
+    "add_verdict": (False, False, False),
+    "link": (False, False, False),
+    "unlink": (False, False, False),
+    "transition": (False, False, False),
+    "close_task": (False, False, False),
+    # Частичная правка задачи: то же значение второй раз не подшивает запись и не
+    # поднимает версию — идемпотентна; не разрушает ничего, потому что правка хранит
+    # `before`/`after` в `section_changed`/`field_changed`.
+    "update_task": (False, False, True),
+    # Правка очереди и участника: идемпотентна тем же способом, но, в отличие от
+    # задачи, у очереди и участника нет журнала правок — прежние название и описание
+    # перезаписываются без следа. Разрушающее обновление в буквальном смысле хинта.
+    "update_queue": (False, True, True),
+    "update_participant": (False, True, True),
+}
+
+
+async def test_every_tool_carries_honest_protocol_annotations(
+    mcp_session: Connect, main_secret: str
+) -> None:
+    """Обзорная проверка 1 TRK-128: аннотации `tools/list` совпадают с ожидаемым набором.
+
+    Сравнение множеств ловит рассинхрон в обе стороны: инструмент, заведённый завтра без
+    записи здесь, проваливает проверку сам, а не остаётся немым до жалобы каталога.
+    """
+    async with mcp_session(main_secret) as session:
+        listed = {tool.name: tool for tool in (await session.list_tools()).tools}
+
+    assert set(listed) == set(TOOL_ANNOTATIONS)
+
+    for name, (read_only, destructive, idempotent) in TOOL_ANNOTATIONS.items():
+        annotations = listed[name].annotations
+        assert annotations is not None, f"{name}: аннотации не объявлены"
+        assert annotations.read_only_hint is read_only, f"{name}: readOnlyHint"
+        assert annotations.destructive_hint is destructive, f"{name}: destructiveHint"
+        assert annotations.idempotent_hint is idempotent, f"{name}: idempotentHint"
+        assert annotations.open_world_hint is False, f"{name}: openWorldHint"
+
+
 # --- Лишний аргумент ------------------------------------------------------------------
 
 #: Имя, которого нет и не будет ни у одного инструмента.

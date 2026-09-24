@@ -345,6 +345,8 @@ def main() -> None:
                 "remaining": "None",
                 "blockers": "None",
                 "next_step": "No steps left, the task is closed",
+                "unmeasured": "None — both supported currencies in the demo scenario "
+                "(JPY, no minor unit, and EUR, with one) are covered by the two checks",
             },
             "verdicts": [
                 {

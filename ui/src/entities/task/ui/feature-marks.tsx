@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { CircleHelp, Flag, Lock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/shared/i18n';
-import { formatNumber } from '@/shared/lib';
+import { cn, formatNumber } from '@/shared/lib';
 import type { TaskFeatures } from '../api/tasks';
 
 /**
@@ -23,6 +24,7 @@ function Mark({
   label,
   tone,
   count,
+  pressable,
 }: {
   icon: typeof Lock;
   label: string;
@@ -32,21 +34,71 @@ function Mark({
    * на языке интерфейса: разделитель разрядов у языков разный.
    */
   count: string | null;
+  pressable: boolean;
 }) {
+  const [shown, setShown] = useState(false);
+
+  if (!pressable) {
+    return (
+      <span
+        data-mark="feature"
+        className={`inline-flex items-center gap-1 whitespace-nowrap text-mark ${tone}`}
+        title={label}
+      >
+        <Icon className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+        <span className="sr-only">{label}</span>
+        {count === null ? null : <span aria-hidden="true">{count}</span>}
+      </span>
+    );
+  }
+
+  /*
+   * Кнопка-переключатель, как у времени (`RelativeTime`, UI-153): нажатие меняет число
+   * при знаке на полную фразу признака, повторное — обратно (UI-163). Фраза уже несёт
+   * число, поэтому раскрытая подпись его заменяет, а не повторяет. Рамку и фон кнопка
+   * снимает явно (`docs/notes/ui.md`, «Кнопка без объявленного фона получает
+   * `ButtonFace` браузера»); на телефоне мишень не ниже `--ui-tap` (UI-154).
+   */
   return (
-    <span
+    <button
+      type="button"
       data-mark="feature"
-      className={`inline-flex items-center gap-1 whitespace-nowrap text-mark ${tone}`}
-      title={label}
+      className={cn(
+        'inline-flex cursor-pointer items-center gap-1 border-none border-current bg-transparent p-0 text-left text-mark max-fold:min-h-(--ui-tap) max-fold:min-w-(--ui-tap)',
+        shown ? 'text-meta' : 'whitespace-nowrap',
+        tone,
+      )}
+      title={shown ? undefined : label}
+      aria-pressed={shown}
+      onClick={() => setShown((value) => !value)}
     >
       <Icon className="size-(--ui-mark) shrink-0" aria-hidden="true" />
-      <span className="sr-only">{label}</span>
-      {count === null ? null : <span aria-hidden="true">{count}</span>}
-    </span>
+      {shown ? (
+        <span>{label}</span>
+      ) : (
+        <>
+          <span className="sr-only">{label}</span>
+          {count === null ? null : <span aria-hidden="true">{count}</span>}
+        </>
+      )}
+    </button>
   );
 }
 
-export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
+export function TaskFeatureMarks({
+  features,
+  pressable = false,
+}: {
+  features: TaskFeatures;
+  /**
+   * Знак — кнопка, раскрывающая смысл признака словами (UI-163): на телефоне наведения
+   * нет, и подсказка `title` недостижима. Только там, где нажатие ничем не занято, —
+   * в шапке задачи. В строке таблицы и на карточке доски знак стоит внутри мишени,
+   * которая ведёт в задачу: нажатие обязано открыть её, и смысл признака человек
+   * узнаёт уже в ней.
+   */
+  pressable?: boolean;
+}) {
   const blocking = features.open_blocking_questions;
   const { t } = useTranslation('ui');
   const { language } = useLanguage();
@@ -54,7 +106,13 @@ export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
   return (
     <>
       {features.blocked ? (
-        <Mark icon={Lock} label={t('task.features.blocked')} tone="text-danger" count={null} />
+        <Mark
+          icon={Lock}
+          label={t('task.features.blocked')}
+          tone="text-danger"
+          count={null}
+          pressable={pressable}
+        />
       ) : null}
 
       {features.open_questions > 0 ? (
@@ -75,6 +133,7 @@ export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
           }
           tone={blocking > 0 ? 'text-danger' : 'text-attention'}
           count={formatNumber(features.open_questions, language)}
+          pressable={pressable}
         />
       ) : null}
 
@@ -88,6 +147,7 @@ export function TaskFeatureMarks({ features }: { features: TaskFeatures }) {
           label={t('task.features.remarks', { count: features.open_remarks })}
           tone="text-accent"
           count={formatNumber(features.open_remarks, language)}
+          pressable={pressable}
         />
       ) : null}
     </>

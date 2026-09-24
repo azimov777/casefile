@@ -180,7 +180,9 @@ for (const width of [1440, 390]) {
       const row = page.locator('tr[data-nested]').filter({
         has: page.locator('th', { hasText: new RegExp(`^${target}$`) }),
       });
-      await expect(row.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+      // Кнопка раскрытия записи, а не первая попавшаяся: время в строке — тоже кнопка,
+      // переключатель подписи (UI-153), и рядом знак ссылки на запись (UI-155).
+      await expect(row.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true');
       // Раскрыта одна запись — названная, её соседи по группе свёрнуты.
       await expect(page.locator('tr[data-nested] button[aria-expanded="true"]')).toHaveCount(1);
       // Тело записи пришло: пара «было / стало» этой правки.

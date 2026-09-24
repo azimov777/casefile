@@ -49,7 +49,7 @@ from app.mcp.arguments import (
     VersionArg,
 )
 from app.mcp.idempotency import Once
-from app.mcp.toolset import Toolset
+from app.mcp.toolset import FILING, IDEMPOTENT_TASK_UPDATE, READ_ONLY, Toolset
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import queues as queues_service
@@ -64,9 +64,9 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def get_task(key: TaskKeyArg) -> views.TaskPackageView:
-        """Всё о задаче одним вызовом: карточка, связи с обеих сторон, вычисляемые
+        """Отдаёт всё о задаче одним вызовом: карточка, связи с обеих сторон, вычисляемые
         признаки, последняя сводка, открытые вопросы, неразобранные замечания, опись
         дела и переходы по таблице статусов.
 
@@ -81,7 +81,7 @@ def register(tools: Toolset) -> None:
                 await tasks_service.read_task_package(session, key, actor=actor)
             )
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def search_tasks(
         query: QueryArg = None,
         key: KeysArg = None,
@@ -108,6 +108,9 @@ def register(tools: Toolset) -> None:
 
         Отказ: строка не разбирается — `invalid_search_query` с позицией символа;
         неизвестное поле, оператор или значение — свой код и допустимые в `details`.
+
+        Здесь строки выборки с полями из `fields`; одна задача целиком, с делом и
+        связями, — `get_task`.
         """
         async with runtime.call() as (session, actor):
             outcome = await search_service.search_tasks(
@@ -145,7 +148,7 @@ def register(tools: Toolset) -> None:
                 next_cursor=outcome.page.next_cursor,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def create_task(
         queue: QueueKeyArg,
         title: TaskTitleArg,
@@ -222,7 +225,7 @@ def register(tools: Toolset) -> None:
                 build=create,
             )
 
-    @tools.tool()
+    @tools.tool(annotations=IDEMPOTENT_TASK_UPDATE)
     async def update_task(
         key: TaskKeyArg,
         changes: TaskChanges,
@@ -260,7 +263,7 @@ def register(tools: Toolset) -> None:
             )
             return views.mutation(mutation)
 
-    @tools.tool()
+    @tools.tool(annotations=FILING)
     async def transition(
         key: TaskKeyArg,
         to: TaskStatusArg,
@@ -269,13 +272,12 @@ def register(tools: Toolset) -> None:
         """Переводит задачу в другой статус по зашитой таблице переходов.
 
         Трекер откажет, если переход портит журнал: выход из `in_progress` без сводки,
-        подшитой после последнего входа в него (`summary_required`); `in_progress →
-        done` без положительного последнего вердикта по каждой проверке, подшитого
-        после последнего входа в `in_progress` (`checks_not_passed`); вход в
+        подшитой после последнего входа в него (`summary_required`); вход в
         `in_progress` без исполнителя (`assignee_required`) или не от него
         (`assignee_mismatch`: исполнитель и подпись просящего в `details`) и при
-        открытом блокере (`task_blocked`); закрытие (`done` или
-        `cancelled`) при незакрытых детях (`task_has_unclosed_children`). В отказе —
+        открытом блокере (`task_blocked`); `cancelled` при незакрытых детях
+        (`task_has_unclosed_children`). В `done` этот вызов не ведёт: закрывает
+        `close_task`, а здесь цель `done` отвечает `closing_not_a_transition`. В отказе —
         что именно мешает. Ни в `waiting`, ни из него трекер не переводит сам: оба хода
         делает вызывающий.
 
@@ -292,7 +294,7 @@ def register(tools: Toolset) -> None:
             )
             return views.mutation(mutation)
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def close_task(
         key: TaskKeyArg,
         summary: ClosingSummaryArg,

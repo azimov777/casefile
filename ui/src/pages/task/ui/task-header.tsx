@@ -128,7 +128,7 @@ export function TaskHeader({ task, features, links }: TaskHeaderProps) {
           <div className={CELL}>
             <dt className={LABEL}>{t('header.flags')}</dt>
             <dd className="flex flex-wrap gap-2">
-              <TaskFeatureMarks features={features} />
+              <TaskFeatureMarks features={features} pressable />
             </dd>
           </div>
         ) : null}

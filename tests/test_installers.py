@@ -128,3 +128,116 @@ def test_install_sh_still_parses() -> None:
     done = subprocess.run([bash, "-n", str(INSTALL_SH)], capture_output=True, text=True)
 
     assert done.returncode == 0, done.stderr
+
+
+# --- Установщик и обновлятор (TRK-131) -------------------------------------------------
+
+#: Подставной `docker` для `install.sh`: пишет вызовы в `$CALLS`, отвечает по `$SCENE`.
+FAKE_DOCKER = r"""#!/bin/sh
+echo "$*" >>"$CALLS"
+case "$*" in
+  "info --format"*) echo linux ;;
+  "create "*) echo holder ;;
+  "cp "*) cp "$SCENE/compose" "$3" ;;
+  "compose ps -q updater") cat "$SCENE/updater" 2>/dev/null ;;
+  "exec "*" test -e /tmp/checking")
+    n=$(cat "$SCENE/checking" 2>/dev/null || echo 0)
+    [ "$n" -gt 0 ] || exit 1
+    echo $((n - 1)) >"$SCENE/checking" ;;
+  "top "*)
+    n=$(cat "$SCENE/busy" 2>/dev/null || echo 0)
+    echo "PID COMMAND"
+    echo "1 sh"
+    if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$SCENE/busy"; echo "7 docker"; fi ;;
+  "compose up "*) exit "$(cat "$SCENE/up" 2>/dev/null || echo 0)" ;;
+  "compose run "*agent-token*) echo agent-token-secret ;;
+  "compose run "*) echo http://localhost:8100/mcp ;;
+esac
+"""
+
+
+def _install(tmp_path: Path, **scene: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """`install.sh` против подставного `docker`; `sleep` — мгновенный."""
+    bin_dir, scene_dir = tmp_path / "bin", tmp_path / "scene"
+    bin_dir.mkdir()
+    scene_dir.mkdir()
+    for name, body in {"docker": FAKE_DOCKER, "sleep": "#!/bin/sh\n"}.items():
+        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).chmod(0o755)
+    (scene_dir / "compose").write_text("services: {}\n", encoding="utf-8")
+    for name, body in scene.items():
+        (scene_dir / name).write_text(body, encoding="utf-8")
+    calls = tmp_path / "calls"
+    calls.touch()
+    done = subprocess.run(
+        ["sh", str(INSTALL_SH)],
+        env={
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "CASEFILE_DIR": str(tmp_path / "casefile"),
+            "CALLS": str(calls),
+            "SCENE": str(scene_dir),
+        },
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return done, calls.read_text().splitlines()
+
+
+def test_the_installer_waits_for_the_updater_check_and_holds_it_during_up(
+    tmp_path: Path,
+) -> None:
+    """Идёт проверка обновлятора — дождаться её; дальше обновлятор стоит до `up`
+    установщика, и два compose одновременно не работают."""
+    done, calls = _install(tmp_path, updater="container-updater\n", busy="2")
+
+    assert done.returncode == 0, done.stderr
+    assert "Waiting for the updater to finish its check" in done.stdout
+    assert "Casefile is running." in done.stdout
+    stop = calls.index("stop container-updater")
+    assert calls[stop - 1].startswith("top "), "остановлен только после своей проверки"
+    assert len([c for c in calls if c.startswith("top ")]) == 3
+    pull, up = calls.index("compose pull --quiet"), calls.index("compose up -d --remove-orphans")
+    assert stop < pull < up
+    assert "start container-updater" not in calls, "обновлятор поднимает `up` установщика"
+
+
+def test_a_failed_install_starts_the_updater_again(tmp_path: Path) -> None:
+    """Остановленный руками контейнер Docker сам не поднимет — это делает установщик."""
+    done, calls = _install(tmp_path, updater="container-updater\n", up="1")
+
+    assert done.returncode != 0
+    assert calls[-1] == "start container-updater"
+
+
+def test_a_first_install_has_no_updater_to_hold(tmp_path: Path) -> None:
+    done, calls = _install(tmp_path)
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if c.startswith(("top ", "stop ", "start "))]
+
+
+def test_install_ps1_holds_the_updater_the_same_way() -> None:
+    """Близнец: та же остановка обновлятора до `pull` и тот же запуск при неудаче."""
+    text = _read(INSTALL_PS1)
+
+    assert text.index("$updater = Stop-Updater") < text.index("Invoke-Docker compose pull")
+    assert "docker top $id -o 'pid,comm'" in text
+    assert "& docker start $updater" in text.split("} finally {", 1)[1]
+
+
+def test_the_installer_waits_while_the_updater_check_sleeps(tmp_path: Path) -> None:
+    """Проверка ждёт здоровья служб (`sleep`), `docker` в ней не идёт — видно по файлу."""
+    done, calls = _install(tmp_path, updater="container-updater\n", checking="2")
+
+    assert done.returncode == 0, done.stderr
+    assert "Waiting for the updater to finish its check" in done.stdout
+    checks = [c for c in calls if c.startswith("exec ")]
+    assert len(checks) == 3
+    assert calls.index("stop container-updater") > calls.index(checks[-1])
+
+
+def test_install_ps1_sees_the_check_by_its_file_too() -> None:
+    assert "docker exec $id test -e /tmp/checking" in _read(INSTALL_PS1)

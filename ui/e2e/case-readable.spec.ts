@@ -160,7 +160,9 @@ test.describe('дело читается по-русски', () => {
     // едет вправо на разную длину, её каждый раз ищут глазами заново.
     const rights = await page.evaluate(() =>
       Array.from(document.querySelectorAll('article'))
-        .map((card) => card.querySelector('button[type="button"]'))
+        // Кнопка ссылки на запись; время в шапке карточки — тоже кнопка, но
+        // переключатель подписи (`aria-pressed`, UI-153), и его не меряют.
+        .map((card) => card.querySelector('button[type="button"]:not([aria-pressed])'))
         .filter((node): node is HTMLElement => node !== null)
         .map((node) => Math.round(node.getBoundingClientRect().right * 10) / 10),
     );

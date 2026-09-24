@@ -44,7 +44,7 @@ from app.mcp.arguments import (
     VerdictOutcomeArg,
 )
 from app.mcp.idempotency import Once
-from app.mcp.toolset import Toolset
+from app.mcp.toolset import FILING, READ_ONLY, Toolset
 from app.services import case as case_service
 from app.services import tasks as tasks_service
 
@@ -54,7 +54,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool()
+    @tools.tool(annotations=READ_ONLY)
     async def read_entries(
         key: TaskKeyArg,
         nos: EntryNosArg = None,
@@ -63,11 +63,13 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.EntryView]:
-        """Тела записей дела с нагрузкой, в порядке номеров.
+        """Отдаёт тела записей одного дела с нагрузкой, в порядке номеров.
 
         Фильтры складываются по «и»: `types=["summary"]` даёт все сводки, `after_no` —
         всё, что подшито после названной записи, вместе — всё подшитое после неё этих
         типов.
+
+        Записи многих дел одним потоком, с ожиданием новых, — `wait_journal`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -86,7 +88,7 @@ def register(tools: Toolset) -> None:
                 next_cursor=page.next_cursor,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def add_summary(
         key: TaskKeyArg,
         done: SummaryDoneArg,
@@ -101,7 +103,8 @@ def register(tools: Toolset) -> None:
         `wait_journal`. Отказ: пустая часть — `entry_fields_invalid` со списком полей.
 
         Заголовок не принимается: им становится первая строка `done`. В описи сводка
-        говорит о случившемся, как и все соседние строки.
+        говорит о случившемся, как и все соседние строки. Финальную сводку, с
+        `unmeasured`, подшивает `close_task` вместе с закрытием.
 
         Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
         трекером заголовок. Присланное обратно не едет; запись целиком — в
@@ -134,7 +137,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def add_entry(
         key: TaskKeyArg,
         type: EntryTypeArg,
@@ -147,7 +150,9 @@ def register(tools: Toolset) -> None:
         замечание, заметку.
 
         Записи неизменяемы: правки и удаления нет ни здесь, ни в REST — есть только
-        следующая запись со ссылкой на прежнюю в `refs`.
+        следующая запись со ссылкой на прежнюю в `refs`. У сводки, вопроса, ответа,
+        вердикта и резолюции свои инструменты: `add_summary`, `ask`, `answer`,
+        `add_verdict`, `resolve`.
 
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
         `wait_journal`. Отказ: тип не из списка, пустой заголовок, ссылка в никуда —
@@ -184,7 +189,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def ask(
         key: TaskKeyArg,
         addressees: AddresseesArg,
@@ -234,7 +239,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def answer(
         key: TaskKeyArg,
         question_no: QuestionNoArg,
@@ -270,7 +275,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def resolve(
         key: TaskKeyArg,
         remark_no: RemarkNoArg,
@@ -321,7 +326,7 @@ def register(tools: Toolset) -> None:
                 build=append,
             )
 
-    @tools.tool(creating=True)
+    @tools.tool(annotations=FILING, creating=True)
     async def add_verdict(
         key: TaskKeyArg,
         check_no: CheckNoArg,
@@ -333,7 +338,8 @@ def register(tools: Toolset) -> None:
 
         `in_progress → done` смотрит на последний вердикт по каждой проверке и считает
         только вердикты этого захода — подшитые после последнего входа в `in_progress`.
-        Вердикты прошлых заходов остаются в деле, но в счёт не идут.
+        Вердикты прошлых заходов остаются в деле, но в счёт не идут. Вердикты вместе с
+        закрытием задачи принимает и `close_task`.
 
         Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
         `wait_journal`. Отказ: проверки с таким номером в задаче нет —

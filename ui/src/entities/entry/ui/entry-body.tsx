@@ -111,8 +111,17 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
      */
     case 'status_changed':
       if (entry.payload.reason == null || entry.payload.reason === '') return null;
+      /*
+       * Не `BLOCK` (`flex flex-col`): здесь единственный ребёнок — строка текста, а не
+       * несколько блоков, которые надо развести отступом. `TaskText` разбирает причину
+       * на текстовые узлы и ссылки `KEY#N` и отдаёт их фрагментом без обёртки; во
+       * флекс-колонке каждый узел — текст до ссылки, сама ссылка, текст после —
+       * становится своим флекс-элементом и переносится строкой, и «(», ссылка «)»
+       * причины вида «текст (KEY#N)» вставали друг под другом (UI-159). Обычный `<p>`
+       * оставляет их строчным потоком, как в абзаце.
+       */
       return (
-        <p className={BLOCK}>
+        <p className="wrap-anywhere">
           <TaskText>{entry.payload.reason}</TaskText>
         </p>
       );
@@ -134,8 +143,8 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'field_changed':
       return (
         <Diff>
-          <Side title={t('entry.was')} value={entry.payload.before} tone="was" />
-          <Side title={t('entry.now')} value={entry.payload.after} tone="now" />
+          <Side title={t('entry.was')} value={entry.payload.before} tone="was" identifier />
+          <Side title={t('entry.now')} value={entry.payload.after} tone="now" identifier />
         </Diff>
       );
 
@@ -255,15 +264,22 @@ const sideTitle = cva(PART_TITLE, {
 
 /**
  * Сторона сравнения: `checks` приходит списком, остальные разделы — строкой.
+ *
+ * `identifier` — у правки обвязки (`field_changed`, сегодня только `priority`):
+ * её значения не текст агента, а значения контракта (`normal`, `high`), и стоят они
+ * тем же моноширинным идентификатором, что приоритет в карточке, а не абзацем
+ * прозы — на русском экране абзац `high` читался бы непереведённой подписью (UI-140).
  */
 function Side({
   title,
   value,
   tone,
+  identifier = false,
 }: {
   title: string;
   value?: string | string[] | null;
   tone: 'was' | 'now';
+  identifier?: boolean;
 }) {
   const { t } = useTranslation('ui');
 
@@ -275,6 +291,10 @@ function Side({
       <span className={sideTitle({ tone })}>{title}</span>
       {value === null || value === undefined || value === '' ? (
         <p className="text-muted italic">{t('entry.emptyValue')}</p>
+      ) : identifier && !Array.isArray(value) ? (
+        <p>
+          <code className={REF}>{value}</code>
+        </p>
       ) : Array.isArray(value) ? (
         <ol className="pl-6">
           {value.map((item, index) => (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
-import { errorMessage } from '@/shared/errors';
+import { errorMessage, fieldReasonText } from '@/shared/errors';
 import { Composer, Receipt } from '@/shared/ui';
 import { remarkDraftKey } from '../model/draft';
 import { remarkTitle, useLeaveRemark } from '../model/use-leave-remark';
@@ -33,6 +33,9 @@ export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
   const remark = useLeaveRemark();
   const [filed, setFiled] = useState<{ entryNo: number; body: string } | null>(null);
   const fields = remark.error instanceof ApiError ? remark.error.fields : null;
+  // Тело важнее заголовка: заголовок выводится из тела, и если не так и то, и другое —
+  // сказать про тело точнее для человека, печатающего в одно поле.
+  const fieldReason = fields?.body ?? fields?.title;
   // И ради подписи, и ради подписки на язык: текст отказа берёт язык у экземпляра.
   const { t } = useTranslation('ui');
 
@@ -58,7 +61,7 @@ export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
       pendingLabel={t('remark.pending')}
       emptyProblem={t('remark.empty')}
       placeholder={t('remark.placeholder')}
-      problem={fields?.body ?? fields?.title}
+      problem={fieldReason === undefined ? undefined : fieldReasonText(fieldReason)}
       isPending={remark.isPending}
       onCancel={onCancel}
       failure={

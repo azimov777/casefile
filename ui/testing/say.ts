@@ -27,4 +27,5 @@ export const say = {
   people: i18n.getFixedT(null, 'people'),
   questions: i18n.getFixedT(null, 'questions'),
   errors: i18n.getFixedT(null, 'errors'),
+  fieldReasons: i18n.getFixedT(null, 'fieldReasons'),
 };

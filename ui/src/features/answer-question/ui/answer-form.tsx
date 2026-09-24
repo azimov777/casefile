@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
-import { errorMessage } from '@/shared/errors';
+import { errorMessage, fieldReasonText } from '@/shared/errors';
 import { Composer } from '@/shared/ui';
 import { draftKey } from '../model/draft';
 import type { Answered } from '../model/answering';
@@ -67,7 +67,7 @@ export function AnswerForm({
       pendingLabel={t('answer.pending')}
       emptyProblem={t('answer.empty')}
       placeholder={t('answer.placeholder')}
-      problem={fields?.body}
+      problem={fields?.body === undefined ? undefined : fieldReasonText(fields.body)}
       isPending={answer.isPending}
       onCancel={onCancel}
       failure={

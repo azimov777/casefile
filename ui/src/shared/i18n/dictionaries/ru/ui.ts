@@ -3,6 +3,7 @@ import type { components } from '@/shared/api';
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
 type LinkKind = components['schemas']['LinkKind'];
+type AuthorKind = components['schemas']['AuthorKind'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -14,10 +15,22 @@ type LinkKind = components['schemas']['LinkKind'];
  */
 export const ui = {
   language: 'Язык интерфейса',
+  /**
+   * Род участника словом (UI-140): значение контракта (`agent`, `human`), но стоит оно
+   * подписью рядом с именем, а не идентификатором, — как тип записи и вид связи.
+   */
+  participantKind: {
+    agent: 'агент',
+    human: 'человек',
+    tracker: 'трекер',
+  } satisfies Record<AuthorKind, string>,
   error: {
     unknown: 'Неизвестная ошибка.',
     unknownCode: 'Неизвестная ошибка ({{code}}).',
     withCode: '{{message}} ({{code}})',
+    // Причина у поля (`details.fields[].reason`), которой нет в словаре `fieldReasons`
+    // (`shared/i18n/dictionaries`): он не обязан покрывать причины целиком.
+    unknownFieldReason: 'Значение не подходит ({{reason}}).',
   },
 
   /**
@@ -126,6 +139,7 @@ export const ui = {
     scopeKind: 'набор',
     scopeTask: 'Рабочий цикл агента: задачи, записи дела и чтение всего.',
     scopeMain: 'Рабочий цикл плюс запись реестров: участники, токены и очереди.',
+    scopeExplain: 'Что открывает набор {{scope}}',
     thisSession: 'ключ этого сеанса',
     revoked: 'отозван',
     shared: 'общий агентский токен',
@@ -271,6 +285,8 @@ export const ui = {
     copy: 'Скопировать {{reference}}',
     copied: 'скопировано',
     clipboardUnavailable: 'буфер обмена недоступен',
+    copyLink: 'Скопировать ссылку на запись #{{no}}',
+    linkCopied: 'Ссылка на запись скопирована',
     group: {
       range: '{{first}}–{{last}}',
       label: 'Записи {{first}}–{{last}}: правка разделов одним действием',
@@ -290,6 +306,7 @@ export const ui = {
     onlineTitle: 'Живой поток журнала открыт: экран обновляется сам',
     offline: 'нет связи',
     offlineTitle: 'Соединение с потоком журнала потеряно, идёт переподключение',
+    explain: 'Живой поток: {{state}}. Подробнее',
     updates: 'Обновления списка',
     changed_one: 'Изменилась {{count, number}} задача',
     changed_few: 'Изменилось {{count, number}} задачи',

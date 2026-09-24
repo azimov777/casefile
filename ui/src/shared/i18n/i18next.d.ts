@@ -10,17 +10,22 @@ import type { en } from './dictionaries/en';
  * Полноту остальных языков компилятор не видит: их набор ключей сверяет
  * `dictionaries/dictionaries.test.ts`.
  *
- * Пространство `errors` объявлено как `Record<string, string>` намеренно: его ключи —
- * коды ошибок бэкенда, приезжающие в рантайме, и требовать от компилятора списка кодов
- * значит требовать, чтобы клиент знал контракт наизусть. Полноту этого пространства
- * проверяет `shared/errors/text.test.ts` против `../docs/ERRORS.md` —
- * то есть против источника, а не против нашей памяти.
+ * Пространства `errors` и `fieldReasons` объявлены как `Record<string, string>`
+ * намеренно: их ключи — коды бэкенда (`error.code` и `details.fields[].reason`),
+ * приезжающие в рантайме, и требовать от компилятора списка кодов значит требовать,
+ * чтобы клиент знал контракт наизусть. Полноту `errors` проверяет
+ * `shared/errors/text.test.ts` против `../docs/ERRORS.md` — то есть против источника,
+ * а не против нашей памяти. У `fieldReasons` такого источника нет (`ru/field-reasons.ts`),
+ * и полноту с ним никто не сверяет: причина без перевода показывает запасной текст.
  */
 declare module 'i18next' {
   interface CustomTypeOptions {
     defaultNS: 'ui';
     // `defaultValue` не должен превращать несуществующий ключ в законный вызов.
     strictKeyChecks: true;
-    resources: Omit<typeof en, 'errors'> & { errors: Record<string, string> };
+    resources: Omit<typeof en, 'errors' | 'fieldReasons'> & {
+      errors: Record<string, string>;
+      fieldReasons: Record<string, string>;
+    };
   }
 }

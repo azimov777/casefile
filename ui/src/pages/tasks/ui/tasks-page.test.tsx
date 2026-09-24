@@ -203,6 +203,10 @@ describe('список задач', () => {
     // Различие держится не только цветом: у каждого знака свой рисунок.
     const shapes = marks.map((node) => node.querySelector('svg')?.innerHTML ?? '');
     expect(new Set(shapes).size).toBe(3);
+
+    // В строке знак не кнопка (UI-163): нажатие по строке ведёт в задачу, а смысл знака
+    // нажатием раскрывается уже в её шапке.
+    for (const node of marks) expect(node.closest('button')).toBeNull();
   });
 
   it('статус и приоритет в строке названы родом: знак читается и глазом, и диктором', async () => {
@@ -907,6 +911,31 @@ describe('переключение вида', () => {
 describe('архив', () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('что такое архив, видно нажатием на знак вопроса, без наведения (UI-153)', async () => {
+    const user = userEvent.setup();
+    server.use(listing(() => taskPage([task('DEMO-3')])));
+
+    open('/tasks?queue=DEMO');
+    await screen.findByText('DEMO-3');
+    const hint = say.tasks('filters.archive.hint', { count: 3 });
+    const explain = screen.getByRole('button', { name: say.tasks('filters.archive.explain') });
+    // Свёрнутое пояснение слышит только диктор — описанием флажка.
+    expect(explain).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText(hint)).toHaveClass('sr-only');
+
+    await user.click(explain);
+    expect(explain).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(hint)).not.toHaveClass('sr-only');
+    // Нажатие на знак вопроса архив не переключает: кнопка вне подписи флажка.
+    expect(
+      screen.getByRole('checkbox', { name: say.tasks('filters.archive.label') }),
+    ).not.toBeChecked();
+    expect(address.current).toBe('/tasks?queue=DEMO');
+
+    await user.click(explain);
+    expect(screen.getByText(hint)).toHaveClass('sr-only');
   });
 
   it('скрыт по умолчанию и показывается одним нажатием флажка в строке отбора', async () => {

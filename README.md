@@ -11,6 +11,7 @@ with a fresh context and zero memory, picks up exactly where the last one stoppe
 ![MCP server](https://img.shields.io/badge/MCP-server-8A2BE2)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-Docker-2496ED)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Glama score](https://glama.ai/mcp/servers/azimov777/casefile/badges/score.svg)](https://glama.ai/mcp/servers/azimov777/casefile)
 
 </div>
 
@@ -144,7 +145,7 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `unlink` — remove a link and file `link_removed` in both tasks' cases
 
 **Queues & participants**
-- `get_queue` — a queue with its description: the shared context for all its tasks
+- `get_queue` — return a queue by key: its title and description, the shared context for all its tasks
 - `list_queues` — every queue in the installation: key and title
 - `list_participants` — the participant registry — who a question can be addressed to
 - `create_queue` — create a queue (requires the `main` token scope)
@@ -185,8 +186,10 @@ time Docker starts, and from then on checks every hour. If you set
 `CASEFILE_VERSION=latest` in `.env` yourself, remove the line to follow releases.
 
 `CASEFILE_UPDATE_INTERVAL` sets how often to check (hours, or `30m`; `0` means only
-when Docker starts). If an update fails to start, `docker compose logs updater` names
-the version to go back to.
+when Docker starts). If a release fails to start, the installation goes back to the
+version it ran before and does not try that release again; the next release is installed
+as usual. `docker compose logs updater` tells what happened. Going back does not undo
+database migrations the failed release has already applied.
 
 ## Network mode
 

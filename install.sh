@@ -47,6 +47,31 @@ setting() {
   printf '%s' "${value:-$2}"
 }
 
+# Обновлятор установки на время установщика стоит: иначе его проверка, пришедшаяся на
+# `pull` и `up` установщика, звала бы свой `up`, и два compose останавливали бы контейнеры
+# друг друга (TRK-131). Идущую проверку он доводит до конца. Её видно по файлу
+# `/tmp/checking` в контейнере, а у обновлятора прежних выпусков — по процессу `docker` в
+# нём, как видит `updater-renew`. Запускает его снова `up` установщика, а если установщик
+# упал раньше — выход скрипта: остановленный руками контейнер Docker сам уже не поднимет.
+updater_checking() {
+  docker exec "$updater" test -e /tmp/checking </dev/null >/dev/null 2>&1 ||
+    docker top "$updater" -o pid,comm </dev/null 2>/dev/null |
+    awk 'NR > 1 && $2 ~ /^docker/ { found = 1 } END { exit !found }'
+}
+
+hold_updater() {
+  updater=$(docker compose ps -q updater </dev/null 2>/dev/null || true)
+  [ -n "$updater" ] || return 0
+  i=0
+  while updater_checking && [ "$i" -lt 120 ]; do
+    [ "$i" -gt 0 ] || bold "Waiting for the updater to finish its check..."
+    sleep 5
+    i=$((i + 1))
+  done
+  docker stop "$updater" </dev/null >/dev/null
+  trap 'docker start "$updater" </dev/null >/dev/null 2>&1 || true' EXIT
+}
+
 main() {
   command -v docker >/dev/null 2>&1 ||
     fail "Docker is required: https://docs.docker.com/get-docker/"
@@ -95,9 +120,12 @@ main() {
     fail "$image carries no $COMPOSE; releases before 0.2.0 cannot be installed this way"
   mv "$COMPOSE.download" "$COMPOSE"
 
+  hold_updater
+
   bold "Starting Casefile (the first run downloads the images)..."
   docker compose pull --quiet </dev/null
   docker compose up -d --remove-orphans </dev/null
+  trap - EXIT
 
   # Токен агента лежит в томе установки; читается разовым контейнером и попадает только
   # в этот терминал — ни в журнал, ни в файл на диске.

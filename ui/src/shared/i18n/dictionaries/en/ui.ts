@@ -3,6 +3,7 @@ import type { components } from '@/shared/api';
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
 type LinkKind = components['schemas']['LinkKind'];
+type AuthorKind = components['schemas']['AuthorKind'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -18,12 +19,24 @@ type LinkKind = components['schemas']['LinkKind'];
  */
 export const ui = {
   language: 'Interface language',
+  /**
+   * Род участника словом (UI-140): значение контракта (`agent`, `human`), но стоит оно
+   * подписью рядом с именем, а не идентификатором, — как тип записи и вид связи.
+   */
+  participantKind: {
+    agent: 'agent',
+    human: 'human',
+    tracker: 'tracker',
+  } satisfies Record<AuthorKind, string>,
   error: {
     unknown: 'Unknown error.',
     unknownCode: 'Unknown error ({{code}}).',
     // Фраза бэкенда, которую нечем заменить: код называется рядом, чтобы человеку
     // было что процитировать в задаче.
     withCode: '{{message}} ({{code}})',
+    // A field reason (`details.fields[].reason`) missing from `fieldReasons`
+    // (`shared/i18n/dictionaries`): that dictionary is not required to cover them all.
+    unknownFieldReason: 'This value is not valid ({{reason}}).',
   },
 
   /**
@@ -143,6 +156,7 @@ export const ui = {
     scopeKind: 'scope',
     scopeTask: 'The working cycle of an agent: tasks, case entries, and reading everything.',
     scopeMain: 'The working cycle plus writing to the registries: participants, tokens and queues.',
+    scopeExplain: 'What does scope {{scope}} open',
     thisSession: 'key of this session',
     revoked: 'revoked',
     shared: 'shared agent token',
@@ -282,6 +296,8 @@ export const ui = {
     copy: 'Copy {{reference}}',
     copied: 'copied',
     clipboardUnavailable: 'clipboard unavailable',
+    copyLink: 'Copy link to entry #{{no}}',
+    linkCopied: 'Link to the entry copied',
     /** Группа правок разделов одного действия (UI-133). */
     group: {
       range: '{{first}}–{{last}}',
@@ -300,6 +316,7 @@ export const ui = {
     onlineTitle: 'The live journal stream is open: the screen updates itself',
     offline: 'no connection',
     offlineTitle: 'The connection to the journal stream is lost, reconnecting',
+    explain: 'Live stream: {{state}}. Details',
     updates: 'List updates',
     changed_one: '{{count, number}} task changed',
     changed_other: '{{count, number}} tasks changed',

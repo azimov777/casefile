@@ -90,7 +90,11 @@ export function TaskLinks({ links }: { links: TaskLink[] }) {
                   key={link.other.key}
                   className="col-span-2 grid grid-cols-subgrid items-baseline gap-y-1 py-2 first:pt-0 last:pb-0"
                 >
-                  <Link className="font-mono" to={`/tasks/${link.other.key}`}>
+                  {/* `whitespace-nowrap` держит ключ целым на переносе (UI-151):
+                      этот файл вела параллельная задача UI-141/148, и правку
+                      сюда UI-151 сознательно не внесла (`git log --grep UI-151`) —
+                      закрыто отдельно, тем же приёмом (UI-161). */}
+                  <Link className="font-mono whitespace-nowrap" to={`/tasks/${link.other.key}`}>
                     {link.other.key}
                   </Link>
                   <span className="min-w-0 break-words text-muted">{link.other.title}</span>

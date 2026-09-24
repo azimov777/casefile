@@ -22,6 +22,8 @@ import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import type { TaskLink } from '@/entities/task';
 import { setToken, type components } from '@/shared/api';
+import { currentLanguage } from '@/shared/i18n';
+import { exactTime } from '@/shared/lib';
 
 /** Адреса всех запросов прогона: по ним видно, что лишних не было. */
 let seen: string[] = [];
@@ -91,6 +93,39 @@ describe('карточка задачи', () => {
         .find((term) => term.textContent === label)?.nextElementSibling?.textContent;
     expect(valueOf(say.task('header.status'))).toBe('in_progress');
     expect(valueOf(say.task('header.priority'))).toBe('normal');
+  });
+
+  it('точное время создания открывается нажатием, без наведения, и тем же нажатием прячется (UI-153)', async () => {
+    const user = userEvent.setup();
+    server.use(packageOf('DEMO-6'), entries('DEMO-6'));
+
+    renderApp('/tasks/DEMO-6');
+    const heading = await screen.findByRole('heading', { name: /DEMO-6/ });
+    const header = heading.closest('header') as HTMLElement;
+
+    // Время создания — кнопка в своей строке шапки: на телефоне наведения нет, и
+    // подсказка `title` одна до точного времени не довела бы.
+    const created = within(header).getByText(say.task('header.created'))
+      .parentElement as HTMLElement;
+    const time = within(created).getByRole('button');
+    const stamp = (time.querySelector('time') as HTMLElement).getAttribute('dateTime') as string;
+    const exact = exactTime(stamp, currentLanguage());
+    expect(exact).not.toBe('');
+    expect(time).toHaveAttribute('aria-pressed', 'false');
+    expect(time).not.toHaveTextContent(exact);
+
+    await user.click(time);
+    expect(time).toHaveAttribute('aria-pressed', 'true');
+    expect(time).toHaveTextContent(exact);
+
+    await user.click(time);
+    expect(time).toHaveAttribute('aria-pressed', 'false');
+    expect(time).not.toHaveTextContent(exact);
+
+    // С клавиатуры то же: фокус на времени и Enter.
+    time.focus();
+    await user.keyboard('{Enter}');
+    expect(time).toHaveTextContent(exact);
   });
 
   it('рисуется одним запросом пакета, без запросов за телами записей', async () => {
@@ -751,6 +786,30 @@ describe('замечание к задаче', () => {
     );
   });
 
+  it('замечание, отклонённое по заголовку, показывает переведённую причину у поля (UI-165)', async () => {
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-6`, () => data(taskPackage('DEMO-6', { remarks: [] }))),
+      http.get(`${API}/api/v1/tasks`, () => collection([])),
+      http.post(`${API}/api/v1/tasks/DEMO-6/entries`, () =>
+        // Настоящая форма бэкенда — список `{field, reason, ...}`
+        // (`app/domain/fields.py`), не объект `{поле: причина}` (UI-165). Замечание
+        // помечает `title`, не `body`: форма падает на него, только если у `body` своих
+        // замечаний нет (`fields?.body ?? fields?.title`, `remark-form.tsx`).
+        failure('entry_fields_invalid', 422, 'Entry fields invalid', {
+          fields: [{ field: 'title', reason: 'too_long', max: 200, got: 500 }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6', { language: 'ru' });
+
+    await user.click(await screen.findByRole('button', { name: say.ui('remark.submit') }));
+    await user.type(screen.getByLabelText(say.ui('remark.fieldLabel')), 'Заведомо длинный текст');
+    await user.click(screen.getByRole('button', { name: say.ui('remark.submit') }));
+
+    expect(await screen.findByText(say.fieldReasons('too_long'))).toBeInTheDocument();
+  });
+
   it('«Отмена» на пустой форме сворачивает её без вопроса (UI-142)', async () => {
     withRemarks();
     const user = userEvent.setup();
@@ -981,7 +1040,7 @@ describe('опись: правки разделов одного действи�
     expect(group).toHaveAttribute('aria-expanded', 'true');
     const rows = nestedRows();
     const opened = rows.filter(
-      (row) => row.querySelector('button')?.getAttribute('aria-expanded') === 'true',
+      (row) => row.querySelector('button[aria-expanded]')?.getAttribute('aria-expanded') === 'true',
     );
     expect(opened.map((row) => row.querySelector('th')?.textContent)).toEqual(['4']);
     await waitFor(() => expect(entriesCalls().some((url) => url.includes('nos=4'))).toBe(true));
@@ -1020,5 +1079,54 @@ describe('опись: правки разделов одного действи�
     });
     expect(within(table).getAllByRole('row')).toHaveLength(1 + 2);
     expect(document.querySelector('tr[data-group]')).toBeNull();
+  });
+});
+
+describe('смысл признака в шапке достижим без наведения (UI-163)', () => {
+  it('нажатие на знак меняет число на фразу признака, повторное — обратно', async () => {
+    const user = userEvent.setup();
+    server.use(
+      packageOf('DEMO-4', {
+        features: {
+          blocked: true,
+          open_questions: 2,
+          open_blocking_questions: 1,
+          open_remarks: 0,
+          last_summary_at: null,
+        },
+      }),
+      entries('DEMO-4'),
+    );
+
+    renderApp('/tasks/DEMO-4');
+    const heading = await screen.findByRole('heading', { name: /DEMO-4/ });
+    const header = heading.closest('header') as HTMLElement;
+
+    const questions = say.ui('task.features.questionsBlocking', {
+      count: 2,
+      blocking: say.ui('task.features.blockingOf', { count: 1 }),
+    });
+    // Знак — кнопка-переключатель: на телефоне наведения нет, и одна подсказка `title`
+    // до смысла знака не довела бы.
+    const mark = within(header).getByRole('button', { name: questions });
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
+    // До нажатия фраза есть только для диктора, глазу видно число.
+    expect(within(mark).getByText(questions)).toHaveClass('sr-only');
+    expect(mark).toHaveTextContent(/2$/);
+
+    await user.click(mark);
+    expect(mark).toHaveAttribute('aria-pressed', 'true');
+    expect(within(mark).getByText(questions)).not.toHaveClass('sr-only');
+
+    await user.click(mark);
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
+    expect(within(mark).getByText(questions)).toHaveClass('sr-only');
+
+    // С клавиатуры то же, и каждый знак раскрывается сам по себе.
+    const blocked = within(header).getByRole('button', { name: say.ui('task.features.blocked') });
+    blocked.focus();
+    await user.keyboard('{Enter}');
+    expect(within(blocked).getByText(say.ui('task.features.blocked'))).not.toHaveClass('sr-only');
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
   });
 });

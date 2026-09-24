@@ -134,24 +134,52 @@ def test_a_release_tag_publishes_the_version_and_the_channel() -> None:
 #: Подставной `docker`: пишет каждый вызов в `$CALLS` и отвечает по файлам сценария.
 FAKE_DOCKER = r"""#!/bin/sh
 echo "$*" >>"$CALLS"
+# Compose without its file fails, the way the real one does.
+case "$1" in
+  compose)
+    [ "$2" = "-f" ] || [ -f "$COMPOSE_FILE" ] ||
+      { echo "no configuration file provided: not found" >&2; exit 1; } ;;
+esac
+# Pops the first line of the scene file $1; prints $2 when there is none.
+next() {
+  if [ -s "$SCENE/$1" ]; then
+    head -n 1 "$SCENE/$1"
+    tail -n +2 "$SCENE/$1" >"$SCENE/$1.rest" && mv "$SCENE/$1.rest" "$SCENE/$1"
+  else
+    echo "$2"
+  fi
+}
 case "$*" in
   "inspect -f {{index .Config.Labels \"com.docker.compose.project\"}} "*) echo test-project ;;
   "inspect -f {{index .Config.Labels \"casefile.updater.revision\"}} "*) cat "$SCENE/revision" ;;
   "inspect -f {{.Image}} "*) echo "$(cat "$SCENE/running")" ;;
   "compose ps -q "*) echo "container-$4" ;;
   "ps -q "*) echo container-updater ;;
+  "ps --filter "*) cat "$SCENE/containers" 2>/dev/null ;;
   "inspect -f {{range .Mounts}}"*) cat "$SCENE/directory" ;;
-  "compose pull"*) exit "$(cat "$SCENE/pull" 2>/dev/null || echo 0)" ;;
+  "compose pull"*)
+    [ ! -e "$CHECKING" ] || echo "(checking)" >>"$CALLS"
+    # What happens on the machine while the pull runs: the file goes, or another up starts.
+    case "$(cat "$SCENE/after-pull" 2>/dev/null)" in
+      vanish) rm -f "$COMPOSE_FILE" ;;
+      busy) echo "migrate  Up 1 second" >"$SCENE/containers" ;;
+    esac
+    exit "$(cat "$SCENE/pull" 2>/dev/null || echo 0)" ;;
   "compose config")
     printf 'name: test\nservices:\n  api:\n    depends_on:\n      db:\n'
     printf '        condition: service_healthy\n    image: registry/casefile:stable\n'
     printf '  db:\n    image: postgres:17-alpine\n  mcp:\n    image: registry/casefile:stable\n'
     printf '  ui:\n    image: registry/casefile-ui:stable\n' ;;
   "compose -f "*) exit 0 ;;
+  "image inspect -f {{.Id}} casefile-updater/"*)
+    [ -s "$SCENE/failed" ] || exit 1
+    cat "$SCENE/failed" ;;
   "image inspect -f {{.Id}} "*) echo "$(cat "$SCENE/wanted")" ;;
   "image inspect "*) echo 0.2.0 ;;
   "run "*) [ -s "$SCENE/compose-in-image" ] || exit 1; cat "$SCENE/compose-in-image" ;;
-  "compose up "*) exit 0 ;;
+  "compose up "*) exit "$(next up 0)" ;;
+  "inspect -f {{.State.Health.Status}} "*) next health healthy ;;
+  "tag "*) exit 0 ;;
   "top "*)
     n=$(cat "$SCENE/busy" 2>/dev/null || echo 0)
     echo "PID COMMAND"
@@ -186,6 +214,7 @@ class Updater:
             "COMPOSE_FILE": "docker-compose.prod.yml",
             "CASEFILE_AUTO_UPDATE": "true",
             "CASEFILE_UPDATE_INTERVAL": "1",
+            "CHECKING": str(root / "checking"),
         }
         self.set(
             running="sha256:old",
@@ -201,7 +230,9 @@ class Updater:
     def run(self, service: str, tail: str, **env: str) -> str:
         """Сценарий службы: с `tail` — только функции и заданный хвост вместо цикла."""
         script = _script(service).replace("/tmp/compose.yml", str(self.root / "fetched.yml"))
+        script = script.replace("/tmp/previous-compose.yml", str(self.root / "previous.yml"))
         script = script.replace("sleep 5", "sleep 0")
+        script = script.replace("/tmp/checking", str(self.root / "checking"))
         if tail:
             script = script[: script.index("trap 'exit 0' TERM INT")] + tail
         done = subprocess.run(
@@ -240,7 +271,7 @@ def test_a_new_release_under_the_tag_is_brought_up(updater: Updater) -> None:
 
     assert updater.called("compose up") == ["compose up -d db api mcp ui"]
     assert "updated to 0.2.0" in out
-    assert updater.called("rmi") == ["rmi sha256:old"]
+    assert "rmi sha256:old" in updater.called("rmi")
 
 
 def test_the_compose_file_of_the_release_replaces_the_local_one(updater: Updater) -> None:
@@ -252,6 +283,103 @@ def test_the_compose_file_of_the_release_replaces_the_local_one(updater: Updater
     assert "compose file updated from registry/casefile:stable" in out
     assert len(updater.called("compose pull")) == 2, "новый файл может звать новые образы"
     assert updater.called("compose up")
+
+
+#: Свои теги обновлятора в проекте подставного `docker`.
+KEPT = "casefile-updater/test-project"
+
+
+def test_the_previous_release_is_kept_under_its_own_tag_until_the_new_one_is_up(
+    updater: Updater,
+) -> None:
+    updater.set(wanted="sha256:new")
+
+    updater.run("updater", "update\n")
+
+    calls = updater.calls.read_text().splitlines()
+    kept = calls.index(f"tag sha256:old {KEPT}/api:previous")
+    assert f"tag sha256:old {KEPT}/ui:previous" in calls
+    assert kept < calls.index("compose up -d db api mcp ui")
+    assert f"rmi {KEPT}/api:previous" in calls
+    assert f"rmi {KEPT}/api:failed" in calls, "удачный выпуск снимает метку упавшего"
+    assert not updater.called("compose up -d --no-deps")
+
+
+def test_a_release_that_does_not_start_is_rolled_back(updater: Updater) -> None:
+    """`up` упал: службы — на образы `previous`, упавший выпуск — под метку `failed`."""
+    updater.set(wanted="sha256:new", up="1\n")
+
+    out = updater.run("updater", "update\n")
+
+    calls = updater.calls.read_text().splitlines()
+    failed = calls.index(f"tag registry/casefile:stable {KEPT}/api:failed")
+    assert f"tag registry/casefile-ui:stable {KEPT}/ui:failed" in calls
+    back = calls.index(f"tag {KEPT}/api:previous registry/casefile:stable")
+    assert f"tag {KEPT}/ui:previous registry/casefile-ui:stable" in calls
+    assert failed < back, "метка `failed` ставится, пока под тегом ещё упавший выпуск"
+    assert updater.called("compose up") == [
+        "compose up -d db api mcp ui",
+        "compose up -d --no-deps db api mcp ui",
+    ], "откат идёт без `migrate`: прежний код не знает ревизии схемы нового"
+    assert "failed to start" in out
+    assert "rolled back to 0.2.0" in out
+    assert f"rmi {KEPT}/api:previous" in calls
+    assert f"rmi {KEPT}/api:failed" not in calls
+
+
+def test_a_release_whose_services_stay_unhealthy_is_rolled_back(updater: Updater) -> None:
+    """`up` прошёл, но mcp так и не стал здоровым — это тоже неудача."""
+    updater.set(wanted="sha256:new", health="healthy\nunhealthy\nhealthy\n")
+
+    out = updater.run("updater", "update\n")
+
+    assert updater.called("compose up -d --no-deps db api mcp ui")
+    assert "rolled back to 0.2.0" in out
+
+
+def test_the_rollback_restores_the_compose_file_of_the_previous_release(
+    updater: Updater,
+) -> None:
+    updater.set(compose_in_image="release: 2\n", up="1\n")
+
+    updater.run("updater", "update\n")
+
+    assert (updater.project / "docker-compose.prod.yml").read_text() == "release: 1\n"
+
+
+def test_a_rollback_that_fails_too_names_the_version_to_go_back_to(updater: Updater) -> None:
+    updater.set(wanted="sha256:new", up="1\n1\n")
+
+    out = updater.run("updater", "update\n")
+
+    assert "could not go back either" in out
+    assert "put CASEFILE_VERSION=0.2.0 into .env" in out
+
+
+def test_a_release_that_failed_here_is_not_tried_again(updater: Updater) -> None:
+    """Под тегом тот же упавший выпуск: ни нового файла, ни `up`, теги — на работающий."""
+    updater.set(wanted="sha256:bad", failed="sha256:bad\n", compose_in_image="release: 2\n")
+
+    out = updater.run("updater", "update\n")
+
+    assert "did not start here before" in out
+    assert not updater.called("compose up")
+    assert not updater.called("run ")
+    assert (updater.project / "docker-compose.prod.yml").read_text() == "release: 1\n"
+    assert updater.called("tag ") == [
+        "tag sha256:old registry/casefile:stable",
+        "tag sha256:old registry/casefile-ui:stable",
+    ], "ручной `docker compose up` не должен поднять упавший выпуск"
+
+
+def test_the_next_release_after_a_failed_one_is_brought_up(updater: Updater) -> None:
+    updater.set(wanted="sha256:next", failed="sha256:bad\n")
+
+    out = updater.run("updater", "update\n")
+
+    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+    assert "updated to 0.2.0" in out
+    assert updater.called(f"rmi {KEPT}/api:failed")
 
 
 def test_a_release_without_a_compose_file_keeps_the_local_one(updater: Updater) -> None:
@@ -337,3 +465,94 @@ def test_the_renewal_leaves_a_current_updater_alone(updater: Updater) -> None:
 
     assert not updater.called("run ")
     assert not updater.called("top")
+
+
+# --- Обновлятор и чужой `up` (TRK-131) ------------------------------------------------
+
+
+def test_a_check_without_the_compose_file_does_not_call_up(updater: Updater) -> None:
+    """Файла нет посреди установщика: не «службы не запущены», а пропуск с причиной."""
+    (updater.project / "docker-compose.prod.yml").unlink()
+    updater.set(wanted="sha256:new")
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose up")
+    assert not updater.called("compose pull")
+    assert "cannot read docker-compose.prod.yml here (no configuration file provided" in out
+    assert "skipping this check" in out
+
+
+def test_a_compose_file_gone_after_the_pull_is_not_taken_for_missing_services(
+    updater: Updater,
+) -> None:
+    """Файл пропал между `pull` и сверкой (live-1 TRK-122): `compose ps` падает, и это не
+    «служба не запущена», а пропуск проверки."""
+    updater.set(wanted="sha256:new", after_pull="vanish")
+
+    out = updater.run("updater", "update\n")
+
+    assert updater.called("compose pull")
+    assert not updater.called("compose up")
+    assert "cannot read the state of the services here; skipping this check" in out
+
+
+def test_a_check_waits_while_another_compose_starts_the_installation(
+    updater: Updater,
+) -> None:
+    """Идёт чужой `up` (разовый шаг, `compose run`, первая проверка здоровья) — ждать,
+    а не затихло за три минуты — пропустить проверку, не трогая служб."""
+    updater.set(
+        wanted="sha256:new",
+        containers="updater  Up 1 hour\napi  Up 5 seconds (health: starting)\n"
+        "agent-token True Up 1 second\n",
+    )
+
+    out = updater.run("updater", "update\n")
+
+    assert "another docker compose is still starting this installation" in out
+    assert not updater.called("compose pull")
+    assert not updater.called("compose up")
+    assert len(updater.called("ps --filter")) == 37
+
+
+def test_its_own_services_do_not_make_the_installation_busy(updater: Updater) -> None:
+    """Сам обновлятор и `updater-renew`, здоровые и упавшие службы — не чужой `up`."""
+    updater.set(
+        wanted="sha256:new",
+        containers="updater  Up 1 hour\nupdater-renew  Up 2 seconds\n"
+        "api  Up 1 hour (healthy)\nmcp  Up 1 hour (unhealthy)\nui  Restarting (1) 3 seconds ago\n",
+    )
+
+    out = updater.run("updater", "update\n")
+
+    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+    assert "updated to 0.2.0" in out
+
+
+def test_an_up_started_elsewhere_during_the_check_is_not_raced(updater: Updater) -> None:
+    """Установщик начал свой `up`, пока шёл `pull`: второй `up` не звать."""
+    updater.set(wanted="sha256:new", after_pull="busy")
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose up")
+    assert "another docker compose is starting this installation right now" in out
+
+
+def test_a_check_in_progress_is_visible_to_the_installer(updater: Updater) -> None:
+    """Пока идёт проверка, в `/tmp` обновлятора лежит файл; кончилась — его нет.
+
+    По процессу `docker` проверку видно не всё время: её ожидания — `sleep`."""
+    (updater.root / "checking").write_text("", encoding="utf-8")  # остался от остановки
+    loop = _script("updater")[_script("updater").index("trap 'exit 0' TERM INT") :]
+    out = updater.run(
+        "updater",
+        loop.split("seconds=$(period)", 1)[0] + 'echo "after=$(ls ../checking 2>&1)"\n',
+    )
+
+    assert "(checking)" in updater.calls.read_text()
+    assert "No such file" in out.split("after=", 1)[1]
+    lines = [line.strip() for line in loop.splitlines()]
+    assert "update" not in lines, "цикл зовёт проверку только через `check`"
+    assert lines.count("check") == 2

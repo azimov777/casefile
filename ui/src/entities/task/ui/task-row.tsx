@@ -8,7 +8,6 @@ import { TaskFeatureMarks } from './feature-marks';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
 import { TaskParents } from './task-parents';
-import { ParentPill, SKETCH } from './ui152-sketch';
 
 /**
  * Строка списка задач. Ничего не вычисляет: признаки приходят из `features` той же
@@ -106,8 +105,6 @@ export function TaskRow({ task }: { task: Task }) {
          * второй рядом с рамкой таблицы.
          */
         '@max-list:flex @max-list:h-auto @max-list:flex-wrap @max-list:items-baseline @max-list:gap-x-3 @max-list:gap-y-1.5 @max-list:px-3 @max-list:py-2.5 @max-list:first:border-t-0',
-        // ЭСКИЗ UI-152 (а): все ячейки строки стоят на линии названия — нижней из двух.
-        SKETCH === 'a' && '[&>*]:align-bottom [&>*]:pb-[3px] @max-list:[&>*]:pb-0',
       )}
       onClick={openTask}
       onAuxClick={openTaskAside}
@@ -118,16 +115,7 @@ export function TaskRow({ task }: { task: Task }) {
         scope="row"
         className="px-3 text-left font-normal font-mono text-mark whitespace-nowrap text-faint @max-list:shrink-0 @max-list:px-0"
       >
-        {SKETCH === 'c' ? (
-          <span className="flex flex-col items-start leading-[1.2]">
-            <span>{task.key}</span>
-            {(task.parents ?? []).length === 0 ? null : (
-              <ParentPill parents={task.parents ?? []} bare />
-            )}
-          </span>
-        ) : (
-          task.key
-        )}
+        {task.key}
       </th>
       {/* `max-w-0` держит название в ширине столбца таблицы; в карточке столбца нет,
           и ширину задаёт основа флекса. */}
@@ -143,70 +131,34 @@ export function TaskRow({ task }: { task: Task }) {
          */}
         {/* В карточке родитель встаёт под название, а не справа от него: места
             справа нет, и обе подписи урезались бы многоточием. */}
-        {SKETCH === 'a' ? (
-          /* ЭСКИЗ UI-152 (а): родитель строкой НАД названием; место под неё оставлено у
-             всех строк, поэтому название стоит на одной высоте с родителем и без. */
-          <div className="flex flex-col leading-[1.3] @max-list:gap-0.5 @max-list:leading-normal">
-            <div className="h-[15.6px] min-w-0 @max-list:h-auto @max-list:empty:hidden">
-              {(task.parents ?? []).length === 0 ? null : (
-                <TaskParents parents={task.parents ?? []} />
-              )}
-            </div>
-            <Link
-              data-link="task"
-              className="min-w-0 text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
-              to={href}
-              state={listReturnState(search)}
-              draggable={false}
-              onClick={skipClickWhileSelecting}
-            >
-              <span
-                className="block truncate @max-list:line-clamp-3 @max-list:whitespace-normal @max-list:wrap-anywhere"
-                title={title}
-              >
-                {title}
-              </span>
-            </Link>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 @max-list:flex-col @max-list:items-start @max-list:gap-1">
-            <Link
-              data-link="task"
-              className="min-w-0 flex-1 text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
-              to={href}
-              // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
-              // он вернётся к тем же строкам, а не ко всем задачам очереди.
-              state={listReturnState(search)}
-              // Перетаскивание ссылки выключено, иначе протяжка по названию таскала бы
-              // ссылку вместо того, чтобы выделять текст.
-              draggable={false}
-              onClick={skipClickWhileSelecting}
-            >
-              {/* Урезанное многоточием название отдаёт полный текст подсказкой:
+        <div className="flex items-center gap-3 @max-list:flex-col @max-list:items-start @max-list:gap-1">
+          <Link
+            data-link="task"
+            className="min-w-0 flex-1 text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
+            to={href}
+            // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
+            // он вернётся к тем же строкам, а не ко всем задачам очереди.
+            state={listReturnState(search)}
+            // Перетаскивание ссылки выключено, иначе протяжка по названию таскала бы
+            // ссылку вместо того, чтобы выделять текст.
+            draggable={false}
+            onClick={skipClickWhileSelecting}
+          >
+            {/* Урезанное многоточием название отдаёт полный текст подсказкой:
                 обрезание без доступа к скрытому — потеря данных, а не плотность. */}
-              <span
-                className="block truncate @max-list:line-clamp-3 @max-list:whitespace-normal @max-list:wrap-anywhere"
-                title={title}
-              >
-                {title}
-              </span>
-            </Link>
-            {SKETCH === 'b' ? (
-              /* ЭСКИЗ UI-152 (б): справа от названия — гнездо одной ширины у всех строк,
-               в нём плашка с ключом родителя; нажатие раскрывает родителя целиком. */
-              <span className="flex w-20 shrink-0 justify-end @max-list:w-auto @max-list:justify-start">
-                {(task.parents ?? []).length === 0 ? null : (
-                  <ParentPill parents={task.parents ?? []} />
-                )}
-              </span>
-            ) : SKETCH === 'c' ? null : (
-              <TaskParents
-                parents={task.parents ?? []}
-                className="max-w-2/5 shrink-0 @max-list:max-w-full"
-              />
-            )}
-          </div>
-        )}
+            <span
+              className="block truncate @max-list:line-clamp-3 @max-list:whitespace-normal @max-list:wrap-anywhere"
+              title={title}
+            >
+              {title}
+            </span>
+          </Link>
+          <TaskParents
+            parents={task.parents ?? []}
+            className="max-w-2/5 shrink-0 @max-list:max-w-full"
+            wrapNarrow
+          />
+        </div>
       </td>
       <td className="px-3 @max-list:px-0">
         <StatusMark status={task.status} />
@@ -242,7 +194,7 @@ export function TaskRow({ task }: { task: Task }) {
         {activity === null ? (
           <span aria-hidden="true">{t('task.emptyCase')}</span>
         ) : (
-          <RelativeTime value={activity} />
+          <RelativeTime value={activity} plain />
         )}
       </td>
     </tr>
