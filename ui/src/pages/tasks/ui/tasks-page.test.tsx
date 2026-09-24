@@ -356,12 +356,13 @@ describe('список задач', () => {
     open('/tasks?queue=DEMO');
 
     const child = (await screen.findByText('DEMO-5')).closest('tr') as HTMLElement;
-    const parent = within(child).getByRole('link', { name: /DEMO-2/ });
-    expect(parent).toHaveAttribute('href', '/tasks/DEMO-2');
-    expect(parent).toHaveTextContent('Лента журнала теряет записи');
-    // У задачи верхнего уровня подписи нет: ссылка в строке одна — своя.
+    // В строке — плашка с ключом родителя (UI-152); название родителя — в её панели.
+    const parent = within(child).getByRole('button', { name: /DEMO-2/ });
+    expect(parent).toHaveAttribute('data-mark', 'parents');
+    // У задачи верхнего уровня плашки нет, а гнездо под неё есть: название той же ширины.
     const top = screen.getByText('DEMO-3').closest('tr') as HTMLElement;
     expect(within(top).getAllByRole('link')).toHaveLength(1);
+    expect(top.querySelector('[data-mark="parents"]')).toBeNull();
 
     // Без имени в наборе полей поля в строке нет вовсе (TRK-95): его просит сам список.
     expect(lastRequest().searchParams.getAll('fields')).toContain('parents');

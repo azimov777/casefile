@@ -599,6 +599,38 @@ describe('блок «Связи» (UI-125)', () => {
     expect(section?.querySelector('[data-mark="link-kind"]')).not.toBeNull();
   });
 
+  it('родитель и дочерние задачи подписаны тем, кем они приходятся этой задаче', async () => {
+    // `child` — эта задача ребёнок перечисленной, `parent` — она родитель перечисленных.
+    server.use(
+      packageOf('DEMO-6', { links: linksOf('parent', 'child', 'parent') }),
+      entries('DEMO-6'),
+    );
+
+    renderApp('/tasks/DEMO-6');
+    await screen.findByRole('heading', { name: /DEMO-6/ });
+
+    const section = screen.getByRole('heading', { name: say.task('links') }).closest('section');
+    const groups = within(section as HTMLElement)
+      .getAllByRole('heading', { level: 3 })
+      .map((node) => node.closest('section') as HTMLElement);
+    const groupOf = (kind: string) =>
+      groups.find((group) => group.querySelector('h3')?.textContent?.includes(kind));
+
+    const parentGroup = groupOf('child') as HTMLElement;
+    const childrenGroup = groupOf('parent') as HTMLElement;
+    // Родитель выше дочерних и подписан словом «родитель», а не видом связи.
+    expect(groups.indexOf(parentGroup)).toBeLessThan(groups.indexOf(childrenGroup));
+    expect(parentGroup.querySelector('h3')).toHaveTextContent(say.ui('task.links.kind.child'));
+    expect(within(parentGroup).getByRole('link', { name: 'DEMO-3' })).toBeInTheDocument();
+    expect(childrenGroup.querySelector('h3')).toHaveTextContent(say.ui('task.links.kind.parent'));
+    expect(within(childrenGroup).getAllByRole('link')).toHaveLength(2);
+
+    // Шапка ведёт в родителя — ту задачу, у которой эта связь стоит как `child`.
+    const header = screen.getByRole('heading', { level: 1 }).closest('header') as HTMLElement;
+    expect(within(header).getByRole('link', { name: /DEMO-3/ })).toBeInTheDocument();
+    expect(within(header).queryByRole('link', { name: /DEMO-2/ })).toBeNull();
+  });
+
   it('статус связанной задачи нарисован тем же знаком, что в таблице задач', async () => {
     server.use(packageOf('DEMO-6', { links: linksOf('child') }), entries('DEMO-6'));
 

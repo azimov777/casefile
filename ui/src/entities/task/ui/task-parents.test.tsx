@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { task } from '@testing/msw/responses';
 import { say } from '@testing/say';
 import type { Task } from '../api/tasks';
+import { ParentPanel } from './parent-badge';
 import { TaskCard } from './task-card';
 import { TaskRow } from './task-row';
 
@@ -46,11 +47,11 @@ function card(row: Task) {
   return show(<TaskCard task={row} />);
 }
 
-function tableRow(row: Task) {
+function tableRow(row: Task, parentSlot = false) {
   return show(
     <table>
       <tbody>
-        <TaskRow task={row} />
+        <TaskRow task={row} parentSlot={parentSlot} />
       </tbody>
     </table>,
   );
@@ -152,68 +153,104 @@ describe('карточка доски называет родителя', () => 
   });
 });
 
-describe('строка списка называет родителя', () => {
-  it('у задачи верхнего уровня подписи нет, и ссылка в строке одна', () => {
+describe('строка списка называет родителя плашкой (UI-152)', () => {
+  function badge(container: HTMLElement): HTMLElement {
+    return container.querySelector('[data-mark="parents"]') as HTMLElement;
+  }
+
+  it('у задачи верхнего уровня в таблице без дочерних плашки и гнезда нет, ссылка одна', () => {
     const { container } = tableRow(task('DEMO-3', { parents: [] }));
 
     expect(caption(container)).toBeNull();
     expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(container.querySelector('td span[class*="--ui-parent-slot"]')).toBeNull();
   });
 
-  it('родитель стоит в ячейке названия, после него, и не растягивает строку', () => {
-    const { container } = tableRow(task('DEMO-5', { parents: [PROGRAM] }));
+  it('гнездо под плашку есть у всех строк таблицы с дочерней задачей — и у строки без родителя', () => {
+    const { container } = tableRow(task('DEMO-3', { parents: [] }), true);
 
-    const shown = caption(container) as HTMLElement;
+    // Название той же ширины, что у соседа с родителем: гнездо одно у всех строк.
+    const slot = container.querySelector('td span[class*="--ui-parent-slot"]');
+    expect(slot).not.toBeNull();
+    expect(slot).toBeEmptyDOMElement();
+    expect(caption(container)).toBeNull();
+  });
+
+  it('плашка стоит в гнезде после названия, говорит словом «родитель» и ключом, строка не растёт', () => {
+    const { container } = tableRow(task('DEMO-5', { parents: [PROGRAM] }), true);
+
+    const shown = badge(container);
     const cell = screen.getByRole('link', { name: 'Задача DEMO-5' }).closest('td');
     expect(cell).toContainElement(shown);
-    // Название первым: начало названия стоит на одном месте у всех строк.
+    // Название первым: его начало стоит на одном месте у всех строк.
     expect(cell?.querySelector('a')).toHaveAttribute('href', '/tasks/DEMO-5');
+    expect(shown.parentElement?.className).toContain('w-(--ui-parent-slot)');
 
-    // Высоту строки держит токен, а подпись — одна строка, не шире двух пятых ячейки.
+    // Кнопка, а не ссылка: нажатие раскрывает, а не уводит. Слово — не одна стрелка.
+    expect(shown.tagName).toBe('BUTTON');
+    expect(shown).toHaveTextContent(`${say.ui('task.parents.badge')}${PROGRAM.key}`);
+    expect(within(shown).getByText(PROGRAM.key)).toHaveClass('font-mono');
+    expect(shown).toHaveAttribute('aria-expanded', 'false');
+    // На телефоне мишень не мельче 24 px (UI-154), как у значков признаков (UI-163).
+    expect(shown).toHaveClass('max-fold:min-h-(--ui-tap)');
+    // Ссылка в строке одна — своя; в родителя ведёт панель.
+    expect(screen.getAllByRole('link')).toHaveLength(1);
     expect(container.querySelector('tr')).toHaveClass('h-(--ui-row-height)');
-    expect(shown).toHaveClass('max-w-2/5', 'shrink-0');
-    expect(within(shown).getByRole('link')).toHaveClass('truncate');
-    // На телефоне строка — карточка, и там подпись переносится, а не режется: наведения
-    // нет, и подсказка `title` одна до полного названия не довела бы (UI-153).
-    expect(within(shown).getByRole('link')).toHaveClass(
-      '@max-list:whitespace-normal',
-      '@max-list:wrap-anywhere',
-    );
-    // Растяжки у строки нет (UI-39), и поднимать подпись там не над чем.
-    expect(within(shown).getByRole('link')).not.toHaveClass('z-1');
   });
 
-  it('клик по подписи ведёт в родителя: обработчик строки его не перехватывает', async () => {
-    const user = userEvent.setup();
-    const { container } = tableRow(task('DEMO-5', { parents: [PROGRAM] }));
+  it('двух родителей не прячет: плашка «родители KEY +1»', () => {
+    const { container } = tableRow(task('DEMO-5', { parents: [PROGRAM, SECOND] }), true);
 
-    await user.click(within(caption(container) as HTMLElement).getByRole('link'));
-    expect(where.current).toBe('/tasks/DEMO-2');
+    expect(badge(container)).toHaveTextContent(
+      `${say.ui('task.parents.badgeMany')}${PROGRAM.key}${say.ui('task.parents.more', { count: 1 })}`,
+    );
   });
 
   it('клик по остальной строке задачи с родителем ведёт в саму задачу', async () => {
     const user = userEvent.setup();
-    tableRow(task('DEMO-5', { parents: [PROGRAM, SECOND] }));
+    tableRow(task('DEMO-5', { parents: [PROGRAM, SECOND] }), true);
 
     // Знак приоритета: ни ссылок, ни кнопок в ячейке нет, уводит обработчик строки.
     await user.click(screen.getByText('normal'));
     expect(where.current).toBe('/tasks/DEMO-5');
   });
 
-  it('число остальных родителей — не ссылка: клик по нему ведёт в задачу, где названы все', async () => {
-    const user = userEvent.setup();
-    tableRow(task('DEMO-5', { parents: [PROGRAM, SECOND] }));
-
-    await user.click(screen.getByText(say.ui('task.parents.more', { count: 1 })));
-    expect(where.current).toBe('/tasks/DEMO-5');
-  });
-
-  it('обводку строки зажигает только её собственная ссылка, а не ссылка на родителя', () => {
-    const { container } = tableRow(task('DEMO-5', { parents: [PROGRAM] }));
+  it('обводку строки зажигает только её собственная ссылка, а не плашка родителя', () => {
+    const { container } = tableRow(task('DEMO-5', { parents: [PROGRAM] }), true);
 
     const own = screen.getByRole('link', { name: 'Задача DEMO-5' });
-    const parent = within(caption(container) as HTMLElement).getByRole('link');
     expect(own).toHaveAttribute('data-link', 'task');
-    expect(parent).not.toHaveAttribute('data-link');
+    expect(badge(container)).not.toHaveAttribute('data-link');
+  });
+});
+
+describe('панель плашки говорит, чей это родитель (UI-152)', () => {
+  const heading = (key: 'task.parents.heading' | 'task.parents.headingMany', of: string) =>
+    say.ui(key, { key: of }).replace(/<\/?key>/g, '');
+
+  it('называет задачу строки словами и ведёт в родителя ссылкой с полным названием', async () => {
+    const user = userEvent.setup();
+    const { container } = show(<ParentPanel parents={[PROGRAM]} childKey="DEMO-5" />);
+
+    // «Родитель задачи DEMO-5»: сказано словами, в какую сторону связь.
+    expect(container).toHaveTextContent(heading('task.parents.heading', 'DEMO-5'));
+    const link = screen.getByRole('link');
+    expect(link).toHaveTextContent(say.ui('task.parents.item', PROGRAM));
+    // Название родителя переносится, а не режется: панель и есть путь к полному тексту.
+    expect(link).not.toHaveClass('truncate');
+    expect(link).toHaveClass('wrap-anywhere');
+
+    await user.click(link);
+    expect(where.current).toBe('/tasks/DEMO-2');
+  });
+
+  it('при двух родителях — «Родители задачи X» и оба ссылками в порядке связи', () => {
+    const { container } = show(<ParentPanel parents={[PROGRAM, SECOND]} childKey="DEMO-5" />);
+
+    expect(container).toHaveTextContent(heading('task.parents.headingMany', 'DEMO-5'));
+    expect(screen.getAllByRole('link').map((node) => node.getAttribute('href'))).toEqual([
+      '/tasks/DEMO-2',
+      '/tasks/DEMO-8',
+    ]);
   });
 });

@@ -135,6 +135,21 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     expect(line(FACTS.link_removed)).toBe(`${say.ui('entry.headline.linkRemoved')} relates DEMO-3`);
   });
 
+  it('у связи родителя и ребёнка роль второй задачи сказана словами перед её ключом', () => {
+    // Вид назван от лица этой задачи: у программы `parent DEMO-9` — «DEMO-9 её дочерняя».
+    expect(line({ type: 'link_added', link_kind: 'parent', other_key: 'DEMO-9' })).toBe(
+      `${say.ui('entry.headline.linkAdded')} parent ${say.ui('entry.headline.linkRole.parent')} DEMO-9`,
+    );
+    // У ребёнка `child DEMO-8` — «DEMO-8 её родитель», и при снятии связи так же.
+    expect(line({ type: 'link_removed', link_kind: 'child', other_key: 'DEMO-8' })).toBe(
+      `${say.ui('entry.headline.linkRemoved')} child ${say.ui('entry.headline.linkRole.child')} DEMO-8`,
+    );
+    // Фраза самого идентификатора у остальных видов читается верно — слов не прибавляется.
+    expect(line({ type: 'link_added', link_kind: 'blocks', other_key: 'DEMO-3' })).toBe(
+      `${say.ui('entry.headline.linkAdded')} blocks DEMO-3`,
+    );
+  });
+
   it('ответ и вердикт тоже собираются здесь: их заголовок выводит трекер', () => {
     const answer = built(FACTS.answer);
     expect(headlineText(answer)).toBe(`${say.ui('entry.headline.answerTo')} DEMO-4#4`);

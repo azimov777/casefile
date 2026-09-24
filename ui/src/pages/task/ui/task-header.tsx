@@ -58,11 +58,21 @@ export function TaskHeader({ task, features, links }: TaskHeaderProps) {
           <Link to={`/tasks?queue=${task.queue.key}`}>
             {task.queue.key} — {task.queue.title}
           </Link>
-          {parents.map((parent) => (
+          {/*
+           * Косая черта — шаг вниз по пути «очередь / родитель / эта задача». Родитель у
+           * задачи один (правило владельца), но данные его не ограничивают, и второй
+           * родитель после ещё одной черты читался бы внуком первого (UI-166). Поэтому
+           * черта стоит только перед первым, остальные — через запятую, на одном шаге.
+           */}
+          {parents.map((parent, index) => (
             <Fragment key={parent.other.key}>
-              <span className="text-faint" aria-hidden="true">
-                /
-              </span>
+              {index === 0 ? (
+                <span className="text-faint" aria-hidden="true">
+                  /
+                </span>
+              ) : (
+                <span className="-ml-2 text-faint">,</span>
+              )}
               <Link to={`/tasks/${parent.other.key}`}>
                 <span className="sr-only">{brick('task.parents.label')} </span>
                 <span className="font-mono whitespace-nowrap">{parent.other.key}</span>{' '}

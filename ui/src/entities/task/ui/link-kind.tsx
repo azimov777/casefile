@@ -5,17 +5,20 @@ import type { LinkKind } from '../api/task-package';
 
 /**
  * Знак вида связи (UI-125). Вид назван от лица этой задачи: `blocked_by` — то, что
- * держит именно её, `blocks` — то, что держит она сама, `parent`/`child` — место
- * в дереве связей, `relates` — связь, которая никого ни к чему не обязывает.
+ * держит именно её, `blocks` — то, что держит она сама, `parent` — она родитель
+ * перечисленных, `child` — она их ребёнок, `relates` — связь, которая никого ни к чему не обязывает.
  *
  * Перечислено ключами через `satisfies Record<LinkKind, …>`: вид, добавленный
  * в контракт, роняет сборку, а не остаётся без знака и без места в порядке групп.
  */
 const KIND_ICON = {
+  // Знак показывает, где в дереве стоят перечисленные под ним задачи (UI-166): под
+  // `parent` — дочерние, они ниже (`CornerDownRight`); под `child` — родитель, он выше,
+  // тем же знаком, что у подписи родителя в строке и на карточке (`task-parents.tsx`).
   blocked_by: Lock,
   blocks: Ban,
-  parent: CornerLeftUp,
-  child: CornerDownRight,
+  parent: CornerDownRight,
+  child: CornerLeftUp,
   relates: Link2,
 } satisfies Record<LinkKind, typeof Lock>;
 
@@ -46,8 +49,9 @@ const KIND_COLOR = {
 const ORDER_SET = {
   blocked_by: true,
   blocks: true,
-  parent: true,
+  // Родитель выше дочерних (UI-166): `child` — группа с родителем этой задачи.
   child: true,
+  parent: true,
   relates: true,
 } satisfies Record<LinkKind, true>;
 

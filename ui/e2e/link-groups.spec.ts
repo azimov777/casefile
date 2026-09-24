@@ -131,10 +131,16 @@ test('насыщенный блок «Связи»: заголовок груп�
     await link(request, subject, 'blocked_by', blockerA);
     await link(request, subject, 'blocked_by', blockerB);
     await link(request, subject, 'blocks', blocked);
-    await link(request, subject, 'parent', parent);
-    await link(request, subject, 'child', childA);
-    await link(request, subject, 'child', childB);
-    await link(request, subject, 'child', childC);
+    /*
+     * Вид называет роль `subject`: «subject child parent» — подопытная ребёнок своего
+     * родителя, «subject parent childA» — она родитель ребёнка. До UI-166 здесь стояло
+     * наоборот, и сценарий заводил подопытной трёх родителей и одного ребёнка,
+     * называя их обратными именами, — ровно та путаница, которую блок показывал.
+     */
+    await link(request, subject, 'child', parent);
+    await link(request, subject, 'parent', childA);
+    await link(request, subject, 'parent', childB);
+    await link(request, subject, 'parent', childC);
     await link(request, subject, 'relates', related);
 
     await silenceJournal(page);
@@ -149,23 +155,29 @@ test('насыщенный блок «Связи»: заголовок груп�
       await expect(headings).toHaveCount(5);
 
       // Порядок групп по значимости: то, что держит задачу, стоит первым, необязывающая
-      // связь `relates` — последней (владелец, UI-125).
+      // связь `relates` — последней (владелец, UI-125); родитель (`child`) — выше
+      // дочерних (`parent`, UI-166).
       const order = await headings.evaluateAll((nodes) =>
         nodes.map((node) => node.querySelector('.font-mono')?.textContent ?? ''),
       );
       expect(order, `порядок групп на ${width}px`).toEqual([
         'blocked_by',
         'blocks',
-        'parent',
         'child',
+        'parent',
         'relates',
       ]);
 
       // Счётчик группы — её собственные задачи, не связи целиком.
       await expect(headings.nth(0)).toContainText('2 задачи'); // blocked_by
       await expect(headings.nth(1)).toContainText('1 задача'); // blocks
-      await expect(headings.nth(2)).toContainText('1 задача'); // parent
-      await expect(headings.nth(3)).toContainText('3 задачи'); // child
+      // Подпись называет, кем перечисленные приходятся подопытной (UI-166).
+      await expect(headings.nth(2)).toContainText('child');
+      await expect(headings.nth(2)).toContainText('Родитель');
+      await expect(headings.nth(2)).toContainText('1 задача');
+      await expect(headings.nth(3)).toContainText('parent');
+      await expect(headings.nth(3)).toContainText('Дочерние задачи');
+      await expect(headings.nth(3)).toContainText('3 задачи');
       await expect(headings.nth(4)).toContainText('1 задача'); // relates
 
       // Ни один идентификатор вида связи не обрезан — ни на широком экране, ни на узком.
