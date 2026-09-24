@@ -393,7 +393,7 @@ async def test_the_link_entry_is_read_back_by_its_own_variant(
     (added,) = response.json()["data"]
     assert added["type"] == "link_added"
     assert added["payload"] == {"kind": "blocks", "other": second}
-    assert added["title"] == f"Link added: blocks {second}"
+    assert added["title"] == f"Link added: {second} is blocked by this task"
 
     other_side = await auth_client.get(
         f"/api/v1/tasks/{second}/entries", params={"types": ["link_added"]}

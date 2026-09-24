@@ -209,6 +209,12 @@ class TaskPackage:
     """
 
     task: Task
+    #: Родитель и дети — отдельными полями, а не видами в `links` (TRK-135): в связи вид
+    #: назван ролью **своей** задачи, и `{kind: parent, other: X}` читали как «родитель —
+    #: X». Имя поля отвечает на вопрос «кто родитель» без разбора направления.
+    parent: links_service.TaskLink | None
+    children: list[links_service.TaskLink]
+    #: Остальные связи — `blocks`, `blocked_by`, `relates`; `parent`/`child` здесь нет.
     links: list[links_service.TaskLink]
     features: TaskFeatures
     summary: Entry | None
@@ -252,6 +258,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     """
     task = await read_task(session, key, actor=actor)
     links = await links_service.list_links(session, task, actor=actor)
+    hierarchy = links_service.split_hierarchy(links)
     summary = await case_service.last_summary(session, task, actor=actor)
     questions = await case_service.open_questions(session, task, actor=actor)
     remarks = await case_service.open_remarks(session, task, actor=actor)
@@ -260,7 +267,9 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     index = await case_service.case_index(session, task, actor=actor)
     return TaskPackage(
         task=task,
-        links=links,
+        parent=hierarchy.parent,
+        children=hierarchy.children,
+        links=hierarchy.others,
         features=case_service.features(
             questions, summary, index, blocked=links_service.blocked(links), remarks=remarks
         ),

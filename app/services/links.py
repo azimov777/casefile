@@ -114,6 +114,31 @@ def blocked(links: Sequence[TaskLink]) -> bool:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class Hierarchy:
+    """Связи задачи, разобранные для карточки: родитель, дети и всё остальное."""
+
+    parent: TaskLink | None
+    children: list[TaskLink]
+    others: list[TaskLink]
+
+
+def split_hierarchy(links: Sequence[TaskLink]) -> Hierarchy:
+    """Выносит родителя и детей из общего списка связей в отдельные поля карточки.
+
+    Родитель — задача на другом конце связи, которую эта задача видит как `child` («я
+    ребёнок X»); дети — те, кого она видит как `parent`. Родитель у задачи один
+    (TRK-135); в данных старше правила их может быть больше, и тогда карточка называет
+    первого по времени связи — того же, что строка выдачи (`parent_of`).
+    """
+    parents = [link for link in links if link.kind is LinkKind.CHILD]
+    return Hierarchy(
+        parent=parents[0] if parents else None,
+        children=[link for link in links if link.kind is LinkKind.PARENT],
+        others=[link for link in links if link.kind not in (LinkKind.PARENT, LinkKind.CHILD)],
+    )
+
+
 async def open_blockers(session: AsyncSession, task: Task) -> list[str]:
     """Ключи незакрытых блокеров — факт для проверки перехода в `in_progress`.
 

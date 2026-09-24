@@ -16,7 +16,7 @@ from app.domain.authors import AuthorKind
 from app.domain.case import EntryType, is_blocking_question
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
-from app.domain.tasks import TaskParent, TaskStatus
+from app.domain.tasks import AskedParent, TaskParent, TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import demo as demo_service
@@ -137,33 +137,32 @@ async def test_every_demo_row_carries_the_features_of_its_own_card(
     assert any(features is not None and features.last_summary_at for features in rows.values())
 
 
-async def test_every_demo_row_names_the_parents_its_card_shows(
+async def test_every_demo_row_names_the_parent_its_card_shows(
     db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
 ) -> None:
-    """Родители строки списка — связи `child` карточки, на каждой задаче демо (TRK-95).
+    """Родитель строки списка — поле `parent` карточки, на каждой задаче демо (TRK-95).
 
     Считаны они разными путями — подзапросом в выборке страницы и чтением связей
-    пакета преемника, — и сойтись обязаны в составе и в порядке. Демо покрывает все
-    виды связей, поэтому рядом с детьми есть и блокировки, и `relates`, которые в поле
-    попасть не должны.
+    пакета преемника, — и сойтись обязаны. Демо покрывает все виды связей, поэтому
+    рядом с детьми есть и блокировки, и `relates`, которые в поле попасть не должны.
     """
     outcome = await search_service.search_tasks(
         db_session, actor=reader, query=f"queue: {DEMO_QUEUE_KEY}", limit=200
     )
-    rows = {found.task.key: found.parents for found in outcome.page.items}
+    rows = {found.task.key: found.parent for found in outcome.page.items}
 
     assert set(rows) == {task.key for task in seeded.tasks}
     for task in seeded.tasks:
         package = await tasks_service.read_task_package(db_session, task.key, actor=reader)
-        from_card = tuple(
-            TaskParent(key=link.other.key, title=link.other.title)
-            for link in package.links
-            if link.kind is LinkKind.CHILD
+        from_card = (
+            None
+            if package.parent is None
+            else TaskParent(key=package.parent.other.key, title=package.parent.other.title)
         )
-        assert rows[task.key] == from_card, task.key
+        assert rows[task.key] == AskedParent(from_card), task.key
 
     # Поле, всегда пустое, совпало бы с карточкой и ничего не значило.
-    assert any(rows.values()), "в демо нет ни одного ребёнка"
+    assert any(row is not None and row.value for row in rows.values()), "в демо нет детей"
 
 
 async def test_decomposed_test_is_a_child_of_the_task_in_progress(
@@ -182,10 +181,10 @@ async def test_decomposed_test_is_a_child_of_the_task_in_progress(
     outcome = await search_service.search_tasks(
         db_session, actor=reader, query=f"queue: {DEMO_QUEUE_KEY}", limit=200
     )
-    rows = {found.task.key: found.parents for found in outcome.page.items}
+    rows = {found.task.key: found.parent for found in outcome.page.items}
 
-    assert rows[child.key] == (TaskParent(key=in_progress.key, title=in_progress.title),)
-    assert rows[in_progress.key] == ()
+    assert rows[child.key] == AskedParent(TaskParent(key=in_progress.key, title=in_progress.title))
+    assert rows[in_progress.key] == AskedParent(None)
 
 
 async def test_demo_leaves_exactly_one_open_blocking_question(

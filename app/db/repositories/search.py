@@ -62,14 +62,14 @@ from app.db.repositories.entries import (
     open_remark_count,
     remarks_in_work_count,
 )
-from app.db.repositories.links import open_blockers_of, parents_of
+from app.db.repositories.links import open_blockers_of, parent_of
 from app.db.sql import ilike_contains
 from app.domain.links import LinkKind
 from app.domain.search import (
     FEATURES_FIELD,
     NEGATIVE_OPERATORS,
     ORDER_OPERATORS,
-    PARENTS_FIELD,
+    PARENT_FIELD,
     Junction,
     Operator,
     ResolvedFilter,
@@ -82,7 +82,13 @@ from app.domain.search import (
     TermGroup,
     field_requested,
 )
-from app.domain.tasks import TASK_KEY_SEPARATOR, TaskFeatures, TaskParent, TaskPriority
+from app.domain.tasks import (
+    TASK_KEY_SEPARATOR,
+    AskedParent,
+    TaskFeatures,
+    TaskParent,
+    TaskPriority,
+)
 
 #: Ранг приоритета: порядок членов `TaskPriority` — от низшего к высшему. Сравнение
 #: `priority: >= high` и сортировка опираются на него, а не на алфавит, в котором
@@ -98,11 +104,11 @@ PRIORITY_RANK: dict[TaskPriority, int] = {
 TASK_NUMBER = cast(func.split_part(Task.key, TASK_KEY_SEPARATOR, 2), BigInteger)
 
 
-#: Строка выдачи: задача, её вычисляемые признаки и её прямые родители. `None` в признаках
-#: и в родителях означает «их не просили», а не «признаков нет» или «родителей нет»:
-#: считать подзапросы ради ответа, в котором их не будет, — работа в никуда. Задача без
-#: родителей — пустой кортеж. Сценарий заворачивает тройку в `FoundTask`.
-TaskRow = tuple[Task, TaskFeatures | None, tuple[TaskParent, ...] | None]
+#: Строка выдачи: задача, её вычисляемые признаки и её родитель. `None` в признаках
+#: означает «их не просили»; у родителя «не просили» и «родителя нет» различает
+#: `AskedParent`: считать подзапросы ради ответа, в котором их не будет, — работа в
+#: никуда. Сценарий заворачивает тройку в `FoundTask`.
+TaskRow = tuple[Task, TaskFeatures | None, AskedParent | None]
 
 
 class TaskSearchRepository:
@@ -135,7 +141,7 @@ class TaskSearchRepository:
         Признаки — подзапросы на строку, и добавляются они только когда их просили
         (`fields`): выдача из одного столбца ключей не должна платить за то, чего в ней
         нет. Стоимость измерена и записана в `docs/notes/search.md`. Родители — ещё один
-        такой подзапрос (`parents_of`) и по тому же правилу: страница с родителями — это
+        такой подзапрос (`parent_of`) и по тому же правилу: страница с родителями — это
         по-прежнему **один** запрос, сколько бы в ней ни было строк (`CONCEPT.md`, 4.4).
 
         `offset` и `with_total` — платные и потому необязательные, а решение платить
@@ -149,7 +155,7 @@ class TaskSearchRepository:
         start = resolve_offset(offset, cursor=cursor)
         keys = sort_keys(resolved.sort)
         wanted = field_requested(FEATURES_FIELD, resolved.fields)
-        with_parents = field_requested(PARENTS_FIELD, resolved.fields)
+        with_parent = field_requested(PARENT_FIELD, resolved.fields)
         statement: Select[Any] = select(Task).join(Task.queue).options(contains_eager(Task.queue))
         condition = compile_filter(resolved)
         if condition is not None:
@@ -160,8 +166,8 @@ class TaskSearchRepository:
         statement = statement.add_columns(*(expression for expression, _ in keys))
         if wanted:
             statement = statement.add_columns(*feature_columns())
-        if with_parents:
-            statement = statement.add_columns(parents_column())
+        if with_parent:
+            statement = statement.add_columns(parent_column())
 
         if cursor is not None:
             values, item_id = decode_sort_cursor(cursor, arity=len(keys))
@@ -178,7 +184,7 @@ class TaskSearchRepository:
             (
                 row[0],
                 _features_of(row) if wanted else None,
-                _parents_of(row) if with_parents else None,
+                _parent_of(row) if with_parent else None,
             )
             for row in page
         ]
@@ -235,20 +241,21 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
     )
 
 
-def parents_column() -> ColumnElement[Any]:
-    """Прямые родители колонкой выдачи: JSON-список `{key, title}` на каждую строку.
+def parent_column() -> ColumnElement[Any]:
+    """Родитель колонкой выдачи: JSON-объект `{key, title}` или `NULL` на каждую строку.
 
     Подзапрос коррелирован с задачей страницы и считается после `Limit` — по строке
     страницы, а не по всей таблице, — поэтому число запросов от размера страницы не
     зависит. Метка обязательна по той же причине, что у признаков: строка читается по
     именам.
     """
-    return parents_of(Task.id).correlate(Task).scalar_subquery().label(PARENTS_FIELD)
+    return parent_of(Task.id).correlate(Task).scalar_subquery().label(PARENT_FIELD)
 
 
-def _parents_of(row: Any) -> tuple[TaskParent, ...]:
-    """Родители из строки выдачи: доменный тип, а не словари из JSON базы."""
-    return tuple(TaskParent(key=item["key"], title=item["title"]) for item in row.parents)
+def _parent_of(row: Any) -> AskedParent:
+    """Родитель из строки выдачи: доменный тип, а не словарь из JSON базы."""
+    item = row.parent
+    return AskedParent(None if item is None else TaskParent(key=item["key"], title=item["title"]))
 
 
 def _features_of(row: Any) -> TaskFeatures:

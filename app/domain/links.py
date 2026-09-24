@@ -117,6 +117,23 @@ class CanonicalLink:
     swapped: bool
 
 
+#: Кем приходится другая сторона этой задаче — по виду связи **своей** задачи. Для
+#: заголовка записи о связи (TRK-135): «Link added: parent TRK-3» читали как «родитель —
+#: TRK-3», хотя вид называл роль своей задачи. Фраза с подлежащим не читается двояко.
+OTHER_SIDE_PHRASES: Mapping[LinkKind, str] = {
+    LinkKind.PARENT: "{other} is a child of this task",
+    LinkKind.CHILD: "{other} is the parent of this task",
+    LinkKind.BLOCKS: "{other} is blocked by this task",
+    LinkKind.BLOCKED_BY: "{other} blocks this task",
+    LinkKind.RELATES: "{other} relates to this task",
+}
+
+
+def other_side_phrase(kind: LinkKind, other_key: str) -> str:
+    """Связь словами, с подлежащим — другой стороной: `TRK-3 is a child of this task`."""
+    return OTHER_SIDE_PHRASES[kind].format(other=other_key)
+
+
 def inverse(kind: LinkKind) -> LinkKind:
     """Обратная сторона связи. Таблица полная, поэтому `KeyError` здесь невозможен."""
     return INVERSE_KINDS[kind]

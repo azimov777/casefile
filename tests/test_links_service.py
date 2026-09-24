@@ -322,7 +322,9 @@ async def test_the_link_entry_is_signed_by_the_author_of_the_action(
     entry = (await entries(db_session, first, task_actor))[-1]
     assert entry.type is EntryType.LINK_ADDED
     assert entry.author.signature == "owner"
-    assert entry.title == "Link added: parent TRK-2"
+    # Заголовок называет роль другой стороны фразой с подлежащим (TRK-135): «parent TRK-2»
+    # читали как «родитель — TRK-2», хотя вид называл роль своей задачи.
+    assert entry.title == "Link added: TRK-2 is a child of this task"
     assert entry.body == ""
 
 

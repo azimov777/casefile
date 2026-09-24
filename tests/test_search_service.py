@@ -25,7 +25,7 @@ from app.domain.errors import (
 from app.domain.links import LinkKind
 from app.domain.query_language import QUERY_RIGHT_SHAPE
 from app.domain.search import MAX_VALUES_PER_CONDITION, Operator
-from app.domain.tasks import TaskFeatures, TaskParent, TaskPriority, TaskStatus
+from app.domain.tasks import AskedParent, TaskFeatures, TaskParent, TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import queues as queues_service
@@ -389,19 +389,21 @@ async def test_an_unknown_parent_key_is_refused_and_named(
 async def test_a_row_names_its_direct_parent_by_key_and_title(
     db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
 ) -> None:
-    """TRK-95: ребёнок называет родителя ключом и названием, верхний уровень — никого.
+    """TRK-95, TRK-135: ребёнок называет родителя ключом и названием, верхний уровень — никого.
 
-    Пустой кортеж у верхнего уровня — ответ «родителей нет», а не «их не считали»: тот
-    ответ — `None`, и его дают только выдачи, где поле не просили.
+    `AskedParent(None)` у верхнего уровня — ответ «родителя нет», а не «его не считали»:
+    тот ответ — `None`, и его дают только выдачи, где поле не просили.
     """
     program = family["program"]
     outcome = await service.search_tasks(db_session, actor=task_actor)
-    rows = {found.task.key: found.parents for found in outcome.page.items}
+    rows = {found.task.key: found.parent for found in outcome.page.items}
 
     for name in ("живой", "первый закрытый", "второй закрытый"):
-        assert rows[family[name].key] == (TaskParent(key=program.key, title=program.title),)
-    assert rows[program.key] == ()
-    assert rows[family["outsider"].key] == ()
+        assert rows[family[name].key] == AskedParent(
+            TaskParent(key=program.key, title=program.title)
+        )
+    assert rows[program.key] == AskedParent(None)
+    assert rows[family["outsider"].key] == AskedParent(None)
 
 
 async def test_a_row_names_the_direct_parent_and_not_the_grandparent(
@@ -417,23 +419,23 @@ async def test_a_row_names_the_direct_parent_and_not_the_grandparent(
     )
 
     outcome = await service.search_tasks(db_session, actor=task_actor)
-    rows = {found.task.key: found.parents for found in outcome.page.items}
+    rows = {found.task.key: found.parent for found in outcome.page.items}
 
-    assert rows[grandchild.key] == (TaskParent(key=child.key, title=child.title),)
-    assert rows[child.key] == (TaskParent(key=program.key, title=program.title),)
+    assert rows[grandchild.key] == AskedParent(TaskParent(key=child.key, title=child.title))
+    assert rows[child.key] == AskedParent(TaskParent(key=program.key, title=program.title))
 
 
-async def test_a_task_with_two_parents_names_both_in_the_order_the_links_were_made(
+async def test_a_task_with_two_parents_from_older_data_shows_the_first_one(
     db_session: AsyncSession, task_actor: Actor, queue: Queue
 ) -> None:
     """Данные старше запрета (TRK-135): второй родитель мог появиться до него, и строка
-    отдаёт всех, а не прячет лишнего.
+    называет первого по времени связи — того же, что и карточка.
 
     Сценарий второго родителя уже не поставит (`task_has_parent`), поэтому вторая связь
-    кладётся прямо в таблицу — так, как она лежит в базе, заведённой раньше. Порядок —
-    появление связи, как у связей в карточке, а не ключ: родитель с меньшим ключом связан
-    позже и стоит вторым. Время связей задано явно — в одной транзакции `now()` у обеих
-    одно и то же, и порядок решал бы случайный `id`.
+    кладётся прямо в таблицу — так, как она лежит в базе, заведённой раньше. «Первый» —
+    по появлению связи, а не по ключу: родитель с меньшим ключом связан позже. Время
+    связей задано явно — в одной транзакции `now()` у обеих одно и то же, и выбор решал
+    бы случайный `id`.
     """
     linked_later = await make(db_session, task_actor, queue, "связан вторым")
     linked_first = await make(db_session, task_actor, queue, "связан первым")
@@ -460,24 +462,26 @@ async def test_a_task_with_two_parents_names_both_in_the_order_the_links_were_ma
 
     outcome = await service.search_tasks(db_session, actor=task_actor, query=f"key: {child.key}")
 
-    assert outcome.page.items[0].parents == (
-        TaskParent(key=linked_first.key, title=linked_first.title),
-        TaskParent(key=linked_later.key, title=linked_later.title),
+    assert outcome.page.items[0].parent == AskedParent(
+        TaskParent(key=linked_first.key, title=linked_first.title)
     )
+    package = await tasks_service.read_task_package(db_session, child.key, actor=task_actor)
+    assert package.parent is not None
+    assert package.parent.other.key == linked_first.key
 
 
 async def test_parents_are_not_selected_when_the_fields_leave_them_out(
     db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
 ) -> None:
-    """`fields` без `parents` — прямая просьба не платить за подзапрос, как у признаков."""
+    """`fields` без `parent` — прямая просьба не платить за подзапрос, как у признаков."""
     narrow = await service.search_tasks(db_session, actor=task_actor, fields=["title"])
     assert narrow.page.items
-    assert all(found.parents is None for found in narrow.page.items)
+    assert all(found.parent is None for found in narrow.page.items)
 
-    asked = await service.search_tasks(db_session, actor=task_actor, fields=["parents"])
-    rows = {found.task.key: found.parents for found in asked.page.items}
-    assert rows[family["живой"].key] == (
-        TaskParent(key=family["program"].key, title=family["program"].title),
+    asked = await service.search_tasks(db_session, actor=task_actor, fields=["parent"])
+    rows = {found.task.key: found.parent for found in asked.page.items}
+    assert rows[family["живой"].key] == AskedParent(
+        TaskParent(key=family["program"].key, title=family["program"].title)
     )
     assert all(found.features is None for found in asked.page.items)
 
@@ -501,7 +505,9 @@ async def _page_selects(session: AsyncSession, actor: Actor, **call: Any) -> tup
     finally:
         event.remove(connection.sync_connection.engine, "before_cursor_execute", record)
 
-    with_parents = sum(1 for found in outcome.page.items if found.parents)
+    with_parents = sum(
+        1 for found in outcome.page.items if found.parent is not None and found.parent.value
+    )
     selects = [item for item in statements if item.lstrip().upper().startswith("SELECT")]
     return len(selects), with_parents
 

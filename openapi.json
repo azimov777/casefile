@@ -2982,7 +2982,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parents`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parents` brings the direct parents of the task, key and title of each; a top-level task has an empty list",
+              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task",
               "examples": [
                 [
                   "title",
@@ -2991,7 +2991,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parents`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parents` brings the direct parents of the task, key and title of each; a top-level task has an empty list"
+            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task"
           },
           {
             "name": "limit",
@@ -10611,13 +10611,32 @@
           "task": {
             "$ref": "#/components/schemas/TaskRead"
           },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinkTaskRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The parent of this task: key, title and status; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links`"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/LinkTaskRead"
+            },
+            "type": "array",
+            "title": "Children",
+            "description": "Children of this task: key, title and status of each, in the order they were linked; empty if none. Set with `link`, shown here and not in `links`"
+          },
           "links": {
             "items": {
               "$ref": "#/components/schemas/TaskLinkRead"
             },
             "type": "array",
             "title": "Links",
-            "description": "Links on both sides, each named from this task's point of view, with the status of the task on the other side"
+            "description": "Other links: `blocks`, `blocked_by`, `relates`, each named from this task's point of view, with the status of the task on the other side. Parent and children are not here: they are the `parent` and `children` fields"
           },
           "features": {
             "$ref": "#/components/schemas/TaskFeaturesRead"
@@ -10675,6 +10694,7 @@
         "type": "object",
         "required": [
           "task",
+          "children",
           "links",
           "features",
           "questions",
@@ -10708,7 +10728,7 @@
           "title"
         ],
         "title": "TaskParentRead",
-        "description": "Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).\n\nСтатуса нет намеренно: строка называет, куда задача входит, а о родителе\nспрашивают его самого."
+        "description": "Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).\n\nСтатуса нет намеренно: строка называет, куда задача входит, а о родителе\nспрашивают его самого."
       },
       "TaskPriority": {
         "type": "string",
@@ -11090,20 +11110,16 @@
             ],
             "description": "Computed features of the task, the same object the successor package carries. Included unless `fields` asks for a narrower set without `features`"
           },
-          "parents": {
+          "parent": {
             "anyOf": [
               {
-                "items": {
-                  "$ref": "#/components/schemas/TaskParentRead"
-                },
-                "type": "array"
+                "$ref": "#/components/schemas/TaskParentRead"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Parents",
-            "description": "Direct parents of the task, key and title of each, in the order the links were made: a task may have more than one. Empty for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parents`"
+            "description": "The parent of the task, key and title; a task has at most one. `null` for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parent`"
           }
         },
         "type": "object",

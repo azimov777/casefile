@@ -22,7 +22,7 @@ from app.api.schemas.entries import (
     SummaryEntryRead,
     SummaryPartsPayload,
 )
-from app.api.schemas.links import TaskLinkRead
+from app.api.schemas.links import LinkTaskRead, TaskLinkRead
 from app.domain.case import MAX_ENTRY_BODY_LENGTH, MAX_SUMMARY_PART_LENGTH, VerdictOutcome
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
@@ -140,10 +140,25 @@ class TaskPackageRead(BaseModel):
     """
 
     task: TaskRead
+    parent: LinkTaskRead | None = Field(
+        default=None,
+        description=(
+            "The parent of this task: key, title and status; `null` for a top-level task. "
+            "A task has at most one parent. Set with the same `link` call as any other "
+            "link, but shown here and not in `links`"
+        ),
+    )
+    children: list[LinkTaskRead] = Field(
+        description=(
+            "Children of this task: key, title and status of each, in the order they were "
+            "linked; empty if none. Set with `link`, shown here and not in `links`"
+        )
+    )
     links: list[TaskLinkRead] = Field(
         description=(
-            "Links on both sides, each named from this task's point of view, with the "
-            "status of the task on the other side"
+            "Other links: `blocks`, `blocked_by`, `relates`, each named from this task's "
+            "point of view, with the status of the task on the other side. Parent and "
+            "children are not here: they are the `parent` and `children` fields"
         )
     )
     features: TaskFeaturesRead
