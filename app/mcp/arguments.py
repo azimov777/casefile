@@ -42,7 +42,6 @@ from typing import Annotated
 from pydantic import Field
 
 from app.domain.idempotency import KEY_TTL
-from app.domain.journal import JOURNAL_START, MAX_TASK_KEYS, MAX_WAIT_SECONDS
 
 # --- Адресация ------------------------------------------------------------------------
 
@@ -89,44 +88,5 @@ IdempotencyKeyArg = Annotated[
             f"{int(KEY_TTL.total_seconds() // 3600)} hours"
         ),
         examples=["6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"],
-    ),
-]
-
-# --- Лента --------------------------------------------------------------------------
-
-AfterArg = Annotated[
-    int,
-    Field(
-        ge=JOURNAL_START,
-        description=(
-            "Journal sequence number `seq` to read after; `0` reads from the start. "
-            "Entries are permanent: no `seq` is too old"
-        ),
-    ),
-]
-JournalTaskArg = Annotated[
-    list[str] | str | None,
-    Field(
-        description=(
-            f"Only entries of these tasks: one key or a list of at most {MAX_TASK_KEYS}. "
-            "One wait covers all of them, and an entry in any of them ends it. More keys "
-            "are refused with `journal_too_many_tasks`, an unknown key with "
-            "`task_not_found`"
-        ),
-        examples=[["TRK-42", "TRK-43"]],
-    ),
-]
-JournalQueueArg = Annotated[
-    str | None,
-    Field(description="Only entries of tasks in this queue", examples=["TRK"]),
-]
-TimeoutArg = Annotated[
-    float,
-    Field(
-        description=(
-            "Seconds to wait for the first matching entry when none is there yet, at most "
-            f"{MAX_WAIT_SECONDS:.0f} (`journal_wait_too_long` beyond); `0` answers at "
-            "once. An empty page after the wait means nothing happened and is not an error"
-        )
     ),
 ]

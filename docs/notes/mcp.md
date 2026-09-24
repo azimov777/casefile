@@ -254,7 +254,7 @@ REST поле в поле». Приведение времени к строке
 поведения чужой системы («назначатель сделает то-то») тестом не держится: запрет слова
 был бы тупым, и это остаётся на вычитке — в описании говорят, что делает трекер.
 **Где:** `tests/test_mcp_metadata.py`, `test_no_description_names_another_status_for_waiting_for_an_answer`;
-`app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/case/ask.py`, `BlockingArg`.
+`app/mcp/tools/journal/wait_journal.py`, `wait_journal`; `app/mcp/tools/case/ask.py`, `BlockingArg`.
 **Обновлено TRK-145:** сверки со скилом больше нет — скил уходит (TRK-140#8), и статус ожидания
 ответа тест берёт из домена (`TaskStatus.WAITING`), а английские абзацы про ответ и ожидание
 ищет по всей метадате, включая схемы ответа: `tests/test_mcp_metadata.py`,
@@ -442,7 +442,7 @@ Glama, а не кодом; stdio-путь держит `tests/test_mcp_stdio.py`
 каждого вызова. Меняя первую строку докстринга, поправить её английский пересказ в
 `README.md`, раздел `## Tools` (тест сверяет только имена, текст — нет).
 **Где:** `app/mcp/tools/registries/get_queue.py`, `get_queue`; `app/mcp/tools/case/read_entries.py`,
-`read_entries`; `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/tasks/transition.py`,
+`read_entries`; `app/mcp/tools/journal/wait_journal.py`, `wait_journal`; `app/mcp/tools/tasks/transition.py`,
 `transition`; `app/domain/tasks.py`, `check_done_is_reached_by_closing`.
 **Обновлено TRK-145:** повелительное «бери `X`» теперь ловит
 `tests/test_mcp_metadata.py::test_no_metadata_prescribes_judges_or_explains`, а фраза о
