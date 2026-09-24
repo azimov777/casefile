@@ -53,7 +53,7 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
   const { t } = useTranslation('tasks');
   const { t: brick } = useTranslation('ui');
   // Гнездо под плашку родителя — у всех строк, если родитель есть хоть у одной (UI-152).
-  const parentSlot = tasks.some((task) => (task.parents ?? []).length > 0);
+  const parentSlot = tasks.some((task) => task.parent != null);
 
   return (
     /*

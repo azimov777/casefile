@@ -5,10 +5,10 @@ import { cn, listReturnState, skipClickWhileSelecting, taskRefHref } from '@/sha
 import type { TaskParent } from '../api/tasks';
 
 interface TaskParentsProps {
-  /** Прямые родители из строки выдачи, в порядке появления связи. Пустой — подписи нет. */
-  parents: readonly TaskParent[];
+  /** Родитель из строки выдачи; `null` или нет поля — задача верхнего уровня, подписи нет. */
+  parent: TaskParent | null | undefined;
   /**
-   * Поднять ссылку и число над растянутой ссылкой карточки. Нужно только карточке:
+   * Поднять ссылку над растянутой ссылкой карточки. Нужно только карточке:
    * у строки таблицы растяжки нет (UI-39), и поднимать там не над чем.
    */
   raised?: boolean;
@@ -20,19 +20,14 @@ interface TaskParentsProps {
  * Родитель задачи подписью в одну строку: «ключ · название» ссылкой в него (UI-119).
  * Её ставит карточка доски, над ключом; строка таблицы ставит плашку (`ParentBadge`).
  *
- * Ничего не вычисляется и не догружается: `parents` приходит в строке выдачи (TRK-95),
+ * Ничего не вычисляется и не догружается: `parent` приходит в строке выдачи (TRK-95),
  * родители всей страницы — тем же запросом, что и сама страница (`docs/FRONTEND.md`,
- * «`parents`»). Запроса за карточкой родителя здесь нет и быть не должно.
+ * «`parent`»). Запроса за карточкой родителя здесь нет и быть не должно.
  *
- * **Родителей бывает несколько**, и молча брать первого нельзя: второй пропал бы, не
- * оставив следа. Ссылкой становится первый, то есть самый ранний по связи. Обычно это
- * программа, в которой задача родилась, и на странице задачи он стоит первым среди
- * `child`. Остальные сказаны числом «+N» рядом с ним. Поимённо их называет подсказка:
- * одна и та же у ссылки и у числа, все родители по строке. Для программы чтения с
- * экрана то же самое сказано скрытым текстом при числе. Число не усекается никогда:
- * многоточие съедает название первого родителя, но не сведения о том, что родителей
- * больше. Одним кликом из подписи достижим только первый; остальные — на странице
- * задачи, в блоке связей, куда ведёт клик по самой карточке.
+ * **Родитель у задачи один** (правило владельца, TRK-135): второй `link` бэкенд
+ * отклоняет `409 task_has_parent`, а у данных старше запрета строка выдачи называет
+ * первого по времени связи. Поэтому прежнего числа «+N» рядом со ссылкой больше нет —
+ * поле строки теперь одно значение, а не список.
  *
  * Подпись в одну строку, с многоточием и полным текстом в подсказке: карточка не должна
  * расти от длинного названия, а столбец доски — шириться от слова с путём (UI-115).
@@ -40,28 +35,21 @@ interface TaskParentsProps {
  * содержимого, а содержимое под `nowrap` длиной во всё название.
  *
  * Подсказка — путь только для мыши. Без наведения полный текст достижим нажатием: ссылка
- * ведёт в родителя, и там его название — заголовок страницы, а «+N» ведёт в саму задачу,
- * где все родители названы в блоке связей. Строка таблицы этой подписи не ставит: там
- * плашка с раскрытием нажатием (`ParentBadge`, UI-152).
+ * ведёт в родителя, и там его название — заголовок страницы. Строка таблицы этой подписи
+ * не ставит: там плашка с раскрытием нажатием (`ParentBadge`, UI-152).
  */
-export function TaskParents({ parents, raised = false, className }: TaskParentsProps) {
+export function TaskParents({ parent, raised = false, className }: TaskParentsProps) {
   const { search } = useLocation();
   const { t } = useTranslation('ui');
-  const [first, ...others] = parents;
 
   // Задача верхнего уровня: ни пустой строки, ни заглушки — подписи просто нет.
-  if (first === undefined) return null;
-
-  const item = (parent: TaskParent) =>
-    t('task.parents.item', { key: parent.key, title: parent.title });
-  // Подсказка называет всех, по родителю на строку: ей одной видно усечённое.
-  const everyone = parents.map(item).join('\n');
+  if (parent == null) return null;
 
   /*
    * Поднятое над растяжкой карточки (`relative z-1`) получает свой клик и свою
    * подсказку, но мишенью задачи быть перестаёт: цена приёма названа заметкой
    * «Растянутая ссылка: мишень надо делить» в `docs/notes/ui.md`. Поднята ровно
-   * ссылка и число — строка подписи целиком не поднята, и пустое место справа от
+   * ссылка — строка подписи целиком не поднята, и пустое место справа от
    * короткой подписи по-прежнему ведёт в саму задачу. Знак слева тоже не поднят.
    */
   const lift = raised ? 'relative z-1' : undefined;
@@ -83,10 +71,10 @@ export function TaskParents({ parents, raised = false, className }: TaskParentsP
           'min-w-0 truncate text-muted no-underline [-webkit-user-drag:none] hover:text-text hover:underline',
           lift,
         )}
-        to={taskRefHref({ key: first.key, entryNo: null })}
+        to={taskRefHref({ key: parent.key, entryNo: null })}
         // Отбор списка едет и в родителя: оттуда человек вернётся к тем же строкам.
         state={listReturnState(search)}
-        title={everyone}
+        title={t('task.parents.item', { key: parent.key, title: parent.title })}
         draggable={false}
         onClick={skipClickWhileSelecting}
       >
@@ -94,18 +82,10 @@ export function TaskParents({ parents, raised = false, className }: TaskParentsP
         <Trans
           t={t}
           i18nKey="task.parents.caption"
-          values={{ key: first.key, title: first.title }}
+          values={{ key: parent.key, title: parent.title }}
           components={{ key: <span className="font-mono" /> }}
         />
       </Link>
-      {others.length === 0 ? null : (
-        <span className={cn('shrink-0', lift)} title={everyone}>
-          <span aria-hidden="true">{t('task.parents.more', { count: others.length })}</span>
-          <span className="sr-only">
-            {t('task.parents.others', { count: others.length, parents: others.map(item) })}
-          </span>
-        </span>
-      )}
     </span>
   );
 }

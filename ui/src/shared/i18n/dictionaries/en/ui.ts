@@ -206,12 +206,7 @@ export const ui = {
       caption: '<key>{{key}}</key> · {{title}}',
       item: '{{key}} · {{title}}',
       badge: 'parent',
-      badgeMany: 'parents',
       heading: 'Parent of <key>{{key}}</key>',
-      headingMany: 'Parents of <key>{{key}}</key>',
-      more: '+{{count, number}}',
-      others_one: 'and {{count, number}} more parent: {{parents, list}}',
-      others_other: 'and {{count, number}} more parents: {{parents, list}}',
     },
     // Заголовок группы связей одного вида (UI-125): подпись рядом с идентификатором
     // контракта, а не вместо него — сам идентификатор `LinkKindMark` не переводит.

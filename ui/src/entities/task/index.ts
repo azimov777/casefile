@@ -21,6 +21,7 @@ export {
   taskPackageKeys,
   taskPackageQueryOptions,
   type LinkKind,
+  type LinkedTask,
   type TaskDetails,
   type TaskLink,
   type TaskPackage,

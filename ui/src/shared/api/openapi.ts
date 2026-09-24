@@ -688,8 +688,9 @@ export interface paths {
          *
          *     Отказы: связь с самой собой — `422 link_self_not_allowed`; кольцо в иерархии или в
          *     блокировках — `409 link_cycle_detected` (виды не смешиваются: родитель, у которого
-         *     `blocked_by` на своих детей, кольцом не считается); `parent` или `blocks` с задачей в
-         *     `done` или `cancelled` с любой стороны — `409 task_closed`. `relates` с закрытой
+         *     `blocked_by` на своих детей, кольцом не считается); второй родитель у задачи —
+         *     `409 task_has_parent` (родитель один, детей сколько угодно); `parent` или `blocks`
+         *     с задачей в `done` или `cancelled` с любой стороны — `409 task_closed`. `relates` с закрытой
          *     задачей проходит: им связывают её с продолжением. Повтор с тем же `Idempotency-Key`
          *     отвечает первой связью, а не `409 link_exists`.
          */
@@ -3509,9 +3510,16 @@ export interface components {
          */
         TaskPackageRead: {
             task: components["schemas"]["TaskRead"];
+            /** @description The parent of this task: key, title and status; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links` */
+            parent?: components["schemas"]["LinkTaskRead"] | null;
+            /**
+             * Children
+             * @description Children of this task: key, title and status of each, in the order they were linked; empty if none. Set with `link`, shown here and not in `links`
+             */
+            children: components["schemas"]["LinkTaskRead"][];
             /**
              * Links
-             * @description Links on both sides, each named from this task's point of view, with the status of the task on the other side
+             * @description Other links: `blocks`, `blocked_by`, `relates`, each named from this task's point of view, with the status of the task on the other side. Parent and children are not here: they are the `parent` and `children` fields
              */
             links: components["schemas"]["TaskLinkRead"][];
             features: components["schemas"]["TaskFeaturesRead"];
@@ -3544,7 +3552,7 @@ export interface components {
         };
         /**
          * TaskParentRead
-         * @description Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
+         * @description Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
          *
          *     Статуса нет намеренно: строка называет, куда задача входит, а о родителе
          *     спрашивают его самого.
@@ -3710,11 +3718,8 @@ export interface components {
             updated_at?: string | null;
             /** @description Computed features of the task, the same object the successor package carries. Included unless `fields` asks for a narrower set without `features` */
             features?: components["schemas"]["TaskFeaturesRead"] | null;
-            /**
-             * Parents
-             * @description Direct parents of the task, key and title of each, in the order the links were made: a task may have more than one. Empty for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parents`
-             */
-            parents?: components["schemas"]["TaskParentRead"][] | null;
+            /** @description The parent of the task, key and title; a task has at most one. `null` for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parent` */
+            parent?: components["schemas"]["TaskParentRead"] | null;
         };
         /**
          * TaskStatus
@@ -5843,7 +5848,7 @@ export interface operations {
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parents`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parents` brings the direct parents of the task, key and title of each; a top-level task has an empty list */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;

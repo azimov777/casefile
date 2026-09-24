@@ -6,6 +6,8 @@ export type TaskPackage = components['schemas']['TaskPackageRead'];
 export type TaskDetails = components['schemas']['TaskRead'];
 export type TaskLink = components['schemas']['TaskLinkRead'];
 export type LinkKind = components['schemas']['LinkKind'];
+/** Задача на другом конце связи: ключ, название, статус. Так приходят `parent` и `children`. */
+export type LinkedTask = components['schemas']['LinkTaskRead'];
 
 export const taskPackageKeys = {
   package: (key: string) => ['task', key] as const,

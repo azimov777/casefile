@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,16 +6,16 @@ import {
   TaskFeatureMarks,
   hasFeatureBadges,
   type TaskDetails,
+  type LinkedTask,
   type TaskFeatures,
-  type TaskLink,
 } from '@/entities/task';
 import { RelativeTime } from '@/shared/ui';
 
 interface TaskHeaderProps {
   task: TaskDetails;
   features: TaskFeatures;
-  /** Связи задачи из пакета: из них берутся родители для строки «где». */
-  links: TaskLink[];
+  /** Родитель задачи из пакета (`parent`, TRK-135) для строки «где»; `null` — верхний уровень. */
+  parent: LinkedTask | null;
 }
 
 /** Отсутствующее значение: курсив вместо прочерка — его читают, а не сканируют. */
@@ -44,12 +43,9 @@ const LABEL = 'text-label text-muted';
  * действий от шапки отделяет 24 px (`mt-2` поверх шага страницы 16): больше любого
  * зазора внутри шапки.
  */
-export function TaskHeader({ task, features, links }: TaskHeaderProps) {
+export function TaskHeader({ task, features, parent }: TaskHeaderProps) {
   const { t } = useTranslation('task');
   const { t: brick } = useTranslation('ui');
-
-  // `child` назван от лица этой задачи: «я ребёнок той». Порядок — порядок связей.
-  const parents = links.filter((link) => link.kind === 'child');
 
   return (
     <header className="mt-2 flex flex-col gap-3">
@@ -60,26 +56,20 @@ export function TaskHeader({ task, features, links }: TaskHeaderProps) {
           </Link>
           {/*
            * Косая черта — шаг вниз по пути «очередь / родитель / эта задача». Родитель у
-           * задачи один (правило владельца), но данные его не ограничивают, и второй
-           * родитель после ещё одной черты читался бы внуком первого (UI-166). Поэтому
-           * черта стоит только перед первым, остальные — через запятую, на одном шаге.
+           * задачи один: с TRK-135 это правило бэкенда (второй — `409 task_has_parent`),
+           * и пакет отдаёт его полем `parent`, а не видом `child` в `links`.
            */}
-          {parents.map((parent, index) => (
-            <Fragment key={parent.other.key}>
-              {index === 0 ? (
-                <span className="text-faint" aria-hidden="true">
-                  /
-                </span>
-              ) : (
-                <span className="-ml-2 text-faint">,</span>
-              )}
-              <Link to={`/tasks/${parent.other.key}`}>
+          {parent === null ? null : (
+            <>
+              <span className="text-faint" aria-hidden="true">
+                /
+              </span>
+              <Link to={`/tasks/${parent.key}`}>
                 <span className="sr-only">{brick('task.parents.label')} </span>
-                <span className="font-mono whitespace-nowrap">{parent.other.key}</span>{' '}
-                {parent.other.title}
+                <span className="font-mono whitespace-nowrap">{parent.key}</span> {parent.title}
               </Link>
-            </Fragment>
-          ))}
+            </>
+          )}
         </p>
 
         {/* Междустрочие названия шире, чем у заголовков вообще (1.25 в сбросе): название

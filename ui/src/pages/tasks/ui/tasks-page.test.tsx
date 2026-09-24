@@ -341,7 +341,7 @@ describe('список задач', () => {
     server.use(
       listing(() =>
         taskPage([
-          task('DEMO-5', { parents: [{ key: 'DEMO-2', title: 'Лента журнала теряет записи' }] }),
+          task('DEMO-5', { parent: { key: 'DEMO-2', title: 'Лента журнала теряет записи' } }),
           task('DEMO-3'),
         ]),
       ),
@@ -365,7 +365,7 @@ describe('список задач', () => {
     expect(top.querySelector('[data-mark="parents"]')).toBeNull();
 
     // Без имени в наборе полей поля в строке нет вовсе (TRK-95): его просит сам список.
-    expect(lastRequest().searchParams.getAll('fields')).toContain('parents');
+    expect(lastRequest().searchParams.getAll('fields')).toContain('parent');
     // Запрос на страницу один, как и до UI-119, и ни одного — на родителя.
     expect(seen).toHaveLength(1);
     expect(asked).toEqual([]);

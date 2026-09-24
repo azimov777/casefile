@@ -156,8 +156,9 @@ export function participant(name: string, overrides: Partial<Participant> = {}):
  * Строка выдачи со всеми полями, которые просит список. Признаки заданы явно:
  * ради них строка и приходит целиком, без запроса на задачу.
  *
- * Родителей по умолчанию нет — `[]`, как у задачи верхнего уровня в ответе бэкенда
- * (TRK-95), а не отсутствие поля: список его просит, и бэкенд его отдаёт всегда.
+ * Родителя по умолчанию нет — `null`, как у задачи верхнего уровня в ответе бэкенда
+ * (TRK-95, одним значением с TRK-135), а не отсутствие поля: список его просит, и
+ * бэкенд его отдаёт всегда.
  */
 export function task(key: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -175,7 +176,7 @@ export function task(key: string, overrides: Partial<Task> = {}): Task {
       last_summary_at: null,
       last_entry_at: '2026-09-01T10:00:00Z',
     },
-    parents: [],
+    parent: null,
     ...overrides,
   };
 }
@@ -322,6 +323,8 @@ export function verdictEntry(no: number, taskKey: string): Entry {
 export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): TaskPackage {
   return {
     task: taskDetails(key),
+    parent: null,
+    children: [],
     links: [
       {
         kind: 'blocked_by',
