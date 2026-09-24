@@ -189,6 +189,72 @@ test('значок раскрытия столбца стоит на одной 
   expect(Math.abs(offsets.collapsed), report).toBeLessThanOrEqual(1);
 });
 
+test('все столбцы свёрнуты: колесо дальше края не уводит заголовки из виду и не оттягивает окно (UI-170)', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const collapsed = contractStatuses()
+    .map((status) => `collapsed=${status}`)
+    .join('&');
+  await page.goto(`/tasks?queue=DEMO&view=board&${collapsed}`);
+  for (const status of contractStatuses()) {
+    await expect(column(page, status).getByRole('button')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  }
+  await fontsReady(page);
+
+  const before = await heads(page);
+  await test.info().attach('свёрнутая доска до прокрутки', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+
+  // Колесо над свёрнутым столбцом, намного дальше, чем есть что прокручивать.
+  const box = await column(page, 'open').boundingBox();
+  if (box === null) throw new Error('столбца open нет на экране');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let turn = 0; turn < 10; turn += 1) await page.mouse.wheel(0, 400);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY), { message: 'окно уехало от колеса' })
+    .toBe(0);
+
+  const after = await heads(page);
+  await test.info().attach('свёрнутая доска после прокрутки колесом', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+
+  const report = JSON.stringify({ before, after });
+  for (const [index, seen] of after.columns.entries()) {
+    expect(seen.head.top, report).toBe(before.columns[index]?.head.top);
+    expect(seen.head.top, report).toBeGreaterThanOrEqual(0);
+    expect(seen.head.bottom, report).toBeLessThanOrEqual(after.window.height);
+  }
+
+  /*
+   * Оттяжку окна за край (rubber-band) делает только Safari на жесте трекпада.
+   * Ни Chromium, ни Playwright-WebKit её не воспроизводят (UI-170#5), поэтому проверяется
+   * её запрет: корень документа на доске с точки остановки оттяжку по вертикали не
+   * разрешает.
+   */
+  const overscroll = () =>
+    page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehaviorY);
+  expect(await overscroll(), report).toBe('none');
+
+  // Ниже точки остановки прокручивается сама страница, и её поведение правка не трогает.
+  await page.setViewportSize({ width: 320, height: 320 });
+  await expect.poll(overscroll).toBe('auto');
+
+  // Уход с доски снимает запрет вместе с ней: у таблицы тот же маршрут `/tasks`.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/tasks?queue=DEMO');
+  await expect(page.locator('[data-board]')).toHaveCount(0);
+  await expect.poll(overscroll).toBe('auto');
+});
+
 test('столбец ожидания развёрнут, а знак в его заголовке тот же, что в строке списка', async ({
   page,
 }) => {
