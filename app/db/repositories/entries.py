@@ -327,7 +327,7 @@ class EntryRepository:
         self,
         *,
         addressee: str | None = None,
-        queue_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
         blocking: bool | None = None,
         open_only: bool = True,
         order: QuestionOrder = QuestionOrder.OLDEST,
@@ -352,8 +352,8 @@ class EntryRepository:
         statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_QUESTION)
         if addressee is not None:
             statement = statement.where(addressed_to(addressee))
-        if queue_id is not None:
-            statement = statement.where(Task.queue_id == queue_id)
+        if project_id is not None:
+            statement = statement.where(Task.project_id == project_id)
         if blocking is not None:
             statement = statement.where(blocking_is(blocking))
         if open_only:
@@ -415,7 +415,7 @@ class EntryRepository:
         self,
         *,
         author: str | None = None,
-        queue_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
         open_only: bool = True,
         limit: int | None = None,
         cursor: str | None = None,
@@ -431,8 +431,8 @@ class EntryRepository:
         statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_REMARK)
         if author is not None:
             statement = statement.where(authored_by(author))
-        if queue_id is not None:
-            statement = statement.where(Task.queue_id == queue_id)
+        if project_id is not None:
+            statement = statement.where(Task.project_id == project_id)
         if open_only:
             statement = _unresolved(statement)
         if cursor is not None:
@@ -476,7 +476,7 @@ class EntryRepository:
         *,
         after: int,
         task_ids: Sequence[uuid.UUID] | None = None,
-        queue_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
         types: Sequence[EntryType] | None = None,
         limit: int | None = None,
     ) -> Page[tuple[Entry, str]]:
@@ -487,7 +487,7 @@ class EntryRepository:
 
         Отдаёт пары «запись, ключ задачи»: у записи связи с задачей нет, только
         `task_id`, а кадром ленты нечего адресовать без ключа. Соединение с задачами
-        нужно и для фильтра по очереди — у записи её нет.
+        нужно и для фильтра по проекту — у записи его нет.
 
         `task_ids` сужает хвост набором задач, а не одной: сессия ведёт несколько дел и
         ждёт новостей по ним одним вызовом. `None` — «все задачи»; пустой набор сюда не
@@ -502,8 +502,8 @@ class EntryRepository:
         )
         if task_ids is not None:
             statement = statement.where(Entry.task_id.in_(list(task_ids)))
-        if queue_id is not None:
-            statement = statement.where(Task.queue_id == queue_id)
+        if project_id is not None:
+            statement = statement.where(Task.project_id == project_id)
         if types is not None:
             # Пустой список — это «ничего», а не «всё»: клиент, отобравший нулевой набор
             # типов, обязан получить пустую ленту, а не всю. Поэтому `is None`.

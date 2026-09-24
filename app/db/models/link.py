@@ -76,7 +76,7 @@ class Link(BaseModel, CreatedByMixin):
     #
     # `selectin`, а не `joined`: обе стороны нужны **всегда** — карточка показывает
     # статус задачи на другой стороне, — а два внешних соединения на строку связи, у
-    # каждой из которых своё соединение с очередью, дали бы декартово произведение
+    # каждой из которых своё соединение с проектом, дали бы декартово произведение
     # там, где хватает одного запроса на уровень.
     source: Mapped[Task] = relationship(lazy="selectin", foreign_keys=[source_id])
     target: Mapped[Task] = relationship(lazy="selectin", foreign_keys=[target_id])

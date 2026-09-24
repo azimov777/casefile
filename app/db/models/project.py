@@ -1,4 +1,4 @@
-"""Очередь: единственный уровень группировки задач."""
+"""Проект: единственный уровень группировки задач."""
 
 from sqlalchemy import Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -7,18 +7,18 @@ from app.db.base import BaseModel
 from app.db.models.author import CreatedByMixin
 
 
-class Queue(BaseModel, CreatedByMixin):
-    """Строка реестра очередей.
+class Project(BaseModel, CreatedByMixin):
+    """Строка реестра проектов.
 
-    Очередь отвечает на вопрос «про что задачи», а не «кто делает» (`CONCEPT.md`, 3.2).
-    Описание — общий контекст всех её задач в markdown: где лежит код, на какие документы
+    Проект отвечает на вопрос «про что задачи», а не «кто делает» (`CONCEPT.md`, 3.2).
+    Описание — общий контекст всех его задач в markdown: где лежит код, на какие документы
     смотреть, чего не делать. Агент получает ключ и название в карточке задачи, а
     описание запрашивает отдельно, чтобы не тащить его в каждый ответ.
 
-    Удаления нет, ключ неизменяем: ключ вшит в ключ каждой задачи очереди.
+    Удаления нет, ключ неизменяем: ключ вшит в ключ каждой задачи проекта.
     """
 
-    __tablename__ = "queues"
+    __tablename__ = "projects"
 
     # Ключ хранится канонизированным (верхний регистр) — как и имя участника, только в
     # другую сторону. Уникальность без учёта регистра держит обычное `UNIQUE`.
@@ -28,7 +28,7 @@ class Queue(BaseModel, CreatedByMixin):
 
     # Счётчик выданных номеров, а не число задач: номер не переиспользуется, и удалённая
     # (в будущем — отменённая) задача свой номер с собой не уносит. Инкремент делает
-    # база одним `UPDATE ... RETURNING` — см. `QueueRepository.allocate_task_number`.
+    # база одним `UPDATE ... RETURNING` — см. `ProjectRepository.allocate_task_number`.
     last_task_number: Mapped[int] = mapped_column(
         Integer,
         default=0,
