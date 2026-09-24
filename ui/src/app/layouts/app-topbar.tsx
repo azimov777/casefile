@@ -214,6 +214,9 @@ function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
     ];
   }
 
+  // Экран проекта: ключ ведёт в его задачи, как и внутри задачи, а раздел назван словом.
+  if (place.section === 'project') return [project, { label: t('app.crumbProject') }];
+
   if (place.taskKey === null) return [project];
 
   const task: Crumb = {

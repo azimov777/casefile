@@ -27,17 +27,17 @@ test('переход из проекта в проект сохраняет ви
   await silenceJournal(page);
   await page.goto('/tasks?project=UI&view=board&status=open');
   await expect(page.getByRole('region', { name: 'open' })).toBeVisible();
-  await expect(side(page).getByRole('link', { name: /UI/ })).toHaveAttribute(
+  await expect(side(page).getByRole('link', { name: /^UI/ })).toHaveAttribute(
     'aria-current',
     'page',
   );
 
   // Переход через панель меняет только проект: вид и условие отбора едут с ним.
-  await side(page).getByRole('link', { name: /TRK/ }).click();
+  await side(page).getByRole('link', { name: /^TRK/ }).click();
   await expect(page).toHaveURL(/[?&]project=TRK(&|$)/);
   await expect(page).toHaveURL(/[?&]view=board(&|$)/);
   await expect(page).toHaveURL(/[?&]status=open(&|$)/);
-  await expect(side(page).getByRole('link', { name: /TRK/ })).toHaveAttribute(
+  await expect(side(page).getByRole('link', { name: /^TRK/ })).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -48,7 +48,7 @@ test('переход из проекта в проект сохраняет ви
   await expect(page).not.toHaveURL(/view=board/);
   await expect(page).toHaveURL(/[?&]project=TRK(&|$)/);
   await expect(page).toHaveURL(/[?&]status=open(&|$)/);
-  await expect(side(page).getByRole('link', { name: /TRK/ })).toHaveAttribute(
+  await expect(side(page).getByRole('link', { name: /^TRK/ })).toHaveAttribute(
     'aria-current',
     'page',
   );

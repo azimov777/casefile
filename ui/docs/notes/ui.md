@@ -73,7 +73,7 @@
 **Как правильно:** `taskRefHref` собирает адрес в одном месте на всё приложение;
 страница читает `entry` и раскрывает запись, следя за параметром и после первого
 рендера — ссылка на запись той же задачи меняет адрес, не перемонтируя страницу.
-**Где:** `src/shared/lib/task-refs.ts`, `src/pages/task/ui/task-index.tsx`.
+**Где:** `src/shared/lib/task-refs.ts`, `src/entities/entry/ui/entry-index.tsx`.
 
 ## Два режима одного списка — два запроса, из которых работает один
 
@@ -1234,7 +1234,7 @@ var(--ui-mark) }` значило бы получить второе имя од�
 (`p-0` на `<td>`, `px-3 py-2` на узле внутри).
 **Где:** `src/features/task-filters/ui/task-filters.tsx`,
 `src/pages/case/ui/case-filters.tsx`, `src/pages/tasks/ui/tasks-board.tsx`,
-`src/pages/task/ui/task-index.tsx`.
+`src/entities/entry/ui/entry-index.tsx`.
 
 ## Обрезание нужно ровно пока едет место, а в покое оно режет замысел
 
@@ -2609,7 +2609,7 @@ padding-бокс — и прибавка выносит область прок�
 **Как правильно:** для узла с собственным полем (`th`, `td`) сравнивать не
 `boundingBox().x`, а `boundingBox().x + computedPaddingLeft`; для узла без своего поля
 (текст, у которого поле несёт родитель) — саму рамку как есть.
-**Где:** `src/pages/task/ui/task-index.tsx`, `CELL`; `e2e/layout.spec.ts`,
+**Где:** `src/entities/entry/ui/entry-index.tsx`, `CELL`; `e2e/layout.spec.ts`,
 «шапка блока „Дело“», `measure()`.
 
 ## Общий хвост страницы и доска: одна доска, две ветки одного признака
@@ -2643,7 +2643,7 @@ UI-68), и это же поле оставалось под ней пустот�
 
 ## Метка «правка своя, не снаружи» обязана гаснуть в лад с тем эффектом, который её читает
 
-**Что:** `TaskIndex` пишет раскрытие записи в тот же параметр адреса (`?entry=N`), которым
+**Что:** `EntryIndex` пишет раскрытие записи в тот же параметр адреса (`?entry=N`), которым
 раскрывает запись и переход по ссылке `TRK-42#12`, — и раньше `IndexRow` центрировал
 прокрутку на **обоих** путях одинаково (UI-126). Починка ставит `useRef`-метку перед
 собственным кликом и гасит её в эффекте, читающем `openAt`, — но первая версия гасила её
@@ -2659,7 +2659,7 @@ UI-68), и это же поле оставалось под ней пустот�
 значение отличается от старого (`nextOpenAt !== openAt`) — то есть ровно тогда, когда
 эффект, который её читает, и правда перезапустится на этом рендере. Гасится она в начале
 эффекта, до любого раннего `return`, а не после него.
-**Где:** `src/pages/task/ui/task-index.tsx`, `TaskIndex` (`internalChange`, `toggle`);
+**Где:** `src/entities/entry/ui/entry-index.tsx`, `EntryIndex` (`internalChange`, `toggle`);
 задача UI-126.
 
 ## Подпись и значение двумя колонками `auto | 1fr` на телефоне ломают значение по знаку (UI-131)
@@ -2750,7 +2750,7 @@ max-content своего содержимого. Длинная подпись (
 В описи то же достигается выводом: группа раскрыта, если раскрыта любая её запись, а
 раскрытие записи по адресу уже делает механизм UI-126 (`expanded` и `scrollTarget`).
 **Где:** `src/pages/case/ui/section-edits-group.tsx`, `SectionEditsGroup`;
-`src/pages/task/ui/task-index.tsx`, `GroupRows`.
+`src/entities/entry/ui/entry-index.tsx`, `GroupRows`.
 
 ## Таблица на узком месте — та же разметка карточками, а не прокрутка вбок (UI-134)
 
@@ -2777,7 +2777,7 @@ max-content своего содержимого. Длинная подпись (
 `columnheader` в карточной ветке). Как Safari 18.6 с VoiceOver читает карточки, не
 проверено: это смотрит человек.
 **Где:** `src/entities/task/ui/task-row.tsx`, `TaskRow`; `src/pages/tasks/ui/tasks-table.tsx`,
-`TasksTable`; `src/pages/task/ui/task-index.tsx`, `ROW`, `HEADLINE`;
+`TasksTable`; `src/entities/entry/ui/entry-index.tsx`, `ROW`, `HEADLINE`;
 `src/shared/styles/theme.css`, `--container-index`; `e2e/narrow.spec.ts`, «телефон 390×844».
 
 ## Крошки полосы с нулевой основой: перенос решает правая группа, а не они (UI-134)
@@ -2892,8 +2892,8 @@ max-content своего содержимого. Длинная подпись (
 **Как правильно:** пустое состояние оборачивать тем же полем, что и тело списка (одна
 константа на оба состояния), и мерить отступ от рамки у пустого и у непустого блока
 `getBoundingClientRect`, а не глазом по снимку.
-**Где:** `src/pages/task/ui/task-links.tsx`, `BODY`; `src/pages/task/ui/task-index.tsx`,
-`TaskIndex`; `e2e/link-groups.spec.ts`, `bodyInsets`.
+**Где:** `src/pages/task/ui/task-links.tsx`, `BODY`; `src/entities/entry/ui/entry-index.tsx`,
+`EntryIndex`; `e2e/link-groups.spec.ts`, `bodyInsets`.
 
 ## Общий столбец для строк из разных списков даёт `subgrid`, а не ширина литералом (UI-148)
 
@@ -3175,7 +3175,7 @@ CSS-токен высоты — токен пишется ровно один р
 текстом (файл) прятать для глаза и подписывать своей кнопкой. Сторожит
 `e2e/service-i18n.spec.ts`: данные в нём греческие, и любая латиница на русском экране или
 кириллица на английском вне моноширинного — утечка служебного.
-**Где:** `src/pages/task/ui/task-index.tsx` (`EntryDetails`),
+**Где:** `src/entities/entry/ui/entry-index.tsx` (`EntryDetails`),
 `src/entities/entry/ui/author-name.tsx`, `src/entities/entry/ui/entry-body.tsx` (`Side`),
 `src/pages/moving/ui/moving-page.tsx`, дело UI-140#7.
 
@@ -3271,3 +3271,41 @@ Safari на macOS оттягивает (rubber-band) главный докуме
 `document.documentElement`, раз саму оттяжку набор не видит. Ось `x` не трогать:
 горизонтальная оттяжка окна в Safari — это жест «назад/вперёд».
 **Где:** `src/shared/styles/reset.css`; `e2e/board.spec.ts`, сценарий UI-170.
+
+## Опись дела живёт в `entities/entry`: экран проекта не может взять её у карточки задачи (UI-174)
+
+**Что:** опись с раскрытием тел (`EntryIndex`) переехала из `pages/task` в
+`entities/entry` и принимает владельца дела (`EntryOwner`: задача или проект). Срезы
+одного слоя друг друга не импортируют, и экран проекта (`pages/project`) до описи
+карточки задачи дотянуться не мог — оставалось копировать её.
+**Почему важно:** копия описи разошлась бы с оригиналом в самом хрупком: прокрутке к
+записи из адреса (`internalChange`), группах правок разделов и доживании тела на
+сворачивании. Подписи описи ушли из пространства `task` в `ui` (`index.*`) по той же
+причине: у сущности нет своего экрана.
+**Как правильно:** новое дело — новый владелец в `EntryOwner`, путь тела — ветка в
+`entryQueryOptions`, адрес записи — ветка в `entryAddress`; опись не трогать.
+**Где:** `src/entities/entry/ui/entry-index.tsx`, `EntryIndex`; `src/entities/entry/model/owner.ts`;
+`src/entities/entry/api/entries.ts`, `entryQueryOptions`.
+
+## `KEY#N` без дефиса — запись дела проекта, и любое `PR#12` в тексте станет ссылкой (UI-174)
+
+**Что:** разбор ссылок в тексте (`splitTaskRefs`) понимает `TRK#7` — запись дела проекта —
+и ведёт её на `/projects/TRK?entry=7` (`projectHref`). Признак один: заглавный ключ из двух и
+более знаков, `#` и число без дефиса. Список проектов разбор не знает — он живёт в `shared`.
+**Почему важно:** `PR#12` или `GH#3` в теле записи агента тоже станет ссылкой, и она
+приведёт на экран «проекта PR нет». Это цена одного правила на всё приложение: сверять
+с проектами из `bootstrap` пришлось бы в каждом месте, где рисуется текст.
+**Как правильно:** если такие ложные ссылки начнут мешать, сужать разбор по проектам
+установки в одном месте — в `splitTaskRefs`, передав ему множество ключей, — а не
+чинить отдельные экраны.
+**Где:** `src/shared/lib/task-refs.ts`, `splitTaskRefs`, `projectHref`.
+
+## У строки проекта в панели две ссылки, и имя строки ищут с якорем `^` (UI-174)
+
+**Что:** рядом со строкой проекта стоит знак-ссылка на экран проекта с именем
+«О проекте DEMO». Поиск строки по `name: /DEMO/` находит обе, и строгий режим
+Playwright роняет сценарий, а `getByRole` Testing Library — страничный тест.
+**Почему важно:** сценарии панели падают не на своём, а на соседнем изменении.
+**Как правильно:** строку проекта искать как `name: /^DEMO/` — её имя начинается с
+ключа, а имя знака — со слова; знак — по полному имени из словаря (`app.aboutProject`).
+**Где:** `src/app/layouts/app-side.tsx`, `AppSide`; `e2e/side.spec.ts`; `e2e/project-place.spec.ts`.

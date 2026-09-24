@@ -65,6 +65,7 @@ export const ui = {
     showSections_other: 'Show sections, {{count, number}} questions waiting',
     projects: 'Projects',
     allTasks: 'All tasks',
+    aboutProject: 'About project {{key}}',
     mine: 'Mine',
     inbox: 'Inbox',
     // Группа панели про саму установку, а не про работу в проектах: подключение
@@ -88,6 +89,7 @@ export const ui = {
     whereAmI: 'Where I am',
     crumbTasks: 'Tasks',
     crumbCase: 'Case',
+    crumbProject: 'Project',
     broken: {
       title: 'The interface broke right here',
       text: 'The screen did not render because of a bug in the interface itself — the data has nothing to do with it. The details are in the browser console.',
@@ -235,6 +237,20 @@ export const ui = {
   },
 
   /** Представление записи дела: род, заголовок по фактам и тело. */
+  // Опись дела — задачи и проекта одним компонентом (`entities/entry`, `EntryIndex`, UI-174).
+  index: {
+    empty: 'The case is empty: there are no entries yet.',
+    count_one: '{{count, number}} entry in the case',
+    count_other: '{{count, number}} entries in the case',
+    loadingEntry: 'Reading the entry…',
+    columns: {
+      no: 'No.',
+      type: 'Type',
+      author: 'Author',
+      when: 'When',
+      headline: 'Headline',
+    },
+  },
   entry: {
     // Подпись самого трекера: у человека и агента здесь стоит имя участника.
     tracker: 'tracker',

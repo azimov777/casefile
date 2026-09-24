@@ -46,18 +46,7 @@ export const task = {
   },
 
   index: {
-    empty: 'The case is empty: there are no entries yet.',
     toLatest: 'To the latest entry',
     toTop: 'To the top of the index',
-    count_one: '{{count, number}} entry in the case',
-    count_other: '{{count, number}} entries in the case',
-    loadingEntry: 'Reading the entry…',
-    columns: {
-      no: 'No.',
-      type: 'Type',
-      author: 'Author',
-      when: 'When',
-      headline: 'Headline',
-    },
   },
 } as const;

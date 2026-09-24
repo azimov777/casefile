@@ -58,6 +58,7 @@ export const ui = {
     showSections_other: 'Показать разделы, вас ждёт {{count, number}} вопроса',
     projects: 'Проекты',
     allTasks: 'Все задачи',
+    aboutProject: 'О проекте {{key}}',
     mine: 'Мне',
     inbox: 'Входящая',
     installation: 'Установка',
@@ -81,6 +82,7 @@ export const ui = {
     whereAmI: 'Где я',
     crumbTasks: 'Задачи',
     crumbCase: 'Дело',
+    crumbProject: 'Проект',
     broken: {
       title: 'Интерфейс сломался на этом месте',
       text: 'Экран не отрисовался из-за ошибки в самом интерфейсе — данные тут ни при чём. Подробности ошибки лежат в консоли браузера.',
@@ -228,6 +230,22 @@ export const ui = {
   },
 
   /** Представление записи дела: род, заголовок по фактам и тело. */
+  // Опись дела — задачи и проекта одним компонентом (`entities/entry`, `EntryIndex`, UI-174).
+  index: {
+    empty: 'Дело пусто: записей ещё нет.',
+    count_one: 'В деле {{count, number}} запись',
+    count_few: 'В деле {{count, number}} записи',
+    count_many: 'В деле {{count, number}} записей',
+    count_other: 'В деле {{count, number}} записи',
+    loadingEntry: 'Читаем запись…',
+    columns: {
+      no: '№',
+      type: 'Тип',
+      author: 'Автор',
+      when: 'Когда',
+      headline: 'Заголовок',
+    },
+  },
   entry: {
     tracker: 'трекер',
     type: {

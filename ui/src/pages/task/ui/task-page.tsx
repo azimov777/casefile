@@ -4,7 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
-import { EntryBody, type Question } from '@/entities/entry';
+import { EntryBody, EntryIndex, type EntryIndexHandle, type Question } from '@/entities/entry';
 import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
   AnswerForm,
@@ -18,7 +18,6 @@ import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
-import { TaskIndex, type TaskIndexHandle } from './task-index';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
 
@@ -89,7 +88,7 @@ const BLOCK_HEAD =
 /**
  * Прыжки по описи: своя строка под шапкой, тем же левым полем, что у заголовка над
  * ней и у ячеек таблицы под ней (`px-3`, тот же, что в `BLOCK_HEAD` и в `CELL`
- * `task-index.tsx`) — один источник поля вместо разъехавшихся частных отступов
+ * `entities/entry/ui/entry-index.tsx`) — один источник поля вместо разъехавшихся частных отступов
  * (UI-127). Своей нижней линии нет: линию между шапкой и телом уже держит
  * `BLOCK_HEAD`, а это его продолжение, а не отдельная секция.
  */
@@ -138,10 +137,10 @@ export function TaskPage() {
 
   /**
    * Прыжок «В начало описи» живёт в шапке блока, а прокручиваемый узел — внутри
-   * `TaskIndex` (UI-126, `scroller`): ручка дотягивается до него, не заводя
+   * `EntryIndex` (UI-126, `scroller`): ручка дотягивается до него, не заводя
    * второго пути прокрутки.
    */
-  const indexRef = useRef<TaskIndexHandle>(null);
+  const indexRef = useRef<EntryIndexHandle>(null);
 
   const openAt = readEntryNo(searchParams.get('entry'));
 
@@ -396,7 +395,7 @@ export function TaskPage() {
                 </h2>
                 {index.length > 0 ? (
                   <span className="text-meta text-muted">
-                    {t('index.count', { count: index.length })}
+                    {brick('index.count', { count: index.length })}
                   </span>
                 ) : null}
               </span>
@@ -425,9 +424,9 @@ export function TaskPage() {
               </div>
             ) : null}
 
-            <TaskIndex
+            <EntryIndex
               ref={indexRef}
-              taskKey={task.key}
+              owner={{ kind: 'task', key: task.key }}
               index={index}
               checks={task.checks}
               openAt={openAt}

@@ -48,20 +48,7 @@ export const task = {
   },
 
   index: {
-    empty: 'Дело пусто: записей ещё нет.',
     toLatest: 'К свежей записи',
     toTop: 'В начало описи',
-    count_one: 'В деле {{count, number}} запись',
-    count_few: 'В деле {{count, number}} записи',
-    count_many: 'В деле {{count, number}} записей',
-    count_other: 'В деле {{count, number}} записи',
-    loadingEntry: 'Читаем запись…',
-    columns: {
-      no: '№',
-      type: 'Тип',
-      author: 'Автор',
-      when: 'Когда',
-      headline: 'Заголовок',
-    },
   },
 } as const;

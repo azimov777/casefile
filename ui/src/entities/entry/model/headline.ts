@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { components } from '@/shared/api';
-import type { Entry } from '../api/entries';
+import type { Entry, EntryHeading } from '../api/entries';
 
 /**
  * Факты записи из описи дела: то, чем её называют, не читая тела.
@@ -338,6 +338,26 @@ export function factsOfEntry(entry: Entry): EntryFacts {
     default:
       return { type: entry.type };
   }
+}
+
+/**
+ * Строка описи из записи целиком: то же, что бэкенд отдаёт описью в пакете задачи.
+ *
+ * У дела проекта описи в ответе нет — `GET /projects/{key}/entries` отдаёт записи с
+ * телами, — и строка собирается из полученного: поля записи как есть, факты — тем же
+ * `factsOfEntry`, что у ленты. Это проекция ответа, а не вычисление признака: ничего,
+ * чего нет в записи, строка не несёт (UI-174).
+ */
+export function headingOfEntry(entry: Entry): EntryHeading {
+  return {
+    no: entry.no,
+    type: entry.type,
+    author: entry.author,
+    created_at: entry.created_at,
+    title: entry.title,
+    action_id: entry.action_id ?? null,
+    facts: factsOfEntry(entry),
+  };
 }
 
 /** Строка заголовка словами: для подсказок, подписей и тестов. */

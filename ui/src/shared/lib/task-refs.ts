@@ -1,5 +1,6 @@
 /**
- * Ссылки на задачи и записи в свободном тексте: `TRK-42` и `TRK-42#12`.
+ * Ссылки на задачи и записи в свободном тексте: `TRK-42`, `TRK-42#12` и запись дела
+ * проекта `TRK#7`.
  *
  * Такие ссылки агенты пишут руками в телах записей, заголовках и разделах, а бэкенд
  * их не размечает: в контракте это просто текст (`refs` рядом — отдельный список,
@@ -14,16 +15,22 @@ export interface TaskRef {
   entryNo: number | null;
 }
 
+/** Кусок строки: обычный текст или ссылка с готовым адресом приложения. */
 export type TextPart =
-  { kind: 'text'; value: string } | { kind: 'ref'; value: string; ref: TaskRef };
+  { kind: 'text'; value: string } | { kind: 'ref'; value: string; href: string };
 
 /**
  * Ключ задачи в верхнем регистре: `КЛЮЧ-номер`, ключ проекта — латиница и цифры
  * (`../app/domain/projects.py`, `PROJECT_KEY_PATTERN`). Нижний регистр бэкенд
  * принимает, но канонический вид — верхний, и только его мы считаем ссылкой:
  * иначе в ссылку превращалось бы любое `pull-2` из текста.
+ *
+ * Вторая ветка — запись дела проекта `TRK#7` (TRK-156, `../docs/CONCEPT.md`, 3.4):
+ * ключ проекта и номер без номера задачи. Её не спутать с `TRK-42#3` — дефис есть
+ * только в ключе задачи. Сам ключ проекта без номера записи (`TRK`) ссылкой не
+ * становится: в прозе это обычное слово заглавными.
  */
-const TASK_REF = /\b([A-Z][A-Z0-9]{1,15})-(\d+)(?:#(\d+))?\b/g;
+const TASK_REF = /\b([A-Z][A-Z0-9]{1,15})(?:-(\d+)(?:#(\d+))?|#(\d+))\b/g;
 
 /** Разбирает строку на обычный текст и ссылки, сохраняя порядок и исходное написание. */
 export function splitTaskRefs(text: string): TextPart[] {
@@ -34,17 +41,35 @@ export function splitTaskRefs(text: string): TextPart[] {
     const at = match.index;
     if (at > last) parts.push({ kind: 'text', value: text.slice(last, at) });
 
-    const [value, project, number, entry] = match;
+    const [value, project = '', number, entry, projectEntry] = match;
     parts.push({
       kind: 'ref',
       value,
-      ref: { key: `${project}-${number}`, entryNo: entry === undefined ? null : Number(entry) },
+      href:
+        number === undefined
+          ? projectHref(project, Number(projectEntry))
+          : taskRefHref({
+              key: `${project}-${number}`,
+              entryNo: entry === undefined ? null : Number(entry),
+            }),
     });
     last = at + value.length;
   }
 
   if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
   return parts;
+}
+
+/**
+ * Адрес экрана проекта; с номером записи — экран с раскрытой записью его дела.
+ *
+ * Тем же параметром `entry`, что и карточка задачи, и по той же причине: ссылка на
+ * запись ведёт к её владельцу, а не в ленту (`taskRefHref` ниже). Ленты у проекта нет
+ * вовсе (`docs/CONCEPT.md`, 3).
+ */
+export function projectHref(key: string, entryNo: number | null = null): string {
+  const path = `/projects/${key}`;
+  return entryNo === null ? path : `${path}?entry=${entryNo}`;
 }
 
 /**

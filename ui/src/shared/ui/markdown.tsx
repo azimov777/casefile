@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Link } from 'react-router';
-import { cn, splitTaskRefs, taskRefHref } from '../lib';
+import { cn, splitTaskRefs } from '../lib';
 
 /**
  * Тело записи или раздел задачи в markdown.
@@ -255,7 +255,7 @@ function visit(node: MdastNode): void {
           ? { type: 'text', value: part.value }
           : {
               type: 'link',
-              url: taskRefHref(part.ref),
+              url: part.href,
               children: [{ type: 'text', value: part.value }],
               data: { hProperties: { className: TASK_REF_LINK_CLASS } },
             },
