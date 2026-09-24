@@ -3,6 +3,8 @@ import type { components } from '@/shared/api';
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
 type LinkKind = components['schemas']['LinkKind'];
+/** Виды иерархии: у них заголовок записи о связи называет роль второй задачи словами. */
+type HierarchyKind = Extract<LinkKind, 'parent' | 'child'>;
 type AuthorKind = components['schemas']['AuthorKind'];
 
 /**
@@ -203,12 +205,16 @@ export const ui = {
     },
     // Заголовок группы связей одного вида (UI-125): подпись рядом с идентификатором
     // контракта, а не вместо него — сам идентификатор `LinkKindMark` не переводит.
+    // Подпись называет, кем перечисленные задачи приходятся открытой (UI-166): вид
+    // `parent` у этой задачи значит «она родитель тех», и под ним стоят её дочерние
+    // задачи; под `child` — её родитель. Прежде подпись повторяла вид словом
+    // («parent — Родитель») и над детьми читалась наоборот.
     links: {
       kind: {
         blocked_by: 'Блокируется',
         blocks: 'Блокирует',
-        parent: 'Родитель',
-        child: 'Дети',
+        parent: 'Дочерние задачи',
+        child: 'Родитель',
         relates: 'Связано',
       } satisfies Record<LinkKind, string>,
     },
@@ -261,6 +267,13 @@ export const ui = {
       assignee: 'Исполнитель',
       linkAdded: 'Связь',
       linkRemoved: 'Связь снята',
+      // Кем вторая задача приходится этой (UI-166). Только у `parent`/`child`: их
+      // идентификатор, прочитанный фразой («parent DEMO-9»), называет роль наоборот —
+      // у `blocks DEMO-3` и `relates DEMO-3` фраза читается верно и без слов.
+      linkRole: {
+        parent: '— дочерняя задача',
+        child: '— родитель',
+      } satisfies Record<HierarchyKind, string>,
       answerTo: 'Ответ на',
       check: 'Обзорная проверка {{no}}',
       resolution: 'Разбор',

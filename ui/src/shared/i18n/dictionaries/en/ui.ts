@@ -3,6 +3,8 @@ import type { components } from '@/shared/api';
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
 type LinkKind = components['schemas']['LinkKind'];
+/** Виды иерархии: у них заголовок записи о связи называет роль второй задачи словами. */
+type HierarchyKind = Extract<LinkKind, 'parent' | 'child'>;
 type AuthorKind = components['schemas']['AuthorKind'];
 
 /**
@@ -209,12 +211,16 @@ export const ui = {
     },
     // Заголовок группы связей одного вида (UI-125): подпись рядом с идентификатором
     // контракта, а не вместо него — сам идентификатор `LinkKindMark` не переводит.
+    // Подпись называет, кем перечисленные задачи приходятся открытой (UI-166): вид
+    // `parent` у этой задачи значит «она родитель тех», и под ним стоят её дочерние
+    // задачи; под `child` — её родитель. Прежде подпись повторяла вид словом
+    // («parent — Родитель») и над детьми читалась наоборот.
     links: {
       kind: {
         blocked_by: 'Blocked by',
         blocks: 'Blocks',
-        parent: 'Parent',
-        child: 'Children',
+        parent: 'Child tasks',
+        child: 'Parent',
         relates: 'Related',
       } satisfies Record<LinkKind, string>,
     },
@@ -271,6 +277,10 @@ export const ui = {
       assignee: 'Assignee',
       linkAdded: 'Link',
       linkRemoved: 'Link removed',
+      linkRole: {
+        parent: '— child task',
+        child: '— parent',
+      } satisfies Record<HierarchyKind, string>,
       answerTo: 'Answer to',
       check: 'Review check {{no}}',
       resolution: 'Resolution of',
