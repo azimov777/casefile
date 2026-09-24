@@ -232,6 +232,109 @@ test('длинное название родителя — одна строка
     });
     expect(heights.filter((row) => row.parents)).toHaveLength(2);
     expect(new Set(heights.map((row) => row.height)).size, JSON.stringify(heights)).toBe(1);
+
+    /*
+     * Проверка 1 UI-152: на 1440 px видимая ширина названия у дочерней задачи не меньше,
+     * чем у задачи без родителя в той же таблице, и стоит оно на том же месте. Гнездо
+     * под плашку одно у всех строк, поэтому ширины равны до пикселя.
+     */
+    const titles = await rows.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const span = node.querySelector('a[data-link="task"] span') as HTMLElement;
+        const box = span.getBoundingClientRect();
+        return {
+          key: node.querySelector('th')?.textContent ?? '',
+          parents: node.querySelector('[data-mark="parents"]') !== null,
+          left: box.left,
+          top: box.top - node.getBoundingClientRect().top,
+          width: box.width,
+          truncated: span.scrollWidth > span.clientWidth,
+        };
+      }),
+    );
+    await test.info().attach('название в строках на 1440 px (UI-152)', {
+      body: JSON.stringify(titles, null, 2),
+      contentType: 'application/json',
+    });
+    const withParent = titles.filter((row) => row.parents);
+    const without = titles.filter((row) => !row.parents);
+    expect(withParent).toHaveLength(2);
+    expect(without).toHaveLength(2);
+    for (const child of withParent) {
+      for (const top of without) {
+        expect(child.width, JSON.stringify(titles)).toBeGreaterThanOrEqual(top.width);
+        expect(child.left).toBe(top.left);
+        // Четверть пикселя по высоте даёт `truncate` (overflow: hidden сдвигает базовую
+        // линию), а не родитель: у урезанного и неурезанного названия без родителя она та же.
+        expect(Math.abs(child.top - top.top)).toBeLessThanOrEqual(0.5);
+      }
+    }
+
+    // Два родителя в плашке: «родители KEY +1»; панель называет обоих ссылками.
+    const doubleRow = page.getByRole('row').filter({
+      has: page.getByRole('link', { name: 'Карточка с двумя родителями', exact: true }),
+    });
+    const doubleBadge = doubleRow.locator('[data-mark="parents"]');
+    await expect(doubleBadge).toHaveText(new RegExp(`родители\\s*${program}\\s*\\+1`));
+    // Ключ родителя в плашке виден целиком: гнездо рассчитано на «родители KEY +1».
+    const keyClipped = await doubleBadge
+      .locator('.font-mono')
+      .evaluate((node) => node.scrollWidth > node.clientWidth);
+    expect(keyClipped).toBe(false);
+    await doubleBadge.click();
+    const panel = page.getByRole('dialog');
+    await expect(panel).toContainText('Родители задачи');
+    await expect(panel.getByRole('link')).toHaveText([
+      `${program} · ${LONG_TITLE}`,
+      `${second} · Второй родитель: доставка журнала без потерь`,
+    ]);
+    // Длинное название родителя в панели переносится, а не режется, и панель не шире окна.
+    const wrapped = await panel
+      .getByRole('link')
+      .first()
+      .evaluate((node) => ({
+        wrap: getComputedStyle(node).whiteSpace,
+        over: node.scrollWidth - node.clientWidth,
+        right: node.getBoundingClientRect().right,
+      }));
+    expect(wrapped.wrap).not.toBe('nowrap');
+    expect(wrapped.over).toBeLessThanOrEqual(0);
+    expect(wrapped.right).toBeLessThanOrEqual(1440);
+    await page.keyboard.press('Escape');
+
+    /*
+     * Телефон: строка — карточка, плашка под названием только у дочерней задачи, мишень
+     * не мельче 24 px (UI-154), и панель открывается нажатием — наведения там нет.
+     */
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fontsReady(page);
+    const phone = await rows.evaluateAll((nodes) =>
+      nodes
+        .map((node) => node.querySelector('[data-mark="parents"]'))
+        .filter((node): node is Element => node !== null)
+        .map((node) => {
+          const box = node.getBoundingClientRect();
+          return { width: box.width, height: box.height };
+        }),
+    );
+    await test.info().attach('плашка на 390 px', {
+      body: JSON.stringify(phone),
+      contentType: 'application/json',
+    });
+    expect(phone).toHaveLength(2);
+    for (const box of phone) {
+      expect(box.height).toBeGreaterThanOrEqual(24);
+      expect(box.width).toBeGreaterThanOrEqual(24);
+    }
+    await doubleBadge.click();
+    await expect(page.getByRole('dialog')).toContainText('Родители задачи');
+    const narrow = await page.getByRole('dialog').evaluate((node) => ({
+      left: node.getBoundingClientRect().left,
+      right: node.getBoundingClientRect().right,
+    }));
+    expect(narrow.left).toBeGreaterThanOrEqual(0);
+    expect(narrow.right).toBeLessThanOrEqual(390);
+    await page.keyboard.press('Escape');
   } finally {
     for (const key of [single, double, program, second]) await cancel(request, key);
   }

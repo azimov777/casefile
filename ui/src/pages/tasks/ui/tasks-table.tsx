@@ -52,6 +52,8 @@ const WIDTHS = [
 export function TasksTable({ tasks, stale }: TasksTableProps) {
   const { t } = useTranslation('tasks');
   const { t: brick } = useTranslation('ui');
+  // Гнездо под плашку родителя — у всех строк, если родитель есть хоть у одной (UI-152).
+  const parentSlot = tasks.some((task) => (task.parents ?? []).length > 0);
 
   return (
     /*
@@ -114,7 +116,7 @@ export function TasksTable({ tasks, stale }: TasksTableProps) {
           </thead>
           <tbody className={stale ? 'opacity-60 @max-list:block' : '@max-list:block'}>
             {tasks.map((task) => (
-              <TaskRow key={task.key} task={task} />
+              <TaskRow key={task.key} task={task} parentSlot={parentSlot} />
             ))}
           </tbody>
         </table>

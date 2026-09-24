@@ -7,7 +7,7 @@ import type { Task } from '../api/tasks';
 import { TaskFeatureMarks } from './feature-marks';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
-import { TaskParents } from './task-parents';
+import { ParentBadge } from './parent-badge';
 
 /**
  * Строка списка задач. Ничего не вычисляет: признаки приходят из `features` той же
@@ -40,7 +40,7 @@ import { TaskParents } from './task-parents';
  * название было бы потерей, а не плотностью. Высота там от содержимого — ритм держат
  * одинаковые поля карточек, а не токен высоты.
  */
-export function TaskRow({ task }: { task: Task }) {
+export function TaskRow({ task, parentSlot = false }: { task: Task; parentSlot?: boolean }) {
   // Адрес списка целиком, вместе с отбором: он поедет в задачу состоянием перехода.
   const { search } = useLocation();
   const navigate = useNavigate();
@@ -122,15 +122,15 @@ export function TaskRow({ task }: { task: Task }) {
       <td className="max-w-0 overflow-hidden px-3 @max-list:max-w-none @max-list:min-w-0 @max-list:grow @max-list:basis-7/10 @max-list:px-0">
         {/*
          * Родитель стоит в ячейке названия, справа, а не своим столбцом (UI-119): у
-         * большинства строк родителя нет, и столбец под него стоял бы пустым, отнимая
-         * ширину у названия. Справа — чтобы подписи родителей читались сверху вниз
-         * одной полосой, а начало названия у всех строк стояло на одном месте.
-         * В одну строку с названием: высота строки задана токеном и от подписи не
-         * растёт (решение Д4). Подпись берёт не больше двух пятых ячейки, остальное
-         * — название; тесно обоим, и многоточием уступают оба.
+         * большинства строк родителя нет, и столбец под него стоял бы пустым. В строке —
+         * плашка с ключом, целиком родитель открывается нажатием (`ParentBadge`, UI-152).
+         * Место под плашку — гнездо одной ширины у **всех** строк таблицы, если хоть у
+         * одной есть родитель (`parentSlot`): так название задачи с родителем и без стоит
+         * на одном месте и одной ширины, и не прыгает от строки к строке. В таблице без
+         * дочерних задач гнезда нет, и название ширины не теряет.
          */}
-        {/* В карточке родитель встаёт под название, а не справа от него: места
-            справа нет, и обе подписи урезались бы многоточием. */}
+        {/* В карточке плашка встаёт под название и только у задачи с родителем: карточки
+            и так разной высоты, держать ровным нечего. */}
         <div className="flex items-center gap-3 @max-list:flex-col @max-list:items-start @max-list:gap-1">
           <Link
             data-link="task"
@@ -153,11 +153,16 @@ export function TaskRow({ task }: { task: Task }) {
               {title}
             </span>
           </Link>
-          <TaskParents
-            parents={task.parents ?? []}
-            className="max-w-2/5 shrink-0 @max-list:max-w-full"
-            wrapNarrow
-          />
+          {parentSlot ? (
+            <span
+              className={cn(
+                'flex w-(--ui-parent-slot) shrink-0 justify-end @max-list:w-auto @max-list:max-w-full @max-list:justify-start',
+                (task.parents ?? []).length === 0 && '@max-list:hidden',
+              )}
+            >
+              <ParentBadge parents={task.parents ?? []} childKey={task.key} />
+            </span>
+          ) : null}
         </div>
       </td>
       <td className="px-3 @max-list:px-0">
