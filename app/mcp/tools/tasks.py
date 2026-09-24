@@ -167,7 +167,9 @@ def register(tools: Toolset) -> None:
 
         `parent` делает задачу ребёнком названной — ребёнок рождается со ссылкой на
         родителя, это одно действие, а не два. Родитель не закроется — ни в `done`, ни в
-        `cancelled`, — пока дети не закрыты.
+        `cancelled`, — пока дети не закрыты. Связь подшивает `link_added` не только в
+        дело новой задачи, но и в дело родителя — это его дело меняется, а не только
+        дело вызова; номер этой записи называет `parent_entry`.
 
         Отвечает коротко: ключ новой задачи, статус, версия и номера подшитых записей;
         они сразу видны в ленте и человеку в интерфейсе. Карточку не возвращает — всё,
@@ -200,10 +202,19 @@ def register(tools: Toolset) -> None:
                     assignee=assignee,
                     priority=priority,
                 )
+                parent_entry: int | None = None
                 if parent_task is not None:
                     await links_service.add_link(
                         session, task, parent_task, actor=actor, kind=LinkKind.CHILD
                     )
+                    # Номер записи в деле родителя читается из дела, тем же приёмом,
+                    # что и у ребёнка ниже: общая блокировка изменений (`app/db/locks.py`,
+                    # `lock_changes`) держит транзакцию монопольно до конца вызова, и
+                    # никто другой не мог подшить запись в дело родителя между `add_link`
+                    # и этим чтением — последняя запись его описи и есть только что
+                    # поставленный `link_added`.
+                    parent_index = await case_service.case_index(session, parent_task, actor=actor)
+                    parent_entry = parent_index[-1].no
                 # Номера подшитого читаются из дела, а не собираются по дороге:
                 # `create_task` отдаёт задачу, `add_link` — связь, и номерами не
                 # заведует ни один из них. У новой задачи в деле одна-две строки, и
@@ -212,7 +223,8 @@ def register(tools: Toolset) -> None:
                 # подшилось, — включая `link_added` у ребёнка.
                 filed = await case_service.case_index(session, task, actor=actor)
                 return views.mutation(
-                    TaskMutation(task=task, entries=tuple(item.no for item in filed))
+                    TaskMutation(task=task, entries=tuple(item.no for item in filed)),
+                    parent_entry=parent_entry,
                 )
 
             return await Once.of(create_task, session, actor, idempotency_key).run(
@@ -285,6 +297,12 @@ def register(tools: Toolset) -> None:
         что именно мешает. Ни в `waiting`, ни из него трекер не переводит сам: оба хода
         делает вызывающий.
 
+        Вход в `in_progress` — из любого статуса, включая `waiting`, — открывает новый
+        заход: `in_progress → done` дальше зачтёт только вердикты, подшитые после этого
+        перехода, а прежние останутся в деле, но не в счёте. Переход в `cancelled`
+        снимает признак `blocked` у задач, которые эта блокировала (`blocks`), — без
+        записи в их деле; так же его снимает и `close_task`.
+
         Этих проверок нет в `transitions` у `get_task`: там таблица переходов.
 
         Отвечает коротко: ключ, новый статус, новая версия и номер подшитой
@@ -326,6 +344,9 @@ def register(tools: Toolset) -> None:
         `in_progress` (`checks_not_passed`), закрытые дети
         (`task_has_unclosed_children`), задача в `in_progress` (`transition_not_allowed`).
         Вердикты этого вызова в счёт входят наравне с подшитыми раньше по ходу работы.
+
+        Задачи, которые эта блокировала (`blocks`), теряют признак `blocked` — без
+        записи в их деле.
 
         Ответ короткий: ключ, новый статус, новая версия и строка на каждую подшитую
         запись — `no`, `seq`, автор, время и заголовок там, где его собрал трекер.

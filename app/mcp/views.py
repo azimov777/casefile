@@ -253,9 +253,18 @@ class MutationView(BaseModel):
     status: TaskStatus
     version: int
     entries: list[int]
+    parent_entry: int | None = Field(
+        default=None,
+        description=(
+            "Number of the `link_added` entry filed into the parent task's own case "
+            "when `create_task` was given `parent`. `null` when no `parent` was given, "
+            "and always `null` for `transition` and `update_task`: they touch no other "
+            "task's case."
+        ),
+    )
 
 
-def mutation(value: TaskMutation) -> MutationView:
+def mutation(value: TaskMutation, *, parent_entry: int | None = None) -> MutationView:
     """Ответ изменяющего инструмента: что стало и чем это подшито, без карточки.
 
     Почему не карточка — в шапке модуля. Здесь важно, что `entries` бывает пустым, и
@@ -263,12 +272,19 @@ def mutation(value: TaskMutation) -> MutationView:
     пополнилось. Отличать «применилось» от «уже так было» агент будет именно по нему,
     поэтому отдельного поля `changed` рядом нет: два способа узнать один факт разошлись
     бы при первой же правке.
+
+    `parent_entry` называет номер записи в **чужом** деле — родителя, которого дал
+    `create_task`; `entries`, наоборот, всегда о деле **своей** задачи, и смешивать два
+    дела в одном списке значило бы отдать номер без адреса, к какому делу он относится.
+    У `transition` и `update_task` параметр не передаётся и остаётся `null`: они не
+    трогают чужих дел вовсе.
     """
     return MutationView(
         key=value.task.key,
         status=value.task.status,
         version=value.task.version,
         entries=list(value.entries),
+        parent_entry=parent_entry,
     )
 
 
