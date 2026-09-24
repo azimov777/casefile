@@ -150,6 +150,16 @@ next() {
   fi
 }
 case "$*" in
+  "compose exec -T db sh -c psql "*) next schema "" ;;
+  "compose exec -T db sh -c pg_dump "*)
+    [ ! -s "$SCENE/dump-fails" ] || exit 1
+    echo DUMP ;;
+  "compose exec -T db sh -c pg_restore "*)
+    cat >"$SCENE/restored"
+    exit "$(cat "$SCENE/restore" 2>/dev/null || echo 0)" ;;
+  "compose stop "*) exit 0 ;;
+  "run --rm --pull never --network none --entrypoint alembic "*)
+    echo "$(cat "$SCENE/head") (head)" ;;
   "inspect -f {{index .Config.Labels \"com.docker.compose.project\"}} "*) echo test-project ;;
   "inspect -f {{index .Config.Labels \"casefile.updater.revision\"}} "*) cat "$SCENE/revision" ;;
   "inspect -f {{.Image}} "*) echo "$(cat "$SCENE/running")" ;;
@@ -233,6 +243,7 @@ class Updater:
         script = script.replace("/tmp/previous-compose.yml", str(self.root / "previous.yml"))
         script = script.replace("sleep 5", "sleep 0")
         script = script.replace("/tmp/checking", str(self.root / "checking"))
+        script = script.replace(SNAPSHOT, str(self.root / "snapshot.dump"))
         if tail:
             script = script[: script.index("trap 'exit 0' TERM INT")] + tail
         done = subprocess.run(
@@ -284,6 +295,9 @@ def test_the_compose_file_of_the_release_replaces_the_local_one(updater: Updater
     assert len(updater.called("compose pull")) == 2, "новый файл может звать новые образы"
     assert updater.called("compose up")
 
+
+#: Снимок базы на время обновления с миграцией — в контейнере обновлятора.
+SNAPSHOT = "/tmp/casefile-before-update.dump"
 
 #: Свои теги обновлятора в проекте подставного `docker`.
 KEPT = "casefile-updater/test-project"
@@ -556,3 +570,89 @@ def test_a_check_in_progress_is_visible_to_the_installer(updater: Updater) -> No
     lines = [line.strip() for line in loop.splitlines()]
     assert "update" not in lines, "цикл зовёт проверку только через `check`"
     assert lines.count("check") == 2
+
+
+# --- Выпуск с миграцией: снимок базы и его восстановление (TRK-134) -------------------
+
+
+def test_a_release_without_a_migration_takes_no_snapshot(updater: Updater) -> None:
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev1")
+
+    updater.run("updater", "update\n")
+
+    assert not updater.called("compose exec -T db sh -c pg_dump")
+    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+
+
+def test_a_release_with_a_migration_is_preceded_by_a_snapshot(updater: Updater) -> None:
+    """Ревизия базы не та, что head нового образа: снимок до `up`, после успеха — прочь."""
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev2")
+
+    out = updater.run("updater", "update\n")
+
+    calls = updater.calls.read_text().splitlines()
+    dump = next(n for n, c in enumerate(calls) if c.startswith("compose exec -T db sh -c pg_dump"))
+    assert "-Fc" in calls[dump], "формат ручной процедуры docs/backup-restore.md"
+    assert dump < calls.index("compose up -d db api mcp ui")
+    assert "the release changes the database (rev1 -> rev2); snapshot taken first" in out
+    assert "updated to 0.2.0" in out
+    assert not (updater.root / "snapshot.dump").exists(), "удачное обновление снимок убирает"
+    assert not updater.called("compose exec -T db sh -c pg_restore")
+
+
+def test_a_failed_release_that_moved_the_schema_gets_the_snapshot_back(updater: Updater) -> None:
+    """Выпуск сдвинул схему и не поднялся: службы стоят, база — из снимка, затем откат."""
+    updater.set(wanted="sha256:new", schema="rev1\nrev2\n", head="rev2", up="1\n")
+
+    out = updater.run("updater", "update\n")
+
+    calls = updater.calls.read_text().splitlines()
+    stop = calls.index("compose stop api mcp ui")
+    restore = next(
+        n for n, c in enumerate(calls) if c.startswith("compose exec -T db sh -c pg_restore")
+    )
+    assert stop < restore < calls.index("compose up -d --no-deps db api mcp ui")
+    assert "DROP SCHEMA public CASCADE" in _script("updater"), "таблицы упавшего выпуска — прочь"
+    assert (updater.scene / "restored").read_text() == "DUMP\n", "восстановлен тот самый снимок"
+    assert "database restored from the snapshot" in out
+    assert "rolled back to 0.2.0" in out
+    assert not (updater.root / "snapshot.dump").exists()
+
+
+def test_a_failed_migration_leaves_nothing_to_restore(updater: Updater) -> None:
+    """`migrate` упал в своей транзакции — схема прежняя, записи после снимка не трогать."""
+    updater.set(wanted="sha256:new", schema="rev1\nrev1\n", head="rev2", up="1\n")
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose exec -T db sh -c pg_restore")
+    assert "rolled back to 0.2.0" in out
+
+
+def test_no_snapshot_no_migration(updater: Updater) -> None:
+    """Снимок не снялся — выпуск с миграцией в этот раз не ставится, всё как было."""
+    updater.set(
+        wanted="sha256:new",
+        schema="rev1\n",
+        head="rev2",
+        dump_fails="1",
+        compose_in_image="release: 2\n",
+    )
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose up")
+    assert "could not take a snapshot of the database" in out
+    assert (updater.project / "docker-compose.prod.yml").read_text() == "release: 1\n"
+    assert "tag sha256:old registry/casefile:stable" in updater.called("tag ")
+
+
+def test_a_snapshot_that_cannot_be_restored_is_kept_and_named(updater: Updater) -> None:
+    updater.set(wanted="sha256:new", schema="rev1\nrev2\n", head="rev2", up="1\n", restore="1")
+
+    out = updater.run("updater", "update\n")
+
+    assert "could not restore the database snapshot" in out
+    assert "docker compose cp updater:" in out
+    assert (updater.root / "snapshot.dump").exists()
+    assert updater.called("compose up -d --no-deps db api mcp ui"), "откат идёт как прежде"

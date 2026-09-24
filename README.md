@@ -188,8 +188,22 @@ time Docker starts, and from then on checks every hour. If you set
 `CASEFILE_UPDATE_INTERVAL` sets how often to check (hours, or `30m`; `0` means only
 when Docker starts). If a release fails to start, the installation goes back to the
 version it ran before and does not try that release again; the next release is installed
-as usual. `docker compose logs updater` tells what happened. Going back does not undo
-database migrations the failed release has already applied.
+as usual. `docker compose logs updater` tells what happened.
+
+A release that changes the database schema costs one more step. Before installing it,
+the updater takes a snapshot of the database (`pg_dump -Fc`, the same format as
+[backup and restore](docs/backup-restore.md)). The snapshot stays inside the updater
+container, at `/tmp/casefile-before-update.dump`, and takes about as much space as a
+manual backup. If that release then fails to start after changing the schema, the
+database goes back to the snapshot before the previous version starts again. So the
+schema and the data are exactly as they were before the update, and a manual
+`docker compose up -d` works as usual. The price: **anything written between the
+snapshot and the rollback is lost.** That window is the failed start, up to a few
+minutes. While the new version is being brought up, the old one keeps answering for a
+few seconds. The snapshot is deleted once the update succeeds or the database is
+restored. If the snapshot cannot be taken, that release is not installed this time. If
+it cannot be restored, the previous version runs on the new schema, the snapshot is kept,
+and the log says how to copy it out.
 
 ## Network mode
 
