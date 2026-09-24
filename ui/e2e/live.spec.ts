@@ -81,7 +81,7 @@ test('запись, подшитая через API, доходит до отк�
     if (call.url().includes('/api/v1/tasks?')) listings.push(call.url());
   });
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   // `exact`: имя по умолчанию ищется подстрокой, и `DEMO-3` попадает заодно в `DEMO-30`
   // и всех соседей за тридцатым — а сколько задач заведут сценарии, идущие раньше,
   // не знает никто.
@@ -163,7 +163,7 @@ test('вопрос ко мне объявляется уведомлением �
   // заданный вопрос честно меняет признаки своей задачи — у неё появляется плашка
   // «вопросов 1», строка становится выше, и на общем списке замер смешивал бы две
   // причины. Здесь единственное, что может сдвинуть вёрстку, — само уведомление.
-  await page.goto('/tasks?queue=DEMO&status=done');
+  await page.goto('/tasks?project=DEMO&status=done');
   await expect(page.locator('tbody tr')).toHaveCount(1);
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
 
@@ -228,7 +228,7 @@ test('вопрос ко мне объявляется уведомлением �
 });
 
 test('два вопроса подряд видны оба: второй не затирает первый', async ({ page, request }) => {
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
 
   const asked: { key: string; no: number }[] = [];
@@ -289,7 +289,7 @@ test('на загрузке страницы индикатор ни разу н
     }).observe(document, { childList: true, subtree: true, characterData: true });
   });
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
 
   const seen = await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen);

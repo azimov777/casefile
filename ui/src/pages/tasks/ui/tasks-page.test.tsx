@@ -85,11 +85,11 @@ describe('список задач', () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&status=in_progress');
+    open('/tasks?project=DEMO&status=open&status=in_progress');
     await screen.findByText('DEMO-3');
 
     const conditions = screen.getByRole('list', { name: say.tasks('filters.conditions') });
-    // Очередь среди чипов не значится: она место, а не условие (UI-38).
+    // Проект среди чипов не значится: он место, а не условие (UI-38).
     expect(within(conditions).getAllByRole('listitem')).toHaveLength(1);
     const statusCondition = say.tasks('filters.condition.status', { values: 'open, in_progress' });
     expect(conditions).toHaveTextContent(statusCondition);
@@ -102,7 +102,7 @@ describe('список задач', () => {
       }),
     );
 
-    expect(address.current).toContain('queue=DEMO');
+    expect(address.current).toContain('project=DEMO');
     expect(address.current).not.toContain('status=');
   });
 
@@ -121,7 +121,7 @@ describe('список задач', () => {
   it('заполненный запрос открывает режим запроса, и отменённых чипов в нём нет', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&blocked=true&query=status%3A+open');
+    open('/tasks?project=DEMO&blocked=true&query=status%3A+open');
     await screen.findByText('DEMO-3');
 
     // Запрос на экране полем, а простой отбор, который он отменяет, чипами не значится:
@@ -138,7 +138,7 @@ describe('список задач', () => {
   it('смена отбора объявляется вслух, без перевода фокуса', async () => {
     server.use(listing(() => taskPage([task('DEMO-3'), task('DEMO-4')])));
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
 
     // Область постоянная, а не появляется вместе с текстом: `aria-live` объявляет
     // только то, что пришло внутрь уже существующего контейнера.
@@ -154,8 +154,8 @@ describe('список задач', () => {
 
     // `tags` сняты вместе с полем задачи (UI-41), но разосланные ссылки остались.
     // Неизвестное значение в адресе отбрасывается тем же правилом, что и опечатка:
-    // человек видит список очереди, а не пустоту и не сломанный экран.
-    open('/tasks?queue=DEMO&tags=frontend&priority=high');
+    // человек видит список проекта, а не пустоту и не сломанный экран.
+    open('/tasks?project=DEMO&tags=frontend&priority=high');
 
     await screen.findByText('DEMO-8');
     const request = lastRequest();
@@ -188,7 +188,7 @@ describe('список задач', () => {
       ),
     );
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
 
     const row = await screen.findByRole('row', { name: /DEMO-9/ });
     const marks = within(row)
@@ -214,7 +214,7 @@ describe('список задач', () => {
       listing(() => taskPage([task('DEMO-4', { status: 'in_progress', priority: 'critical' })])),
     );
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
 
     const row = await screen.findByRole('row', { name: /DEMO-4/ });
     // Знак несёт форму, а род значения — текстом рядом: иначе диктор прочёл бы
@@ -233,7 +233,7 @@ describe('список задач', () => {
       ),
     );
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
 
     const waiting = await screen.findByRole('row', { name: /DEMO-5/ });
     expect(waiting).toHaveTextContent(`${say.ui('task.statusLabel')} waiting`);
@@ -258,7 +258,7 @@ describe('список задач', () => {
       http.get(`${API}/api/v1/tasks/DEMO-4`, () => data(taskPackage('DEMO-4'))),
     );
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
 
     const row = await screen.findByRole('row', { name: /DEMO-4/ });
     // Знак приоритета: ссылок и кнопок в этой ячейке нет. До UI-39 сюда попадала
@@ -304,7 +304,7 @@ describe('список задач', () => {
       ),
     );
 
-    open('/tasks?queue=DEMO&status=open');
+    open('/tasks?project=DEMO&status=open');
 
     const blocked = (await screen.findByText('DEMO-6')).closest('tr');
     expect(blocked).not.toBeNull();
@@ -353,7 +353,7 @@ describe('список задач', () => {
       }),
     );
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
 
     const child = (await screen.findByText('DEMO-5')).closest('tr') as HTMLElement;
     // В строке — плашка с ключом родителя (UI-152); название родителя — в её панели.
@@ -374,11 +374,11 @@ describe('список задач', () => {
   it('отправляет условия из адреса структурными параметрами', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&status=in_progress&priority=high&blocked=true');
+    open('/tasks?project=DEMO&status=open&status=in_progress&priority=high&blocked=true');
     await screen.findByText('DEMO-3');
 
     const request = lastRequest();
-    expect(request.searchParams.getAll('queue')).toEqual(['DEMO']);
+    expect(request.searchParams.getAll('project')).toEqual(['DEMO']);
     expect(request.searchParams.getAll('status')).toEqual(['open', 'in_progress']);
     expect(request.searchParams.getAll('priority')).toEqual(['high']);
     expect(request.searchParams.get('blocked')).toBe('true');
@@ -401,21 +401,21 @@ describe('список задач', () => {
     expect(await screen.findByText('DEMO-3')).toBeInTheDocument();
   });
 
-  it('пустую выдачу объясняет и даёт сбросить условия, не унося из очереди', async () => {
+  it('пустую выдачу объясняет и даёт сбросить условия, не унося из проекта', async () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([])));
 
-    open('/tasks?queue=DEMO&status=done');
+    open('/tasks?project=DEMO&status=done');
 
     expect(await screen.findByText(say.tasks('empty'))).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: say.tasks('resetFilters') }));
 
-    // Сброс снимает условия, но не место: человек остаётся в очереди, в которую
+    // Сброс снимает условия, но не место: человек остаётся в проекте, в который
     // пришёл, — «уйти отсюда» делается в боковой панели (UI-38).
     const last = lastRequest();
-    expect(last.searchParams.getAll('queue')).toEqual(['DEMO']);
+    expect(last.searchParams.getAll('project')).toEqual(['DEMO']);
     expect(last.searchParams.getAll('status')).toEqual([]);
-    expect(address.current).toBe('/tasks?queue=DEMO');
+    expect(address.current).toBe('/tasks?project=DEMO');
   });
 
   it('отказ бэкенда объясняет по коду, а не английской фразой', async () => {
@@ -441,7 +441,7 @@ describe('строка отбора', () => {
   it('называет все включённые условия и ни одно не прячет за счётчиком', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&status=in_progress&assignee=owner&text=токен');
+    open('/tasks?project=DEMO&status=open&status=in_progress&assignee=owner&text=токен');
     await screen.findByText('DEMO-3');
 
     // Панель закрыта: на первом экране списка стоят задачи, а не поля отбора.
@@ -576,7 +576,7 @@ describe('поле запроса на языке бэкенда', () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([task('DEMO-1', { status: 'done' })])));
 
-    open('/tasks?queue=DEMO&status=open');
+    open('/tasks?project=DEMO&status=open');
     await screen.findByText('DEMO-1');
     await openQuery(user);
 
@@ -587,7 +587,7 @@ describe('поле запроса на языке бэкенда', () => {
     // Структурный отбор отменён, а правило архива — нет: оно складывается с запросом.
     expect(last.searchParams.get('query')).toMatch(hidingArchive('status: done'));
     expect(last.searchParams.getAll('status')).toEqual([]);
-    expect(last.searchParams.getAll('queue')).toEqual([]);
+    expect(last.searchParams.getAll('project')).toEqual([]);
   });
 });
 
@@ -719,7 +719,7 @@ describe('порядок и страницы', () => {
   it('пустая выдача не обещает ни страниц, ни задач', async () => {
     server.use(listing(() => taskPage([], { total: 0 })));
 
-    open('/tasks?queue=DEMO&status=done');
+    open('/tasks?project=DEMO&status=done');
 
     expect(await screen.findByText(say.tasks('empty'))).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: say.tasks('paging.label') })).toBeNull();
@@ -782,7 +782,7 @@ describe('порядок и страницы', () => {
 
     // Курсор в адресе таблицы больше ничего не значит: страница адресуется номером,
     // а прислать бэкенду оба адреса сразу — `422 cursor_with_offset`.
-    open('/tasks?queue=DEMO&cursor=eyJrIjogIkRFTU8tNTEifQ');
+    open('/tasks?project=DEMO&cursor=eyJrIjogIkRFTU8tNTEifQ');
 
     await screen.findByText('DEMO-1');
     expect(lastRequest().searchParams.get('cursor')).toBeNull();
@@ -835,21 +835,21 @@ describe('переключение вида', () => {
     const user = userEvent.setup();
     server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&status=open&priority=high&assignee=owner&sort=key');
+    open('/tasks?project=DEMO&status=open&priority=high&assignee=owner&sort=key');
     await screen.findByText('DEMO-3');
 
     await user.click(screen.getByRole('link', { name: say.tasks('view.board') }));
 
-    // Раньше отсюда уходили на голое `/tasks?view=board`: очередь и всё остальное
+    // Раньше отсюда уходили на голое `/tasks?view=board`: проект и всё остальное
     // молча оставались позади, и человек видел чужую выдачу.
     await waitFor(() => expect(address.current).toContain('view=board'));
-    expect(address.current).toContain('queue=DEMO');
+    expect(address.current).toContain('project=DEMO');
     expect(address.current).toContain('priority=high');
     expect(address.current).toContain('assignee=owner');
     expect(address.current).toContain('sort=key');
 
     const request = lastRequest();
-    expect(request.searchParams.getAll('queue')).toEqual(['DEMO']);
+    expect(request.searchParams.getAll('project')).toEqual(['DEMO']);
     expect(request.searchParams.getAll('priority')).toEqual(['high']);
   });
 
@@ -857,18 +857,18 @@ describe('переключение вида', () => {
     const user = userEvent.setup();
     server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
-    open('/tasks?view=board&queue=DEMO&priority=high');
+    open('/tasks?view=board&project=DEMO&priority=high');
     await screen.findByText('DEMO-3');
 
     await user.click(screen.getByRole('link', { name: say.tasks('view.table') }));
 
-    await waitFor(() => expect(address.current).toBe('/tasks?queue=DEMO&priority=high'));
+    await waitFor(() => expect(address.current).toBe('/tasks?project=DEMO&priority=high'));
   });
 
   it('текущий вид назван текущим, и переключатель на странице один', async () => {
     server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
-    open('/tasks?view=board&queue=DEMO');
+    open('/tasks?view=board&project=DEMO');
     await screen.findByText('DEMO-3');
 
     expect(screen.getByRole('link', { name: say.tasks('view.board') })).toHaveAttribute(
@@ -882,10 +882,10 @@ describe('переключение вида', () => {
     expect(screen.getAllByRole('link', { name: say.tasks('view.board') })).toHaveLength(1);
   });
 
-  it('верхняя полоса называет место: очередь и раздел', async () => {
+  it('верхняя полоса называет место: проект и раздел', async () => {
     server.use(listing((url) => taskListing(url, [task('DEMO-3')])));
 
-    open('/tasks?view=board&queue=DEMO&priority=high');
+    open('/tasks?view=board&project=DEMO&priority=high');
     await screen.findByText('DEMO-3');
 
     expect(screen.getByLabelText(say.ui('app.whereAmI'))).toHaveTextContent(
@@ -893,7 +893,7 @@ describe('переключение вида', () => {
     );
   });
 
-  it('внутри задачи место называет её очередь и ключ, а вида не показывает', async () => {
+  it('внутри задачи место называет её проект и ключ, а вида не показывает', async () => {
     server.use(
       listing((url) => taskListing(url, [task('DEMO-3')])),
       http.get(`${API}/api/v1/tasks/DEMO-3`, () => data(taskPackage('DEMO-3'))),
@@ -902,7 +902,7 @@ describe('переключение вида', () => {
     open('/tasks/DEMO-3?entry=4');
     await screen.findAllByText('DEMO-3');
 
-    // Очередь прочитана из ключа задачи: отдельного запроса ради неё нет.
+    // Проект прочитан из ключа задачи: отдельного запроса ради него нет.
     expect(screen.getByLabelText(say.ui('app.whereAmI'))).toHaveTextContent('DEMO/DEMO-3');
     // Переключать нечего: вид есть только у списка.
     expect(screen.queryByRole('link', { name: say.tasks('view.board') })).not.toBeInTheDocument();
@@ -918,7 +918,7 @@ describe('архив', () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
     await screen.findByText('DEMO-3');
     const hint = say.tasks('filters.archive.hint', { count: 3 });
     const explain = screen.getByRole('button', { name: say.tasks('filters.archive.explain') });
@@ -933,7 +933,7 @@ describe('архив', () => {
     expect(
       screen.getByRole('checkbox', { name: say.tasks('filters.archive.label') }),
     ).not.toBeChecked();
-    expect(address.current).toBe('/tasks?queue=DEMO');
+    expect(address.current).toBe('/tasks?project=DEMO');
 
     await user.click(explain);
     expect(screen.getByText(hint)).toHaveClass('sr-only');
@@ -943,7 +943,7 @@ describe('архив', () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO');
+    open('/tasks?project=DEMO');
     await screen.findByText('DEMO-3');
     expect(lastRequest().searchParams.get('query')).toMatch(hidingArchive());
 
@@ -955,7 +955,7 @@ describe('архив', () => {
 
     await user.click(archive);
 
-    await waitFor(() => expect(address.current).toBe('/tasks?queue=DEMO&archive=shown'));
+    await waitFor(() => expect(address.current).toBe('/tasks?project=DEMO&archive=shown'));
     // Показанный архив — это выдача API по умолчанию: правила в запросе нет вовсе.
     await waitFor(() => expect(lastRequest().searchParams.has('query')).toBe(false));
     expect(archive).toBeChecked();
@@ -974,7 +974,7 @@ describe('архив', () => {
       ),
     );
 
-    open('/tasks?queue=DEMO&view=board');
+    open('/tasks?project=DEMO&view=board');
     await screen.findByText('DEMO-2');
 
     // Число выдачи, раскрытые столбцы и числа свёрнутых — каждый читает сам: запрос
@@ -989,7 +989,7 @@ describe('архив', () => {
   it('показанный открывается ссылкой: флажок отмечен, и запрос уходит без правила', async () => {
     server.use(listing(() => taskPage([task('DEMO-1', { status: 'done' })])));
 
-    open('/tasks?queue=DEMO&archive=shown&query=status%3A+done');
+    open('/tasks?project=DEMO&archive=shown&query=status%3A+done');
     await screen.findByText('DEMO-1');
 
     expect(
@@ -1002,12 +1002,12 @@ describe('архив', () => {
     const user = userEvent.setup();
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    open('/tasks?queue=DEMO&priority=high&archive=shown');
+    open('/tasks?project=DEMO&priority=high&archive=shown');
     await screen.findByText('DEMO-3');
 
     await user.click(screen.getByRole('button', { name: say.tasks('filters.reset') }));
 
-    await waitFor(() => expect(address.current).toBe('/tasks?queue=DEMO&archive=shown'));
+    await waitFor(() => expect(address.current).toBe('/tasks?project=DEMO&archive=shown'));
   });
 
   it('пустая выдача при скрытом архиве говорит об этом и показывает архив кнопкой', async () => {
@@ -1020,7 +1020,7 @@ describe('архив', () => {
       ),
     );
 
-    open('/tasks?queue=DEMO&status=done');
+    open('/tasks?project=DEMO&status=done');
 
     expect(await screen.findByText(say.tasks('empty'))).toBeInTheDocument();
     expect(screen.getByText(say.tasks('archiveHidden'))).toBeInTheDocument();
@@ -1028,10 +1028,10 @@ describe('архив', () => {
     await user.click(screen.getByRole('button', { name: say.tasks('showArchive') }));
 
     await waitFor(() =>
-      expect(address.current).toBe('/tasks?queue=DEMO&status=done&archive=shown'),
+      expect(address.current).toBe('/tasks?project=DEMO&status=done&archive=shown'),
     );
     expect(await screen.findByText('DEMO-1')).toBeInTheDocument();
-    // При показанном архиве пустота — это пустота очереди, и про архив молчат.
+    // При показанном архиве пустота — это пустота проекта, и про архив молчат.
     expect(screen.queryByText(say.tasks('archiveHidden'))).toBeNull();
   });
 
@@ -1060,7 +1060,7 @@ describe('архив', () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-11T12:00:00.000Z') });
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
-    const { queryClient } = open('/tasks?queue=DEMO');
+    const { queryClient } = open('/tasks?project=DEMO');
     await screen.findByText('DEMO-3');
     expect(seen).toHaveLength(1);
     expect(lastRequest().searchParams.get('query')).toContain('"2026-09-08T12:00:00.000Z"');

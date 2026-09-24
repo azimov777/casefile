@@ -32,7 +32,7 @@ function Probe() {
 function show(view: ReactNode) {
   where.current = '/tasks';
   return render(
-    <MemoryRouter initialEntries={['/tasks?queue=DEMO']}>
+    <MemoryRouter initialEntries={['/tasks?project=DEMO']}>
       <Probe />
       <Routes>
         <Route path="/tasks" element={view} />

@@ -19,7 +19,7 @@ test('доска показывает по столбцу на каждый ст
   const expected = await tasksByStatus(request);
   const statuses = contractStatuses();
 
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, statuses[0] as string)).toBeVisible();
   await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
 
@@ -61,7 +61,7 @@ test('раскрытие столбца не сужает соседей и не
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
 
   const widths = () =>
@@ -103,7 +103,7 @@ test('свёрнутые столбцы живут в адресе: пережи
   context,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
 
   // Развернули закрытые, свернули открытые: состояние, которого нет в умолчании.
   await column(page, 'done').getByRole('button').click();
@@ -133,7 +133,7 @@ test('свёрнутые столбцы живут в адресе: пережи
 test('закрытые и отменённые свёрнуты, показывают число и раскрываются кликом', async ({ page }) => {
   // С архивом: отменённая `DEMO-7` без записей агента в архиве сразу (UI-97), и
   // раскрывать без него было бы нечего — а проверяется здесь раскрытие, не архив.
-  await page.goto('/tasks?queue=DEMO&view=board&archive=shown');
+  await page.goto('/tasks?project=DEMO&view=board&archive=shown');
 
   for (const status of ['done', 'cancelled']) {
     const toggle = column(page, status).getByRole('button');
@@ -171,7 +171,7 @@ test('значок раскрытия столбца стоит на одной 
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -197,7 +197,7 @@ test('все столбцы свёрнуты: колесо дальше края
   const collapsed = contractStatuses()
     .map((status) => `collapsed=${status}`)
     .join('&');
-  await page.goto(`/tasks?queue=DEMO&view=board&${collapsed}`);
+  await page.goto(`/tasks?project=DEMO&view=board&${collapsed}`);
   for (const status of contractStatuses()) {
     await expect(column(page, status).getByRole('button')).toHaveAttribute(
       'aria-expanded',
@@ -250,7 +250,7 @@ test('все столбцы свёрнуты: колесо дальше края
 
   // Уход с доски снимает запрет вместе с ней: у таблицы тот же маршрут `/tasks`.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.locator('[data-board]')).toHaveCount(0);
   await expect.poll(overscroll).toBe('auto');
 });
@@ -259,7 +259,7 @@ test('столбец ожидания развёрнут, а знак в его 
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
 
   // Свёрнуто по умолчанию то, что **уже не в работе**. Ждущее из работы не вышло:
   // оно ждёт хода человека, и прятать от него единственный адресованный ему столбец
@@ -276,7 +276,7 @@ test('столбец ожидания развёрнут, а знак в его 
     .first()
     .innerHTML();
 
-  await page.goto('/tasks?queue=DEMO&status=waiting');
+  await page.goto('/tasks?project=DEMO&status=waiting');
   await expect(page.locator('tbody tr')).toHaveCount(1);
   const row = await page.locator('tbody [data-mark="status"] svg').first().innerHTML();
 
@@ -284,7 +284,7 @@ test('столбец ожидания развёрнут, а знак в его 
 });
 
 test('карточка ведёт в задачу, а «назад» возвращает на доску', async ({ page }) => {
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
 
   await column(page, 'in_progress')
     .getByRole('article')
@@ -315,7 +315,7 @@ test('фильтр по исполнителю действует на доск�
 
   // `collapsed=` — «ничего не свёрнуто»: столбцом сужения может оказаться и тот,
   // что свёрнут по умолчанию, и тогда карточек в нём не видно намеренно.
-  await page.goto('/tasks?queue=DEMO&view=board&assignee=demo_agent&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&assignee=demo_agent&collapsed=');
   await expect(column(page, status)).toBeVisible();
 
   await expect(column(page, status).getByRole('article')).toHaveCount(keys.length);
@@ -337,7 +337,7 @@ test('доска прокручивается внутри себя, а не у�
 
   for (const width of [1440, 1024]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/tasks?queue=DEMO&view=board');
+    await page.goto('/tasks?project=DEMO&view=board');
     await expect(column(page, 'waiting')).toBeVisible();
     await fontsReady(page);
 
@@ -358,7 +358,7 @@ test('доска прокручивается внутри себя, а не у�
 });
 
 test('доступность доски', async ({ page }) => {
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, 'open')).toBeVisible();
 
   const result = await new AxeBuilder({ page }).analyze();
@@ -367,7 +367,7 @@ test('доступность доски', async ({ page }) => {
 
 test('столбцы одной ширины при любом сочетании свёрнутых и развёрнутых', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, 'open')).toBeVisible();
   await fontsReady(page);
 
@@ -410,7 +410,7 @@ test('столбцы одной высоты при резко разной дл
 
   await silenceJournal(page);
   // `collapsed=` — все столбцы развёрнуты, включая обычно свёрнутые `done` и `cancelled`.
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, longStatus).getByRole('article')).toHaveCount(longKeys.length);
   await fontsReady(page);
 
@@ -449,7 +449,7 @@ test('у карточек столбца подвал на одном месте
   expect(keys.length).toBeGreaterThan(1);
 
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -495,7 +495,7 @@ test('столбец прокручивается сам, а соседние с
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -556,7 +556,7 @@ test('ниже точки остановки доска остаётся на п
    * это дороже, чем видеть соседей (UI-68).
    */
   await page.setViewportSize({ width: 320, height: SHORT_WINDOW.height });
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -668,7 +668,7 @@ test('на любой глубине прокрутки видно, какой �
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -706,7 +706,7 @@ test('прилипшая шапка не просвечивает карточк
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -782,7 +782,7 @@ test('кнопка прилипшей шапки работает с глуби�
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   const cards = column(page, status).getByRole('article');
   const toggle = column(page, status).getByRole('button');
   await expect(cards.first()).toBeVisible();
@@ -864,7 +864,7 @@ test('при прокрутке ряда вбок заголовок едет в
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -1001,7 +1001,7 @@ test('ниже точки остановки заголовок прижат к 
    * перед глазами.
    */
   await page.setViewportSize(NARROW_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -1055,7 +1055,7 @@ test('ниже точки остановки все шесть столбцов 
 }) => {
   await silenceJournal(page);
   await page.setViewportSize(NARROW_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -1108,7 +1108,7 @@ test('страница не едет вбок ни на узкой доске, �
   // ни после прокрутки ряда до упора — это ловили дважды (UI-40, UI-48).
   for (const width of [320, 704]) {
     await page.setViewportSize({ width, height: NARROW_WINDOW.height });
-    await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+    await page.goto('/tasks?project=DEMO&view=board&collapsed=');
     await expect(column(page, status).getByRole('article').first()).toBeVisible();
     await fontsReady(page);
 
@@ -1185,7 +1185,7 @@ test('столбец доски не прокручивается вбок ни 
    */
   for (const width of [640, 704, 1024]) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+    await page.goto('/tasks?project=DEMO&view=board&collapsed=');
     await boardRead(page);
     await fontsReady(page);
 
@@ -1225,7 +1225,7 @@ test('прижатая шапка не просвечивает карточка
 
   await silenceJournal(page);
   await page.setViewportSize(NARROW_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -1352,7 +1352,7 @@ test('знак края есть у переполненного столбца 
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -1424,7 +1424,7 @@ test('докрутили до конца — знак снят: столбец �
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, longest).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -1494,7 +1494,7 @@ test('знак края читается в своей теме и не съед
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
   await settledEdges(page, 'знак разошёлся с прокруткой');
@@ -1594,7 +1594,7 @@ test('знак края не добавляет остановок Tab: до п�
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, longest).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 
@@ -1670,7 +1670,7 @@ test('ниже точки остановки знака края нет: сво�
   // То же окно, что у проверки липкости: ниже `fold` прокручивается страница, а столбец
   // прокручиваемой областью не является вовсе (UI-68).
   await page.setViewportSize({ width: 320, height: 320 });
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
 

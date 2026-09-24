@@ -82,7 +82,7 @@ export function TaskCard({ task }: { task: Task }) {
           className="text-text no-underline [-webkit-user-drag:none] after:absolute after:inset-0 after:rounded-mark after:content-[''] hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-1 focus-visible:after:outline-focus"
           to={taskRefHref({ key: task.key, entryNo: null })}
           // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
-          // он вернётся к тем же строкам, а не ко всем задачам очереди.
+          // он вернётся к тем же строкам, а не ко всем задачам проекта.
           state={listReturnState(search)}
           draggable={false}
           onClick={skipClickWhileSelecting}

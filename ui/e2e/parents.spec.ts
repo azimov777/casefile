@@ -35,7 +35,7 @@ const OPEN_COLUMNS = new Set(['backlog', 'open', 'in_progress', 'waiting']);
  * здесь руками, разошлись бы с ним молча.
  */
 async function family(request: APIRequestContext): Promise<{ child: Row; top: Row }> {
-  const query = new URLSearchParams({ queue: 'DEMO', limit: '100', query: outsideArchive() });
+  const query = new URLSearchParams({ project: 'DEMO', limit: '100', query: outsideArchive() });
   for (const field of ['title', 'status', 'parent']) query.append('fields', field);
   const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
     headers: { Authorization: `Bearer ${readE2eToken()}` },
@@ -76,7 +76,7 @@ test('на доске у задачи с родителем видны его к
   const { child, top } = await family(request);
   const parent = child.parent as Parent;
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await shellReady(page);
 
   const card = cardOf(page, child);
@@ -136,7 +136,7 @@ test('в таблице родитель — плашка «родитель KEY
   const { child, top } = await family(request);
   const parent = child.parent as Parent;
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await shellReady(page);
 
   const row = rowOf(page, child);
@@ -240,13 +240,13 @@ test('родителя приносит та же выдача: запросов
   });
 
   // Доска: по запросу на столбец и один на число выдачи — как до UI-119 (UI-70).
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(caption(cardOf(page, child))).toBeVisible();
   const board = await calmCalls(calls);
 
   // Таблица: одна страница выдачи — как до UI-119.
   calls.length = 0;
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(caption(rowOf(page, child))).toBeVisible();
   const table = await calmCalls(calls);
 
@@ -278,7 +278,7 @@ test('плашка родителя — своя остановка табом, 
 }) => {
   const { child } = await family(request);
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await shellReady(page);
 
   const row = rowOf(page, child);

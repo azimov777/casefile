@@ -39,7 +39,7 @@ docker compose -f docker-compose.yml -f /tmp/demo-compose-override.yml run --rm 
 OWNER=$(cat .secrets/demo-owner-token)
 curl -s -X POST http://localhost:9020/api/v1/participants \
   -H "Authorization: Bearer $OWNER" -H "Content-Type: application/json" \
-  -d '{"kind":"agent","name":"claude","description":"Agent working the Checkout service queue"}'
+  -d '{"kind":"agent","name":"claude","description":"Agent working the Checkout service project"}'
 
 CLAUDE=$(curl -s -X POST http://localhost:9020/api/v1/tokens \
   -H "Authorization: Bearer $OWNER" -H "Content-Type: application/json" \
@@ -50,7 +50,7 @@ DEMO_API_URL=http://localhost:9020 python3 ui/e2e-demo/seed-background.py \
   .secrets/demo-owner-token .secrets/demo-claude-token
 ```
 
-Заводит очередь `APP` («Checkout service») и девять фоновых задач — 3 в
+Заводит проект `APP` («Checkout service») и девять фоновых задач — 3 в
 `backlog`, 2 в `open`, 2 в `in_progress`, по одной в `waiting` и `done` — так,
 чтобы самая длинная колонка доски уже стояла близко к высоте страницы задачи
 (её кадр — самый высокий из всех сцен записи, см. следующий шаг), а не пустовала
@@ -58,7 +58,7 @@ DEMO_API_URL=http://localhost:9020 python3 ui/e2e-demo/seed-background.py \
 шире одной строки риск переполнить видимую высоту колонки раньше времени
 (`fold:overflow-y-auto` в `tasks-board.tsx` включает свою прокрутку колонки, и
 часть карточек ушла бы за пределы кадра). Идемпотентности нет: повторный запуск
-на той же базе упадёт на создании очереди — начинать заново `docker compose down -v`.
+на той же базе упадёт на создании проекта — начинать заново `docker compose down -v`.
 
 ## 3. Поднять интерфейс на том же бэкенде
 
@@ -150,5 +150,5 @@ cd .. && docker compose -f docker-compose.yml -f /tmp/demo-compose-override.yml 
 - `README.md` — этот файл
 - `demo-recording.spec.ts` — сценарий записи: доска, живое создание задачи агентом
   через REST, движение по статусам, записи дела, переход в карточку
-- `seed-background.py` — наполняет фон (девять задач очереди `APP`) до начала записи,
+- `seed-background.py` — наполняет фон (девять задач проекта `APP`) до начала записи,
   без внешних зависимостей (только `python3` из стандартной библиотеки)

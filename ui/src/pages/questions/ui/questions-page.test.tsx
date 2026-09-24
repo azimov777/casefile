@@ -495,24 +495,24 @@ describe('входящая: мои замечания', () => {
     expect(address.current).not.toContain('blocking=true');
   });
 
-  it('пустая половина замечаний под отбором очереди не выдумывает историю', async () => {
+  it('пустая половина замечаний под отбором проекта не выдумывает историю', async () => {
     server.use(
       http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
       http.get(`${API}/api/v1/questions`, () => collection([])),
-      // Замечание есть, но в другой очереди: под условие оно не подходит.
+      // Замечание есть, но в другом проекте: под условие оно не подходит.
       http.get(`${API}/api/v1/remarks`, ({ request }) => {
-        const queue = new URL(request.url).searchParams.get('queue');
-        return collection(queue === 'TRK' ? [] : [remarkEntry(8, 'DEMO-1')]);
+        const project = new URL(request.url).searchParams.get('project');
+        return collection(project === 'TRK' ? [] : [remarkEntry(8, 'DEMO-1')]);
       }),
     );
 
-    renderApp('/questions?queue=TRK');
+    renderApp('/questions?project=TRK');
 
     await waitFor(() => {
       expect(
         screen.getAllByText(
           say.questions('emptyByFilter', {
-            conditions: say.questions('condition.queue', { queue: 'TRK' }),
+            conditions: say.questions('condition.project', { project: 'TRK' }),
           }),
         ).length,
       ).toBeGreaterThan(0);

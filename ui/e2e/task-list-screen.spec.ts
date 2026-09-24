@@ -4,7 +4,7 @@ import { fontsReady, readE2eToken, silenceJournal } from './contour';
 const token = readE2eToken();
 
 /*
- * Сценарий пишущий и идёт последним среди пишущих: он заводит в очереди DEMO два
+ * Сценарий пишущий и идёт последним среди пишущих: он заводит в проекте DEMO два
  * десятка задач, и соседи, которые ищут демо-задачи по ключу (`DEMO-3` находит и
  * `DEMO-30`), после него падали бы строгим режимом локатора. Порядок задаётся именем
  * файла — Playwright берёт файлы по алфавиту, и `task-list-screen` стоит после
@@ -23,7 +23,7 @@ const token = readE2eToken();
  *
  * Фраза, а не вставленное в скобках слово: односложную метку тут держало то, что
  * структурный отбор `text` отвергал значение из двух слов (`422 invalid_search_query`),
- * и это ограничение снято (TRK-21). Фраза обязана оставаться уникальной в очереди DEMO:
+ * и это ограничение снято (TRK-21). Фраза обязана оставаться уникальной в проекте DEMO:
  * совпав с чужой задачей, сценарий нашёл бы её и своей не завёл.
  *
  * На экране она видна: свёрнутый отбор называет условие чипом «текст «…»». Замеров это
@@ -32,7 +32,7 @@ const token = readE2eToken();
 const MARKER = 'ради замеров первого экрана списка';
 
 /** Адрес списка, отобранного до своего набора: им начинается каждый сценарий файла. */
-const LIST = `/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}`;
+const LIST = `/tasks?project=DEMO&text=${encodeURIComponent(MARKER)}`;
 
 /** Столько задач заводится: экран обязан вместить больше, чем помещалось раньше. */
 const TASKS = 21;
@@ -45,7 +45,7 @@ async function makeTask(
   const created = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title,
       description: `Заведена сквозным тестом ${MARKER}.`,
       ...overrides,
@@ -58,7 +58,7 @@ async function makeTask(
 /** Ключи задач набора, уже заведённых в установке. */
 async function seededKeys(request: APIRequestContext): Promise<string[]> {
   const response = await request.get(
-    `/api/v1/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}&fields=title&limit=200&sort=key`,
+    `/api/v1/tasks?project=DEMO&text=${encodeURIComponent(MARKER)}&fields=title&limit=200&sort=key`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   expect(response.status()).toBe(200);

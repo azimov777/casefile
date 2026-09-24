@@ -13,9 +13,9 @@ import { readE2eToken, silenceJournal } from './contour';
  * заголовка. Идентификаторы контракта (ключи, статусы, виды связи, имена участников)
  * набраны моноширинным шрифтом и в счёт не идут — они остаются как есть по правилу.
  *
- * Строк данных не по-гречески две — название очереди `DEMO` в шапке карточки (его
+ * Строк данных не по-гречески две — название проекта `DEMO` в шапке карточки (его
  * написал не этот сценарий) и аватар исполнителя из двух букв его имени; обе
- * вычитаются ровно тем значением, которое отдал бэкенд. Ключи очередей, задач и записей
+ * вычитаются ровно тем значением, которое отдал бэкенд. Ключи проектов, задач и записей
  * вычитаются образцом: это идентификаторы и там, где стоят в прозе («Дело DEMO-8»).
  */
 
@@ -53,7 +53,7 @@ async function api(
 
 interface Seeded {
   key: string;
-  /** Строки данных не по-гречески: название очереди и аватар исполнителя. */
+  /** Строки данных не по-гречески: название проекта и аватар исполнителя. */
   data: string[];
 }
 
@@ -68,7 +68,7 @@ let ready: Promise<Seeded> | null = null;
 function seed(request: APIRequestContext): Promise<Seeded> {
   ready ??= (async () => {
     const existing = await request.get(
-      `/api/v1/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
+      `/api/v1/tasks?project=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const found = ((await existing.json()) as { data: { key: string }[] }).data;
@@ -83,7 +83,7 @@ function seed(request: APIRequestContext): Promise<Seeded> {
         'post',
         '/api/v1/tasks',
         {
-          queue: 'DEMO',
+          project: 'DEMO',
           title: GREEK.title,
           description: GREEK.description,
           goal: GREEK.goal,
@@ -195,12 +195,12 @@ function seed(request: APIRequestContext): Promise<Seeded> {
     }
 
     const detail = await api(request, 'get', `/api/v1/tasks/${key}`);
-    const task = detail.task as { queue: { title: string }; assignee: string };
+    const task = detail.task as { project: { title: string }; assignee: string };
     /*
      * Аватар исполнителя в шапке карточки — две первые буквы его имени: это данные
      * (имя участника), а не подпись, но набраны они не моноширинным.
      */
-    return { key, data: [task.queue.title, task.assignee.slice(0, 2)] };
+    return { key, data: [task.project.title, task.assignee.slice(0, 2)] };
   })();
   return ready;
 }
@@ -218,7 +218,7 @@ async function foreign(page: Page, letter: RegExp, data: string[]): Promise<stri
     ({ source, data }) => {
       const pattern = new RegExp(source);
       const found: string[] = [];
-      // Названные строки данных и ключи очередей, задач и записей (`DEMO`, `DEMO-8`,
+      // Названные строки данных и ключи проектов, задач и записей (`DEMO`, `DEMO-8`,
       // `DEMO-8#3`): ключ — идентификатор, даже когда стоит в прозе заголовка.
       const clean = (text: string) =>
         data

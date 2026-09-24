@@ -28,7 +28,7 @@ function column(page: Page, status: string) {
 
 /** Сколько задач в отборе — по правде бэкенда: `meta.total` считает всю выдачу. */
 async function countTasks(request: APIRequestContext, params: Record<string, string> = {}) {
-  const query = new URLSearchParams({ queue: 'DEMO', fields: 'status', limit: '1', ...params });
+  const query = new URLSearchParams({ project: 'DEMO', fields: 'status', limit: '1', ...params });
   const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -46,7 +46,7 @@ async function fillColumn(request: APIRequestContext): Promise<number> {
     request.post('/api/v1/tasks', {
       headers: { Authorization: `Bearer ${token}` },
       data: {
-        queue: 'DEMO',
+        project: 'DEMO',
         title: `Задача для проверки дочитывания столбца № ${index + 1}`,
         description: 'Заведена сквозным тестом, чтобы столбец доски не влез в одну страницу.',
       },
@@ -78,7 +78,7 @@ test('столбец дочитывается прокруткой, а не на
   await silenceJournal(page);
   const calls = watchRequests(page);
 
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   const cards = column(page, LONG).getByRole('article');
   await expect(cards.first()).toBeVisible();
   await fontsReady(page);
@@ -128,7 +128,7 @@ test('раскрытие свёрнутого столбца читает одн
 
   // Тот же длинный столбец, но свёрнутый: раскрытие едет движением, и сторож конца
   // на это время оказывается внутри обрезанного места.
-  await page.goto(`/tasks?queue=DEMO&view=board&collapsed=${LONG}`);
+  await page.goto(`/tasks?project=DEMO&view=board&collapsed=${LONG}`);
   const toggle = column(page, LONG).getByRole('button');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(toggle).toContainText(String(total));
@@ -206,7 +206,7 @@ test('длинное непереносимое слово в названии �
   const created = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title: `Подпись рамки таблицы живёт в ${UNBREAKABLE}`,
       description: 'Заведена сквозным тестом: в названии путь, который нигде не переносится.',
       assignee: PROBE,
@@ -225,7 +225,7 @@ test('длинное непереносимое слово в названии �
    */
   for (const width of [640, 704, 1024]) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto(`/tasks?queue=DEMO&view=board&assignee=${PROBE}&collapsed=`);
+    await page.goto(`/tasks?project=DEMO&view=board&assignee=${PROBE}&collapsed=`);
     await expect(column(page, LONG).getByRole('article')).toHaveCount(1);
     await expect(column(page, LONG).getByRole('article').first()).toContainText(UNBREAKABLE);
     await fontsReady(page);
@@ -254,7 +254,7 @@ test('в покое доска не спрашивает ничего: ни пу
    * сторож в каждом из них виден с первого кадра. Наблюдатель, не спрашивающий
    * «а есть ли что дочитывать», крутился бы здесь вечно.
    */
-  await page.goto('/tasks?queue=DEMO&view=board&assignee=никого-с-таким-именем-нет');
+  await page.goto('/tasks?project=DEMO&view=board&assignee=никого-с-таким-именем-нет');
   await expect(column(page, 'open')).toBeVisible();
   await expect(column(page, 'open').getByRole('article')).toHaveCount(0);
   await expect.poll(() => calls.length).toBeGreaterThan(0);
@@ -268,7 +268,7 @@ test('в покое доска не спрашивает ничего: ни пу
   expect(short, 'в демо не осталось короткого столбца').toBeLessThan(COLUMN_PAGE);
 
   calls.length = 0;
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, 'waiting').getByRole('article').first()).toBeVisible();
   await expect.poll(() => calls.length).toBeGreaterThan(0);
 

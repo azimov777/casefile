@@ -114,7 +114,7 @@ export function AppTopbar({
 }
 
 /**
- * Где человек находится, словами: очередь, раздел и — внутри задачи — её ключ.
+ * Где человек находится, словами: проект, раздел и — внутри задачи — её ключ.
  *
  * Не `nav`, а `p` с `aria-label`: это не набор ссылок для перехода, а ответ на вопрос
  * «где я». Ссылкой здесь становится только то, откуда человек пришёл и куда вернётся.
@@ -163,7 +163,7 @@ function Crumbs({ place }: { place: Place }) {
                 part.mono ? 'font-mono' : '',
                 /*
                  * Минимум и высоты, и ширины — только на телефоне (`max-fold:`):
-                 * крошка «UI» (ключ очереди из двух знаков, моноширинным) мерилась
+                 * крошка «UI» (ключ проекта из двух знаков, моноширинным) мерилась
                  * 14×18 на 390 px (UI-154). На столе крошка была бы шире своего
                  * текста, а строка — плотнее соседних, ровно то, что запрещает
                  * `ui/docs/CONCEPT.md`, §6.
@@ -200,21 +200,21 @@ function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
   if (place.section === 'people') return [{ label: t('app.people') }];
   if (place.section === 'account') return [{ label: t('app.account') }];
 
-  const queue: Crumb =
-    place.queue === null
+  const project: Crumb =
+    place.project === null
       ? { label: t('app.allTasks') }
-      : { label: place.queue, mono: true, to: tasksHref('', { queue: place.queue }) };
+      : { label: place.project, mono: true, to: tasksHref('', { project: place.project }) };
 
   if (place.section === 'tasks') {
-    // На самом списке очередь — уже текущее место: ссылка вела бы туда же, откуда
+    // На самом списке проект — уже текущее место: ссылка вела бы туда же, откуда
     // человек смотрит, и по дороге стирала бы остальной отбор.
     return [
-      { ...queue, to: undefined },
+      { ...project, to: undefined },
       { label: t('app.crumbTasks'), wide: true },
     ];
   }
 
-  if (place.taskKey === null) return [queue];
+  if (place.taskKey === null) return [project];
 
   const task: Crumb = {
     label: place.taskKey,
@@ -223,6 +223,6 @@ function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
   };
 
   return place.section === 'case'
-    ? [queue, task, { label: t('app.crumbCase') }]
-    : [queue, { ...task, to: undefined }];
+    ? [project, task, { label: t('app.crumbCase') }]
+    : [project, { ...task, to: undefined }];
 }

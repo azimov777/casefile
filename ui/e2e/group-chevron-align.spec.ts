@@ -75,7 +75,7 @@ async function seed(
   const created = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title: 'Подопытная задача для замера треугольника группы (UI-162)',
       description: 'Заведена сквозным тестом UI-162.',
       ...sections(0),

@@ -8,17 +8,17 @@ const token = readE2eToken();
 const PAGE_SIZE = 50;
 
 /**
- * Сколько задач в очереди сейчас — по правде бэкенда, а не по длине прочитанной
+ * Сколько задач в проекте сейчас — по правде бэкенда, а не по длине прочитанной
  * страницы: `meta.total` считает всю выдачу по отбору и от размера страницы не зависит
  * (TRK-41). До него это же число собиралось запросом с `limit=200` и врало бы ровно
- * тогда, когда очередь перерастёт двести задач.
+ * тогда, когда проект перерастёт двести задач.
  *
  * Считаются задачи вне архива: столько список и показывает, пока архив не попросили
  * (UI-97).
  */
 async function countTasks(request: APIRequestContext): Promise<number> {
   const query = new URLSearchParams({
-    queue: 'DEMO',
+    project: 'DEMO',
     fields: 'status',
     limit: '1',
     query: outsideArchive(),
@@ -36,7 +36,7 @@ async function countTasks(request: APIRequestContext): Promise<number> {
  * Листание рядом страниц: в демо семь задач, а страница вмещает пятьдесят, и ряд без
  * этого сценария не появляется вовсе (замечено в задаче 02).
  *
- * Задачи заводятся в очереди DEMO, своей очереди сценарий не заводит. Поэтому он пишущий
+ * Задачи заводятся в проекте DEMO, своего проекта сценарий не заводит. Поэтому он пишущий
  * и идёт последним, после читающих, которые считают задачи демо поимённо
  * (`playwright.config.ts`, проект «запись»).
  */
@@ -55,7 +55,7 @@ test('страницы списка листаются рядом номеров
     request.post('/api/v1/tasks', {
       headers: { Authorization: `Bearer ${token}` },
       data: {
-        queue: 'DEMO',
+        project: 'DEMO',
         title: `Задача для проверки листания № ${index + 1}`,
         description: 'Заведена сквозным тестом, чтобы список не поместился на страницу.',
       },
@@ -69,7 +69,7 @@ test('страницы списка листаются рядом номеров
   const pages = Math.ceil(total / PAGE_SIZE);
   expect(pages).toBeGreaterThan(1);
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const rows = page.locator('tbody tr');
   await expect(rows).toHaveCount(PAGE_SIZE);
@@ -163,7 +163,7 @@ test('запись с последней страницы дела дочиты�
   const created = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title: 'Задача с делом длиннее одной страницы',
       description: 'Заведена сквозным тестом ради проверки ссылки на дальнюю запись.',
     },

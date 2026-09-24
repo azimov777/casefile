@@ -326,7 +326,7 @@
    */
   --ui-tap: calc(var(--spacing) * 6); /* 24px — минимальная мишень нажатия на телефоне */
   --ui-header: calc(var(--spacing) * 12); /* 3rem — высота шапки приложения */
-  --ui-side: calc(var(--spacing) * 50); /* 12.5rem — боковая панель очередей */
+  --ui-side: calc(var(--spacing) * 50); /* 12.5rem — боковая панель проектов */
   --ui-board-column: calc(var(--spacing) * 62); /* 15.5rem — столбец доски */
 
   /*

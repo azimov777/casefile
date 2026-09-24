@@ -2,9 +2,9 @@
 export const questions = {
   intro: 'The questions agents are waiting on from you, and your remarks you are waiting on.',
   filterLabel: 'Inbox selection',
-  queue: 'Queue',
-  allQueues: 'every queue',
-  queueNote: 'The queue selects both halves of the inbox.',
+  project: 'Project',
+  allProjects: 'every project',
+  projectNote: 'The project selects both halves of the inbox.',
 
   questionsTitle: 'Questions for me',
   blockingOnly: 'blocking only',
@@ -44,7 +44,7 @@ export const questions = {
   emptyByFilter: 'Nothing matched this selection ({{conditions}}).',
   resetFilter: 'Reset the selection',
   condition: {
-    queue: 'queue {{queue}}',
+    project: 'project {{project}}',
     blocking: 'blocking only',
   },
 } as const;

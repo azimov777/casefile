@@ -12,9 +12,9 @@ import { readPlace } from './place';
 /**
  * Содержимое боковой панели: где человек работает, кто он и жив ли поток.
  *
- * Очередь — место, а не поле формы отбора (решение Д25). Раньше, чтобы перейти из `UI`
+ * Проект — место, а не поле формы отбора (решение Д25). Раньше, чтобы перейти из `UI`
  * в `TRK`, человек разворачивал форму на 295 px, менял выпадающий список и сворачивал
- * обратно; при этом очередь — первое, чем он делит работу.
+ * обратно; при этом проект — первое, чем он делит работу.
  *
  * Действий, меняющих данные, здесь нет и не будет: человек наблюдает и отвечает,
  * остальное делают агенты (`CONCEPT.md`, 1 и 7). Единственная кнопка — выход, и та
@@ -30,7 +30,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { t } = useTranslation('ui');
 
-  const queues = bootstrap.data?.queues ?? [];
+  const projects = bootstrap.data?.projects ?? [];
   /*
    * Учётная запись и люди — только в режиме входа (`TRK-113`). На своей машине владелец
    * тоже администратор (`owner@localhost`), но там человек один, пароля у него нет и
@@ -50,12 +50,12 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const onList = location.pathname === '/tasks';
 
   /**
-   * Переход в очередь сохраняет вид и остальной отбор — тем же правилом, что и
+   * Переход в проект сохраняет вид и остальной отбор — тем же правилом, что и
    * переключатель вида. Условия берутся из адреса только на самом списке: на карточке
    * задачи и во входящей в адресе стоит чужое состояние, и тащить его в отбор нельзя.
    */
-  function queueHref(queue: string): string {
-    return tasksHref(onList ? searchParams : new URLSearchParams(), { queue });
+  function projectHref(project: string): string {
+    return tasksHref(onList ? searchParams : new URLSearchParams(), { project });
   }
 
   return (
@@ -72,30 +72,34 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="flex flex-col gap-px" aria-label={t('app.sections')}>
         <p className="mt-1 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">
-          {t('app.queues')}
+          {t('app.projects')}
         </p>
 
-        {/* «Все задачи» — то же самое, что пустая очередь в отборе: без этого пункта
-            из очереди некуда вернуться, кроме как снятием чипа в форме. */}
-        <SideLink to={queueHref('')} current={place.queue === null && onList} onClick={onNavigate}>
+        {/* «Все задачи» — то же самое, что пустой проект в отборе: без этого пункта
+            из проекта некуда вернуться, кроме как снятием чипа в форме. */}
+        <SideLink
+          to={projectHref('')}
+          current={place.project === null && onList}
+          onClick={onNavigate}
+        >
           {t('app.allTasks')}
         </SideLink>
 
-        {queues.map((queue) => (
+        {projects.map((project) => (
           <SideLink
-            key={queue.key}
-            to={queueHref(queue.key)}
-            current={place.queue === queue.key}
-            title={queue.title}
+            key={project.key}
+            to={projectHref(project.key)}
+            current={place.project === project.key}
+            title={project.title}
             onClick={onNavigate}
           >
             {/*
-             * Название очереди переносится, а не режется многоточием (UI-153): полное
+             * Название проекта переносится, а не режется многоточием (UI-153): полное
              * название было только в подсказке `title`, а на телефоне, где панель —
              * выдвижной лист, наведения нет. Ключ стоит на первой строке названия.
              */}
-            <span className="shrink-0 font-mono">{queue.key}</span>
-            <span className="min-w-0 text-faint wrap-anywhere">{queue.title}</span>
+            <span className="shrink-0 font-mono">{project.key}</span>
+            <span className="min-w-0 text-faint wrap-anywhere">{project.title}</span>
           </SideLink>
         ))}
 
@@ -130,7 +134,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
 
         {/*
          * Установка — отдельная группа, а не ещё один пункт «Мне»: подключение агента
-         * касается установки целиком, а не работы человека в очередях. Пункт — переход
+         * касается установки целиком, а не работы человека в проектах. Пункт — переход
          * к инструкции, данных он не меняет.
          */}
         <p className="mt-3 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">

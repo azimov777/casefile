@@ -25,7 +25,7 @@ async function create(request: APIRequestContext, title: string): Promise<string
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title,
       description: 'Заведена сквозным тестом UI-166: родитель и дети.',
     },
@@ -120,7 +120,7 @@ for (const [lang, say] of Object.entries(WORDS)) {
         await expect(children.getByRole('link', { name: first })).toBeVisible();
         await expect(children.getByRole('link', { name: second })).toBeVisible();
         await expect(group(page, say.links, 'child')).toHaveCount(0);
-        // В шапке программы родителя нет: путь — только очередь.
+        // В шапке программы родителя нет: путь — только проект.
         await expect(
           page.locator('header').getByRole('link', { name: new RegExp(first) }),
         ).toHaveCount(0);

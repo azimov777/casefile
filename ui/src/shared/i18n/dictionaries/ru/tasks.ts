@@ -110,7 +110,7 @@ export const tasks = {
       toggle: 'Запрос',
       label: 'Запрос на языке бэкенда',
       note: 'Запрос заменяет простой отбор; архив по-прежнему решает флажок справа.',
-      placeholder: 'queue: DEMO and status: open and blocked: false',
+      placeholder: 'project: DEMO and status: open and blocked: false',
       errorAt: 'Ошибка в символе {{position}}.',
       allowed: 'Допустимо: {{list}}',
       stale: 'Показаны строки предыдущего отбора.',

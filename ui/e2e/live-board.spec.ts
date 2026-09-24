@@ -36,7 +36,7 @@ async function tasksIn(
   params: Record<string, string>,
 ): Promise<string[]> {
   const query = new URLSearchParams({
-    queue: 'DEMO',
+    project: 'DEMO',
     fields: 'status',
     limit: '200',
     sort: '-last_entry_at',
@@ -60,7 +60,7 @@ async function fillBacklog(request: APIRequestContext): Promise<string[]> {
     request.post('/api/v1/tasks', {
       headers: auth(),
       data: {
-        queue: 'DEMO',
+        project: 'DEMO',
         title: `Задача для проверки живой доски № ${index + 1}`,
         description: 'Заведена сквозным тестом, чтобы столбец доски не влез в одну страницу.',
       },
@@ -83,7 +83,7 @@ async function seedMover(request: APIRequestContext): Promise<string> {
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title: 'Задача, которую сквозной тест двигает между столбцами',
       description: 'Заведена сквозным тестом: на ней проверяется, что доска обновляется сама.',
       goal: 'Проверить, что карточка переезжает в свой столбец без нажатия.',
@@ -170,7 +170,7 @@ test.describe('доска под живым потоком', () => {
     expect(backlog).toContain(moving);
 
     const calls = watchRequests(page);
-    await page.goto('/tasks?queue=DEMO&view=board');
+    await page.goto('/tasks?project=DEMO&view=board');
     await expect(column(page, 'backlog').getByRole('article').first()).toBeVisible();
     await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
     await fontsReady(page);
@@ -252,7 +252,7 @@ test.describe('доска под живым потоком', () => {
     expect(target, 'в демо не нашлось открытой задачи').toBeDefined();
 
     const calls = watchRequests(page);
-    await page.goto('/tasks?queue=DEMO&view=board');
+    await page.goto('/tasks?project=DEMO&view=board');
     await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
     await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
     await settled(() => calls.length);
@@ -301,7 +301,7 @@ test.describe('доска под живым потоком', () => {
     test.setTimeout(240_000);
     const moving = await seedMover(request);
 
-    await page.goto('/tasks?queue=DEMO&view=board');
+    await page.goto('/tasks?project=DEMO&view=board');
     await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
     const topbar = page.getByRole('banner');
     await expect(topbar.getByText('на связи')).toBeVisible();
@@ -359,7 +359,7 @@ test.describe('доска под живым потоком', () => {
     const calls = watchRequests(page);
     // Сначала доска: её запросы попадают в кэш, и дальше проверяется именно то, что
     // помеченный устаревшим, но не показанный запрос в сеть не идёт.
-    await page.goto('/tasks?queue=DEMO&view=board');
+    await page.goto('/tasks?project=DEMO&view=board');
     await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
     await settled(() => calls.length);
 

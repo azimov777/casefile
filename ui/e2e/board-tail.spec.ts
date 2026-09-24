@@ -49,7 +49,7 @@ test('под полосой прокрутки столбцов остаётся
 
   for (const [index, size] of SIZES.entries()) {
     await page.setViewportSize(size);
-    await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+    await page.goto('/tasks?project=DEMO&view=board&collapsed=');
     await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
     await fontsReady(page);
 
@@ -101,7 +101,7 @@ test('у таблицы задач и у карточки нижний хвос�
   await silenceJournal(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await page.locator('table tbody tr').first().waitFor();
   await fontsReady(page);
 

@@ -21,7 +21,7 @@ describe('условия отбора словами', () => {
   it('называет каждое включённое условие и ни одно не сворачивает в счётчик', () => {
     expect(
       labels({
-        queue: 'DEMO',
+        project: 'DEMO',
         status: ['open', 'in_progress'],
         priority: ['high'],
         assignee: 'owner',
@@ -42,13 +42,13 @@ describe('условия отбора словами', () => {
   });
 
   it('на доске не называет статус: столбцы показаны все, и параметром он не уходит', () => {
-    expect(labels({ view: 'board', queue: 'DEMO', status: ['open'], priority: ['high'] })).toEqual([
-      say.tasks('filters.condition.priority', { values: 'high' }),
-    ]);
+    expect(
+      labels({ view: 'board', project: 'DEMO', status: ['open'], priority: ['high'] }),
+    ).toEqual([say.tasks('filters.condition.priority', { values: 'high' })]);
   });
 
-  it('очередь условием не считает: она стала местом в интерфейсе, а не отбором', () => {
-    expect(labels({ queue: 'DEMO' })).toEqual([]);
+  it('проект условием не считает: он стал местом в интерфейсе, а не отбором', () => {
+    expect(labels({ project: 'DEMO' })).toEqual([]);
   });
 
   it('порядок и режим условиями не считает: они меняют вид, а не состав выдачи', () => {
@@ -59,7 +59,7 @@ describe('условия отбора словами', () => {
     const conditions = describeFilters(
       {
         ...EMPTY_FILTERS,
-        queue: 'DEMO',
+        project: 'DEMO',
         blocked: true,
         query: 'status: open',
       },

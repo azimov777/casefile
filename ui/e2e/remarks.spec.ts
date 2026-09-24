@@ -55,7 +55,7 @@ test('разбор стоит под своим замечанием, назыв
 test('признак «замечаний» стоит в строке списка и на карточке доски, и по нему отбирают', async ({
   page,
 }) => {
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const row = page.getByRole('row').filter({ hasText: 'DEMO-1' });
   await expect(row.getByText('1 замечание без разбора')).toBeVisible();
@@ -69,7 +69,7 @@ test('признак «замечаний» стоит в строке спис�
   // На доске тот же признак: он живёт в одном представлении на оба вида. Столбцы
   // `done` и `cancelled` свёрнуты по умолчанию, а замечание висит на закрытой задаче,
   // поэтому адрес разворачивает всё — пустым `collapsed`.
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   // Карточка доски — `article` с ключом: ссылка на ней носит название задачи, а не
   // ключ, и признак лежит рядом с ней, а не внутри.
   await expect(
