@@ -13,6 +13,7 @@ from app.core.errors import UnauthorizedError, ValidationError
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_OFFSET, MIN_PAGE_SIZE
 from app.db.session import get_session, session_scope
 from app.domain.authors import ACTOR_LABEL_HEADER
+from app.domain.case import EntryType
 from app.services.auth import Actor, authenticate
 from app.services.journal import SessionFactory
 
@@ -151,6 +152,27 @@ OffsetQuery = Annotated[
 # разными описаниями, и в сгенерированном клиенте один параметр выглядел бы по-разному.
 # Шаблона нет намеренно: форму проверяет домен (`parse_task_key`), одинаково для REST
 # и MCP; адресация мягкая — `trk-42` находит `TRK-42`.
+# Фильтры чтения дела. Объявлены псевдонимами, а не по месту: те же три фильтра
+# принимают чтение дела задачи и дела проекта и инструменты MCP `read_entries` и
+# `read_project_entries`, и разные описания у одного фильтра выглядели бы в
+# сгенерированном клиенте как разные параметры.
+EntryNosQuery = Annotated[
+    list[int] | None,
+    Query(description="Read only these entry numbers", examples=[[3, 12]]),
+]
+EntryTypesQuery = Annotated[
+    list[EntryType] | None,
+    Query(description="Read only entries of these types", examples=[["summary"]]),
+]
+AfterNoQuery = Annotated[
+    int | None,
+    Query(
+        ge=1,
+        description="Read only entries after this number — what happened since",
+        examples=[12],
+    ),
+]
+
 TaskKeyPath = Annotated[
     str,
     Path(description="Task key `PROJECT-number`; matching ignores case", examples=["TRK-42"]),

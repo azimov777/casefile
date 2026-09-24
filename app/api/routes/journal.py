@@ -82,7 +82,10 @@ TaskQuery = Annotated[
 ProjectQuery = Annotated[
     str | None,
     Query(
-        description="Only entries of tasks in this project; matching ignores case",
+        description=(
+            "Only entries of this project: its own case and the cases of its tasks; "
+            "matching ignores case"
+        ),
         examples=["TRK"],
     ),
 ]
@@ -150,7 +153,9 @@ def render(message: JournalMessage) -> str:
         return f": {message.comment}\n\n"
     assert message.item is not None
     entry = message.item.entry
-    data = entry_read(entry, task_key=message.item.task_key).model_dump_json()
+    data = entry_read(
+        entry, task_key=message.item.task_key, project_key=message.item.project_key
+    ).model_dump_json()
     return f"id: {entry.seq}\nevent: {entry.type.value}\ndata: {data}\n\n"
 
 
@@ -201,7 +206,10 @@ async def read_journal(
         client_gone=request.is_disconnected,
     )
     return CollectionResponse[EntryRead].of(
-        [entry_read(item.entry, task_key=item.task_key) for item in page.items],
+        [
+            entry_read(item.entry, task_key=item.task_key, project_key=item.project_key)
+            for item in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 

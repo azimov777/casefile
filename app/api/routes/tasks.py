@@ -9,11 +9,14 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Path, status
 
 from app.api.deps import (
     ActorDep,
+    AfterNoQuery,
     CursorQuery,
+    EntryNosQuery,
+    EntryTypesQuery,
     LimitQuery,
     OffsetQuery,
     SessionDep,
@@ -46,7 +49,6 @@ from app.api.schemas.tasks import (
     TaskUpdate,
 )
 from app.db.pagination import DEFAULT_PAGE_SIZE
-from app.domain.case import EntryType
 from app.domain.tasks import CheckEdit
 from app.services import case as case_service
 from app.services import projects as projects_service
@@ -59,26 +61,6 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 EntryNoPath = Annotated[
     int,
     Path(ge=1, description="Entry number inside the task, from 1", examples=[12]),
-]
-
-# Фильтры чтения дела. Объявлены псевдонимами, а не по месту: те же три фильтра
-# принимает инструмент MCP `read_entries`, и разные описания у одного фильтра выглядели
-# бы в сгенерированном клиенте как разные параметры.
-EntryNosQuery = Annotated[
-    list[int] | None,
-    Query(description="Read only these entry numbers", examples=[[3, 12]]),
-]
-EntryTypesQuery = Annotated[
-    list[EntryType] | None,
-    Query(description="Read only entries of these types", examples=[["summary"]]),
-]
-AfterNoQuery = Annotated[
-    int | None,
-    Query(
-        ge=1,
-        description="Read only entries after this number — what happened since",
-        examples=[12],
-    ),
 ]
 
 

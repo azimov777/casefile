@@ -586,3 +586,27 @@ FastAPI. С проверкой в заголовке REST отвечал бы о
 **Где:** `app/api/client_address.py`, `ClientAddresses`; `app/services/login.py`,
 `client_key`, `PasswordLogin`; `docker-compose.prod.yml`, `TRACKER_REAL_IP_FROM`;
 `tests/test_password_login.py`, `test_the_counters_never_hold_more_keys_than_the_ceiling`.
+
+## У записи дела проекта два поля владельца, и только у типов, которые бывают в деле проекта
+
+**Что:** варианты `EntryRead` для типов, которые встречаются в деле проекта (`PlainEntryRead`
+— `note`, `decision`, `finding`, `artifact`, `created`; `FieldChangedEntryRead`), несут
+`task_key` и `project_key` типа «строка или `null`», оба в `required` схемы, и непусто ровно
+одно. Остальные варианты (сводка, вопрос, ответ, вердикт, замечание, резолюция, переход,
+правка раздела, исполнитель, связи) бывают только у задачи: `task_key: string`, а
+`project_key` объявлен всегда `null` — поле есть у всех, чтобы запись REST совпадала с
+`EntryView` MCP поле в поле (`test_get_task_returns_the_same_package_as_rest`). `entry_read` утверждает «ровно один ключ» на входе (TRK-156). Подшивка в
+дело проекта принимает свою модель `ProjectEntryCreate` с типами `note`, `decision`,
+`finding`, `artifact`: тип задачи отсекает схема (`422 validation_error`), а
+`entry_fields_invalid` приходит от сценария — за форму полей и ссылки `TRK#7`.
+**Почему важно:** сгенерированный клиент сужает тип по `type`: у вопроса и замечания
+`task_key` остаётся строкой, и экраны входящей не заметят дела проекта вовсе. Там, где запись
+может принадлежать проекту (лента, поток, дело проекта), клиент видит `string | null` и обязан
+выбрать адрес по непустому ключу. Поле, пропущенное при `null`, спрятало бы эту разницу
+(соседняя заметка «Отбросить пустые поля в ответе…»).
+**Как правильно:** адрес записи — непустой ключ владельца и `no` (`TRK-42#3`, `TRK#7`).
+Новый тип записи, которому место и в деле проекта, наследует `_ProjectOwnableEntryRead`.
+Фильтры чтения дела (`EntryNosQuery`, `EntryTypesQuery`, `AfterNoQuery`) — общие псевдонимы в
+`app/api/deps.py` для дела задачи и дела проекта.
+**Где:** `app/api/schemas/entries.py`, `_ProjectOwnableEntryRead`, `entry_read`,
+`ProjectEntryCreate`; `app/api/routes/projects.py`, `create_project_entry`; `app/api/deps.py`.

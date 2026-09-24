@@ -61,12 +61,15 @@ from app.domain.links import LinkKind
 from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
 
 _REFS_DESCRIPTION = (
-    "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task "
-    "references must exist; addresses are not checked"
+    "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and "
+    "addresses. Entry and task references must exist; addresses are not checked"
 )
 _TITLE_DESCRIPTION = "One line; this is what the case index shows"
 _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the payload"
-_NO_DESCRIPTION = "Number inside the task, from 1; `TRK-42#12`"
+_NO_DESCRIPTION = (
+    "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, "
+    "`TRK#7` for a project entry"
+)
 _ACTION_ID_DESCRIPTION = (
     "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this "
     "entry: entries of one call share the same value, entries of another call never "
@@ -514,6 +517,12 @@ class _EntryReadBase(BaseModel):
     seq: int = Field(examples=[1024], description="Tracker-wide monotonic number; journal cursor")
     no: int = Field(examples=[12], description=_NO_DESCRIPTION)
     task_key: str = Field(examples=["TRK-42"])
+    # Поле есть у каждого варианта, чтобы форма записи была одна — в REST и в MCP
+    # (`EntryView`), — но у типов, которых в деле проекта не бывает, оно всегда `null`.
+    project_key: None = Field(
+        examples=[None],
+        description="Always `null`: entries of this type belong to a task, never to a project",
+    )
     author: AuthorRead
     title: str = Field(examples=["Status changed: backlog -> open"], description=_TITLE_DESCRIPTION)
     body: str = Field(examples=[""], description=_BODY_DESCRIPTION)
@@ -526,8 +535,33 @@ class _EntryReadBase(BaseModel):
     )
 
 
-class PlainEntryRead(_EntryReadBase):
-    """Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи."""
+class _ProjectOwnableEntryRead(_EntryReadBase):
+    """Общие поля записи, которая бывает и в деле задачи, и в деле проекта.
+
+    Владелец записи — задача или проект, и непуст ровно один ключ, как колонки владельца
+    в базе (`ck_entries_one_owner`). Оба поля обязательны в схеме, а не пропускаются при
+    `null`: форма записи одна в любом ответе (`docs/notes/api.md`). Сужение только у этих
+    вариантов: типы, которых в деле проекта не бывает (сводка, вопрос, вердикт, переход и
+    прочие), всегда принадлежат задаче — их `task_key` остаётся строкой, а `project_key`
+    всегда `null`, и клиенту не нужно проверять на `null` ключ, который `null` быть не может.
+    """
+
+    task_key: str | None = Field(  # type: ignore[assignment]
+        examples=["TRK-42"],
+        description="Key of the owning task; `null` for an entry of a project's case",
+    )
+    project_key: str | None = Field(  # type: ignore[assignment]
+        examples=[None],
+        description=(
+            "Key of the owning project for an entry of a project's case (`TRK#7`); "
+            "`null` for a task entry, whose project is part of `task_key`"
+        ),
+    )
+
+
+class PlainEntryRead(_ProjectOwnableEntryRead):
+    """Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи
+    или проекта."""
 
     type: Literal[
         EntryType.DECISION,
@@ -615,8 +649,9 @@ class SectionChangedEntryRead(_EntryReadBase):
     payload: SectionChangedPayload
 
 
-class FieldChangedEntryRead(_EntryReadBase):
-    """Служебная запись о правке обвязки: сегодня это только `priority`."""
+class FieldChangedEntryRead(_ProjectOwnableEntryRead):
+    """Служебная запись о правке обвязки задачи (`priority`) или карточки проекта
+    (название, описание)."""
 
     type: Literal[EntryType.FIELD_CHANGED]
     payload: FieldChangedPayload
@@ -688,20 +723,26 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
 }
 
 
-def entry_read(entry: Entry, *, task_key: str) -> EntryRead:
+def entry_read(
+    entry: Entry, *, task_key: str | None = None, project_key: str | None = None
+) -> EntryRead:
     """Собирает вариант ответа по типу записи.
 
-    Ключ задачи приходит от вызывающего: у записи связи с задачей нет, только `task_id`.
+    Ключ владельца приходит от вызывающего: у записи связи с задачей и проектом нет,
+    только `task_id` или `project_id`. Передаётся ровно один — ключ задачи для записи
+    задачи, ключ проекта для записи дела проекта.
 
     Тип, которого нет в таблице, — это запись без формы нагрузки, то есть дефект
     объединения, а не рабочее состояние: `KeyError` здесь честнее молчаливого
     возврата записи со свободным `payload`, который фронт не разберёт.
     """
+    assert (task_key is None) != (project_key is None), "entry owner is exactly one key"
     return _READ_MODELS.get(entry.type, PlainEntryRead)(
         id=entry.id,
         seq=entry.seq,
         no=entry.no,
         task_key=task_key,
+        project_key=project_key,
         type=entry.type,
         author=AuthorRead.model_validate(entry.author),
         title=entry.title,
@@ -818,6 +859,22 @@ type EntryCreate = Annotated[
     Field(discriminator="type"),
 ]
 """Подшиваемая запись: те же типы, что доступны агенту, размеченные по `type`."""
+
+
+class ProjectEntryCreate(_TitledEntryCreate):
+    """Запись агента или человека в деле проекта: заметка, решение, находка, артефакт.
+
+    Отдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой
+    (`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не
+    отказом `entry_fields_invalid` после.
+    """
+
+    type: Literal[
+        EntryType.NOTE,
+        EntryType.DECISION,
+        EntryType.FINDING,
+        EntryType.ARTIFACT,
+    ]
 
 
 type ClosingEntryCreate = Annotated[
