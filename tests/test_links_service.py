@@ -14,6 +14,7 @@ from app.domain.errors import (
     LinkSelfError,
     TaskBlockedError,
     TaskClosedError,
+    TaskHasParentError,
     TaskHasUnclosedChildrenError,
 )
 from app.domain.links import LinkKind
@@ -321,7 +322,9 @@ async def test_the_link_entry_is_signed_by_the_author_of_the_action(
     entry = (await entries(db_session, first, task_actor))[-1]
     assert entry.type is EntryType.LINK_ADDED
     assert entry.author.signature == "owner"
-    assert entry.title == "Link added: parent TRK-2"
+    # Заголовок называет роль другой стороны фразой с подлежащим (TRK-135): «parent TRK-2»
+    # читали как «родитель — TRK-2», хотя вид называл роль своей задачи.
+    assert entry.title == "Link added: TRK-2 is a child of this task"
     assert entry.body == ""
 
 
@@ -428,6 +431,86 @@ async def test_relates_is_removed_from_a_closed_task_as_well(
     kinds = [entry.type for entry in await entries(db_session, closed, task_actor)]
     assert kinds.count(EntryType.LINK_ADDED) == 1
     assert kinds.count(EntryType.LINK_REMOVED) == 1
+
+
+# --- Один родитель ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("from_child_side", [False, True], ids=["parent", "child"])
+async def test_a_second_parent_is_refused_from_either_side(
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+    from_child_side: bool,
+) -> None:
+    """Родитель у задачи один (TRK-135): второй — `task_has_parent`, как ни проси.
+
+    `parent` со стороны нового родителя и `child` со стороны ребёнка — одна строка связи,
+    и отказ у них один. В подробностях — ребёнок и его нынешний родитель: агенту, который
+    хотел перевесить задачу, сразу видно, какую связь снять.
+    """
+    first = await make(db_session, task_actor, queue, "первая программа")
+    second = await make(db_session, task_actor, queue, "вторая программа")
+    child = await make(db_session, task_actor, queue, "часть")
+    await service.add_link(db_session, first, child, actor=task_actor, kind=LinkKind.PARENT)
+
+    with pytest.raises(TaskHasParentError) as error:
+        if from_child_side:
+            await service.add_link(db_session, child, second, actor=task_actor, kind=LinkKind.CHILD)
+        else:
+            await service.add_link(
+                db_session, second, child, actor=task_actor, kind=LinkKind.PARENT
+            )
+
+    assert error.value.code == "task_has_parent"
+    assert error.value.details["child"] == child.key
+    assert error.value.details["parent"] == first.key
+    links = await service.list_links(db_session, child, actor=task_actor)
+    assert [(link.kind, link.other.key) for link in links] == [(LinkKind.CHILD, first.key)]
+
+
+async def test_a_parent_takes_many_children_and_a_child_can_change_its_parent(
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Запрет касается только числа родителей: детей сколько угодно, перевесить можно.
+
+    Перевесить — снять нынешнюю связь и поставить новую: после снятия родителя нет, и
+    вторая программа принимается.
+    """
+    program = await make(db_session, task_actor, queue, "программа")
+    other = await make(db_session, task_actor, queue, "другая программа")
+    children = [await make(db_session, task_actor, queue, f"часть {n}") for n in range(3)]
+    for child in children:
+        await service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
+
+    await service.remove_link(
+        db_session, children[0], program, actor=task_actor, kind=LinkKind.CHILD
+    )
+    await service.add_link(db_session, other, children[0], actor=task_actor, kind=LinkKind.PARENT)
+
+    seen = await service.list_links(db_session, program, actor=task_actor)
+    # Время связей в одной транзакции одно, и порядок детей между собой решает `id`.
+    assert sorted((link.kind, link.other.key) for link in seen) == sorted(
+        (LinkKind.PARENT, child.key) for child in children[1:]
+    )
+    moved = await service.list_links(db_session, children[0], actor=task_actor)
+    assert [(link.kind, link.other.key) for link in moved] == [(LinkKind.CHILD, other.key)]
+
+
+async def test_an_exact_repeat_of_the_parent_link_is_still_a_duplicate(
+    db_session: AsyncSession,
+    task_actor: Actor,
+    queue: Queue,
+) -> None:
+    """Повтор той же связи — `link_exists`, а не «второй родитель»: родитель тот же."""
+    program = await make(db_session, task_actor, queue, "программа")
+    child = await make(db_session, task_actor, queue, "часть")
+    await service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
+
+    with pytest.raises(LinkExistsError):
+        await service.add_link(db_session, child, program, actor=task_actor, kind=LinkKind.CHILD)
 
 
 # --- Циклы ------------------------------------------------------------------------------

@@ -10,12 +10,12 @@
 как значение по умолчанию.
 
 Без явного `fields` возвращается задача целиком — ровно в том же виде, в каком её отдаёт
-чтение, плюс вычисляемые признаки и прямые родители: набор полей у `TaskSearchRead` — это
-поля `TaskRead`, `features` и `parents`, и это стережёт тест. Два разных представления
+чтение, плюс вычисляемые признаки и родитель: набор полей у `TaskSearchRead` — это
+поля `TaskRead`, `features` и `parent`, и это стережёт тест. Два разных представления
 одной задачи в одном API — то, чего проект не допускает, поэтому признаки приезжают тем
 же объектом `TaskFeaturesRead`, что и в пакете преемника, а не плоскими полями рядом с
-колонками задачи. Родители — это связи `child` того же пакета, сжатые до ключа и
-названия: строке списка нужно назвать программу, а не показать связь целиком.
+колонками задачи. Родитель — это поле `parent` того же пакета, сжатое до ключа и
+названия: строке списка нужно назвать программу, а не показать её статус.
 
 ## Два способа задать отбор и один результат
 
@@ -48,7 +48,7 @@ from app.domain.search import (
     MAX_QUERY_LENGTH,
     MAX_SORT_TERMS,
     MAX_VALUES_PER_CONDITION,
-    PARENTS_FIELD,
+    PARENT_FIELD,
     Operator,
     searchable_names,
     selectable_names,
@@ -85,8 +85,8 @@ _FIELDS_DESCRIPTION = (
     "included. `features` is picked as a whole and brings "
     + ", ".join(f"`{name}`" for name in feature_names())
     + "; a single feature is not a field of the answer, and asking for one answers 422 "
-    "`search_field_unknown` with the selectable names. `parents` brings the direct parents "
-    "of the task, key and title of each; a top-level task has an empty list"
+    "`search_field_unknown` with the selectable names. `parent` brings the parent of the "
+    "task, key and title, or `null` for a top-level task"
 )
 QueryParam = Annotated[
     str | None,
@@ -269,7 +269,7 @@ TaskFilterParams = Annotated[TaskFilters, Depends()]
 
 
 class TaskParentRead(BaseModel):
-    """Прямой родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
+    """Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
 
     Статуса нет намеренно: строка называет, куда задача входит, а о родителе
     спрашивают его самого.
@@ -314,13 +314,12 @@ class TaskSearchRead(BaseModel):
             "carries. Included unless `fields` asks for a narrower set without `features`"
         ),
     )
-    parents: list[TaskParentRead] | None = Field(
+    parent: TaskParentRead | None = Field(
         default=None,
         description=(
-            "Direct parents of the task, key and title of each, in the order the links "
-            "were made: a task may have more than one. Empty for a top-level task. "
-            "Grandparents are not included. Included unless `fields` asks for a narrower "
-            "set without `parents`"
+            "The parent of the task, key and title; a task has at most one. `null` for a "
+            "top-level task. Grandparents are not included. Included unless `fields` asks "
+            "for a narrower set without `parent`"
         ),
     )
 
@@ -330,8 +329,8 @@ class TaskSearchRead(BaseModel):
 
         Признаков в словаре нет, если их не считали: `fields` без `features` — прямая
         просьба не платить за подзапросы, и показать в таком ответе `null` значило бы
-        соврать про задачу, у которой признаки есть всегда. С родителями так же: `null`
-        читался бы как «родителей нет», а у задачи верхнего уровня это `[]`.
+        соврать про задачу, у которой признаки есть всегда. С родителем тоньше: `null` —
+        законный ответ «родителя нет», поэтому поле кладётся только когда его просили.
         """
         task = found.task
         payload: dict[str, object] = {
@@ -357,10 +356,9 @@ class TaskSearchRead(BaseModel):
             payload[FEATURES_FIELD] = TaskFeaturesRead.model_validate(
                 found.features, from_attributes=True
             )
-        if found.parents is not None:
-            payload[PARENTS_FIELD] = [
-                TaskParentRead.model_validate(parent) for parent in found.parents
-            ]
+        if found.parent is not None:
+            asked = found.parent.value
+            payload[PARENT_FIELD] = None if asked is None else TaskParentRead.model_validate(asked)
         if fields:
             payload = {name: value for name, value in payload.items() if name in fields}
         return cls(**payload)  # type: ignore[arg-type]

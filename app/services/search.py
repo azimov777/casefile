@@ -87,7 +87,7 @@ from app.domain.search import (
     sortable_names,
     split_names,
 )
-from app.domain.tasks import TaskFeatures, TaskParent, TaskPriority, TaskStatus
+from app.domain.tasks import AskedParent, TaskFeatures, TaskPriority, TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import queues as queues_service
 from app.services import tasks as tasks_service
@@ -123,15 +123,15 @@ class FoundTask:
     нет»: у задачи они есть всегда, и `blocked=False` здесь соврал бы. Сериализатор в
     таком ответе поля `features` не показывает вовсе.
 
-    С родителями то же правило: `parents is None` — «не просили», пустой кортеж — «у
-    задачи верхнего уровня родителей нет». Едут они той же строкой и по той же причине:
+    С родителем то же правило: `parent is None` — «не просили», `AskedParent(None)` — «у
+    задачи верхнего уровня родителя нет». Едут они той же строкой и по той же причине:
     доска, называющая программу каждой карточки, не может звать карточку родителя на
     каждую строку (`CONCEPT.md`, 4.4).
     """
 
     task: Task
     features: TaskFeatures | None = None
-    parents: tuple[TaskParent, ...] | None = None
+    parent: AskedParent | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,8 +194,8 @@ async def search_tasks(
     return SearchOutcome(
         page=Page(
             items=[
-                FoundTask(task=task, features=features, parents=parents)
-                for task, features, parents in page.items
+                FoundTask(task=task, features=features, parent=parent)
+                for task, features, parent in page.items
             ],
             next_cursor=page.next_cursor,
             total=page.total,

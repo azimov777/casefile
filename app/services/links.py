@@ -58,6 +58,7 @@ from app.domain.errors import (
     LinkExistsError,
     LinkNotFoundError,
     TaskClosedError,
+    TaskHasParentError,
 )
 from app.domain.links import (
     LinkKind,
@@ -113,6 +114,31 @@ def blocked(links: Sequence[TaskLink]) -> bool:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class Hierarchy:
+    """Связи задачи, разобранные для карточки: родитель, дети и всё остальное."""
+
+    parent: TaskLink | None
+    children: list[TaskLink]
+    others: list[TaskLink]
+
+
+def split_hierarchy(links: Sequence[TaskLink]) -> Hierarchy:
+    """Выносит родителя и детей из общего списка связей в отдельные поля карточки.
+
+    Родитель — задача на другом конце связи, которую эта задача видит как `child` («я
+    ребёнок X»); дети — те, кого она видит как `parent`. Родитель у задачи один
+    (TRK-135); в данных старше правила их может быть больше, и тогда карточка называет
+    первого по времени связи — того же, что строка выдачи (`parent_of`).
+    """
+    parents = [link for link in links if link.kind is LinkKind.CHILD]
+    return Hierarchy(
+        parent=parents[0] if parents else None,
+        children=[link for link in links if link.kind is LinkKind.PARENT],
+        others=[link for link in links if link.kind not in (LinkKind.PARENT, LinkKind.CHILD)],
+    )
+
+
 async def open_blockers(session: AsyncSession, task: Task) -> list[str]:
     """Ключи незакрытых блокеров — факт для проверки перехода в `in_progress`.
 
@@ -141,9 +167,9 @@ async def add_link(
     """Ставит связь `task <kind> other` и подшивает `link_added` в оба дела.
 
     Порядок проверок — от дешёвых к дорогим и от формы к состоянию: вид связи, связь с
-    самой собой, закрытые задачи, дубликат, кольцо. Кольцо последним не случайно: это
-    единственная проверка с обходом графа, и платить за неё на заведомо неверном
-    запросе незачем.
+    самой собой, закрытые задачи, дубликат, второй родитель, кольцо. Кольцо последним
+    не случайно: это единственная проверка с обходом графа, и платить за неё на
+    заведомо неверном запросе незачем.
 
     Очередь изменений занимается после проверок формы и до первой проверки состояния:
     форма не зависит от того, что делают соседи, а всё остальное — зависит.
@@ -159,6 +185,14 @@ async def add_link(
     existing = await repository.find(source_id=source.id, target_id=target.id, kind=stored_kind)
     if existing is not None:
         raise LinkExistsError(details=_sides(task, other, requested))
+    if stored_kind is LinkKind.PARENT:
+        # Родитель один (TRK-135). Гонки двух запросов здесь нет: очередь изменений
+        # (`lock_changes` выше) пускает сценарии по одному, и второй прочтёт связь первого.
+        current = await repository.parent_key(target.id)
+        if current is not None:
+            raise TaskHasParentError(
+                details=_sides(task, other, requested) | {"child": target.key, "parent": current}
+            )
     if is_acyclic(stored_kind) and await repository.reaches(
         kind=stored_kind, from_id=target.id, to_id=source.id
     ):

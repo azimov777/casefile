@@ -16,7 +16,7 @@ from app.api.schemas.tasks import TaskFeaturesRead, TaskRead
 from app.db.models.queue import Queue
 from app.db.models.task import Task
 from app.domain.links import LinkKind
-from app.domain.search import FEATURES_FIELD, PARENTS_FIELD, SELECTABLE_FIELDS
+from app.domain.search import FEATURES_FIELD, PARENT_FIELD, SELECTABLE_FIELDS
 from app.domain.tasks import TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
@@ -403,17 +403,17 @@ async def test_the_search_answer_carries_the_same_fields_as_the_task_card() -> N
     Поле, добавленное в карточку и забытое здесь, приезжало бы из списка и из чтения
     по-разному, и фронтенд узнал бы об этом на своей стороне.
 
-    Строка списка шире карточки ровно на `features` и `parents`: в чтении признаки лежат
+    Строка списка шире карточки ровно на `features` и `parent`: в чтении признаки лежат
     рядом с карточкой, в пакете преемника (`TaskPackageRead.features`), и объект у них
-    один и тот же — `TaskFeaturesRead`. Родители в пакете — связи `child`, а в строке они
-    сжаты до ключа и названия (TRK-95): строке нужно назвать программу, а не связь.
+    один и тот же — `TaskFeaturesRead`. Родитель в пакете — поле `parent` со статусом, а в
+    строке он сжат до ключа и названия (TRK-95, TRK-135): строке нужно назвать программу.
     """
     assert set(TaskSearchRead.model_fields) == set(TaskRead.model_fields) | {
         FEATURES_FIELD,
-        PARENTS_FIELD,
+        PARENT_FIELD,
     }
     assert TaskSearchRead.model_fields[FEATURES_FIELD].annotation == TaskFeaturesRead | None
-    assert TaskSearchRead.model_fields[PARENTS_FIELD].annotation == list[TaskParentRead] | None
+    assert TaskSearchRead.model_fields[PARENT_FIELD].annotation == TaskParentRead | None
 
 
 async def test_every_row_carries_the_features_of_its_own_card(
@@ -520,68 +520,72 @@ async def program(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> 
 async def test_the_children_of_a_program_name_it_and_the_top_level_names_nobody(
     auth_client: AsyncClient, program: dict[str, Task]
 ) -> None:
-    """Проверка 2 задачи TRK-95 через HTTP: `parent: X` — у каждой строки X, `empty()` — `[]`.
+    """TRK-95, TRK-135 через HTTP: `parent: X` — у каждой строки X, `empty()` — `null`.
 
-    `[]`, а не `null`: у списка «родителей нет» — пустой список, а `null` на месте поля
-    не встречается вовсе — не запрошенного поля в строке просто нет.
+    Отбор и поле выдачи называются одним именем и значат одно: `parent: X` отбирает
+    строки, у которых в поле `parent` стоит X. `null` у верхнего уровня — «родителя нет»;
+    не запрошенного поля в строке нет вовсе.
     """
     parent = program["parent"]
     named = {"key": parent.key, "title": parent.title}
 
-    children = await listed(auth_client, query=f"parent: {parent.key}", fields="key,parents")
+    children = await listed(auth_client, query=f"parent: {parent.key}", fields="key,parent")
     assert children == [
-        {"key": program["first"].key, "parents": [named]},
-        {"key": program["second"].key, "parents": [named]},
+        {"key": program["first"].key, "parent": named},
+        {"key": program["second"].key, "parent": named},
     ]
 
-    top = await listed(auth_client, query="parent: empty()", fields="parents")
+    top = await listed(auth_client, query="parent: empty()", fields="parent")
     assert {item["key"] for item in top} == {parent.key, program["lone"].key}
-    assert all(item["parents"] == [] for item in top)
+    assert all(item["parent"] is None for item in top)
 
 
-async def test_every_row_names_the_parents_its_card_shows(
+async def test_every_row_names_the_parent_its_card_shows(
     auth_client: AsyncClient, program: dict[str, Task]
 ) -> None:
-    """Родители строки — это связи `child` карточки, сжатые до ключа и названия.
+    """Родитель строки — это поле `parent` карточки, сжатое до ключа и названия.
 
     Считаны они разными путями — подзапросом в выборке страницы и чтением связей
-    карточки, — и сойтись обязаны на каждой задаче, в том же порядке.
+    карточки, — и сойтись обязаны на каждой задаче. В `links` карточки родителя и детей
+    нет: они — поля `parent` и `children` (TRK-135).
     """
-    rows = {item["key"]: item["parents"] for item in await listed(auth_client)}
+    rows = {item["key"]: item["parent"] for item in await listed(auth_client)}
 
     assert set(rows) == {task.key for task in program.values()}
-    for key, parents in rows.items():
+    for key, parent in rows.items():
         card = await auth_client.get(f"/api/v1/tasks/{key}")
         assert card.status_code == 200, card.text
-        from_card = [
-            {"key": link["other"]["key"], "title": link["other"]["title"]}
-            for link in card.json()["data"]["links"]
-            if link["kind"] == "child"
-        ]
-        assert parents == from_card, key
+        data = card.json()["data"]
+        from_card = (
+            None
+            if data["parent"] is None
+            else {"key": data["parent"]["key"], "title": data["parent"]["title"]}
+        )
+        assert parent == from_card, key
+        assert all(link["kind"] not in ("parent", "child") for link in data["links"]), key
     assert rows[program["first"].key], "ребёнок обязан быть в расстановке"
 
 
 async def test_parents_are_picked_by_name_and_are_absent_when_not_asked(
     auth_client: AsyncClient, program: dict[str, Task]
 ) -> None:
-    """Проверка 3 задачи TRK-95 через HTTP: без `parents` в `fields` поля в строке нет.
+    """TRK-95 через HTTP: без `parent` в `fields` поля в строке нет.
 
-    Имя условия отбора — `parent`, имя поля выдачи — `parents`: это список. `fields=parent`
-    отвечает отказом с перечнем, где стоит верное имя, а не пустой строкой.
+    Прежнее имя `parents` (до TRK-135) отвечает отказом с перечнем, где стоит верное имя,
+    а не пустой строкой.
     """
     narrow = await listed(auth_client, fields="title")
     assert narrow
-    assert all(PARENTS_FIELD not in item for item in narrow)
+    assert all(PARENT_FIELD not in item for item in narrow)
 
     whole = await listed(auth_client)
-    assert all(PARENTS_FIELD in item for item in whole)
+    assert all(PARENT_FIELD in item for item in whole)
 
-    response = await auth_client.get("/api/v1/tasks", params={"fields": "parent"})
+    response = await auth_client.get("/api/v1/tasks", params={"fields": "parents"})
     assert response.status_code == 422
     error = response.json()["error"]
     assert error["code"] == "search_field_unknown"
-    assert PARENTS_FIELD in error["details"]["allowed"]
+    assert PARENT_FIELD in error["details"]["allowed"]
 
 
 # --- Страницами: общее число выдачи и адрес страницы --------------------------------------

@@ -80,7 +80,7 @@ from app.domain.errors import (
     EntryNotFoundError,
 )
 from app.domain.fields import FieldProblems
-from app.domain.links import LinkKind
+from app.domain.links import LinkKind, other_side_phrase
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     CheckGap,
@@ -788,7 +788,9 @@ async def record_link_change(
         task,
         actor=actor,
         type=EntryType.LINK_ADDED if added else EntryType.LINK_REMOVED,
-        title=f"Link {action}: {kind.value} {other_key}",
+        # Заголовок называет роль другой стороны фразой (TRK-135); вид в `payload` —
+        # по-прежнему роль своей задачи, как в `links` карточки.
+        title=f"Link {action}: {other_side_phrase(kind, other_key)}",
         payload={"kind": kind.value, "other": other_key},
         action_id=action_id,
     )

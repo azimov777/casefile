@@ -556,7 +556,7 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
     }
 
 
-async def test_search_tasks_names_the_parents_and_leaves_them_out_when_not_asked(
+async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
     mcp_session: Connect,
     auth_client: AsyncClient,
     db_session: AsyncSession,
@@ -564,11 +564,11 @@ async def test_search_tasks_names_the_parents_and_leaves_them_out_when_not_asked
     queue: Queue,
     task_secret: str,
 ) -> None:
-    """Проверка 3 задачи TRK-95: `parents` в `fields` — поле есть, без него — поля нет.
+    """TRK-95, TRK-135: `parent` в `fields` — поле есть, без него — поля нет.
 
     Строка совпадает с REST поле в поле. По умолчанию поле приезжает: агент одним
-    поиском видит программу каждой задачи (TRK-95#7). Имя `parent` в `fields` — отказ с
-    перечнем, где стоит `parents`: это имя условия отбора, а не поля выдачи.
+    поиском видит программу каждой задачи (TRK-95#7). Прежнее имя `parents` в `fields` —
+    отказ с перечнем, где стоит `parent`.
     """
     program = await tasks_service.create_task(
         db_session, actor=task_actor, queue=queue, title="программа", description="описание"
@@ -579,24 +579,24 @@ async def test_search_tasks_names_the_parents_and_leaves_them_out_when_not_asked
     await links_service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
     # Ключи и названия читаются до вызовов: сервер MCP фиксирует ту же сессию, и
     # истёкший объект полез бы в базу вне асинхронного контекста.
-    named = [{"key": program.key, "title": program.title}]
+    named = {"key": program.key, "title": program.title}
     program_key, child_key = program.key, child.key
 
-    fields = ["key", "parents"]
+    fields = ["key", "parent"]
     async with mcp_session(task_secret) as session:
         asked = await call(session, "search_tasks", queue=["TRK"], fields=fields)
         narrow = await call(session, "search_tasks", queue=["TRK"], fields=["key", "title"])
         default = await call(session, "search_tasks", queue=["TRK"])
-        wrong_name = await refuse(session, "search_tasks", fields=["key", "parent"])
+        wrong_name = await refuse(session, "search_tasks", fields=["key", "parents"])
 
     assert asked["items"] == [
-        {"key": program_key, "parents": []},
-        {"key": child_key, "parents": named},
+        {"key": program_key, "parent": None},
+        {"key": child_key, "parent": named},
     ]
-    assert all("parents" not in item for item in narrow["items"])
-    assert [item["parents"] for item in default["items"]] == [[], named]
+    assert all("parent" not in item for item in narrow["items"])
+    assert [item["parent"] for item in default["items"]] == [None, named]
     assert "search_field_unknown" in wrong_name
-    assert '"parents"' in wrong_name
+    assert '"parent"' in wrong_name
 
     response = await auth_client.get("/api/v1/tasks", params={"queue": "TRK", "fields": fields})
     assert response.status_code == 200, response.text
@@ -968,13 +968,58 @@ async def test_create_task_is_born_in_backlog_with_its_parent(
     # выше вызван именно им, без промежуточного поиска.
     assert package["task"]["key"] == child["key"]
 
-    # Вид связи называет роль **своей** задачи: у ребёнка это `child`, у родителя `parent`.
-    assert [(item["kind"], item["other"]["key"]) for item in package["links"]] == [
-        ("child", parent_key)
-    ]
-    assert [(item["kind"], item["other"]["key"]) for item in parent_package["links"]] == [
-        ("parent", child["key"])
-    ]
+    # Родитель и дети — поля карточки, а не виды в `links` (TRK-135): у ребёнка `parent`
+    # называет программу, у программы `children` — ребёнка.
+    assert package["parent"]["key"] == parent_key
+    assert package["children"] == []
+    assert [item["key"] for item in parent_package["children"]] == [child["key"]]
+    assert parent_package["parent"] is None
+    assert package["links"] == parent_package["links"] == []
+
+
+async def test_a_child_born_with_a_parent_takes_no_second_one(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Родитель один, детей много (TRK-135): `create_task(parent=)` даёт первого, второй —
+    отказ `task_has_parent` с любой стороны `link`, и связей у ребёнка не прибавляется.
+    """
+    sections = {
+        "goal": "цель",
+        "context": "контекст",
+        "constraints": "ограничения",
+        "output": "выход",
+        "checks": ["проверка"],
+    }
+    async with mcp_session(task_secret) as session:
+        other = await call(
+            session, "create_task", queue="trk", title="Вторая программа", description="д"
+        )
+        children = [
+            await call(
+                session,
+                "create_task",
+                queue="trk",
+                title=f"Часть {n}",
+                description="д",
+                sections=sections,
+                parent=task.key,
+            )
+            for n in range(2)
+        ]
+        child = children[0]["key"]
+        from_parent = await refuse(session, "link", key=other["key"], kind="parent", other=child)
+        from_child = await refuse(session, "link", key=child, kind="child", other=other["key"])
+        package = await call(session, "get_task", key=child)
+        program = await call(session, "get_task", key=task.key)
+
+    for text in (from_parent, from_child):
+        assert "task_has_parent" in text
+        assert task.key in text
+    assert package["parent"]["key"] == task.key
+    # Время связей в одной транзакции одно, и порядок детей между собой решает `id`.
+    assert sorted(item["key"] for item in program["children"]) == sorted(
+        item["key"] for item in children
+    )
 
 
 async def test_a_repeated_create_task_answers_with_the_first_task(

@@ -332,6 +332,19 @@ class LinkCycleError(ConflictError):
     message = "Link would create a cycle"
 
 
+class TaskHasParentError(ConflictError):
+    """У задачи уже есть родитель: второй не ставится, нынешний назван в `details.parent`.
+
+    Родитель у задачи один, детей сколько угодно (слово владельца 2026-09-24, TRK-135).
+    Отказ одинаков, с какой стороны ни просить: `parent` со стороны нового родителя и
+    `child` со стороны ребёнка — одна и та же строка связи. Сменить родителя — снять
+    нынешнюю связь и поставить новую.
+    """
+
+    code = "task_has_parent"
+    message = "Task already has a parent"
+
+
 class TaskBlockedError(ConflictError):
     """Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`.
 

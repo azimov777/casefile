@@ -10,14 +10,13 @@
 — единственное определение признака `blocked` в SQL, и поиску нужен тот же запрос,
 вложенный в `EXISTS` по каждой строке выдачи. Метод, привязанный к сессии, туда не
 годится, а второе написание условия развело бы поиск с карточкой (`docs/notes/search.md`).
-Так же объявлен `parents_of`: родители строки выдачи — подзапрос внутри выборки страницы.
+Так же объявлен `parent_of`: родитель строки выдачи — подзапрос внутри выборки страницы.
 """
 
 import uuid
 from typing import Any
 
-from sqlalchemy import Integer, Select, Uuid, cast, func, literal, or_, select, text
-from sqlalchemy.dialects.postgresql import aggregate_order_by
+from sqlalchemy import Integer, Select, Uuid, cast, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -51,6 +50,24 @@ class LinkRepository:
             Link.kind == kind,
         )
         return (await self._session.scalars(statement)).unique().one_or_none()
+
+    async def parent_key(self, task_id: uuid.UUID) -> str | None:
+        """Ключ родителя задачи — источника связи `parent`, где она цель, — или `None`.
+
+        Закрытый родитель тоже родитель: статус здесь не отбирается, в отличие от
+        `related_task_keys`. Родитель у задачи один (TRK-135); если данные старше этого
+        правила и родителей больше, берётся первый по времени связи — ответ «родитель
+        уже есть» от этого не меняется.
+        """
+        parent = aliased(Task, name="parent_task")
+        statement = (
+            select(parent.key)
+            .join(Link, parent.id == Link.source_id)
+            .where(Link.target_id == task_id, Link.kind == LinkKind.PARENT)
+            .order_by(Link.created_at, Link.id)
+            .limit(1)
+        )
+        return await self._session.scalar(statement)
 
     async def list_for_task(self, task_id: uuid.UUID) -> list[Link]:
         """Все связи задачи: и те, где она источник, и те, где она цель.
@@ -177,35 +194,27 @@ def related_task_keys(task_id: Any, *, kind: LinkKind, as_source: bool) -> Selec
     )
 
 
-def parents_of(task_id: Any) -> Select[tuple[Any]]:
-    """Прямые родители задачи одним значением: JSON-список `{key, title}`, пустой — `[]`.
+def parent_of(task_id: Any) -> Select[tuple[Any]]:
+    """Родитель задачи одним значением: JSON-объект `{key, title}` или `NULL`.
 
-    Отдаётся не строками, а одним агрегатом, потому что поиск вкладывает запрос в
-    выборку страницы скалярным подзапросом — колонкой рядом с признаками, — и родители
-    всей страницы приезжают тем же запросом, что и сама страница, без запроса на строку
-    (`CONCEPT.md`, 4.4). Строками запрос пришлось бы соединять со страницей, а соединение
-    размножило бы задачу по числу родителей и сломало бы и страницу, и курсор.
+    Отдаётся не строкой, а одним значением, потому что поиск вкладывает запрос в выборку
+    страницы скалярным подзапросом — колонкой рядом с признаками, — и родители всей
+    страницы приезжают тем же запросом, что и сама страница, без запроса на строку
+    (`CONCEPT.md`, 4.4). Соединение со страницей размножило бы задачу по числу связей и
+    сломало бы и страницу, и курсор.
 
     Родитель — источник связи `parent`, задача — её цель (`app/domain/links.py`,
     `canonical_form`), поэтому ребёнок ищется по `target_id`: тот же индекс
-    `ix_links_target_id_kind`, что у отбора `parent:`. Порядок — появление связи, как у
-    связей в карточке (`list_for_task`): ключ содержит номер, и строковый порядок поставил
-    бы `TRK-10` перед `TRK-2`.
-
-    `[]`, а не `NULL`, у задачи без родителей: у списка «ничего» — это пустой список, и
-    второй способ сказать то же самое вызывающему пришлось бы помнить.
+    `ix_links_target_id_kind`, что у отбора `parent:`. Родитель у задачи один (TRK-135);
+    в данных старше этого правила их может быть больше, и тогда берётся первый по
+    времени связи — тот же, что назовёт карточка (`LinkRepository.parent_key`).
     """
     parent = aliased(Task, name="parent_task")
-    listed = func.jsonb_agg(
-        aggregate_order_by(
-            func.jsonb_build_object("key", parent.key, "title", parent.title),
-            Link.created_at,
-            Link.id,
-        )
-    )
     return (
-        select(func.coalesce(listed, text("'[]'::jsonb")))
+        select(func.jsonb_build_object("key", parent.key, "title", parent.title))
         .select_from(Link)
         .join(parent, parent.id == Link.source_id)
         .where(Link.kind == LinkKind.PARENT, Link.target_id == task_id)
+        .order_by(Link.created_at, Link.id)
+        .limit(1)
     )

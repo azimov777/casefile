@@ -27,7 +27,7 @@ from app.api.schemas.entries import (
     EntryRead,
     entry_read,
 )
-from app.api.schemas.links import TaskLinkRead
+from app.api.schemas.links import LinkTaskRead, TaskLinkRead
 from app.api.schemas.search import (
     FieldsParam,
     QueryParam,
@@ -224,6 +224,10 @@ async def read_task(
     return DataResponse[TaskPackageRead](
         data=TaskPackageRead(
             task=TaskRead.model_validate(package.task),
+            parent=None
+            if package.parent is None
+            else LinkTaskRead.model_validate(package.parent.other),
+            children=[LinkTaskRead.model_validate(link.other) for link in package.children],
             links=[TaskLinkRead.model_validate(link) for link in package.links],
             features=TaskFeaturesRead.model_validate(package.features, from_attributes=True),
             # `entry_read` отдаёт вариант по типу записи, а сценарий гарантирует, что

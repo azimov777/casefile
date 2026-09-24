@@ -370,10 +370,12 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/
 дёшево: подзапросы считаются только для строк страницы, замеры на 40 000 задач — в
 `docs/notes/search.md`.
 
-Рядом с ними в строке лежит `parents` — прямые родители задачи, ключ и название каждого
-(схема `TaskParentRead`); у задачи верхнего уровня список пуст. По нему видно, к какой
-программе относится задача, без чтения её карточки. Выбирается поле тоже именем
-(`fields=key,parents`), а отбирают по родителю условием `parent` в единственном числе.
+Рядом с ними в строке лежит `parent` — родитель задачи, ключ и название (схема
+`TaskParentRead`); у задачи верхнего уровня `null`. По нему видно, к какой программе
+относится задача, без чтения её карточки. Выбирается поле тоже именем
+(`fields=key,parent`), и тем же именем по родителю отбирают: `parent: TRK-7`. В карточке
+(`GET /api/v1/tasks/{key}`) родитель и дети — поля `parent` и `children`, а не виды в
+`links`.
 
 ```bash
 # кандидаты назначателя одной строкой: что можно брать в работу прямо сейчас
@@ -393,9 +395,9 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -H "Authorization: Bearer $TOKEN" \
      'http://localhost:8000/api/v1/tasks?fields=title,features&limit=100'
 
-# дети программы и её имя в каждой строке: parent отбирает, parents приезжает в ответе
+# дети программы и её имя в каждой строке: parent и отбирает, и приезжает в ответе
 curl -H "Authorization: Bearer $TOKEN" --get --data-urlencode 'query=parent: TRK-7' \
-     --data-urlencode 'fields=title,parents' http://localhost:8000/api/v1/tasks
+     --data-urlencode 'fields=title,parent' http://localhost:8000/api/v1/tasks
 
 # порядок и страницы: sort принимает key, updated_at и priority, минус — по убыванию
 curl -H "Authorization: Bearer $TOKEN" \
@@ -735,11 +737,11 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 | `TRACKER_MCP_TEXT_LIMIT` | потолок длинного текста в выдаче `search_tasks`; обрезка объявлена полями `<поле>_truncated` и `<поле>_length`, а задача целиком — один `get_task` |
 
 `search_tasks` по умолчанию просит узкий набор полей (`key`, `title`, `status`,
-`assignee`, `priority`, `features`, `parents`): полная задача с пятью разделами съедает
+`assignee`, `priority`, `features`, `parent`): полная задача с пятью разделами съедает
 контекст ровно там, где агент выбирает, что брать. Признаки в набор входят — по ним
 решают, можно ли брать задачу, и без них пришлось бы звать `get_task` на каждую строку.
-Родители входят по той же причине: без них не видно, к какой программе относится задача.
-Задаче верхнего уровня они стоят `"parents":[]`. Пустой список `fields` возвращает задачу
+Родитель входит по той же причине: без него не видно, к какой программе относится задача.
+Задаче верхнего уровня он стоит `"parent":null`. Пустой список `fields` возвращает задачу
 целиком.
 
 ## Команды разработки
