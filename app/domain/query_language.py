@@ -99,7 +99,7 @@ EMPTY_FUNCTION = "empty"
 QUERY_EXAMPLES: tuple[str, ...] = (
     "queue: TRK and status: open and blocked: false",
     "status: in open, in_progress",
-    "priority: >= high and text: ~ ключ",
+    "priority: >= high and text: ~ login",
     "assignee: empty() or open_questions: > 0",
 )
 
