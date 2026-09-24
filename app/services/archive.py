@@ -45,7 +45,7 @@ from app.db import archive as store
 from app.db.locks import lock_changes
 from app.db.models.account import Account
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.token import Token
 from app.db.repositories import ParticipantRepository
 from app.domain.archive import (
@@ -149,7 +149,7 @@ async def import_installation(
     """Заменяет данные пустой установки архивом, доводя его схему до head.
 
     Отказы: форма документа (`archive_format_unsupported`, `archive_invalid`), архив
-    новее приёмника (`archive_revision_unknown`), у приёмника есть очереди
+    новее приёмника (`archive_revision_unknown`), у приёмника есть проекты
     (`installation_not_empty`). Любой отказ — в том числе строка, которую не принял
     Postgres, — не оставляет в приёмнике ничего: всё идёт одной транзакцией вызывающего.
     """
@@ -162,9 +162,9 @@ async def import_installation(
         raise ArchiveRevisionUnknownError(
             details={"schema_revision": archive.schema_revision, "head": head}
         )
-    queues = await session.scalar(select(func.count()).select_from(Queue)) or 0
-    if queues:
-        raise InstallationNotEmptyError(details={"queues": queues})
+    projects = await session.scalar(select(func.count()).select_from(Project)) or 0
+    if projects:
+        raise InstallationNotEmptyError(details={"projects": projects})
 
     machine_keys = await _machine_keys(session)
     replaced = {

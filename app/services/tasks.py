@@ -51,7 +51,7 @@ from app.core.sentinels import UNSET, is_set
 from app.db.locks import lock_changes
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import TaskRepository
 from app.domain.case import EntryHeading
@@ -90,7 +90,7 @@ from app.domain.tasks import (
 from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import links as links_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services.auth import Actor
 from app.services.permissions import ensure_scope
 
@@ -288,7 +288,7 @@ async def create_task(
     session: AsyncSession,
     *,
     actor: Actor,
-    queue: Queue,
+    project: Project,
     title: str,
     description: str,
     goal: str = "",
@@ -306,7 +306,7 @@ async def create_task(
     транзакции теряется навсегда (`docs/notes/db.md`), а неудачные запросы у агентов —
     обычное дело. Новую проверку ставить **до** выдачи номера.
 
-    Очередь изменений занимается раньше строки очереди задач: единый порядок захвата
+    Очередь изменений занимается раньше строки проекта: единый порядок захвата
     (`app/db/locks.py`) — то, чем два одновременных создания не встают друг о друга.
     """
     ensure_scope(actor, TokenScope.TASK, action="task.create")
@@ -327,14 +327,14 @@ async def create_task(
     )
 
     # Номер — последним, после всех проверок: см. строку документации выше.
-    number = await queues_service.next_task_number(session, queue, actor=actor)
+    number = await projects_service.next_task_number(session, project, actor=actor)
 
-    # Очередь передаётся объектом, а не идентификатором: у только что созданной задачи
+    # Проект передаётся объектом, а не идентификатором: у только что созданной задачи
     # связь иначе не загружена, и сборка ответа полезла бы за ней в базу вне
     # async-контекста — падение `MissingGreenlet` далеко от места ошибки.
     task = Task(
-        key=format_task_key(queue.key, number),
-        queue=queue,
+        key=format_task_key(project.key, number),
+        project=project,
         status=INITIAL_STATUS,
         version=1,
         **{field.value: value for field, value in stored.items()},

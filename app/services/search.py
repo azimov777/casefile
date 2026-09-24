@@ -2,7 +2,7 @@
 
 Единственное место, где внутреннее представление фильтра встречается с базой. Разбор
 языка живёт в домене и проверяется без базы, компиляция в SQL — в
-`app/db/repositories/search.py`; здесь между ними стоит шаг, которому нужны очереди и
+`app/db/repositories/search.py`; здесь между ними стоит шаг, которому нужны проекты и
 перечисления.
 
 ## Два источника фильтра и один результат
@@ -29,7 +29,7 @@
 
 Форму запроса — скобки, операторы, позицию ошибки — проверил разбор. Сюда приезжает
 дерево, в котором имена и значения ещё строки, и остаётся то, на что нужна база или
-перечисление: существует ли такая очередь, бывает ли такой статус, число ли это.
+перечисление: существует ли такой проект, бывает ли такой статус, число ли это.
 
 Транзакцию функции не фиксируют: границу держит вход в приложение.
 """
@@ -89,7 +89,7 @@ from app.domain.search import (
 )
 from app.domain.tasks import AskedParent, TaskFeatures, TaskPriority, TaskStatus
 from app.domain.tokens import TokenScope
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.permissions import ensure_scope
@@ -403,7 +403,7 @@ def _split_empty(
 
     `empty()` — не значение, а признак его отсутствия, и держать их вперемешку значило
     бы искать маркер перебором в компиляторе. Поле, у которого пустого состояния не
-    бывает (`queue`, `status`), отвергает маркер здесь, а не молча им пренебрегает.
+    бывает (`project`, `status`), отвергает маркер здесь, а не молча им пренебрегает.
     """
     values: list[SearchValue] = []
     include_empty = False
@@ -431,8 +431,8 @@ async def _resolve_value(
     value: SearchValue,
 ) -> Any:
     match spec.kind:
-        case SearchValueKind.QUEUE_KEY:
-            return await _queue_id(session, condition, value)
+        case SearchValueKind.PROJECT_KEY:
+            return await _project_id(session, condition, value)
         case SearchValueKind.TASK_KEY:
             return await _task_id(session, condition, value)
         case SearchValueKind.STATUS:
@@ -449,25 +449,25 @@ async def _resolve_value(
             return _text(condition, value)
 
 
-async def _queue_id(session: AsyncSession, condition: Condition, value: SearchValue) -> Any:
-    """Очередь по ключу. Ненайденная очередь — неверное значение фильтра, а не `404`.
+async def _project_id(session: AsyncSession, condition: Condition, value: SearchValue) -> Any:
+    """Проект по ключу. Ненайденный проект — неверное значение фильтра, а не `404`.
 
-    Промах здесь особенно важно назвать: `queue: TKR` без проверки дал бы пустую
-    выдачу, неотличимую от «в очереди нет подходящих задач», и искать опечатку
+    Промах здесь особенно важно назвать: `project: TKR` без проверки дал бы пустую
+    выдачу, неотличимую от «в проекте нет подходящих задач», и искать опечатку
     пришлось бы, глядя на данные.
     """
     key = _text(condition, value)
     try:
-        queue = await queues_service.get_queue(session, key)
+        project = await projects_service.get_project(session, key)
     except AppError as exc:
         raise _value_rejected(condition, value, exc, key) from exc
-    return queue.id
+    return project.id
 
 
 async def _task_id(session: AsyncSession, condition: Condition, value: SearchValue) -> Any:
     """Задача по ключу. Ненайденная задача — неверное значение фильтра, а не `404`.
 
-    Названный промах здесь важнее, чем у очереди: `parent: TKR-7` без проверки дал бы
+    Названный промах здесь важнее, чем у проекта: `parent: TKR-7` без проверки дал бы
     пустую выдачу, а пустая выдача на вопрос «что у детей этой задачи» читается как
     «детей нет» — то есть как ответ, а не как опечатка. На таком ответе программу
     закрывают.

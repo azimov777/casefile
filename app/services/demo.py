@@ -8,7 +8,7 @@
 
 Что наполняется (`TRK-29`):
 
-- очередь `DEMO` с описанием — общим контекстом всех её задач;
+- проект `DEMO` с описанием — общим контекстом всех его задач;
 - семь задач: все шесть статусов, `in_progress` — двумя, потому что интересны обе:
   с живой сводкой и с провальным вердиктом, держащим выход в `done`;
 - записи **всех** типов, включая служебные `section_changed`, `assignee_changed`,
@@ -20,7 +20,7 @@
 
 ## Идемпотентность
 
-Признак «демо уже наполнено» — существование очереди `DEMO`. Повтор ничего не делает и
+Признак «демо уже наполнено» — существование проекта `DEMO`. Повтор ничего не делает и
 говорит об этом. Считать задачи или записи и дописывать недостающее было бы хуже: демо
 — это одна связная история, и наполовину доигранная история хуже, чем отсутствующая.
 """
@@ -30,27 +30,27 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
-from app.db.repositories import ParticipantRepository, QueueRepository
+from app.db.repositories import ParticipantRepository, ProjectRepository
 from app.domain.authors import label_author
 from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
-from app.domain.queues import normalize_queue_key
+from app.domain.projects import normalize_project_key
 from app.domain.tasks import TaskPriority, TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import participants as participants_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.setup import DEFAULT_OWNER_NAME
 from app.services.tasks import TaskChanges
 
-#: Ключ демонстрационной очереди. Он же признак «демо уже наполнено».
-DEMO_QUEUE_KEY = "DEMO"
+#: Ключ демонстрационного проекта. Он же признак «демо уже наполнено».
+DEMO_PROJECT_KEY = "DEMO"
 
 #: Постоянный агент демо: ему адресуемы вопросы и он подписывает большую часть записей.
 DEMO_AGENT_NAME = "demo_agent"
@@ -60,7 +60,7 @@ DEMO_AGENT_NAME = "demo_agent"
 #: identity агента (`CONCEPT.md`, 3.1), а не только именную.
 DEMO_LABEL = "nightly_agent"
 
-_QUEUE_DESCRIPTION = """Демонстрационная очередь: на ней видно каждый экран интерфейса.
+_PROJECT_DESCRIPTION = """Демонстрационный проект: на нём видно каждый экран интерфейса.
 
 Задачи здесь ненастоящие, но собраны настоящими сценариями трекера — теми же, которыми
 работают агенты. Дело каждой задачи читается сверху вниз как история: что решили, что
@@ -74,27 +74,27 @@ _QUEUE_DESCRIPTION = """Демонстрационная очередь: на н
 
 @dataclass(frozen=True, slots=True)
 class DemoData:
-    """Что наполнено. `None` в `queue` означает «уже было наполнено, ничего не делали»."""
+    """Что наполнено. `None` в `project` означает «уже было наполнено, ничего не делали»."""
 
-    queue: Queue | None
+    project: Project | None
     tasks: list[Task]
 
     @property
     def created(self) -> bool:
-        return self.queue is not None
+        return self.project is not None
 
 
 async def seed_demo(session: AsyncSession) -> DemoData:
     """Наполняет установку демонстрационными данными. Повтор ничего не делает.
 
     Автор каждого действия — тот, кто делал бы его в жизни: задачи ведёт агент, отвечает
-    на вопросы человек, очередь и участников заводит владелец установки. Подставлять
+    на вопросы человек, проект и участников заводит владелец установки. Подставлять
     везде одного автора было бы проще, но экран дела перестал бы показывать то, ради
     чего в записи есть подпись.
     """
-    key = normalize_queue_key(DEMO_QUEUE_KEY)
-    if await QueueRepository(session).get_by_key(key) is not None:
-        return DemoData(queue=None, tasks=[])
+    key = normalize_project_key(DEMO_PROJECT_KEY)
+    if await ProjectRepository(session).get_by_key(key) is not None:
+        return DemoData(project=None, tasks=[])
 
     human = await _human(session)
     owner = Actor(author=human.author, scope=TokenScope.MAIN, participant=human)
@@ -104,23 +104,23 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     # общего агентского токена, которым такой агент и ходит.
     temporary = Actor(author=label_author(DEMO_LABEL), scope=TokenScope.TASK)
 
-    queue = await queues_service.create_queue(
+    project = await projects_service.create_project(
         session,
         actor=owner,
-        key=DEMO_QUEUE_KEY,
+        key=DEMO_PROJECT_KEY,
         title="Демонстрация",
-        description=_QUEUE_DESCRIPTION,
+        description=_PROJECT_DESCRIPTION,
     )
 
-    done = await _done_task(session, queue, agent=agent, temporary=temporary, human=human)
-    in_progress = await _in_progress_task(session, queue, agent=agent, owner=owner, human=human)
-    candidate = await _candidate_task(session, queue, agent=agent)
-    waiting = await _waiting_task(session, queue, agent=agent, human=human)
-    child = await _child_task(session, queue, agent=agent, parent=in_progress)
+    done = await _done_task(session, project, agent=agent, temporary=temporary, human=human)
+    in_progress = await _in_progress_task(session, project, agent=agent, owner=owner, human=human)
+    candidate = await _candidate_task(session, project, agent=agent)
+    waiting = await _waiting_task(session, project, agent=agent, human=human)
+    child = await _child_task(session, project, agent=agent, parent=in_progress)
     checking = await _checking_task(
-        session, queue, agent=agent, temporary=temporary, blocker=in_progress
+        session, project, agent=agent, temporary=temporary, blocker=in_progress
     )
-    cancelled = await _cancelled_task(session, queue, agent=agent)
+    cancelled = await _cancelled_task(session, project, agent=agent)
 
     # Человек правит курс: замечание к уже закрытой задаче и его разбор. Одно замечание
     # разобрано и указывает на живую задачу, второе ждёт разбора — из него на экране
@@ -138,7 +138,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     await links_service.add_link(session, candidate, waiting, actor=agent, kind=LinkKind.RELATES)
 
     return DemoData(
-        queue=queue,
+        project=project,
         tasks=[done, in_progress, candidate, waiting, child, checking, cancelled],
     )
 
@@ -176,7 +176,7 @@ async def _agent(session: AsyncSession, owner: Actor) -> Participant:
         actor=owner,
         kind=ParticipantKind.AGENT,
         name=DEMO_AGENT_NAME,
-        description="Агент демонстрационной очереди: ведёт её задачи",
+        description="Агент демонстрационного проекта: ведёт его задачи",
     )
 
 
@@ -185,7 +185,7 @@ async def _agent(session: AsyncSession, owner: Actor) -> Participant:
 
 async def _done_task(
     session: AsyncSession,
-    queue: Queue,
+    project: Project,
     *,
     agent: Actor,
     temporary: Actor,
@@ -200,15 +200,15 @@ async def _done_task(
     task = await tasks_service.create_task(
         session,
         actor=agent,
-        queue=queue,
+        project=project,
         title="Ключ задачи сгорает на отклонённом запросе",
         description=(
-            "Номер выдаётся счётчиком очереди до валидации тела, поэтому запрос, "
+            "Номер выдаётся счётчиком проекта до валидации тела, поэтому запрос, "
             "отклонённый по форме, тратит номер навсегда."
         ),
-        goal="Отклонённый запрос не тратит номер очереди",
-        context="Номер выдаёт `queues.next_task_number`, вызов стоит первым в сценарии",
-        constraints="Счётчик очереди не переписывать: номера не переиспользуются",
+        goal="Отклонённый запрос не тратит номер проекта",
+        context="Номер выдаёт `projects.next_task_number`, вызов стоит первым в сценарии",
+        constraints="Счётчик проекта не переписывать: номера не переиспользуются",
         output="Перенесённый вызов и тест на несгоревший номер",
         checks=[
             "Создание задачи без названия оставляет `last_task_number` прежним",
@@ -222,7 +222,7 @@ async def _done_task(
         task,
         actor=agent,
         changes=TaskChanges(
-            goal="Отклонённый запрос не тратит номер очереди ни при какой ошибке валидации"
+            goal="Отклонённый запрос не тратит номер проекта ни при какой ошибке валидации"
         ),
     )
     await tasks_service.update_task(
@@ -288,7 +288,7 @@ async def _done_task(
         task,
         actor=agent,
         type=EntryType.NOTE,
-        title="Соседняя очередь заводит задачи тем же путём, её это тоже чинит",
+        title="Соседний проект заводит задачи тем же путём, его это тоже чинит",
     )
     await case_service.add_summary(
         session,
@@ -392,7 +392,7 @@ async def _remarks_on_done(
 
 async def _in_progress_task(
     session: AsyncSession,
-    queue: Queue,
+    project: Project,
     *,
     agent: Actor,
     owner: Actor,
@@ -406,7 +406,7 @@ async def _in_progress_task(
     task = await tasks_service.create_task(
         session,
         actor=agent,
-        queue=queue,
+        project=project,
         title="Лента журнала теряет записи при переподключении",
         description=(
             "Клиент, переподключившийся к потоку с `Last-Event-ID`, иногда пропускает "
@@ -455,19 +455,19 @@ async def _in_progress_task(
     return task
 
 
-async def _candidate_task(session: AsyncSession, queue: Queue, *, agent: Actor) -> Task:
+async def _candidate_task(session: AsyncSession, project: Project, *, agent: Actor) -> Task:
     """Свободная задача без блокеров и открытых вопросов — кандидат назначателя."""
     task = await tasks_service.create_task(
         session,
         actor=agent,
-        queue=queue,
-        title="Описание очереди не показывается в карточке задачи",
-        description="Агент получает ключ и название очереди, а описание запрашивает отдельно.",
-        goal="Понятно, откуда брать общий контекст очереди",
-        context="`get_queue` отдаёт описание целиком; в карточке задачи его нет намеренно",
+        project=project,
+        title="Описание проекта не показывается в карточке задачи",
+        description="Агент получает ключ и название проекта, а описание запрашивает отдельно.",
+        goal="Понятно, откуда брать общий контекст проекта",
+        context="`get_project` отдаёт описание целиком; в карточке задачи его нет намеренно",
         constraints="Описание в карточку задачи не добавлять: оно длинное и съест контекст",
-        output="Строка в `instructions` о том, когда звать `get_queue`",
-        checks=["`instructions` называют `get_queue` в разделе о начале работы"],
+        output="Строка в `instructions` о том, когда звать `get_project`",
+        checks=["`instructions` называют `get_project` в разделе о начале работы"],
         priority=TaskPriority.LOW,
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
@@ -475,7 +475,7 @@ async def _candidate_task(session: AsyncSession, queue: Queue, *, agent: Actor) 
 
 
 async def _waiting_task(
-    session: AsyncSession, queue: Queue, *, agent: Actor, human: Participant
+    session: AsyncSession, project: Project, *, agent: Actor, human: Participant
 ) -> Task:
     """Задача в `waiting`: сценарий `CONCEPT.md`, 4.6, строка «Ответа, долго».
 
@@ -487,7 +487,7 @@ async def _waiting_task(
     task = await tasks_service.create_task(
         session,
         actor=agent,
-        queue=queue,
+        project=project,
         title="Удалять ли записи дела отменённых задач через год",
         description="Дело отменённой задачи занимает место и никем не читается.",
         goal="Решено, что делать с делами отменённых задач",
@@ -530,7 +530,9 @@ async def _waiting_task(
     return task
 
 
-async def _child_task(session: AsyncSession, queue: Queue, *, agent: Actor, parent: Task) -> Task:
+async def _child_task(
+    session: AsyncSession, project: Project, *, agent: Actor, parent: Task
+) -> Task:
     """Ребёнок задачи в работе: декомпозиция, ещё не открытая к работе.
 
     Разделы намеренно заполнены не все: задача в `backlog` — это черновик, и экран
@@ -539,7 +541,7 @@ async def _child_task(session: AsyncSession, queue: Queue, *, agent: Actor, pare
     task = await tasks_service.create_task(
         session,
         actor=agent,
-        queue=queue,
+        project=project,
         title="Тест на разрыв потока посреди выдачи",
         description="Отдельная задача: тест требует своего стенда с обрывом соединения.",
         goal="Разрыв потока покрыт тестом",
@@ -552,7 +554,7 @@ async def _child_task(session: AsyncSession, queue: Queue, *, agent: Actor, pare
 
 
 async def _checking_task(
-    session: AsyncSession, queue: Queue, *, agent: Actor, temporary: Actor, blocker: Task
+    session: AsyncSession, project: Project, *, agent: Actor, temporary: Actor, blocker: Task
 ) -> Task:
     """Задача в работе на обзорных проверках: одна пройдена, вторая провалена.
 
@@ -566,7 +568,7 @@ async def _checking_task(
     task = await tasks_service.create_task(
         session,
         actor=agent,
-        queue=queue,
+        project=project,
         title="Ошибки поиска не называют допустимые значения",
         description="Отказ разбора запроса приходит без списка допустимых полей.",
         goal="Отказ поиска чинится с первой попытки, без перебора",
@@ -617,12 +619,12 @@ async def _checking_task(
     return task
 
 
-async def _cancelled_task(session: AsyncSession, queue: Queue, *, agent: Actor) -> Task:
+async def _cancelled_task(session: AsyncSession, project: Project, *, agent: Actor) -> Task:
     """Отменённая задача: закрыта без результата, причина обязательна."""
     task = await tasks_service.create_task(
         session,
         actor=agent,
-        queue=queue,
+        project=project,
         title="Добавить вебхуки на закрытие задачи",
         description="Назначателю нужен push вместо чтения ленты.",
         goal="Назначатель узнаёт о закрытии задачи без опроса",
