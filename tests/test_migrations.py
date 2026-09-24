@@ -472,3 +472,134 @@ async def test_the_project_case_rollback_refuses_while_project_entries_exist(
 
     with pytest.raises(Exception, match="task_id"):
         await migrate(url, PROJECTS_REVISION, down=True)
+
+
+# --- Описание проекта не длиннее 320 знаков (TRK-158) ---------------------------------
+
+#: Ревизия переноса длинных описаний и ревизия перед ней (атрибуты проекта, TRK-157).
+DESCRIPTION_REVISION = "b7d2f94c0e15"
+DESCRIPTION_PREVIOUS = "8e4a61c3d2f7"
+
+#: Длинное описание — кириллица с переносами и markdown: переезжает дословно.
+LONG_DESCRIPTION = "Бэкенд трекера.\n\n- Код в `app/`, «соглашения» в docs/.\n" * 10
+#: Ровно на пределе, кириллицей: 320 знаков — это 640 байт, и поле остаётся.
+EXACT_DESCRIPTION = "ж" * 320
+
+
+async def _seed_descriptions(engine: AsyncEngine) -> None:
+    """Четыре проекта: длинное без дела, длинное с делом, на пределе и короткое."""
+    async with engine.begin() as connection:
+        for key, description in (
+            ("LONG", LONG_DESCRIPTION),
+            ("CASE", LONG_DESCRIPTION + " + дело"),
+            ("EXACT", EXACT_DESCRIPTION),
+            ("SHORT", "Коротко"),
+        ):
+            await connection.execute(
+                text(
+                    "INSERT INTO projects (key, title, description, created_by_kind, "
+                    "created_by_signature) VALUES (:key, :key, :description, 'agent', 'claude')"
+                ),
+                {"key": key, "description": description},
+            )
+        # У CASE дело уже начато: база стояла на дереве с делом проекта (демо, атрибуты).
+        for no in (1, 2):
+            await connection.execute(
+                text(
+                    "INSERT INTO entries (project_id, no, type, title, created_by_kind, "
+                    "created_by_signature) SELECT id, :no, 'note', 'Заметка', 'agent', "
+                    "'claude' FROM projects WHERE key = 'CASE'"
+                ),
+                {"no": no},
+            )
+
+
+async def _descriptions(engine: AsyncEngine) -> dict[str, str]:
+    async with engine.connect() as connection:
+        rows = await connection.execute(text("SELECT key, description FROM projects"))
+        return dict(rows.tuples().all())
+
+
+async def _moved_notes(engine: AsyncEngine) -> list[tuple]:
+    """Записи «Описание до v0.4.0»: ключ проекта, номер, автор, тело, пустота `payload`
+    и `refs`, есть ли `action_id`, `task_id`."""
+    async with engine.connect() as connection:
+        rows = await connection.execute(
+            text(
+                "SELECT projects.key, entries.no, entries.type, entries.created_by_kind, "
+                "entries.created_by_signature, entries.body, entries.payload = '{}'::jsonb, "
+                "entries.refs = '[]'::jsonb, entries.action_id IS NOT NULL, entries.task_id "
+                "FROM entries JOIN projects ON projects.id = entries.project_id "
+                "WHERE entries.title = 'Описание до v0.4.0' ORDER BY projects.key"
+            )
+        )
+        return [tuple(row) for row in rows]
+
+
+async def test_long_descriptions_move_into_the_project_case_word_for_word(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DESCRIPTION_PREVIOUS)
+    await _seed_descriptions(migration_engine)
+
+    await migrate(url, DESCRIPTION_REVISION)
+
+    assert await _descriptions(migration_engine) == {
+        "LONG": "",
+        "CASE": "",
+        "EXACT": EXACT_DESCRIPTION,
+        "SHORT": "Коротко",
+    }
+    common = ("note", "tracker", None)
+    assert await _moved_notes(migration_engine) == [
+        # Номер следующий за последним в деле: 1 и 2 уже заняты.
+        ("CASE", 3, *common, LONG_DESCRIPTION + " + дело", True, True, True, None),
+        # Дело было пустым — запись первая.
+        ("LONG", 1, *common, LONG_DESCRIPTION, True, True, True, None),
+    ]
+
+
+async def test_the_schema_refuses_a_long_description_after_the_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DESCRIPTION_REVISION)
+    async with migration_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO projects (key, title, description, created_by_kind, "
+                "created_by_signature) VALUES ('EXACT', 'x', :description, 'agent', 'claude')"
+            ),
+            {"description": EXACT_DESCRIPTION},
+        )
+
+    with pytest.raises(Exception, match="ck_projects_description_length"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(text("UPDATE projects SET description = description || 'ж'"))
+
+
+async def test_the_description_migration_rolls_back_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Откат снимает ограничение и не трогает данные: записи неизменяемы, а текст в деле."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DESCRIPTION_PREVIOUS)
+    await _seed_descriptions(migration_engine)
+    await migrate(url, DESCRIPTION_REVISION)
+    moved = await _moved_notes(migration_engine)
+
+    await migrate(url, DESCRIPTION_PREVIOUS, down=True)
+    assert await _moved_notes(migration_engine) == moved
+    async with migration_engine.begin() as connection:
+        await connection.execute(
+            text("UPDATE projects SET description = :long WHERE key = 'SHORT'"),
+            {"long": LONG_DESCRIPTION},
+        )
+
+    await migrate(url, DESCRIPTION_REVISION)
+    notes = await _moved_notes(migration_engine)
+    assert notes[:2] == moved
+    assert [(key, no, body) for key, no, *_, body, _p, _r, _a, _t in notes[2:]] == [
+        ("SHORT", 1, LONG_DESCRIPTION)
+    ]
