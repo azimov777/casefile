@@ -20,7 +20,10 @@
 #      compose-файл из образа выпуска, а обновлятор своего `up` не зовёт (TRK-131);
 #   G. выпуск, у которого api не проходит проверку здоровья, откатывается на прежний, данные
 #      на месте; следующие проверки его не пробуют и не пересоздают служб; следующий выпуск
-#      после него доходит как обычно (TRK-122).
+#      после него доходит как обычно (TRK-122);
+#   H. выпуск с миграцией, у которого api не проходит проверку здоровья: перед ним снимок
+#      базы, после отката база из снимка — ревизия, таблицы и данные как до обновления, и
+#      ручной `docker compose up -d` проходит `migrate` (TRK-134).
 #
 # Час ожидания сокращён: `CASEFILE_UPDATE_INTERVAL` берётся из `CHECK_INTERVAL` (по
 # умолчанию `1m`), разброс — до шестой доли, как и у часа. Каждая фаза кончается
@@ -82,6 +85,9 @@ say "build images from the working tree"
 docker build -q -f docker/Dockerfile.prod -t "$P-build/casefile" . >/dev/null
 docker build -q -f ui/docker/Dockerfile -t "$P-build/casefile-ui" ui >/dev/null
 
+# Последняя ревизия схемы дерева: на неё кладёт свою миграцию выпуск фазы H.
+TREE_HEAD=$(docker run --rm --network none --entrypoint alembic "$P-build/casefile" heads | awk 'NR == 1 { print $1 }')
+
 docker run -d --name "$P-registry" -p "127.0.0.1:$REG_PORT:5000" registry:2 >/dev/null
 docker run -d --name "$P-web" -v "$WEB:/www:ro" busybox httpd -f -p 80 -h /www >/dev/null
 sleep 2
@@ -105,6 +111,29 @@ async def app(scope, receive, send):
         await send({"type": "http.response.body", "body": b"broken on purpose"})
 PY
     echo 'COPY main.py /app/app/main.py' >>"$ctx/Dockerfile"
+  fi
+  # `MIGRATION=1` — выпуск несёт миграцию поверх head дерева: новая таблица и колонка.
+  if [ -n "${MIGRATION:-}" ]; then
+    cat >"$ctx/29990101_0000_check_h.py" <<PY
+import sqlalchemy as sa
+from alembic import op
+
+revision = "check_h_0001"
+down_revision = "$TREE_HEAD"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table("check_h", sa.Column("id", sa.Integer(), primary_key=True))
+    op.add_column("queues", sa.Column("check_h", sa.Text(), nullable=True))
+
+
+def downgrade() -> None:
+    op.drop_column("queues", "check_h")
+    op.drop_table("check_h")
+PY
+    echo 'COPY 29990101_0000_check_h.py /app/app/db/migrations/versions/' >>"$ctx/Dockerfile"
   fi
   docker build -q -t "$REG/casefile:$version" "$ctx" >/dev/null
   printf 'FROM %s\nLABEL org.opencontainers.image.version=%s\n' \
@@ -352,5 +381,45 @@ wait_for 300 updated || fail "no successful update to 0.3.1 logged"
 services | tee "$EVIDENCE/G-next.txt"
 dc logs --no-color -t updater >"$EVIDENCE/G-next-updater.log"
 note "G passed"
+
+# --- H. Выпуск с миграцией, который не поднялся ------------------------------------------
+
+say "H. release 0.4.0 under stable: brings a migration, its api never gets healthy"
+db() { dc exec -T db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -tAc \"$1\""; }
+api -X POST -H 'Content-Type: application/json' -d '{"key":"HOLD","title":"written before 0.4.0"}' \
+  "http://127.0.0.1:$UI_PORT/api/v1/queues" >/dev/null
+api "http://127.0.0.1:$UI_PORT/api/v1/queues" >"$EVIDENCE/H-queues-before.json"
+schema_before=$(db "SELECT version_num FROM alembic_version")
+note "schema before: $schema_before"
+services >"$EVIDENCE/H-before.txt"
+BROKEN=1 MIGRATION=1 publish 0.4.0 "" stable
+restored() { dc logs --no-color updater 2>/dev/null | grep -q "rolled back to 0.3.1"; }
+wait_for 900 restored || fail "no rollback from 0.4.0 logged"
+dc logs --no-color -t updater >"$EVIDENCE/H-rollback-updater.log"
+grep -E "changes the database|failed to start|database restored|rolled back|snapshot" \
+  "$EVIDENCE/H-rollback-updater.log" | tee -a "$EVIDENCE/run.log"
+grep -q "the release changes the database ($schema_before -> check_h_0001); snapshot taken first" \
+  "$EVIDENCE/H-rollback-updater.log" || fail "no snapshot before the migration"
+grep -q "database restored from the snapshot" "$EVIDENCE/H-rollback-updater.log" ||
+  fail "the database was not restored"
+on_release "$r4_api" "$r4_ui" || fail "services are not back on 0.3.1"
+[ "$(db "SELECT version_num FROM alembic_version")" = "$schema_before" ] ||
+  fail "the schema is not back at $schema_before"
+[ -z "$(db "SELECT 1 FROM pg_tables WHERE tablename = 'check_h'")" ] ||
+  fail "the table of the failed release is still there"
+[ -z "$(db "SELECT 1 FROM information_schema.columns WHERE table_name = 'queues' AND column_name = 'check_h'")" ] ||
+  fail "the column of the failed release is still there"
+api "http://127.0.0.1:$UI_PORT/api/v1/queues" >"$EVIDENCE/H-queues-after.json"
+diff "$EVIDENCE/H-queues-before.json" "$EVIDENCE/H-queues-after.json" ||
+  fail "the data differs from before the update"
+note "H: back on 0.3.1, schema $schema_before, data as before the update"
+
+say "H. a manual docker compose up -d after the rollback"
+dc up -d >"$EVIDENCE/H-manual-up.log" 2>&1 || { cat "$EVIDENCE/H-manual-up.log"; fail "manual up -d failed"; }
+dc logs --no-color migrate | tail -5 | tee -a "$EVIDENCE/run.log"
+on_release "$r4_api" "$r4_ui" || fail "the manual up left 0.3.1"
+api "http://127.0.0.1:$UI_PORT/api/v1/queues/HOLD" | grep -q '"HOLD"' || fail "HOLD is gone"
+services | tee "$EVIDENCE/H-after-manual-up.txt"
+note "H passed"
 
 say "all phases passed"
