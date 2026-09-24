@@ -1,4 +1,6 @@
 import {
+  Archive,
+  ArchiveRestore,
   AlignLeft,
   ArrowRight,
   Check,
@@ -54,6 +56,8 @@ const KIND_ICON = {
   attribute_created: Tag,
   attribute_changed: Tags,
   attribute_removed: Eraser,
+  archived: Archive,
+  restored: ArchiveRestore,
 } satisfies Record<EntryType, typeof Check>;
 
 /**
@@ -83,6 +87,8 @@ const KIND_COLOR = {
   attribute_created: 'text-faint',
   attribute_changed: 'text-faint',
   attribute_removed: 'text-faint',
+  archived: 'text-faint',
+  restored: 'text-faint',
 } satisfies Record<EntryType, string>;
 
 interface EntryKindProps {

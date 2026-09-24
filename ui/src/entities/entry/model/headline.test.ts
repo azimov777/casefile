@@ -51,6 +51,8 @@ const FACTS = {
   attribute_created: { type: 'attribute_created', name: 'repo' },
   attribute_changed: { type: 'attribute_changed', name: 'repo' },
   attribute_removed: { type: 'attribute_removed', name: 'repo' },
+  archived: { type: 'archived' },
+  restored: { type: 'restored' },
 } satisfies Record<EntryType, EntryFacts>;
 
 describe('названия типов записи в словарях', () => {

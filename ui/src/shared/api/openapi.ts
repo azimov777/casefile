@@ -413,6 +413,57 @@ export interface paths {
         patch: operations["update_project"];
         trace?: never;
     };
+    "/api/v1/projects/{project_key}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive a project
+         * @description Архивирует проект с причиной. Требует набора `main`.
+         *
+         *     Проект и его задачи замораживаются как есть: закрывать задачи не нужно, статусы не
+         *     меняются. Дальше любое изменение в проекте и его задачах — новая задача, запись в
+         *     дело, переход, правка, атрибут, новая связь — отвечает `409 project_archived`;
+         *     снять связь с его задачей можно. Чтение работает как раньше. Причина уезжает в
+         *     запись `archived` дела проекта; пустая — `422 project_reason_required`. Проект уже в
+         *     архиве — `409 project_archived`.
+         */
+        post: operations["archive_project"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an archived project
+         * @description Восстанавливает проект из архива с причиной. Требует набора `main`.
+         *
+         *     Задачи продолжаются с того места, где их застал архив. Причина уезжает в запись
+         *     `restored` дела проекта; пустая — `422 project_reason_required`. Проект не в архиве —
+         *     `409 project_not_archived`.
+         */
+        post: operations["restore_project"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_key}/attributes/{attribute_name}": {
         parameters: {
             query?: never;
@@ -2256,13 +2307,13 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
          * @enum {string}
          */
-        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "attribute_created" | "attribute_changed" | "attribute_removed";
+        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
         /**
          * ErrorDetail
          * @description Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд.
@@ -2667,7 +2718,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "artifact" | "attempt" | "created" | "decision" | "finding" | "note" | "remark" | "summary";
+            type: "archived" | "artifact" | "attempt" | "created" | "decision" | "finding" | "note" | "remark" | "restored" | "summary";
         };
         /**
          * PageMeta
@@ -2915,6 +2966,104 @@ export interface components {
             payload?: components["schemas"]["EmptyPayload"];
         };
         /**
+         * ProjectArchiveEntryRead
+         * @description Служебная запись: проект архивирован (`archived`) или восстановлен (`restored`).
+         */
+        ProjectArchiveEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @description Always `null`: entries of this type belong to a project, never to a task
+             * @example null
+             */
+            task_key: null;
+            /**
+             * Project Key
+             * @description Key of the owning project; the entry address is `TRK#7`
+             * @example TRK
+             */
+            project_key: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "archived" | "restored";
+            payload: components["schemas"]["ProjectArchivePayload"];
+        };
+        /**
+         * ProjectArchivePayload
+         * @description Проект архивирован или восстановлен: причина действия.
+         */
+        ProjectArchivePayload: {
+            /**
+             * Reason
+             * @description Why the project was archived or restored
+             * @example Репозиторий заброшен, работа перенесена в CORE
+             */
+            reason: string;
+        };
+        /**
+         * ProjectArchiving
+         * @description Архивирование или восстановление проекта: причина обязательна в обе стороны.
+         */
+        ProjectArchiving: {
+            /**
+             * Reason
+             * @description Why the project is archived or restored; a blank one answers `422 project_reason_required`. Filed in the `archived` or `restored` entry of the project's case
+             * @example Репозиторий заброшен, работа перенесена в CORE
+             */
+            reason: string;
+        };
+        /**
          * ProjectCreate
          * @description Создание проекта.
          *
@@ -2976,6 +3125,12 @@ export interface components {
              * @example 42
              */
             last_task_number: number;
+            /**
+             * Archived At
+             * @description When the project was archived; `null` while it is active. An archived project and its tasks are frozen: every change answers `409 project_archived`, except `restore` and removing a link. Reading works as usual
+             * @example null
+             */
+            archived_at?: string | null;
             created_by: components["schemas"]["AuthorRead"];
             /**
              * Created At
@@ -3058,6 +3213,12 @@ export interface components {
              * @example 42
              */
             last_task_number: number;
+            /**
+             * Archived At
+             * @description When the project was archived; `null` while it is active. An archived project and its tasks are frozen: every change answers `409 project_archived`, except `restore` and removing a link. Reading works as usual
+             * @example null
+             */
+            archived_at?: string | null;
             created_by: components["schemas"]["AuthorRead"];
             /**
              * Created At
@@ -6535,6 +6696,174 @@ export interface operations {
             };
         };
     };
+    archive_project: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectArchiving"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_ProjectDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restore_project: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectArchiving"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_ProjectDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     set_project_attribute: {
         parameters: {
             query?: never;
@@ -8232,7 +8561,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

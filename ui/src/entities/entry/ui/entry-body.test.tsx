@@ -90,6 +90,8 @@ function expected(): Record<EntryType, (string | RegExp)[]> {
       'github.com/demo',
       /Репозиторий закрыт/,
     ],
+    archived: [say.ui('entry.headline.projectArchived'), /Демо отложено/],
+    restored: [say.ui('entry.headline.projectRestored'), /Демо отложено/],
   };
 }
 
@@ -111,6 +113,8 @@ const BUILT_HEADLINE: EntryType[] = [
   'attribute_created',
   'attribute_changed',
   'attribute_removed',
+  'archived',
+  'restored',
 ];
 
 function show(type: EntryType) {
