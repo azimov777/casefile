@@ -89,8 +89,13 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
             title={queue.title}
             onClick={onNavigate}
           >
-            <span className="font-mono">{queue.key}</span>
-            <span className="truncate text-faint">{queue.title}</span>
+            {/*
+             * Название очереди переносится, а не режется многоточием (UI-153): полное
+             * название было только в подсказке `title`, а на телефоне, где панель —
+             * выдвижной лист, наведения нет. Ключ стоит на первой строке названия.
+             */}
+            <span className="shrink-0 font-mono">{queue.key}</span>
+            <span className="min-w-0 text-faint wrap-anywhere">{queue.title}</span>
           </SideLink>
         ))}
 
@@ -249,7 +254,7 @@ function SideLink({
       onClick={onClick}
       aria-current={current ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-2 overflow-hidden rounded-control px-2 py-1 text-meta no-underline',
+        'flex items-baseline gap-2 overflow-hidden rounded-control px-2 py-1 text-meta no-underline',
         'transition-colors duration-(--motion-fast) ease-fast',
         current
           ? 'bg-accent-soft font-semibold text-accent'
