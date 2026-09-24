@@ -186,8 +186,10 @@ time Docker starts, and from then on checks every hour. If you set
 `CASEFILE_VERSION=latest` in `.env` yourself, remove the line to follow releases.
 
 `CASEFILE_UPDATE_INTERVAL` sets how often to check (hours, or `30m`; `0` means only
-when Docker starts). If an update fails to start, `docker compose logs updater` names
-the version to go back to.
+when Docker starts). If a release fails to start, the installation goes back to the
+version it ran before and does not try that release again; the next release is installed
+as usual. `docker compose logs updater` tells what happened. Going back does not undo
+database migrations the failed release has already applied.
 
 ## Network mode
 
