@@ -210,6 +210,15 @@ class ResolutionFactsRead(_EntryFactsBase):
     )
 
 
+class AttributeFactsRead(_EntryFactsBase):
+    """Атрибут проекта заведён, изменён или снят: его имя. Значения — в самой записи."""
+
+    type: Literal[
+        EntryType.ATTRIBUTE_CREATED, EntryType.ATTRIBUTE_CHANGED, EntryType.ATTRIBUTE_REMOVED
+    ]
+    name: str | None = Field(default=None, examples=["repo"], description="Attribute name")
+
+
 # Состав полей каждой формы объявлен схемой, а не угадывается по тому, какие ключи
 # пришли непустыми. Разметка повторяет `type` строки описи, и это осознанная плата за
 # то, чтобы `facts` читался сам по себе: клиент принимает его отдельным значением — и из
@@ -226,7 +235,8 @@ type EntryFactsRead = Annotated[
     | QuestionFactsRead
     | AnswerFactsRead
     | VerdictFactsRead
-    | ResolutionFactsRead,
+    | ResolutionFactsRead
+    | AttributeFactsRead,
     Field(discriminator="type"),
 ]
 """Факты записи: размеченное по `type` объединение всех форм."""
@@ -507,6 +517,46 @@ class LinkPayload(BaseModel):
     other: str = Field(examples=["TRK-7"], description="Key of the task on the other side")
 
 
+class AttributeCreatedPayload(BaseModel):
+    """Атрибут проекта заведён: имя, значение и причина, если её назвали."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(examples=["repo"], description="Attribute name as stored")
+    after: str = Field(examples=["https://github.com/azimov777/casefile"], description="Value set")
+    reason: str | None = Field(
+        default=None,
+        examples=[None],
+        description="Why the attribute was created; `null` when no reason was given",
+    )
+
+
+class AttributeChangedPayload(BaseModel):
+    """Значение атрибута изменено: «было» и «стало» целиком и причина."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(examples=["repo"], description="Attribute name as stored")
+    before: str = Field(description="Previous value")
+    after: str = Field(description="New value")
+    reason: str = Field(
+        examples=["Репозиторий переехал в организацию"], description="Why the value changed"
+    )
+
+
+class AttributeRemovedPayload(BaseModel):
+    """Атрибут снят: последнее значение и причина."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(examples=["repo"], description="Attribute name as stored")
+    before: str = Field(description="Value at the moment of removal")
+    reason: str = Field(
+        examples=["Проект больше не публикуется в реестре"],
+        description="Why the attribute was removed",
+    )
+
+
 # --- Запись в ответе ------------------------------------------------------------------
 
 
@@ -556,6 +606,22 @@ class _ProjectOwnableEntryRead(_EntryReadBase):
             "Key of the owning project for an entry of a project's case (`TRK#7`); "
             "`null` for a task entry, whose project is part of `task_key`"
         ),
+    )
+
+
+class _ProjectEntryRead(_EntryReadBase):
+    """Общие поля записи, которая бывает только в деле проекта: об атрибутах.
+
+    Сужение в обратную сторону от задачных типов: `task_key` всегда `null`, `project_key`
+    всегда строка — атрибутов у задач нет (`CONCEPT.md`, 3.2).
+    """
+
+    task_key: None = Field(  # type: ignore[assignment]
+        examples=[None],
+        description="Always `null`: entries of this type belong to a project, never to a task",
+    )
+    project_key: str = Field(  # type: ignore[assignment]
+        examples=["TRK"], description="Key of the owning project; the entry address is `TRK#7`"
     )
 
 
@@ -671,6 +737,27 @@ class LinkEntryRead(_EntryReadBase):
     payload: LinkPayload
 
 
+class AttributeCreatedEntryRead(_ProjectEntryRead):
+    """Служебная запись: атрибут проекта заведён."""
+
+    type: Literal[EntryType.ATTRIBUTE_CREATED]
+    payload: AttributeCreatedPayload
+
+
+class AttributeChangedEntryRead(_ProjectEntryRead):
+    """Служебная запись: значение атрибута проекта изменено."""
+
+    type: Literal[EntryType.ATTRIBUTE_CHANGED]
+    payload: AttributeChangedPayload
+
+
+class AttributeRemovedEntryRead(_ProjectEntryRead):
+    """Служебная запись: атрибут проекта снят."""
+
+    type: Literal[EntryType.ATTRIBUTE_REMOVED]
+    payload: AttributeRemovedPayload
+
+
 type EntryRead = Annotated[
     PlainEntryRead
     | SummaryEntryRead
@@ -683,7 +770,10 @@ type EntryRead = Annotated[
     | SectionChangedEntryRead
     | FieldChangedEntryRead
     | AssigneeChangedEntryRead
-    | LinkEntryRead,
+    | LinkEntryRead
+    | AttributeCreatedEntryRead
+    | AttributeChangedEntryRead
+    | AttributeRemovedEntryRead,
     Field(discriminator="type"),
 ]
 """Запись дела целиком: размеченное по `type` объединение всех форм нагрузки."""
@@ -720,6 +810,9 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.ASSIGNEE_CHANGED: AssigneeChangedEntryRead,
     EntryType.LINK_ADDED: LinkEntryRead,
     EntryType.LINK_REMOVED: LinkEntryRead,
+    EntryType.ATTRIBUTE_CREATED: AttributeCreatedEntryRead,
+    EntryType.ATTRIBUTE_CHANGED: AttributeChangedEntryRead,
+    EntryType.ATTRIBUTE_REMOVED: AttributeRemovedEntryRead,
 }
 
 

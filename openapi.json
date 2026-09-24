@@ -2514,7 +2514,7 @@
           "projects"
         ],
         "summary": "Read a project",
-        "description": "Карточка проекта вместе с описанием — общим контекстом всех его задач.\n\nАгент запрашивает её отдельно: в карточке задачи лежат только ключ и название, а\nописание бывает длинным, и таскать его в каждом ответе значило бы тратить контекст.",
+        "description": "Карточка проекта вместе с описанием и нынешними значениями атрибутов.\n\nАгент запрашивает её отдельно: в карточке задачи лежат только ключ и название, а\nописание бывает длинным, и таскать его в каждом ответе значило бы тратить контекст.\nИстория атрибутов — записи дела проекта (`/projects/{key}/entries`).",
         "operationId": "read_project",
         "security": [
           {
@@ -2564,7 +2564,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_ProjectRead_"
+                  "$ref": "#/components/schemas/DataResponse_ProjectDetailRead_"
                 }
               }
             }
@@ -2696,7 +2696,345 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_ProjectRead_"
+                  "$ref": "#/components/schemas/DataResponse_ProjectDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/attributes/{attribute_name}": {
+      "put": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Set a project attribute",
+        "description": "Заводит атрибут проекта или меняет его значение. Набор `task`.\n\nОдно действие на оба случая, запись выбирает трекер: атрибута с таким именем (без\nучёта регистра) нет — `attribute_created`, причина необязательна; есть с другим\nзначением — `attribute_changed`, без причины `422 attribute_reason_required`; есть с\nтем же значением — ничего не подшивается. Имя хранится так, как его завели, и другое\nнаписание его не меняет. Имя не по шаблону — `422 invalid_attribute_name`, значение\nдлиннее предела — `422 attribute_value_too_long`.\n\nПовтор с тем же `Idempotency-Key` отвечает первым результатом и не применяет\nзначение второй раз поверх чужой правки.",
+        "operationId": "set_project_attribute",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "attribute_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case",
+              "examples": [
+                "repo"
+              ],
+              "title": "Attribute Name"
+            },
+            "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttributeSet"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AttributeRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/attributes/{attribute_name}/remove": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Remove a project attribute",
+        "description": "Снимает атрибут проекта с причиной и отдаёт подшитую запись `attribute_removed`.\n\nНабор `task`. Действие, а не `DELETE`: причина обязательна, а тело у `DELETE` клиенты\nи посредники теряют. Атрибута с таким именем (без учёта регистра) нет — `404\nattribute_not_found`, пустая причина — `422 attribute_reason_required`. Запись хранит\nпоследнее значение: снятый атрибут восстанавливается из дела, а не из корзины.\n\nПовтор с тем же `Idempotency-Key` отвечает первой записью, а не `404`.",
+        "operationId": "remove_project_attribute",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "attribute_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case",
+              "examples": [
+                "repo"
+              ],
+              "title": "Attribute Name"
+            },
+            "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttributeRemoval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
                 }
               }
             }
@@ -6212,6 +6550,9 @@
                       "artifact": "#/components/schemas/PlainEntryRead",
                       "assignee_changed": "#/components/schemas/AssigneeChangedEntryRead",
                       "attempt": "#/components/schemas/PlainEntryRead",
+                      "attribute_changed": "#/components/schemas/AttributeChangedEntryRead",
+                      "attribute_created": "#/components/schemas/AttributeCreatedEntryRead",
+                      "attribute_removed": "#/components/schemas/AttributeRemovedEntryRead",
                       "created": "#/components/schemas/PlainEntryRead",
                       "decision": "#/components/schemas/PlainEntryRead",
                       "field_changed": "#/components/schemas/FieldChangedEntryRead",
@@ -6265,6 +6606,15 @@
                     },
                     {
                       "$ref": "#/components/schemas/LinkEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AttributeCreatedEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AttributeChangedEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AttributeRemovedEntryRead"
                     }
                   ]
                 }
@@ -7486,6 +7836,608 @@
         "title": "AssigneeChangedPayload",
         "description": "Смена исполнителя. `null` с любой стороны означает «исполнителя не было»."
       },
+      "AttributeChangedEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "null",
+            "title": "Task Key",
+            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "examples": [
+              null
+            ]
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "attribute_changed",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AttributeChangedPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "AttributeChangedEntryRead",
+        "description": "Служебная запись: значение атрибута проекта изменено."
+      },
+      "AttributeChangedPayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Attribute name as stored",
+            "examples": [
+              "repo"
+            ]
+          },
+          "before": {
+            "type": "string",
+            "title": "Before",
+            "description": "Previous value"
+          },
+          "after": {
+            "type": "string",
+            "title": "After",
+            "description": "New value"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why the value changed",
+            "examples": [
+              "Репозиторий переехал в организацию"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "before",
+          "after",
+          "reason"
+        ],
+        "title": "AttributeChangedPayload",
+        "description": "Значение атрибута изменено: «было» и «стало» целиком и причина."
+      },
+      "AttributeCreatedEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "null",
+            "title": "Task Key",
+            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "examples": [
+              null
+            ]
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "attribute_created",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AttributeCreatedPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "AttributeCreatedEntryRead",
+        "description": "Служебная запись: атрибут проекта заведён."
+      },
+      "AttributeCreatedPayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Attribute name as stored",
+            "examples": [
+              "repo"
+            ]
+          },
+          "after": {
+            "type": "string",
+            "title": "After",
+            "description": "Value set",
+            "examples": [
+              "https://github.com/azimov777/casefile"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Why the attribute was created; `null` when no reason was given",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "after"
+        ],
+        "title": "AttributeCreatedPayload",
+        "description": "Атрибут проекта заведён: имя, значение и причина, если её назвали."
+      },
+      "AttributeFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "attribute_created",
+              "attribute_changed",
+              "attribute_removed"
+            ],
+            "title": "Type"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Attribute name",
+            "examples": [
+              "repo"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "AttributeFactsRead",
+        "description": "Атрибут проекта заведён, изменён или снят: его имя. Значения — в самой записи."
+      },
+      "AttributeRead": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Name as it was first set; matching ignores case",
+            "examples": [
+              "repo"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "Plain text, not interpreted by the tracker",
+            "examples": [
+              "https://github.com/azimov777/casefile"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AttributeRead",
+        "description": "Атрибут проекта: нынешнее значение. История — записями дела проекта."
+      },
+      "AttributeRemoval": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Reason",
+            "description": "Why the attribute is removed; a blank one answers `attribute_reason_required`. Recorded in the `attribute_removed` entry together with the last value",
+            "examples": [
+              "Проект больше не публикуется в реестре"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "AttributeRemoval",
+        "description": "Снятие атрибута: причина обязательна."
+      },
+      "AttributeRemovedEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "null",
+            "title": "Task Key",
+            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "examples": [
+              null
+            ]
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "attribute_removed",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AttributeRemovedPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "AttributeRemovedEntryRead",
+        "description": "Служебная запись: атрибут проекта снят."
+      },
+      "AttributeRemovedPayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Attribute name as stored",
+            "examples": [
+              "repo"
+            ]
+          },
+          "before": {
+            "type": "string",
+            "title": "Before",
+            "description": "Value at the moment of removal"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why the attribute was removed",
+            "examples": [
+              "Проект больше не публикуется в реестре"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "before",
+          "reason"
+        ],
+        "title": "AttributeRemovedPayload",
+        "description": "Атрибут снят: последнее значение и причина."
+      },
+      "AttributeSet": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "Plain text up to 1000 characters, stored as sent; a longer one answers `attribute_value_too_long`. A value equal to the current one changes nothing and files no entry",
+            "examples": [
+              "https://github.com/azimov777/casefile"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 65536
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Why the value changes. Required when the attribute already exists with another value (`attribute_reason_required`); optional when it is created",
+            "examples": [
+              "Репозиторий переехал в организацию"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "title": "AttributeSet",
+        "description": "Значение атрибута: заводит его или меняет нынешнее."
+      },
       "AuthorKind": {
         "type": "string",
         "enum": [
@@ -7910,6 +8862,18 @@
         ],
         "title": "DataResponse[ArchiveImportRead]"
       },
+      "DataResponse_AttributeRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AttributeRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[AttributeRead]"
+      },
       "DataResponse_BootstrapRead_": {
         "properties": {
           "data": {
@@ -7969,6 +8933,18 @@
           "data"
         ],
         "title": "DataResponse[ParticipantRead]"
+      },
+      "DataResponse_ProjectDetailRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProjectDetailRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[ProjectDetailRead]"
       },
       "DataResponse_ProjectRead_": {
         "properties": {
@@ -8080,6 +9056,9 @@
           },
           {
             "$ref": "#/components/schemas/ResolutionFactsRead"
+          },
+          {
+            "$ref": "#/components/schemas/AttributeFactsRead"
           }
         ],
         "discriminator": {
@@ -8089,6 +9068,9 @@
             "artifact": "#/components/schemas/NoFactsRead",
             "assignee_changed": "#/components/schemas/AssigneeChangedFactsRead",
             "attempt": "#/components/schemas/NoFactsRead",
+            "attribute_changed": "#/components/schemas/AttributeFactsRead",
+            "attribute_created": "#/components/schemas/AttributeFactsRead",
+            "attribute_removed": "#/components/schemas/AttributeFactsRead",
             "created": "#/components/schemas/NoFactsRead",
             "decision": "#/components/schemas/NoFactsRead",
             "field_changed": "#/components/schemas/FieldChangedFactsRead",
@@ -8207,6 +9189,15 @@
           },
           {
             "$ref": "#/components/schemas/LinkEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/AttributeCreatedEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/AttributeChangedEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/AttributeRemovedEntryRead"
           }
         ],
         "discriminator": {
@@ -8216,6 +9207,9 @@
             "artifact": "#/components/schemas/PlainEntryRead",
             "assignee_changed": "#/components/schemas/AssigneeChangedEntryRead",
             "attempt": "#/components/schemas/PlainEntryRead",
+            "attribute_changed": "#/components/schemas/AttributeChangedEntryRead",
+            "attribute_created": "#/components/schemas/AttributeCreatedEntryRead",
+            "attribute_removed": "#/components/schemas/AttributeRemovedEntryRead",
             "created": "#/components/schemas/PlainEntryRead",
             "decision": "#/components/schemas/PlainEntryRead",
             "field_changed": "#/components/schemas/FieldChangedEntryRead",
@@ -8253,7 +9247,10 @@
           "field_changed",
           "assignee_changed",
           "link_added",
-          "link_removed"
+          "link_removed",
+          "attribute_created",
+          "attribute_changed",
+          "attribute_removed"
         ],
         "title": "EntryType",
         "description": "Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после."
@@ -9372,6 +10369,80 @@
         ],
         "title": "ProjectCreate",
         "description": "Создание проекта.\n\nКлюч принимается в любом регистре и хранится в верхнем: он идёт в ключ каждой задачи\n(`TRK-42`) и там обязан читаться как ключ. Уникальность — без учёта регистра."
+      },
+      "ProjectDetailRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Трекер"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Markdown context shared by every task of the project",
+            "examples": [
+              "Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"
+            ]
+          },
+          "last_task_number": {
+            "type": "integer",
+            "title": "Last Task Number",
+            "description": "Last task number handed out; numbers are never reused",
+            "examples": [
+              42
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/AttributeRead"
+            },
+            "type": "array",
+            "title": "Attributes",
+            "description": "Current attribute values, ordered by name ignoring case. Every change is an entry of the project's case: `attribute_created`, `attribute_changed`, `attribute_removed`"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "title",
+          "description",
+          "last_task_number",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "attributes"
+        ],
+        "title": "ProjectDetailRead",
+        "description": "Один проект с нынешними значениями атрибутов.\n\nОтдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов\nне показывают, и запрос атрибутов на каждый проект списка стоил бы им без пользы."
       },
       "ProjectEntryCreate": {
         "properties": {

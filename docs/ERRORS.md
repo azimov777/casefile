@@ -49,6 +49,7 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `account_not_found` | Account not found | Учётной записи с таким идентификатором или почтой нет. |
+| `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта нет. |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
@@ -100,10 +101,13 @@
 | `addressee_with_any_addressee` | Questions are filtered either by addressee or by any addressee, not by both | В выдаче вопросов назван адресат и тут же снято условие адресата. |
 | `archive_format_unsupported` | This is not an installation archive this Casefile can read | Документ — не архив установки этой раскладки: чужой `format` или `format_version`. |
 | `archive_invalid` | The installation archive is malformed | Архив противоречит сам себе или схеме своей ревизии. |
+| `attribute_reason_required` | Changing or removing an attribute requires a reason | Изменение и снятие атрибута требуют непустой причины `reason`. |
+| `attribute_value_too_long` | Attribute value is too long | Значение атрибута длиннее предела (`app/domain/attributes.py`). |
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
 | `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
+| `invalid_attribute_name` | Attribute name is invalid | Имя атрибута не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
 | `invalid_email` | Email is invalid | Почта не похожа на адрес: нет `@`, пустая часть, пробел или слишком длинная. |
 | `invalid_idempotency_key` | Idempotency key is invalid | Ключ идемпотентности пуст или длиннее допустимого. |
