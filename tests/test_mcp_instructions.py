@@ -162,6 +162,33 @@ async def test_the_assignee_is_set_before_taking_the_task_into_work(served: str)
     )
 
 
+async def test_the_cycle_names_backlog_open_and_in_progress_in_order(served: str) -> None:
+    """TRK-165: шаг 1 называет ход `backlog` → `open` → `in_progress`, а не один прыжок.
+
+    Таблица переходов не пускает `backlog` прямо в `in_progress` (нужен `open` в
+    промежутке); стенд TRK-140#27 показал, что текст читался как прямой переход.
+    """
+    backlog = served.index("`backlog`")
+    reopen = served.index("`open`", backlog)
+
+    assert backlog < reopen < served.index("`in_progress`", reopen), (
+        "шаг 1 не называет `open` между `backlog` и `in_progress`"
+    )
+
+
+async def test_the_closing_step_says_close_task_does_not_check_remarks_itself(
+    served: str,
+) -> None:
+    """TRK-165 (правило 2.4): `close_task` не отказывает из-за неразобранного замечания.
+
+    Шаг 5 называет порядок `resolve` → `close_task`; без этой фразы агент может принять
+    порядок за проверку, которую делает трекер (TRK-140#24, оговорка 2).
+    """
+    assert "unchecked by `close_task`" in served, (
+        "шаг 5 больше не говорит, что `close_task` не проверяет неразобранные замечания сам"
+    )
+
+
 def clause_openers(text: str) -> list[str]:
     """Первое слово каждой части текста, где мог бы стоять приказ, в нижнем регистре."""
     openers = []
