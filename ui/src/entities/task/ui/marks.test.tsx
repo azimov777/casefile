@@ -111,18 +111,14 @@ describe('знак вида связи (UI-125)', () => {
     expect(new Set(shapes).size).toBe(LINK_KIND_ORDER.length);
   });
 
-  it('идентификатор контракта стоит моноширинным и не обрезается', () => {
-    render(<LinkKindMark kind="blocked_by" />);
+  it('заголовок — подпись на языке человека без идентификатора вида (UI-168)', () => {
+    const { container } = render(<LinkKindMark kind="blocked_by" />);
 
-    // Сам идентификатор — текст без сокращения, ровно как в контракте.
-    expect(screen.getByText('blocked_by')).toHaveClass('font-mono');
-  });
-
-  it('подпись на языке человека стоит рядом с идентификатором, а не вместо него', () => {
-    render(<LinkKindMark kind="blocked_by" />);
-
-    expect(screen.getByText('blocked_by')).toBeInTheDocument();
+    // Владелец, UI-168#10: рядом с подписью «Блокирует эту задачу» идентификатор,
+    // названный ролью этой задачи, читался бы противоречием. Вид остаётся в разметке.
     expect(screen.getByText(say.ui('task.links.kind.blocked_by'))).toBeInTheDocument();
+    expect(screen.queryByText('blocked_by')).toBeNull();
+    expect(container.querySelector('[data-kind="blocked_by"]')).not.toBeNull();
   });
 
   it('у каждого вида своя подпись: перепутать группы нельзя даже на слух', () => {

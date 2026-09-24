@@ -81,15 +81,16 @@ function line(...parts: string[]): RegExp {
   return new RegExp(parts.map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'));
 }
 
-/** Группа блока «Связи» по идентификатору вида в её заголовке. */
+/**
+ * Группа блока «Связи» по виду связи. Идентификатора вида в заголовке группы нет
+ * (UI-168): он стоит в разметке знака, `data-kind`, а видна подпись.
+ */
 function group(page: Page, links: string, kind: string) {
   return page
     .getByRole('region', { name: links })
     .locator('section')
     .filter({
-      has: page
-        .getByRole('heading', { level: 3 })
-        .locator('.font-mono', { hasText: new RegExp(`^${kind}$`) }),
+      has: page.getByRole('heading', { level: 3 }).locator(`[data-kind="${kind}"]`),
     });
 }
 

@@ -110,7 +110,7 @@ async function rowGaps(page: Page): Promise<{ inside: number[]; between: number[
 
 /**
  * Заголовки групп блока «Связи» по линиям (UI-168): базовая линия каждой текстовой части
- * заголовка — идентификатора, подписи, счётчика — и сколько строк он занял. Базовую
+ * заголовка — подписи и счётчика — и сколько строк он занял. Базовую
  * линию даёт нулевой `inline-block` в конце текста части: его верх стоит ровно на ней.
  * Высота строки берётся у самого заголовка: одна строка — высота не больше полутора.
  */
@@ -195,7 +195,9 @@ test('насыщенный блок «Связи»: заголовок груп�
       // связь `relates` — последней (владелец, UI-125); родитель (`child`) — выше
       // дочерних (`parent`, UI-166).
       const order = await headings.evaluateAll((nodes) =>
-        nodes.map((node) => node.querySelector('.font-mono')?.textContent ?? ''),
+        nodes.map(
+          (node) => node.querySelector('[data-mark="link-kind"]')?.getAttribute('data-kind') ?? '',
+        ),
       );
       expect(order, `порядок групп на ${width}px`).toEqual([
         'blocked_by',
@@ -205,24 +207,33 @@ test('насыщенный блок «Связи»: заголовок груп�
         'relates',
       ]);
 
-      // Счётчик группы — её собственные задачи, не связи целиком.
-      await expect(headings.nth(0)).toContainText('2 задачи'); // blocked_by
-      await expect(headings.nth(1)).toContainText('1 задача'); // blocks
-      // Подпись называет, кем перечисленные приходятся подопытной (UI-166).
-      await expect(headings.nth(2)).toContainText('child');
-      await expect(headings.nth(2)).toContainText('Родитель');
-      await expect(headings.nth(2)).toContainText('1 задача');
-      await expect(headings.nth(3)).toContainText('parent');
-      await expect(headings.nth(3)).toContainText('Дочерние задачи');
-      await expect(headings.nth(3)).toContainText('3 задачи');
-      await expect(headings.nth(4)).toContainText('1 задача'); // relates
+      // Заголовок называет, кем задачи группы приходятся подопытной, её глазами
+      // (UI-166, UI-168), а счётчик — собственные задачи группы, не связи целиком.
+      const expected = [
+        ['Блокирует эту задачу', '2 задачи'],
+        ['Эта задача блокирует', '1 задача'],
+        ['Родитель', '1 задача'],
+        ['Дочерние задачи', '3 задачи'],
+        ['Связанные', '1 задача'],
+      ] as const;
+      for (const [at, [caption, count]] of expected.entries()) {
+        await expect(headings.nth(at)).toHaveText(`${caption}${count}`);
+      }
+      // Идентификатора вида рядом с подписью нет (владелец, UI-168#10): `parent` над
+      // «Дочерние задачи» читался противоречием — вид называет роль подопытной.
+      for (const kind of order) {
+        await expect(groupHeadings(page).filter({ hasText: kind })).toHaveCount(0);
+      }
 
-      // Ни один идентификатор вида связи не обрезан — ни на широком экране, ни на узком.
+      // Ни одна подпись вида связи не обрезана — ни на широком экране, ни на узком.
       const marks = linksSection(page).locator('[data-mark="link-kind"]');
       const clipped = await marks.evaluateAll((nodes) =>
         nodes.map((node) => {
-          const mono = node.querySelector('.font-mono') as HTMLElement;
-          return { text: mono.textContent, clipped: mono.scrollWidth > mono.clientWidth };
+          const caption = node.querySelector('span') as HTMLElement;
+          return {
+            text: caption.textContent,
+            clipped: caption.scrollWidth > caption.clientWidth,
+          };
         }),
       );
       for (const item of clipped) {
@@ -233,6 +244,7 @@ test('насыщенный блок «Связи»: заголовок груп�
       // знака вида браузер брал низ его иконки, и счётчик стоял на 3–4 px ниже подписи.
       for (const heading of await headingLines(page)) {
         const label = `${width}px, «${heading.text}»: ${heading.baselines.join(', ')}`;
+        // Две части — подпись и счётчик.
         expect(heading.baselines.length, label).toBeGreaterThanOrEqual(2);
         expect(
           Math.max(...heading.baselines) - Math.min(...heading.baselines),

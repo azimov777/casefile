@@ -88,8 +88,8 @@ export function TaskLinks({ parent, childTasks, links }: TaskLinksProps) {
             {/*
              * Заголовок группы — вид связи, а не число: счётчик стоит рядом с ним,
              * а не выносится в отдельную строку, иначе на узком экране он читался
-             * бы как ещё одна, третья строка. `LinkKindMark` не обрезает идентификатор
-             * контракта (`ui/docs/CONCEPT.md`, 6) — он остаётся моноширинным целиком.
+             * бы как ещё одна, третья строка. Заголовок — подпись, кем задачи группы
+             * приходятся этой, без идентификатора вида (UI-168, `LinkKindMark`).
              */}
             <h3 className="col-span-2 flex flex-wrap items-baseline gap-2">
               <LinkKindMark kind={kind} />
