@@ -1,4 +1,7 @@
-"""Скил, который сервер раздаёт агенту: промпт, инструкции и совпадение имён.
+"""Скил, который сервер раздаёт агенту: промпт и совпадение имён.
+
+`instructions` сервера из скила больше не берутся — их стережёт
+`tests/test_mcp_instructions.py` (TRK-142).
 
 Дисциплина живёт в одном файле — `skill/tracker-agent/SKILL.md` (`CONCEPT.md`, 5.3).
 Проверяется здесь не столько код, сколько то, что второй копии этого текста нет и что
@@ -29,7 +32,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp_types import TextContent, Tool
 
 from app.domain.tasks import TaskStatus
-from app.mcp.skill import PROMPT_NAME, SKILL_PATH, SUMMARY_HEADING
+from app.mcp.skill import PROMPT_NAME, SKILL_PATH
 from conftest import Connect
 
 #: Идентификатор в обратных кавычках, за которым сразу идёт скобка, — это вызов
@@ -69,26 +72,6 @@ async def test_the_prompt_returns_the_whole_skill(
         if isinstance(message.content, TextContent)
     ]
     assert contents == [skill_text]
-
-
-async def test_the_instructions_are_the_summary_section(
-    mcp_session: Connect, task_secret: str, skill_text: str
-) -> None:
-    """Обзорная проверка 6: `instructions` равны разделу «Кратко».
-
-    Раздел здесь вырезается своим разбором, а не функцией приложения: тест, зовущий тот
-    же код, проверял бы только то, что функция детерминирована.
-    """
-    _, _, rest = skill_text.partition(f"{SUMMARY_HEADING}\n")
-    expected = rest.split("\n## ", 1)[0].strip()
-    assert expected, "в скиле не стало раздела «Кратко»"
-
-    async with mcp_session(task_secret) as session:
-        result = await session.initialize()
-
-    assert result.instructions == expected
-    assert "add_summary" in expected, "выжимка перестала называть главное правило"
-    assert "after_no" in expected, "выжимка перестала звать читать записи после сводки"
 
 
 async def test_every_tool_named_in_the_skill_exists(mcp_server: MCPServer, skill_text: str) -> None:
@@ -248,19 +231,6 @@ def test_the_rule_is_not_a_licence_to_dismiss_a_remark(skill_text: str) -> None:
     )
 
 
-def test_the_summary_section_names_the_foreign_text_rule(skill_text: str) -> None:
-    """Дисциплина TRK-37: правило доезжает в `instructions`, а не только в промпте.
-
-    Раздел «Кратко» уезжает клиенту при подключении и читается моделью раньше любого
-    вызова; полный скил читают не всегда. Строка в выжимке — единственное, что получает
-    агент, работающий по одним `instructions`, и она обязана оставаться строкой: раздел
-    целиком едет в каждое подключение.
-    """
-    brief = section(skill_text, "Кратко")
-
-    assert "сведения" in brief, "выжимка перестала различать задание и сведения"
-
-
 def test_decomposition_says_when_to_split_and_not_only_how(skill_text: str) -> None:
     """Разбиение задачи не проверяет никто: признаки живут только в тексте скила.
 
@@ -278,19 +248,6 @@ def test_decomposition_says_when_to_split_and_not_only_how(skill_text: str) -> N
     assert "create_task(" in splitting, "раздел перестал звать заводить ребёнка"
 
 
-def test_the_summary_section_names_the_decomposition_trigger(skill_text: str) -> None:
-    """Разбиение обязано доехать в `instructions`: описания инструментов о нём молчат.
-
-    `create_task` рассказывает, что делает `parent`, и не говорит, когда его ставить, —
-    и правильно: описание отвечает на «как позвать», а не на «пора ли». Значит, агент,
-    работающий по одним `instructions`, услышит про декомпозицию только из «Кратко» или
-    не услышит вовсе и доведёт до `done` задачу, которая давно распалась.
-    """
-    brief = section(skill_text, "Кратко")
-
-    assert "parent=key" in brief, "выжимка не зовёт заводить детей: `create_task(..., parent=key)`"
-
-
 def _before(text: str, first: str, second: str) -> bool:
     """`first` встречается в тексте раньше `second`, и оба есть."""
     return first in text and second in text and text.index(first) < text.index(second)
@@ -301,13 +258,12 @@ def test_entering_a_task_assigns_yourself_before_taking_it_into_work(skill_text:
 
     Трекер откажет не исполнителю, но отказ — последняя защита, а не способ узнать
     правило: агент по скилу назначает себя сам и только потом берёт задачу в работу.
-    Правило держится и во входе, и в «Кратко», которое уезжает в `instructions`.
+    В `instructions` то же правило стережёт `tests/test_mcp_instructions.py`.
     """
-    for name in ("Вход в задачу", "Кратко"):
-        text = section(skill_text, name)
-        assert _before(text, 'update_task(key, {"assignee"', 'transition(key, "in_progress")'), (
-            f'раздел «{name}» перестал назначать себя до `transition(key, "in_progress")`'
-        )
+    entering = section(skill_text, "Вход в задачу")
+    assert _before(entering, 'update_task(key, {"assignee"', 'transition(key, "in_progress")'), (
+        'раздел «Вход в задачу» перестал назначать себя до `transition(key, "in_progress")`'
+    )
 
     entering = section(skill_text, "Вход в задачу")
     assert "assignee_required" in entering
@@ -556,22 +512,3 @@ async def test_every_filing_tool_names_that_the_entry_is_seen_at_once(
                 missing.append(f"{name}: не сказано про «{mark}»")
 
     assert not missing, "описание не называет вторичный эффект подшивки:\n" + "\n".join(missing)
-
-
-def test_the_summary_section_carries_what_the_descriptions_no_longer_say(
-    skill_text: str,
-) -> None:
-    """`TRK-33`: снятое из описаний обязано доехать в `instructions`.
-
-    Сжать описания и не укрепить скил значило бы ухудшить положение агента, у которого
-    скила нет: описания приезжают всегда, промпт — по усмотрению клиента, а `instructions`
-    несут только «Кратко». Из восьми снятых ходов шесть в «Кратко» уже были; `waiting` и
-    правка разделов не были ни там, ни где-либо ещё в надёжном канале — и добавлены сюда
-    вместе с чисткой описаний.
-    """
-    brief = section(skill_text, "Кратко")
-
-    assert "waiting" in brief, "выжимка не зовёт в `waiting`; описание `transition` уже не зовёт"
-    assert "backlog" in brief and "update_task" in brief, (
-        "выжимка не называет правку разделов; описание `update_task` её уже не называет"
-    )
