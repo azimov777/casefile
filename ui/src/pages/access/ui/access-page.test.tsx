@@ -196,8 +196,9 @@ describe('экран «Доступы»', () => {
     const revoked = row('проверка 6 сентября');
     expect(within(revoked).getByText(say.ui('token.revoked'))).toBeInTheDocument();
     expect(within(revoked).getByText(say.ui('token.shared'))).toBeInTheDocument();
-    // Отозванный доступ отзывать нечего: кнопки у него нет.
-    expect(within(revoked).queryByRole('button')).toBeNull();
+    // Отозванный доступ отзывать нечего: кнопки отзыва у него нет. Кнопка у строки
+    // всё же есть — плашка набора раскрывает, что он открывает (UI-163).
+    expect(within(revoked).queryByRole('button', { name: say.access('revoke.action') })).toBeNull();
   });
 
   it('действующие идут раньше отозванных, даже если выдача их перемешала', async () => {
@@ -546,7 +547,9 @@ describe('чьи токены на экране (TRK-114)', () => {
     });
     expect(within(own).getByRole('button', { name: say.access('revoke.action') })).toBeEnabled();
     // Чужая строка — без кнопки: её отзыв ответил бы `403 not_own_token`.
-    expect(within(row('агент владельца')).queryByRole('button')).toBeNull();
+    expect(
+      within(row('агент владельца')).queryByRole('button', { name: say.access('revoke.action') }),
+    ).toBeNull();
 
     // Выпуск открыт: за сеансом человек с учётной записью.
     await user.click(screen.getByRole('button', { name: say.access('actions.issue') }));
@@ -721,5 +724,45 @@ describe('чьи токены на экране (TRK-114)', () => {
     expect(
       await within(dialog).findByText(say.access('denied.not_own_token'), { exact: false }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('смысл набора токена достижим без наведения (UI-163)', () => {
+  it('нажатие на плашку набора раскрывает, что он открывает, повторное — прячет', async () => {
+    installation('main', [UI_TOKEN, AGENT_TOKEN, REVOKED_TOKEN]);
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    const own = await screen.findByRole('article', {
+      name: say.ui('token.label', { name: 'local-ui' }),
+    });
+    // Плашка — кнопка-раскрытие: на телефоне подсказки `title` нет вовсе.
+    const scope = within(own).getByRole('button', {
+      name: say.ui('token.scopeExplain', { scope: 'main' }),
+    });
+    const hint = within(own).getByText(say.ui('token.scopeMain'));
+    expect(scope).toHaveAttribute('aria-expanded', 'false');
+    expect(scope).toHaveAttribute('aria-controls', hint.id);
+    expect(hint).not.toBeVisible();
+
+    await user.click(scope);
+    expect(scope).toHaveAttribute('aria-expanded', 'true');
+    expect(hint).toBeVisible();
+
+    await user.click(scope);
+    expect(hint).not.toBeVisible();
+
+    // Набор `task` называет своё, и раскрытие одной строки не трогает соседнюю.
+    await user.click(
+      screen.getByRole('button', { name: say.access('tokens.history', { count: 1 }) }),
+    );
+    const revoked = row('проверка 6 сентября');
+    const task = within(revoked).getByRole('button', {
+      name: say.ui('token.scopeExplain', { scope: 'task' }),
+    });
+    task.focus();
+    await user.keyboard('{Enter}');
+    expect(within(revoked).getByText(say.ui('token.scopeTask'))).toBeVisible();
+    expect(within(row('local-agent')).getByText(say.ui('token.scopeMain'))).not.toBeVisible();
   });
 });

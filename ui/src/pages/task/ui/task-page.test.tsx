@@ -1022,3 +1022,52 @@ describe('опись: правки разделов одного действи�
     expect(document.querySelector('tr[data-group]')).toBeNull();
   });
 });
+
+describe('смысл признака в шапке достижим без наведения (UI-163)', () => {
+  it('нажатие на знак меняет число на фразу признака, повторное — обратно', async () => {
+    const user = userEvent.setup();
+    server.use(
+      packageOf('DEMO-4', {
+        features: {
+          blocked: true,
+          open_questions: 2,
+          open_blocking_questions: 1,
+          open_remarks: 0,
+          last_summary_at: null,
+        },
+      }),
+      entries('DEMO-4'),
+    );
+
+    renderApp('/tasks/DEMO-4');
+    const heading = await screen.findByRole('heading', { name: /DEMO-4/ });
+    const header = heading.closest('header') as HTMLElement;
+
+    const questions = say.ui('task.features.questionsBlocking', {
+      count: 2,
+      blocking: say.ui('task.features.blockingOf', { count: 1 }),
+    });
+    // Знак — кнопка-переключатель: на телефоне наведения нет, и одна подсказка `title`
+    // до смысла знака не довела бы.
+    const mark = within(header).getByRole('button', { name: questions });
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
+    // До нажатия фраза есть только для диктора, глазу видно число.
+    expect(within(mark).getByText(questions)).toHaveClass('sr-only');
+    expect(mark).toHaveTextContent(/2$/);
+
+    await user.click(mark);
+    expect(mark).toHaveAttribute('aria-pressed', 'true');
+    expect(within(mark).getByText(questions)).not.toHaveClass('sr-only');
+
+    await user.click(mark);
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
+    expect(within(mark).getByText(questions)).toHaveClass('sr-only');
+
+    // С клавиатуры то же, и каждый знак раскрывается сам по себе.
+    const blocked = within(header).getByRole('button', { name: say.ui('task.features.blocked') });
+    blocked.focus();
+    await user.keyboard('{Enter}');
+    expect(within(blocked).getByText(say.ui('task.features.blocked'))).not.toHaveClass('sr-only');
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
+  });
+});

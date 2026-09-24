@@ -203,6 +203,10 @@ describe('список задач', () => {
     // Различие держится не только цветом: у каждого знака свой рисунок.
     const shapes = marks.map((node) => node.querySelector('svg')?.innerHTML ?? '');
     expect(new Set(shapes).size).toBe(3);
+
+    // В строке знак не кнопка (UI-163): нажатие по строке ведёт в задачу, а смысл знака
+    // нажатием раскрывается уже в её шапке.
+    for (const node of marks) expect(node.closest('button')).toBeNull();
   });
 
   it('статус и приоритет в строке названы родом: знак читается и глазом, и диктором', async () => {
