@@ -73,6 +73,8 @@ TASK_TOOLS = {
     "get_project",
     "list_projects",
     "list_participants",
+    "set_attribute",
+    "remove_attribute",
     "wait_journal",
 }
 
@@ -202,6 +204,9 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     "unlink": (False, False, False),
     "transition": (False, False, False),
     "close_task": (False, False, False),
+    # Снятие атрибута: без ключа повтор отвечает `attribute_not_found`; последнее значение
+    # остаётся в `attribute_removed` — не разрушает (TRK-157).
+    "remove_attribute": (False, False, False),
     # Частичная правка задачи: то же значение второй раз не подшивает запись и не
     # поднимает версию — идемпотентна; не разрушает ничего, потому что правка хранит
     # `before`/`after` в `section_changed`/`field_changed`.
@@ -209,6 +214,9 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     # Правка карточки проекта — так же: с TRK-156 у проекта есть дело, и прежние
     # название и описание остаются в `field_changed`.
     "update_project": (False, False, True),
+    # Значение атрибута: то же значение второй раз ничего не подшивает; прежнее значение
+    # остаётся в `attribute_changed` — не разрушает (TRK-157).
+    "set_attribute": (False, False, True),
     # Правка участника: идемпотентна тем же способом, но у участника нет дела — прежнее
     # описание перезаписывается без следа. Разрушающее обновление в буквальном смысле хинта.
     "update_participant": (False, True, True),
@@ -1681,7 +1689,13 @@ async def test_get_project_carries_the_context_shared_by_its_tasks(
         read = await call(session, "get_project", key="trk")
 
     index = read.pop("index")
-    assert read == {"key": project.key, "title": project.title, "description": project.description}
+    # Атрибутов у нового проекта нет (TRK-157): список пуст, а не пропущен.
+    assert read == {
+        "key": project.key,
+        "title": project.title,
+        "description": project.description,
+        "attributes": [],
+    }
     # Дело проекта открывается записью `created` (TRK-156): опись едет той же строкой, что
     # у задачи.
     assert [(line["no"], line["type"], line["title"]) for line in index] == [
@@ -1770,6 +1784,7 @@ async def test_the_main_scope_runs_the_registries(
         "key": "OPS",
         "title": "Эксплуатация и дежурства",
         "description": "Дежурства",
+        "attributes": [],
     }
     # Правка названия осталась в деле проекта (TRK-156), а не пропала без следа.
     assert [(line["type"], line["facts"]) for line in index] == [

@@ -45,11 +45,16 @@ def reader(seeded: demo_service.DemoData, db_session: AsyncSession) -> Actor:
 async def _entry_types(
     session: AsyncSession, data: demo_service.DemoData, reader: Actor
 ) -> Counter[EntryType]:
-    """Сколько записей каждого типа во всех делах демо."""
+    """Сколько записей каждого типа во всех делах демо: задач и проекта."""
     found: Counter[EntryType] = Counter()
     for task in data.tasks:
         page = await case_service.list_entries(session, task, actor=reader, limit=200)
         found.update(entry.type for entry in page.items)
+    assert data.project is not None
+    project_page = await case_service.list_project_entries(
+        session, data.project, actor=reader, limit=200
+    )
+    found.update(entry.type for entry in project_page.items)
     return found
 
 
@@ -66,7 +71,7 @@ async def test_demo_fills_every_status(seeded: demo_service.DemoData) -> None:
 async def test_demo_fills_every_entry_type(
     db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
 ) -> None:
-    """Все пятнадцать типов записей, включая служебные.
+    """Все типы записей, включая служебные, — в делах задач и в деле проекта.
 
     Служебные типы попадают в демо только через настоящие сценарии: `section_changed`
     — правкой раздела в `backlog`, `assignee_changed` — сменой исполнителя,

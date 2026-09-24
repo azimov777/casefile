@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas.entries import EntryFactsRead
 from app.db.models.project import Project
 from app.db.models.task import Task
-from app.domain.case import FACTS_BY_ENTRY_TYPE, EntryType, NoFacts
+from app.domain.case import ATTRIBUTE_ENTRY_TYPES, FACTS_BY_ENTRY_TYPE, EntryType, NoFacts
 from app.domain.links import LinkKind
 from app.domain.tasks import MAX_CHECK_LENGTH, MAX_TEXT_LENGTH, TaskStatus
 from app.mcp.tools.case.views import FactsView
@@ -370,7 +370,10 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
         assert set(heading["facts"]) == in_domain, heading
         assert heading["facts"]["type"] == heading["type"], heading
 
-    assert seen == {entry_type.value for entry_type in EntryType}, sorted(seen)
+    # Записи об атрибутах бывают только в деле проекта (TRK-157): их факты сверяет
+    # `tests/test_project_attributes.py` по описи `get_project`.
+    in_a_task_case = set(EntryType) - ATTRIBUTE_ENTRY_TYPES
+    assert seen == {entry_type.value for entry_type in in_a_task_case}, sorted(seen)
 
 
 async def _case_with_every_entry_type(client: AsyncClient, project: Project) -> str:
