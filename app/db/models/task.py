@@ -4,8 +4,8 @@
 список проверок — колонки, а не реестр полей. Статус — перечисление, а не ссылка на
 справочник: справочника статусов в базе нет.
 
-Ключ задачи (`TRK-42`) неизменяем и не переиспользуется. Ключ и очередь — две колонки,
-а не ключ, вычисляемый из очереди: на ключ ссылаются записи дела и внешние системы, и
+Ключ задачи (`TRK-42`) неизменяем и не переиспользуется. Ключ и проект — две колонки,
+а не ключ, вычисляемый из проекта: на ключ ссылаются записи дела и внешние системы, и
 он обязан пережить любую будущую правку принадлежности.
 """
 
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseModel, string_enum
 from app.db.models.author import CreatedByMixin
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.domain.tasks import (
     INITIAL_STATUS,
     MAX_ASSIGNEE_LENGTH,
@@ -34,7 +34,7 @@ from app.domain.tasks import (
 class Task(BaseModel, CreatedByMixin):
     """Строка задачи.
 
-    Внешний ключ на очередь без `ondelete`: очереди не удаляются, а если это однажды
+    Внешний ключ на проект без `ondelete`: проекты не удаляются, а если это однажды
     случится, база откажет, и задачи не исчезнут молча.
 
     Автор строки (`CreatedByMixin`) — тот, кто завёл задачу. Это не «исполнитель»:
@@ -44,19 +44,21 @@ class Task(BaseModel, CreatedByMixin):
 
     __tablename__ = "tasks"
     __table_args__ = (
-        # «Задачи очереди в таком-то статусе» — основной запрос списка и назначателя.
-        # Индекс начинается с очереди: по одному `queue_id` он работает тоже, обратное
+        # «Задачи проекта в таком-то статусе» — основной запрос списка и назначателя.
+        # Индекс начинается с проекта: по одному `project_id` он работает тоже, обратное
         # неверно.
-        Index("ix_tasks_queue_id_status", "queue_id", "status"),
+        Index("ix_tasks_project_id_status", "project_id", "status"),
         # «Что у этого исполнителя» — фильтр поиска и входящая агента.
         Index("ix_tasks_assignee", "assignee"),
         # Курсорная пагинация проекта идёт по паре `(created_at, id)`; без индекса
         # каждая страница означала бы сортировку всей таблицы.
         Index("ix_tasks_created_at_id", "created_at", "id"),
-        # Порядок списка задач по умолчанию — «очередь, номер». Номер вынут из ключа
+        # Порядок списка задач по умолчанию — «проект, номер». Номер вынут из ключа
         # выражением: строковое сравнение поставило бы `TRK-10` перед `TRK-2`, а
         # отдельной колонки под номер нет — ключ и есть его хранилище.
-        Index("ix_tasks_queue_id_number", "queue_id", text("(split_part(key, '-', 2)::bigint)")),
+        Index(
+            "ix_tasks_project_id_number", "project_id", text("(split_part(key, '-', 2)::bigint)")
+        ),
         # Сортировка по времени обновления с тайбрейкером по `id`: пара, а не одна
         # колонка, потому что курсор идёт по обеим.
         Index("ix_tasks_updated_at_id", "updated_at", "id"),
@@ -81,7 +83,7 @@ class Task(BaseModel, CreatedByMixin):
     )
 
     key: Mapped[str] = mapped_column(String(MAX_TASK_KEY_LENGTH), unique=True, nullable=False)
-    queue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("queues.id"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False)
 
     title: Mapped[str] = mapped_column(String(MAX_TITLE_LENGTH), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -141,6 +143,6 @@ class Task(BaseModel, CreatedByMixin):
         "version_id_col": version,
     }
 
-    # Ключ и название очереди входят в каждую карточку задачи, а очередь у задачи одна,
+    # Ключ и название проекта входят в каждую карточку задачи, а проект у задачи один,
     # поэтому `joined`: одно соединение вместо второго запроса на каждый ответ.
-    queue: Mapped[Queue] = relationship(lazy="joined")
+    project: Mapped[Project] = relationship(lazy="joined")

@@ -30,7 +30,7 @@ from app.mcp.arguments import CursorArg, LimitArg
 from app.mcp.enums import TaskPrioritySchema, TaskStatusSchema
 from app.mcp.tools.tasks.views import FeaturesView, features, task
 from app.mcp.toolset import READ_ONLY, Toolset
-from app.mcp.views import AuthorView, PageView, QueueRefView, page
+from app.mcp.views import AuthorView, PageView, ProjectRefView, page
 from app.services import search as search_service
 from app.services.search import FoundTask, StructuredTerm
 
@@ -124,7 +124,7 @@ KeysArg = Annotated[
     ),
 ]
 
-QueuesArg = Annotated[list[str] | None, Field(description="Queue keys", examples=[["TRK"]])]
+ProjectsArg = Annotated[list[str] | None, Field(description="Project keys", examples=[["TRK"]])]
 
 
 StatusesArg = Annotated[list[TaskStatusSchema] | None, Field(description="Task statuses")]
@@ -146,7 +146,7 @@ ParentFilterArg = Annotated[
     Field(
         description=(
             "Parent task keys: their **direct** children, one level down. `empty()` "
-            "matches tasks without a parent, the top level of a queue. An unknown key is "
+            "matches tasks without a parent, the top level of a project. An unknown key is "
             "refused rather than read as «no children»"
         ),
         examples=[["TRK-7"]],
@@ -235,7 +235,7 @@ class FoundTaskView(BaseModel):
 
     key: str
     id: str | None = None
-    queue: QueueRefView | None = None
+    project: ProjectRefView | None = None
     title: str | None = None
     description: str | None = None
     goal: str | None = None
@@ -329,7 +329,7 @@ def register(tools: Toolset) -> None:
     async def search_tasks(
         query: QueryArg = None,
         key: KeysArg = None,
-        queue: QueuesArg = None,
+        project: ProjectsArg = None,
         parent: ParentFilterArg = None,
         status: StatusesArg = None,
         assignee: AssigneesArg = None,
@@ -364,7 +364,7 @@ def register(tools: Toolset) -> None:
                 query=query,
                 structured=_terms(
                     key=key,
-                    queue=queue,
+                    project=project,
                     parent=parent,
                     status=status,
                     assignee=assignee,
@@ -397,7 +397,7 @@ def register(tools: Toolset) -> None:
 def _terms(
     *,
     key: Sequence[str] | None,
-    queue: Sequence[str] | None,
+    project: Sequence[str] | None,
     parent: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
     assignee: Sequence[str] | None,
@@ -424,7 +424,7 @@ def _terms(
         StructuredTerm(name=name, values=values)
         for name, values in (
             ("key", key),
-            ("queue", queue),
+            ("project", project),
             ("parent", parent),
             ("status", None if status is None else [item.value for item in status]),
             ("assignee", assignee),

@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.db.models.author import created_by_columns
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository
 from app.domain.authors import TRACKER
@@ -152,15 +152,15 @@ def committing_sessions(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]
 async def committed_tasks(
     committing_sessions: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[list[uuid.UUID]]:
-    """Очередь и три задачи, видимые другим соединениям, и уборка за собой."""
+    """Проект и три задачи, видимые другим соединениям, и уборка за собой."""
     async with committing_sessions() as session:
-        queue = Queue(key="TRIMRACE", title="Гонка обвязки", **created_by_columns(TRACKER))
-        session.add(queue)
+        project = Project(key="TRIMRACE", title="Гонка обвязки", **created_by_columns(TRACKER))
+        session.add(project)
         await session.flush()
         tasks = [
             Task(
                 key=f"TRIMRACE-{number}",
-                queue=queue,
+                project=project,
                 title=f"Задача {number}",
                 description="Есть",
                 status=TaskStatus.OPEN,
@@ -171,7 +171,7 @@ async def committed_tasks(
         session.add_all(tasks)
         await session.commit()
         task_ids = [item.id for item in tasks]
-        queue_id = queue.id
+        project_id = project.id
 
     try:
         yield task_ids
@@ -184,7 +184,7 @@ async def committed_tasks(
             await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(text("DELETE FROM tasks WHERE id = ANY(:ids)"), {"ids": task_ids})
             await session.execute(
-                text("DELETE FROM queues WHERE id = :queue_id"), {"queue_id": queue_id}
+                text("DELETE FROM projects WHERE id = :project_id"), {"project_id": project_id}
             )
             await session.commit()
 

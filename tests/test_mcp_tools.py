@@ -26,7 +26,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
@@ -46,7 +46,7 @@ from app.mcp.tools.tasks.search_tasks import DEFAULT_SEARCH_FIELDS, FieldsArg, Q
 from app.mcp.tools.tasks.views import FeaturesView
 from app.services import case as case_service
 from app.services import links as links_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from conftest import Connect, call, refuse, tool_text
@@ -68,14 +68,14 @@ TASK_TOOLS = {
     "resolve",
     "link",
     "unlink",
-    "get_queue",
-    "list_queues",
+    "get_project",
+    "list_projects",
     "list_participants",
     "wait_journal",
 }
 
 #: Что набор `main` добавляет сверху. Выпуска токенов среди них нет намеренно.
-MAIN_TOOLS = {"create_queue", "update_queue", "register_participant", "update_participant"}
+MAIN_TOOLS = {"create_project", "update_project", "register_participant", "update_participant"}
 
 #: «Сделано» из двух строк: заголовок сводки — только первая из них. Строки
 #: собираются соединением, а не одним литералом с `\n`: escape внутри русского текста
@@ -98,8 +98,8 @@ CLOSING_SUMMARY = {
 #: Аргументы, с которыми инструмент набора `main` доходит до проверки прав. Значения
 #: намеренно осмысленные: отказ должен приходить из прав, а не из разбора аргументов.
 MAIN_TOOL_CALLS: dict[str, dict[str, Any]] = {
-    "create_queue": {"key": "OPS", "title": "Эксплуатация"},
-    "update_queue": {"key": "TRK", "title": "Другое название"},
+    "create_project": {"key": "OPS", "title": "Эксплуатация"},
+    "update_project": {"key": "TRK", "title": "Другое название"},
     "register_participant": {"kind": "agent", "name": "nightly_bot"},
     "update_participant": {"name": "owner", "description": "Другое описание"},
 }
@@ -136,14 +136,14 @@ async def test_a_main_token_sees_the_registries_too(mcp_session: Connect, main_s
 async def test_every_main_tool_refuses_a_task_token_with_the_rest_code(
     mcp_session: Connect,
     task_secret: str,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2: недоступный инструмент отвечает `permission_denied`.
 
-    Проверяются все четыре, а не только `create_queue`: объявленный набор инструмента —
+    Проверяются все четыре, а не только `create_project`: объявленный набор инструмента —
     это описание списка, и разойтись с настоящими правами ему не даёт именно этот тест.
     """
-    del queue
+    del project
     async with mcp_session(task_secret) as session:
         for name, arguments in MAIN_TOOL_CALLS.items():
             failure = await refuse(session, name, **arguments)
@@ -176,8 +176,8 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     # Читающие: ничего не меняют, повтор всегда безопасен.
     "get_task": (True, False, True),
     "search_tasks": (True, False, True),
-    "get_queue": (True, False, True),
-    "list_queues": (True, False, True),
+    "get_project": (True, False, True),
+    "list_projects": (True, False, True),
     "list_participants": (True, False, True),
     "read_entries": (True, False, True),
     "wait_journal": (True, False, True),
@@ -186,7 +186,7 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     # состояние: заводит вторую запись/объект или отказывает конфликтом или
     # неприменимым переходом.
     "create_task": (False, False, False),
-    "create_queue": (False, False, False),
+    "create_project": (False, False, False),
     "register_participant": (False, False, False),
     "add_entry": (False, False, False),
     "add_summary": (False, False, False),
@@ -202,10 +202,10 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     # поднимает версию — идемпотентна; не разрушает ничего, потому что правка хранит
     # `before`/`after` в `section_changed`/`field_changed`.
     "update_task": (False, False, True),
-    # Правка очереди и участника: идемпотентна тем же способом, но, в отличие от
-    # задачи, у очереди и участника нет журнала правок — прежние название и описание
+    # Правка проекта и участника: идемпотентна тем же способом, но, в отличие от
+    # задачи, у проекта и участника нет журнала правок — прежние название и описание
     # перезаписываются без следа. Разрушающее обновление в буквальном смысле хинта.
-    "update_queue": (False, True, True),
+    "update_project": (False, True, True),
     "update_participant": (False, True, True),
 }
 
@@ -266,7 +266,7 @@ async def test_every_tool_refuses_an_argument_it_does_not_declare(
 
 
 async def test_create_task_with_a_section_at_the_top_level_files_nothing(
-    mcp_session: Connect, main_secret: str, queue: Queue
+    mcp_session: Connect, main_secret: str, project: Project
 ) -> None:
     """Тот самый случай: разделы присланы верхним уровнем вместо вложенного `sections`.
 
@@ -274,20 +274,20 @@ async def test_create_task_with_a_section_at_the_top_level_files_nothing(
     разделами. Поэтому здесь проверяется не только текст отказа, но и то, что задачи не
     появилось: молчаливо заведённая пустая задача — и есть цена этой ошибки.
     """
-    key = queue.key
+    key = project.key
     async with mcp_session(main_secret) as session:
-        before = await call(session, "search_tasks", queue=[key], fields=["key"])
+        before = await call(session, "search_tasks", project=[key], fields=["key"])
 
         failure = await refuse(
             session,
             "create_task",
-            queue=key,
+            project=key,
             title="Разделы верхним уровнем",
             description="Проверка отказа",
             goal="Цель, присланная мимо sections",
         )
 
-        after = await call(session, "search_tasks", queue=[key], fields=["key"])
+        after = await call(session, "search_tasks", project=[key], fields=["key"])
 
     assert "goal" in failure, failure
     assert "extra_forbidden" in failure, failure
@@ -390,7 +390,7 @@ async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
 
 
 async def test_transitions_are_the_table_and_not_the_moves_that_would_pass_now(
-    mcp_session: Connect, task_secret: str, open_task: Task, queue: Queue
+    mcp_session: Connect, task_secret: str, open_task: Task, project: Project
 ) -> None:
     """`transitions` называет ходы по таблице; валидации считаются в момент перехода.
 
@@ -399,13 +399,13 @@ async def test_transitions_are_the_table_and_not_the_moves_that_would_pass_now(
     (`allowed_transitions` в `app/domain/tasks.py`) — это дорого и устаревает, пока агент
     думает. Вопрос «пустят ли» закрывает признак `blocked`.
     """
-    del queue
+    del project
     key = open_task.key
     async with mcp_session(task_secret) as session:
         blocker = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Блокер",
             description="Пока не закрыт",
         )
@@ -448,7 +448,7 @@ async def test_search_tasks_asks_for_a_narrow_set_of_fields_by_default(
 ) -> None:
     """Полная задача с пятью разделами съела бы контекст ровно там, где агент выбирает."""
     async with mcp_session(task_secret) as session:
-        found = await call(session, "search_tasks", queue=["TRK"])
+        found = await call(session, "search_tasks", project=["TRK"])
 
     assert [item["key"] for item in found["items"]] == [task.key]
     assert set(found["items"][0]) == set(DEFAULT_SEARCH_FIELDS)
@@ -462,12 +462,12 @@ async def test_search_tasks_understands_the_query_language_and_the_arguments_ali
         by_query = await call(
             session,
             "search_tasks",
-            query="queue: TRK and status: open and blocked: false and open_blocking_questions: 0",
+            query="project: TRK and status: open and blocked: false and open_blocking_questions: 0",
         )
         by_arguments = await call(
             session,
             "search_tasks",
-            queue=["TRK"],
+            project=["TRK"],
             status=["open"],
             blocked=False,
             open_blocking_questions=0,
@@ -487,26 +487,26 @@ async def test_search_tasks_asks_about_the_tasks_the_session_names(
     task_secret: str,
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
     task: Task,
 ) -> None:
     """Ключи списком: сессия называет свои дела и получает их состояние одним вызовом.
 
     И строка, и аргумент отвечают одинаково: у одного вопроса не бывает двух ответов в
-    зависимости от того, как его задали. Третья задача в той же очереди нужна, чтобы
+    зависимости от того, как его задали. Третья задача в том же проекте нужна, чтобы
     отбор было чем провалить: без неё выдача «все задачи» совпала бы с названной парой.
     """
     second = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
+        project=project,
         title="Второе дело сессии",
         description="Есть",
     )
     outsider = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
+        project=project,
         title="Задача, про которую не спрашивали",
         description="Есть",
     )
@@ -540,9 +540,9 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
     """
     fields = ["title", "status", "features"]
     async with mcp_session(task_secret) as session:
-        from_mcp = await call(session, "search_tasks", queue=["TRK"], fields=fields)
+        from_mcp = await call(session, "search_tasks", project=["TRK"], fields=fields)
 
-    response = await auth_client.get("/api/v1/tasks", params={"queue": "TRK", "fields": fields})
+    response = await auth_client.get("/api/v1/tasks", params={"project": "TRK", "fields": fields})
     assert response.status_code == 200, response.text
 
     assert from_mcp["items"] == response.json()["data"]
@@ -562,7 +562,7 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
     auth_client: AsyncClient,
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
     task_secret: str,
 ) -> None:
     """TRK-95, TRK-135: `parent` в `fields` — поле есть, без него — поля нет.
@@ -572,10 +572,10 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
     отказ с перечнем, где стоит `parent`.
     """
     program = await tasks_service.create_task(
-        db_session, actor=task_actor, queue=queue, title="программа", description="описание"
+        db_session, actor=task_actor, project=project, title="программа", description="описание"
     )
     child = await tasks_service.create_task(
-        db_session, actor=task_actor, queue=queue, title="ребёнок", description="описание"
+        db_session, actor=task_actor, project=project, title="ребёнок", description="описание"
     )
     await links_service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
     # Ключи и названия читаются до вызовов: сервер MCP фиксирует ту же сессию, и
@@ -585,9 +585,9 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
 
     fields = ["key", "parent"]
     async with mcp_session(task_secret) as session:
-        asked = await call(session, "search_tasks", queue=["TRK"], fields=fields)
-        narrow = await call(session, "search_tasks", queue=["TRK"], fields=["key", "title"])
-        default = await call(session, "search_tasks", queue=["TRK"])
+        asked = await call(session, "search_tasks", project=["TRK"], fields=fields)
+        narrow = await call(session, "search_tasks", project=["TRK"], fields=["key", "title"])
+        default = await call(session, "search_tasks", project=["TRK"])
         wrong_name = await refuse(session, "search_tasks", fields=["key", "parents"])
 
     assert asked["items"] == [
@@ -599,7 +599,7 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
     assert "search_field_unknown" in wrong_name
     assert '"parent"' in wrong_name
 
-    response = await auth_client.get("/api/v1/tasks", params={"queue": "TRK", "fields": fields})
+    response = await auth_client.get("/api/v1/tasks", params={"project": "TRK", "fields": fields})
     assert response.status_code == 200, response.text
     assert asked["items"] == response.json()["data"]
 
@@ -618,7 +618,7 @@ async def test_search_tasks_clips_a_long_text_and_says_so(
     )
 
     async with mcp_session(task_secret) as session:
-        found = await call(session, "search_tasks", queue=["TRK"], fields=["goal"])
+        found = await call(session, "search_tasks", project=["TRK"], fields=["goal"])
         whole = await call(session, "get_task", key=task.key)
 
     item = found["items"][0]
@@ -646,7 +646,9 @@ async def test_search_tasks_returns_the_sections_it_was_asked_for(
     described = _fields_description()
 
     async with mcp_session(task_secret) as session:
-        found = await call(session, "search_tasks", queue=["TRK"], fields=["key", "checks", "goal"])
+        found = await call(
+            session, "search_tasks", project=["TRK"], fields=["key", "checks", "goal"]
+        )
 
     assert found["items"] == [{"key": task.key, "goal": task.goal, "checks": task.checks}]
     for section in ("goal", "context", "constraints", "output", "checks"):
@@ -663,7 +665,7 @@ async def test_an_unknown_field_name_is_refused_with_the_allowed_ones(
     зависит от вызова, и стал бы выяснять его перебором.
     """
     async with mcp_session(task_secret) as session:
-        text = await refuse(session, "search_tasks", queue=["TRK"], fields=["key", "чеклист"])
+        text = await refuse(session, "search_tasks", project=["TRK"], fields=["key", "чеклист"])
 
     assert "search_field_unknown" in text
     assert '"field": "чеклист"' in text
@@ -783,7 +785,7 @@ async def test_an_update_that_changes_nothing_files_nothing(
     assert again["version"] == first["version"], "версия выросла на правке, ничего не изменившей"
 
 
-#: Раздел задачи, похожей на настоящую. Разделы боевых задач очереди `TRK` — это абзацы
+#: Раздел задачи, похожей на настоящую. Разделы боевых задач проекта `TRK` — это абзацы
 #: по несколько сотен символов каждый, и именно они дают тот множитель, ради которого
 #: задача затевалась. Задача из фикстуры их не имеет: её разделы в одну строку, и на ней
 #: замер показал бы восьмикратную разницу вместо настоящей — то есть соврал бы в меньшую
@@ -801,7 +803,7 @@ SHORT_ANSWER_CEILING = 256
 
 
 async def test_the_short_answer_is_an_order_of_magnitude_smaller(
-    mcp_session: Connect, task_secret: str, queue: Queue, db_session: AsyncSession, task: Task
+    mcp_session: Connect, task_secret: str, project: Project, db_session: AsyncSession, task: Task
 ) -> None:
     """Обзорная проверка 2 TRK-12: ответ перехода короче прежнего больше чем в десять раз.
 
@@ -824,8 +826,8 @@ async def test_the_short_answer_is_an_order_of_magnitude_smaller(
     big = await tasks_service.create_task(
         db_session,
         actor=actor,
-        queue=queue,
-        title="Разделы длиной, будто из боевой очереди",
+        project=project,
+        title="Разделы длиной, будто из боевого проекта",
         description=REALISTIC_SECTION,
         goal=REALISTIC_SECTION,
         context=REALISTIC_SECTION,
@@ -940,12 +942,12 @@ async def test_create_task_is_born_in_backlog_with_its_parent(
         child = await call(
             session,
             "create_task",
-            queue="trk",
-            title="Выдать номера очередям",
-            description="Счётчик номеров живёт в очереди",
+            project="trk",
+            title="Выдать номера проектам",
+            description="Счётчик номеров живёт в проекте",
             sections={
                 "goal": "Номера не переиспользуются",
-                "context": "Счётчик в `queues`",
+                "context": "Счётчик в `projects`",
                 "constraints": "Схему не менять",
                 "output": "Тест на счётчик",
                 "checks": ["Два создания подряд дают разные номера"],
@@ -1003,13 +1005,13 @@ async def test_a_child_born_with_a_parent_takes_no_second_one(
     }
     async with mcp_session(task_secret) as session:
         other = await call(
-            session, "create_task", queue="trk", title="Вторая программа", description="д"
+            session, "create_task", project="trk", title="Вторая программа", description="д"
         )
         children = [
             await call(
                 session,
                 "create_task",
-                queue="trk",
+                project="trk",
                 title=f"Часть {n}",
                 description="д",
                 sections=sections,
@@ -1034,13 +1036,13 @@ async def test_a_child_born_with_a_parent_takes_no_second_one(
 
 
 async def test_a_repeated_create_task_answers_with_the_first_task(
-    mcp_session: Connect, task_secret: str, queue: Queue
+    mcp_session: Connect, task_secret: str, project: Project
 ) -> None:
     """Агент упал и повторил вызов: второй задачи не появляется, номер не тратится."""
-    del queue
+    del project
     key = str(uuid.uuid4())
     arguments: dict[str, Any] = {
-        "queue": "TRK",
+        "project": "TRK",
         "title": "Починить выдачу ключей",
         "description": "Ключ сгорает",
         "idempotency_key": key,
@@ -1050,7 +1052,7 @@ async def test_a_repeated_create_task_answers_with_the_first_task(
         first = await call(session, "create_task", **arguments)
         again = await call(session, "create_task", **arguments)
         conflict = await refuse(session, "create_task", **{**arguments, "title": "Совсем другое"})
-        found = await call(session, "search_tasks", queue=["TRK"])
+        found = await call(session, "search_tasks", project=["TRK"])
 
     assert first == again
     assert "idempotency_key_reused" in conflict
@@ -1268,7 +1270,7 @@ async def test_asking_an_unknown_participant_is_refused(
 
 
 async def test_a_verdict_gates_the_move_to_done(
-    mcp_session: Connect, task_secret: str, queue: Queue
+    mcp_session: Connect, task_secret: str, project: Project
 ) -> None:
     """Закрытие требует по каждой проверке последний вердикт `passed`.
 
@@ -1280,12 +1282,12 @@ async def test_a_verdict_gates_the_move_to_done(
     приехавший закрытием, в деле не остаётся — отказ откатывает вызов целиком; провал
     подшивают `add_verdict` по ходу работы, там он и остаётся историей.
     """
-    del queue
+    del project
     async with mcp_session(task_secret) as session:
         task = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Задача из двух проверок",
             assignee="owner",
             description="Проверки закрываются вердиктами",
@@ -1344,18 +1346,18 @@ async def test_a_verdict_gates_the_move_to_done(
 
 
 @pytest.fixture
-async def closing_task(mcp_session: Connect, task_secret: str, queue: Queue) -> str:
+async def closing_task(mcp_session: Connect, task_secret: str, project: Project) -> str:
     """Задача с двумя проверками, взятая в работу: остаётся только закрыть.
 
     Ключ строкой: сессия MCP коммитит на входе, и обращение к полю ORM-объекта после
     этого ушло бы в базу мимо цикла событий (`tests/conftest.py`).
     """
-    del queue
+    del project
     async with mcp_session(task_secret) as session:
         created = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Задача под закрытие",
             assignee="owner",
             description="Две проверки, артефакт и сводка",
@@ -1550,16 +1552,16 @@ async def test_a_repeated_closing_answers_with_the_first_result(
 
 
 async def test_a_link_is_named_from_the_side_that_asks(
-    mcp_session: Connect, task_secret: str, open_task: Task, queue: Queue
+    mcp_session: Connect, task_secret: str, open_task: Task, project: Project
 ) -> None:
     """`blocks` у одной стороны — `blocked_by` у другой; строка при этом одна."""
-    del queue
+    del project
     key = open_task.key
     async with mcp_session(task_secret) as session:
         blocker = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Блокер",
             description="Пока не закрыт",
         )
@@ -1580,15 +1582,15 @@ async def test_a_link_is_named_from_the_side_that_asks(
 
 
 async def test_link_and_unlink_answer_with_the_filed_entry_numbers(
-    mcp_session: Connect, task_secret: str, task: Task, queue: Queue
+    mcp_session: Connect, task_secret: str, task: Task, project: Project
 ) -> None:
     """TRK-144: ответ `link`/`unlink` называет номера обеих подшитых записей, без эха
     входа (`kind`, `other`) и без выдуманного `removed`, которое иначе не бывает.
     """
-    del queue
+    del project
     key = task.key
     async with mcp_session(task_secret) as session:
-        other = await call(session, "create_task", queue="TRK", title="Другая", description="д")
+        other = await call(session, "create_task", project="TRK", title="Другая", description="д")
         other_key = other["key"]
 
         linked = await call(session, "link", key=key, kind="blocks", other=other_key)
@@ -1626,7 +1628,7 @@ async def test_a_link_to_itself_is_refused(
 
 
 async def test_a_closed_task_carries_its_continuation_but_takes_no_blocker(
-    mcp_session: Connect, task_secret: str, task: Task, queue: Queue
+    mcp_session: Connect, task_secret: str, task: Task, project: Project
 ) -> None:
     """Главная проверка TRK-10 в MCP: продолжение видно из `get_task` закрытой задачи.
 
@@ -1634,14 +1636,14 @@ async def test_a_closed_task_carries_its_continuation_but_takes_no_blocker(
     нужен. `blocked_by` при этом по-прежнему отклоняется: закрытую задачу не делают
     заблокированной задним числом.
     """
-    del queue
+    del project
     key = task.key
     async with mcp_session(task_secret) as session:
         await call(session, "transition", key=key, to="cancelled", reason="вышло не то")
         continuation = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Продолжение",
             description="Выросло из отменённой",
         )
@@ -1666,40 +1668,40 @@ async def test_a_closed_task_carries_its_continuation_but_takes_no_blocker(
 # --- Реестры --------------------------------------------------------------------------
 
 
-async def test_get_queue_carries_the_context_shared_by_its_tasks(
-    mcp_session: Connect, task_secret: str, queue: Queue
+async def test_get_project_carries_the_context_shared_by_its_tasks(
+    mcp_session: Connect, task_secret: str, project: Project
 ) -> None:
     """В карточке задачи только ключ и название: описание запрашивают отдельно."""
     async with mcp_session(task_secret) as session:
-        read = await call(session, "get_queue", key="trk")
+        read = await call(session, "get_project", key="trk")
 
-    assert read == {"key": queue.key, "title": queue.title, "description": queue.description}
+    assert read == {"key": project.key, "title": project.title, "description": project.description}
 
 
-async def test_list_queues_is_the_entry_point_when_no_key_is_known(
+async def test_list_projects_is_the_entry_point_when_no_key_is_known(
     mcp_session: Connect,
     task_secret: str,
     db_session: AsyncSession,
     main_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
-    """Агент без контекста репозитория находит очереди сам, а описание берёт у выбранной.
+    """Агент без контекста репозитория находит проекты сам, а описание берёт у выбранного.
 
-    Строка списка — ровно ключ и название: описание очереди бывает длинным, и в выдаче,
-    где очередей много, оно стоило бы контекста больше, чем сам выбор.
+    Строка списка — ровно ключ и название: описание проекта бывает длинным, и в выдаче,
+    где проектов много, оно стоило бы контекста больше, чем сам выбор.
     """
-    del queue
-    await queues_service.create_queue(
+    del project
+    await projects_service.create_project(
         db_session, actor=main_actor, key="UI", title="Интерфейс", description="Фронтенд"
     )
 
     async with mcp_session(task_secret) as session:
-        listed = await call(session, "list_queues")
-        first = await call(session, "list_queues", limit=1)
-        second = await call(session, "list_queues", limit=1, cursor=first["next_cursor"])
-        chosen = await call(session, "get_queue", key=first["items"][0]["key"])
+        listed = await call(session, "list_projects")
+        first = await call(session, "list_projects", limit=1)
+        second = await call(session, "list_projects", limit=1, cursor=first["next_cursor"])
+        chosen = await call(session, "get_project", key=first["items"][0]["key"])
 
-    # Порядок страниц здесь не проверяется: очереди одного теста заведены в одной
+    # Порядок страниц здесь не проверяется: проекты одного теста заведены в одной
     # транзакции, `created_at` у них общий, и пара `(created_at, id)` вырождается в
     # сортировку по случайным UUID (`docs/notes/testing.md`). Проверяется полнота
     # выдачи и то, что страницы не пересекаются.
@@ -1711,25 +1713,25 @@ async def test_list_queues_is_the_entry_point_when_no_key_is_known(
     assert second["items"] != first["items"], "курсор повторил страницу"
     assert sorted(item["key"] for item in first["items"] + second["items"]) == ["TRK", "UI"]
     assert chosen["key"] == first["items"][0]["key"]
-    assert chosen["description"], "описание отдаёт только get_queue"
+    assert chosen["description"], "описание отдаёт только get_project"
 
 
 async def test_the_main_scope_runs_the_registries(
-    mcp_session: Connect, main_secret: str, queue: Queue
+    mcp_session: Connect, main_secret: str, project: Project
 ) -> None:
-    """Очереди и участники заводятся из MCP; токены — нет, и не будут.
+    """Проекты и участники заводятся из MCP; токены — нет, и не будут.
 
-    TRK-144: ответы `create_queue`/`update_queue`/`register_participant`/
+    TRK-144: ответы `create_project`/`update_project`/`register_participant`/
     `update_participant` называют только ключ или имя — без эха названия, описания и
-    рода, которые вызывающий и так прислал сам. Итог проверяется чтением: `get_queue`
+    рода, которые вызывающий и так прислал сам. Итог проверяется чтением: `get_project`
     и `list_participants` — источник правды, а не короткий ответ правки.
     """
-    del queue
+    del project
     async with mcp_session(main_secret) as session:
         created = await call(
-            session, "create_queue", key="ops", title="Эксплуатация", description="Дежурства"
+            session, "create_project", key="ops", title="Эксплуатация", description="Дежурства"
         )
-        renamed = await call(session, "update_queue", key="OPS", title="Эксплуатация и дежурства")
+        renamed = await call(session, "update_project", key="OPS", title="Эксплуатация и дежурства")
         registered = await call(
             session,
             "register_participant",
@@ -1740,7 +1742,7 @@ async def test_the_main_scope_runs_the_registries(
         described = await call(
             session, "update_participant", name="release_bot", description="Ведёт выкладки"
         )
-        stored_queue = await call(session, "get_queue", key="OPS")
+        stored_project = await call(session, "get_project", key="OPS")
         participants = await call(session, "list_participants")
 
     # Ответ короткий: ключ или имя, канонизированные по регистру, и ничего сверх.
@@ -1750,9 +1752,9 @@ async def test_the_main_scope_runs_the_registries(
     assert described == {"name": "release_bot"}
 
     # Итог правки — у того, кто его хранит: переименование не стёрло описание
-    # («Дежурства» пережили `update_queue` без своего поля), а `update_participant`
+    # («Дежурства» пережили `update_project` без своего поля), а `update_participant`
     # переписало только описание, не тронув род.
-    assert stored_queue == {
+    assert stored_project == {
         "key": "OPS",
         "title": "Эксплуатация и дежурства",
         "description": "Дежурства",
@@ -1846,7 +1848,7 @@ async def test_every_search_field_is_reachable_from_the_tool_itself(
     for name in searchable_names():
         assert f"`{name}`" in described, f"поле {name} не названо в описании языка"
 
-    for name in ("key", "queue", "parent", "status", "assignee", "priority", "text"):
+    for name in ("key", "project", "parent", "status", "assignee", "priority", "text"):
         assert name in arguments, f"поле {name} не выражается структурным параметром"
 
 

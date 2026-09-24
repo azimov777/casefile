@@ -155,12 +155,12 @@ def test_patch_field_is_not_nullable_when_null_has_no_meaning(schema: dict) -> N
     """Схемы `PATCH` не должны разрешать `null`: сгенерированный клиент обязан это знать.
 
     Проверяются все схемы частичного обновления сразу: у описания участника, у полей
-    очереди и у текстов задачи `null` смысла не имеет, и поле, объявленное как
+    проекта и у текстов задачи `null` смысла не имеет, и поле, объявленное как
     `T | None`, разрешило бы фронтенду отправить то, что сервер отвергнет.
     """
     partial_updates = (
         ("ParticipantUpdate", ["description"]),
-        ("QueueUpdate", ["title", "description"]),
+        ("ProjectUpdate", ["title", "description"]),
         ("TaskUpdate", ["title", "description", "goal", "context", "constraints", "output"]),
     )
     for model, fields in partial_updates:

@@ -20,9 +20,9 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.db.models.author import created_by_columns
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.domain.authors import TRACKER
-from app.services import queues as service
+from app.services import projects as service
 from app.services.auth import TRACKER_ACTOR
 
 CONCURRENCY = 50
@@ -35,41 +35,41 @@ def committing_sessions(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]
 
 
 @pytest.fixture
-async def committed_queue(
+async def committed_project(
     committing_sessions: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[uuid.UUID]:
-    """Очередь, видимая другим соединениям, и уборка за собой.
+    """Проект, видимый другим соединениям, и уборка за собой.
 
     Уборка ручная: транзакция теста здесь ни при чём, а закоммиченная строка переживёт
     прогон и займёт ключ `RACE` у следующего.
     """
     async with committing_sessions() as session:
-        queue = Queue(key="RACE", title="Гонка", **created_by_columns(TRACKER))
-        session.add(queue)
+        project = Project(key="RACE", title="Гонка", **created_by_columns(TRACKER))
+        session.add(project)
         await session.commit()
-        queue_id = queue.id
+        project_id = project.id
 
     try:
-        yield queue_id
+        yield project_id
     finally:
         async with committing_sessions() as session:
-            await session.execute(delete(Queue).where(Queue.id == queue_id))
+            await session.execute(delete(Project).where(Project.id == project_id))
             await session.commit()
 
 
 async def test_parallel_allocations_never_hand_out_the_same_number(
     committing_sessions: async_sessionmaker[AsyncSession],
-    committed_queue: uuid.UUID,
+    committed_project: uuid.UUID,
 ) -> None:
     """Обзорная проверка 5: номера разные, последовательные и без дыр."""
     barrier = asyncio.Barrier(CONCURRENCY)
 
     async def allocate() -> int:
         async with committing_sessions() as session:
-            queue = await session.get(Queue, committed_queue)
-            assert queue is not None
+            project = await session.get(Project, committed_project)
+            assert project is not None
             await barrier.wait()
-            number = await service.next_task_number(session, queue, actor=TRACKER_ACTOR)
+            number = await service.next_task_number(session, project, actor=TRACKER_ACTOR)
             await session.commit()
             return number
 

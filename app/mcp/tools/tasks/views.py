@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from app.db.models.task import Task
 from app.domain.tasks import TaskFeatures
 from app.mcp.enums import TaskPrioritySchema, TaskStatusSchema
-from app.mcp.views import AuthorView, QueueRefView, author, queue_ref
+from app.mcp.views import AuthorView, ProjectRefView, author, project_ref
 from app.services.tasks import TaskMutation
 
 
@@ -22,7 +22,7 @@ class TaskView(BaseModel):
 
     id: str
     key: str
-    queue: QueueRefView
+    project: ProjectRefView
     title: str
     description: str
     goal: str
@@ -44,7 +44,7 @@ def task(item: Task) -> TaskView:
     return TaskView(
         id=str(item.id),
         key=item.key,
-        queue=queue_ref(item.queue),
+        project=project_ref(item.project),
         title=item.title,
         description=item.description,
         goal=item.goal,

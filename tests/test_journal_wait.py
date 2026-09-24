@@ -37,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
 from app.db.models.author import created_by_columns
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository
 from app.db.session import asyncpg_dsn
@@ -89,15 +89,15 @@ async def listening(test_database_url: str) -> AsyncIterator[None]:
 async def committed_tasks(
     committing_sessions: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[list[uuid.UUID]]:
-    """Очередь и десять задач, видимых другим соединениям, и уборка за собой."""
+    """Проект и десять задач, видимых другим соединениям, и уборка за собой."""
     async with committing_sessions() as session:
-        queue = Queue(key="JOURNALRACE", title="Гонка ленты", **created_by_columns(TRACKER))
-        session.add(queue)
+        project = Project(key="JOURNALRACE", title="Гонка ленты", **created_by_columns(TRACKER))
+        session.add(project)
         await session.flush()
         tasks = [
             Task(
                 key=f"JOURNALRACE-{number}",
-                queue=queue,
+                project=project,
                 title=f"Задача {number}",
                 description="Есть",
                 **created_by_columns(TRACKER),
@@ -107,7 +107,7 @@ async def committed_tasks(
         session.add_all(tasks)
         await session.commit()
         task_ids = [task.id for task in tasks]
-        queue_id = queue.id
+        project_id = project.id
 
     try:
         yield task_ids
@@ -120,7 +120,7 @@ async def committed_tasks(
             await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(text("DELETE FROM tasks WHERE id = ANY(:ids)"), {"ids": task_ids})
             await session.execute(
-                text("DELETE FROM queues WHERE id = :queue_id"), {"queue_id": queue_id}
+                text("DELETE FROM projects WHERE id = :project_id"), {"project_id": project_id}
             )
             await session.commit()
 
@@ -243,7 +243,7 @@ async def test_four_entries_in_one_window_give_only_those_of_the_named_tasks(
     committed_tasks: list[uuid.UUID],
     listening: None,
 ) -> None:
-    """Обзорная проверка 2: три названных дела приходят, четвёртое той же очереди — нет.
+    """Обзорная проверка 2: три названных дела приходят, четвёртое того же проекта — нет.
 
     Четыре записи подшиты в одно окно, и запись посторонней задачи стоит между своими:
     ожидание, которое просто останавливается на последней записи, прошло бы тест с одной

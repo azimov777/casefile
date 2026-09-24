@@ -17,7 +17,7 @@ from that directory.
 
 ## What gets backed up
 
-`pg_dump` captures everything that lives in the database: tasks, case entries, queues,
+`pg_dump` captures everything that lives in the database: tasks, case entries, projects,
 participants and **token hashes**. It does not capture the two secret files that live in
 the `ui-key` and `agent-key` volumes (`.secrets/ui-token`, `.secrets/agent-token`) — those
 never touch the database, by design (`app/services/setup.py`: a token's secret exists

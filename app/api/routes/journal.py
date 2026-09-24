@@ -79,10 +79,10 @@ TaskQuery = Annotated[
         examples=[["TRK-42", "TRK-43"]],
     ),
 ]
-QueueQuery = Annotated[
+ProjectQuery = Annotated[
     str | None,
     Query(
-        description="Only entries of tasks in this queue; matching ignores case",
+        description="Only entries of tasks in this project; matching ignores case",
         examples=["TRK"],
     ),
 ]
@@ -161,7 +161,7 @@ async def read_journal(
     actor: ActorDep,
     after: AfterQuery = JOURNAL_START,
     task: TaskQuery = None,
-    queue: QueueQuery = None,
+    project: ProjectQuery = None,
     types: TypesQuery = None,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
@@ -191,7 +191,9 @@ async def read_journal(
     page = await service.wait_journal(
         session,
         actor=actor,
-        journal_filter=await service.resolve_filter(session, task=task, queue=queue, types=types),
+        journal_filter=await service.resolve_filter(
+            session, task=task, project=project, types=types
+        ),
         after=after,
         cursor=cursor,
         limit=limit,
@@ -239,7 +241,7 @@ async def stream_journal(
     sessions: StreamSessionsDep,
     actor: ActorDep,
     task: TaskQuery = None,
-    queue: QueueQuery = None,
+    project: ProjectQuery = None,
     types: TypesQuery = None,
     after: AfterQuery | None = None,
     last_event_id_header: LastEventIdHeader = None,
@@ -262,7 +264,7 @@ async def stream_journal(
     Число одновременно открытых потоков на процесс ограничено настройкой; сверх неё —
     `429`, который клиент повторяет через паузу.
     """
-    journal_filter = await service.resolve_filter(session, task=task, queue=queue, types=types)
+    journal_filter = await service.resolve_filter(session, task=task, project=project, types=types)
     # Проверки, способные отказать, идут **до** начала потока: разбор курсора, права и
     # место в лимите соединений. Отказ после первого отданного байта клиент увидел бы
     # как оборванный поток без объяснения — по коду ответа `200` уже не сказать «нельзя».

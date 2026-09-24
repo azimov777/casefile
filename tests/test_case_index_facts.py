@@ -19,7 +19,7 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas.entries import EntryFactsRead
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.case import FACTS_BY_ENTRY_TYPE, EntryType, NoFacts
 from app.domain.links import LinkKind
@@ -41,11 +41,11 @@ MAX_HEADING_BYTES = 200
 MAX_FACTS_BYTES = 100
 
 
-async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) -> Task:
+async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
     return await tasks_service.create_task(
         session,
         actor=actor,
-        queue=queue,
+        project=project,
         title=title,
         description="description",
         goal="goal",
@@ -76,9 +76,9 @@ def facts_of(index: list[Any], entry_type: EntryType) -> Any:
 
 
 async def test_a_status_move_carries_both_ends_and_whether_a_reason_was_given(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    task = await make(db_session, task_actor, queue, "status moves")
+    task = await make(db_session, task_actor, project, "status moves")
     await tasks_service.transition_task(
         db_session, task, actor=task_actor, to=TaskStatus.OPEN, reason=None
     )
@@ -105,10 +105,10 @@ async def test_a_status_move_carries_both_ends_and_whether_a_reason_was_given(
 
 
 async def test_a_link_carries_its_kind_and_the_other_key(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    task = await make(db_session, task_actor, queue, "link side")
-    other = await make(db_session, task_actor, queue, "other side")
+    task = await make(db_session, task_actor, project, "link side")
+    other = await make(db_session, task_actor, project, "other side")
 
     await links_service.add_link(
         db_session, task, other, actor=task_actor, kind=LinkKind.BLOCKED_BY
@@ -126,9 +126,9 @@ async def test_a_link_carries_its_kind_and_the_other_key(
 
 
 async def test_an_assignee_change_carries_both_names(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    task = await make(db_session, task_actor, queue, "assignee case")
+    task = await make(db_session, task_actor, project, "assignee case")
 
     await tasks_service.update_task(
         db_session, task, actor=task_actor, changes=TaskChanges(assignee="release_bot")
@@ -140,9 +140,9 @@ async def test_an_assignee_change_carries_both_names(
 
 
 async def test_a_section_change_carries_the_field_name_and_nothing_else(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    task = await make(db_session, task_actor, queue, "section edit")
+    task = await make(db_session, task_actor, project, "section edit")
     long_text = "ы" * (MAX_TEXT_LENGTH - 1)
 
     await tasks_service.update_task(
@@ -159,10 +159,10 @@ async def test_a_section_change_carries_the_field_name_and_nothing_else(
 
 
 async def test_a_question_an_answer_and_a_verdict_are_nameable_from_the_index(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Проверка 5: по описи называется и то, чему заголовок выводит трекер."""
-    task = await make(db_session, task_actor, queue, "question case")
+    task = await make(db_session, task_actor, project, "question case")
     await tasks_service.transition_task(
         db_session, task, actor=task_actor, to=TaskStatus.OPEN, reason=None
     )
@@ -196,10 +196,10 @@ async def test_a_question_an_answer_and_a_verdict_are_nameable_from_the_index(
 
 
 async def test_entries_written_by_their_author_carry_no_facts(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """У записи агента заголовок пишет автор: называть строку нечем и незачем."""
-    task = await make(db_session, task_actor, queue, "note case")
+    task = await make(db_session, task_actor, project, "note case")
     await case_service.add_entry(
         db_session,
         task,
@@ -219,10 +219,10 @@ async def test_entries_written_by_their_author_carry_no_facts(
 
 
 async def test_the_index_holds_no_free_text_of_any_kind(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Проверка 4: ни тела, ни разделов, ни причины перехода, ни списка проверок."""
-    task = await make(db_session, task_actor, queue, "all at once")
+    task = await make(db_session, task_actor, project, "all at once")
     await tasks_service.update_task(
         db_session,
         task,
@@ -253,14 +253,14 @@ async def test_the_index_holds_no_free_text_of_any_kind(
 
 
 async def test_the_index_does_not_grow_with_the_length_of_the_sections(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Проверка 3: главная. Правки разделов близ потолка длины не утяжеляют опись."""
     long_text = "ы" * (MAX_TEXT_LENGTH - 1)
     long_checks = ["я" * (MAX_CHECK_LENGTH - 1) for _ in range(10)]
 
-    heavy = await make(db_session, task_actor, queue, "heavy edits")
-    light = await make(db_session, task_actor, queue, "light edits")
+    heavy = await make(db_session, task_actor, project, "heavy edits")
+    light = await make(db_session, task_actor, project, "light edits")
 
     for field, value in (
         ("goal", long_text),
@@ -346,7 +346,7 @@ def test_the_contract_declares_the_facts_of_every_entry_type(layer: str, union: 
 
 
 async def test_the_index_carries_only_the_fields_of_its_own_type(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Проверка 6: в деле со **всеми** типами записей у каждой строки ровно свои ключи.
 
@@ -355,7 +355,7 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
     описи, и в конце сверяется, что нашлись все типы: пропущенный тип роняет проверку,
     а не тихо выпадает из перебора.
     """
-    key = await _case_with_every_entry_type(auth_client, queue)
+    key = await _case_with_every_entry_type(auth_client, project)
 
     package = await auth_client.get(f"/api/v1/tasks/{key}")
     assert package.status_code == 200, package.text
@@ -373,12 +373,12 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
     assert seen == {entry_type.value for entry_type in EntryType}, sorted(seen)
 
 
-async def _case_with_every_entry_type(client: AsyncClient, queue: Queue) -> str:
+async def _case_with_every_entry_type(client: AsyncClient, project: Project) -> str:
     """Заводит задачу и подшивает в неё запись каждого типа `EntryType`. Возвращает ключ."""
     created = await client.post(
         "/api/v1/tasks",
         json={
-            "queue": queue.key,
+            "project": project.key,
             "title": "every entry type",
             "description": "description",
             "goal": "goal",
@@ -393,7 +393,7 @@ async def _case_with_every_entry_type(client: AsyncClient, queue: Queue) -> str:
 
     other = await client.post(
         "/api/v1/tasks",
-        json={"queue": queue.key, "title": "the other side", "description": "description"},
+        json={"project": project.key, "title": "the other side", "description": "description"},
     )
     assert other.status_code == 201, other.text
     other_key = other.json()["data"]["key"]
@@ -456,7 +456,7 @@ async def _case_with_every_entry_type(client: AsyncClient, queue: Queue) -> str:
 
 
 async def test_the_package_still_costs_the_same_number_of_queries(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Проверка 6: факты вырезаются в том же запросе, что и опись.
 
@@ -464,8 +464,8 @@ async def test_the_package_still_costs_the_same_number_of_queries(
     с тремя записями и пакет с шестьюдесятью обязаны стоить одинаково. Запрос на строку
     описи виден только так — ни по ответу, ни по времени его не заметить.
     """
-    small = await make(db_session, task_actor, queue, "small case")
-    big = await make(db_session, task_actor, queue, "big case")
+    small = await make(db_session, task_actor, project, "small case")
+    big = await make(db_session, task_actor, project, "big case")
     for index in range(60):
         await case_service.add_entry(
             db_session, big, actor=task_actor, type=EntryType.NOTE, title=f"note {index}"
@@ -479,12 +479,14 @@ async def test_the_package_still_costs_the_same_number_of_queries(
     )
 
 
-async def test_the_rest_answer_carries_the_facts(auth_client: AsyncClient, queue: Queue) -> None:
+async def test_the_rest_answer_carries_the_facts(
+    auth_client: AsyncClient, project: Project
+) -> None:
     """Тот же состав приходит и в HTTP-ответе, а не только в домене."""
     created = await auth_client.post(
         "/api/v1/tasks",
         json={
-            "queue": queue.key,
+            "project": project.key,
             "title": "facts in the answer",
             "description": "description",
             # Разделы заполнены: без них переход в `open` отвечает

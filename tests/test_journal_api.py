@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.journal import MAX_TASK_KEYS, MAX_WAIT_SECONDS
@@ -45,7 +45,7 @@ class Written:
 async def written(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
     task: Task,
     owner: Participant,
 ) -> Written:
@@ -58,8 +58,8 @@ async def written(
     other_task = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
-        title="Вторая задача очереди",
+        project=project,
+        title="Вторая задача проекта",
         description="Нужна, чтобы фильтр по задаче было чем провалить",
     )
     question = await case_service.ask(
@@ -192,14 +192,14 @@ async def test_the_type_and_task_filters_narrow_together(
     assert data[0]["task_key"] == task.key
 
 
-async def test_the_queue_filter_keeps_the_whole_queue(
+async def test_the_project_filter_keeps_the_whole_project(
     auth_client: AsyncClient,
     written: Written,
-    queue: Queue,
+    project: Project,
 ) -> None:
-    """Фильтр по очереди берёт записи всех её задач: у записи очереди нет, она у задачи."""
+    """Фильтр по проекту берёт записи всех его задач: у записи проекта нет, она у задачи."""
     response = await auth_client.get(
-        JOURNAL, params={"after": written.start, "queue": queue.key.lower()}
+        JOURNAL, params={"after": written.start, "project": project.key.lower()}
     )
     seqs = [item["seq"] for item in response.json()["data"]]
 

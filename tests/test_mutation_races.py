@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.core.errors import AppError
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.authors import TRACKER, label_author
 from app.domain.case import EntryType
@@ -56,7 +56,7 @@ from app.services.auth import TRACKER_ACTOR, Actor
 #: очередь. На исправном коде она стоит на блокировке, на сломанном — успевает всё.
 SETTLE = 0.5
 
-QUEUE_KEY = "MUTRACE"
+PROJECT_KEY = "MUTRACE"
 
 #: Кто переводит в гонке. Не сам трекер: в `in_progress` задачу берёт только её
 #: исполнитель (`CONCEPT.md`, 3.3), а у трекера подписи нет. Метка — чтобы не заводить
@@ -92,12 +92,12 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
     законное место, где его выключают (`docs/notes/db.md`).
     """
     async with committing_sessions() as session:
-        queue = Queue(key=QUEUE_KEY, title="Гонка изменений", **created_by_columns(TRACKER))
-        session.add(queue)
+        project = Project(key=PROJECT_KEY, title="Гонка изменений", **created_by_columns(TRACKER))
+        session.add(project)
         await session.flush()
         subject = Task(
-            key=f"{QUEUE_KEY}-1",
-            queue=queue,
+            key=f"{PROJECT_KEY}-1",
+            project=project,
             title="Переводимая задача",
             description="Её и переводят в гонке",
             status=TaskStatus.IN_PROGRESS,
@@ -105,16 +105,16 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
             **created_by_columns(TRACKER),
         )
         child = Task(
-            key=f"{QUEUE_KEY}-2",
-            queue=queue,
+            key=f"{PROJECT_KEY}-2",
+            project=project,
             title="Ребёнок",
             description="Появляется во время перехода родителя",
             status=TaskStatus.OPEN,
             **created_by_columns(TRACKER),
         )
         blocker = Task(
-            key=f"{QUEUE_KEY}-3",
-            queue=queue,
+            key=f"{PROJECT_KEY}-3",
+            project=project,
             title="Блокер",
             description="Появляется во время входа в работу",
             status=TaskStatus.OPEN,
@@ -136,7 +136,7 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
         )
         await session.commit()
         ids = Trio(subject=subject.id, child=child.id, blocker=blocker.id)
-        queue_id = queue.id
+        project_id = project.id
 
     try:
         yield ids
@@ -154,7 +154,7 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
                 {"ids": task_ids},
             )
             await session.execute(text("DELETE FROM tasks WHERE id = ANY(:ids)"), {"ids": task_ids})
-            await session.execute(text("DELETE FROM queues WHERE id = :id"), {"id": queue_id})
+            await session.execute(text("DELETE FROM projects WHERE id = :id"), {"id": project_id})
             await session.commit()
 
 

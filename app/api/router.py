@@ -28,8 +28,8 @@ from app.api.routes import (
     journal,
     links,
     participants,
+    projects,
     questions,
-    queues,
     remarks,
     session,
     tasks,
@@ -54,7 +54,7 @@ def generate_operation_id(route: APIRoute) -> str:
     """Идентификатор операции для генератора клиента — имя функции-обработчика.
 
     По умолчанию FastAPI склеивает имя с путём и методом
-    (`read_queue_api_v1_queues__queue_key__get`). В сгенерированном TypeScript это
+    (`read_project_api_v1_projects__project_key__get`). В сгенерированном TypeScript это
     нечитаемо, а главное — меняется при любой правке пути, и фронтенд ломается на
     переезде маршрута, хотя контракт не менялся. Имя функции зависит только от кода.
 
@@ -78,7 +78,7 @@ api_router.include_router(installation.router)
 api_router.include_router(participants.router)
 api_router.include_router(tokens.router)
 api_router.include_router(accounts.router)
-api_router.include_router(queues.router)
+api_router.include_router(projects.router)
 api_router.include_router(tasks.router)
 api_router.include_router(links.router)
 api_router.include_router(questions.router)

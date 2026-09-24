@@ -201,7 +201,7 @@ CLOSING_SUMMARY_PARTS: tuple[str, ...] = (*SUMMARY_PARTS, CLOSING_SUMMARY_PART)
 ENTRY_REF_SEPARATOR = "#"
 
 #: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку.
-ENTRY_REF_SHAPE = f"<QUEUE>-<task number>{ENTRY_REF_SEPARATOR}<entry number>"
+ENTRY_REF_SHAPE = f"<PROJECT>-<task number>{ENTRY_REF_SEPARATOR}<entry number>"
 
 #: Чем обрезается слишком длинный выведенный заголовок. Обрезка, а не отказ: у сводки
 #: заголовок берётся из текста автора, и отклонять справку из-за длинной первой строки

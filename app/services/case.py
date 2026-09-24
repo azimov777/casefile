@@ -51,7 +51,7 @@ from app.db.locks import lock_changes
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import Page
 from app.db.repositories import EntryRepository, ParticipantRepository, TaskRepository
@@ -262,7 +262,7 @@ async def list_questions(
     *,
     actor: Actor,
     addressee: str | None = None,
-    queue: Queue | None = None,
+    project: Project | None = None,
     any_addressee: bool = False,
     blocking: bool | None = None,
     open_only: bool = True,
@@ -299,7 +299,7 @@ async def list_questions(
     repository = EntryRepository(session)
     page = await repository.questions_page(
         addressee=name,
-        queue_id=queue.id if queue is not None else None,
+        project_id=project.id if project is not None else None,
         blocking=blocking,
         open_only=open_only,
         order=order,
@@ -325,7 +325,7 @@ async def list_remarks(
     *,
     actor: Actor,
     author: str | None = None,
-    queue: Queue | None = None,
+    project: Project | None = None,
     open_only: bool = True,
     limit: int | None = None,
     cursor: str | None = None,
@@ -345,7 +345,7 @@ async def list_remarks(
     ensure_scope(actor, TokenScope.TASK, action="remark.list")
     page = await EntryRepository(session).remarks_page(
         author=None if author is None else author.strip().lower(),
-        queue_id=queue.id if queue is not None else None,
+        project_id=project.id if project is not None else None,
         open_only=open_only,
         limit=limit,
         cursor=cursor,

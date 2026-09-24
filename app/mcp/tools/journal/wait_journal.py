@@ -36,9 +36,9 @@ JournalTaskArg = Annotated[
     ),
 ]
 
-JournalQueueArg = Annotated[
+JournalProjectArg = Annotated[
     str | None,
-    Field(description="Only entries of tasks in this queue", examples=["TRK"]),
+    Field(description="Only entries of tasks in this project", examples=["TRK"]),
 ]
 
 TimeoutArg = Annotated[
@@ -62,7 +62,7 @@ def register(tools: Toolset) -> None:
     async def wait_journal(
         after: AfterArg = JOURNAL_START,
         task: JournalTaskArg = None,
-        queue: JournalQueueArg = None,
+        project: JournalProjectArg = None,
         types: EntryTypesArg = None,
         timeout: TimeoutArg = 0,
         limit: LimitArg = None,
@@ -71,7 +71,7 @@ def register(tools: Toolset) -> None:
         """Returns journal entries after the sequence number `after`, waiting for new ones.
 
         The journal is every case entry of the installation in one stream, in `seq`
-        order; `task`, `queue` and `types` narrow it. The call returns as soon as a
+        order; `task`, `project` and `types` narrow it. The call returns as soon as a
         matching entry appears, and after `timeout` seconds at the latest. The next call
         continues from the `seq` of the last entry received. With `types=["answer"]` and
         `task`, one call covers an answer expected within `timeout`.
@@ -83,7 +83,7 @@ def register(tools: Toolset) -> None:
                 session,
                 actor=actor,
                 journal_filter=await journal_service.resolve_filter(
-                    session, task=task, queue=queue, types=types
+                    session, task=task, project=project, types=types
                 ),
                 after=after,
                 cursor=cursor,

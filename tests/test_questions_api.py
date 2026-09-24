@@ -1,7 +1,7 @@
 """Эндпоинт вопросов: «входящая» участника поперёк задач.
 
 Вопрос — не отдельная сущность, а представление над делом, поэтому проверяется здесь
-именно то, что из дела считается: открытость, адресат, признак `blocking`, очередь.
+именно то, что из дела считается: открытость, адресат, признак `blocking`, проект.
 """
 
 from typing import Any
@@ -9,7 +9,7 @@ from typing import Any
 from httpx import AsyncClient
 from tests.test_case_api import append, create
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 
 
 async def register(client: AsyncClient, name: str) -> None:
@@ -40,7 +40,7 @@ async def questions(client: AsyncClient, **params: Any) -> list[dict[str, Any]]:
 
 
 async def test_the_inbox_keeps_the_open_blocking_questions_of_the_current_participant(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 9."""
     await register(auth_client, "reviewer")
@@ -68,7 +68,7 @@ async def test_the_inbox_keeps_the_open_blocking_questions_of_the_current_partic
 
 
 async def test_the_answered_questions_are_readable_too(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """`open=false` — вторая половина выдачи; «все вопросы задачи» читаются из её дела."""
     await create(auth_client)
@@ -81,16 +81,16 @@ async def test_the_answered_questions_are_readable_too(
     ]
 
 
-async def test_the_inbox_is_filtered_by_addressee_and_queue(
-    auth_client: AsyncClient, queue: Queue
+async def test_the_inbox_is_filtered_by_addressee_and_project(
+    auth_client: AsyncClient, project: Project
 ) -> None:
     await register(auth_client, "reviewer")
     created = await auth_client.post(
-        "/api/v1/queues", json={"key": "OPS", "title": "Эксплуатация", "description": ""}
+        "/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация", "description": ""}
     )
     assert created.status_code == 201, created.text
     await create(auth_client)
-    await create(auth_client, queue="OPS")
+    await create(auth_client, project="OPS")
     await ask(auth_client, "TRK-1", "Вопрос в TRK", to="reviewer", blocking=False)
     await ask(auth_client, "OPS-1", "Вопрос в OPS", to="reviewer", blocking=False)
 
@@ -100,13 +100,13 @@ async def test_the_inbox_is_filtered_by_addressee_and_queue(
         "Вопрос в OPS",
     ]
     assert [
-        q["title"] for q in await questions(auth_client, addressee="reviewer", queue="ops")
+        q["title"] for q in await questions(auth_client, addressee="reviewer", project="ops")
     ] == ["Вопрос в OPS"]
     assert await questions(auth_client) == []
 
 
 async def test_an_unknown_addressee_is_a_refusal_rather_than_an_empty_inbox(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     response = await auth_client.get("/api/v1/questions", params={"addressee": "ghost"})
 
@@ -115,7 +115,7 @@ async def test_an_unknown_addressee_is_a_refusal_rather_than_an_empty_inbox(
 
 
 async def test_a_shared_agent_token_must_name_the_addressee(
-    client: AsyncClient, shared_secret: str, queue: Queue
+    client: AsyncClient, shared_secret: str, project: Project
 ) -> None:
     """У временного агента адресата нет: пустой список соврал бы, что вопросов не пришло."""
     client.headers["Authorization"] = f"Bearer {shared_secret}"
@@ -131,7 +131,7 @@ async def test_a_shared_agent_token_must_name_the_addressee(
 
 
 async def test_a_question_carries_its_answers_in_order_and_only_its_own(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """История: ответы едут со строкой вопроса, а не отдельным запросом на задачу.
 
@@ -165,7 +165,7 @@ async def test_a_question_carries_its_answers_in_order_and_only_its_own(
 
 
 async def test_the_newest_order_pages_backwards_with_its_own_cursor(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     await create(auth_client)
     for title in ("Первый", "Второй", "Третий"):
@@ -199,7 +199,7 @@ async def test_the_newest_order_pages_backwards_with_its_own_cursor(
 
 
 async def test_any_addressee_drops_the_addressee_filter(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     await register(auth_client, "reviewer")
     await create(auth_client)
@@ -220,7 +220,7 @@ async def test_any_addressee_drops_the_addressee_filter(
 
 
 async def test_a_shared_agent_token_may_read_questions_to_anyone(
-    client: AsyncClient, shared_secret: str, queue: Queue
+    client: AsyncClient, shared_secret: str, project: Project
 ) -> None:
     """Снятое явно условие адресата — не «мне»: отказывать временному агенту не в чем."""
     client.headers["Authorization"] = f"Bearer {shared_secret}"

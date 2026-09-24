@@ -18,7 +18,7 @@ from app.api.schemas.entries import AnsweredQuestionRead, entry_read
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.case import QuestionOrder
 from app.services import case as case_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services.case import AnsweredQuestion
 
 router = APIRouter(prefix="/questions", tags=["questions"])
@@ -42,9 +42,11 @@ AnyAddresseeQuery = Annotated[
         ),
     ),
 ]
-QueueQuery = Annotated[
+ProjectQuery = Annotated[
     str | None,
-    Query(description="Queue key of the question's task; matching ignores case", examples=["TRK"]),
+    Query(
+        description="Project key of the question's task; matching ignores case", examples=["TRK"]
+    ),
 ]
 BlockingQuery = Annotated[
     bool | None,
@@ -80,7 +82,7 @@ async def list_questions(
     actor: ActorDep,
     addressee: AddresseeQuery = None,
     any_addressee: AnyAddresseeQuery = False,
-    queue: QueueQuery = None,
+    project: ProjectQuery = None,
     blocking: BlockingQuery = None,
     open_only: OpenQuery = True,
     order: OrderQuery = QuestionOrder.OLDEST,
@@ -102,7 +104,7 @@ async def list_questions(
         actor=actor,
         addressee=addressee,
         any_addressee=any_addressee,
-        queue=None if queue is None else await queues_service.get_queue(session, queue),
+        project=None if project is None else await projects_service.get_project(session, project),
         blocking=blocking,
         open_only=open_only,
         order=order,

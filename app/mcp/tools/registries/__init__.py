@@ -1,9 +1,9 @@
-"""Инструменты по реестрам: очереди и участники.
+"""Инструменты по реестрам: проекты и участники.
 
-Чтение открыто набору `task` — оно часть рабочего цикла: без списка очередей агент с
-чистым контекстом не найдёт, где вообще лежат задачи, без описания очереди не знает
-общего контекста её задач, без реестра участников ему некому адресовать вопрос.
-Запись требует набора `main`: заводить очереди и регистрировать участников — управление
+Чтение открыто набору `task` — оно часть рабочего цикла: без списка проектов агент с
+чистым контекстом не найдёт, где вообще лежат задачи, без описания проекта не знает
+общего контекста его задач, без реестра участников ему некому адресовать вопрос.
+Запись требует набора `main`: заводить проекты и регистрировать участников — управление
 установкой, а не работа над задачей.
 
 Выпуска токенов здесь нет и не будет: выдача доступов остаётся за человеком и идёт
@@ -16,23 +16,23 @@ from collections.abc import Sequence
 from types import ModuleType
 
 from app.mcp.tools.registries import (
-    create_queue,
-    get_queue,
+    create_project,
+    get_project,
     list_participants,
-    list_queues,
+    list_projects,
     register_participant,
     update_participant,
-    update_queue,
+    update_project,
 )
 from app.mcp.toolset import Toolset
 
 #: Инструменты группы: модуль на инструмент, в порядке `tools/list`.
 TOOLS: Sequence[ModuleType] = (
-    get_queue,
-    list_queues,
+    get_project,
+    list_projects,
     list_participants,
-    create_queue,
-    update_queue,
+    create_project,
+    update_project,
     register_participant,
     update_participant,
 )

@@ -152,12 +152,12 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `link` — links two tasks and files `link_added` in both cases
 - `unlink` — removes a link and files `link_removed` in both cases
 
-**Queues & participants**
-- `get_queue` — returns one queue by its key: key, title and description
-- `list_queues` — lists the installation's queues: key and title
+**Projects & participants**
+- `get_project` — returns one project by its key: key, title and description
+- `list_projects` — lists the installation's projects: key and title
 - `list_participants` — lists the participant registry: the possible addressees of a question
-- `create_queue` — creates a queue (`main` token only)
-- `update_queue` — changes a queue's title and description (`main` token only)
+- `create_project` — creates a project (`main` token only)
+- `update_project` — changes a project's title and description (`main` token only)
 - `register_participant` — registers a human or a permanent agent (`main` token only)
 - `update_participant` — changes a participant's description (`main` token only)
 

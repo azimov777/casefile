@@ -11,18 +11,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.repositories import EntryRepository
 from app.domain.case import SERVICE_ENTRY_TYPES, EntryType
 from app.domain.tasks import TaskStatus
 from app.services import tasks as tasks_service
 
 READY = {
-    "queue": "trk",
+    "project": "trk",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
-    "context": "Номер выдаёт очередь",
+    "context": "Номер выдаёт проект",
     "constraints": "Счётчик не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
@@ -89,7 +89,7 @@ async def package(client: AsyncClient, key: str) -> dict[str, Any]:
 
 
 async def test_a_summary_needs_four_parts_and_is_titled_by_what_was_done(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 1. Заголовок — первая строка `done`, и это видно в описи."""
     await create(auth_client)
@@ -111,7 +111,7 @@ async def test_a_summary_needs_four_parts_and_is_titled_by_what_was_done(
 
 
 async def test_leaving_in_progress_without_a_summary_is_refused(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 2."""
     await create(auth_client)
@@ -130,7 +130,7 @@ async def test_leaving_in_progress_without_a_summary_is_refused(
 
 
 async def test_a_summary_of_the_previous_stint_does_not_count(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 3: задача, взятая повторно, старой справкой не закрывается."""
     await create(auth_client)
@@ -152,7 +152,7 @@ async def test_a_summary_of_the_previous_stint_does_not_count(
 
 
 async def test_a_question_to_someone_outside_the_registry_is_refused(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 4: имя несуществующего адресата — в подробностях."""
     await create(auth_client)
@@ -172,7 +172,7 @@ async def test_a_question_to_someone_outside_the_registry_is_refused(
 
 
 async def test_an_answer_to_something_that_is_not_a_question_is_refused(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 5."""
     await create(auth_client)
@@ -188,7 +188,7 @@ async def test_an_answer_to_something_that_is_not_a_question_is_refused(
 
 
 async def test_a_verdict_outside_the_check_range_names_the_range(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 6: у задачи три проверки, вердикт по пятой отвергается."""
     await create(auth_client, checks=["первая", "вторая", "третья"])
@@ -203,7 +203,7 @@ async def test_a_verdict_outside_the_check_range_names_the_range(
 
 
 async def test_closing_needs_a_passing_verdict_on_every_check(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 7: полный цикл до `done` через REST.
 
@@ -235,7 +235,7 @@ async def test_closing_needs_a_passing_verdict_on_every_check(
 
 
 async def test_closing_via_rest_rejects_a_missing_or_blank_unmeasured_by_the_schema(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """TRK-78: на запись закрытия `unmeasured` обязателен уже в схеме, раньше домена.
 
@@ -273,7 +273,7 @@ async def test_closing_via_rest_rejects_a_missing_or_blank_unmeasured_by_the_sch
 
 
 async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_as_headings(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 8."""
     await create(auth_client)
@@ -336,7 +336,7 @@ async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_
 
 
 async def test_entries_are_read_by_number_type_and_position(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     await create(auth_client)
     await append(auth_client, "TRK-1", type="summary", payload=SUMMARY)
@@ -364,7 +364,7 @@ async def test_entries_are_read_by_number_type_and_position(
 
 
 async def test_a_summary_without_the_unmeasured_part_is_still_read_without_errors(
-    auth_client: AsyncClient, db_session: AsyncSession, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, project: Project
 ) -> None:
     """Совместимость со старыми делами: схема чтения терпит отсутствие `unmeasured`.
 
@@ -405,7 +405,7 @@ async def test_a_summary_without_the_unmeasured_part_is_still_read_without_error
 
 
 async def test_a_reference_must_exist_while_an_address_is_taken_as_is(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 10."""
     await create(auth_client)
@@ -425,7 +425,9 @@ async def test_a_reference_must_exist_while_an_address_is_taken_as_is(
     assert entry["refs"] == ["TRK-1#1", "https://example.com/a#b"]
 
 
-async def test_a_note_is_filed_into_a_closed_task(auth_client: AsyncClient, queue: Queue) -> None:
+async def test_a_note_is_filed_into_a_closed_task(
+    auth_client: AsyncClient, project: Project
+) -> None:
     """Обзорная проверка 11: дело закрытой задачи продолжает пополняться."""
     await create(auth_client)
     await move(auth_client, "TRK-1", "cancelled", reason="Задача снята")
@@ -440,7 +442,7 @@ async def test_a_note_is_filed_into_a_closed_task(auth_client: AsyncClient, queu
 
 
 async def test_a_service_type_cannot_be_filed_through_the_endpoint(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Служебные записи подшивает трекер: в объединение запроса их типы не входят."""
     await create(auth_client)
@@ -455,7 +457,7 @@ async def test_a_service_type_cannot_be_filed_through_the_endpoint(
 
 
 async def test_a_derived_title_is_not_accepted_from_the_client(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """У сводки заголовок равен первой строке `done`, и второго способа задать его нет."""
     await create(auth_client)

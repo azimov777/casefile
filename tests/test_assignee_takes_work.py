@@ -17,7 +17,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from tests.conftest import Connect, call, refuse
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenScope
 from app.services import participants as participants_service
@@ -25,11 +25,11 @@ from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
 
 READY: dict[str, Any] = {
-    "queue": "TRK",
+    "project": "TRK",
     "title": "Починить выдачу ключей задач",
     "description": "Ключ выдаётся до валидации и сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
-    "context": "Номер выдаёт счётчик очереди",
+    "context": "Номер выдаёт счётчик проекта",
     "constraints": "Счётчик не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
@@ -77,7 +77,7 @@ async def _take(client: AsyncClient, key: str) -> Any:
 
 
 async def test_rest_refuses_a_task_without_an_assignee(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     key = await _opened(auth_client)
     before = await _state(auth_client, key)
@@ -92,7 +92,7 @@ async def test_rest_refuses_a_task_without_an_assignee(
 
 
 async def test_rest_refuses_someone_other_than_the_assignee(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     key = await _opened(auth_client, assignee="alice")
     before = await _state(auth_client, key)
@@ -108,7 +108,7 @@ async def test_rest_refuses_someone_other_than_the_assignee(
 
 
 async def test_rest_lets_the_assignee_in_whatever_the_case(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Подпись канонична, `assignee` — свободная строка: `Owner` тот же участник."""
     key = await _opened(auth_client, assignee="Owner")
@@ -120,7 +120,7 @@ async def test_rest_lets_the_assignee_in_whatever_the_case(
 
 
 async def test_rest_lets_a_temporary_agent_in_by_its_label(
-    auth_client: AsyncClient, shared_secret: str, queue: Queue
+    auth_client: AsyncClient, shared_secret: str, project: Project
 ) -> None:
     """Метка временного агента сравнивается так же, как имя участника."""
     key = await _opened(auth_client, assignee="nightly_agent")
@@ -148,14 +148,14 @@ async def _index_length(session: Any, key: str) -> tuple[str, int]:
 
 
 async def test_mcp_refuses_without_an_assignee_and_for_another_one(
-    mcp_session: Connect, task_secret: str, alice_secret: str, queue: Queue
+    mcp_session: Connect, task_secret: str, alice_secret: str, project: Project
 ) -> None:
-    del queue
+    del project
     async with mcp_session(task_secret) as session:
         created = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Без исполнителя",
             description="Есть",
             sections=SECTIONS,
@@ -184,14 +184,14 @@ async def test_mcp_refuses_without_an_assignee_and_for_another_one(
 
 
 async def test_mcp_lets_a_temporary_agent_in_by_its_label(
-    mcp_session: Connect, task_secret: str, shared_secret: str, queue: Queue
+    mcp_session: Connect, task_secret: str, shared_secret: str, project: Project
 ) -> None:
-    del queue
+    del project
     async with mcp_session(task_secret) as session:
         created = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Под метку",
             description="Есть",
             sections=SECTIONS,

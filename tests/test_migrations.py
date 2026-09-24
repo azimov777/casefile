@@ -303,3 +303,100 @@ SELECT
 FROM tasks
 WHERE tasks.key = 'OLD-1'
 """
+
+
+# --- Очередь становится проектом (TRK-152) -------------------------------------------
+
+#: Ревизия, переименовавшая очередь в проект, и ревизия перед ней — последняя v0.3.
+PROJECTS_REVISION = "3b8e6d2f9a41"
+PROJECTS_PREVIOUS = "7f4089f291b8"
+
+
+async def _seed_queues(engine: AsyncEngine) -> None:
+    """Две очереди с задачами и дырой в нумерации — установка v0.3 с историей."""
+    async with engine.begin() as connection:
+        for key, last in (("OLD", 3), ("NEW", 1)):
+            queue_id = await connection.scalar(
+                text(
+                    "INSERT INTO queues (key, title, last_task_number, created_by_kind, "
+                    "created_by_signature) VALUES (:key, :key, :last, 'agent', 'claude') "
+                    "RETURNING id"
+                ),
+                {"key": key, "last": last},
+            )
+            # У OLD номер 2 сгорел на откаченной транзакции: счётчик больше числа задач.
+            for number in (1, 3) if key == "OLD" else (1,):
+                await connection.execute(
+                    text(
+                        "INSERT INTO tasks (key, queue_id, title, description, "
+                        "created_by_kind, created_by_signature) "
+                        "VALUES (:task_key, :queue_id, 'Задача', 'Описание', 'agent', 'claude')"
+                    ),
+                    {"task_key": f"{key}-{number}", "queue_id": queue_id},
+                )
+
+
+async def _projects_state(engine: AsyncEngine, table: str, column: str) -> list[tuple]:
+    """Ключ задачи, ключ её проекта и счётчик проекта — по порядку ключей."""
+    async with engine.connect() as connection:
+        rows = await connection.execute(
+            text(
+                f"SELECT tasks.key, {table}.key, {table}.last_task_number FROM tasks "
+                f"JOIN {table} ON {table}.id = tasks.{column} ORDER BY tasks.key"
+            )
+        )
+        return [tuple(row) for row in rows]
+
+
+async def test_queues_become_projects_with_the_same_keys_and_counters(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, PROJECTS_PREVIOUS)
+    await _seed_queues(migration_engine)
+    before = await _projects_state(migration_engine, "queues", "queue_id")
+
+    await migrate(url, PROJECTS_REVISION)
+
+    assert await _projects_state(migration_engine, "projects", "project_id") == before
+    assert before == [
+        ("NEW-1", "NEW", 1),
+        ("OLD-1", "OLD", 3),
+        ("OLD-3", "OLD", 3),
+    ]
+    async with migration_engine.connect() as connection:
+        names = set(
+            await connection.scalars(
+                text(
+                    "SELECT conname FROM pg_constraint WHERE conrelid IN "
+                    "('projects'::regclass, 'tasks'::regclass) "
+                    "UNION SELECT indexname FROM pg_indexes WHERE tablename IN "
+                    "('projects', 'tasks')"
+                )
+            )
+        )
+    assert not {name for name in names if "queue" in name}
+    assert {
+        "pk_projects",
+        "uq_projects_key",
+        "ck_projects_author_kind",
+        "fk_tasks_project_id_projects",
+        "ix_tasks_project_id_status",
+        "ix_tasks_project_id_number",
+    } <= names
+
+
+async def test_the_projects_migration_rolls_back_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, PROJECTS_PREVIOUS)
+    await _seed_queues(migration_engine)
+    before = await _projects_state(migration_engine, "queues", "queue_id")
+    await migrate(url, PROJECTS_REVISION)
+
+    await migrate(url, "-1", down=True)
+    assert await _projects_state(migration_engine, "queues", "queue_id") == before
+
+    await migrate(url, PROJECTS_REVISION)
+    assert await _projects_state(migration_engine, "projects", "project_id") == before

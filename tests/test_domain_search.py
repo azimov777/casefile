@@ -1,7 +1,7 @@
 """Домен отбора без базы: разбор языка запросов, позиция ошибки, склейка фильтров.
 
 База здесь не нужна и не должна быть нужна: разбор проверяет только форму, а знание о
-том, какие бывают очереди и статусы, живёт в сценарии. Если тесту разбора понадобилась
+том, какие бывают проекты и статусы, живёт в сценарии. Если тесту разбора понадобилась
 сессия — значит, проверка уехала не в тот слой.
 """
 
@@ -119,7 +119,7 @@ def test_empty_is_a_marker_and_not_a_literal() -> None:
 
 def test_and_binds_tighter_than_or() -> None:
     """`a and b or c` — это `(a and b) or c`, и это свойство грамматики, а не скобок."""
-    parsed = parse_query("queue: TRK and status: open or priority: critical")
+    parsed = parse_query("project: TRK and status: open or priority: critical")
 
     assert parsed.root is not None
     assert parsed.root.junction is Junction.OR
@@ -130,7 +130,7 @@ def test_and_binds_tighter_than_or() -> None:
 
 
 def test_parentheses_override_precedence() -> None:
-    parsed = parse_query("queue: TRK and (status: open or priority: critical)")
+    parsed = parse_query("project: TRK and (status: open or priority: critical)")
 
     assert parsed.root is not None
     assert parsed.root.junction is Junction.AND
@@ -285,7 +285,7 @@ def test_too_many_sort_keys_are_refused() -> None:
 def test_every_concept_field_has_a_spec() -> None:
     """Поля отбора перечислены концепцией (4.4); описание должно быть у каждого."""
     for name in (
-        "queue",
+        "project",
         "parent",
         "status",
         "assignee",
@@ -336,7 +336,7 @@ def test_the_names_in_both_sets_are_those_you_both_filter_and_order_by() -> None
 
 
 def test_two_filters_are_combined_by_and() -> None:
-    merged = combine([parse_query("queue: TRK"), parse_query("status: open")])
+    merged = combine([parse_query("project: TRK"), parse_query("status: open")])
 
     assert merged.root is not None
     assert merged.root.junction is Junction.AND
@@ -402,7 +402,7 @@ def test_the_hint_filled_with_the_values_parses_into_the_intended_condition() ->
 @pytest.mark.parametrize(
     ("query", "hint_tail"),
     [
-        ("queue = UI", "queue: value"),
+        ("project = UI", "project: value"),
         ("priority >= high", "priority: >= value"),
         ("status not in open, done", "status: not in value, value"),
         ("text ~ ключ", "text: ~ value"),

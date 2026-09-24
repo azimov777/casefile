@@ -75,7 +75,7 @@ What the user should know, in one line each:
 
 - `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/` prints `200`: the board is up.
 - `claude mcp list` shows `casefile` as connected (other clients: list the MCP tools and
-  look for `list_queues`).
+  look for `list_projects`).
 
 ## 5. Learn about news in your tasks
 

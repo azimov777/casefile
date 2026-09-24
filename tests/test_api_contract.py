@@ -43,7 +43,7 @@ from app.api.contract import (
     render_error_catalog,
 )
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import AccountRepository
 from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
@@ -289,7 +289,7 @@ def _substitute(path: str, values: dict[str, str]) -> str:
 
 @pytest.fixture
 async def sample(
-    db_session: AsyncSession, owner: Participant, queue: Queue, task: Task
+    db_session: AsyncSession, owner: Participant, project: Project, task: Task
 ) -> dict[str, str]:
     """Настоящие значения для каждого параметра пути.
 
@@ -302,7 +302,7 @@ async def sample(
     return {
         "participant_name": owner.name,
         "account_id": str(account.id),
-        "queue_key": queue.key,
+        "project_key": project.key,
         "task_key": task.key,
         # У только что заведённой задачи в деле одна запись — `created` с номером 1.
         "entry_no": "1",

@@ -15,7 +15,7 @@ from tests.conftest import Connect, call, refuse
 
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
 from app.domain.tokens import TokenScope
@@ -171,21 +171,21 @@ async def test_an_agent_with_a_main_token_issues_no_tokens(
 
 
 async def test_an_agent_works_over_mcp_with_the_issued_token_until_it_is_revoked(
-    auth_client: AsyncClient, alice: str, agent: Participant, queue: Queue, mcp_session: Connect
+    auth_client: AsyncClient, alice: str, agent: Participant, project: Project, mcp_session: Connect
 ) -> None:
     """Обзорная проверка 2: следующий же вызов после отзыва отклоняется."""
     issued = await issue(auth_client, alice, name="alice agent", participant=agent.name)
 
     async with mcp_session(issued["secret"]) as session:
         created = await call(
-            session, "create_task", queue=queue.key, title="От агента", description="Проверка"
+            session, "create_task", project=project.key, title="От агента", description="Проверка"
         )
-        assert created["key"].startswith(queue.key)
+        assert created["key"].startswith(project.key)
 
         revoked = await auth_client.delete(f"{TOKENS}/{issued['id']}", headers=bearer(alice))
         assert revoked.status_code == 204
 
-        failure = await refuse(session, "list_queues")
+        failure = await refuse(session, "list_projects")
 
     assert "unauthorized" in failure
     assert "token_revoked" in failure
@@ -228,7 +228,7 @@ async def test_disabling_a_person_stops_the_agents_and_enabling_does_not_revive_
     alice: str,
     bob: str,
     agent: Participant,
-    queue: Queue,
+    project: Project,
     mcp_session: Connect,
 ) -> None:
     """Обзорная проверка 4, как записано в `TRK-114#13`, п. 1."""
@@ -241,13 +241,13 @@ async def test_disabling_a_person_stops_the_agents_and_enabling_does_not_revive_
     assert disabled.status_code == 200, disabled.text
 
     async with mcp_session(alices["secret"]) as session:
-        failure = await refuse(session, "list_queues")
+        failure = await refuse(session, "list_projects")
     assert "token_revoked" in failure
     async with mcp_session(shared["secret"], label="nightly") as session:
-        failure = await refuse(session, "list_queues")
+        failure = await refuse(session, "list_projects")
     assert "token_revoked" in failure
     async with mcp_session(bobs["secret"]) as session:
-        await call(session, "list_queues")
+        await call(session, "list_projects")
 
     listed = (await auth_client.get(TOKENS)).json()["data"]
     revoked = {item["id"] for item in listed if item["revoked_at"] is not None}

@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.idempotency import IdempotencyKey
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER, KEY_TTL, MAX_KEY_LENGTH
 
@@ -32,8 +32,8 @@ def with_key(key: str, *, secret: str | None = None) -> dict[str, str]:
     return headers
 
 
-def task_body(queue: Queue, title: str = "Починить выдачу ключей") -> dict[str, Any]:
-    return {"queue": queue.key, "title": title, "description": "Ключ сгорает на отказе"}
+def task_body(project: Project, title: str = "Починить выдачу ключей") -> dict[str, Any]:
+    return {"project": project.key, "title": title, "description": "Ключ сгорает на отказе"}
 
 
 async def stored_keys(session: AsyncSession) -> int:
@@ -50,10 +50,10 @@ async def task_count(session: AsyncSession) -> int:
 async def test_the_same_key_and_body_create_one_task(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 1: две задачи не заводятся, ответы совпадают целиком."""
-    body = task_body(queue)
+    body = task_body(project)
 
     first = await auth_client.post("/api/v1/tasks", json=body, headers=with_key(KEY))
     second = await auth_client.post("/api/v1/tasks", json=body, headers=with_key(KEY))
@@ -63,21 +63,21 @@ async def test_the_same_key_and_body_create_one_task(
     # Побайтово, а не по ключу задачи: повтор обязан отдать **тот же** ответ, включая
     # отметки времени и версию, — иначе клиент увидит два разных состояния одного объекта.
     assert second.json() == first.json()
-    assert first.json()["data"]["key"] == f"{queue.key}-1"
+    assert first.json()["data"]["key"] == f"{project.key}-1"
     assert await task_count(db_session) == 1
 
 
 async def test_the_same_key_with_another_body_is_a_conflict(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2: ключ обещает «тот же вызов», и обещание проверяется."""
-    await auth_client.post("/api/v1/tasks", json=task_body(queue), headers=with_key(KEY))
+    await auth_client.post("/api/v1/tasks", json=task_body(project), headers=with_key(KEY))
 
     response = await auth_client.post(
         "/api/v1/tasks",
-        json=task_body(queue, title="Совсем другая задача"),
+        json=task_body(project, title="Совсем другая задача"),
         headers=with_key(KEY),
     )
 
@@ -90,13 +90,13 @@ async def test_the_same_key_with_another_body_is_a_conflict(
 
 async def test_the_same_key_on_another_operation_is_a_conflict(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Имя операции входит в отпечаток: иначе повтор получил бы ответ чужого действия."""
-    await auth_client.post("/api/v1/tasks", json=task_body(queue), headers=with_key(KEY))
+    await auth_client.post("/api/v1/tasks", json=task_body(project), headers=with_key(KEY))
 
     response = await auth_client.post(
-        "/api/v1/queues",
+        "/api/v1/projects",
         json={"key": "OPS", "title": "Эксплуатация"},
         headers=with_key(KEY),
     )
@@ -108,12 +108,12 @@ async def test_the_same_key_on_another_operation_is_a_conflict(
 async def test_keys_of_two_tokens_are_independent(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
     main_secret: str,
     task_secret: str,
 ) -> None:
     """Обзорная проверка 3: ключ живёт в паре с токеном."""
-    body = task_body(queue)
+    body = task_body(project)
 
     first = await auth_client.post(
         "/api/v1/tasks", json=body, headers=with_key(KEY, secret=main_secret)
@@ -131,10 +131,10 @@ async def test_keys_of_two_tokens_are_independent(
 async def test_without_the_header_the_repeat_creates_a_second_task(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Без заголовка поведение обычное: механизм не включается сам по себе."""
-    body = task_body(queue)
+    body = task_body(project)
 
     await auth_client.post("/api/v1/tasks", json=body)
     await auth_client.post("/api/v1/tasks", json=body)
@@ -149,10 +149,10 @@ async def test_without_the_header_the_repeat_creates_a_second_task(
 async def test_an_expired_key_does_not_stop_a_new_object(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 6: ключ старше срока жизни не отвечает повтором."""
-    body = task_body(queue)
+    body = task_body(project)
     await auth_client.post("/api/v1/tasks", json=body, headers=with_key(KEY))
     record = (await db_session.scalars(select(IdempotencyKey))).one()
     record.created_at = datetime.now(UTC) - KEY_TTL - timedelta(minutes=1)
@@ -161,24 +161,24 @@ async def test_an_expired_key_does_not_stop_a_new_object(
     response = await auth_client.post("/api/v1/tasks", json=body, headers=with_key(KEY))
 
     assert response.status_code == 201, response.text
-    assert response.json()["data"]["key"] == f"{queue.key}-2"
+    assert response.json()["data"]["key"] == f"{project.key}-2"
     assert await task_count(db_session) == 2
 
 
 async def test_writing_a_key_sweeps_the_expired_ones(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Уборка идёт попутно: фонового процесса, который снимал бы ключи, в трекере нет."""
-    await auth_client.post("/api/v1/tasks", json=task_body(queue), headers=with_key(KEY))
+    await auth_client.post("/api/v1/tasks", json=task_body(project), headers=with_key(KEY))
     stale = (await db_session.scalars(select(IdempotencyKey))).one()
     stale.created_at = datetime.now(UTC) - KEY_TTL - timedelta(minutes=1)
     await db_session.flush()
 
     await auth_client.post(
         "/api/v1/tasks",
-        json=task_body(queue, title="Другая задача"),
+        json=task_body(project, title="Другая задача"),
         headers=with_key("another-key"),
     )
 
@@ -196,12 +196,14 @@ async def test_writing_a_key_sweeps_the_expired_ones(
 async def test_a_malformed_key_is_rejected(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
     key: str,
     reason: str,
 ) -> None:
     """Отказ, а не молчаливый пропуск: иначе клиент считал бы вызов защищённым."""
-    response = await auth_client.post("/api/v1/tasks", json=task_body(queue), headers=with_key(key))
+    response = await auth_client.post(
+        "/api/v1/tasks", json=task_body(project), headers=with_key(key)
+    )
 
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "invalid_idempotency_key"
@@ -212,10 +214,10 @@ async def test_a_malformed_key_is_rejected(
 async def test_a_key_is_matched_after_trimming(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Ключ, скопированный с переводом строки, остаётся тем же ключом."""
-    body = task_body(queue)
+    body = task_body(project)
 
     await auth_client.post("/api/v1/tasks", json=body, headers=with_key(KEY))
     response = await auth_client.post("/api/v1/tasks", json=body, headers=with_key(f" {KEY} "))
@@ -266,13 +268,13 @@ async def test_appending_an_entry_twice_appends_one(
 
 async def test_the_same_entry_key_in_another_task_is_a_conflict(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
     task: Task,
 ) -> None:
     """Ключ задачи входит в отпечаток: без него повтор подшил бы запись не в то дело."""
     body = {"type": "note", "title": "Заметка", "body": "Проверил вручную"}
     await auth_client.post(f"/api/v1/tasks/{task.key}/entries", json=body, headers=with_key(KEY))
-    other = await auth_client.post("/api/v1/tasks", json=task_body(queue, title="Вторая задача"))
+    other = await auth_client.post("/api/v1/tasks", json=task_body(project, title="Вторая задача"))
     other_key = other.json()["data"]["key"]
 
     response = await auth_client.post(
@@ -285,11 +287,11 @@ async def test_the_same_entry_key_in_another_task_is_a_conflict(
 
 async def test_a_repeated_link_answers_with_the_first_one(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
     task: Task,
 ) -> None:
     """Повтор связи отвечает связью, а не `link_exists`: вызов тот же самый."""
-    other = await auth_client.post("/api/v1/tasks", json=task_body(queue, title="Вторая"))
+    other = await auth_client.post("/api/v1/tasks", json=task_body(project, title="Вторая"))
     other_key = other.json()["data"]["key"]
     body = {"kind": "blocks", "other": other_key}
 
@@ -304,12 +306,12 @@ async def test_a_repeated_link_answers_with_the_first_one(
     assert second.json() == first.json()
 
 
-async def test_a_repeated_queue_answers_with_the_first_one(auth_client: AsyncClient) -> None:
-    """Повтор создания очереди отвечает очередью, а не `queue_key_taken`."""
+async def test_a_repeated_project_answers_with_the_first_one(auth_client: AsyncClient) -> None:
+    """Повтор создания проекта отвечает проектом, а не `project_key_taken`."""
     body = {"key": "OPS", "title": "Эксплуатация"}
 
-    first = await auth_client.post("/api/v1/queues", json=body, headers=with_key(KEY))
-    second = await auth_client.post("/api/v1/queues", json=body, headers=with_key(KEY))
+    first = await auth_client.post("/api/v1/projects", json=body, headers=with_key(KEY))
+    second = await auth_client.post("/api/v1/projects", json=body, headers=with_key(KEY))
 
     assert first.status_code == 201, first.text
     assert second.json() == first.json()
@@ -334,16 +336,16 @@ async def test_a_repeated_participant_answers_with_the_first_one(
 async def test_a_rejected_request_stores_nothing(
     auth_client: AsyncClient,
     db_session: AsyncSession,
-    queue: Queue,
+    project: Project,
 ) -> None:
-    """Отказ до занятия ключа: несуществующая очередь не тратит ключ.
+    """Отказ до занятия ключа: несуществующий проект не тратит ключ.
 
     Отказ **после** занятия ключа снимает строку откатом транзакции — это видно только
     на настоящих транзакциях, и проверяет это `tests/test_idempotency_race.py`.
     """
     response = await auth_client.post(
         "/api/v1/tasks",
-        json={"queue": "NOPE", "title": "Задача", "description": "Есть"},
+        json={"project": "NOPE", "title": "Задача", "description": "Есть"},
         headers=with_key(KEY),
     )
 

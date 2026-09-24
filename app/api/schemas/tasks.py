@@ -51,8 +51,8 @@ _ASSIGNEE_DESCRIPTION = (
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
 
 
-class TaskQueueRead(BaseModel):
-    """Очередь в карточке задачи: ключ и название. Описание запрашивается отдельно."""
+class TaskProjectRead(BaseModel):
+    """Проект в карточке задачи: ключ и название. Описание запрашивается отдельно."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -67,12 +67,12 @@ class TaskRead(BaseModel):
 
     id: uuid.UUID
     key: str = Field(examples=["TRK-42"], description="Immutable and never reused")
-    queue: TaskQueueRead
+    project: TaskProjectRead
     title: str = Field(examples=[_TITLE_EXAMPLE])
     description: str = Field(examples=[_DESCRIPTION_EXAMPLE])
     goal: str = Field(examples=["Ключи не сгорают на отклонённых запросах"])
-    context: str = Field(examples=["Номер выдаёт `queues.next_task_number`"])
-    constraints: str = Field(examples=["Счётчик очереди не переписывать"])
+    context: str = Field(examples=["Номер выдаёт `projects.next_task_number`"])
+    constraints: str = Field(examples=["Счётчик проекта не переписывать"])
     output: str = Field(examples=["Тест на несгоревший номер"])
     checks: list[str] = Field(examples=[_CHECKS_EXAMPLE], description=_CHECKS_DESCRIPTION)
     status: TaskStatus = Field(examples=[TaskStatus.BACKLOG])
@@ -190,13 +190,13 @@ class TaskPackageRead(BaseModel):
 class TaskCreate(BaseModel):
     """Создание задачи. Статуса нет: новая задача рождается в `backlog`.
 
-    Ключа тоже нет — его выдаёт счётчик очереди. Разделы можно оставить пустыми и
+    Ключа тоже нет — его выдаёт счётчик проекта. Разделы можно оставить пустыми и
     дописать в `backlog`; перед `open` они обязаны быть заполнены.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    queue: str = Field(examples=["TRK"], description="Queue key; matching ignores case")
+    project: str = Field(examples=["TRK"], description="Project key; matching ignores case")
     title: str = Field(min_length=1, max_length=MAX_TITLE_LENGTH, examples=[_TITLE_EXAMPLE])
     description: str = Field(
         min_length=1, max_length=MAX_TEXT_LENGTH, examples=[_DESCRIPTION_EXAMPLE]

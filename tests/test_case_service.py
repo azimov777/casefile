@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.session import transaction
 from app.domain.authors import label_author
@@ -32,7 +32,7 @@ from app.domain.tasks import TaskStatus
 from app.domain.tokens import TokenScope
 from app.services import case as service
 from app.services import participants as participants_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 
@@ -65,7 +65,9 @@ async def take(session: AsyncSession, task: Task, actor: Actor) -> None:
         await tasks_service.transition_task(session, task, actor=actor, to=status)
 
 
-async def ready(session: AsyncSession, actor: Actor, queue: Queue, *, checks: list[str]) -> Task:
+async def ready(
+    session: AsyncSession, actor: Actor, project: Project, *, checks: list[str]
+) -> Task:
     """Новая задача с этими проверками, в работе и с готовым выходом.
 
     Сводка и два перехода — не предмет здешних тестов, но без них до `done` не
@@ -74,7 +76,7 @@ async def ready(session: AsyncSession, actor: Actor, queue: Queue, *, checks: li
     task = await tasks_service.create_task(
         session,
         actor=actor,
-        queue=queue,
+        project=project,
         title="Задача на закрытие",
         description="Есть",
         goal="Цель",
@@ -166,13 +168,13 @@ async def test_an_unknown_addressee_is_named_in_the_details(
 
 
 async def test_an_answer_points_at_a_question_of_the_same_task(
-    db_session: AsyncSession, task: Task, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task: Task, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 5: чужая запись и запись не того типа отвергаются одинаково."""
     other = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
+        project=project,
         title="Соседняя задача",
         description="Есть",
     )
@@ -286,10 +288,10 @@ async def test_leaving_in_progress_needs_a_summary_filed_after_the_last_entry(
 
 
 async def test_closing_needs_the_last_verdict_of_every_check_to_be_passed(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 7: провал закрывается новым вердиктом, а не правкой старого."""
-    task = await ready(db_session, task_actor, queue, checks=["первая", "вторая", "третья"])
+    task = await ready(db_session, task_actor, project, checks=["первая", "вторая", "третья"])
 
     await pass_all(db_session, task, task_actor)
     await service.add_verdict(db_session, task, actor=task_actor, check_no=2, outcome="failed")
@@ -307,14 +309,14 @@ async def test_closing_needs_the_last_verdict_of_every_check_to_be_passed(
 
 
 async def test_verdicts_of_the_previous_stint_do_not_close_the_new_one(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 3: возврат в `open` обнуляет зачёт вердиктов.
 
     Проверяется именно поведение границы: вердикты никуда не деваются из дела —
     перестаёт засчитываться то, что подшито до последнего входа в `in_progress`.
     """
-    task = await ready(db_session, task_actor, queue, checks=["первая", "вторая"])
+    task = await ready(db_session, task_actor, project, checks=["первая", "вторая"])
     await pass_all(db_session, task, task_actor)
 
     await tasks_service.transition_task(
@@ -339,14 +341,14 @@ async def test_verdicts_of_the_previous_stint_do_not_close_the_new_one(
 
 
 async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Задача 31, обзорная проверка 2: правка `checks` не оставляет старых `passed`.
 
     Номера проверок те же самые, а проверяют они другое: без границы вердикт по первой
     проверке молча закрыл бы переписанную первую проверку.
     """
-    task = await ready(db_session, task_actor, queue, checks=["первая", "вторая"])
+    task = await ready(db_session, task_actor, project, checks=["первая", "вторая"])
     await pass_all(db_session, task, task_actor)
 
     # Пять разделов правятся только в `backlog` (`CONCEPT.md`, 3.3), и задача идёт туда
@@ -376,7 +378,7 @@ async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
 
 
 async def test_closing_refused_on_a_blank_unmeasured_files_nothing_at_all(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """TRK-78: отказ на `unmeasured` откатывает весь вызов, включая поданные вердикты.
 
@@ -386,7 +388,7 @@ async def test_closing_refused_on_a_blank_unmeasured_files_nothing_at_all(
     работу без права её продолжить. Граница отката здесь настоящая, боевая
     (`app/db/session.py`, `transaction`) — та же, что держит вход приложения.
     """
-    task = await ready(db_session, task_actor, queue, checks=["первая"])
+    task = await ready(db_session, task_actor, project, checks=["первая"])
     key = task.key
     before = await service.case_index(db_session, task, actor=task_actor)
     # Коммит закрывает точку сохранения фикстур и открытого выше `ready()`: откат
@@ -417,10 +419,10 @@ async def test_closing_refused_on_a_blank_unmeasured_files_nothing_at_all(
 
 
 async def test_closing_with_unmeasured_carries_the_part_into_the_case(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """TRK-78: заполненная пятая часть доезжает до дела и видна в последней сводке."""
-    task = await ready(db_session, task_actor, queue, checks=["первая"])
+    task = await ready(db_session, task_actor, project, checks=["первая"])
     unmeasured = "Живая проверка на проде не гонялась, риск считаю теоретическим"
 
     await tasks_service.close_task(
@@ -642,17 +644,17 @@ async def test_the_inbox_of_a_temporary_agent_is_a_refusal_rather_than_an_empty_
     assert error.value.details == {"signature": "nightly_agent"}
 
 
-async def test_the_inbox_is_filtered_by_queue(
-    db_session: AsyncSession, task: Task, task_actor: Actor, main_actor: Actor, queue: Queue
+async def test_the_inbox_is_filtered_by_project(
+    db_session: AsyncSession, task: Task, task_actor: Actor, main_actor: Actor, project: Project
 ) -> None:
-    other_queue = await queues_service.create_queue(
+    other_project = await projects_service.create_project(
         db_session, actor=main_actor, key="OPS", title="Эксплуатация", description=""
     )
     other = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=other_queue,
-        title="Задача в другой очереди",
+        project=other_project,
+        title="Задача в другом проекте",
         description="Есть",
     )
     await service.ask(
@@ -672,7 +674,7 @@ async def test_the_inbox_is_filtered_by_queue(
         blocking=False,
     )
 
-    page = await service.list_questions(db_session, actor=task_actor, queue=other_queue)
+    page = await service.list_questions(db_session, actor=task_actor, project=other_project)
 
     assert [item.entry.title for item in page.items] == ["Вопрос в OPS"]
     assert [item.task_key for item in page.items] == ["OPS-1"]

@@ -27,7 +27,7 @@
 `blocked: false` и `features.blocked` не могут разойтись.
 
 **Порядок по ключу — это не порядок строки.** `TRK-10` обязан идти после `TRK-2`, а по
-алфавиту он идёт раньше. Поэтому ключ раскладывается на пару «ключ очереди, номер», и
+алфавиту он идёт раньше. Поэтому ключ раскладывается на пару «ключ проекта, номер», и
 номер сравнивается числом.
 
 **Порядок всегда заканчивается идентификатором.** Тайбрейкер добавляется здесь, а не
@@ -46,7 +46,7 @@ from sqlalchemy.orm import contains_eager
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.link import Link
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import (
     Page,
@@ -98,8 +98,8 @@ PRIORITY_RANK: dict[TaskPriority, int] = {
     priority: index for index, priority in enumerate(TaskPriority)
 }
 
-#: Номер задачи внутри очереди, вынутый из ключа. Ключ очереди по шаблону не содержит
-#: дефиса (`app/domain/queues.py`), поэтому вторая часть — всегда номер, и он приводится
+#: Номер задачи внутри проекта, вынутый из ключа. Ключ проекта по шаблону не содержит
+#: дефиса (`app/domain/projects.py`), поэтому вторая часть — всегда номер, и он приводится
 #: к числу: строковое сравнение поставило бы `TRK-10` перед `TRK-2`.
 TASK_NUMBER = cast(func.split_part(Task.key, TASK_KEY_SEPARATOR, 2), BigInteger)
 
@@ -128,7 +128,7 @@ class TaskSearchRepository:
     ) -> Page[TaskRow]:
         """Страница задач по фильтру, в заданном порядке, с признаками каждой строки.
 
-        Очередь присоединяется явно и загружается через `contains_eager`, а не ленивой
+        Проект присоединяется явно и загружается через `contains_eager`, а не ленивой
         стратегией `joined` из модели: та добавила бы **второе** соединение с той же
         таблицей под собственным псевдонимом, к которому не обратиться из `ORDER BY`.
         Одно явное соединение и дешевле, и делает порядок по ключу выразимым.
@@ -156,7 +156,9 @@ class TaskSearchRepository:
         keys = sort_keys(resolved.sort)
         wanted = field_requested(FEATURES_FIELD, resolved.fields)
         with_parent = field_requested(PARENT_FIELD, resolved.fields)
-        statement: Select[Any] = select(Task).join(Task.queue).options(contains_eager(Task.queue))
+        statement: Select[Any] = (
+            select(Task).join(Task.project).options(contains_eager(Task.project))
+        )
         condition = compile_filter(resolved)
         if condition is not None:
             statement = statement.where(condition)
@@ -205,10 +207,10 @@ class TaskSearchRepository:
         бы никого. Порядок и признаки на число строк не влияют и в счёт не идут:
         сортировать то, что тут же схлопывается в одно число, — работа в никуда.
 
-        Соединение с очередью остаётся: по ней отбирают (`queue: TRK`), а внешний ключ
+        Соединение с проектом остаётся: по нему отбирают (`project: TRK`), а внешний ключ
         обязателен и соединение внутреннее, поэтому число строк от него не меняется.
         """
-        statement = select(func.count()).select_from(Task).join(Task.queue)
+        statement = select(func.count()).select_from(Task).join(Task.project)
         if condition is not None:
             statement = statement.where(condition)
         # `COUNT(*)` отдаёт строку всегда, в том числе `0` на пустой выдаче: `None`
@@ -291,7 +293,7 @@ def _compile(term: Term) -> ColumnElement[bool]:
 
 def _compile_term(term: SearchTerm) -> ColumnElement[bool]:
     # Условие «значения нет» строится только когда его просили: у поля без пустого
-    # состояния (`queue`, `status`) его не существует, и вычислять его заранее значило
+    # состояния (`project`, `status`) его не существует, и вычислять его заранее значило
     # бы падать на запросе, который ничего такого не спрашивал.
     empty = _empty_state(term) if term.include_empty else None
     body = _body(term) if term.values else None
@@ -300,8 +302,8 @@ def _compile_term(term: SearchTerm) -> ColumnElement[bool]:
 
 def _body(term: SearchTerm) -> ColumnElement[bool]:
     match term.kind:
-        case SearchValueKind.QUEUE_KEY:
-            return _scalar(Task.queue_id, term.operator, term.values)
+        case SearchValueKind.PROJECT_KEY:
+            return _scalar(Task.project_id, term.operator, term.values)
         case SearchValueKind.TASK_KEY:
             return _task_key(term)
         case SearchValueKind.STATUS:
@@ -331,7 +333,7 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
         case SearchValueKind.ASSIGNEE:
             return Task.assignee.is_(None)
         case SearchValueKind.TASK_KEY if term.field is SearchField.PARENT:
-            # «Родителя нет» — верхний уровень очереди: ни одной связи `parent`, где
+            # «Родителя нет» — верхний уровень проекта: ни одной связи `parent`, где
             # эта задача была бы ребёнком. Колонки под родителя нет, и `IS NULL` тут
             # не о чем спросить. Условие на поле, а не на вид значения: ключ самой
             # задачи того же вида, но пустого состояния у него не бывает.
@@ -427,7 +429,7 @@ def _counter(
 
     Подзапрос считается для каждой строки, дошедшей до этого условия, и это осознанная
     цена: колонки под признак нет намеренно (`CONCEPT.md`, 4.3), а сузить набор заранее
-    можно любым условием по колонке — очередью, статусом, исполнителем. Подзапросы идут
+    можно любым условием по колонке — проектом, статусом, исполнителем. Подзапросы идут
     по `ix_entries_task_id_type`.
     """
     return _scalar(_counted(term.field), operator, values)
@@ -573,7 +575,7 @@ def _priority_rank() -> ColumnElement[Any]:
 def sort_keys(terms: Sequence[ResolvedSort]) -> list[tuple[ColumnElement[Any], bool]]:
     """Ключи порядка выражениями: один ключ сортировки может дать больше одного.
 
-    Так устроен порядок по ключу задачи: он раскладывается на пару «ключ очереди, номер»
+    Так устроен порядок по ключу задачи: он раскладывается на пару «ключ проекта, номер»
     — иначе `TRK-10` встал бы перед `TRK-2`. Курсор от этого не усложняется: он хранит
     значения **выражений**, а не имена ключей, и их число проверяет `decode_sort_cursor`.
     """
@@ -587,7 +589,7 @@ def sort_keys(terms: Sequence[ResolvedSort]) -> list[tuple[ColumnElement[Any], b
 def _expressions(key: SortKey) -> tuple[ColumnElement[Any], ...]:
     match key:
         case SortKey.KEY:
-            return (Queue.key, TASK_NUMBER)
+            return (Project.key, TASK_NUMBER)
         case SortKey.UPDATED_AT:
             return (Task.updated_at,)
         case SortKey.PRIORITY:

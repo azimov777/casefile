@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
 from app.db.models.author import created_by_columns
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository
 from app.db.session import asyncpg_dsn, transaction
@@ -113,20 +113,20 @@ async def test_the_wait_takes_several_task_keys_at_once(
     task: Task,
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Сессия, ведущая несколько дел, называет их списком и ждёт по всем разом."""
     second = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
+        project=project,
         title="Второе дело сессии",
         description="Нужно, чтобы список ключей было чем провалить",
     )
     third = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
+        project=project,
         title="Задача, про которую не спрашивали",
         description="Записи этой задачи в выдачу попасть не должны",
     )
@@ -189,12 +189,12 @@ async def committed_world(
             scope=TokenScope.TASK,
             name="wake test",
         )
-        queue = Queue(key=f"WAKE{suffix}", title="Пробуждение", **created_by_columns(TRACKER))
-        session.add(queue)
+        project = Project(key=f"WAKE{suffix}", title="Пробуждение", **created_by_columns(TRACKER))
+        session.add(project)
         await session.flush()
         task = Task(
-            key=f"{queue.key}-1",
-            queue=queue,
+            key=f"{project.key}-1",
+            project=project,
             title="Задача для пробуждения",
             description="Есть",
             **created_by_columns(TRACKER),
@@ -204,7 +204,7 @@ async def committed_world(
         secret = issued.secret
         ids = {
             "task": task.id,
-            "queue": queue.id,
+            "project": project.id,
             "token": issued.token.id,
             "participant": participant.id,
         }
@@ -220,7 +220,7 @@ async def committed_world(
             await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(text("DELETE FROM tasks WHERE id = :task"), {"task": ids["task"]})
             await session.execute(
-                text("DELETE FROM queues WHERE id = :queue"), {"queue": ids["queue"]}
+                text("DELETE FROM projects WHERE id = :project"), {"project": ids["project"]}
             )
             await session.execute(
                 text("DELETE FROM idempotency_keys WHERE token_id = :token"),

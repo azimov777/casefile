@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from conftest import Connect, call, refuse
@@ -35,15 +35,15 @@ REWRITTEN = "Третья проверка: дефект показан на с�
 
 
 @pytest.fixture
-async def with_checks(mcp_session: Connect, task_secret: str, queue: Queue) -> str:
+async def with_checks(mcp_session: Connect, task_secret: str, project: Project) -> str:
     """Задача в `backlog` с четырьмя проверками. Ключ строкой: объект после чужого
     вызова может оказаться устаревшим (`tests/conftest.py`)."""
-    del queue
+    del project
     async with mcp_session(task_secret) as session:
         created = await call(
             session,
             "create_task",
-            queue="TRK",
+            project="TRK",
             title="Правка проверки",
             description="Проверка сформулирована невыполнимо",
             assignee="owner",

@@ -85,7 +85,7 @@ async def test_a_shared_token_without_the_header_is_refused(
     """Обзорная проверка 3, первая половина: код назван в `docs/ERRORS.md`."""
     client.headers["Authorization"] = f"Bearer {shared_secret}"
 
-    response = await client.get("/api/v1/queues")
+    response = await client.get("/api/v1/projects")
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "actor_label_required"
@@ -97,7 +97,7 @@ async def test_a_shared_token_with_the_header_signs_with_the_label(
 ) -> None:
     """Обзорная проверка 3, вторая половина: автор создающего вызова — метка и род `agent`.
 
-    Выпускать очередь общим токеном нельзя (нужен `main`), поэтому создающий вызов здесь
+    Заводить проект общим токеном нельзя (нужен `main`), поэтому создающий вызов здесь
     — регистрация участника: она тоже пишет автора, и общий токен для неё выпускается
     с набором `main`.
     """
@@ -127,7 +127,7 @@ async def test_a_malformed_label_answers_with_its_own_code(
     client.headers["Authorization"] = f"Bearer {shared_secret}"
     client.headers["X-Actor-Label"] = "nightly agent"
 
-    response = await client.get("/api/v1/queues")
+    response = await client.get("/api/v1/projects")
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_actor_label"

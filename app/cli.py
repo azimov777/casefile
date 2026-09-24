@@ -20,7 +20,7 @@
   доступ к контейнерам, и флага администратора у него не спрашивают. Пароль генерируется
   и печатается один раз или, с `--set-password`, спрашивается с терминала без эха (из
   трубы — первой строкой);
-- `demo` — наполнить установку демонстрационными данными: очередь `DEMO`, задачи во всех
+- `demo` — наполнить установку демонстрационными данными: проект `DEMO`, задачи во всех
   статусах и дела со всеми типами записей. Через API это были бы десятки запросов
   в нужном порядке;
 - `openapi` и `errors` — выгрузить поставляемые артефакты контракта: схему для
@@ -375,21 +375,21 @@ async def _demo(args: argparse.Namespace) -> int:
     """Наполняет установку демонстрационными данными.
 
     Идемпотентна так же, как `init`, и по той же причине: команда стоит в Compose рядом
-    с миграциями, и её повторный запуск не должен плодить вторую копию очереди `DEMO`.
-    Признак «уже наполнено» — существование самой очереди.
+    с миграциями, и её повторный запуск не должен плодить вторую копию проекта `DEMO`.
+    Признак «уже наполнено» — существование самого проекта.
     """
-    from app.services.demo import DEMO_QUEUE_KEY, seed_demo
+    from app.services.demo import DEMO_PROJECT_KEY, seed_demo
 
     async with session_scope() as session:
         data = await seed_demo(session)
         if not data.created:
-            print(f"Demo data is already there: queue {DEMO_QUEUE_KEY} exists.")
+            print(f"Demo data is already there: project {DEMO_PROJECT_KEY} exists.")
             print("Nothing was created. To start over, drop the database volume:")
             print("  docker compose down -v")
             return 0
 
-        assert data.queue is not None  # `created` — это и есть «очередь заведена»
-        print(f"queue: {data.queue.key} ({data.queue.title})")
+        assert data.project is not None  # `created` — это и есть «проект заведён»
+        print(f"project: {data.project.key} ({data.project.title})")
         for task in data.tasks:
             print(f"  {task.key}  {task.status.value:<12} {task.title}")
         print()
@@ -558,7 +558,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     demo = commands.add_parser(
         "demo",
-        help="Fill the installation with demo data: queue DEMO, tasks in every status",
+        help="Fill the installation with demo data: project DEMO, tasks in every status",
     )
     demo.set_defaults(handler=_demo)
 

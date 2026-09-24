@@ -98,7 +98,7 @@ async def test_a_stdio_call_is_signed_by_the_token_participant(
 async def test_a_stdio_call_with_a_bad_token_is_refused(mcp_sessions: SessionFactory) -> None:
     """Негодный токен — тот же `unauthorized`, что и в HTTP, а не молчаливый пропуск."""
     async with Client(stdio_server(mcp_sessions, "not-a-token")) as stdio:
-        result = await stdio.call_tool("list_queues", {})
+        result = await stdio.call_tool("list_projects", {})
 
     assert result.is_error
     assert "unauthorized" in tool_text(result)

@@ -6,7 +6,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.entry import Entry
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import (
@@ -23,7 +23,7 @@ from app.domain.errors import (
 )
 from app.domain.tasks import TaskPriority, TaskStatus
 from app.services import case as case_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tasks as service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
@@ -106,7 +106,7 @@ async def test_a_new_task_is_born_in_backlog_with_a_created_entry(
     assert task.version == 1
     assert task.priority is TaskPriority.NORMAL
     assert task.created_by.signature == "owner"
-    assert task.queue.key == "TRK"
+    assert task.project.key == "TRK"
 
     case = await entries(db_session, task)
     assert [(entry.no, entry.type) for entry in case] == [(1, EntryType.CREATED)]
@@ -119,28 +119,28 @@ async def test_a_new_task_is_born_in_backlog_with_a_created_entry(
 async def test_a_rejected_creation_does_not_burn_a_number(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Номер выдаётся последним: откат по валидации не оставляет дыры в нумерации."""
     with pytest.raises(TaskFieldsInvalidError) as error:
         await service.create_task(
-            db_session, actor=task_actor, queue=queue, title="  ", description="есть"
+            db_session, actor=task_actor, project=project, title="  ", description="есть"
         )
     assert [item["field"] for item in error.value.details["fields"]] == ["title"]
-    assert queue.last_task_number == 0
+    assert project.last_task_number == 0
 
     created = await service.create_task(
-        db_session, actor=task_actor, queue=queue, title="Первая", description="есть"
+        db_session, actor=task_actor, project=project, title="Первая", description="есть"
     )
     assert created.key == "TRK-1"
 
 
 async def test_the_description_is_required(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     with pytest.raises(TaskFieldsInvalidError):
         await service.create_task(
-            db_session, actor=task_actor, queue=queue, title="x", description=" "
+            db_session, actor=task_actor, project=project, title="x", description=" "
         )
 
 
@@ -176,11 +176,11 @@ async def test_the_package_carries_transitions_and_the_case_index(
 
 
 async def test_opening_requires_filled_sections(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 2: все незаполненные разделы перечислены сразу."""
     blank = await service.create_task(
-        db_session, actor=task_actor, queue=queue, title="Пустая", description="Без разделов"
+        db_session, actor=task_actor, project=project, title="Пустая", description="Без разделов"
     )
 
     with pytest.raises(TaskSectionsIncompleteError) as error:
@@ -602,12 +602,12 @@ async def test_seq_grows_across_the_tracker_and_no_inside_each_task(
     task_actor: Actor,
     task: Task,
 ) -> None:
-    """Обзорная проверка 8: две очереди, записи чередуются."""
-    other_queue = await queues_service.create_queue(
+    """Обзорная проверка 8: два проекта, записи чередуются."""
+    other_project = await projects_service.create_project(
         db_session, actor=main_actor, key="OPS", title="Эксплуатация"
     )
     other = await service.create_task(
-        db_session, actor=task_actor, queue=other_queue, title="Дежурство", description="Есть"
+        db_session, actor=task_actor, project=other_project, title="Дежурство", description="Есть"
     )
     await service.update_task(db_session, task, actor=task_actor, changes=TaskChanges(goal="a"))
     await service.update_task(db_session, other, actor=task_actor, changes=TaskChanges(goal="b"))

@@ -1,8 +1,8 @@
 """Первый экран одним запросом.
 
-Интерфейс человека начинается с трёх вопросов: кто я, какие есть очереди и сколько
+Интерфейс человека начинается с трёх вопросов: кто я, какие есть проекты и сколько
 вопросов ждут моего ответа. По отдельности всё это уже отдают `GET /participants/{name}`,
-`GET /queues` и `GET /questions`, но три запроса ради первой отрисовки — это три круга
+`GET /projects` и `GET /questions`, но три запроса ради первой отрисовки — это три круга
 задержки и три состояния загрузки в интерфейсе, который ещё ничего не показал.
 
 «Кто я» — это участник, его учётная запись (TRK-113) **и сам токен**: его набор и
@@ -26,12 +26,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import UnauthorizedError
 from app.db.models.account import Account
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.pagination import MAX_PAGE_SIZE
 from app.domain.tokens import TokenScope
 from app.services import accounts as accounts_service
 from app.services import case as case_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services.auth import Actor
 
 
@@ -51,7 +51,7 @@ class Bootstrap:
     token_id: uuid.UUID
     #: Набор этого токена. У общего агентского токена участника нет, а набор есть.
     scope: TokenScope
-    queues: list[Queue]
+    projects: list[Project]
     #: Открытые вопросы, адресованные `participant`. Ноль при пустом участнике — это
     #: факт, а не умолчание: адресовать временного агента нельзя (`CONCEPT.md`, 3.6),
     #: поэтому вопросов ему не приходит и прийти не может.
@@ -59,13 +59,13 @@ class Bootstrap:
 
 
 async def read_bootstrap(session: AsyncSession, *, actor: Actor) -> Bootstrap:
-    """Текущий участник, его токен с набором, очереди установки и число вопросов к нему.
+    """Текущий участник, его токен с набором, проекты установки и число вопросов к нему.
 
-    Очереди читаются одной страницей с общим потолком размера: очередь — единственный
+    Проекты читаются одной страницей с общим потолком размера: проект — единственный
     уровень группировки, и установка, у которой их больше двух сотен, первым экраном
-    всё равно не описывается. Такой установке нужен `GET /api/v1/queues` с курсором;
-    поле `queues_total` здесь не заводится, потому что объём первого экрана закрыт
-    (`TRK-29`): текущий участник и его токен (`TRK-65`), очереди, число вопросов.
+    всё равно не описывается. Такой установке нужен `GET /api/v1/projects` с курсором;
+    поле `projects_total` здесь не заводится, потому что объём первого экрана закрыт
+    (`TRK-29`): текущий участник и его токен (`TRK-65`), проекты, число вопросов.
 
     Первый экран описывает токен, поэтому без токена отвечать нечем. Снаружи так не
     бывает — аутентификация без токена не проходит, и `Actor.token_id` пуст только у
@@ -77,7 +77,7 @@ async def read_bootstrap(session: AsyncSession, *, actor: Actor) -> Bootstrap:
             message="The first screen describes a token, and this action has none",
             details={"reason": "first_screen_requires_token"},
         )
-    page = await queues_service.list_queues(session, actor=actor, limit=MAX_PAGE_SIZE)
+    page = await projects_service.list_projects(session, actor=actor, limit=MAX_PAGE_SIZE)
     open_questions = (
         0
         if actor.participant is None
@@ -88,6 +88,6 @@ async def read_bootstrap(session: AsyncSession, *, actor: Actor) -> Bootstrap:
         account=await accounts_service.account_of(session, actor.participant),
         token_id=actor.token_id,
         scope=actor.scope,
-        queues=page.items,
+        projects=page.items,
         open_questions=open_questions,
     )

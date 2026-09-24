@@ -6,14 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.links import LinkKind
 from app.domain.tasks import DEFAULT_PRIORITY
-from app.mcp.arguments import IdempotencyKeyArg, QueueKeyArg
+from app.mcp.arguments import IdempotencyKeyArg, ProjectKeyArg
 from app.mcp.enums import TaskPrioritySchema
 from app.mcp.idempotency import Once
 from app.mcp.tools.tasks.views import MutationView, mutation
 from app.mcp.toolset import FILING, Toolset
 from app.services import case as case_service
 from app.services import links as links_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.tasks import TaskMutation
 
@@ -94,7 +94,7 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(annotations=FILING, creating=True)
     async def create_task(
-        queue: QueueKeyArg,
+        project: ProjectKeyArg,
         title: TaskTitleArg,
         description: TaskDescriptionArg,
         sections: SectionsArg = None,
@@ -121,7 +121,7 @@ def register(tools: Toolset) -> None:
             # Всё, что может отказать, — до занятия ключа: отклонённый вызов не должен
             # тратить ключ. Ключи уезжают в отпечаток разрешёнными (`TRK`, а не `trk`):
             # адресация мягкая, и иначе повтор тем же ключом ответил бы конфликтом.
-            resolved_queue = await queues_service.get_queue(session, queue)
+            resolved_project = await projects_service.get_project(session, project)
             parent_task = None if parent is None else await tasks_service.get_task(session, parent)
             parts = sections or TaskSections()
 
@@ -129,7 +129,7 @@ def register(tools: Toolset) -> None:
                 task = await tasks_service.create_task(
                     session,
                     actor=actor,
-                    queue=resolved_queue,
+                    project=resolved_project,
                     title=title,
                     description=description,
                     goal=parts.goal,
@@ -168,7 +168,7 @@ def register(tools: Toolset) -> None:
             return await Once.of(create_task, session, actor, idempotency_key).run(
                 result=MutationView,
                 request={
-                    "queue": resolved_queue.key,
+                    "project": resolved_project.key,
                     "title": title,
                     "description": description,
                     "sections": parts,

@@ -1,13 +1,13 @@
-"""Эндпоинты очередей: доступ по набору, неизменяемый ключ, частичное обновление."""
+"""Эндпоинты проектов: доступ по набору, неизменяемый ключ, частичное обновление."""
 
 from httpx import AsyncClient
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 
 
-async def test_creation_answers_with_the_created_queue(auth_client: AsyncClient) -> None:
+async def test_creation_answers_with_the_created_project(auth_client: AsyncClient) -> None:
     response = await auth_client.post(
-        "/api/v1/queues",
+        "/api/v1/projects",
         json={"key": "ops", "title": "Эксплуатация", "description": "Дежурства и выкладки"},
     )
 
@@ -25,34 +25,36 @@ async def test_creation_is_forbidden_for_the_task_scope(
 ) -> None:
     """Обзорная проверка 2: тот же запрос отклоняется с `task` и проходит с `main`."""
     client.headers["Authorization"] = f"Bearer {task_secret}"
-    forbidden = await client.post("/api/v1/queues", json={"key": "OPS", "title": "Эксплуатация"})
+    forbidden = await client.post("/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация"})
 
     assert forbidden.status_code == 403
     assert forbidden.json()["error"]["code"] == "permission_denied"
     assert forbidden.json()["error"]["details"]["required_scope"] == "main"
 
     client.headers["Authorization"] = f"Bearer {main_secret}"
-    created = await client.post("/api/v1/queues", json={"key": "OPS", "title": "Эксплуатация"})
+    created = await client.post("/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация"})
 
     assert created.status_code == 201, created.text
 
 
-async def test_reading_ignores_case_in_the_key(auth_client: AsyncClient, queue: Queue) -> None:
-    response = await auth_client.get("/api/v1/queues/trk")
+async def test_reading_ignores_case_in_the_key(auth_client: AsyncClient, project: Project) -> None:
+    response = await auth_client.get("/api/v1/projects/trk")
 
     assert response.status_code == 200
     assert response.json()["data"]["key"] == "TRK"
 
 
-async def test_an_unknown_queue_answers_with_its_own_code(auth_client: AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/queues/GHOST")
+async def test_an_unknown_project_answers_with_its_own_code(auth_client: AsyncClient) -> None:
+    response = await auth_client.get("/api/v1/projects/GHOST")
 
     assert response.status_code == 404
-    assert response.json()["error"]["code"] == "queue_not_found"
+    assert response.json()["error"]["code"] == "project_not_found"
 
 
-async def test_the_list_is_a_collection_with_meta(auth_client: AsyncClient, queue: Queue) -> None:
-    response = await auth_client.get("/api/v1/queues")
+async def test_the_list_is_a_collection_with_meta(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    response = await auth_client.get("/api/v1/projects")
 
     assert response.status_code == 200
     payload = response.json()
@@ -62,16 +64,16 @@ async def test_the_list_is_a_collection_with_meta(auth_client: AsyncClient, queu
 
 async def test_patch_refuses_the_key_and_accepts_the_description(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 4: `key` в теле — `422`, `description` меняет описание."""
-    refused = await auth_client.patch("/api/v1/queues/TRK", json={"key": "OPS"})
+    refused = await auth_client.patch("/api/v1/projects/TRK", json={"key": "OPS"})
 
     assert refused.status_code == 422
     assert refused.json()["error"]["code"] == "validation_error"
 
     changed = await auth_client.patch(
-        "/api/v1/queues/TRK", json={"description": "Новый общий контекст"}
+        "/api/v1/projects/TRK", json={"description": "Новый общий контекст"}
     )
 
     assert changed.status_code == 200, changed.text
@@ -84,10 +86,10 @@ async def test_patch_refuses_the_key_and_accepts_the_description(
 async def test_patch_requires_the_main_scope(
     client: AsyncClient,
     task_secret: str,
-    queue: Queue,
+    project: Project,
 ) -> None:
     client.headers["Authorization"] = f"Bearer {task_secret}"
 
-    response = await client.patch("/api/v1/queues/TRK", json={"title": "Нельзя"})
+    response = await client.patch("/api/v1/projects/TRK", json={"title": "Нельзя"})
 
     assert response.status_code == 403

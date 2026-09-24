@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app import cli
 from app.db import session as session_module
-from app.db.repositories import ParticipantRepository, QueueRepository, TokenRepository
+from app.db.repositories import ParticipantRepository, ProjectRepository, TokenRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenScope
@@ -51,7 +51,7 @@ from conftest import connect_mcp, tool_text
 #: оставшаяся от упавшей уборки строка иначе занимала бы ключ у следующего прогона.
 SUFFIX = uuid.uuid4().hex[:6].upper()
 
-QUEUE_KEY = f"CONF{SUFFIX}"
+PROJECT_KEY = f"CONF{SUFFIX}"
 OWNER_NAME = f"conf_owner_{SUFFIX.lower()}"
 
 
@@ -102,7 +102,9 @@ async def committed_secret(
                 text("DELETE FROM participants WHERE id = :participant"),
                 {"participant": participant_id},
             )
-            await session.execute(text("DELETE FROM queues WHERE key = :key"), {"key": QUEUE_KEY})
+            await session.execute(
+                text("DELETE FROM projects WHERE key = :key"), {"key": PROJECT_KEY}
+            )
             await session.commit()
 
 
@@ -132,7 +134,7 @@ def meet_after_the_check(
 
     Место встречи здесь не оформление, а само проверяемое условие. Создающий сценарий
     читает занятость сам и на найденной строке отвечает своим доменным отказом
-    (`queue_key_taken`, `participant_name_taken`); до уникального индекса — а значит и до
+    (`project_key_taken`, `participant_name_taken`); до уникального индекса — а значит и до
     проверяемого здесь перевода `IntegrityError` — доходит только тот, кто прочитал
     раньше чужого коммита. Встреча после чтения делает это чередование обязательным для
     обеих транзакций, и других исходов у проигравшего не остаётся.
@@ -156,7 +158,7 @@ def meet_after_the_check(
     monkeypatch.setattr(repository, method, rendezvous)
 
 
-async def test_two_parallel_create_queue_calls_leave_mcp_a_domain_error(
+async def test_two_parallel_create_project_calls_leave_mcp_a_domain_error(
     committing_server: MCPServer,
     committed_secret: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -169,22 +171,22 @@ async def test_two_parallel_create_queue_calls_leave_mcp_a_domain_error(
     кем-то ещё, и не повторяет вызов вслепую. Трассировки и имени класса драйвера в нём
     быть не должно: агент читает текст, а не разбирает исключения Python.
     """
-    meet_after_the_check(monkeypatch, asyncio.Barrier(2), QueueRepository, "get_by_key")
-    arguments = {"key": QUEUE_KEY, "title": "Гонка ключа", "description": ""}
+    meet_after_the_check(monkeypatch, asyncio.Barrier(2), ProjectRepository, "get_by_key")
+    arguments = {"key": PROJECT_KEY, "title": "Гонка ключа", "description": ""}
 
     async with AsyncExitStack() as clients:
         first = await clients.enter_async_context(connect_mcp(committing_server, committed_secret))
         second = await clients.enter_async_context(connect_mcp(committing_server, committed_secret))
         results = await asyncio.gather(
-            first.call_tool("create_queue", arguments),
-            second.call_tool("create_queue", arguments),
+            first.call_tool("create_project", arguments),
+            second.call_tool("create_project", arguments),
         )
 
     refused = [result for result in results if result.is_error]
     assert len(refused) == 1, [tool_text(result) for result in results]
     text_of_refusal = tool_text(refused[0])
     assert "conflict: Database constraint violated" in text_of_refusal, text_of_refusal
-    assert "uq_queues_key" in text_of_refusal, text_of_refusal
+    assert "uq_projects_key" in text_of_refusal, text_of_refusal
     assert "IntegrityError" not in text_of_refusal, text_of_refusal
     assert "IntegrityError" not in caplog.text, caplog.text
 
