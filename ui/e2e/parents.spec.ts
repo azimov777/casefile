@@ -10,8 +10,8 @@ import {
 
 /**
  * Родитель задачи на карточке доски и в строке списка (UI-119) — на демо-данных, как
- * они есть: сценарий только читает. Длинное название родителя и двух родителей у одной
- * задачи заводит себе пишущий `parents-long.spec.ts`.
+ * они есть: сценарий только читает. Длинное название родителя и отказ второму родителю
+ * заводит себе пишущий `parents-long.spec.ts`.
  */
 
 interface Parent {
@@ -23,7 +23,7 @@ interface Row {
   key: string;
   title: string;
   status: string;
-  parents: Parent[];
+  parent: Parent | null;
 }
 
 /** Столбцы, раскрытые на доске по умолчанию: `done` и `cancelled` свёрнуты. */
@@ -36,7 +36,7 @@ const OPEN_COLUMNS = new Set(['backlog', 'open', 'in_progress', 'waiting']);
  */
 async function family(request: APIRequestContext): Promise<{ child: Row; top: Row }> {
   const query = new URLSearchParams({ queue: 'DEMO', limit: '100', query: outsideArchive() });
-  for (const field of ['title', 'status', 'parents']) query.append('fields', field);
+  for (const field of ['title', 'status', 'parent']) query.append('fields', field);
   const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
     headers: { Authorization: `Bearer ${readE2eToken()}` },
   });
@@ -44,8 +44,8 @@ async function family(request: APIRequestContext): Promise<{ child: Row; top: Ro
   const rows = ((await response.json()) as { data: Row[] }).data;
 
   const shown = rows.filter((row) => OPEN_COLUMNS.has(row.status));
-  const child = shown.find((row) => row.parents.length === 1);
-  const top = shown.find((row) => row.parents.length === 0);
+  const child = shown.find((row) => row.parent !== null);
+  const top = shown.find((row) => row.parent === null);
   if (child === undefined || top === undefined) {
     throw new Error(
       `В демо нет пары «с родителем и без» на раскрытых столбцах: ${JSON.stringify(rows)}`,
@@ -74,7 +74,7 @@ test('на доске у задачи с родителем видны его к
   request,
 }) => {
   const { child, top } = await family(request);
-  const parent = child.parents[0] as Parent;
+  const parent = child.parent as Parent;
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO&view=board');
   await shellReady(page);
@@ -134,7 +134,7 @@ test('в таблице родитель — плашка «родитель KEY
   request,
 }) => {
   const { child, top } = await family(request);
-  const parent = child.parents[0] as Parent;
+  const parent = child.parent as Parent;
   await silenceJournal(page);
   await page.goto('/tasks?queue=DEMO');
   await shellReady(page);
@@ -230,7 +230,7 @@ test('родителя приносит та же выдача: запросов
   request,
 }) => {
   const { child } = await family(request);
-  const parent = child.parents[0] as Parent;
+  const parent = child.parent as Parent;
   await silenceJournal(page);
 
   const calls: string[] = [];
@@ -269,7 +269,7 @@ test('родителя приносит та же выдача: запросов
     .map((path) => new URL(path, 'http://contour').searchParams)
     .filter((params) => params.get('limit') !== '1');
   expect(reading.length).toBeGreaterThan(0);
-  for (const params of reading) expect(params.getAll('fields')).toContain('parents');
+  for (const params of reading) expect(params.getAll('fields')).toContain('parent');
 });
 
 test('плашка родителя — своя остановка табом, и строку задачи она не обводит', async ({

@@ -132,7 +132,7 @@ describe('доска', () => {
       listing([
         task('DEMO-5', {
           status: 'backlog',
-          parents: [{ key: 'DEMO-2', title: 'Лента журнала теряет записи' }],
+          parent: { key: 'DEMO-2', title: 'Лента журнала теряет записи' },
         }),
         task('DEMO-3', { status: 'open' }),
       ]),
@@ -156,7 +156,7 @@ describe('доска', () => {
     await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
     // Карточки читаются с родителями в наборе полей — тем же запросом, что и столбец.
     for (const url of readRequests()) {
-      expect(url.searchParams.getAll('fields')).toContain('parents');
+      expect(url.searchParams.getAll('fields')).toContain('parent');
     }
     expect(asked).toEqual([]);
   });

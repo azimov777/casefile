@@ -42,7 +42,7 @@ export function TaskCard({ task }: { task: Task }) {
        * над растяжкой и ведёт в родителя; остальная карточка — в саму задачу.
        * У задачи верхнего уровня строки нет вовсе.
        */}
-      <TaskParents parents={task.parents ?? []} raised />
+      <TaskParents parent={task.parent} raised />
 
       <div className="flex items-center justify-between gap-2">
         {/* Ключ не поднят над растяжкой: клик по нему ведёт в ту же задачу.

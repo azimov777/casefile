@@ -568,7 +568,9 @@ describe('блок «Связи» (UI-125)', () => {
   it('вид связи стоит заголовком группы со счётчиком, а не плашкой слева', async () => {
     server.use(
       packageOf('DEMO-6', {
-        links: linksOf('blocked_by', 'blocked_by', 'child', 'relates'),
+        // Родитель — полем пакета (TRK-135), а не видом в `links`: групп всё равно три.
+        parent: { key: 'DEMO-9', title: 'Программа', status: 'in_progress' },
+        links: linksOf('blocked_by', 'blocked_by', 'relates'),
       }),
       entries('DEMO-6'),
     );
@@ -600,9 +602,17 @@ describe('блок «Связи» (UI-125)', () => {
   });
 
   it('родитель и дочерние задачи подписаны тем, кем они приходятся этой задаче', async () => {
-    // `child` — эта задача ребёнок перечисленной, `parent` — она родитель перечисленных.
+    // С TRK-135 родитель и дети — поля пакета `parent` и `children`, в `links` их нет.
+    // Группы — прежние виды от лица этой задачи: под `child` её родитель, под `parent` дети.
     server.use(
-      packageOf('DEMO-6', { links: linksOf('parent', 'child', 'parent') }),
+      packageOf('DEMO-6', {
+        parent: { key: 'DEMO-3', title: 'Программа', status: 'in_progress' },
+        children: [
+          { key: 'DEMO-2', title: 'Первая дочерняя', status: 'done' },
+          { key: 'DEMO-4', title: 'Вторая дочерняя', status: 'open' },
+        ],
+        links: [],
+      }),
       entries('DEMO-6'),
     );
 
@@ -625,14 +635,20 @@ describe('блок «Связи» (UI-125)', () => {
     expect(childrenGroup.querySelector('h3')).toHaveTextContent(say.ui('task.links.kind.parent'));
     expect(within(childrenGroup).getAllByRole('link')).toHaveLength(2);
 
-    // Шапка ведёт в родителя — ту задачу, у которой эта связь стоит как `child`.
+    // Шапка ведёт в родителя — поле `parent` пакета, а не дочерних.
     const header = screen.getByRole('heading', { level: 1 }).closest('header') as HTMLElement;
     expect(within(header).getByRole('link', { name: /DEMO-3/ })).toBeInTheDocument();
     expect(within(header).queryByRole('link', { name: /DEMO-2/ })).toBeNull();
   });
 
   it('статус связанной задачи нарисован тем же знаком, что в таблице задач', async () => {
-    server.use(packageOf('DEMO-6', { links: linksOf('child') }), entries('DEMO-6'));
+    server.use(
+      packageOf('DEMO-6', {
+        parent: { key: 'DEMO-2', title: 'Программа', status: 'in_progress' },
+        links: [],
+      }),
+      entries('DEMO-6'),
+    );
 
     renderApp('/tasks/DEMO-6');
     await screen.findByRole('heading', { name: /DEMO-6/ });

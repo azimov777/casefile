@@ -84,7 +84,6 @@ describe('словари языков', () => {
       'ui.snippets.jsonCaption',
       'ui.task.parents.caption',
       'ui.task.parents.item',
-      'ui.task.parents.more',
     ]);
 
     /*

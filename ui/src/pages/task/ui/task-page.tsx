@@ -192,7 +192,7 @@ export function TaskPage() {
     );
   }
 
-  const { task, features, summary, links, index, remarks } = pkg.data;
+  const { task, features, summary, parent, children, links, index, remarks } = pkg.data;
   const questions = withHeld(pkg.data.questions, answering.held, (question) =>
     questionId(task.key, question),
   );
@@ -349,7 +349,7 @@ export function TaskPage() {
           )
         }
       />
-      <TaskHeader task={task} features={features} links={links} />
+      <TaskHeader task={task} features={features} parent={parent ?? null} />
 
       {/*
        * Две колонки, каждая своим потоком, и делятся они на точке `card` (80rem).
@@ -450,7 +450,7 @@ export function TaskPage() {
             <h2 className={blockTitle({ kind: 'list' })} id="links">
               {t('links')}
             </h2>
-            <TaskLinks links={links} />
+            <TaskLinks parent={parent ?? null} childTasks={children} links={links} />
           </section>
         </div>
       </div>

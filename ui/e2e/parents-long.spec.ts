@@ -2,9 +2,13 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 import { fontsReady, motionSettled, readE2eToken, silenceJournal } from './contour';
 
 /**
- * Родитель с длинным названием и задача с двумя родителями (UI-119). Таких в демо нет,
- * поэтому сценарий заводит их сам и потому идёт в проекте «запись». Родителя из демо,
- * как он есть, проверяет читающий `parents.spec.ts`.
+ * Родитель с длинным названием у двух задач (UI-119) и отказ второму родителю (UI-167).
+ * Таких в демо нет, поэтому сценарий заводит их сам и потому идёт в проекте «запись».
+ * Родителя из демо, как он есть, проверяет читающий `parents.spec.ts`.
+ *
+ * До TRK-135 здесь стояла задача с двумя родителями и подпись «+1». С TRK-135 родитель
+ * у задачи один: второй `link` бэкенд отклоняет `409 task_has_parent`, и сценарий
+ * проверяет этот отказ с обеих сторон связи, а не невозможное теперь состояние.
  */
 
 const token = readE2eToken();
@@ -53,6 +57,28 @@ async function adopt(request: APIRequestContext, parent: string, child: string):
 }
 
 /**
+ * Второй родитель отклоняется с любой стороны связи: `parent` со стороны нового родителя
+ * и `child` со стороны ребёнка — одна и та же строка (TRK-135). Отказ называет нынешнего
+ * родителя в `details.parent`.
+ */
+async function refuseSecondParent(
+  request: APIRequestContext,
+  side: { key: string; kind: 'parent' | 'child'; other: string },
+  current: string,
+): Promise<void> {
+  const response = await request.post(`/api/v1/tasks/${side.key}/links`, {
+    headers: auth(),
+    data: { kind: side.kind, other: side.other },
+  });
+  expect(response.status(), `${side.key} ${side.kind} ${side.other}`).toBe(409);
+  const { error } = (await response.json()) as {
+    error: { code: string; details: { parent?: string } };
+  };
+  expect(error.code).toBe('task_has_parent');
+  expect(error.details.parent).toBe(current);
+}
+
+/**
  * Уборка: отменённая задача без записей агента в архиве сразу (UI-97), и соседи по
  * проекту «запись» её больше не видят. Детей раньше родителей: родитель с незакрытыми
  * детьми не закрывается.
@@ -78,7 +104,7 @@ function caption(scope: Locator): Locator {
   return scope.locator('[data-mark="parents"]');
 }
 
-/** Геометрия подписи: одна ли строка, усечена ли ссылка, помещается ли число. */
+/** Геометрия подписи: одна ли строка, усечена ли ссылка, нет ли за ней числа «+N». */
 async function measure(shown: Locator) {
   return shown.evaluate((node) => {
     const link = node.querySelector('a') as HTMLElement;
@@ -93,9 +119,7 @@ async function measure(shown: Locator) {
       truncated: link.scrollWidth > link.clientWidth,
       title: link.getAttribute('title'),
       captionRight: box.right,
-      moreRight: more === null ? null : more.getBoundingClientRect().right,
-      moreClipped: more === null ? null : more.scrollWidth > more.clientWidth,
-      moreTitle: more === null ? null : more.getAttribute('title'),
+      more: more === null ? null : more.textContent,
     };
   });
 }
@@ -108,7 +132,7 @@ async function lane(section: Locator) {
   }));
 }
 
-test('длинное название родителя — одна строка с многоточием, подсказка целиком, столбец той же ширины', async ({
+test('длинное название родителя — одна строка с многоточием, подсказка целиком, столбец той же ширины; второй родитель — отказ', async ({
   page,
   request,
 }) => {
@@ -117,11 +141,12 @@ test('длинное название родителя — одна строка
   const program = await create(request, LONG_TITLE);
   const second = await create(request, 'Второй родитель: доставка журнала без потерь');
   const single = await create(request, 'Карточка с родителем, чьё название — пути');
-  const double = await create(request, 'Карточка с двумя родителями');
-  // Порядок связей — порядок в `parents`: у `double` первым стоит длинный родитель.
+  const double = await create(request, 'Карточка, которой отказали во втором родителе');
   await adopt(request, program, single);
   await adopt(request, program, double);
-  await adopt(request, second, double);
+  // Второй родитель — отказ с обеих сторон связи, и родитель у `double` остаётся прежним.
+  await refuseSecondParent(request, { key: second, kind: 'parent', other: double }, program);
+  await refuseSecondParent(request, { key: double, kind: 'child', other: second }, program);
 
   try {
     await silenceJournal(page);
@@ -144,7 +169,7 @@ test('длинное название родителя — одна строка
     await fontsReady(page);
 
     const one = cardOf(page, 'Карточка с родителем, чьё название — пути');
-    const two = cardOf(page, 'Карточка с двумя родителями');
+    const two = cardOf(page, 'Карточка, которой отказали во втором родителе');
     const top = cardOf(page, LONG_TITLE);
     await expect(caption(one)).toBeVisible();
     await expect(caption(two)).toBeVisible();
@@ -184,16 +209,14 @@ test('длинное название родителя — одна строка
     expect(oneShown.truncated).toBe(true);
     expect(oneShown.title).toBe(`${program} · ${LONG_TITLE}`);
 
-    // Два родителя: первый ссылкой, второй не пропал — «+1» виден целиком, не усечён,
-    // и подсказка у обоих называет всех.
+    // Задача, которой отказали во втором родителе: подпись та же, родитель один — прежний,
+    // и числа «+N» за ссылкой нет (TRK-135).
     expect(twoShown.height).toBeLessThanOrEqual(twoShown.line + 1);
     expect(twoShown.truncated).toBe(true);
-    const everyone = `${program} · ${LONG_TITLE}\n${second} · Второй родитель: доставка журнала без потерь`;
-    expect(twoShown.title).toBe(everyone);
-    expect(twoShown.moreTitle).toBe(everyone);
-    expect(twoShown.moreClipped).toBe(false);
-    expect(twoShown.moreRight as number).toBeLessThanOrEqual(twoShown.captionRight + 0.5);
-    await expect(caption(two)).toContainText('+1');
+    expect(twoShown.title).toBe(`${program} · ${LONG_TITLE}`);
+    expect(twoShown.more).toBeNull();
+    expect(oneShown.more).toBeNull();
+    await expect(caption(two)).not.toContainText(second);
     await expect(caption(two).getByRole('link')).toHaveAttribute('href', `/tasks/${program}`);
 
     // Тот же столбец в тёмной теме — снимком для дела, без проверок: сразу после смены
@@ -205,8 +228,7 @@ test('длинное название родителя — одна строка
     await page.emulateMedia({ colorScheme: 'light' });
 
     /*
-     * Таблица: высота строки с подписью, с двумя родителями и без родителя одна
-     * до пикселя (решение Д4).
+     * Таблица: высота строки с подписью и без родителя одна до пикселя (решение Д4).
      */
     await page.goto(`/tasks?queue=DEMO&assignee=${PROBE}&sort=key`);
     const rows = page.locator('tbody tr');
@@ -270,24 +292,24 @@ test('длинное название родителя — одна строка
       }
     }
 
-    // Два родителя в плашке: «родители KEY +1»; панель называет обоих ссылками.
+    // Плашка — «родитель KEY», без «+N»: родитель один (TRK-135); панель — одной ссылкой.
     const doubleRow = page.getByRole('row').filter({
-      has: page.getByRole('link', { name: 'Карточка с двумя родителями', exact: true }),
+      has: page.getByRole('link', {
+        name: 'Карточка, которой отказали во втором родителе',
+        exact: true,
+      }),
     });
     const doubleBadge = doubleRow.locator('[data-mark="parents"]');
-    await expect(doubleBadge).toHaveText(new RegExp(`родители\\s*${program}\\s*\\+1`));
-    // Ключ родителя в плашке виден целиком: гнездо рассчитано на «родители KEY +1».
+    await expect(doubleBadge).toHaveText(new RegExp(`^родитель\\s*${program}$`));
+    // Ключ родителя в плашке виден целиком.
     const keyClipped = await doubleBadge
       .locator('.font-mono')
       .evaluate((node) => node.scrollWidth > node.clientWidth);
     expect(keyClipped).toBe(false);
     await doubleBadge.click();
     const panel = page.getByRole('dialog');
-    await expect(panel).toContainText('Родители задачи');
-    await expect(panel.getByRole('link')).toHaveText([
-      `${program} · ${LONG_TITLE}`,
-      `${second} · Второй родитель: доставка журнала без потерь`,
-    ]);
+    await expect(panel).toContainText(`Родитель задачи ${double}`);
+    await expect(panel.getByRole('link')).toHaveText([`${program} · ${LONG_TITLE}`]);
     // Длинное название родителя в панели переносится, а не режется, и панель не шире окна.
     const wrapped = await panel
       .getByRole('link')
@@ -327,7 +349,7 @@ test('длинное название родителя — одна строка
       expect(box.width).toBeGreaterThanOrEqual(24);
     }
     await doubleBadge.click();
-    await expect(page.getByRole('dialog')).toContainText('Родители задачи');
+    await expect(page.getByRole('dialog')).toContainText('Родитель задачи');
     const narrow = await page.getByRole('dialog').evaluate((node) => ({
       left: node.getBoundingClientRect().left,
       right: node.getBoundingClientRect().right,

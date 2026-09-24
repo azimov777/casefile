@@ -5,6 +5,7 @@ import {
   LinkKindMark,
   StatusMark,
   type LinkKind,
+  type LinkedTask,
   type TaskLink,
 } from '@/entities/task';
 
@@ -15,6 +16,15 @@ import {
  * них стояло вплотную к рамке и читалось как выпавшее из панели (UI-141).
  */
 const BODY = 'p-3';
+
+interface TaskLinksProps {
+  /** Родитель этой задачи (`parent` пакета); `null` — задача верхнего уровня. */
+  parent: LinkedTask | null;
+  /** Дочерние задачи (`children` пакета), в порядке появления связи. */
+  childTasks: LinkedTask[];
+  /** Остальные связи пакета: `blocks`, `blocked_by`, `relates`. */
+  links: TaskLink[];
+}
 
 /**
  * Связи с обеих сторон, сгруппированные видом (UI-125). Вид назван от лица этой
@@ -27,22 +37,30 @@ const BODY = 'p-3';
  * идентификатор до «rel…», «bloc…», «pa…» и не говорила, где кончается одна связь
  * и начинается другая. Второй раскладки не осталось — эта заменяет прежнюю целиком.
  */
-export function TaskLinks({ links }: { links: TaskLink[] }) {
+export function TaskLinks({ parent, childTasks, links }: TaskLinksProps) {
   const { t } = useTranslation('task');
 
-  if (links.length === 0) {
+  /*
+   * С TRK-135 родитель и дети приходят своими полями пакета, а в `links` их больше нет.
+   * Группы остаются прежними видами, названными от лица этой задачи (UI-166): под `child`
+   * — её родитель, под `parent` — её дочерние. Так подписи «Родитель» и «Дочерние задачи»,
+   * знаки и порядок групп из `link-kind.tsx` работают без второй раскладки.
+   */
+  const byKind = new Map<LinkKind, LinkedTask[]>();
+  if (parent !== null) byKind.set('child', [parent]);
+  if (childTasks.length > 0) byKind.set('parent', childTasks);
+  for (const link of links) {
+    const same = byKind.get(link.kind) ?? [];
+    same.push(link.other);
+    byKind.set(link.kind, same);
+  }
+
+  if (byKind.size === 0) {
     return (
       <div className={BODY}>
         <p className="text-muted italic">{t('noLinks')}</p>
       </div>
     );
-  }
-
-  const byKind = new Map<LinkKind, TaskLink[]>();
-  for (const link of links) {
-    const same = byKind.get(link.kind) ?? [];
-    same.push(link);
-    byKind.set(link.kind, same);
   }
 
   return (
@@ -63,7 +81,7 @@ export function TaskLinks({ links }: { links: TaskLink[] }) {
     <div className={`grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-5 ${BODY}`}>
       {LINK_KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => {
         // Непусто по самому фильтру строкой выше: `byKind.has(kind)` уже это проверил.
-        const group = byKind.get(kind) as TaskLink[];
+        const group = byKind.get(kind) as LinkedTask[];
 
         return (
           <section key={kind} className="col-span-2 grid grid-cols-subgrid gap-y-2">
@@ -80,25 +98,25 @@ export function TaskLinks({ links }: { links: TaskLink[] }) {
               </span>
             </h3>
             <ul className="col-span-2 grid list-none grid-cols-subgrid divide-y divide-line p-0">
-              {group.map((link) => (
+              {group.map((other) => (
                 /*
                  * Ключ и название стоят на одной базовой линии первой строки; статус —
                  * во второй, под названием, у любой длины названия. Название
                  * переносится в своём столбце и не обрезается (`ui/docs/CONCEPT.md`, 6).
                  */
                 <li
-                  key={link.other.key}
+                  key={other.key}
                   className="col-span-2 grid grid-cols-subgrid items-baseline gap-y-1 py-2 first:pt-0 last:pb-0"
                 >
                   {/* `whitespace-nowrap` держит ключ целым на переносе (UI-151):
                       этот файл вела параллельная задача UI-141/148, и правку
                       сюда UI-151 сознательно не внесла (`git log --grep UI-151`) —
                       закрыто отдельно, тем же приёмом (UI-161). */}
-                  <Link className="font-mono whitespace-nowrap" to={`/tasks/${link.other.key}`}>
-                    {link.other.key}
+                  <Link className="font-mono whitespace-nowrap" to={`/tasks/${other.key}`}>
+                    {other.key}
                   </Link>
-                  <span className="min-w-0 break-words text-muted">{link.other.title}</span>
-                  <StatusMark className="col-start-2" status={link.other.status} />
+                  <span className="min-w-0 break-words text-muted">{other.title}</span>
+                  <StatusMark className="col-start-2" status={other.status} />
                 </li>
               ))}
             </ul>

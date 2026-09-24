@@ -157,10 +157,10 @@ export function TaskRow({ task, parentSlot = false }: { task: Task; parentSlot?:
             <span
               className={cn(
                 'flex w-(--ui-parent-slot) shrink-0 justify-end @max-list:w-auto @max-list:max-w-full @max-list:justify-start',
-                (task.parents ?? []).length === 0 && '@max-list:hidden',
+                task.parent == null && '@max-list:hidden',
               )}
             >
-              <ParentBadge parents={task.parents ?? []} childKey={task.key} />
+              <ParentBadge parent={task.parent} childKey={task.key} />
             </span>
           ) : null}
         </div>
