@@ -77,6 +77,11 @@ HTTP (`url` у него значит SSE); VS Code — корень `servers`, �
 
 ## Команда установки скила: `&&` ломается в Windows PowerShell 5.1, `mkdir -p` — нет, но случайно
 
+Скила и раздела экрана, который его ставил, в проекте больше нет (`TRK-146`, `UI-171`):
+дисциплину трекера агент получает от сервера сам при подключении. Три находки ниже
+про PowerShell 5.1 и кодировки остаются историей — тот же класс ошибок ждёт любую
+следующую команду этого экрана на две оболочки.
+
 **Что:** три отдельные находки `UI-118` про `mkdir -p ~/.claude/skills/tracker-agent &&
 docker compose exec -T mcp cat skill/tracker-agent/SKILL.md > ~/.claude/skills/tracker-agent/SKILL.md`.
 
@@ -118,7 +123,7 @@ BOM перед `---` сломал бы его чтение так же тихо.
 PowerShell, а PowerShell декодирует вывод внешней команды кодировкой
 `[Console]::OutputEncoding` — по умолчанию в Windows PowerShell 5.1 это кодовая
 страница системы, не UTF-8 (`about_Character_Encoding`, раздел про `$OutputEncoding`).
-Скил (`../skill/tracker-agent/SKILL.md`) — сплошь русский текст: без явного `[Console]::OutputEncoding =
+Скил был сплошь русским текстом: без явного `[Console]::OutputEncoding =
 [System.Text.Encoding]::UTF8` до вызова `docker` строки декодировались бы уже
 испорченными, и никакой выбор кодировки записи это не исправил бы задним числом.
 
@@ -139,5 +144,5 @@ PowerShell, а PowerShell декодирует вывод внешней ком�
 по документации Microsoft и исходнику движка PowerShell (или на настоящем Windows,
 когда он появится — `TRK-63`), а не в Linux-контейнере с pwsh.
 
-**Где:** `src/pages/connect/model/skill-command.ts`, `SKILL_COMMAND`;
-`install.ps1`, комментарий у `[System.IO.File]::WriteAllLines` (тот же приём против BOM).
+**Где:** `install.ps1`, комментарий у `[System.IO.File]::WriteAllLines` (тот же приём
+против BOM) — команда экрана и её файл сняты, `UI-171`.

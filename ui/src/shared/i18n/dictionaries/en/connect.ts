@@ -1,5 +1,5 @@
 /**
- * Экран «Подключить агента»: откуда взять токен, фрагменты под клиенты, скил дисциплины.
+ * Экран «Подключить агента»: откуда взять токен, фрагменты под клиенты, фраза о дисциплине.
  *
  * Подписи самих фрагментов живут в `ui.snippets`: их показывает и экран «Доступы».
  * Имена из кода (`{{placeholder}}`, `{{header}}`) приходят значениями из констант
@@ -7,7 +7,7 @@
  */
 export const connect = {
   intro:
-    'An agent works with Casefile over MCP: the address of this installation and a token in the <code>Authorization</code> header. Three steps, and the agent keeps its tasks in the tracker.',
+    'An agent works with Casefile over MCP: the address of this installation and a token in the <code>Authorization</code> header. Two steps, and the agent keeps its tasks in the tracker.',
   steps: 'Connection steps',
   token: {
     title: 'Get a token',
@@ -30,16 +30,6 @@ export const connect = {
     shared: 'Shared agent token: add <code>{{header}}</code>',
     loading: 'Reading the MCP address…',
   },
-  skill: {
-    title: 'Install the discipline skill',
-    optional: 'optional',
-    fromServer:
-      'The server hands the gist of the discipline to the client by itself when it connects, in the MCP instructions, and the full text as the <code>tracker-discipline</code> prompt. To keep the skill in the harness for good, put it in as a file. Claude Code: run this command in the installation directory.',
-    commandBashLabel: 'Command that installs the skill for Claude Code (bash/zsh)',
-    commandBashCaption: 'Terminal, in the installation directory',
-    commandPowerShellLabel: 'Command that installs the skill for Claude Code (PowerShell)',
-    commandPowerShellCaption: 'PowerShell, in the installation directory',
-    otherAgents:
-      'Other agents: the same file goes wherever their harness keeps skills or instructions.',
-  },
+  discipline:
+    'The agent gets the tracker rules from the server itself when it connects — there is nothing to install for them.',
 } as const;

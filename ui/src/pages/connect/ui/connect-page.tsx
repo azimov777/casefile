@@ -9,7 +9,6 @@ import {
   installationQueryOptions,
 } from '@/features/connect-agent';
 import { CopyBlock, QueryState } from '@/shared/ui';
-import { SKILL_COMMAND } from '../model/skill-command';
 
 /**
  * Токен агента этой машины без печати куда-либо, кроме терминала человека: установка
@@ -21,10 +20,13 @@ const AGENT_TOKEN_COMMAND =
   'docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token';
 
 /**
- * Экран «Подключить агента»: три шага по порядку — взять токен, вставить фрагмент под
- * свой клиент, поставить скил дисциплины.
+ * Экран «Подключить агента»: два шага по порядку — взять токен, вставить фрагмент под
+ * свой клиент. Третьего шага, ставившего скил дисциплины файлом, больше нет: сервер
+ * отдаёт правила работы с трекером агенту сам при подключении, `instructions` MCP и
+ * метадатой инструментов (решение владельца `TRK-140#8`, скил снят `TRK-146`, экран —
+ * `UI-171`). Под списком шагов стоит одна фраза об этом вместо снятого раздела.
  *
- * Шаги — нумерованный список, а не три раздела подряд (UI-131): человек, открывший экран
+ * Шаги — нумерованный список, а не разделы подряд (UI-131): человек, открывший экран
  * впервые, видит, с чего начать и что после чего, а ключевое действие каждого шага —
  * блок копирования — стоит первым, объяснение идёт следом. Всё на экране одной колонки
  * (`--ui-column-max`): текст и блоки кода одной ширины, справа от текста не остаётся
@@ -126,28 +128,11 @@ export function ConnectPage() {
             <ConnectionSnippets mcpUrl={installation.data.mcp_url} labelled={shared} />
           )}
         </Step>
-
-        <Step number={3} title={t('skill.title')} note={t('skill.optional')}>
-          <Text>
-            <Trans t={t} i18nKey="skill.fromServer" values={values} components={code} />
-          </Text>
-          {/* Обе оболочки сразу, а не одна по умолчанию: угадывать оболочку по
-              `navigator.userAgent` запрещено (`UI-114`, решение UI-114#5) — в PowerShell
-              5.1 у команды свои три расхождения с bash/zsh (`UI-118`,
-              `src/pages/connect/model/skill-command.ts`). */}
-          <CopyBlock
-            label={t('skill.commandBashLabel')}
-            caption={t('skill.commandBashCaption')}
-            text={SKILL_COMMAND.bashZsh}
-          />
-          <CopyBlock
-            label={t('skill.commandPowerShellLabel')}
-            caption={t('skill.commandPowerShellCaption')}
-            text={SKILL_COMMAND.powerShell}
-          />
-          <Hint>{t('skill.otherAgents')}</Hint>
-        </Step>
       </ol>
+
+      {/* Раздел установки скила дисциплины снят (TRK-146, UI-171): скила в проекте
+          больше нет, и ставить агенту нечего. Одна фраза на его месте вместо шага. */}
+      <Hint>{t('discipline')}</Hint>
     </main>
   );
 }
@@ -155,7 +140,7 @@ export function ConnectPage() {
 /**
  * Шаг подключения: номер на полях слева, заголовок второго уровня и содержимое.
  *
- * Номер виден глазу, а диктору его говорит сам нумерованный список («1 из 3»), поэтому
+ * Номер виден глазу, а диктору его говорит сам нумерованный список («N из M»), поэтому
  * кружок от него спрятан: иначе номер прозвучал бы дважды.
  */
 function Step({
