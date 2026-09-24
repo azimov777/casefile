@@ -933,6 +933,12 @@ curl https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.azim
 
 Ответ называет версию только что вышедшего тега с `isLatest: true`.
 
+Затем идут площадки. GitHub Release руками создают из заметок к выпуску:
+`gh release create vX.Y.Z --verify-tag --title "Casefile vX.Y.Z" --notes-file docs/release-notes/vX.Y.Z.md --latest`.
+От него сама обновляется версия в Glama (Auto-Release). Что на каких площадках (GitHub,
+Glama, mcp.so, списки awesome, каталоги поверх реестра) обновляется само, а что руками и где, —
+таблица в деле `TRK-138#12`.
+
 ## Продакшен-контур
 
 Продакшен-контур — это установка Casefile целиком (база, API, MCP, интерфейс) из готовых
