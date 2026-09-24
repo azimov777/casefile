@@ -124,10 +124,9 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel, Field
 
-from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.domain.authors import Author
-from app.mcp.enums import AuthorKindSchema, ParticipantKindSchema
+from app.mcp.enums import AuthorKindSchema
 
 
 class AuthorView(BaseModel):
@@ -156,80 +155,6 @@ def queue_ref(queue: Queue) -> QueueRefView:
     коротко, обязана выглядеть одинаково везде, где она не главный предмет ответа.
     """
     return QueueRefView(key=queue.key, title=queue.title)
-
-
-class QueueView(BaseModel):
-    """Queue with its description."""
-
-    key: str
-    title: str
-    description: str = Field(
-        description=(
-            "Shared context of all tasks of the queue: where the code lives, which "
-            "documents apply, what is out of bounds. Task cards carry only the queue's "
-            "key and title"
-        )
-    )
-
-
-def queue(item: Queue) -> QueueView:
-    """Очередь с описанием — общим контекстом всех её задач.
-
-    Короче ответа REST: `id`, счётчик номеров и времена правки интерфейсу нужны, а
-    агенту — нет, и каждое лишнее поле здесь оплачено его контекстом.
-    """
-    return QueueView(key=item.key, title=item.title, description=item.description)
-
-
-# Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания.
-#
-# `create_queue` канонизирует регистр — это единственное, чего вызывающий не мог
-# знать заранее. `update_queue` ключ не меняет вовсе, но повторяет его по тому же
-# правилу, что и `MutationView`: ответ должен читаться сам по себе. Название и
-# описание вызывающий прислал сам; итог, если нужен, отдаёт `get_queue` (TRK-144).
-class QueueKeyView(BaseModel):
-    """Queue key in its stored, upper-case form; the queue in full is returned by
-    `get_queue`.
-    """
-
-    key: str
-
-
-def queue_key(item: Queue) -> QueueKeyView:
-    """Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания."""
-    return QueueKeyView(key=item.key)
-
-
-class ParticipantView(BaseModel):
-    """Registry participant: a possible addressee of a question."""
-
-    kind: ParticipantKindSchema
-    name: str
-    description: str
-
-
-def participant(item: Participant) -> ParticipantView:
-    """Участник реестра: кому можно адресовать вопрос и что о нём известно."""
-    return ParticipantView(kind=item.kind, name=item.name, description=item.description)
-
-
-# Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания.
-#
-# `register_participant` канонизирует регистр — единственное новое здесь. `name` у
-# правки не меняется вовсе, но остаётся в ответе по тому же правилу, что и ключ у
-# `MutationView`: ответ должен читаться сам по себе. Род и описание вызывающий
-# прислал сам; реестр целиком, если нужен итог, отдаёт `list_participants` (TRK-144).
-class ParticipantNameView(BaseModel):
-    """Participant name in its stored, lower-case form; the registry is returned by
-    `list_participants`.
-    """
-
-    name: str
-
-
-def participant_name(item: Participant) -> ParticipantNameView:
-    """Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания."""
-    return ParticipantNameView(name=item.name)
 
 
 # Страница выдачи. Форма одна у всех инструментов, которые её отдают.

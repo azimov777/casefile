@@ -43,7 +43,6 @@ from pydantic import Field
 
 from app.domain.idempotency import KEY_TTL
 from app.domain.journal import JOURNAL_START, MAX_TASK_KEYS, MAX_WAIT_SECONDS
-from app.mcp.enums import ParticipantKindSchema
 
 # --- Адресация ------------------------------------------------------------------------
 
@@ -63,38 +62,6 @@ QueueKeyArg = Annotated[
             "Queue key, case-insensitive. An unknown key is refused with `queue_not_found`"
         ),
         examples=["TRK"],
-    ),
-]
-NewQueueKeyArg = Annotated[
-    str,
-    Field(
-        description=(
-            "Key of the new queue: a Latin letter followed by 1–15 Latin letters or digits "
-            "(`invalid_queue_key` otherwise). It is stored upper-case, never changes and "
-            "prefixes the key of every task of the queue. A key already taken, in any "
-            "case, is refused with `queue_key_taken`"
-        ),
-        examples=["TRK"],
-    ),
-]
-ParticipantNameArg = Annotated[
-    str,
-    Field(
-        description=(
-            "Participant name, case-insensitive. An unknown name is refused with "
-            "`participant_not_found`"
-        )
-    ),
-]
-NewParticipantNameArg = Annotated[
-    str,
-    Field(
-        description=(
-            "Name of the new participant: a Latin letter followed by 1–63 Latin letters, "
-            "digits or `_` (`invalid_participant_name` otherwise). It is stored "
-            "lower-case and never changes: it signs the participant's entries. A name "
-            "already taken, in any case, is refused with `participant_name_taken`"
-        )
     ),
 ]
 
@@ -162,31 +129,4 @@ TimeoutArg = Annotated[
             "once. An empty page after the wait means nothing happened and is not an error"
         )
     ),
-]
-
-# --- Реестры ------------------------------------------------------------------------
-
-ParticipantKindArg = Annotated[ParticipantKindSchema, Field(description="Human or permanent agent")]
-ParticipantDescriptionArg = Annotated[
-    str,
-    Field(
-        description=(
-            "Who the participant is: all that a reader of a case learns about the author "
-            "of an entry"
-        )
-    ),
-]
-QueueTitleArg = Annotated[str, Field(description="Queue title")]
-QueueDescriptionArg = Annotated[
-    str,
-    Field(description="Queue description in markdown: the shared context of all its tasks"),
-]
-# Отдельные аннотации для правки: `None` здесь означает «не передано». Осмысленного
-# `null` ни у названия, ни у описания нет, поэтому третьего состояния и не нужно — в
-# отличие от исполнителя задачи, который `null` как раз снимается.
-QueueTitleChangeArg = Annotated[
-    str | None, Field(description="New title; when left out, the title stays")
-]
-QueueDescriptionChangeArg = Annotated[
-    str | None, Field(description="New description; when left out, the description stays")
 ]

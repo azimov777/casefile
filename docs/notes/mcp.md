@@ -441,7 +441,7 @@ Glama, а не кодом; stdio-путь держит `tests/test_mcp_stdio.py`
 Где развилки нет (`link`/`unlink`, `create_task`), фразы нет: описания едут в контекст
 каждого вызова. Меняя первую строку докстринга, поправить её английский пересказ в
 `README.md`, раздел `## Tools` (тест сверяет только имена, текст — нет).
-**Где:** `app/mcp/tools/registry.py`, `get_queue`; `app/mcp/tools/case/read_entries.py`,
+**Где:** `app/mcp/tools/registries/get_queue.py`, `get_queue`; `app/mcp/tools/case/read_entries.py`,
 `read_entries`; `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/tasks/transition.py`,
 `transition`; `app/domain/tasks.py`, `check_done_is_reached_by_closing`.
 **Обновлено TRK-145:** повелительное «бери `X`» теперь ловит
