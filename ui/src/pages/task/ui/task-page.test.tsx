@@ -584,18 +584,20 @@ describe('блок «Связи» (UI-125)', () => {
     const groupHeadings = within(section as HTMLElement).getAllByRole('heading', { level: 3 });
     expect(groupHeadings).toHaveLength(3);
 
-    const blockedByHeading = groupHeadings.find((node) => node.textContent?.includes('blocked_by'));
+    const kindOf = (node: HTMLElement) =>
+      node.querySelector('[data-mark="link-kind"]')?.getAttribute('data-kind');
+    const blockedByHeading = groupHeadings.find((node) => kindOf(node) === 'blocked_by');
     expect(blockedByHeading).toBeDefined();
-    // Идентификатор контракта рядом с подписью на языке человека — не вместо неё.
-    expect(blockedByHeading).toHaveTextContent('blocked_by');
+    // Заголовок — подпись на языке человека, без идентификатора вида рядом (UI-168).
     expect(blockedByHeading).toHaveTextContent(say.ui('task.links.kind.blocked_by'));
+    expect(blockedByHeading).not.toHaveTextContent('blocked_by');
     // Счётчик группы считает её собственные задачи, а не связи целиком.
     expect(blockedByHeading).toHaveTextContent(say.task('linkGroup.count', { count: 2 }));
 
     // Порядок групп значимый: то, что держит задачу, стоит первым.
-    const order = groupHeadings.map((node) => node.textContent ?? '');
-    expect(order.findIndex((text) => text.includes('blocked_by'))).toBe(0);
-    expect(order.findIndex((text) => text.includes('relates'))).toBe(order.length - 1);
+    const order = groupHeadings.map(kindOf);
+    expect(order.indexOf('blocked_by')).toBe(0);
+    expect(order.indexOf('relates')).toBe(order.length - 1);
 
     // Прежней плашки слева больше нет: у знака вида связи своя разметка.
     expect(section?.querySelector('[data-mark="link-kind"]')).not.toBeNull();
@@ -624,7 +626,7 @@ describe('блок «Связи» (UI-125)', () => {
       .getAllByRole('heading', { level: 3 })
       .map((node) => node.closest('section') as HTMLElement);
     const groupOf = (kind: string) =>
-      groups.find((group) => group.querySelector('h3')?.textContent?.includes(kind));
+      groups.find((group) => group.querySelector(`h3 [data-kind="${kind}"]`) !== null);
 
     const parentGroup = groupOf('child') as HTMLElement;
     const childrenGroup = groupOf('parent') as HTMLElement;
