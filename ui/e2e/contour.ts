@@ -127,7 +127,7 @@ export async function fontsReady(page: Page): Promise<void> {
 }
 
 /**
- * Боковая панель оболочки: очереди, входящая со счётчиком, участник, состояние потока
+ * Боковая панель оболочки: проекты, входящая со счётчиком, участник, состояние потока
  * и выход. До UI-38 всё это стояло в шапке, и тесты искали его в `banner`.
  */
 export function side(page: Page): Locator {
@@ -233,7 +233,7 @@ export async function tasksByStatus(
 ): Promise<Map<string, string[]>> {
   const shown: Record<string, string> = archive ? {} : { query: outsideArchive(now) };
   const query = new URLSearchParams({
-    queue: 'DEMO',
+    project: 'DEMO',
     fields: 'status',
     limit: '100',
     ...shown,

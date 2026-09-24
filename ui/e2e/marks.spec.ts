@@ -15,7 +15,7 @@ async function shotOf(page: Page, status: string): Promise<Buffer> {
 
 test('статусы различаются формой: разница держится без цвета', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(page.getByRole('region', { name: 'done' })).toBeVisible();
   await fontsReady(page);
 
@@ -48,7 +48,7 @@ test('колонка «Приоритет» не выросла: знак вме
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.locator('tbody tr').first()).toBeVisible();
   await fontsReady(page);
 

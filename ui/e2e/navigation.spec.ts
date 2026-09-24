@@ -4,7 +4,7 @@ import { fontsReady, layoutSettled, silenceJournal } from './contour';
 test('возврат в список не теряет отбор, с которым человек ушёл', async ({ page }) => {
   await silenceJournal(page);
 
-  const listed = '/tasks?queue=DEMO&status=open';
+  const listed = '/tasks?project=DEMO&status=open';
   await page.goto(listed);
   // Дожидаемся строк, а не считаем сразу: `count()` не ждёт, и до прихода выдачи
   // таблица пуста — счётчик снял бы ноль и сравнивал его сам с собой.
@@ -95,15 +95,15 @@ test('номер записи, которой в деле нет, объясня
 test('смена вида сохраняет отбор в обе стороны и не заводит второго пути', async ({ page }) => {
   await silenceJournal(page);
 
-  const listed = '/tasks?queue=DEMO&status=open&status=in_progress&sort=key';
+  const listed = '/tasks?project=DEMO&status=open&status=in_progress&sort=key';
   await page.goto(listed);
   await expect(page.getByRole('table')).toBeVisible();
 
-  // Таблица → доска: раньше отсюда уходили на голое `/tasks?view=board`, и очередь
+  // Таблица → доска: раньше отсюда уходили на голое `/tasks?view=board`, и проект
   // с остальными условиями оставались позади молча.
   await page.getByRole('link', { name: 'Доска' }).click();
   await expect(page).toHaveURL(/view=board/);
-  await expect(page).toHaveURL(/queue=DEMO/);
+  await expect(page).toHaveURL(/project=DEMO/);
   await expect(page).toHaveURL(/status=in_progress/);
   await expect(page).toHaveURL(/sort=key/);
   await expect(page.getByRole('region', { name: 'open' })).toBeVisible();
@@ -119,13 +119,13 @@ test('смена вида сохраняет отбор в обе стороны
 test('возврат с доски в задачу и назад сохраняет и вид, и условия', async ({ page }) => {
   await silenceJournal(page);
 
-  await page.goto('/tasks?queue=DEMO&view=board&assignee=demo_agent');
+  await page.goto('/tasks?project=DEMO&view=board&assignee=demo_agent');
   const card = page.getByRole('article').first();
   await expect(card).toBeVisible();
   await card.getByRole('link').first().click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-\d+$/);
 
-  // Место не врёт: очередь задачи прочитана из её ключа и подсвечена в панели —
+  // Место не врёт: проект задачи прочитан из её ключа и подсвечена в панели —
   // подробнее это проверяет `side.spec.ts`.
   await expect(page.getByLabel('Где я')).toContainText('DEMO');
 

@@ -431,7 +431,7 @@ describe('доска под живым потоком', () => {
 
   async function openBoard(): Promise<void> {
     board();
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
     await screen.findByRole('region', { name: 'open' });
     await within(column('open')).findByRole('article');
     await waitFor(() => expect(columnRequests()).toHaveLength(4));

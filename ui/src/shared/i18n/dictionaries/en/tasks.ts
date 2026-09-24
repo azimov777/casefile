@@ -12,7 +12,7 @@ export const tasks = {
   found_other: '{{count, number}} tasks found',
   empty: 'No tasks match these conditions',
   // Пустота при скрытом архиве: сказать, что за ней может стоять архив, и дать его
-  // показать — иначе «задач нет» читалось бы выводом обо всей очереди.
+  // показать — иначе «задач нет» читалось бы выводом обо всём проекте.
   archiveHidden: 'The archive is not shown.',
   showArchive: 'Show the archive',
   resetFilters: 'Reset the filters',
@@ -106,7 +106,7 @@ export const tasks = {
       note: 'The query replaces the simple selection; the archive is still up to the checkbox on the right.',
       // Пример на языке запросов бэкенда, а не фраза: он одинаков на любом языке
       // (освобождён в `dictionaries.test.ts`).
-      placeholder: 'queue: DEMO and status: open and blocked: false',
+      placeholder: 'project: DEMO and status: open and blocked: false',
       errorAt: 'The error is at character {{position}}.',
       allowed: 'Allowed: {{list}}',
       stale: 'The rows of the previous selection are shown.',

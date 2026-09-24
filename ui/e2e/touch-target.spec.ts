@@ -33,7 +33,7 @@ const SCREENS: [string, string, (page: Page) => Promise<unknown>][] = [
   ['дело', '/tasks/DEMO-3/case', (page) => expect(page.locator('article').first()).toBeVisible()],
   [
     'список задач',
-    '/tasks?queue=DEMO',
+    '/tasks?project=DEMO',
     (page) => expect(page.locator('tbody tr').first()).toBeVisible(),
   ],
 ];
@@ -103,7 +103,7 @@ for (const [name, url, ready] of SCREENS) {
   });
 }
 
-test('ссылки вне абзацев не мельче 24×24 px на 390: возврат и крошка очереди', async ({ page }) => {
+test('ссылки вне абзацев не мельче 24×24 px на 390: возврат и крошка проекта', async ({ page }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 
@@ -117,17 +117,17 @@ test('ссылки вне абзацев не мельче 24×24 px на 390: �
   expect(back, 'ссылка «← Ко всем задачам» не найдена').not.toBeNull();
   expect(Math.min(back!.width, back!.height), '← Ко всем задачам').toBeGreaterThanOrEqual(MIN);
 
-  // Крошка очереди — ссылка только на карточке и в деле (на самом списке она текущее
-  // место, не ссылка): демо-очередь `DEMO` шире 24 px даже без минимума, поэтому здесь
+  // Крошка проекта — ссылка только на карточке и в деле (на самом списке он текущее
+  // место, не ссылка): демо-проект `DEMO` шире 24 px даже без минимума, поэтому здесь
   // же проверяется и вычисленный `min-width`, а не только по случаю широкий рендер —
   // короткие ключи (`UI`, `TRK` на установке владельца) без него остались бы мельче.
   const crumb = page.getByRole('link', { name: 'DEMO', exact: true });
   const crumbBox = await crumb.boundingBox();
-  expect(crumbBox, 'крошка очереди «DEMO» не найдена').not.toBeNull();
-  expect(Math.min(crumbBox!.width, crumbBox!.height), 'крошка очереди').toBeGreaterThanOrEqual(MIN);
+  expect(crumbBox, 'крошка проекта «DEMO» не найдена').not.toBeNull();
+  expect(Math.min(crumbBox!.width, crumbBox!.height), 'крошка проекта').toBeGreaterThanOrEqual(MIN);
 
   const minWidth = await crumb.evaluate((node) => getComputedStyle(node).minWidth);
-  expect(minWidth, 'крошка очереди: вычисленный min-width').toBe('24px');
+  expect(minWidth, 'крошка проекта: вычисленный min-width').toBe('24px');
 });
 
 test('вкладки клиента на /connect не мельче 24×24 px на 390', async ({ page }) => {
@@ -169,7 +169,7 @@ test('чип отбора и «Сбросить» не мельче 24×24 px н
 }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: WIDTH, height: HEIGHT });
-  await page.goto('/tasks?queue=DEMO&status=open');
+  await page.goto('/tasks?project=DEMO&status=open');
   await expect(page.getByRole('main')).toBeVisible();
   await expect(page.locator('tbody tr').first()).toBeVisible();
   await fontsReady(page);
@@ -258,7 +258,7 @@ test.describe('тёмная тема', () => {
   }) => {
     await silenceJournal(page);
     await page.setViewportSize({ width: WIDTH, height: HEIGHT });
-    await page.goto('/tasks?queue=DEMO&status=open');
+    await page.goto('/tasks?project=DEMO&status=open');
     await expect(page.getByRole('main')).toBeVisible();
     await expect(page.locator('tbody tr').first()).toBeVisible();
     await fontsReady(page);

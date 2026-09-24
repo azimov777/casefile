@@ -19,12 +19,12 @@ function filters(overrides: Partial<TaskFilters> = {}): TaskFilters {
 describe('чтение отбора из адреса', () => {
   it('разбирает повторяющиеся параметры и флажки', () => {
     const params = new URLSearchParams(
-      'queue=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&page=3',
+      'project=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&page=3',
     );
 
     expect(readFilters(params)).toEqual({
       view: 'table',
-      queue: 'DEMO',
+      project: 'DEMO',
       status: ['open', 'in_progress'],
       priority: ['high'],
       assignee: 'owner',
@@ -56,10 +56,10 @@ describe('чтение отбора из адреса', () => {
   });
 
   it('старая ссылка с курсором открывает начало списка: курсора в адресе больше нет', () => {
-    const parsed = readFilters(new URLSearchParams('queue=DEMO&cursor=eyJrIjog'));
+    const parsed = readFilters(new URLSearchParams('project=DEMO&cursor=eyJrIjog'));
 
     expect(parsed.page).toBe(1);
-    expect(parsed.queue).toBe('DEMO');
+    expect(parsed.project).toBe('DEMO');
     expect(writeFilters(parsed).has('cursor')).toBe(false);
   });
 });
@@ -97,7 +97,7 @@ describe('запись отбора в адрес', () => {
 
   it('переживает круг: адрес → отбор → адрес', () => {
     const source = new URLSearchParams(
-      'queue=DEMO&status=open&priority=low&assignee=owner&text=очередь&blocked=true&questions=true&sort=key&page=4',
+      'project=DEMO&status=open&priority=low&assignee=owner&text=журнал&blocked=true&questions=true&sort=key&page=4',
     );
 
     expect(writeFilters(readFilters(source)).toString()).toBe(source.toString());
@@ -107,11 +107,11 @@ describe('запись отбора в адрес', () => {
 describe('перевод отбора в параметры запроса', () => {
   it('структурные условия уезжают своими параметрами', () => {
     const params = filtersToListParams(
-      filters({ queue: 'DEMO', status: ['open'], blocked: true, text: '  поиск  ' }),
+      filters({ project: 'DEMO', status: ['open'], blocked: true, text: '  поиск  ' }),
     );
 
     expect(params).toMatchObject({
-      queue: ['DEMO'],
+      project: ['DEMO'],
       status: ['open'],
       blocked: true,
       text: 'поиск',
@@ -137,7 +137,7 @@ describe('перевод отбора в параметры запроса', () 
 
   it('заполненное поле запроса отменяет структурный отбор целиком', () => {
     const params = filtersToListParams(
-      filters({ queue: 'DEMO', status: ['open'], withQuestions: true, query: ' status: done ' }),
+      filters({ project: 'DEMO', status: ['open'], withQuestions: true, query: ' status: done ' }),
     );
 
     // Правило архива остаётся и поверх запроса: его строка складывается с правилом
@@ -198,7 +198,7 @@ describe('архив', () => {
   });
 
   it('показанный живёт в адресе словом `shown` и переживает круг', () => {
-    const source = new URLSearchParams('queue=DEMO&archive=shown');
+    const source = new URLSearchParams('project=DEMO&archive=shown');
 
     const parsed = readFilters(source);
     expect(parsed.showArchive).toBe(true);

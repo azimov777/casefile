@@ -23,7 +23,7 @@ test('отказ шапки объясняется по-русски и чини
     });
   });
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const panel = side(page);
   await expect(panel.getByRole('alert')).toHaveText('База данных недоступна.', {
@@ -67,7 +67,7 @@ test('отказ списка объясняется по коду и повто
   });
 
   // 4xx не повторяется молча: человек видит объяснение сразу.
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const failure = page.getByRole('main').getByRole('alert');
   await expect(failure).toHaveText('Такого поля отбора нет.');

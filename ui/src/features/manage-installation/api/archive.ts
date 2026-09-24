@@ -19,7 +19,7 @@ export async function exportInstallationArchive(): Promise<InstallationArchiveUp
 }
 
 /**
- * Принимает архив в эту установку. Требует администратора и установки без очередей
+ * Принимает архив в эту установку. Требует администратора и установки без проектов
  * (`403 admin_required`, `409 installation_not_empty`); архив снят более новой версией
  * — `409 archive_revision_unknown`.
  *

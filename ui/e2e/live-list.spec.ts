@@ -172,13 +172,13 @@ async function framesSeen(page: Page): Promise<number> {
 }
 
 /**
- * Задачи очереди `DEMO` в порядке таблицы по умолчанию — «свежие в деле сверху», —
+ * Задачи проекта `DEMO` в порядке таблицы по умолчанию — «свежие в деле сверху», —
  * по правде бэкенда. Последняя на первой странице — та, чей подъём наверх виден
  * сразу: запись выносит её с конца страницы в начало.
  */
 async function tableOrder(request: APIRequestContext): Promise<string[]> {
   const response = await request.get(
-    `/api/v1/tasks?queue=DEMO&fields=status&limit=${TABLE_PAGE}&sort=-last_entry_at`,
+    `/api/v1/tasks?project=DEMO&fields=status&limit=${TABLE_PAGE}&sort=-last_entry_at`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   expect(response.status()).toBe(200);
@@ -198,7 +198,7 @@ test.describe('список под живым потоком', () => {
     page,
     request,
   }) => {
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(rows(page).first()).toBeVisible();
 
     const before = { keys: await keys(page), tops: await tops(page) };
@@ -228,7 +228,7 @@ test.describe('список под живым потоком', () => {
     // Задача в незакрытом статусе: у `done` и `cancelled` не меняется ничего
     // (`409 task_closed`), а какая из демо-задач сейчас открыта — знает бэкенд.
     const listed = await request.get(
-      '/api/v1/tasks?queue=DEMO&status=open&fields=priority&limit=1&sort=key',
+      '/api/v1/tasks?project=DEMO&status=open&fields=priority&limit=1&sort=key',
       { headers: { Authorization: `Bearer ${token}` } },
     );
     expect(listed.status()).toBe(200);
@@ -237,7 +237,7 @@ test.describe('список под живым потоком', () => {
     const key = (target as { key: string }).key;
     const was = (target as { priority: string }).priority === 'critical' ? 'high' : 'critical';
 
-    await page.goto('/tasks?queue=DEMO&status=open&sort=key');
+    await page.goto('/tasks?project=DEMO&status=open&sort=key');
     await expect(rows(page).first()).toBeVisible();
 
     const row = page
@@ -260,7 +260,7 @@ test.describe('список под живым потоком', () => {
   });
 
   test('возврат из фона не выливает накопленное на экран', async ({ page, request }) => {
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(rows(page).first()).toBeVisible();
     const before = { keys: await keys(page), tops: await tops(page) };
 
@@ -330,7 +330,7 @@ test.describe('список под живым потоком', () => {
     const tableCalls = watchListings(page, isTableRequest);
     const target = (await tableOrder(request)).at(-1) as string;
 
-    await page.goto('/tasks?queue=DEMO&view=board');
+    await page.goto('/tasks?project=DEMO&view=board');
     await expect(
       page.getByRole('region', { name: 'open' }).getByRole('article').first(),
     ).toBeVisible();
@@ -377,7 +377,7 @@ test.describe('список под живым потоком', () => {
   }) => {
     const tableCalls = watchListings(page, isTableRequest);
 
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(rows(page).first()).toBeVisible();
     await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
 
@@ -416,7 +416,7 @@ test.describe('список под живым потоком', () => {
     const tableCalls = watchListings(page, isTableRequest);
     const target = (await tableOrder(request)).at(-1) as string;
 
-    await page.goto('/tasks?queue=DEMO&view=board');
+    await page.goto('/tasks?project=DEMO&view=board');
     await expect(
       page.getByRole('region', { name: 'open' }).getByRole('article').first(),
     ).toBeVisible();
@@ -478,7 +478,7 @@ test.describe('список под живым потоком', () => {
     // Гашение и подъём бэкенда — минуты, а не секунды.
     test.setTimeout(240_000);
 
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(rows(page).first()).toBeVisible();
     const before = { keys: await keys(page), tops: await tops(page) };
 
@@ -560,7 +560,7 @@ test.describe('полоса обновлений не закрывает под�
     test(`на ${width} px подвал панели виден и нажимается целиком`, async ({ page, request }) => {
       await signedInByHand(page);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto('/tasks?queue=DEMO');
+      await page.goto('/tasks?project=DEMO');
       await expect(rows(page).first()).toBeVisible();
 
       const name = side(page).getByText('owner');
@@ -703,7 +703,7 @@ test.describe('полоса обновлений не спорит за мест
     }) => {
       await signedInByHand(page);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto('/tasks?queue=DEMO');
+      await page.goto('/tasks?project=DEMO');
       await expect(rows(page).first()).toBeVisible();
       await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
       // Кадр с вопросом, обогнавший участника, уведомления не даст: «спросили ли меня»
@@ -1003,7 +1003,7 @@ test.describe('стопка над полосой обновлений вста�
     request,
   }) => {
     await page.setViewportSize({ width: 768, height: 900 });
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(rows(page).first()).toBeVisible();
     await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
     // Кадр с вопросом, обогнавший участника, уведомления не даст (`shellReady`).
@@ -1135,7 +1135,7 @@ test.describe('стопка над полосой обновлений вста�
     request,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(rows(page).first()).toBeVisible();
     await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
     await shellReady(page);

@@ -12,7 +12,7 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
 test('подробность живого потока открывается нажатием на индикатор', async ({ page }) => {
   // Поток не глушится: нужен настоящий «на связи», а не вечное «подключаемся».
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   const banner = page.getByRole('banner');
   await expect(banner.getByText('на связи')).toBeVisible();
 
@@ -56,7 +56,7 @@ test('в строке списка знак признака не перехва
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const mark = page
     .locator('tbody [data-mark="feature"]')
@@ -79,7 +79,7 @@ test('значение набора токена раскрывается наж
   // Ключ контура — набора `main` (TRK-69): такой доступ в списке есть всегда.
   const own = page.locator('article[data-token-scope="main"]').first();
   const scope = own.getByRole('button', { name: 'Что открывает набор main' });
-  const hint = own.getByText('Рабочий цикл плюс запись реестров: участники, токены и очереди.');
+  const hint = own.getByText('Рабочий цикл плюс запись реестров: участники, токены и проекты.');
   await expect(hint).toBeHidden();
 
   await scope.tap();

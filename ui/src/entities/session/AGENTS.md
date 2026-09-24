@@ -11,4 +11,4 @@
 
 - `index.ts` — публичный интерфейс среза: `bootstrapQueryOptions`, `fetchBootstrap`,
   `sessionKeys`, `useSessionToken`, `useSessionExpired`, `markSessionExpired`,
-  `resetSessionExpiry`, типы `Bootstrap`, `Participant`, `Queue`
+  `resetSessionExpiry`, типы `Bootstrap`, `Participant`, `Project`

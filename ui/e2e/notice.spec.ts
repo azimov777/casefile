@@ -17,7 +17,7 @@ import { curve, fontsReady, ms, readFrame, shellReady } from './contour';
 async function fakeJournal(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const encoder = new TextEncoder();
-    let sink: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let sink: WritableStreamDefaultWriter<Uint8Array> | null = null;
     const network = window.fetch.bind(window);
 
     window.fetch = (input, init) => {
@@ -27,13 +27,13 @@ async function fakeJournal(page: Page): Promise<void> {
 
       // Поток не кончается: клиент считает закрытие сервером обрывом и через паузу
       // переподключается, а нам нужно одно соединение на весь сценарий.
-      const body = new ReadableStream<Uint8Array>({
-        start: (controller) => {
-          sink = controller;
-        },
-      });
+      const pipe = new TransformStream<Uint8Array, Uint8Array>();
+      sink = pipe.writable.getWriter();
       return Promise.resolve(
-        new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+        new Response(pipe.readable, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
       );
     };
 
@@ -53,7 +53,7 @@ async function fakeJournal(page: Page): Promise<void> {
           type: 'question',
           payload: { addressees: ['owner'], blocking: false },
         };
-        sink?.enqueue(encoder.encode(`data: ${JSON.stringify(entry)}\n\n`));
+        void sink?.write(encoder.encode(`data: ${JSON.stringify(entry)}\n\n`));
       },
     });
   });
@@ -105,7 +105,7 @@ async function motionSettled(page: Page): Promise<void> {
 
 test('уведомление о вопросе приходит и уходит движением из словаря', async ({ page }) => {
   await fakeJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
   // Кадр, пришедший раньше участника, уведомления не даст: «спросили ли меня»
   // сверяется с именем из `bootstrap`, а он приезжает после первой отрисовки.
@@ -515,7 +515,7 @@ test('закрытая карточка доезжает до конца вых�
 
 test('человек просит не двигать интерфейс — уведомление перестаёт ехать', async ({ page }) => {
   await fakeJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
   // Кадр, пришедший раньше участника, уведомления не даст: «спросили ли меня»
   // сверяется с именем из `bootstrap`, а он приезжает после первой отрисовки.

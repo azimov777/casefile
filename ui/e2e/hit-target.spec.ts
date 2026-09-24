@@ -37,7 +37,7 @@ async function dragAcross(page: Page, target: Locator): Promise<void> {
 
 test('в задачу ведёт название и пустое место строки, а не только ключ', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   // Название — самая широкая и самая заметная ячейка: раньше это был мёртвый текст.
   await row(page, 'DEMO-3').getByRole('link').click();
@@ -55,7 +55,7 @@ test('клик по ключу ведёт в ту же задачу: он пер
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await settled(page);
 
   // Ключ ничем не перекрыт: человек целится в него и попадает в задачу, потому что
@@ -74,7 +74,7 @@ test('клик по ключу ведёт в ту же задачу: он пер
 test('текст вне ссылки выделяется и не уводит со страницы', async ({ page }) => {
   await silenceJournal(page);
   // Отбор по исполнителю: нужны строки, у которых имя исполнителя вообще есть.
-  await page.goto('/tasks?queue=DEMO&assignee=demo_agent');
+  await page.goto('/tasks?project=DEMO&assignee=demo_agent');
   await settled(page);
 
   const assignee = page.locator('tbody tr').first().getByText('demo_agent', { exact: true });
@@ -89,7 +89,7 @@ test('текст вне ссылки выделяется и не уводит �
 
 test('cmd-клик по строке открывает задачу второй вкладкой', async ({ page, context }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
   const [opened] = await Promise.all([
@@ -127,7 +127,7 @@ test('cmd-клик по строке открывает задачу второ�
 test('обход табом даёт одну остановку на задачу, и фокус виден', async ({ page, request }) => {
   const shown = await shownKeys(request);
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await settled(page);
   const rows = page.locator('tbody tr');
   await expect(rows).toHaveCount(shown.length);
@@ -170,7 +170,7 @@ test('обход табом даёт одну остановку на задач
 test('доступность списка и доски с растянутой ссылкой', async ({ page }) => {
   await silenceJournal(page);
 
-  for (const address of ['/tasks?queue=DEMO', '/tasks?queue=DEMO&view=board']) {
+  for (const address of ['/tasks?project=DEMO', '/tasks?project=DEMO&view=board']) {
     await page.goto(address);
     const found = await new AxeBuilder({ page }).analyze();
     expect(found.violations, address).toEqual([]);
@@ -179,7 +179,7 @@ test('доступность списка и доски с растянутой 
 
 test('карточка доски ведёт в задачу целиком', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await shellReady(page);
 
   const card = page.getByRole('article').filter({ hasText: 'DEMO-3' }).first();

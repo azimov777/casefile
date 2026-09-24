@@ -37,7 +37,7 @@ async function create(request: APIRequestContext, title: string): Promise<string
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title,
       description: 'Заведена сквозным тестом UI-119: подпись родителя на карточке и в строке.',
       assignee: PROBE,
@@ -157,13 +157,13 @@ test('длинное название родителя — одна строка
      * Ширина задана токеном `--ui-board-column`, и сравнивается она с той, что под
      * карточками с подписями, — а не с числом, выписанным здесь.
      */
-    await page.goto('/tasks?queue=DEMO&view=board&assignee=никого-с-таким-именем-нет');
+    await page.goto('/tasks?project=DEMO&view=board&assignee=никого-с-таким-именем-нет');
     await expect(column(page, BORN)).toBeVisible();
     await expect(column(page, BORN).getByRole('article')).toHaveCount(0);
     await fontsReady(page);
     const empty = await lane(column(page, BORN));
 
-    await page.goto(`/tasks?queue=DEMO&view=board&assignee=${PROBE}`);
+    await page.goto(`/tasks?project=DEMO&view=board&assignee=${PROBE}`);
     const born = column(page, BORN);
     await expect(born.getByRole('article')).toHaveCount(4);
     await fontsReady(page);
@@ -230,7 +230,7 @@ test('длинное название родителя — одна строка
     /*
      * Таблица: высота строки с подписью и без родителя одна до пикселя (решение Д4).
      */
-    await page.goto(`/tasks?queue=DEMO&assignee=${PROBE}&sort=key`);
+    await page.goto(`/tasks?project=DEMO&assignee=${PROBE}&sort=key`);
     const rows = page.locator('tbody tr');
     await expect(rows).toHaveCount(4);
     await fontsReady(page);

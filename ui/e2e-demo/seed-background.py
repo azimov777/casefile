@@ -3,7 +3,7 @@
 
 Run on the host with plain python3 (stdlib only, no deps) against the isolated
 backend's REST API — see `README.md` in this folder for how that backend is
-raised. Creates queue APP ("Checkout service") and nine background tasks spanning
+raised. Creates project APP ("Checkout service") and nine background tasks spanning
 backlog (3) / open (2) / in_progress (2) / waiting (1) / done (1), so the busiest
 column already stands close to as tall as the task-page scene (~700px of 800) —
 one card per column left the board mostly empty below the fold, and no amount of
@@ -51,7 +51,7 @@ def main() -> None:
 
     call(
         "POST",
-        "/api/v1/queues",
+        "/api/v1/projects",
         owner,
         {
             "key": "APP",
@@ -61,7 +61,7 @@ def main() -> None:
             ),
         },
     )
-    print("queue APP created")
+    print("project APP created")
 
     def create_task(**fields):
         _, resp = call("POST", "/api/v1/tasks", claude, fields)
@@ -83,7 +83,7 @@ def main() -> None:
     # single-line ones (see the module docstring for why single-line and why
     # three, not four).
     create_task(
-        queue="APP",
+        project="APP",
         title="Refund flow for partially captured orders",
         description=(
             "A partial capture followed by a refund leaves the order in `paid` "
@@ -106,7 +106,7 @@ def main() -> None:
     print("APP-1 backlog created")
 
     create_task(
-        queue="APP",
+        project="APP",
         title="Idle carts never expire",
         description="A cart left untouched for weeks still shows as active and holds stock.",
         goal="An idle cart releases its held stock",
@@ -123,7 +123,7 @@ def main() -> None:
     print("APP-2 backlog created")
 
     create_task(
-        queue="APP",
+        project="APP",
         title="Coupon codes can stack silently",
         description="Two different coupon codes both apply to the same order with no warning.",
         goal="At most one coupon code applies per order",
@@ -143,7 +143,7 @@ def main() -> None:
 
     # 2. open — two cards.
     open_key = create_task(
-        queue="APP",
+        project="APP",
         title="Rate-limit the public orders API",
         description="A single API key can list every order in the store with no throttling.",
         goal="Public order lookups are rate-limited per API key",
@@ -160,7 +160,7 @@ def main() -> None:
     print(f"{open_key} open created")
 
     saved_cards_key = create_task(
-        queue="APP",
+        project="APP",
         title="Saved cards outlive a reissue",
         description=(
             "A saved card keeps charging after the customer's bank reissues it with a new number."
@@ -185,7 +185,7 @@ def main() -> None:
     # live summary, plus a second, quieter one (no entries — it just sits there,
     # a neighbor `APP-11` will later join without stealing its own history).
     discount_key = create_task(
-        queue="APP",
+        project="APP",
         title="A discount code can be applied twice",
         description=(
             "Submitting the checkout form twice quickly applies the same discount "
@@ -237,7 +237,7 @@ def main() -> None:
     print(f"{discount_key} in_progress created")
 
     inventory_key = create_task(
-        queue="APP",
+        project="APP",
         title="Inventory checks stall checkout",
         description="A slow inventory lookup can hold the checkout form open for several seconds.",
         goal="Checkout never waits on a slow inventory check",
@@ -257,7 +257,7 @@ def main() -> None:
 
     # 4. waiting, with a blocking question to owner
     uuid_key = create_task(
-        queue="APP",
+        project="APP",
         title="Migrate orders to UUID primary keys",
         description="Sequential order ids leak order volume to anyone who can count.",
         goal="Order ids reveal nothing about volume",
@@ -300,7 +300,7 @@ def main() -> None:
 
     # 5. done, closed with two passed verdicts
     rounding_key = create_task(
-        queue="APP",
+        project="APP",
         title="Cart totals ignore currency rounding",
         description=(
             "Multi-currency carts summed line items in float and rounded only at "

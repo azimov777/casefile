@@ -33,7 +33,7 @@ export interface paths {
         };
         /**
          * Read the first screen
-         * @description Текущий участник, его учётная запись, токен с набором, очереди и число вопросов к нему.
+         * @description Текущий участник, его учётная запись, токен с набором, проекты и число вопросов к нему.
          *
          *     Ровно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки
          *     задач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,
@@ -44,7 +44,7 @@ export interface paths {
          *
          *     У общего агентского токена участника нет: `participant` приходит `null`, а
          *     `open_questions` — ноль, потому что временного агента нельзя адресовать вопросом
-         *     (`docs/CONCEPT.md`, 3.6). Очереди в этом случае отдаются те же самые.
+         *     (`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.
          */
         get: operations["read_bootstrap"];
         put?: never;
@@ -107,7 +107,7 @@ export interface paths {
          *
          *     Тело — ответ выгрузки как есть. Архив более старой версии доводится миграциями до
          *     схемы этой установки; более новой — отказ `409 archive_revision_unknown`. Установка с
-         *     очередями — `409 installation_not_empty`. Ключ интерфейса и ключ агента этой машины
+         *     проектами — `409 installation_not_empty`. Ключ интерфейса и ключ агента этой машины
          *     переживают приём, одноимённые ключи источника отзываются; сеансы браузера этой
          *     установки заканчиваются — войти заново учётной записью из архива.
          *
@@ -354,7 +354,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/queues": {
+    "/api/v1/projects": {
         parameters: {
             query?: never;
             header?: never;
@@ -362,27 +362,27 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List queues
-         * @description Все очереди установки. Единственный уровень группировки: над ними ничего нет.
+         * List projects
+         * @description Все проекты установки. Единственный уровень группировки: над ними ничего нет.
          */
-        get: operations["list_queues"];
+        get: operations["list_projects"];
         put?: never;
         /**
-         * Create a queue
-         * @description Заводит очередь. Требует набора `main`.
+         * Create a project
+         * @description Заводит проект. Требует набора `main`.
          *
          *     Ключ уникален без учёта регистра, хранится в верхнем и дальше неизменяем: он идёт
-         *     в ключ каждой задачи очереди. Повтор с тем же `Idempotency-Key` отвечает первой
-         *     очередью, а не `409 queue_key_taken`.
+         *     в ключ каждой задачи проекта. Повтор с тем же `Idempotency-Key` отвечает первым
+         *     проектом, а не `409 project_key_taken`.
          */
-        post: operations["create_queue"];
+        post: operations["create_project"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/queues/{queue_key}": {
+    "/api/v1/projects/{project_key}": {
         parameters: {
             query?: never;
             header?: never;
@@ -390,26 +390,26 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read a queue
-         * @description Карточка очереди вместе с описанием — общим контекстом всех её задач.
+         * Read a project
+         * @description Карточка проекта вместе с описанием — общим контекстом всех его задач.
          *
          *     Агент запрашивает её отдельно: в карточке задачи лежат только ключ и название, а
          *     описание бывает длинным, и таскать его в каждом ответе значило бы тратить контекст.
          */
-        get: operations["read_queue"];
+        get: operations["read_project"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /**
-         * Update a queue
+         * Update a project
          * @description Меняет название и описание; ключ неизменяем. Требует набора `main`.
          *
          *     Поле `key` в теле — ошибка `422`, а не молчаливый пропуск: клиент должен узнать,
          *     что переименования не произошло, из ответа, а не из следующего чтения.
          */
-        patch: operations["update_queue"];
+        patch: operations["update_project"];
         trace?: never;
     };
     "/api/v1/tasks": {
@@ -424,8 +424,8 @@ export interface paths {
          * @description Задачи по строке запроса, по структурному фильтру или по обоим сразу.
          *
          *     Оба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый
-         *     результат в одинаковом порядке: `?query=queue: TRK and status: open` и
-         *     `?queue=TRK&status=open` — это буквально один путь исполнения. Условия из разных
+         *     результат в одинаковом порядке: `?query=project: TRK and status: open` и
+         *     `?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных
          *     источников складываются по `and`.
          *
          *     Запрос без условий — законный: это «все задачи» по ключу, и отдельного способа
@@ -436,7 +436,7 @@ export interface paths {
          *     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
          *     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
          *     связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
-         *     `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`.
+         *     `project: TRK and status: open and blocked: false and open_blocking_questions: 0`.
          *     Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
          *     названная задача ещё не закрыта».
          *
@@ -470,14 +470,14 @@ export interface paths {
         put?: never;
         /**
          * Create a task
-         * @description Заводит задачу в `backlog`. Ключ выдаёт счётчик очереди, статус не принимается.
+         * @description Заводит задачу в `backlog`. Ключ выдаёт счётчик проекта, статус не принимается.
          *
          *     В деле сразу появляется запись `created` с автором из токена. Разделы можно
          *     оставить пустыми и дописать в `backlog`; перед переходом в `open` четыре раздела
          *     должны быть заполнены, а `checks` — содержать хотя бы одну проверку.
          *
          *     Повтор с тем же `Idempotency-Key` и тем же телом отвечает первой задачей, а не
-         *     заводит вторую: номер очереди на этом не тратится.
+         *     заводит вторую: номер проекта на этом не тратится.
          */
         post: operations["create_task"];
         delete?: never;
@@ -1500,10 +1500,10 @@ export interface components {
             /** @description The token this request was made with: its `id` and scope. Present for every token, a shared agent one included, where `participant` is null */
             token: components["schemas"]["CurrentTokenRead"];
             /**
-             * Queues
-             * @description Queues of the installation, one page capped at the common page ceiling. An installation with more queues than that pages `GET /api/v1/queues`
+             * Projects
+             * @description Projects of the installation, one page capped at the common page ceiling. An installation with more projects than that pages `GET /api/v1/projects`
              */
-            queues: components["schemas"]["QueueRead"][];
+            projects: components["schemas"]["ProjectRead"][];
             /**
              * Open Questions
              * @description Questions with no answer yet addressed to `participant`. Zero with a shared agent token: a temporary agent cannot be addressed at all
@@ -1603,10 +1603,10 @@ export interface components {
             data: components["schemas"]["ParticipantRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
-        /** CollectionResponse[QueueRead] */
-        CollectionResponse_QueueRead_: {
+        /** CollectionResponse[ProjectRead] */
+        CollectionResponse_ProjectRead_: {
             /** Data */
-            data: components["schemas"]["QueueRead"][];
+            data: components["schemas"]["ProjectRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
         /** CollectionResponse[RemarkEntryRead] */
@@ -1642,7 +1642,7 @@ export interface components {
              */
             id: string;
             /**
-             * @description Scope of that token, the only right in the tracker: `task` opens the working cycle, `main` adds writes to queues, participants and tokens. A write beyond it answers `403 permission_denied`
+             * @description Scope of that token, the only right in the tracker: `task` opens the working cycle, `main` adds writes to projects, participants and tokens. A write beyond it answers `403 permission_denied`
              * @example task
              */
             scope: components["schemas"]["TokenScope"];
@@ -1679,9 +1679,9 @@ export interface components {
         DataResponse_ParticipantRead_: {
             data: components["schemas"]["ParticipantRead"];
         };
-        /** DataResponse[QueueRead] */
-        DataResponse_QueueRead_: {
-            data: components["schemas"]["QueueRead"];
+        /** DataResponse[ProjectRead] */
+        DataResponse_ProjectRead_: {
+            data: components["schemas"]["ProjectRead"];
         };
         /** DataResponse[SessionRead] */
         DataResponse_SessionRead_: {
@@ -2121,7 +2121,7 @@ export interface components {
             key: string;
             /**
              * Title
-             * @example Выдать номера очередям
+             * @example Выдать номера проектам
              */
             title: string;
             /**
@@ -2379,6 +2379,97 @@ export interface components {
             payload?: components["schemas"]["EmptyPayload"];
         };
         /**
+         * ProjectCreate
+         * @description Создание проекта.
+         *
+         *     Ключ принимается в любом регистре и хранится в верхнем: он идёт в ключ каждой задачи
+         *     (`TRK-42`) и там обязан читаться как ключ. Уникальность — без учёта регистра.
+         */
+        ProjectCreate: {
+            /**
+             * Key
+             * @description Latin key, stored uppercase, immutable: it is part of every task key
+             * @example TRK
+             */
+            key: string;
+            /**
+             * Title
+             * @example Трекер
+             */
+            title: string;
+            /**
+             * Description
+             * @default
+             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
+             */
+            description: string;
+        };
+        /**
+         * ProjectRead
+         * @description Проект в ответе.
+         */
+        ProjectRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Key
+             * @example TRK
+             */
+            key: string;
+            /**
+             * Title
+             * @example Трекер
+             */
+            title: string;
+            /**
+             * Description
+             * @description Markdown context shared by every task of the project
+             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
+             */
+            description: string;
+            /**
+             * Last Task Number
+             * @description Last task number handed out; numbers are never reused
+             * @example 42
+             */
+            last_task_number: number;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ProjectUpdate
+         * @description Частичное обновление: применяется только переданное.
+         *
+         *     Поля `key` здесь нет и не будет: ключ вшит в ключ каждой задачи проекта, и правка
+         *     задним числом порвала бы все уже записанные ссылки. Схема отвергает лишнее поле, а
+         *     не игнорирует его молча — иначе клиент получил бы `200` на изменение, которого не
+         *     было.
+         */
+        ProjectUpdate: {
+            /**
+             * Title
+             * @example Трекер
+             */
+            title?: string;
+            /**
+             * Description
+             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
+             */
+            description?: string;
+        };
+        /**
          * QuestionEntryCreate
          * @description Вопрос участникам реестра.
          */
@@ -2525,97 +2616,6 @@ export interface components {
              * @example true
              */
             blocking: boolean;
-        };
-        /**
-         * QueueCreate
-         * @description Создание очереди.
-         *
-         *     Ключ принимается в любом регистре и хранится в верхнем: он идёт в ключ каждой задачи
-         *     (`TRK-42`) и там обязан читаться как ключ. Уникальность — без учёта регистра.
-         */
-        QueueCreate: {
-            /**
-             * Key
-             * @description Latin key, stored uppercase, immutable: it is part of every task key
-             * @example TRK
-             */
-            key: string;
-            /**
-             * Title
-             * @example Трекер
-             */
-            title: string;
-            /**
-             * Description
-             * @default
-             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
-             */
-            description: string;
-        };
-        /**
-         * QueueRead
-         * @description Очередь в ответе.
-         */
-        QueueRead: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Key
-             * @example TRK
-             */
-            key: string;
-            /**
-             * Title
-             * @example Трекер
-             */
-            title: string;
-            /**
-             * Description
-             * @description Markdown context shared by every task of the queue
-             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
-             */
-            description: string;
-            /**
-             * Last Task Number
-             * @description Last task number handed out; numbers are never reused
-             * @example 42
-             */
-            last_task_number: number;
-            created_by: components["schemas"]["AuthorRead"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /**
-         * QueueUpdate
-         * @description Частичное обновление: применяется только переданное.
-         *
-         *     Поля `key` здесь нет и не будет: ключ вшит в ключ каждой задачи очереди, и правка
-         *     задним числом порвала бы все уже записанные ссылки. Схема отвергает лишнее поле, а
-         *     не игнорирует его молча — иначе клиент получил бы `200` на изменение, которого не
-         *     было.
-         */
-        QueueUpdate: {
-            /**
-             * Title
-             * @example Трекер
-             */
-            title?: string;
-            /**
-             * Description
-             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
-             */
-            description?: string;
         };
         /**
          * RemarkEntryCreate
@@ -3368,16 +3368,16 @@ export interface components {
          * TaskCreate
          * @description Создание задачи. Статуса нет: новая задача рождается в `backlog`.
          *
-         *     Ключа тоже нет — его выдаёт счётчик очереди. Разделы можно оставить пустыми и
+         *     Ключа тоже нет — его выдаёт счётчик проекта. Разделы можно оставить пустыми и
          *     дописать в `backlog`; перед `open` они обязаны быть заполнены.
          */
         TaskCreate: {
             /**
-             * Queue
-             * @description Queue key; matching ignores case
+             * Project
+             * @description Project key; matching ignores case
              * @example TRK
              */
-            queue: string;
+            project: string;
             /**
              * Title
              * @example Починить выдачу ключей задач
@@ -3576,10 +3576,10 @@ export interface components {
          */
         TaskPriority: "low" | "normal" | "high" | "critical";
         /**
-         * TaskQueueRead
-         * @description Очередь в карточке задачи: ключ и название. Описание запрашивается отдельно.
+         * TaskProjectRead
+         * @description Проект в карточке задачи: ключ и название. Описание запрашивается отдельно.
          */
-        TaskQueueRead: {
+        TaskProjectRead: {
             /**
              * Key
              * @example TRK
@@ -3607,7 +3607,7 @@ export interface components {
              * @example TRK-42
              */
             key: string;
-            queue: components["schemas"]["TaskQueueRead"];
+            project: components["schemas"]["TaskProjectRead"];
             /**
              * Title
              * @example Починить выдачу ключей задач
@@ -3625,12 +3625,12 @@ export interface components {
             goal: string;
             /**
              * Context
-             * @example Номер выдаёт `queues.next_task_number`
+             * @example Номер выдаёт `projects.next_task_number`
              */
             context: string;
             /**
              * Constraints
-             * @example Счётчик очереди не переписывать
+             * @example Счётчик проекта не переписывать
              */
             constraints: string;
             /**
@@ -3690,7 +3690,7 @@ export interface components {
             key: string;
             /** Id */
             id?: string | null;
-            queue?: components["schemas"]["TaskQueueRead"] | null;
+            project?: components["schemas"]["TaskProjectRead"] | null;
             /** Title */
             title?: string | null;
             /** Description */
@@ -3951,7 +3951,7 @@ export interface components {
          *     | Набор | Открывает |
          *     |---|---|
          *     | `task` | Рабочий цикл: задачи, дело, связи, поиск, лента, чтение реестров. |
-         *     | `main` | То же плюс запись очередей, участников и токенов. |
+         *     | `main` | То же плюс запись проектов, участников и токенов. |
          * @enum {string}
          */
         TokenScope: "task" | "main";
@@ -5512,7 +5512,7 @@ export interface operations {
             };
         };
     };
-    list_queues: {
+    list_projects: {
         parameters: {
             query?: {
                 /** @description Page size */
@@ -5535,7 +5535,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CollectionResponse_QueueRead_"];
+                    "application/json": components["schemas"]["CollectionResponse_ProjectRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -5594,7 +5594,7 @@ export interface operations {
             };
         };
     };
-    create_queue: {
+    create_project: {
         parameters: {
             query?: never;
             header?: {
@@ -5608,7 +5608,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["QueueCreate"];
+                "application/json": components["schemas"]["ProjectCreate"];
             };
         };
         responses: {
@@ -5618,7 +5618,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_QueueRead_"];
+                    "application/json": components["schemas"]["DataResponse_ProjectRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -5677,7 +5677,7 @@ export interface operations {
             };
         };
     };
-    read_queue: {
+    read_project: {
         parameters: {
             query?: never;
             header?: {
@@ -5685,8 +5685,8 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Queue key; matching ignores case */
-                queue_key: string;
+                /** @description Project key; matching ignores case */
+                project_key: string;
             };
             cookie?: never;
         };
@@ -5698,7 +5698,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_QueueRead_"];
+                    "application/json": components["schemas"]["DataResponse_ProjectRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -5757,7 +5757,7 @@ export interface operations {
             };
         };
     };
-    update_queue: {
+    update_project: {
         parameters: {
             query?: never;
             header?: {
@@ -5765,14 +5765,14 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Queue key; matching ignores case */
-                queue_key: string;
+                /** @description Project key; matching ignores case */
+                project_key: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["QueueUpdate"];
+                "application/json": components["schemas"]["ProjectUpdate"];
             };
         };
         responses: {
@@ -5782,7 +5782,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_QueueRead_"];
+                    "application/json": components["schemas"]["DataResponse_ProjectRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -5844,11 +5844,11 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `queue`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `queue: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
-                /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by queue and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
+                /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `queue`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -5858,9 +5858,9 @@ export interface operations {
                 offset?: number | null;
                 /** @description Task keys; matching ignores case. Asks about several named tasks at once instead of one request each. An unknown key answers 422 instead of an empty page: emptiness here reads as an answer and would hide the typo */
                 key?: string[] | null;
-                /** @description Queue keys; matching ignores case */
-                queue?: string[] | null;
-                /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a queue. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
+                /** @description Project keys; matching ignores case */
+                project?: string[] | null;
+                /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a project. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
                 parent?: string[] | null;
                 /** @description Task statuses */
                 status?: components["schemas"]["TaskStatus"][] | null;
@@ -6046,7 +6046,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
             };
             cookie?: never;
@@ -6126,7 +6126,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
             };
             cookie?: never;
@@ -6210,7 +6210,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
             };
             cookie?: never;
@@ -6296,7 +6296,7 @@ export interface operations {
                 "Idempotency-Key"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
             };
             cookie?: never;
@@ -6391,7 +6391,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
             };
             cookie?: never;
@@ -6473,7 +6473,7 @@ export interface operations {
                 "Idempotency-Key"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
             };
             cookie?: never;
@@ -6557,7 +6557,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
                 /** @description Entry number inside the task, from 1 */
                 entry_no: number;
@@ -6641,7 +6641,7 @@ export interface operations {
                 "Idempotency-Key"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
             };
             cookie?: never;
@@ -6725,7 +6725,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `QUEUE-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case */
                 task_key: string;
                 /** @description Link kind as seen from the task in the path, not from the other one */
                 kind: components["schemas"]["LinkKind"];
@@ -6806,8 +6806,8 @@ export interface operations {
                 addressee?: string | null;
                 /** @description true drops the addressee filter and returns questions to anyone. Not accepted together with `addressee` (`422 addressee_with_any_addressee`) */
                 any_addressee?: boolean;
-                /** @description Queue key of the question's task; matching ignores case */
-                queue?: string | null;
+                /** @description Project key of the question's task; matching ignores case */
+                project?: string | null;
                 /** @description Keep only questions that do (or do not) block the work */
                 blocking?: boolean | null;
                 /** @description true (the default) keeps only questions with no answer yet; false drops the filter and returns every question, answered or not. To read the questions of one task use its case with `types=question` */
@@ -6898,8 +6898,8 @@ export interface operations {
             query?: {
                 /** @description Signature the remark is filed under: a participant name or a temporary agent label; matching ignores case. Omit to get remarks by anyone */
                 author?: string | null;
-                /** @description Queue key of the remark's task; matching ignores case */
-                queue?: string | null;
+                /** @description Project key of the remark's task; matching ignores case */
+                project?: string | null;
                 /** @description true (the default) keeps only remarks with no resolution yet; false drops the filter and returns every remark, resolved or not. To read the remarks of one task use its case with `types=remark` */
                 open?: boolean;
                 /** @description Page size */
@@ -6988,8 +6988,8 @@ export interface operations {
                 after?: number;
                 /** @description Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail */
                 task?: string[] | null;
-                /** @description Only entries of tasks in this queue; matching ignores case */
-                queue?: string | null;
+                /** @description Only entries of tasks in this project; matching ignores case */
+                project?: string | null;
                 /** @description Only entries of these types */
                 types?: components["schemas"]["EntryType"][] | null;
                 /** @description Page size */
@@ -7078,8 +7078,8 @@ export interface operations {
             query?: {
                 /** @description Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail */
                 task?: string[] | null;
-                /** @description Only entries of tasks in this queue; matching ignores case */
-                queue?: string | null;
+                /** @description Only entries of tasks in this project; matching ignores case */
+                project?: string | null;
                 /** @description Only entries of these types */
                 types?: components["schemas"]["EntryType"][] | null;
                 after?: number | null;

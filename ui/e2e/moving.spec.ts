@@ -86,7 +86,7 @@ test('администратор скачивает архив и принима
   // сценария: /moving открыт администратору владельца без единого действия входа.
   // Счётчик задач — примета списка, а не экрана переноса, поэтому снимается на /tasks.
   await page.goto('/tasks');
-  const sourceQueues = await found(page);
+  const sourceProjects = await found(page);
 
   await page.goto('/moving');
   await expect(page.getByRole('heading', { level: 1, name: 'Перенос установки' })).toBeVisible();
@@ -130,10 +130,10 @@ test('администратор скачивает архив и принима
   await expect(result.getByText('local-ui', { exact: false })).toBeVisible();
 
   // Доска новой установки продолжает работать её собственным ключом, без перезагрузки
-  // (решение TRK-100#19/#20), и показывает ту же очередь и те же задачи, что источник.
+  // (решение TRK-100#19/#20), и показывает тот же проект и те же задачи, что источник.
   await target.goto('/tasks');
   await expect(side(target).getByRole('link', { name: /DEMO/ })).toBeVisible();
-  expect(await found(target)).toBe(sourceQueues);
+  expect(await found(target)).toBe(sourceProjects);
 
   // Повторный приём того же архива — установка больше не пустая.
   await target.goto('/moving');
@@ -142,7 +142,7 @@ test('администратор скачивает архив и принима
   // ролью в окне на этот момент — два элемента; отказ поэтому ищется текстом.
   await expect(
     secondConfirm.getByText(
-      'Принять архив может только установка без очередей — принимайте в свежую.',
+      'Принять архив может только установка без проектов — принимайте в свежую.',
     ),
   ).toBeVisible();
   await expect(secondConfirm).toBeVisible();

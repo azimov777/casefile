@@ -10,14 +10,14 @@ import {
 
 export type Bootstrap = components['schemas']['BootstrapRead'];
 export type Participant = components['schemas']['ParticipantRead'];
-export type Queue = components['schemas']['QueueRead'];
+export type Project = components['schemas']['ProjectRead'];
 
 export const sessionKeys = {
   bootstrap: ['bootstrap'] as const,
 };
 
 /**
- * Первый кадр интерфейса одним запросом: участник за токеном, очереди установки,
+ * Первый кадр интерфейса одним запросом: участник за токеном, проекты установки,
  * число адресованных ему открытых вопросов.
  *
  * `token` передаётся явно только на входе — когда его ещё не сохранили и проверяют.

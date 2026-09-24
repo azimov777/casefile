@@ -6,7 +6,7 @@ const token = readE2eToken();
 
 /**
  * Фраза, по которой сценарий узнаёт свою задачу между прогонами (`e2e/AGENTS.md`):
- * отбор `text` ищет её в описании. Уникальна в очереди DEMO.
+ * отбор `text` ищет её в описании. Уникальна в проекте DEMO.
  */
 const MARKER = 'ради группы правок разделов';
 
@@ -54,7 +54,7 @@ let ready: Promise<Seeded> | null = null;
 function seed(request: APIRequestContext): Promise<Seeded> {
   ready ??= (async () => {
     const existing = await request.get(
-      `/api/v1/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
+      `/api/v1/tasks?project=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const found = ((await existing.json()) as { data: { key: string }[] }).data;
@@ -65,7 +65,7 @@ function seed(request: APIRequestContext): Promise<Seeded> {
         request,
         'post',
         '/api/v1/tasks',
-        { queue: 'DEMO', ...sections(0) },
+        { project: 'DEMO', ...sections(0) },
         201,
       );
       key = task.key as string;

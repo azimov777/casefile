@@ -63,11 +63,11 @@ export const ui = {
     showSections_zero: 'Show sections',
     showSections_one: 'Show sections, {{count, number}} question waiting',
     showSections_other: 'Show sections, {{count, number}} questions waiting',
-    queues: 'Queues',
+    projects: 'Projects',
     allTasks: 'All tasks',
     mine: 'Mine',
     inbox: 'Inbox',
-    // Группа панели про саму установку, а не про работу в очередях: подключение
+    // Группа панели про саму установку, а не про работу в проектах: подключение
     // агента и доступы касаются установки целиком.
     installation: 'Installation',
     connect: 'Connect an agent',
@@ -157,7 +157,8 @@ export const ui = {
     label: 'Access {{name}}',
     scopeKind: 'scope',
     scopeTask: 'The working cycle of an agent: tasks, case entries, and reading everything.',
-    scopeMain: 'The working cycle plus writing to the registries: participants, tokens and queues.',
+    scopeMain:
+      'The working cycle plus writing to the registries: participants, tokens and projects.',
     scopeExplain: 'What does scope {{scope}} open',
     thisSession: 'key of this session',
     revoked: 'revoked',

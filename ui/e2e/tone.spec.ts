@@ -32,7 +32,7 @@ test('статус читается тоном формы: работа, зав�
   // она в архиве с первой минуты (UI-97). Тону снятого нужна строка, а не умолчание списка.
   const all = await shownKeys(request, { archive: true });
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&archive=shown');
+  await page.goto('/tasks?project=DEMO&archive=shown');
   await expect(page.locator('tbody tr')).toHaveCount(all.length);
 
   const inProgress = await shapeColor(mark(page, 'status', 'in_progress'));
@@ -70,7 +70,7 @@ test('приоритет выше обычного виден взглядом: 
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const normal = await shapeColor(mark(page, 'priority', 'normal'));
   expect(await shapeColor(mark(page, 'priority', 'high'))).not.toBe(normal);
@@ -88,7 +88,7 @@ test('приоритет выше обычного виден взглядом: 
  */
 test('тон тревоги отличается от нейтрального', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   // После UI-31 признак — знак, а не плашка: заливки у него нет, и тревога выражена
   // цветом самого рисунка. Сравнивается он со знаком статуса `open` — тот нейтрален

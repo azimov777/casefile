@@ -2,9 +2,9 @@
 export const questions = {
   intro: 'Вопросы, которых агенты ждут от вас, и ваши замечания, которых ждёте вы.',
   filterLabel: 'Отбор входящей',
-  queue: 'Очередь',
-  allQueues: 'все очереди',
-  queueNote: 'Очередь отбирает обе половины входящей.',
+  project: 'Проект',
+  allProjects: 'все проекты',
+  projectNote: 'Проект отбирает обе половины входящей.',
 
   questionsTitle: 'Вопросы ко мне',
   blockingOnly: 'только блокирующие',
@@ -44,7 +44,7 @@ export const questions = {
   emptyByFilter: 'По этому отбору ({{conditions}}) ничего не нашлось.',
   resetFilter: 'Сбросить отбор',
   condition: {
-    queue: 'очередь {{queue}}',
+    project: 'проект {{project}}',
     blocking: 'только блокирующие',
   },
 } as const;

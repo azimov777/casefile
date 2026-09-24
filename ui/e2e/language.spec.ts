@@ -161,7 +161,7 @@ test.describe('выбор человека против языка браузе�
    * Подписи оболочки, а не карточки входа: она стоит на каждом экране, и именно по ней
    * видно, что язык — свойство всего интерфейса, а не одного компонента.
    */
-  const SHELL = { sections: 'Casefile sections', queues: 'Queues', inbox: 'Inbox' };
+  const SHELL = { sections: 'Casefile sections', projects: 'Projects', inbox: 'Inbox' };
 
   test('английский из хранилища держится на всех экранах и переживает перезагрузку', async ({
     page,
@@ -179,10 +179,10 @@ test.describe('выбор человека против языка браузе�
       [LANGUAGE_STORAGE_KEY, 'en'],
     );
 
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
 
     const shell = page.getByRole('complementary', { name: SHELL.sections });
-    await expect(shell).toContainText(SHELL.queues);
+    await expect(shell).toContainText(SHELL.projects);
     await expect(shell).toContainText(SHELL.inbox);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 

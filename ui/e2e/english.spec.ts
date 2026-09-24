@@ -15,7 +15,7 @@ import { readE2eToken, silenceJournal } from './contour';
  * 1. подписи интерфейса английские — по фразам, вписанным сюда руками, а не взятым
  *    из словаря (иначе проверялась бы связь ключа с элементом, а не текст);
  * 2. данные остались русскими — по строке, спрошенной у бэкенда и сверенной знак
- *    в знак. Названия задач, тексты записей и названия очередей пишут агенты, и эта
+ *    в знак. Названия задач, тексты записей и названия проектов пишут агенты, и эта
  *    программа их не переводит (UI-76). Проверка именно явная: «тест не упал»
  *    доказывает только то, что никто не смотрел.
  *
@@ -30,15 +30,15 @@ const token = readE2eToken();
 async function demoTask(
   request: APIRequestContext,
   key: string,
-): Promise<{ title: string; queueTitle: string }> {
+): Promise<{ title: string; projectTitle: string }> {
   const response = await request.get(`/api/v1/tasks/${key}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = (await response.json()) as {
-    data: { task: { title: string; queue: { title: string } } };
+    data: { task: { title: string; project: { title: string } } };
   };
-  return { title: body.data.task.title, queueTitle: body.data.task.queue.title };
+  return { title: body.data.task.title, projectTitle: body.data.task.project.title };
 }
 
 type Summary = { no: number; payload: { done: string; next_step: string } };
@@ -64,22 +64,22 @@ function expectRussian(value: string): void {
   expect(value).toMatch(/[А-Яа-яЁё]/);
 }
 
-test('список задач: оболочка и таблица английские, названия задач и очередей русские', async ({
+test('список задач: оболочка и таблица английские, названия задач и проектов русские', async ({
   page,
   request,
 }) => {
-  const { title, queueTitle } = await demoTask(request, 'DEMO-1');
+  const { title, projectTitle } = await demoTask(request, 'DEMO-1');
   expectRussian(title);
-  expectRussian(queueTitle);
+  expectRussian(projectTitle);
 
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
   const shell = page.getByRole('complementary', { name: 'Casefile sections' });
-  await expect(shell).toContainText('Queues');
+  await expect(shell).toContainText('Projects');
   await expect(shell).toContainText('All tasks');
   await expect(shell).toContainText('Inbox');
 
@@ -99,12 +99,12 @@ test('список задач: оболочка и таблица английс
     'Activity',
   ]);
 
-  // Данные: название задачи в строке и название очереди в панели — те самые.
+  // Данные: название задачи в строке и название проекта в панели — те самые.
   const row = page
     .getByRole('row')
     .filter({ has: page.getByRole('rowheader', { name: 'DEMO-1' }) });
   await expect(row).toContainText(title);
-  await expect(shell).toContainText(queueTitle);
+  await expect(shell).toContainText(projectTitle);
 });
 
 test('карточка задачи: блоки задания английские, название и текст сводки русские', async ({
@@ -175,11 +175,11 @@ test('входящая: разделы английские, вопросы ру
     page.getByRole('heading', { name: 'My remarks without a resolution' }),
   ).toBeVisible();
 
-  // Отбор входящей — тоже подпись интерфейса, и он тоже английский: поле очереди
+  // Отбор входящей — тоже подпись интерфейса, и он тоже английский: поле проекта
   // подписано, а его первое значение названо словами, а не пустой строкой.
   const filter = page.getByRole('form', { name: 'Inbox selection' });
-  await expect(filter.getByRole('combobox', { name: 'Queue' })).toBeVisible();
-  await expect(filter).toContainText('The queue selects both halves of the inbox.');
+  await expect(filter.getByRole('combobox', { name: 'Project' })).toBeVisible();
+  await expect(filter).toContainText('The project selects both halves of the inbox.');
 
   /*
    * Текст вопроса пишет агент. Явное ожидание, а не «кириллица где-нибудь на

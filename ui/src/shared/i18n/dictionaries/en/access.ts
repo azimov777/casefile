@@ -103,7 +103,7 @@ export const access = {
     scopeTaskHint:
       '— the working cycle of an agent: tasks, case entries, questions and answers, and reading everything, this list included.',
     scopeMainHint:
-      '— the same plus writing to the registries: registering participants, issuing and revoking tokens, creating and editing queues. Such a key opens the installation whole.',
+      '— the same plus writing to the registries: registering participants, issuing and revoking tokens, creating and editing projects. Such a key opens the installation whole.',
     nameLabel: 'Name of the token',
     namePlaceholder: 'nightly_agent on the laptop',
     nameHint:

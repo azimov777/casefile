@@ -5,7 +5,7 @@ test.use({ viewport: { width: 1440, height: 900 } });
 
 test('строка отбора с двумя условиями занимает не больше двух строк', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&status=open&status=in_progress');
+  await page.goto('/tasks?project=DEMO&status=open&status=in_progress');
   await expect(page.locator('tbody tr').first()).toBeVisible();
   await fontsReady(page);
 
@@ -15,17 +15,17 @@ test('строка отбора с двумя условиями занимае�
   // Строка инструментов и строка состояния: условия не прячутся за раскрытием, но и
   // первый экран списка не отдаётся форме — прежняя развёрнутая занимала около 295 px.
   expect(box?.height ?? 0).toBeLessThanOrEqual(72);
-  // Очередь среди условий не значится: она стала местом в интерфейсе (UI-38).
+  // Проект среди условий не значится: он стал местом в интерфейсе (UI-38).
   const conditions = page.getByRole('list', { name: 'Условия отбора' });
   await expect(conditions).toContainText('статус open, in_progress');
-  await expect(conditions).not.toContainText('очередь');
+  await expect(conditions).not.toContainText('проект');
 });
 
 test('приоритет, исполнитель и признак ставятся из панели и переживают перезагрузку чипами', async ({
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.locator('tbody tr').first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
@@ -65,7 +65,7 @@ test('приоритет, исполнитель и признак ставят�
 
 test('запрос: ошибка объясняется у поля, верный отменяет простой отбор', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&status=open');
+  await page.goto('/tasks?project=DEMO&status=open');
   await expect(page.locator('tbody tr').first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Запрос', exact: true }).click();
@@ -98,14 +98,14 @@ test('запрос: ошибка объясняется у поля, верны�
 
 test('чип снимается клавиатурой, и фокус не падает на body', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&status=open');
+  await page.goto('/tasks?project=DEMO&status=open');
   await expect(page.locator('tbody tr').first()).toBeVisible();
 
   const remove = page.getByRole('button', { name: 'Убрать условие: статус open' });
   await remove.focus();
   await page.keyboard.press('Enter');
 
-  await expect(page).toHaveURL(/queue=DEMO/);
+  await expect(page).toHaveURL(/project=DEMO/);
   await expect(page).not.toHaveURL(/status=/);
 
   // Условие снято, кнопка исчезла — но фокус остался в интерфейсе, а не улетел
@@ -118,7 +118,7 @@ test('список сортировки открывается с клавиат
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.locator('tbody tr').first()).toBeVisible();
 
   const trigger = page.getByRole('combobox', { name: 'Сортировка' });
@@ -156,7 +156,7 @@ test('на доске тот же порядок: выбранный уходи�
     }
   });
 
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(page.getByRole('region', { name: 'open' })).toBeVisible();
 
   const trigger = page.getByRole('combobox', { name: 'Сортировка' });
@@ -190,7 +190,7 @@ test('шеврон выбора языка стоит на одной оси с 
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.locator('tbody tr').first()).toBeVisible();
   /*
    * Замер снят после `document.fonts.ready` (`docs/notes/ui.md`, «Замер геометрии

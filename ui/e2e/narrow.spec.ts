@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { fontsReady, side, signedInByHand, silenceJournal } from './contour';
 
 /** Экраны, на которых оболочка обязана держаться одинаково. */
-const SCREENS = ['/tasks?queue=DEMO', '/tasks/DEMO-6', '/tasks/DEMO-1/case', '/questions'];
+const SCREENS = ['/tasks?project=DEMO', '/tasks/DEMO-6', '/tasks/DEMO-1/case', '/questions'];
 
 /**
  * Рамка таблицы списка. Ищется от таблицы, а не по имени: имя и роль области у рамки
@@ -39,7 +39,7 @@ for (const width of [320, 390, 768]) {
 test('при увеличении текста вдвое полоса растёт, а не уезжает за край', async ({ page }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('table')).toBeVisible();
 
   const before = await page.getByRole('banner').boundingBox();
@@ -69,7 +69,7 @@ test('на узком экране разделы, входящая и выхо�
   await signedInByHand(page);
   await silenceJournal(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('table')).toBeVisible();
 
   const opener = page.getByRole('button', { name: /Показать разделы/ });
@@ -80,7 +80,7 @@ test('на узком экране разделы, входящая и выхо�
   const sheet = page.getByRole('dialog', { name: 'Разделы Casefile' });
   await expect(sheet).toBeVisible();
 
-  // Внутри шторки табом обходится всё служебное: очереди, входящая, выход.
+  // Внутри шторки табом обходится всё служебное: проекты, входящая, выход.
   await expect(sheet.getByRole('link', { name: /Входящая/ })).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Выйти' })).toBeVisible();
 
@@ -93,7 +93,7 @@ test('на узком экране разделы, входящая и выхо�
 test('состояние потока видно на узком экране, не открывая панель', async ({ page }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   // Панель уехала, но свежесть показанного осталась на виду: узнавать «нет связи»
   // открытием меню человек стал бы уже после того, как поверил экрану.
@@ -132,7 +132,7 @@ test('на узком экране строка списка — карточк�
 }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('table')).toBeVisible();
   await fontsReady(page);
 
@@ -210,7 +210,7 @@ test('ни на одной ширине название не схлопывае
 
   for (const width of BAND) {
     await page.setViewportSize({ width, height: 720 });
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
     await fontsReady(page);
 
@@ -235,7 +235,7 @@ test('ни на одной ширине название не схлопывае
 test('на широком экране таблица не прокручивается, а шапка липнет к верху', async ({ page }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('table')).toBeVisible();
   await fontsReady(page);
 
@@ -281,7 +281,7 @@ test.describe('рамка таблицы на широком экране', () =
 
   test('прокрутки нет — и про прокрутку не сказано ничего', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
     await fontsReady(page);
 
@@ -309,7 +309,7 @@ test.describe('рамка таблицы на узком экране', () => {
 
   test('прокрутки нет — и про прокрутку не сказано ничего', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
     await fontsReady(page);
 
@@ -329,7 +329,7 @@ test.describe('рамка таблицы на узком экране', () => {
 test('раскладка строки следует за шириной места, а не за загрузкой страницы', async ({ page }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.getByRole('table')).toBeVisible();
   await fontsReady(page);
 
@@ -419,9 +419,9 @@ test('сводка на узком экране идёт подписью над
  * на телефоне это ширина окна за вычетом соседа, выглядывающего справа.
  */
 const PHONE_SCREENS = [
-  '/tasks?queue=DEMO',
+  '/tasks?project=DEMO',
   '/tasks',
-  '/tasks?queue=DEMO&view=board',
+  '/tasks?project=DEMO&view=board',
   '/tasks/DEMO-1',
   '/tasks/DEMO-6',
   '/tasks/DEMO-1/case',
@@ -469,7 +469,7 @@ test.describe('телефон 390×844', () => {
   test('верхняя полоса списка стоит одной строкой', async ({ page }) => {
     await silenceJournal(page);
 
-    for (const address of ['/tasks?queue=DEMO', '/tasks', '/tasks?queue=DEMO&view=board']) {
+    for (const address of ['/tasks?project=DEMO', '/tasks', '/tasks?project=DEMO&view=board']) {
       await page.goto(address);
       await expect(page.getByRole('main')).toBeVisible();
       await fontsReady(page);

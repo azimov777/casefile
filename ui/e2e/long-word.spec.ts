@@ -33,7 +33,7 @@ async function create(request: APIRequestContext): Promise<string> {
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title: 'Подопытная задача для длинного слова и кода без переноса (UI-150)',
       description: 'Заведена сквозным тестом UI-150: длинное слово и код на 390 px.',
     },

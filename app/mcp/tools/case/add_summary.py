@@ -30,9 +30,9 @@ def register(tools: Toolset) -> None:
         """Files a summary: the handover note of a case, in four parts, none of them empty
         (`entry_fields_invalid` lists the empty ones).
 
-        A summary follows each significant step: a decision made, a finished part of the
-        work, a failure that changes the plan, any point where a colleague would need an
-        explanation of where the work stands.
+        A significant step is a decision made, a finished part of the work, a failure
+        that changes the plan, or any point where a colleague would need an explanation
+        of where the work stands.
 
         Its index title is the first line of `done`, returned in the response. The final
         summary, with `unmeasured`, is filed by `close_task`.

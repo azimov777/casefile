@@ -32,7 +32,7 @@ async function create(request: APIRequestContext): Promise<string> {
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title: 'Подопытная задача для причины перехода со ссылкой (UI-159)',
       description: 'Заведена сквозным тестом UI-159: причина `waiting` со ссылкой на запись.',
     },

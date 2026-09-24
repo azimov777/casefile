@@ -20,7 +20,7 @@ test('отбор по статусу open даёт ровно открытые �
   const open = (await tasksByStatus(request)).get('open') ?? [];
   expect(open.length).toBeGreaterThan(0);
 
-  await page.goto('/tasks?queue=DEMO&status=open');
+  await page.goto('/tasks?project=DEMO&status=open');
 
   await expect(rows(page)).toHaveCount(open.length);
   for (const key of open) {
@@ -32,7 +32,7 @@ test('отбор по статусу open даёт ровно открытые �
   // Строка отбора называет условие словами, не заставляя открывать панель.
   await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('статус open');
 
-  // Очередь стоит там, где она теперь живёт, — местом в боковой панели, а не полем
+  // Проект стоит там, где он теперь живёт, — местом в боковой панели, а не полем
   // формы: подсветка переживает перезагрузку вместе с адресом (UI-38).
   await expect(side(page).getByRole('link', { name: /DEMO/ })).toHaveAttribute(
     'aria-current',
@@ -61,7 +61,7 @@ test('признаки строки берутся из выдачи списк�
     if (call.url().includes('/api/v1/tasks')) calls.push(call.url());
   });
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page)).toHaveCount(shown.length);
 
   await expect(row(page, 'DEMO-6').getByText(/^заблокирована/)).toBeVisible();
@@ -80,7 +80,7 @@ test('опечатка в запросе объясняется позицией
   request,
 }) => {
   const shown = await shownKeys(request);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page)).toHaveCount(shown.length);
 
   await page.getByRole('button', { name: 'Запрос', exact: true }).click();
@@ -98,7 +98,7 @@ test('сортировка живёт в адресе: вторая вкладк
   page,
   context,
 }) => {
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   // Дожидаемся именно пересортированной выдачи, а не только смены адреса: до её
   // прихода таблица показывает прежний порядок, и снятое с неё значение сравнивалось
@@ -127,7 +127,7 @@ test('сортировка живёт в адресе: вторая вкладк
 });
 
 test('пустая выдача объясняется и предлагает сброс', async ({ page }) => {
-  await page.goto('/tasks?queue=DEMO&text=такоготочнонет');
+  await page.goto('/tasks?project=DEMO&text=такоготочнонет');
 
   await expect(page.getByText('Задач по этим условиям нет')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toBeEnabled();
@@ -145,7 +145,7 @@ test('пустая выдача объясняется и предлагает �
  * `resilience.spec.ts`, подменяя ответ в браузере.
  */
 test('ссылка на страницу за концом выдачи объясняется и возвращает рядом', async ({ page }) => {
-  await page.goto('/tasks?queue=DEMO&page=99');
+  await page.goto('/tasks?project=DEMO&page=99');
 
   await expect(page.getByText(/по этим условиям есть \d+ задач/)).toBeVisible();
   // Сброс отбора здесь ни при чём: условия нашли задачи, кончилась выдача.
@@ -160,7 +160,7 @@ test('ссылка на страницу за концом выдачи объя
 
 test('доступность списка задач', async ({ page, request }) => {
   const shown = await shownKeys(request);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page)).toHaveCount(shown.length);
 
   // Панель надо открыть: закрытую её `axe` не увидит, а проверять надо и её —

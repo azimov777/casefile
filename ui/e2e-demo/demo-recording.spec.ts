@@ -47,13 +47,13 @@ test('agent works a task while the board watches', async ({ page }) => {
   test.setTimeout(90_000);
 
   // Сцена 1: доска уже живёт своей жизнью — фоновые задачи заведены заранее.
-  await page.goto('/tasks?queue=APP&view=board');
+  await page.goto('/tasks?project=APP&view=board');
   await expect(column(page, 'backlog').getByRole('article').first()).toBeVisible();
   await page.waitForTimeout(2_500);
 
   // Сцена 2: агент заводит новую задачу — карточка появляется сама, без перезагрузки.
   const created = (await agentCall('POST', '/api/v1/tasks', {
-    queue: 'APP',
+    project: 'APP',
     title: 'Duplicate webhook events double-charge a retried payment',
     description:
       'Stripe redelivers a webhook after a slow 200 response, and the handler charges the order a second time.',

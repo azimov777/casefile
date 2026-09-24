@@ -18,8 +18,8 @@ export type TextPart =
   { kind: 'text'; value: string } | { kind: 'ref'; value: string; ref: TaskRef };
 
 /**
- * Ключ задачи в верхнем регистре: `КЛЮЧ-номер`, ключ очереди — латиница и цифры
- * (`../app/domain/queues.py`, `QUEUE_KEY_PATTERN`). Нижний регистр бэкенд
+ * Ключ задачи в верхнем регистре: `КЛЮЧ-номер`, ключ проекта — латиница и цифры
+ * (`../app/domain/projects.py`, `PROJECT_KEY_PATTERN`). Нижний регистр бэкенд
  * принимает, но канонический вид — верхний, и только его мы считаем ссылкой:
  * иначе в ссылку превращалось бы любое `pull-2` из текста.
  */
@@ -34,11 +34,11 @@ export function splitTaskRefs(text: string): TextPart[] {
     const at = match.index;
     if (at > last) parts.push({ kind: 'text', value: text.slice(last, at) });
 
-    const [value, queue, number, entry] = match;
+    const [value, project, number, entry] = match;
     parts.push({
       kind: 'ref',
       value,
-      ref: { key: `${queue}-${number}`, entryNo: entry === undefined ? null : Number(entry) },
+      ref: { key: `${project}-${number}`, entryNo: entry === undefined ? null : Number(entry) },
     });
     last = at + value.length;
   }
@@ -86,16 +86,16 @@ export function readEntryNo(value: string | null): number | null {
 }
 
 /**
- * Ключ очереди, которой принадлежит задача: `UI-38` → `UI`.
+ * Ключ проекта, которому принадлежит задача: `UI-38` → `UI`.
  *
  * Разбор ключа, а не вычисление за бэкенд: ключ задачи по контракту состоит из ключа
- * очереди и номера, и очередь читается из него так же, как её читает человек.
+ * проекта и номера, и проект читается из него так же, как его читает человек.
  * Спрашивать ради этого задачу отдельно значило бы платить запросом за то, что уже
  * написано в адресе.
  *
- * `null` — строка ключом не является: показывать очередь тогда нечего.
+ * `null` — строка ключом не является: показывать проект тогда нечего.
  */
-export function queueOfKey(key: string): string | null {
+export function projectOfKey(key: string): string | null {
   const match = /^([A-Za-z][A-Za-z0-9]{1,15})-\d+$/.exec(key);
   return match?.[1] === undefined ? null : match[1].toUpperCase();
 }

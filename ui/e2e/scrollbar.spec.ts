@@ -26,7 +26,7 @@ async function board(page: Page, request: Parameters<typeof tasksByStatus>[0]): 
 
   await silenceJournal(page);
   await page.setViewportSize(SHORT_WINDOW);
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, status).getByRole('article').first()).toBeVisible();
   await fontsReady(page);
   return status;

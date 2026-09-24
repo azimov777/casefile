@@ -137,7 +137,7 @@ export function TaskRow({ task, parentSlot = false }: { task: Task; parentSlot?:
             className="min-w-0 flex-1 text-text no-underline [-webkit-user-drag:none] hover:underline focus-visible:outline-none"
             to={href}
             // Отбор, с которым человек смотрел список, едет с ним в задачу: обратно
-            // он вернётся к тем же строкам, а не ко всем задачам очереди.
+            // он вернётся к тем же строкам, а не ко всем задачам проекта.
             state={listReturnState(search)}
             // Перетаскивание ссылки выключено, иначе протяжка по названию таскала бы
             // ссылку вместо того, чтобы выделять текст.

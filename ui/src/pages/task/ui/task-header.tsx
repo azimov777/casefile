@@ -31,7 +31,7 @@ const LABEL = 'text-label text-muted';
  * Шапка карточки — группы, которые читаются с первого взгляда (UI-143, вариант B,
  * выбранный владельцем в UI-143#10):
  *
- * 1. «Где» и «что» — очередь, родители и название — одна группа с шагом 4 px: очередь
+ * 1. «Где» и «что» — проект, родители и название — одна группа с шагом 4 px: проект
  *    и родитель читаются надписью над названием, а не отдельной строкой.
  * 2. Состояние и время — полоса свойств между двумя линиями, в 12 px под названием.
  *    Каждое значение подписано (`dt`), поэтому статус принадлежит задаче по подписи,
@@ -51,11 +51,11 @@ export function TaskHeader({ task, features, parent }: TaskHeaderProps) {
     <header className="mt-2 flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <p className="flex flex-wrap items-baseline gap-x-2 text-meta">
-          <Link to={`/tasks?queue=${task.queue.key}`}>
-            {task.queue.key} — {task.queue.title}
+          <Link to={`/tasks?project=${task.project.key}`}>
+            {task.project.key} — {task.project.title}
           </Link>
           {/*
-           * Косая черта — шаг вниз по пути «очередь / родитель / эта задача». Родитель у
+           * Косая черта — шаг вниз по пути «проект / родитель / эта задача». Родитель у
            * задачи один: с TRK-135 это правило бэкенда (второй — `409 task_has_parent`),
            * и пакет отдаёт его полем `parent`, а не видом `child` в `links`.
            */}

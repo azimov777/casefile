@@ -104,7 +104,7 @@ test('со сдвигом часов на четыре дня закрытые �
   await silenceJournal(page);
   await page.clock.install({ time: later });
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page)).toHaveCount(open.length);
   for (const key of open) await expect(page.getByRole('rowheader', { name: key })).toBeVisible();
   for (const key of closed) await expect(page.getByRole('rowheader', { name: key })).toHaveCount(0);
@@ -112,7 +112,7 @@ test('со сдвигом часов на четыре дня закрытые �
   const tableHidden = await rows(page).count();
 
   // Доска: все столбцы развёрнуты, чтобы считать карточки, а не только числа.
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   const withoutArchive = { ...sizes(all), done: 0, cancelled: 0 };
   await expectBoard(page, withoutArchive);
   const boardHidden = await cardsByStatus(page);
@@ -158,14 +158,14 @@ test('без сдвига часов видны все задачи демо, в
   );
 
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page)).toHaveCount(shown.length);
   for (const key of shown) await expect(page.getByRole('rowheader', { name: key })).toBeVisible();
   for (const key of neverWorked) {
     await expect(page.getByRole('rowheader', { name: key })).toHaveCount(0);
   }
 
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   const byStatus = await tasksByStatus(request);
   await expectBoard(page, sizes(byStatus));
   const board = await cardsByStatus(page);
@@ -185,10 +185,10 @@ test('показ архива держится адресом: пережива�
   const { closed, open } = await everything(request);
   await page.clock.install({ time: new Date(Date.now() + SHIFT) });
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page)).toHaveCount(open.length);
   await archive(page).click();
-  await expect(page).toHaveURL(/\/tasks\?queue=DEMO&archive=shown$/);
+  await expect(page).toHaveURL(/\/tasks\?project=DEMO&archive=shown$/);
   await expect(rows(page)).toHaveCount(open.length + closed.length);
 
   await page.reload();
@@ -203,7 +203,7 @@ test('показ архива держится адресом: пережива�
 
   // Снять — тоже одно действие, и адрес возвращается к умолчанию.
   await archive(copy).click();
-  await expect(copy).toHaveURL(/\/tasks\?queue=DEMO$/);
+  await expect(copy).toHaveURL(/\/tasks\?project=DEMO$/);
   await expect(rows(copy)).toHaveCount(open.length);
   await copy.close();
 });
@@ -214,7 +214,7 @@ test('экран без событий потока не шлёт лишних �
   await silenceJournal(page);
   const calls = watchRequests(page);
 
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page).first()).toBeVisible();
   const tableAfterLoad = calls.length;
   // Перерисовки без чтения: открыть и закрыть панель отбора, навести на строку.
@@ -225,7 +225,7 @@ test('экран без событий потока не шлёт лишних �
   const tableAfterRest = calls.length;
 
   const board = calls.length;
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
   // Столбец на статус и одно число выдачи — то, что доска и должна прочитать (UI-70).
   await expect.poll(() => calls.length - board).toBe(contractStatuses().length + 1);
@@ -257,7 +257,7 @@ test('порог пересекается при следующем чтении
   const calls = watchRequests(page);
 
   await page.clock.install();
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(rows(page)).toHaveCount(shown.length);
   const before = calls.length;
 
@@ -282,7 +282,7 @@ test('запрос человека складывается с правилом
   const token = readE2eToken();
   const allDone = await (async () => {
     const response = await page.request.get(
-      '/api/v1/tasks?queue=DEMO&status=done&fields=status&limit=100',
+      '/api/v1/tasks?project=DEMO&status=done&fields=status&limit=100',
       { headers: { Authorization: `Bearer ${token}` } },
     );
     return ((await response.json()) as { data: { key: string }[] }).data.map((row) => row.key);
@@ -293,7 +293,7 @@ test('запрос человека складывается с правилом
   await page.clock.install({ time: new Date(Date.now() + SHIFT) });
 
   // `status: done` без показа архива — только неархивные `done`: со сдвигом их нет.
-  const query = 'queue: DEMO and status: done';
+  const query = 'project: DEMO and status: done';
   await page.goto(`/tasks?query=${encodeURIComponent(query)}`);
   await expect(page.getByText('Задач по этим условиям нет')).toBeVisible();
   await expect(page.getByText('Архив не показан.')).toBeVisible();
@@ -306,7 +306,7 @@ test('запрос человека складывается с правилом
 
   // Опечатка без показа архива: запрос ушёл склеенным, а символ и указатель — в строке
   // человека. `donee` стоит в ней на 25-м символе.
-  const typo = 'queue: DEMO and status: donee';
+  const typo = 'project: DEMO and status: donee';
   await page.goto(`/tasks?query=${encodeURIComponent(typo)}`);
   const problem = page.getByRole('alert');
   await expect(problem).toContainText(`Ошибка в символе ${typo.indexOf('donee') + 1}`);
@@ -332,7 +332,7 @@ test('запрос человека складывается с правилом
 test('доступность таблицы и доски с переключателем архива', async ({ page }) => {
   await silenceJournal(page);
 
-  for (const path of ['/tasks?queue=DEMO', '/tasks?queue=DEMO&view=board']) {
+  for (const path of ['/tasks?project=DEMO', '/tasks?project=DEMO&view=board']) {
     await page.goto(path);
     await expect(archive(page)).toBeVisible();
     await expect(page.locator('tbody tr, article').first()).toBeVisible();

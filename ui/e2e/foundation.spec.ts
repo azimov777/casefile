@@ -3,8 +3,8 @@ import { fontsReady, silenceJournal } from './contour';
 
 /** Пять экранов из `CONCEPT.md`, 3: список, доска, карточка, дело, входящая. */
 const SCREENS: [string, string][] = [
-  ['список', '/tasks?queue=DEMO'],
-  ['доска', '/tasks?queue=DEMO&view=board'],
+  ['список', '/tasks?project=DEMO'],
+  ['доска', '/tasks?project=DEMO&view=board'],
   ['карточка', '/tasks/DEMO-3'],
   ['дело', '/tasks/DEMO-3/case'],
   ['входящая', '/questions'],
@@ -53,7 +53,7 @@ for (const [name, url] of SCREENS) {
 
 test('в колонке «Активность» цифры табличные: разряды стоят друг под другом', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&sort=-last_entry_at');
+  await page.goto('/tasks?project=DEMO&sort=-last_entry_at');
   await expect(page.locator('tbody tr').first()).toBeVisible();
   await fontsReady(page);
 
@@ -83,7 +83,7 @@ test.describe('тёмная тема', () => {
 
   test('фон и текст страницы — ночные значения токенов', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.locator('tbody tr').first()).toBeVisible();
 
     const measured = await page.evaluate(() => {

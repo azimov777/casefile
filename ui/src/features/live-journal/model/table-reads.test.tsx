@@ -116,7 +116,7 @@ describe('чтение таблицы снимает накопленное по
     // Отбор сменили посреди чтения: второй ключ таблицы читается рядом с первым.
     holdForRequest([TABLE], 'DEMO-2');
     const second = gate({ items: [] });
-    const secondRead = read({ queue: ['DEMO'] }, second.promise);
+    const secondRead = read({ project: ['DEMO'] }, second.promise);
     expect(requestedTaskCount()).toBe(0);
 
     first.open();
@@ -133,7 +133,7 @@ describe('чтение таблицы снимает накопленное по
     holdForRequest([TABLE], 'DEMO-1');
     const first = gate({ items: [] });
     const second = gate({ items: [] });
-    const reads = [read({}, first.promise), read({ queue: ['DEMO'] }, second.promise)];
+    const reads = [read({}, first.promise), read({ project: ['DEMO'] }, second.promise)];
     first.open();
     second.open();
     await Promise.all(reads);
@@ -291,7 +291,7 @@ describe('полоса над таблицей считает с последн�
   }
 
   async function openBoard(): Promise<void> {
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
     await within(await screen.findByRole('region', { name: 'open' })).findByRole('article');
   }
 
@@ -327,7 +327,7 @@ describe('полоса над таблицей считает с последн�
 
   it('из карточки в таблицу после кадров: полосы нет, запрос таблицы один', async () => {
     const user = userEvent.setup();
-    renderApp('/tasks?queue=DEMO');
+    renderApp('/tasks?project=DEMO');
     await screen.findByRole('rowheader', { name: 'DEMO-1' });
 
     // Первый кадр застал человека на таблице — полоса была.
@@ -380,7 +380,7 @@ describe('полоса над таблицей считает с последн�
 
   it('кадр во время чтения по «Показать» тоже остаётся в полосе', async () => {
     const user = userEvent.setup();
-    renderApp('/tasks?queue=DEMO');
+    renderApp('/tasks?project=DEMO');
     await screen.findByRole('rowheader', { name: 'DEMO-1' });
 
     agentMoves(1131, 'DEMO-1', 'in_progress');
@@ -478,7 +478,7 @@ describe('полоса над таблицей считает с последн�
     document.documentElement.style.setProperty('--motion-fast', '120ms');
     try {
       const user = userEvent.setup();
-      renderApp('/tasks?queue=DEMO');
+      renderApp('/tasks?project=DEMO');
       await screen.findByRole('rowheader', { name: 'DEMO-1' });
 
       agentMoves(1161, 'DEMO-1', 'in_progress');
