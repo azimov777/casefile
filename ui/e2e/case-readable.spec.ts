@@ -60,14 +60,14 @@ let ready: Promise<string> | null = null;
  *
  * Именно фраза, а не вставленное в скобках слово: односложную метку тут держало то, что
  * структурный отбор `text` отвергал значение из двух слов (`422 invalid_search_query`),
- * и это ограничение снято (TRK-21). Фраза обязана оставаться уникальной в очереди DEMO.
+ * и это ограничение снято (TRK-21). Фраза обязана оставаться уникальной в проекте DEMO.
  */
 const MARKER = 'ради читаемости дела';
 
 function seed(request: APIRequestContext): Promise<string> {
   ready ??= (async () => {
     const existing = await request.get(
-      `/api/v1/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
+      `/api/v1/tasks?project=DEMO&text=${encodeURIComponent(MARKER)}&fields=title`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const found = ((await existing.json()) as { data: { key: string }[] }).data;
@@ -78,7 +78,7 @@ function seed(request: APIRequestContext): Promise<string> {
       'post',
       '/api/v1/tasks',
       {
-        queue: 'DEMO',
+        project: 'DEMO',
         title: 'Дело со служебными записями всех родов',
         description: `Заведена сквозным тестом ${MARKER}.`,
         goal: LONG_GOAL,
@@ -102,7 +102,7 @@ function seed(request: APIRequestContext): Promise<string> {
       'post',
       '/api/v1/tasks',
       {
-        queue: 'DEMO',
+        project: 'DEMO',
         title: 'Вторая сторона связи для дела',
         description: 'Заведена сквозным тестом.',
       },

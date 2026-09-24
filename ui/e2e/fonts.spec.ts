@@ -28,13 +28,13 @@ test('с сетью: Fira Sans и Fira Code загружены, кириллиц
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(page.locator('tbody tr').first()).toBeVisible();
   await fontsReady(page);
 
   expect(await facesFor(page, 'Fira Sans', 'Задачи')).toContain('loaded');
   // Моноширинным набираются идентификаторы контракта, и часть из них — свободные
-  // строки: исполнителя и название очереди трекер не ограничивает латиницей. Без
+  // строки: исполнителя и название проекта трекер не ограничивает латиницей. Без
   // кириллицы в Fira Code такое значение молча съезжало бы на запасную гарнитуру.
   expect(await facesFor(page, 'Fira Code', 'программа')).toContain('loaded');
 
@@ -49,7 +49,7 @@ test('без хоста шрифтов: страница читаема запа
   const shown = await shownKeys(request);
   for (const host of FONT_HOSTS) await page.route(host, (route) => route.abort());
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
 
   const rows = page.locator('tbody tr');
   await expect(rows).toHaveCount(shown.length);
@@ -76,7 +76,7 @@ test.describe('тёмная тема', () => {
 
   test('приходит подстановкой значения, а не классом на html', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.locator('tbody tr').first()).toBeVisible();
 
     // Тема системная: переключателя нет, и класса, которым его обычно включают, тоже.

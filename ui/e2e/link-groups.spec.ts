@@ -23,7 +23,7 @@ async function create(request: APIRequestContext, title: string): Promise<string
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title,
       description: 'Заведена сквозным тестом UI-125: насыщенный блок «Связи».',
     },

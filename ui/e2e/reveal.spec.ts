@@ -275,7 +275,7 @@ test('раскрытие столбца доски со своей прокру�
   await page.setViewportSize({ width: 1024, height: 420 });
   // `collapsed=` — все столбцы раскрыты: первая страница столбца прочитана до замера,
   // и раскрытие берёт её из кэша, а не ждёт посреди хода.
-  await page.goto('/tasks?queue=DEMO&view=board&collapsed=');
+  await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   const column = page.getByRole('region', { name: status });
   await expect(column.getByRole('article').first()).toBeVisible();
   await fontsReady(page);

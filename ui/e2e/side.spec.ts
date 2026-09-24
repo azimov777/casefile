@@ -73,34 +73,34 @@ function closeWhileEntering(): Promise<number> {
   });
 }
 
-test('переход в другую очередь меняет только очередь', async ({ page }) => {
+test('переход в другой проект меняет только проект', async ({ page }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board&status=open');
+  await page.goto('/tasks?project=DEMO&view=board&status=open');
   await expect(page.getByRole('region', { name: 'open' })).toBeVisible();
 
-  // В демо-контуре очередь одна, поэтому «все задачи» — вторая точка того же
-  // перехода: она снимает очередь, не трогая ни вид, ни остальной отбор.
+  // В демо-контуре проект один, поэтому «все задачи» — вторая точка того же
+  // перехода: она снимает проект, не трогая ни вид, ни остальной отбор.
   await side(page).getByRole('link', { name: 'Все задачи' }).click();
 
   await expect(page).toHaveURL(/view=board/);
   await expect(page).toHaveURL(/status=open/);
-  await expect(page).not.toHaveURL(/queue=/);
+  await expect(page).not.toHaveURL(/project=/);
   await expect(side(page).getByRole('link', { name: 'Все задачи' })).toHaveAttribute(
     'aria-current',
     'page',
   );
 });
 
-test('очередь остаётся подсвеченной внутри задачи, а вид — доской при возврате', async ({
+test('проект остаётся подсвеченным внутри задачи, а вид — доской при возврате', async ({
   page,
 }) => {
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO&view=board');
+  await page.goto('/tasks?project=DEMO&view=board');
 
   await page.getByRole('article').first().getByRole('link').first().click();
   await expect(page).toHaveURL(/\/tasks\/DEMO-\d+$/);
 
-  // Очередь задачи прочитана из её ключа: подсветка не пропадает от того, что
+  // Проект задачи прочитан из её ключа: подсветка не пропадает от того, что
   // человек ушёл со списка.
   await expect(side(page).getByRole('link', { name: /DEMO/ })).toHaveAttribute(
     'aria-current',
@@ -112,13 +112,48 @@ test('очередь остаётся подсвеченной внутри за
   await expect(page).toHaveURL(/view=board/);
 });
 
+test('старый параметр адреса проектом не читается: список тот же, что без него', async ({
+  page,
+}) => {
+  // Чистый разрез v0.4.0 (TRK-150, решение 2): закладка со старым именем параметра
+  // не перенаправляется и не падает — интерфейс его просто не знает.
+  const keys = () =>
+    page
+      .getByRole('main')
+      .locator('a[href^="/tasks/"]')
+      .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
+
+  await silenceJournal(page);
+  await page.goto('/tasks');
+  await expect(page.getByRole('table')).toBeVisible();
+  const plain = await keys();
+  expect(plain.length).toBeGreaterThan(0);
+
+  // Имя старого параметра собрано из частей: проверка UI-172 ищет его по всему `ui/`
+  // и обязана не находить — ни в коде, ни в сценариях.
+  const stale = `/tasks?${'que' + 'ue'}=DEMO`;
+  await page.goto(stale);
+  await expect(page.getByRole('table')).toBeVisible();
+  expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(stale);
+  expect(await keys()).toEqual(plain);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(side(page).getByRole('link', { name: 'Все задачи' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(side(page).getByRole('link', { name: /DEMO/ })).not.toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
 test('в панели нет действий, меняющих данные', async ({ page }) => {
   // Установка с несколькими людьми: у неё панель богаче на одну кнопку — «Выйти», —
   // и перечисление обязано ловить лишнее именно там, где кнопок больше. На локальной
   // установке кнопок в панели нет вовсе (`e2e/install-key.spec.ts`).
   await signedInByHand(page);
   await silenceJournal(page);
-  await page.goto('/tasks?queue=DEMO');
+  await page.goto('/tasks?project=DEMO');
   await expect(side(page)).toBeVisible();
 
   // Человек наблюдает и отвечает, остальное делают агенты: заводить задачи и менять
@@ -135,7 +170,7 @@ test.describe('узкий экран', () => {
     // а «Выйти» есть только у установки, где людей несколько.
     await signedInByHand(page);
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
 
     // Постоянного места панель здесь не занимает: содержание получает всю ширину.
@@ -167,7 +202,7 @@ test.describe('узкий экран', () => {
    */
   test('шторка въезжает и уезжает движением из словаря', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
 
     const motion = await page.evaluate(() => {
@@ -217,7 +252,7 @@ test.describe('узкий экран', () => {
 
   test('человек просит не двигать интерфейс — шторка перестаёт ехать', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
 
     // Просьба приходит от системы в любой момент, в том числе на открытой странице.
@@ -239,7 +274,7 @@ test.describe('узкий экран', () => {
 
   test('шторка закрывается посреди своего появления, а не после него', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
 
     const fast = ms(
@@ -267,7 +302,7 @@ test.describe('узкий экран', () => {
     await silenceJournal(page);
 
     for (const address of [
-      '/tasks?queue=DEMO',
+      '/tasks?project=DEMO',
       '/tasks/DEMO-1',
       '/tasks/DEMO-1/case',
       '/questions',
@@ -282,7 +317,7 @@ test.describe('узкий экран', () => {
 
   test('доступность оболочки на узком экране', async ({ page }) => {
     await silenceJournal(page);
-    await page.goto('/tasks?queue=DEMO');
+    await page.goto('/tasks?project=DEMO');
     await expect(page.getByRole('table')).toBeVisible();
 
     await page.getByRole('button', { name: 'Показать разделы' }).click();

@@ -3,7 +3,7 @@ import { readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
-/** Заводит задачу в демо-очереди и возвращает её ключ. */
+/** Заводит задачу в демо-проекте и возвращает её ключ. */
 async function makeTask(
   request: APIRequestContext,
   title: string,
@@ -14,7 +14,7 @@ async function makeTask(
   const created = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title,
       description: 'Заведена сквозным тестом ради проверки раскладки карточки.',
       ...sections,

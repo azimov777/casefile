@@ -41,7 +41,7 @@ async function create(
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
     data: {
-      queue: 'DEMO',
+      project: 'DEMO',
       title,
       description: 'Заведена сквозным тестом UI-151: ключ и ссылка на запись на 390 px.',
     },
@@ -250,12 +250,12 @@ test('ключ задачи вне markdown несёт `white-space: nowrap` —
     /*
      * Таблица (карточка на узком экране — строка-карточка, UI-134): ключ в своей ячейке.
      * Строка отбирается по названию своей задачи (`text`, ищет в названии и описании,
-     * `e2e/AGENTS.md`), а не берётся первой строкой очереди: очередь DEMO — общий контур
+     * `e2e/AGENTS.md`), а не берётся первой строкой проекта: проект DEMO — общий контур
      * сквозных сценариев, к этому месту в прогоне в ней уже десятки задач от других
      * пишущих сценариев, и первая строка — чужая случайность, а не то, что проверяет
      * UI-151.
      */
-    await page.goto(`/tasks?queue=DEMO&text=${encodeURIComponent(MARKER)}`);
+    await page.goto(`/tasks?project=DEMO&text=${encodeURIComponent(MARKER)}`);
     await expect(page.getByRole('table')).toBeVisible();
     expect(await rowKeyStyle(page, key)).toBe('nowrap');
 

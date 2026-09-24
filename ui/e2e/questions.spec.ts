@@ -142,19 +142,19 @@ test('ссылка вопроса ведёт в саму запись, а не �
   ).toHaveAttribute('aria-expanded', 'true');
 });
 
-test('очередь отбирает обе половины, и это сказано словами', async ({ page }) => {
+test('проект отбирает обе половины, и это сказано словами', async ({ page }) => {
   await page.goto('/questions');
   await expect(page.getByRole('main')).toBeVisible();
 
-  // Область действия названа у самого поля: очередь общая, «только блокирующие» —
+  // Область действия названа у самого поля: проект общий, «только блокирующие» —
   // условие вопросов и стоит внутри их половины.
-  await expect(page.getByText('Очередь отбирает обе половины входящей.')).toBeVisible();
+  await expect(page.getByText('Проект отбирает обе половины входящей.')).toBeVisible();
   const questions = page.getByRole('region').filter({ hasText: 'Вопросы ко мне' });
   await expect(page.getByRole('checkbox', { name: 'только блокирующие' })).toBeVisible();
 
-  // Отбор по очереди уходит в адрес и держится в обеих половинах.
-  await page.goto('/questions?queue=DEMO');
-  await expect(page.getByRole('combobox', { name: 'Очередь' })).toHaveValue('DEMO');
+  // Отбор по проекту уходит в адрес и держится в обеих половинах.
+  await page.goto('/questions?project=DEMO');
+  await expect(page.getByRole('combobox', { name: 'Проект' })).toHaveValue('DEMO');
   await expect(questions.getByRole('article').first()).toBeVisible();
 });
 
