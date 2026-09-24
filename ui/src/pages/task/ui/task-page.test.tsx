@@ -786,6 +786,30 @@ describe('замечание к задаче', () => {
     );
   });
 
+  it('замечание, отклонённое по заголовку, показывает переведённую причину у поля (UI-165)', async () => {
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-6`, () => data(taskPackage('DEMO-6', { remarks: [] }))),
+      http.get(`${API}/api/v1/tasks`, () => collection([])),
+      http.post(`${API}/api/v1/tasks/DEMO-6/entries`, () =>
+        // Настоящая форма бэкенда — список `{field, reason, ...}`
+        // (`app/domain/fields.py`), не объект `{поле: причина}` (UI-165). Замечание
+        // помечает `title`, не `body`: форма падает на него, только если у `body` своих
+        // замечаний нет (`fields?.body ?? fields?.title`, `remark-form.tsx`).
+        failure('entry_fields_invalid', 422, 'Entry fields invalid', {
+          fields: [{ field: 'title', reason: 'too_long', max: 200, got: 500 }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6', { language: 'ru' });
+
+    await user.click(await screen.findByRole('button', { name: say.ui('remark.submit') }));
+    await user.type(screen.getByLabelText(say.ui('remark.fieldLabel')), 'Заведомо длинный текст');
+    await user.click(screen.getByRole('button', { name: say.ui('remark.submit') }));
+
+    expect(await screen.findByText(say.fieldReasons('too_long'))).toBeInTheDocument();
+  });
+
   it('«Отмена» на пустой форме сворачивает её без вопроса (UI-142)', async () => {
     withRemarks();
     const user = userEvent.setup();

@@ -36,13 +36,18 @@ export class ApiError extends Error {
     this.details = details;
   }
 
-  /** Замечания по полям из `details.fields`: их показывают у самих полей. */
+  /**
+   * Замечания по полям из `details.fields`: причина по имени поля. Бэкенд шлёт их
+   * **списком** — `[{field, reason, ...}]` (`app/domain/fields.py`), не объектом
+   * `{поле: причина}`: старый разбор объектом читал `Object.entries` списка по
+   * индексам (`"0"`, `"1"`, ...) и ни разу не совпадал с именем настоящего поля
+   * (UI-165). Текст причины ищет `shared/errors` (`fieldReasonText`) — здесь только
+   * код `snake_case`, часть контракта.
+   */
   get fields(): Record<string, string> | null {
-    const fields = this.details.fields;
-    if (fields === null || typeof fields !== 'object') return null;
-    const entries = Object.entries(fields as Record<string, unknown>).map(
-      ([name, reason]) => [name, String(reason)] as const,
-    );
+    const raw = this.details.fields;
+    if (!Array.isArray(raw)) return null;
+    const entries = raw.filter(isFieldProblem).map(({ field, reason }) => [field, reason] as const);
     return entries.length > 0 ? Object.fromEntries(entries) : null;
   }
 
@@ -68,6 +73,17 @@ export class ApiError extends Error {
       {},
     );
   }
+}
+
+/**
+ * Одна запись `details.fields`: `{field, reason, ...}` (`app/domain/fields.py`).
+ * Подробности сверх этих двух ключей (`allowed`, `max`, `got`, ...) существуют, но
+ * эта форма их не разбирает — им нет читателя на клиенте.
+ */
+function isFieldProblem(value: unknown): value is { field: string; reason: string } {
+  if (value === null || typeof value !== 'object') return false;
+  const { field, reason } = value as Record<string, unknown>;
+  return typeof field === 'string' && typeof reason === 'string';
 }
 
 function readErrorDetail(body: unknown): ErrorDetail | null {

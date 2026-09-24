@@ -185,50 +185,58 @@ describe('входящая и ответ', () => {
     expect(second?.key).toBe(first?.key);
   });
 
-  it('пустой ответ не отправляется, а замечание бэкенда показано у поля', async () => {
-    server.use(
-      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
-      http.get(`${API}/api/v1/questions`, () => collection([questionEntry(4, 'DEMO-4')])),
-      http.post(`${API}/api/v1/tasks/DEMO-4/entries`, async ({ request }) => {
-        sent.push({
-          url: new URL(request.url),
-          key: request.headers.get('Idempotency-Key'),
-          body: await request.json(),
-        });
-        return failure('entry_fields_invalid', 422, 'Entry fields invalid', {
-          fields: { body: 'Тело записи не может быть пустым' },
-        });
-      }),
-    );
+  it.each(['en', 'ru'] as const)(
+    'пустой ответ не отправляется, а причина по полю от бэкенда переведена и показана у него (%s)',
+    async (language) => {
+      server.use(
+        http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+        http.get(`${API}/api/v1/questions`, () => collection([questionEntry(4, 'DEMO-4')])),
+        http.post(`${API}/api/v1/tasks/DEMO-4/entries`, async ({ request }) => {
+          sent.push({
+            url: new URL(request.url),
+            key: request.headers.get('Idempotency-Key'),
+            body: await request.json(),
+          });
+          // Настоящая форма бэкенда (`app/domain/fields.py`, `tests/test_case_api.py`):
+          // список `{field, reason, ...}`, а не объект `{поле: причина}` (UI-165) —
+          // и причина стабильный код `snake_case`, а не готовая фраза для человека.
+          return failure('entry_fields_invalid', 422, 'Entry fields invalid', {
+            fields: [{ field: 'body', reason: 'too_long', max: 65_536, got: 70_000 }],
+          });
+        }),
+      );
 
-    const user = userEvent.setup();
-    renderApp('/questions');
+      const user = userEvent.setup();
+      renderApp('/questions', { language });
 
-    await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
-    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
+      await user.click(await screen.findByRole('button', { name: say.ui('answer.open') }));
+      await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
 
-    expect(await screen.findByText(say.ui('answer.empty'))).toBeInTheDocument();
-    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveAttribute(
-      'aria-invalid',
-      'true',
-    );
-    expect(posts()).toHaveLength(0);
+      expect(await screen.findByText(say.ui('answer.empty'))).toBeInTheDocument();
+      expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(posts()).toHaveLength(0);
 
-    // Упрёк снимается первым же символом: человек сделал ровно то, о чём его
-    // попросили, и продолжать показывать ему красное значит штрафовать за прошлое.
-    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'О');
-    expect(screen.queryByText(say.ui('answer.empty'))).not.toBeInTheDocument();
-    expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveAttribute(
-      'aria-invalid',
-      'false',
-    );
+      // Упрёк снимается первым же символом: человек сделал ровно то, о чём его
+      // попросили, и продолжать показывать ему красное значит штрафовать за прошлое.
+      await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'О');
+      expect(screen.queryByText(say.ui('answer.empty'))).not.toBeInTheDocument();
+      expect(screen.getByLabelText(say.ui('answer.fieldLabel'))).toHaveAttribute(
+        'aria-invalid',
+        'false',
+      );
 
-    await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'тветил');
-    await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
+      await user.type(screen.getByLabelText(say.ui('answer.fieldLabel')), 'тветил');
+      await user.click(screen.getByRole('button', { name: say.ui('answer.submit') }));
 
-    expect(await screen.findByText('Тело записи не может быть пустым')).toBeInTheDocument();
-    expect(posts()).toHaveLength(1);
-  });
+      // Причина — переведённый текст по коду словаря `fieldReasons`, на языке
+      // интерфейса, а не код и не фраза бэкенда: `message` — техническая, для лога.
+      expect(await screen.findByText(say.fieldReasons('too_long'))).toBeInTheDocument();
+      expect(posts()).toHaveLength(1);
+    },
+  );
 
   /**
    * Кадр живого потока об ответе так, как его отдаёт бэкенд: ответ подшит,
