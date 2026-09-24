@@ -8,7 +8,7 @@
 `docs/FRONTEND.md`.
 
 Что и зачем строим: `docs/CONCEPT.md`. Как строим: `docs/CONVENTIONS.md`. Задания
-приходят задачами трекера, очередь `UI`.
+приходят задачами трекера, проект `UI`.
 
 Стек: React 19 и Vite, маршруты React Router, серверное состояние TanStack Query,
 клиент API из `openapi-typescript` и `openapi-fetch`. Оформление — Tailwind CSS 4
@@ -50,7 +50,7 @@ docker compose -f ../docker-compose.prod.yml up -d   # из клона; без �
 Интерфейс ходит на свой источник и полагается на прокси `/api`, поэтому нужен
 поднятый бэкенд. Проще всего — рабочий контур бэкенда из корня репозитория
 (`../docs/DEVELOPMENT.md`, «Быстрый старт»): миграции, `init` печатает первый токен,
-`demo` наполняет очередь `DEMO`.
+`demo` наполняет проект `DEMO`.
 
 ```bash
 pnpm dev                                   # прокси /api на http://localhost:8000
@@ -138,7 +138,7 @@ docker compose up -d --wait api        # база и бэкенд из корн�
 docker compose run --rm migrate        # миграции
 docker compose run --rm init           # владелец установки и его первый токен
 docker compose run --rm local-token    # ключ интерфейса — в .secrets/ui-token
-docker compose run --rm demo           # демо-данные: очередь DEMO, дело, открытый вопрос
+docker compose run --rm demo           # демо-данные: проект DEMO, дело, открытый вопрос
 TRACKER_UI_TOKEN=$(cat .secrets/ui-token) docker compose up -d --wait --build ui
 open http://127.0.0.1:8081             # задачи сразу: входить не нужно
 docker compose down -v                 # погасить вместе с данными
