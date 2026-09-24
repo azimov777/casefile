@@ -832,7 +832,7 @@ async def record_attribute_removed(
     )
 
 
-async def record_project_archived(
+async def record_archived(
     session: AsyncSession, project: Project, *, actor: Actor, reason: str
 ) -> Entry:
     """Проект архивирован: причина — в записи `archived` его дела (`CONCEPT.md`, 3.2)."""
@@ -846,7 +846,7 @@ async def record_project_archived(
     )
 
 
-async def record_project_restored(
+async def record_restored(
     session: AsyncSession, project: Project, *, actor: Actor, reason: str
 ) -> Entry:
     """Проект восстановлен из архива: причина — в записи `restored` его дела."""

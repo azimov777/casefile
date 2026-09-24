@@ -168,9 +168,7 @@ async def archive_project(
     ensure_scope(actor, TokenScope.MAIN, action="project.archive")
     checked = require_project_reason(reason, key=project.key, action="archive")
     await freeze.lock_unfrozen(session, project=project)
-    entry = await case_service.record_project_archived(
-        session, project, actor=actor, reason=checked
-    )
+    entry = await case_service.record_archived(session, project, actor=actor, reason=checked)
     project.archived_at = entry.created_at
     await session.flush()
     return entry
@@ -193,9 +191,7 @@ async def restore_project(
     await session.refresh(project)
     if project.archived_at is None:
         raise ProjectNotArchivedError(details={"key": project.key})
-    entry = await case_service.record_project_restored(
-        session, project, actor=actor, reason=checked
-    )
+    entry = await case_service.record_restored(session, project, actor=actor, reason=checked)
     project.archived_at = None
     await session.flush()
     return entry
