@@ -280,20 +280,24 @@ REST поле в поле». Приведение времени к строке
 здоров, инструмент на месте, схема верна.
 **Как правильно:** правя домен, править описания вместе со скилом и держать факт тестом,
 который сверяет два текста, а не глазами. Образец —
-`tests/test_mcp_skill.py::test_no_tool_description_names_another_status_for_waiting_for_an_answer`:
+`tests/test_mcp_metadata.py::test_no_description_names_another_status_for_waiting_for_an_answer`:
 статус ожидания он берёт **из скила** (раздел «Вопросы»), описания — у живого сервера
 через `tools/list`, включая описания аргументов, и падает, если абзац про ожидание
 ответа называет другой статус. Проверка отрицательная: она не требует, чтобы ход
 дисциплины в описании был, — только чтобы названный совпадал со скилом. Обещание
 поведения чужой системы («назначатель сделает то-то») тестом не держится: запрет слова
 был бы тупым, и это остаётся на вычитке — в описании говорят, что делает трекер.
-**Где:** `tests/test_mcp_skill.py`, `waiting_status` и `statuses_named`;
+**Где:** `tests/test_mcp_metadata.py`, `test_no_description_names_another_status_for_waiting_for_an_answer`;
 `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/arguments.py`, `BlockingArg`.
+**Обновлено TRK-145:** сверки со скилом больше нет — скил уходит (TRK-140#8), и статус ожидания
+ответа тест берёт из домена (`TaskStatus.WAITING`), а английские абзацы про ответ и ожидание
+ищет по всей метадате, включая схемы ответа: `tests/test_mcp_metadata.py`,
+`test_no_description_names_another_status_for_waiting_for_an_answer`.
 
 ## Дисциплину в описаниях ловит грамматика, а не сверка со скилом
 
 **Что:** правило «описание инструмента — контракт вызова, дисциплина — скил» (`TRK-33`,
-`CONCEPT.md`, 5.2) держит `tests/test_mcp_skill.py::test_no_tool_description_tells_the_agent_what_to_do_next`:
+`CONCEPT.md`, 5.2) держит `tests/test_mcp_metadata.py::test_no_metadata_prescribes_judges_or_explains`:
 закрытый список повелительных форм («прочитай», «пиши», «подшей», «собери») и наречий
 порядка («сначала», «потом», «затем»). Очевидный тест — «описание не повторяет текст
 скила» — проверен и отвергнут: он ловит не дисциплину, а контракт, который скил законно
@@ -315,8 +319,17 @@ REST поле в поле». Приведение времени к строке
 Чего список не ловит: безличный совет вроде «так ждут ответа, не отпуская задачу» —
 грамматического следа он не оставляет и остаётся на вычитке, как и обещание чужого
 поведения (соседняя заметка).
-**Где:** `tests/test_mcp_skill.py`, `NEXT_MOVE_WORDS` и `FILING_TOOLS`;
+**Где:** `tests/test_mcp_metadata.py`, `IMPERATIVE` и `PRESCRIBING`;
 `app/mcp/arguments.py`, шапка модуля; `docs/CONCEPT.md`, 5.2–5.3.
+**Обновлено TRK-145:** правило «дисциплина — в скиле, описание — контракт» отменено решением
+TRK-140#8: правила работы с одним инструментом теперь живут в его метадате. Грамматика
+осталась, но ловит другое — не ход агента, а форму текста (TRK-140#18): повелительное
+предложение, обращение («you», «should»), оценку и «because» в английской метадате. Правило
+пишется определением или условием («`note` — an entry that fits none of the types above»),
+а не советом. Перенос строки внутри абзаца докстроки — не начало предложения: без
+`unwrapped` «review\ncheck» читался как повелительное «Check». Где: `tests/test_mcp_metadata.py`,
+`IMPERATIVE`, `PRESCRIBING`, `unwrapped`. Замер `tools/list` (токен `main`, 23 инструмента):
+107627 → 96962 символов JSON, 139735 → 97024 байт UTF-8, описания инструментов 14294 → 10739.
 
 ## Сузить форму ответа создающего инструмента можно, расширить — нельзя
 
@@ -437,6 +450,12 @@ TRK-35) безопасно само по себе: сутки сосуществ
 **Где:** `app/mcp/toolset.py`, `READ_ONLY`, `FILING`, `IDEMPOTENT_TASK_UPDATE`,
 `OVERWRITING_UPDATE`, `Toolset`, `tool`; `tests/test_mcp_tools.py`, `TOOL_ANNOTATIONS`,
 `test_every_tool_carries_honest_protocol_annotations`.
+**Добавлено TRK-145:** разбор TDQS Glama v0.3.0 писал «no annotations are present», хотя
+`tools/list` через `python -m app.mcp --stdio` отдаёт их у всех инструментов. Причина — снимок
+схемы на стороне Glama («First observed Sep 23, 2026», старые русские описания), снятый до
+коммита аннотаций 6e5f7321 (2026-09-24). Лечится повторной синхронизацией сервера в админке
+Glama, а не кодом; stdio-путь держит `tests/test_mcp_stdio.py`,
+`test_stdio_lists_annotations_for_every_tool`.
 
 ## Сосед называется одной безличной фразой и только там, где выбор реален
 
@@ -452,13 +471,19 @@ TRK-35) безопасно само по себе: сутки сосуществ
 `checks_not_passed`», хотя в `done` он не ведёт вовсе — `closing_not_a_transition`
 проверяется раньше вердиктов.
 **Как правильно:** соседа называть безлично («— `wait_journal`», «даёт `list_queues`»):
-повелительное «бери `X`» ловит `test_no_tool_description_tells_the_agent_what_to_do_next`.
+повелительное «бери `X`» ловит `test_no_metadata_prescribes_judges_or_explains`.
 Где развилки нет (`link`/`unlink`, `create_task`), фразы нет: описания едут в контекст
 каждого вызова. Меняя первую строку докстринга, поправить её английский пересказ в
 `README.md`, раздел `## Tools` (тест сверяет только имена, текст — нет).
 **Где:** `app/mcp/tools/registry.py`, `get_queue`; `app/mcp/tools/case.py`,
 `read_entries`; `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/tasks.py`,
 `transition`; `app/domain/tasks.py`, `check_done_is_reached_by_closing`.
+**Обновлено TRK-145:** повелительное «бери `X`» теперь ловит
+`tests/test_mcp_metadata.py::test_no_metadata_prescribes_judges_or_explains`, а фраза о
+соседе стоит у одной стороны пары: `test_no_phrase_repeats_across_tool_descriptions` не
+пускает отрезок в шесть слов в описания двух инструментов. Форма ответа («запись целиком —
+`read_entries`», «очередь целиком — `get_queue`») названа один раз, в описании модели ответа
+(`AppendedEntryView`, `QueueKeyView`, `ParticipantNameView`), а не в каждом инструменте.
 
 ## Claude Code режет `instructions` и описания на 2048 символах UTF-16
 
@@ -515,3 +540,25 @@ REST, и `services/demo.py`. `latest_no` дешевле `case_index`/`headings`:
 в этот список, а метка шага пишется существительным («Splitting», не «Split»).
 **Где:** `tests/test_mcp_instructions.py`, `test_no_clause_opens_with_a_command`,
 `test_no_address_duty_or_judgement`, `test_the_instructions_are_english`.
+
+## Докстрока модели и перечисления — тоже метадата, и перечисление домена её тащит
+
+**Что:** pydantic кладёт в схему `description` из докстроки класса — и у вложенной модели
+аргументов (`TaskSections`, `TaskChanges`, `Closing*`), и у каждого представления ответа, и
+у перечисления (`TaskStatus`, `EntryType`…). Поэтому английских описаний аргументов мало:
+до TRK-145 в `tools/list` было 31656 кириллических символов, в том числе длинные доводы
+разработчика из докстрок `FoundTaskView` и `EntryView`, и каждая `$defs` перечисления несла
+русскую докстроку домена со ссылками на `CONCEPT.md`.
+**Почему важно:** докстроки перечислений домена — это ещё и описания в `openapi.json`, из
+которого интерфейс генерирует `ui/src/shared/api/openapi.ts`, а тест контракта интерфейса
+сверяет клиент с `openapi.json` байт в байт. Правка домена ради метадаты MCP потащила бы
+перегенерацию контракта REST и клиента.
+**Как правильно:** слой MCP объявляет схему перечисления сам — `app/mcp/enums.py`,
+`Annotated[TaskStatus, WithJsonSchema(...)]` со списком значений из перечисления и английским
+описанием; проверка значений остаётся доменной. Докстрока модели в `arguments.py` и
+`views.py` — короткое английское описание, доводы разработчика — комментарием над классом.
+Кириллицу во всём `tools/list` ловит `test_the_tool_list_has_no_cyrillic`. Пример языка
+запросов с кириллицей (`text: ~ ключ`) заменён в домене на `text: ~ login`: он уезжает и в
+MCP, и в `openapi.json`/`openapi.ts` — оба перегенерированы.
+**Где:** `app/mcp/enums.py`; `app/mcp/arguments.py`, `app/mcp/views.py` — докстроки моделей;
+`app/domain/query_language.py`, `QUERY_EXAMPLES`; `tests/test_mcp_metadata.py`.

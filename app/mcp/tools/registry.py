@@ -16,6 +16,8 @@ from app.mcp.arguments import (
     CursorArg,
     IdempotencyKeyArg,
     LimitArg,
+    NewParticipantNameArg,
+    NewQueueKeyArg,
     ParticipantDescriptionArg,
     ParticipantKindArg,
     ParticipantNameArg,
@@ -38,11 +40,9 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(annotations=READ_ONLY)
     async def get_queue(key: QueueKeyArg) -> views.QueueView:
-        """Отдаёт очередь по ключу: название и описание — общий контекст всех её задач:
-        где лежит код, на какие документы смотреть, чего не делать.
+        """Returns one queue by its key: key, title and description.
 
-        В карточке задачи от очереди только ключ и название; описание отдаёт этот вызов.
-        Ключи очередей установки, если они не известны, даёт `list_queues`.
+        The keys of the installation's queues are listed by `list_queues`.
         """
         async with runtime.call() as (session, actor):
             return views.queue(await queues_service.read_queue(session, key, actor=actor))
@@ -52,10 +52,8 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.QueueRefView]:
-        """Отдаёт все очереди установки: ключ и название.
-
-        Описания здесь нет: у выбранной очереди его отдаёт `get_queue`, а в списке оно
-        стоило бы контекста больше, чем сам выбор.
+        """Lists the installation's queues, one page at a time: key and title. A queue's
+        description is returned by `get_queue`.
         """
         async with runtime.call() as (session, actor):
             page = await queues_service.list_queues(
@@ -71,10 +69,9 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.ParticipantView]:
-        """Отдаёт реестр участников: кому можно адресовать вопрос.
-
-        Люди и постоянные агенты одним списком. Временных агентов здесь нет и быть не
-        может — они не регистрируются, и адресовать их нельзя.
+        """Lists the participant registry: humans and permanent agents, the possible
+        addressees of a question. Temporary agents are not registered and are absent
+        from it.
         """
         async with runtime.call() as (session, actor):
             page = await participants_service.list_participants(
@@ -87,19 +84,13 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(annotations=FILING, scope=TokenScope.MAIN, creating=True)
     async def create_queue(
-        key: QueueKeyArg,
+        key: NewQueueKeyArg,
         title: QueueTitleArg,
         description: QueueDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.QueueKeyView:
-        """Заводит очередь. Требует набора `main`.
-
-        Ключ хранится в верхнем регистре и дальше неизменяем: он идёт в ключ каждой
-        задачи очереди. В описании — общий контекст всех её задач.
-
-        Ответ называет только ключ — единственное, чего вызывающий не знал заранее
-        (регистр канонизирован). Название и описание он прислал сам; очередь целиком
-        отдаёт `get_queue`.
+        """Creates a queue with a key, a title and a description. Only a `main` token
+        creates queues.
         """
         async with runtime.call() as (session, actor):
 
@@ -122,13 +113,9 @@ def register(tools: Toolset) -> None:
         title: QueueTitleChangeArg = None,
         description: QueueDescriptionChangeArg = None,
     ) -> views.QueueKeyView:
-        """Меняет название и описание очереди. Требует набора `main`.
-
-        Ключ не меняется никогда: он вшит в ключ каждой задачи очереди. Непереданное
-        поле не трогается; осмысленного `null` ни у названия, ни у описания нет.
-
-        Ответ называет только ключ, тем же правилом, что и `MutationView`: ответ
-        должен читаться сам по себе. Итог правки, если нужен, отдаёт `get_queue`.
+        """Changes a queue's title and description; a field left out stays. Only a `main`
+        token edits queues. The key never changes, and the previous title and
+        description are not kept.
         """
         async with runtime.call() as (session, actor):
             queue = await queues_service.get_queue(session, key)
@@ -141,21 +128,13 @@ def register(tools: Toolset) -> None:
     @tools.tool(annotations=FILING, scope=TokenScope.MAIN, creating=True)
     async def register_participant(
         kind: ParticipantKindArg,
-        name: ParticipantNameArg,
+        name: NewParticipantNameArg,
         description: ParticipantDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.ParticipantNameView:
-        """Регистрирует человека или постоянного агента. Требует набора `main`.
-
-        Имя хранится в нижнем регистре и дальше неизменяемо: оно стоит подписью в уже
-        подшитых записях дела. Токен участнику выпускают через REST.
-
-        Имя уже в реестре — отказ `participant_name_taken`; описание существующего
-        участника меняет `update_participant`.
-
-        Ответ называет только имя — единственное, чего вызывающий не знал заранее
-        (регистр канонизирован). Род и описание он прислал сам; реестр целиком отдаёт
-        `list_participants`.
+        """Registers a human or a permanent agent. Only a `main` token registers
+        participants; the new participant's token is issued through the REST API. An
+        existing participant's description is changed by `update_participant`.
         """
         async with runtime.call() as (session, actor):
 
@@ -177,14 +156,9 @@ def register(tools: Toolset) -> None:
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg,
     ) -> views.ParticipantNameView:
-        """Меняет описание участника. Требует набора `main`.
-
-        Имя и род неизменяемы: имя стоит подписью в записях дела, род объясняет
-        читателю, кто говорит, — переписать их задним числом значило бы переписать
-        историю, которую дело обязано хранить неизменной.
-
-        Ответ называет только имя, тем же правилом, что и `MutationView`: ответ должен
-        читаться сам по себе. Итог правки, если нужен, отдаёт `list_participants`.
+        """Changes a participant's description. Only a `main` token edits participants.
+        Name and kind never change: the name signs entries already filed. The previous
+        description is not kept.
         """
         async with runtime.call() as (session, actor):
             participant = await participants_service.get_participant(session, name)

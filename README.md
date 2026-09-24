@@ -134,37 +134,37 @@ For the best case files, also give your agent the [skill](skill/tracker-agent/SK
 Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`):
 
 **Tasks**
-- `get_task` — everything about a task in one call: card, links, computed flags, latest summary, open questions, unresolved remarks, case index and status transitions
-- `search_tasks` — search tasks by a query-language string, by individual filters, or both combined
-- `create_task` — create a task in `backlog`, where every new task starts
-- `update_task` — update only the fields you pass; anything left out stays untouched
-- `transition` — move a task to another status along the built-in transition table
-- `close_task` — file entries, verdicts and the final summary, and move the task to `done` — all in one call and one transaction
+- `get_task` — returns everything about one task in a single call: card, parent and children, links, computed features, latest summary, open questions, unresolved remarks, case index and transition targets
+- `search_tasks` — searches tasks by a query-language string, by separate conditions, or by both
+- `create_task` — creates a task in `backlog`, optionally as a child of a parent task
+- `update_task` — changes the given fields of a task; fields left out stay as they are
+- `transition` — moves a task to another status along the fixed transition table
+- `close_task` — closes a task: files entries, verdicts and the final summary and moves it to `done`, in one transaction
 
 **Case**
-- `read_entries` — full bodies of case entries, with payload, in order
-- `add_summary` — file a summary: a hand-off briefing for the case
-- `add_entry` — file a plain entry: a decision, attempt, finding, artifact, remark or note
-- `ask` — ask registered participants a question
-- `answer` — answer a question filed on the same task
-- `resolve` — resolve a remark on a task: how it turned out and where the follow-up work went
-- `add_verdict` — file the outcome of one review check
+- `read_entries` — returns entry bodies of one task's case, with payload, in number order
+- `add_summary` — files a summary: the handover note of a case, in four parts
+- `add_entry` — files an entry without payload: a decision, attempt, finding, artifact, remark or note
+- `ask` — files a question to registry participants
+- `answer` — answers a question of the same task
+- `resolve` — resolves a remark on a task: its outcome and where the work went
+- `add_verdict` — files the outcome of one review check
 
 **Links**
-- `link` — link two tasks and file `link_added` in both their cases
-- `unlink` — remove a link and file `link_removed` in both tasks' cases
+- `link` — links two tasks and files `link_added` in both cases
+- `unlink` — removes a link and files `link_removed` in both cases
 
 **Queues & participants**
-- `get_queue` — return a queue by key: its title and description, the shared context for all its tasks
-- `list_queues` — every queue in the installation: key and title
-- `list_participants` — the participant registry — who a question can be addressed to
-- `create_queue` — create a queue (requires the `main` token scope)
-- `update_queue` — rename a queue or change its description (requires the `main` token scope)
-- `register_participant` — register a person or a permanent agent (requires the `main` token scope)
-- `update_participant` — change a participant's description (requires the `main` token scope)
+- `get_queue` — returns one queue by its key: key, title and description
+- `list_queues` — lists the installation's queues: key and title
+- `list_participants` — lists the participant registry: the possible addressees of a question
+- `create_queue` — creates a queue (`main` token only)
+- `update_queue` — changes a queue's title and description (`main` token only)
+- `register_participant` — registers a human or a permanent agent (`main` token only)
+- `update_participant` — changes a participant's description (`main` token only)
 
 **Journal**
-- `wait_journal` — journal entries after a given sequence number, waiting for new ones if there aren't any yet
+- `wait_journal` — returns journal entries after a sequence number, waiting for new ones
 
 ## Everyday
 

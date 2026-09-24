@@ -48,6 +48,25 @@ async def test_stdio_lists_the_same_tools_as_http(
     assert over_stdio == over_http
 
 
+async def test_stdio_lists_annotations_for_every_tool(
+    mcp_sessions: SessionFactory,
+    main_secret: str,
+) -> None:
+    """Аннотации протокола доходят и через stdio — тем путём, каким сервер запускает Glama.
+
+    Разбор TDQS Glama говорил «no annotations are present» при объявленных аннотациях;
+    причина — старый снимок схемы на стороне каталога, а не транспорт (TRK-145#20). Тест
+    держит вторую половину этого вывода: stdio-сервер отдаёт аннотации каждого инструмента.
+    """
+    async with Client(stdio_server(mcp_sessions, main_secret)) as stdio:
+        listed = (await stdio.list_tools()).tools
+
+    assert listed
+    missing = [tool.name for tool in listed if tool.annotations is None]
+    assert not missing, f"без аннотаций через stdio: {missing}"
+    assert all(tool.annotations.read_only_hint is not None for tool in listed if tool.annotations)
+
+
 async def test_stdio_offers_the_discipline_prompt(
     mcp_sessions: SessionFactory,
     main_secret: str,

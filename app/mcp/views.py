@@ -98,8 +98,13 @@ in_progress → done`, карточка приезжала четыре раза
 
 Второго, полного режима у этих инструментов нет намеренно: параметр вроде `fields` дал бы
 два поведения, из которых проверяется одно. Кому нужна карточка целиком — зовёт
-`get_task`, запись целиком — `read_entries`, и это сказано в описании каждого инструмента,
-чтобы агент не звал их на всякий случай после каждого действия.
+`get_task`, запись целиком — `read_entries`, и это сказано один раз, в описании формы
+ответа (`AppendedEntryView`, `QueueKeyView`, `ParticipantNameView`), а не в описании каждого
+инструмента (TRK-145).
+
+Докстрока модели представления — её описание в `outputSchema`, то есть метадата:
+английская и короткая (TRK-140#18). Доводы разработчика стоят комментарием над классом.
+Перечисления берутся из `app/mcp/enums.py`: у доменных в схеме русская докстрока.
 
 Ответы этих инструментов при этом хранятся ключом идемпотентности, и повтор отдаёт
 **сохранённое**, а не пересобранное (`app/services/idempotency.py`): сутки после правки
@@ -139,7 +144,7 @@ from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
 from app.db.models.task import Task
-from app.domain.authors import Author, AuthorKind
+from app.domain.authors import Author
 from app.domain.case import (
     TITLED_ENTRY_TYPES,
     AnswerFacts,
@@ -151,17 +156,24 @@ from app.domain.case import (
     LinkFacts,
     NoFacts,
     QuestionFacts,
-    RemarkOutcome,
     ResolutionFacts,
     SectionChangedFacts,
     StatusChangedFacts,
     VerdictFacts,
-    VerdictOutcome,
 )
-from app.domain.links import LinkKind
-from app.domain.participants import ParticipantKind
 from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD, PARENT_FIELD
-from app.domain.tasks import TaskFeatures, TaskField, TaskParent, TaskPriority, TaskStatus
+from app.domain.tasks import TaskFeatures, TaskParent
+from app.mcp.enums import (
+    AuthorKindSchema,
+    EntryTypeSchema,
+    LinkKindSchema,
+    ParticipantKindSchema,
+    RemarkOutcomeSchema,
+    TaskFieldSchema,
+    TaskPrioritySchema,
+    TaskStatusSchema,
+    VerdictOutcomeSchema,
+)
 from app.services.links import TaskLink
 from app.services.search import FoundTask
 from app.services.tasks import TaskClosure, TaskMutation, TaskPackage
@@ -174,9 +186,9 @@ LONG_TEXT_FIELDS: frozenset[str] = frozenset(
 
 
 class AuthorView(BaseModel):
-    """Кто сделал действие: род и подпись. У самого трекера подписи нет."""
+    """Who acted: kind and signature. The tracker itself has no signature."""
 
-    kind: AuthorKind
+    kind: AuthorKindSchema
     signature: str | None
 
 
@@ -186,7 +198,7 @@ def author(value: Author) -> AuthorView:
 
 
 class QueueRefView(BaseModel):
-    """Очередь одной строкой: ключ и название."""
+    """Queue in one line: key and title."""
 
     key: str
     title: str
@@ -201,8 +213,9 @@ def queue_ref(queue: Queue) -> QueueRefView:
     return QueueRefView(key=queue.key, title=queue.title)
 
 
+# Карточка задачи — тот же набор полей, что у `TaskRead` в REST.
 class TaskView(BaseModel):
-    """Карточка задачи — тот же набор полей, что у `TaskRead` в REST."""
+    """Task card."""
 
     id: str
     key: str
@@ -214,9 +227,9 @@ class TaskView(BaseModel):
     constraints: str
     output: str
     checks: list[str]
-    status: TaskStatus
+    status: TaskStatusSchema
     assignee: str | None
-    priority: TaskPriority
+    priority: TaskPrioritySchema
     version: int
     created_by: AuthorView
     created_at: datetime
@@ -247,12 +260,19 @@ def task(item: Task) -> TaskView:
 
 
 class MutationView(BaseModel):
-    """Ответ изменяющего инструмента: что стало и чем это подшито, без карточки."""
+    """Task state after the call and the entries it filed; the card in full is returned
+    by `get_task`.
+    """
 
     key: str
-    status: TaskStatus
-    version: int
-    entries: list[int]
+    status: TaskStatusSchema
+    version: int = Field(description="Task version after the call")
+    entries: list[int] = Field(
+        description=(
+            "Numbers of the entries filed in this task's case, in filing order. Empty when "
+            "the sent values were already in place; the version then stays the same"
+        )
+    )
     parent_entry: int | None = Field(
         default=None,
         description=(
@@ -288,8 +308,9 @@ def mutation(value: TaskMutation, *, parent_entry: int | None = None) -> Mutatio
     )
 
 
+# Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).
 class FeaturesView(BaseModel):
-    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
+    """Computed task features."""
 
     blocked: bool
     open_questions: int
@@ -311,8 +332,9 @@ def features(value: TaskFeatures) -> FeaturesView:
     )
 
 
+# Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
 class ParentView(BaseModel):
-    """Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4)."""
+    """Parent task: key and title."""
 
     key: str
     title: str
@@ -323,24 +345,24 @@ def parent_row(value: TaskParent) -> ParentView:
     return ParentView(key=value.key, title=value.title)
 
 
+# Строка выдачи поиска: карточка задачи, у которой любое поле может отсутствовать.
+#
+# Единственная модель слоя с необязательными полями, и это не послабление типизации, а
+# её предмет. Список умеет отдавать подмножество полей (`fields`), и схема обязана
+# честно это показывать — ровно так же, как `TaskSearchRead` в REST.
+#
+# Отсюда же сериализатор ниже. SDK сворачивает результат вызовом
+# `model_dump(mode="json")` — **без** `exclude_unset`, — и незапрошенное поле приезжало
+# бы агенту как `null`. Это не то же самое, что «поля нет»: пакет обязан совпадать с
+# ответом REST поле в поле, а тот отдаётся с `response_model_exclude_unset`.
+#
+# Схему сериализатор не портит, и это проверено: SDK строит `outputSchema` через
+# `TypeAdapter(...).json_schema()`, у которого режим по умолчанию — **валидация**, а
+# обёрточный сериализатор действует только на схему сериализации. У FastAPI режим
+# противоположный, поэтому предупреждение заметки `docs/notes/api.md` («Отбросить
+# пустые поля в ответе — значит потерять схему у клиента») сюда не переносится.
 class FoundTaskView(BaseModel):
-    """Строка выдачи поиска: карточка задачи, у которой любое поле может отсутствовать.
-
-    Единственная модель слоя с необязательными полями, и это не послабление типизации, а
-    её предмет. Список умеет отдавать подмножество полей (`fields`), и схема обязана
-    честно это показывать — ровно так же, как `TaskSearchRead` в REST.
-
-    Отсюда же сериализатор ниже. SDK сворачивает результат вызовом
-    `model_dump(mode="json")` — **без** `exclude_unset`, — и незапрошенное поле приезжало
-    бы агенту как `null`. Это не то же самое, что «поля нет»: пакет обязан совпадать с
-    ответом REST поле в поле, а тот отдаётся с `response_model_exclude_unset`.
-
-    Схему сериализатор не портит, и это проверено: SDK строит `outputSchema` через
-    `TypeAdapter(...).json_schema()`, у которого режим по умолчанию — **валидация**, а
-    обёрточный сериализатор действует только на схему сериализации. У FastAPI режим
-    противоположный, поэтому предупреждение заметки `docs/notes/api.md` («Отбросить
-    пустые поля в ответе — значит потерять схему у клиента») сюда не переносится.
-    """
+    """Search result row: the requested fields of one task."""
 
     key: str
     id: str | None = None
@@ -352,9 +374,9 @@ class FoundTaskView(BaseModel):
     constraints: str | None = None
     output: str | None = None
     checks: list[str] | None = None
-    status: TaskStatus | None = None
+    status: TaskStatusSchema | None = None
     assignee: str | None = None
-    priority: TaskPriority | None = None
+    priority: TaskPrioritySchema | None = None
     version: int | None = None
     created_by: AuthorView | None = None
     created_at: datetime | None = None
@@ -415,17 +437,17 @@ def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> F
 
 
 class LinkOtherView(BaseModel):
-    """Задача на другом конце связи."""
+    """Task on the other side of a link."""
 
     key: str
     title: str
-    status: TaskStatus
+    status: TaskStatusSchema
 
 
 class LinkView(BaseModel):
-    """Связь со стороны своей задачи: вид назван ролью **этой** задачи."""
+    """Link seen from this task: `kind` is the role of this task."""
 
-    kind: LinkKind
+    kind: LinkKindSchema
     other: LinkOtherView
     author: AuthorView
     created_at: datetime
@@ -453,27 +475,27 @@ def link(value: TaskLink) -> LinkView:
     )
 
 
+# Ответ `link` и `unlink`: номера записей, которые вызов подшил в оба дела.
+#
+# `kind` и ключ `other` здесь не повторяются: вызывающий прислал их сам, а `removed`
+# у прежнего `unlink` был не нужен и вовсе — отказ приходит исключением, и успешный
+# ответ всегда означал одно и то же значение (TRK-144).
+#
+# `key` — тот же адрес, что в запросе, по тому же правилу, что у `MutationView`: ответ
+# должен читаться сам по себе. Ключ `other` в ответе не нужен: вызывающий его и так
+# прислал, а `TRK-42#12` строится его собственным ключом плюс этим номером.
 class LinkFilingView(BaseModel):
-    """Ответ `link` и `unlink`: номера записей, которые вызов подшил в оба дела.
-
-    `kind` и ключ `other` здесь не повторяются: вызывающий прислал их сам, а `removed`
-    у прежнего `unlink` был не нужен и вовсе — отказ приходит исключением, и успешный
-    ответ всегда означал одно и то же значение (TRK-144).
-
-    `key` — тот же адрес, что в запросе, по тому же правилу, что у `MutationView`: ответ
-    должен читаться сам по себе. `entry` — номер записи (`link_added` у `link`,
-    `link_removed` у `unlink`) в деле `key`, `other_entry` — та же запись в деле `other`.
-    Ключ `other` в ответе не нужен: вызывающий его и так прислал, а `TRK-42#12` строится
-    его собственным ключом плюс этим номером.
-    """
+    """Entries filed by `link` or `unlink` on both sides of the link."""
 
     key: str
-    entry: int
-    other_entry: int
+    entry: int = Field(
+        description="Number of the `link_added` or `link_removed` entry in the case of `key`"
+    )
+    other_entry: int = Field(description="Number of the same entry in the case of `other`")
 
 
 class NoFactsView(BaseModel):
-    """Фактов нет: заголовок записи пишет её автор."""
+    """No facts: the author writes the entry title."""
 
     type: Literal[
         EntryType.SUMMARY,
@@ -488,31 +510,31 @@ class NoFactsView(BaseModel):
 
 
 class StatusChangedFactsView(BaseModel):
-    """Переход статуса: оба конца и был ли назван повод."""
+    """Status change: both ends and whether a reason was given."""
 
     type: Literal[EntryType.STATUS_CHANGED]
-    from_status: TaskStatus | None
-    to_status: TaskStatus | None
+    from_status: TaskStatusSchema | None
+    to_status: TaskStatusSchema | None
     has_reason: bool | None
 
 
 class SectionChangedFactsView(BaseModel):
-    """Правка задания: какой раздел, и какая проверка при точечной правке."""
+    """Section change: which field, and which check for a single-check edit."""
 
     type: Literal[EntryType.SECTION_CHANGED]
-    field: TaskField | None
+    field: TaskFieldSchema | None
     check_no: int | None
 
 
 class FieldChangedFactsView(BaseModel):
-    """Правка обвязки: какое поле."""
+    """Change of a non-section field: which one."""
 
     type: Literal[EntryType.FIELD_CHANGED]
-    field: TaskField | None
+    field: TaskFieldSchema | None
 
 
 class AssigneeChangedFactsView(BaseModel):
-    """Смена исполнителя: оба имени."""
+    """Assignee change: both names."""
 
     type: Literal[EntryType.ASSIGNEE_CHANGED]
     assignee_from: str | None
@@ -520,15 +542,15 @@ class AssigneeChangedFactsView(BaseModel):
 
 
 class LinkFactsView(BaseModel):
-    """Связь появилась или снята: её вид и вторая сторона."""
+    """Link added or removed: its kind and the other side."""
 
     type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
-    link_kind: LinkKind | None
+    link_kind: LinkKindSchema | None
     other_key: str | None
 
 
 class QuestionFactsView(BaseModel):
-    """Вопрос: кому адресован и держит ли работу."""
+    """Question: addressees and whether it blocks the work."""
 
     type: Literal[EntryType.QUESTION]
     addressees: list[str] | None
@@ -536,27 +558,27 @@ class QuestionFactsView(BaseModel):
 
 
 class AnswerFactsView(BaseModel):
-    """Ответ: на какой вопрос той же задачи."""
+    """Answer: the question of the same task it answers."""
 
     type: Literal[EntryType.ANSWER]
     question_no: int | None
 
 
 class VerdictFactsView(BaseModel):
-    """Вердикт: какая проверка, чем кончилась и не переписали ли её после."""
+    """Verdict: which check, its outcome and whether the check was rewritten since."""
 
     type: Literal[EntryType.VERDICT]
     check_no: int | None
-    outcome: VerdictOutcome | None
+    outcome: VerdictOutcomeSchema | None
     outdated: bool | None
 
 
 class ResolutionFactsView(BaseModel):
-    """Резолюция: какое замечание разобрано, чем и куда ушла работа."""
+    """Resolution: which remark, its outcome and the continuation task."""
 
     type: Literal[EntryType.RESOLUTION]
     remark_no: int | None
-    outcome: RemarkOutcome | None
+    outcome: RemarkOutcomeSchema | None
     continuation_key: str | None
 
 
@@ -642,10 +664,10 @@ def facts(value: EntryFacts) -> FactsView:
 
 
 class HeadingView(BaseModel):
-    """Строка описи дела: то, что видно о записи, не читая её тела."""
+    """Line of the case index: what is known of an entry without its body."""
 
     no: int
-    type: EntryType
+    type: EntryTypeSchema
     author: AuthorView
     created_at: datetime
     title: str
@@ -673,21 +695,21 @@ def heading(value: EntryHeading) -> HeadingView:
     )
 
 
+# Запись дела целиком.
+#
+# `payload` — единственное поле слоя без объявленной формы, и это то же исключение,
+# что и в схеме REST (`docs/notes/api.md`, «`payload` записи дела — исключение из
+# типизации, названное по месту»): нагрузка своя у каждого типа записи, и типизирует
+# её отдельная задача — сразу в обоих интерфейсах, иначе они разойдутся. `JsonValue`,
+# а не `Any`: форма свободна, но значение обязано быть представимо в JSON.
 class EntryView(BaseModel):
-    """Запись дела целиком.
-
-    `payload` — единственное поле слоя без объявленной формы, и это то же исключение,
-    что и в схеме REST (`docs/notes/api.md`, «`payload` записи дела — исключение из
-    типизации, названное по месту»): нагрузка своя у каждого типа записи, и типизирует
-    её отдельная задача — сразу в обоих интерфейсах, иначе они разойдутся. `JsonValue`,
-    а не `Any`: форма свободна, но значение обязано быть представимо в JSON.
-    """
+    """Case entry in full."""
 
     id: str
-    seq: int
+    seq: int = Field(description="Journal sequence number, usable as `after` of `wait_journal`")
     no: int
     task_key: str
-    type: EntryType
+    type: EntryTypeSchema
     author: AuthorView
     title: str
     body: str
@@ -722,19 +744,29 @@ def entry(value: Entry, *, task_key: str) -> EntryView:
     )
 
 
+# Ответ подшивающего инструмента: чем запись адресуют, без самой записи.
+#
+# `title` непуст только там, где заголовок собрал трекер: у сводки, ответа, вердикта и
+# резолюции его не принимают вовсе (`app/domain/case.py`, `TITLED_ENTRY_TYPES`). Где
+# заголовок прислал агент, здесь стоит `null` — «в описи ровно то, что ты прислал».
 class AppendedEntryView(BaseModel):
-    """Ответ подшивающего инструмента: чем запись адресуют, без самой записи.
-
-    `title` непуст только там, где заголовок собрал трекер: у сводки, ответа, вердикта и
-    резолюции его не принимают вовсе (`app/domain/case.py`, `TITLED_ENTRY_TYPES`). Где
-    заголовок прислал агент, здесь стоит `null` — «в описи ровно то, что ты прислал».
+    """A filed entry, by its address rather than its content; the entry in full is
+    returned by `read_entries`.
     """
 
-    no: int
-    seq: int
+    no: int = Field(
+        description="Entry number in the task's case; with the key it forms `TRK-42#12`"
+    )
+    seq: int = Field(description="Journal sequence number, usable as `after` of `wait_journal`")
     task_key: str
     author: AuthorView
-    title: str | None
+    title: str | None = Field(
+        description=(
+            "The title the tracker built, for entry types whose title is not sent "
+            "(summary, answer, verdict, resolution, service entries); `null` when the "
+            "caller sent the title"
+        )
+    )
     created_at: datetime
 
 
@@ -755,24 +787,27 @@ def appended_entry(value: Entry, *, task_key: str) -> AppendedEntryView:
     )
 
 
+# Ответ закрытия: чем стала задача и чем это подшито, без карточки и без записей.
+#
+# Элемент списка — то же `AppendedEntryView`, каким отвечает подшивающий инструмент,
+# поэтому ключ задачи повторяется в каждом: восьмое представление ради двадцати
+# сэкономленных байт развело бы две формы одной и той же записи, которые разойдутся
+# при первой правке.
+#
+# Поле, добавленное сюда позже, обязано иметь значение по умолчанию: ответ создающего
+# инструмента живёт сутки в ключах идемпотентности, и вчерашнее тело без нового поля
+# не поднимется (`docs/notes/mcp.md`, «Сузить форму ответа создающего инструмента
+# можно, расширить — нельзя»).
 class ClosedTaskView(BaseModel):
-    """Ответ закрытия: чем стала задача и чем это подшито, без карточки и без записей.
-
-    Элемент списка — то же `AppendedEntryView`, каким отвечает подшивающий инструмент,
-    поэтому ключ задачи повторяется в каждом: восьмое представление ради двадцати
-    сэкономленных байт развело бы две формы одной и той же записи, которые разойдутся
-    при первой правке.
-
-    Поле, добавленное сюда позже, обязано иметь значение по умолчанию: ответ создающего
-    инструмента живёт сутки в ключах идемпотентности, и вчерашнее тело без нового поля
-    не поднимется (`docs/notes/mcp.md`, «Сузить форму ответа создающего инструмента
-    можно, расширить — нельзя»).
-    """
+    """Closed task: key, new status and version, and every entry the call filed."""
 
     key: str
-    status: TaskStatus
+    status: TaskStatusSchema
     version: int
-    entries: list[AppendedEntryView] = Field(default_factory=list)
+    entries: list[AppendedEntryView] = Field(
+        default_factory=list,
+        description="Filed entries in filing order, ending with `status_changed`",
+    )
 
 
 def closed_task(closure: TaskClosure) -> ClosedTaskView:
@@ -789,8 +824,11 @@ def closed_task(closure: TaskClosure) -> ClosedTaskView:
     )
 
 
+# Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 class TaskPackageView(BaseModel):
-    """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом."""
+    """Everything about one task: card, parent and children, links, features, latest
+    summary, open questions, unresolved remarks, transition targets and case index.
+    """
 
     task: TaskView
     #: Родитель и дети — полями, а не видами в `links` (TRK-135): имя поля и есть ответ
@@ -802,7 +840,7 @@ class TaskPackageView(BaseModel):
     summary: EntryView | None
     questions: list[EntryView]
     remarks: list[EntryView]
-    transitions: list[TaskStatus]
+    transitions: list[TaskStatusSchema]
     index: list[HeadingView]
 
 
@@ -829,11 +867,17 @@ def task_package(package: TaskPackage) -> TaskPackageView:
 
 
 class QueueView(BaseModel):
-    """Очередь с описанием — общим контекстом всех её задач."""
+    """Queue with its description."""
 
     key: str
     title: str
-    description: str
+    description: str = Field(
+        description=(
+            "Shared context of all tasks of the queue: where the code lives, which "
+            "documents apply, what is out of bounds. Task cards carry only the queue's "
+            "key and title"
+        )
+    )
 
 
 def queue(item: Queue) -> QueueView:
@@ -845,13 +889,15 @@ def queue(item: Queue) -> QueueView:
     return QueueView(key=item.key, title=item.title, description=item.description)
 
 
+# Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания.
+#
+# `create_queue` канонизирует регистр — это единственное, чего вызывающий не мог
+# знать заранее. `update_queue` ключ не меняет вовсе, но повторяет его по тому же
+# правилу, что и `MutationView`: ответ должен читаться сам по себе. Название и
+# описание вызывающий прислал сам; итог, если нужен, отдаёт `get_queue` (TRK-144).
 class QueueKeyView(BaseModel):
-    """Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания.
-
-    `create_queue` канонизирует регистр — это единственное, чего вызывающий не мог
-    знать заранее. `update_queue` ключ не меняет вовсе, но повторяет его по тому же
-    правилу, что и `MutationView`: ответ должен читаться сам по себе. Название и
-    описание вызывающий прислал сам; итог, если нужен, отдаёт `get_queue` (TRK-144).
+    """Queue key in its stored, upper-case form; the queue in full is returned by
+    `get_queue`.
     """
 
     key: str
@@ -863,9 +909,9 @@ def queue_key(item: Queue) -> QueueKeyView:
 
 
 class ParticipantView(BaseModel):
-    """Участник реестра: кому можно адресовать вопрос и что о нём известно."""
+    """Registry participant: a possible addressee of a question."""
 
-    kind: ParticipantKind
+    kind: ParticipantKindSchema
     name: str
     description: str
 
@@ -875,13 +921,15 @@ def participant(item: Participant) -> ParticipantView:
     return ParticipantView(kind=item.kind, name=item.name, description=item.description)
 
 
+# Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания.
+#
+# `register_participant` канонизирует регистр — единственное новое здесь. `name` у
+# правки не меняется вовсе, но остаётся в ответе по тому же правилу, что и ключ у
+# `MutationView`: ответ должен читаться сам по себе. Род и описание вызывающий
+# прислал сам; реестр целиком, если нужен итог, отдаёт `list_participants` (TRK-144).
 class ParticipantNameView(BaseModel):
-    """Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания.
-
-    `register_participant` канонизирует регистр — единственное новое здесь. `name` у
-    правки не меняется вовсе, но остаётся в ответе по тому же правилу, что и ключ у
-    `MutationView`: ответ должен читаться сам по себе. Род и описание вызывающий
-    прислал сам; реестр целиком, если нужен итог, отдаёт `list_participants` (TRK-144).
+    """Participant name in its stored, lower-case form; the registry is returned by
+    `list_participants`.
     """
 
     name: str
@@ -892,11 +940,16 @@ def participant_name(item: Participant) -> ParticipantNameView:
     return ParticipantNameView(name=item.name)
 
 
+# Страница выдачи. Форма одна у всех инструментов, которые её отдают.
 class PageView[ItemT](BaseModel):
-    """Страница выдачи. Форма одна у всех инструментов, которые её отдают."""
+    """One page of results."""
 
     items: list[ItemT]
-    next_cursor: str | None
+    next_cursor: str | None = Field(
+        description=(
+            "Cursor of the next page, sent back as `cursor`; `null` means this page is the last one"
+        )
+    )
 
 
 def page[ItemT](items: Iterable[ItemT], *, next_cursor: str | None) -> PageView[ItemT]:

@@ -1,11 +1,26 @@
 """Аргументы инструментов: общие аннотации и вложенные модели.
 
-Описание аргумента — часть **контракта** вызова, а не место для дисциплины: оно говорит,
-что значит значение, что трекер с ним сделает и когда откажет. Пересказ типа не пишется:
-его модель видит в самой схеме. Порядок ходов и выбор между ними живут в скиле
-(`CONCEPT.md`, 5.2): описания приезжают в `tools/list` при каждом подключении, и второй
-копии дисциплины в них нет — она разошлась бы со скилом при первой же правке домена
-(`TRK-31`), а расхождение видно только тому, у кого скила нет.
+Описание аргумента — то, что модель читает о поле в `tools/list`: смысл, формат,
+допустимые значения, как поле заполняется, на что влияет и каким кодом трекер откажет.
+Всё, что относится к одному полю, стоит здесь, а не в описании инструмента.
+
+## Правила текста метадаты
+
+Решение владельца TRK-140#8: скила в проекте нет, и правила работы с одним инструментом
+(выбор типа записи, части сводки, `unmeasured`, исходы замечания и прочие строки таблицы
+TRK-141#15–#17) живут в его метадате. Прежнее правило «дисциплину в описания не
+переносить» (TRK-33, TRK-129) этим отменено. Как писать сам текст — TRK-140#18:
+
+- язык — английский: описания инструментов, аргументов, вложенных моделей, полей ответа
+  и перечислений в схеме;
+- без повелительного наклонения, советов «делай / не делай», оценок, объяснений
+  «because» и примеров ситуаций; правило записывается определением или условием;
+- примеры — только формата (`TRK-42`, `TRK-42#12`, UUID, язык запросов);
+- одно правило — у одного инструмента или поля; свойство всех записей («видна в ленте и
+  человеку») стоит один раз в `instructions`.
+
+Всё это стерегут `tests/test_mcp_metadata.py` по живому `tools/list` и README (раздел
+`## Tools`).
 
 ## Границы значений здесь не повторяются
 
@@ -23,6 +38,11 @@
 `changes`, поля которого объявлены через `unset_field`, а `model_dump(exclude_unset=True)`
 отдаёт ровно переданные ключи. Без этого правка тегов каждый раз снимала бы исполнителя,
 а снять его было бы нечем.
+
+## Перечисления
+
+Типы перечислений берутся из `app/mcp/enums.py`, а не из домена напрямую: схема домена
+несёт русскую докстроку класса (шапка того модуля).
 """
 
 from typing import Annotated, Literal
@@ -30,11 +50,9 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.sentinels import unset_field
-from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
+from app.domain.case import EntryType
 from app.domain.idempotency import KEY_TTL
 from app.domain.journal import JOURNAL_START, MAX_TASK_KEYS, MAX_WAIT_SECONDS
-from app.domain.links import LinkKind
-from app.domain.participants import ParticipantKind
 from app.domain.query_language import (
     QUERY_EXAMPLES,
     QUERY_RIGHT_SHAPE,
@@ -50,32 +68,77 @@ from app.domain.search import (
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     MAX_CHECK_LENGTH,
-    TaskPriority,
-    TaskStatus,
     feature_names,
+)
+from app.mcp.enums import (
+    EntryTypeSchema,
+    LinkKindSchema,
+    ParticipantKindSchema,
+    RemarkOutcomeSchema,
+    TaskPrioritySchema,
+    TaskStatusSchema,
+    VerdictOutcomeSchema,
 )
 
 # --- Адресация ------------------------------------------------------------------------
 
 TaskKeyArg = Annotated[
     str,
-    Field(description="Ключ задачи, например `TRK-42`. Регистр не важен", examples=["TRK-42"]),
+    Field(
+        description=(
+            "Task key `QUEUE-N`, case-insensitive. An unknown key is refused with `task_not_found`"
+        ),
+        examples=["TRK-42"],
+    ),
 ]
 QueueKeyArg = Annotated[
     str,
-    Field(description="Ключ очереди, например `TRK`. Регистр не важен", examples=["TRK"]),
+    Field(
+        description=(
+            "Queue key, case-insensitive. An unknown key is refused with `queue_not_found`"
+        ),
+        examples=["TRK"],
+    ),
+]
+NewQueueKeyArg = Annotated[
+    str,
+    Field(
+        description=(
+            "Key of the new queue: a Latin letter followed by 1–15 Latin letters or digits "
+            "(`invalid_queue_key` otherwise). It is stored upper-case, never changes and "
+            "prefixes the key of every task of the queue. A key already taken, in any "
+            "case, is refused with `queue_key_taken`"
+        ),
+        examples=["TRK"],
+    ),
 ]
 ParticipantNameArg = Annotated[
     str,
-    Field(description="Имя участника из реестра. Регистр не важен", examples=["release_bot"]),
+    Field(
+        description=(
+            "Participant name, case-insensitive. An unknown name is refused with "
+            "`participant_not_found`"
+        )
+    ),
+]
+NewParticipantNameArg = Annotated[
+    str,
+    Field(
+        description=(
+            "Name of the new participant: a Latin letter followed by 1–63 Latin letters, "
+            "digits or `_` (`invalid_participant_name` otherwise). It is stored "
+            "lower-case and never changes: it signs the participant's entries. A name "
+            "already taken, in any case, is refused with `participant_name_taken`"
+        )
+    ),
 ]
 ParentKeyArg = Annotated[
     str | None,
     Field(
         description=(
-            "Ключ родительской задачи. Ребёнок рождается со ссылкой на родителя; "
-            "родитель не закроется — ни в `done`, ни в `cancelled`, — пока дети не "
-            "закрыты. Закрытую задачу родителем назначить нельзя"
+            "Key of the parent task: the new task is born as its child. A closed parent "
+            "is refused with `task_closed`. The parent is not closed — neither `done` "
+            "nor `cancelled` — while any of its children is open"
         ),
         examples=["TRK-42"],
     ),
@@ -84,52 +147,46 @@ VersionArg = Annotated[
     int | None,
     Field(
         description=(
-            "Версия задачи, прочитанная раньше. Присланная обратно, она превращает "
-            "потерянное чужое изменение в отказ `version_conflict` вместо тихой "
-            "перезаписи; не передана — правка ложится поверх текущей версии"
-        ),
-        examples=[3],
+            "Task version read earlier. When given and the task has changed since, the "
+            "call is refused with `version_conflict` instead of overwriting the other "
+            "change; when left out, the edit applies on top of the current version"
+        )
     ),
 ]
 
 # --- Поля задачи ----------------------------------------------------------------------
 
-TaskTitleArg = Annotated[
-    str,
-    Field(description="Название задачи одной строкой", examples=["Починить выдачу ключей задач"]),
-]
+TaskTitleArg = Annotated[str, Field(description="Task title, one line")]
 TaskDescriptionArg = Annotated[
     str,
     Field(
-        description="Описание задачи: что случилось и почему это задача",
-        examples=["Ключ выдаётся до валидации и сгорает на неудачном запросе"],
+        description=(
+            "What happened and why it is a task. For a continuation of a closed task it "
+            "names the task the work grew from; the lineage itself is a `relates` link"
+        )
     ),
 ]
 AssigneeArg = Annotated[
     str | None,
     Field(
         description=(
-            "Имя участника или метка временного агента. Трекер сам его не ставит и не "
-            "снимает; в `in_progress` задачу переводит только тот, чья подпись с ним "
-            "совпадает"
-        ),
-        examples=["release_bot"],
+            "Participant name or temporary agent label. The tracker never sets or clears "
+            "it by itself; only a caller whose signature matches it moves the task into "
+            "`in_progress`"
+        )
     ),
 ]
-PriorityArg = Annotated[
-    TaskPriority,
-    Field(description="Приоритет задачи", examples=[TaskPriority.NORMAL]),
-]
+PriorityArg = Annotated[TaskPrioritySchema, Field(description="Task priority")]
 ReasonArg = Annotated[
     str | None,
     Field(
         description=(
-            "Почему задача идёт туда. Обязательна для любого шага назад по цепочке "
-            "`backlog < open < in_progress < done`, для `cancelled` и для `waiting`; в "
-            "остальных переходах необязательна. У `waiting` она называет, чего ждём, — "
-            "больше это записать негде. Попадает в дело записью `status_changed`"
-        ),
-        examples=["Жду ответа на TRK-42#7"],
+            "Why the task moves. Required for any step back along `backlog < open < "
+            "in_progress < done`, for `cancelled` and for `waiting` "
+            "(`transition_reason_required` otherwise), optional elsewhere. For `waiting` "
+            "it is the only record of what the task waits for. Filed in the "
+            "`status_changed` entry"
+        )
     ),
 ]
 
@@ -137,14 +194,11 @@ ReasonArg = Annotated[
 
 LimitArg = Annotated[
     int | None,
-    Field(
-        description="Сколько записей вернуть за раз. Без значения — размер страницы установки",
-        examples=[25],
-    ),
+    Field(description="Page size. Without a value, the installation's default page size"),
 ]
 CursorArg = Annotated[
     str | None,
-    Field(description="Продолжение выдачи: значение `next_cursor` из прошлого ответа"),
+    Field(description="`next_cursor` of the previous page; without it, the first page"),
 ]
 
 # --- Идемпотентность ------------------------------------------------------------------
@@ -153,10 +207,11 @@ IdempotencyKeyArg = Annotated[
     str | None,
     Field(
         description=(
-            "Ключ повтора, который ты придумываешь сам (обычно UUID). Повтор вызова с тем "
-            "же ключом и теми же аргументами отвечает первым результатом и второго объекта "
-            "не заводит; тот же ключ с другими аргументами отклоняется. Ключ живёт в паре "
-            f"с твоим токеном и помнится {int(KEY_TTL.total_seconds() // 3600)} часа"
+            "Retry key chosen by the caller, e.g. a UUID. A repeat with the same key and "
+            "the same arguments returns the first result and creates nothing; the same "
+            "key with other arguments is refused with `idempotency_key_reused`. A key is "
+            "bound to the caller's token and kept for "
+            f"{int(KEY_TTL.total_seconds() // 3600)} hours"
         ),
         examples=["6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"],
     ),
@@ -166,16 +221,22 @@ IdempotencyKeyArg = Annotated[
 
 EntryBodyArg = Annotated[
     str,
-    Field(description="Тело записи в markdown; хранится и отдаётся как есть"),
+    Field(
+        description=(
+            "Entry body in markdown, stored and returned as is. It holds what a successor "
+            "needs to continue; file contents and long outputs stay outside it, "
+            "represented by a pointer and the gist"
+        )
+    ),
 ]
 EntryRefsArg = Annotated[
     list[str] | None,
     Field(
         description=(
-            "Ссылки: записи `TRK-42#12`, задачи `TRK-7`, адреса. Записи и задачи "
-            "проверяются на существование, адреса — нет"
+            "References: entries `TRK-42#12`, tasks `TRK-7`, URLs. An entry or task that "
+            "does not exist is refused with `entry_fields_invalid`; URLs are not checked"
         ),
-        examples=[["TRK-42#3"]],
+        examples=[["TRK-42#12"]],
     ),
 ]
 
@@ -185,6 +246,9 @@ EntryRefsArg = Annotated[
 #:
 #: Набор объявлен `Literal` прямо в аннотации, а не проверкой в теле инструмента: агент
 #: видит допустимые значения в самой схеме и не узнаёт о них из отказа.
+#:
+#: Описание поля — правила выбора типа из таблицы TRK-141 (4.1, 3.5, 4.2, 4.3, 8.6, 8.7):
+#: у записи без нагрузки выбор типа и есть решение агента, и других мест для него нет.
 EntryTypeArg = Annotated[
     Literal[
         EntryType.DECISION,
@@ -196,38 +260,39 @@ EntryTypeArg = Annotated[
     ],
     Field(
         description=(
-            "Что случилось: `decision` — выбран вариант из нескольких, `attempt` — "
-            "попытка и чем кончилась (провал ценнее успеха), `finding` — установленный "
-            "факт с источником, `artifact` — указатель на результат, `remark` — "
-            "замечание «вышло не то» к чужой сделанной работе, `note` — всё остальное, "
-            "и это последний выбор. Сводка, вопрос, ответ, вердикт и резолюция "
-            "подшиваются своими инструментами"
-        ),
-        examples=[EntryType.DECISION],
+            "What the entry records:\n"
+            "- `decision` — an option chosen among several, with the reason;\n"
+            "- `attempt` — something tried and how it ended, failed attempts included;\n"
+            "- `finding` — an established fact with its source, including what was "
+            "learned from reading;\n"
+            "- `artifact` — a pointer to a result;\n"
+            "- `remark` — a claim that finished work of a task came out wrong, written "
+            "from the side of whoever needs the result; the task's assignee resolves it "
+            "with `resolve`. A remark on a closed task is accepted: the case grows, the "
+            "task stays as it is. An observation about the caller's own task is a "
+            "`finding`, not a `remark`;\n"
+            "- `note` — an entry that fits none of the types above"
+        )
     ),
 ]
 EntryTitleArg = Annotated[
     str,
     Field(
-        description="Заголовок записи: он стоит в описи дела, которую отдаёт `get_task`",
-        examples=["Выбран asyncpg вместо psycopg: нужен LISTEN без потока"],
+        description=(
+            "Entry title: its line in the case index of `get_task`. It states what "
+            "happened, not how"
+        )
     ),
 ]
 VerdictOutcomeArg = Annotated[
-    VerdictOutcome,
-    Field(description="Исход проверки. Третьего состояния нет", examples=[VerdictOutcome.PASSED]),
+    VerdictOutcomeSchema, Field(description="Outcome of the check; there is no third state")
 ]
-EntryNosArg = Annotated[
-    list[int] | None,
-    Field(description="Только эти номера записей", examples=[[3, 12]]),
-]
+EntryNosArg = Annotated[list[int] | None, Field(description="Only entries with these numbers")]
 EntryTypesArg = Annotated[
-    list[EntryType] | None,
-    Field(description="Только записи этих типов", examples=[["decision", "attempt"]]),
+    list[EntryTypeSchema] | None, Field(description="Only entries of these types")
 ]
 AfterNoArg = Annotated[
-    int | None,
-    Field(description="Только записи после этого номера — что случилось с тех пор", examples=[12]),
+    int | None, Field(description="Only entries filed after the entry with this number")
 ]
 
 # --- Сводка ---------------------------------------------------------------------------
@@ -236,49 +301,43 @@ SummaryDoneArg = Annotated[
     str,
     Field(
         description=(
-            "Что сделано с прошлой сводки, со ссылками на артефакты. Первая строка "
-            "становится заголовком записи в описи — одной фразой о случившемся; "
-            "слишком длинную трекер обрежет по границе слова"
-        ),
-        examples=["Разобрался, где сгорает номер задачи"],
+            "What was done since the previous summary, with references to artifacts. Its "
+            "first line becomes the entry title in the case index: one sentence about "
+            "what happened; a longer line is cut at a word boundary"
+        )
     ),
 ]
-SummaryRemainingArg = Annotated[
-    str,
-    Field(
-        description="Что осталось до выхода задачи",
-        examples=["Перенести выдачу номера после валидации"],
-    ),
-]
+SummaryRemainingArg = Annotated[str, Field(description="What remains before the task is done")]
 SummaryBlockersArg = Annotated[
     str,
     Field(
-        description="Что мешает. Пустым это поле быть не может: «ничего», если ничего",
-        examples=["Ничего"],
+        description=(
+            "What stands in the way, or `nothing`. In a summary before `waiting` it names "
+            "what is awaited and from whom"
+        )
     ),
 ]
 SummaryNextStepArg = Annotated[
     str,
     Field(
-        description="Одно конкретное действие, с которого начнёт преемник",
-        examples=["Перенести вызов next_task_number в конец create_task"],
+        description=(
+            "The one concrete action a successor starts with. In a summary before "
+            "`waiting` it is the action taken once the awaited arrives. A doubt about a "
+            "decision or a result is recorded here, as what to look at and why, rather "
+            "than as a verdict"
+        )
     ),
 ]
 SummaryUnmeasuredArg = Annotated[
     str,
     Field(
         description=(
-            "Какая часть цели не измерена ни одной обзорной проверкой — и какой риск ты "
-            "сам считаешь теоретическим. Вердикт отвечает проверке, а не цели: назови "
-            "то, что ты сделал, но не доказал, что запускал руками вместо проверки и "
-            "где судил по сходству, а не по замеру. «Ничего» — законный ответ, когда "
-            "проверки покрыли цель целиком, но это ответ, а не отписка: если в голове "
-            "вертится «вообще-то я не пробовал…» — это и есть содержание поля"
-        ),
-        examples=[
-            "Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь. "
-            "Риск считаю теоретическим — команды отличаются одним флагом"
-        ],
+            "Which part of the task's goal no review check measured, and which risks the "
+            "author considers theoretical: what was done but not proven, what was run by "
+            "hand instead of a check, where a conclusion rests on similarity rather than "
+            "measurement. A verdict answers its check, not the goal. `nothing` is a "
+            "valid value when the checks covered the whole goal"
+        )
     ),
 ]
 
@@ -288,104 +347,122 @@ AddresseesArg = Annotated[
     list[str],
     Field(
         description=(
-            "Имена участников из `list_participants`, хотя бы одно. Временного агента "
-            "адресовать нельзя: строки в реестре у него нет"
-        ),
-        examples=[["owner"]],
+            "Names of participants from `list_participants`, at least one. A temporary "
+            "agent has no registry entry and cannot be addressed. An unknown name is "
+            "refused with `entry_fields_invalid`, `reason: unknown_participant`"
+        )
     ),
 ]
 BlockingArg = Annotated[
     bool,
     Field(
         description=(
-            "Можно ли продолжать работу без ответа. Значения по умолчанию нет намеренно: "
-            "это знаешь только ты. `true` считается признаком `open_blocking_questions`, "
-            "по которому задачу находят отбором; больше трекер с ним ничего не делает"
-        ),
-        examples=[True],
+            "Whether work on the task can go on without the answer. `true` counts toward "
+            "the `open_blocking_questions` feature, by which such tasks are selected; the "
+            "tracker does nothing else with it"
+        )
     ),
 ]
 QuestionNoArg = Annotated[
     int,
-    Field(description="Номер записи `question` в этой же задаче", examples=[7]),
+    Field(
+        description=(
+            "Number of the `question` entry in the same task. Any other number is refused "
+            "with `entry_fields_invalid`, `reason: unknown_entry` or `not_a_question`"
+        )
+    ),
 ]
 RemarkNoArg = Annotated[
     int,
-    Field(description="Номер записи `remark` в этой же задаче", examples=[7]),
-]
-RemarkOutcomeArg = Annotated[
-    RemarkOutcome,
     Field(
         description=(
-            "Чем разобрано замечание: `fixed` — поправлено сразу, `accepted` — принято "
-            "в работу отдельной задачей (тогда обязателен `task`), `needs_detail` — "
-            "нужно уточнение, `declined` — менять не будем, причина в теле"
-        ),
-        examples=[RemarkOutcome.ACCEPTED],
+            "Number of the `remark` entry in the same task; any other number is refused "
+            "with `entry_fields_invalid`"
+        )
+    ),
+]
+RemarkOutcomeArg = Annotated[
+    RemarkOutcomeSchema,
+    Field(
+        description=(
+            "How the remark is resolved, and what the body holds:\n"
+            "- `fixed` — corrected at once; the body states what changed;\n"
+            "- `accepted` — taken into work as a separate task named in `task`;\n"
+            "- `needs_detail` — the remark needs clarification; the body holds the "
+            "concrete question;\n"
+            "- `declined` — nothing will change; the body gives the reason"
+        )
     ),
 ]
 ContinuationKeyArg = Annotated[
     str | None,
     Field(
         description=(
-            "Ключ задачи, в которую ушла работа. Только с исходом `accepted` и там "
-            "обязателен: «приняли» без адреса это обещание без ссылки"
+            "Key of the task the work went to. Required with `accepted` and refused with "
+            "any other outcome, both as `entry_fields_invalid`"
         ),
         examples=["TRK-43"],
     ),
 ]
 CheckNoArg = Annotated[
     int,
-    Field(description="Номер обзорной проверки в списке задачи, с 1", examples=[3]),
+    Field(
+        description=(
+            "Number of the review check in the task's list, from 1; a number outside the "
+            "list is refused with `entry_fields_invalid`"
+        )
+    ),
 ]
 EvidenceArg = Annotated[
     str,
     Field(
-        description="Доказательство исхода: что запустил, что увидел, ссылка на материал",
-        examples=["docker compose run --rm test: 214 passed"],
+        description=(
+            "What was run for the check as written and what it showed: the command, its "
+            "output, a link to the material"
+        )
     ),
 ]
 
 # --- Связи ----------------------------------------------------------------------------
 
 LinkKindArg = Annotated[
-    LinkKind,
+    LinkKindSchema,
     Field(
         description=(
-            "Кем приходится задача из `key` задаче из `other`, а не наоборот: "
-            "`link(key='TRK-1', kind='blocks', other='TRK-7')` — это «TRK-1 блокирует "
-            "TRK-7». В карточке TRK-7 та же связь показана как `blocked_by TRK-1`"
-        ),
-        examples=[LinkKind.BLOCKED_BY],
+            "Role of the task `key` toward the task `other`: "
+            "`link(key='TRK-1', kind='blocks', other='TRK-7')` means TRK-1 blocks TRK-7, "
+            "and the card of TRK-7 shows the same link as `blocked_by`"
+        )
     ),
 ]
 OtherTaskKeyArg = Annotated[
     str,
-    Field(description="Ключ задачи на другой стороне связи", examples=["TRK-7"]),
+    Field(description="Key of the task on the other side of the link", examples=["TRK-7"]),
 ]
 
 # --- Вложенные модели -----------------------------------------------------------------
+#
+# Докстрока вложенной модели — её описание в схеме, то есть метадата: английская и
+# короткая. Доводы разработчика стоят комментарием над классом.
 
 
 class TaskSections(BaseModel):
-    """Пять разделов задачи. Правятся только в `backlog`, дальше неизменяемы."""
+    """The five task sections; they are editable only while the task is in `backlog`."""
 
     model_config = ConfigDict(extra="forbid")
 
-    goal: str = Field(default="", description="Зачем задача нужна и что изменится")
-    context: str = Field(
-        default="", description="Что уже есть, на что опираться, какие заметки читать"
-    )
+    goal: str = Field(default="", description="Why the task exists and what will change")
+    context: str = Field(default="", description="What already exists and what the work relies on")
     constraints: str = Field(
-        default="", description="Чего не делать, что не входит, чего нельзя менять"
+        default="", description="What is out of scope and what stays unchanged"
     )
-    output: str = Field(default="", description="Что должно существовать по завершении")
+    output: str = Field(default="", description="What exists once the task is done")
     checks: list[str] = Field(
         default_factory=list,
         description=(
-            "Обзорные проверки по порядку, нумерация с 1: что запустить и что должно получиться"
+            "Review checks in order, numbered from 1; each names what is run and the "
+            "expected result"
         ),
-        examples=[["docker compose run --rm test: весь набор зелёный"]],
     )
 
 
@@ -393,68 +470,70 @@ SectionsArg = Annotated[
     TaskSections | None,
     Field(
         description=(
-            "Пять разделов задачи. Без четырёх непустых разделов и хотя бы одной "
-            "проверки задача не откроется; дописать их можно, пока она в `backlog`"
+            "The five sections. The task moves from `backlog` to `open` only with four "
+            "non-empty text sections and at least one check (`task_sections_incomplete` "
+            "otherwise); until then they can be completed with `update_task`"
         )
     ),
 ]
 
 
 class CheckEditArg(BaseModel):
-    """Правка одной проверки: её номер и новый текст."""
+    """Rewrite of one check: its number and new text."""
 
     model_config = ConfigDict(extra="forbid")
 
     no: int = Field(
         ge=FIRST_CHECK_NUMBER,
-        description="Номер проверки в нынешнем списке задачи, с 1",
-        examples=[3],
+        description="Number of the check in the current list, from 1",
     )
     text: str = Field(
         min_length=1,
         max_length=MAX_CHECK_LENGTH,
-        description="Новая формулировка этой проверки; остальные остаются теми же байтами",
-        examples=["`docker compose run --rm test` зелёный целиком"],
+        description="New wording of this check",
     )
 
 
+# `null` осмыслен только у `assignee`: он снимает исполнителя. У остальных полей `null`
+# смысла не имеет, и схема его не пропустит. Статуса здесь нет — он меняется
+# `transition`; ключа нет — он неизменяем.
 class TaskChanges(BaseModel):
-    """Что поменять в задаче. Непереданное поле не трогается.
-
-    Статуса здесь нет — он меняется `transition`; ключа нет — он неизменяем. У
-    `assignee` осмыслен `null`: он снимает исполнителя. У остальных полей `null` смысла
-    не имеет, и схема его не пропустит.
+    """Fields to change; a field left out stays as it is. Title, description, sections
+    and checks are editable only in `backlog`; elsewhere they are refused with
+    `task_field_locked`.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    title: str = unset_field(description="Название задачи; только в `backlog`")
-    description: str = unset_field(description="Описание задачи; только в `backlog`")
-    goal: str = unset_field(description="Раздел «цель»; только в `backlog`")
-    context: str = unset_field(description="Раздел «контекст»; только в `backlog`")
-    constraints: str = unset_field(description="Раздел «ограничения»; только в `backlog`")
-    output: str = unset_field(description="Раздел «выход»; только в `backlog`")
+    title: str = unset_field(description="Task title")
+    description: str = unset_field(description="Task description")
+    goal: str = unset_field(description="Section `goal`")
+    context: str = unset_field(description="Section `context`")
+    constraints: str = unset_field(description="Section `constraints`")
+    output: str = unset_field(description="Section `output`")
     checks: list[str] = unset_field(
         description=(
-            "Обзорные проверки целиком, списком; только в `backlog`. Этим меняют "
-            "**состав**: добавляют проверку, снимают, переставляют. Переписать одну — "
-            "`check`: пересылка восьми строк ради третьей пропускает опечатку в "
-            "остальных семи молча"
+            "All review checks as a list: changes their composition — a check added, "
+            "removed or moved"
         )
     )
     check: CheckEditArg = unset_field(
         description=(
-            "Переписывает одну проверку на месте, не трогая остальные; только в "
-            "`backlog`. Главный способ правки: переписывают обычно одну — «эту проверку "
-            "выполнить нельзя», — а состав меняют редко. Вместе с `checks` не "
-            "принимается: это два разных ответа на один вопрос"
+            "Rewrites one check in place; the other checks stay byte for byte, and the "
+            "`section_changed` entry names the check number. Refused together with "
+            "`checks` (`task_fields_invalid`)"
         )
     )
     assignee: str | None = unset_field(
-        description="Имя участника или метка временного агента; `null` снимает исполнителя",
-        examples=["release_bot"],
+        description=(
+            "Participant name or temporary agent label; `null` clears it. The name is "
+            "compared with the caller's signature regardless of case, and every session "
+            "signed with that name counts as the assignee. Replacing another "
+            "participant's name takes the task over from them: the tracker accepts it, "
+            "files `assignee_changed` and informs no one"
+        )
     )
-    priority: TaskPriority = unset_field(description="Приоритет", examples=[TaskPriority.HIGH])
+    priority: TaskPrioritySchema = unset_field(description="Task priority")
 
 
 # --- Закрытие -------------------------------------------------------------------------
@@ -464,12 +543,11 @@ class TaskChanges(BaseModel):
 # копии, которая разойдётся с первой, здесь нет.
 
 
+# `unmeasured` обязателен: значение по умолчанию превратило бы «чего не измерили» в
+# поле, которое молча опускают ровно в тех делах, где оно и нужно.
 class ClosingSummary(BaseModel):
-    """Финальная сводка. Заголовка не принимает: им становится первая строка `done`.
-
-    На одну часть длиннее промежуточной: `unmeasured` есть только здесь. Обязателен —
-    значение по умолчанию превратило бы «чего не измерили» в поле, которое молча
-    опускают ровно в тех делах, где оно и нужно.
+    """Final summary: the four parts of `add_summary` plus `unmeasured`. It takes no
+    title: the first line of `done` becomes it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -482,7 +560,7 @@ class ClosingSummary(BaseModel):
 
 
 class ClosingVerdict(BaseModel):
-    """Исход одной обзорной проверки с доказательством."""
+    """Outcome of one review check with its evidence."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -492,7 +570,7 @@ class ClosingVerdict(BaseModel):
 
 
 class ClosingEntry(BaseModel):
-    """Запись без нагрузки: та же форма, что у `add_entry`."""
+    """An entry without payload, of the same shape as in `add_entry`."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -506,8 +584,10 @@ ClosingSummaryArg = Annotated[
     ClosingSummary,
     Field(
         description=(
-            "Сводка, которой задача закрывается. Подшивается последней, после присланных "
-            "записей и вердиктов, поэтому в описи она стоит ниже их и говорит об их исходе"
+            "The summary the task closes with, filed last and reporting the outcome of "
+            "the entries and verdicts before it: the first line of `done` states how the "
+            "task ended, `remaining` is `nothing` or the key of the task the rest went "
+            "to, `next_step` is `no steps` or that key"
         )
     ),
 ]
@@ -515,10 +595,10 @@ ClosingVerdictsArg = Annotated[
     list[ClosingVerdict] | None,
     Field(
         description=(
-            "Вердикты, которые подшиваются этим же вызовом. Список может быть пуст: "
-            "вердикты, подшитые раньше по ходу работы, засчитываются наравне, а "
-            "требование «положительный последний вердикт по каждой проверке» проверяет "
-            "сам переход"
+            "Verdicts filed by this call. The list may be empty: verdicts filed earlier "
+            "in the current pass count equally. A refused call files none of them, so a "
+            "`failed` verdict sent here leaves no trace in the case, unlike one filed "
+            "with `add_verdict`"
         )
     ),
 ]
@@ -526,8 +606,8 @@ ClosingEntriesArg = Annotated[
     list[ClosingEntry] | None,
     Field(
         description=(
-            "Записи, которые подшиваются перед вердиктами: обычно `artifact` с "
-            "указателями на результат"
+            "Entries without payload filed before the verdicts, such as `artifact` pointers "
+            "to the result"
         )
     ),
 ]
@@ -560,21 +640,22 @@ QueryArg = Annotated[
     str | None,
     Field(
         description=(
-            "Строка языка запросов. Условие пишется `имя: [оператор] значения` — оператор "
-            "стоит **после** двоеточия, и это главное, чем язык отличается от SQL: "
-            f"`{QUERY_RIGHT_SHAPE}`, а не `{QUERY_WRONG_SHAPE}`. Скобки в языке есть, но "
-            "группируют они условия, а не значения.\n\n"
-            "Без оператора условие означает равенство, а несколько значений через запятую "
-            "— вхождение в набор: `status: open, in_progress` то же самое, что "
+            "Query language string. A condition is written `name: [operator] values`: the "
+            "operator stands **after** the colon, unlike SQL — "
+            f"`{QUERY_RIGHT_SHAPE}`, not `{QUERY_WRONG_SHAPE}`. Parentheses group "
+            "conditions, not values.\n\n"
+            "Without an operator a condition means equality, and comma-separated values "
+            "mean membership: `status: open, in_progress` equals "
             f"`{QUERY_RIGHT_SHAPE}`.\n\n"
-            "Поля: " + ", ".join(f"`{name}`" for name in searchable_names()) + ". "
-            "Операторы: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (вхождение подстроки), `!~`, "
-            "`in`, `not in`; `empty()` находит задачи без значения. Условия связываются "
-            "`and` и `or`.\n\n"
-            "Примеры:\n"
+            "Fields: " + ", ".join(f"`{name}`" for name in searchable_names()) + ". "
+            "Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (substring), `!~`, `in`, "
+            "`not in`; `empty()` matches tasks without a value. Conditions combine with "
+            "`and` and `or`.\n\n"
+            "Examples:\n"
             + "\n".join(f"- `{example}`" for example in QUERY_EXAMPLES)
-            + "\n\nОшибка разбора приходит с позицией символа, а там, где верная форма "
-            "выводима из места ошибки, — и с ней самой в `details.hint`"
+            + "\n\nA string that does not parse is refused with `invalid_search_query` "
+            "and the character position, plus the correct form in `details.hint` where "
+            "the error position determines it"
         ),
         examples=list(QUERY_EXAMPLES),
     ),
@@ -583,8 +664,8 @@ SortArg = Annotated[
     list[str] | None,
     Field(
         description=(
-            "Порядок, старший ключ первым; `-` в начале — по убыванию. Допустимы: "
-            + ", ".join(f"`{name}`" for name in sortable_names())
+            "Sort order, most significant key first; a leading `-` sorts descending. "
+            "Allowed: " + ", ".join(f"`{name}`" for name in sortable_names())
         ),
         examples=[["-updated_at"]],
     ),
@@ -592,18 +673,17 @@ SortArg = Annotated[
 # Домен значений называется целиком и собирается из домена, а не переписывается словами:
 # описание и `details.allowed` отказа обязаны быть одним списком в одном порядке, иначе
 # агент решит, что набор зависит от вызова. Место здесь дорогое — описание `search_tasks`
-# самое длинное в установке, — поэтому названы имена и ничего больше: ни примеров
-# применения, ни советов, когда это пригодится.
+# самое длинное в установке, — поэтому названы имена и ничего больше.
 FieldsArg = Annotated[
     list[str],
     Field(
         description=(
-            "Какие поля вернуть: "
+            "Fields to return: "
             + ", ".join(f"`{name}`" for name in selectable_names())
-            + ". Ключ приходит всегда, пустой список означает «задачу целиком»: разделы "
-            "длинные. `features` приносит вычисляемые признаки строки: "
+            + ". The key always comes back; an empty list returns whole tasks. "
+            "`features` brings the computed features: "
             + ", ".join(f"`{name}`" for name in feature_names())
-            + ". `parent` — родитель: ключ и название или `null`"
+            + ". `parent` is the parent's key and title, or `null`"
         )
     ),
 ]
@@ -616,79 +696,67 @@ KeysArg = Annotated[
     list[str] | None,
     Field(
         description=(
-            "Ключи задач: спросить про несколько названных разом, а не по вызову на "
-            "каждую. Несуществующий ключ отвечает отказом, а не пустой выдачей"
+            "Task keys: several named tasks in one call. An unknown key is refused with "
+            "`search_value_invalid`, `reason: task_not_found`, rather than left out"
         ),
         examples=[["TRK-42", "TRK-43"]],
     ),
 ]
-QueuesArg = Annotated[
-    list[str] | None,
-    Field(description="Ключи очередей", examples=[["TRK"]]),
-]
-StatusesArg = Annotated[
-    list[TaskStatus] | None,
-    Field(description="Статусы задач", examples=[[TaskStatus.OPEN]]),
-]
+QueuesArg = Annotated[list[str] | None, Field(description="Queue keys", examples=[["TRK"]])]
+StatusesArg = Annotated[list[TaskStatusSchema] | None, Field(description="Task statuses")]
 AssigneesArg = Annotated[
     list[str] | None,
     Field(
-        description="Исполнители, точным совпадением; `empty()` находит задачи без исполнителя",
-        examples=[["release_bot"]],
+        description=(
+            "Assignee names, exact match; `empty()` matches tasks without an assignee. A "
+            "name covers every session signed with it: no value selects the tasks of one "
+            "session"
+        )
     ),
 ]
 ParentFilterArg = Annotated[
     list[str] | None,
     Field(
         description=(
-            "Ключи родительских задач: в выдаче их **прямые** дети, на одно колено. "
-            "`empty()` находит задачи без родителя — верхний уровень очереди. "
-            "Несуществующий ключ отвечает отказом, а не пустой выдачей: пустота здесь "
-            "читается как «детей нет», и опечатка спряталась бы за ответом"
+            "Parent task keys: their **direct** children, one level down. `empty()` "
+            "matches tasks without a parent, the top level of a queue. An unknown key is "
+            "refused rather than read as «no children»"
         ),
         examples=[["TRK-7"]],
     ),
 ]
-PrioritiesArg = Annotated[
-    list[TaskPriority] | None,
-    Field(description="Приоритеты", examples=[[TaskPriority.HIGH]]),
-]
+PrioritiesArg = Annotated[list[TaskPrioritySchema] | None, Field(description="Priorities")]
 BlockedArg = Annotated[
     bool | None,
     Field(
         description=(
-            "Есть ли у задачи `blocked_by` на задачу не в `done` и не в `cancelled`. "
-            "Вход в `in_progress` при `true` отклоняется"
+            "Whether the task has `blocked_by` on a task that is neither `done` nor `cancelled`"
         )
     ),
 ]
 OpenQuestionsArg = Annotated[
     int | None,
-    Field(description="Ровно столько вопросов без ответа. Для диапазонов есть язык запросов"),
+    Field(description="Exact number of unanswered questions; ranges go in `query`"),
 ]
 OpenBlockingQuestionsArg = Annotated[
     int | None,
-    Field(description="Из них помеченных `blocking`; `0` означает «ничто не мешает»"),
+    Field(description="Exact number of unanswered `blocking` questions; `0` means none blocks"),
 ]
 OpenRemarksArg = Annotated[
     int | None,
-    Field(description="Ровно столько замечаний без резолюции. Для диапазонов есть язык запросов"),
+    Field(description="Exact number of unresolved remarks; ranges go in `query`"),
 ]
 RemarksInWorkArg = Annotated[
     int | None,
     Field(
         description=(
-            "Замечаний, принятых в работу, чья задача-продолжение ещё не закрыта: "
-            "«разобрано, но работа не доделана»"
+            "Number of remarks resolved as `accepted` whose continuation task is not closed yet"
         )
     ),
 ]
 TextArg = Annotated[
     str | None,
-    Field(
-        description="Подстрока в названии или описании, без учёта регистра",
-        examples=["выдача ключей"],
-    ),
+    Field(description="Substring of the title or description, case-insensitive"),
 ]
 
 # --- Лента --------------------------------------------------------------------------
@@ -698,79 +766,62 @@ AfterArg = Annotated[
     Field(
         ge=JOURNAL_START,
         description=(
-            "Сквозной номер `seq`, после которого читать. 0 — с самого начала: записи "
-            "постоянны, слишком старого курсора не бывает"
+            "Journal sequence number `seq` to read after; `0` reads from the start. "
+            "Entries are permanent: no `seq` is too old"
         ),
-        examples=[1024],
     ),
 ]
 JournalTaskArg = Annotated[
     list[str] | str | None,
     Field(
         description=(
-            "Только записи этих задач: ключ или список ключей, не больше "
-            f"{MAX_TASK_KEYS}. Несколько дел спрашиваются одним ожиданием, а не по "
-            "вызову на каждое. Превышение — `journal_too_many_tasks` с числом в "
-            "подробностях; несуществующий ключ — `task_not_found`, а не пустая лента"
+            f"Only entries of these tasks: one key or a list of at most {MAX_TASK_KEYS}. "
+            "One wait covers all of them, and an entry in any of them ends it. More keys "
+            "are refused with `journal_too_many_tasks`, an unknown key with "
+            "`task_not_found`"
         ),
         examples=[["TRK-42", "TRK-43"]],
     ),
 ]
 JournalQueueArg = Annotated[
     str | None,
-    Field(description="Только записи задач этой очереди", examples=["TRK"]),
+    Field(description="Only entries of tasks in this queue", examples=["TRK"]),
 ]
 TimeoutArg = Annotated[
     float,
     Field(
         description=(
-            "Сколько секунд ждать первую подходящую запись, если хвост пуст; не больше "
-            f"{MAX_WAIT_SECONDS:.0f}. 0 — ответить сразу. Пустой список по истечении "
-            "ожидания означает «ничего не случилось» и ошибкой не является"
-        ),
-        examples=[30],
+            "Seconds to wait for the first matching entry when none is there yet, at most "
+            f"{MAX_WAIT_SECONDS:.0f} (`journal_wait_too_long` beyond); `0` answers at "
+            "once. An empty page after the wait means nothing happened and is not an error"
+        )
     ),
 ]
 
 # --- Реестры ------------------------------------------------------------------------
 
-ParticipantKindArg = Annotated[
-    ParticipantKind,
-    Field(description="Человек или постоянный агент", examples=[ParticipantKind.AGENT]),
-]
+ParticipantKindArg = Annotated[ParticipantKindSchema, Field(description="Human or permanent agent")]
 ParticipantDescriptionArg = Annotated[
     str,
     Field(
-        description="Кто это. Всё, что читающий дело узнает об авторе записи",
-        examples=["Релизный бот, ведёт задачи выкладки"],
+        description=(
+            "Who the participant is: all that a reader of a case learns about the author "
+            "of an entry"
+        )
     ),
 ]
-QueueTitleArg = Annotated[
-    str,
-    Field(description="Название очереди", examples=["Трекер"]),
-]
+QueueTitleArg = Annotated[str, Field(description="Queue title")]
 QueueDescriptionArg = Annotated[
     str,
-    Field(
-        description=(
-            "Общий контекст всех задач очереди в markdown: где лежит код, на какие "
-            "документы смотреть, чего не делать"
-        ),
-        examples=["Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"],
-    ),
+    Field(description="Queue description in markdown: the shared context of all its tasks"),
 ]
 # Отдельные аннотации для правки: `None` здесь означает «не передано». Осмысленного
 # `null` ни у названия, ни у описания нет, поэтому третьего состояния и не нужно — в
 # отличие от исполнителя задачи, который `null` как раз снимается.
 QueueTitleChangeArg = Annotated[
-    str | None,
-    Field(description="Новое название; непереданное поле не меняется", examples=["Трекер"]),
+    str | None, Field(description="New title; when left out, the title stays")
 ]
 QueueDescriptionChangeArg = Annotated[
-    str | None,
-    Field(description="Новое описание; непереданное поле не меняется"),
+    str | None, Field(description="New description; when left out, the description stays")
 ]
-TaskStatusArg = Annotated[
-    TaskStatus,
-    Field(description="Целевой статус", examples=[TaskStatus.OPEN]),
-]
+TaskStatusArg = Annotated[TaskStatusSchema, Field(description="Target status")]

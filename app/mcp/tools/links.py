@@ -35,28 +35,26 @@ def register(tools: Toolset) -> None:
         other: OtherTaskKeyArg,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.LinkFilingView:
-        """Связывает две задачи и подшивает `link_added` в дела обеих; обе записи
-        сразу видны в ленте и человеку в интерфейсе.
+        """Links two tasks and files `link_added` in both cases.
 
-        Вид называет роль задачи из `key`: `kind="blocks"` означает «`key` блокирует
-        `other`», и в карточке `other` та же связь показана как `blocked_by`. Связь
-        хранится один раз, поэтому повтор с другой стороны — отказ, а не вторая связь.
+        `kind` is the role of `key`: `blocks` means `key` blocks `other`, and the card
+        of `other` shows the link as `blocked_by`. A link is stored once: the same link
+        from the other side is refused with `link_exists`, like a repeat. A link closing
+        a cycle is refused with `link_cycle_detected`, a link of a task to itself with
+        `link_self_not_allowed`.
 
-        Родитель и ребёнок заводятся этим же вызовом (`kind="parent"` — «`key` родитель
-        `other`»), а в карточке `get_task` видны полями `parent` и `children`, не в
-        `links`. Родитель у задачи один, детей сколько угодно: второй родитель — отказ
-        `task_has_parent`, нынешний назван в `details.parent`.
+        `parent` and `child` set the hierarchy, shown by `get_task` in the fields
+        `parent` and `children` rather than in `links`. A task has one parent: a second
+        one is refused with `task_has_parent`, the current parent named in
+        `details.parent`.
 
-        Незакрытый блокер поднимает у заблокированной задачи признак `blocked` и
-        закрывает ей вход в `in_progress` отказом `task_blocked`.
+        An open blocker raises the `blocked` feature of the blocked task and keeps it
+        out of `in_progress` with `task_blocked`.
 
-        С закрытой задачей (`done`, `cancelled`) ставится только `relates` — им и
-        связывают её с продолжением, выросшим из неё. `parent` и `blocks` у закрытой
-        задачи отклоняются: они меняли бы смысл уже случившегося.
-
-        Ответ короткий: `key`, номер записи `link_added` в его деле и номер той же
-        записи в деле `other`. Вид и обе задачи вызывающий уже прислал сам; карточку
-        `other` целиком, если она вдруг нужна, отдаёт `get_task`.
+        A closed task (`done`, `cancelled`) accepts only `relates`, the link to a
+        continuation grown from it; `parent` and `blocks` on it are refused with
+        `task_closed`. Only a link shows the lineage on the cards of both tasks: a key
+        mentioned in an entry body or in `refs` does not.
         """
         async with runtime.call() as (session, actor):
             # Ключи разрешаются до занятия ключа идемпотентности: вызов, отклонённый до
@@ -83,14 +81,12 @@ def register(tools: Toolset) -> None:
     async def unlink(
         key: TaskKeyArg, kind: LinkKindArg, other: OtherTaskKeyArg
     ) -> views.LinkFilingView:
-        """Снимает связь и подшивает `link_removed` в дела обеих задач.
+        """Removes a link and files `link_removed` in both cases.
 
-        Снять можно с любой стороны и любым её именем: «снять с `TRK-1` связь `blocks` с
-        `TRK-7`» и «снять с `TRK-7` связь `blocked_by` с `TRK-1`» — это одна и та же
-        строка. У закрытой задачи не снимаются `parent` и `blocks`, `relates` снимается.
-
-        Ответ короткий: `key`, номер записи `link_removed` в его деле и номер той же
-        записи в деле `other`.
+        A link is removed from either side and under either name of its kind: `blocks`
+        from `TRK-1` to `TRK-7` and `blocked_by` from `TRK-7` to `TRK-1` are the same
+        link. On a closed task `parent` and `blocks` stay (`task_closed`), `relates` is
+        removed. A link that does not exist is refused with `link_not_found`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
