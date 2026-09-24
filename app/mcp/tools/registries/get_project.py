@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from app.db.models.attribute import ProjectAttribute
 from app.db.models.project import Project
 from app.domain.case import EntryHeading
+from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.mcp.arguments import ProjectKeyArg
 from app.mcp.tools.case.views import HeadingView, heading
 from app.mcp.toolset import READ_ONLY, Toolset
@@ -27,9 +28,8 @@ class ProjectView(BaseModel):
     title: str
     description: str = Field(
         description=(
-            "Shared context of all tasks of the project: where the code lives, which "
-            "documents apply, what is out of bounds. Task cards carry only the project's "
-            "key and title"
+            f'Short "what this is" of the project, up to {MAX_PROJECT_DESCRIPTION_LENGTH} '
+            "characters; may be empty. Every task card carries it too"
         )
     )
     attributes: list[AttributeView] = Field(

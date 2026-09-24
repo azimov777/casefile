@@ -4,6 +4,7 @@ from typing import Annotated
 
 from pydantic import Field
 
+from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.domain.tokens import TokenScope
 from app.mcp.arguments import ProjectKeyArg
 from app.mcp.tools.registries.views import ProjectKeyView, project_key
@@ -18,7 +19,14 @@ ProjectTitleChangeArg = Annotated[
 ]
 
 ProjectDescriptionChangeArg = Annotated[
-    str | None, Field(description="New description; when left out, the description stays")
+    str | None,
+    Field(
+        description=(
+            f"New description, up to {MAX_PROJECT_DESCRIPTION_LENGTH} characters after "
+            "trimming (`project_description_too_long` otherwise); when left out, the "
+            "description stays"
+        )
+    ),
 ]
 
 

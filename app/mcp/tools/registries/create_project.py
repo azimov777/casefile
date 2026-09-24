@@ -4,6 +4,7 @@ from typing import Annotated
 
 from pydantic import Field
 
+from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.domain.tokens import TokenScope
 from app.mcp.arguments import IdempotencyKeyArg
 from app.mcp.idempotency import Once
@@ -29,7 +30,13 @@ ProjectTitleArg = Annotated[str, Field(description="Project title")]
 
 ProjectDescriptionArg = Annotated[
     str,
-    Field(description="Project description in markdown: the shared context of all its tasks"),
+    Field(
+        description=(
+            f'Short "what this is", up to {MAX_PROJECT_DESCRIPTION_LENGTH} characters after '
+            "trimming; a longer one is refused with `project_description_too_long`. It rides "
+            "in the card of every task of the project"
+        )
+    ),
 ]
 
 

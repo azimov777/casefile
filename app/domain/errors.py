@@ -106,6 +106,17 @@ class InvalidProjectKeyError(ValidationError):
     message = "Project key is invalid"
 
 
+class ProjectDescriptionTooLongError(ValidationError):
+    """Описание проекта длиннее предела (`app/domain/projects.py`).
+
+    Текст не обрезается: он либо помещается, либо остаётся у вызывающего целиком —
+    длинное место ему в атрибутах и в деле проекта (`CONCEPT.md`, 3.2).
+    """
+
+    code = "project_description_too_long"
+    message = "Project description is too long"
+
+
 # --- Атрибуты проекта ----------------------------------------------------------------
 
 
