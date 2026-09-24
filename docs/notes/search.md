@@ -101,7 +101,7 @@
 сериализаторы фильтруют готовый словарь тем же правилом, но решение о цене принимается до
 выборки, в репозитории.
 **Где:** `app/domain/search.py` (`FEATURES_FIELD`, `field_requested`),
-`app/db/repositories/search.py`, `app/api/schemas/search.py`, `app/mcp/views.py`.
+`app/db/repositories/search.py`, `app/api/schemas/search.py`, `app/mcp/tools/tasks/search_tasks.py`.
 
 ## Порядок по ключу — это пара «очередь, номер», а не строка
 
@@ -305,7 +305,7 @@ TRK-76 стоит в обоих.
 пригодится. Объём слов вокруг имён ограничен двумя строками, и это стережёт
 `test_the_fields_description_names_the_whole_domain_and_stays_short`.
 **Где:** `app/domain/search.py` (`SELECTABLE_FIELDS`, `selectable_names`),
-`app/domain/tasks.py` (`feature_names`), `app/mcp/arguments.py` (`FieldsArg`),
+`app/domain/tasks.py` (`feature_names`), `app/mcp/tools/tasks/search_tasks.py` (`FieldsArg`),
 `app/api/schemas/search.py` (`_FIELDS_DESCRIPTION`), `app/services/search.py`
 (`_resolve_fields`), `tests/test_mcp_tools.py`.
 
@@ -371,5 +371,5 @@ TRK-76 стоит в обоих.
 имён (`SELECTABLE_FIELDS` и `SearchField`), совпадение имён их не смешивает.
 **Как правильно:** оба имени объявлены в одном месте, и переименовывать их по отдельности
 нельзя.
-**Где:** `app/domain/search.py` (`PARENT_FIELD`, `SearchField`), `app/mcp/arguments.py`
+**Где:** `app/domain/search.py` (`PARENT_FIELD`, `SearchField`), `app/mcp/tools/tasks/search_tasks.py`
 (`DEFAULT_SEARCH_FIELDS`).

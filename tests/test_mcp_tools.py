@@ -42,8 +42,8 @@ from app.domain.search import (
 )
 from app.domain.tasks import feature_names
 from app.domain.tokens import TokenScope
-from app.mcp.arguments import DEFAULT_SEARCH_FIELDS, FieldsArg, QueryArg
-from app.mcp.views import FeaturesView
+from app.mcp.tools.tasks.search_tasks import DEFAULT_SEARCH_FIELDS, FieldsArg, QueryArg
+from app.mcp.tools.tasks.views import FeaturesView
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import queues as queues_service
@@ -534,8 +534,9 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
     """Проверка 3 задачи 32: строка выдачи MCP совпадает с REST поле в поле.
 
     Признаки в строке — самое лёгкое место разойтись: их сериализуют два разных слоя
-    (`app/mcp/views.py` и `app/api/schemas/search.py`), а считает один запрос. Пока
-    сравнение зелёное, агент и человек выбирают задачу по одним и тем же числам.
+    (`app/mcp/tools/tasks/search_tasks.py` и `app/api/schemas/search.py`), а считает один
+    запрос. Пока сравнение зелёное, агент и человек выбирают задачу по одним и тем же
+    числам.
     """
     fields = ["title", "status", "features"]
     async with mcp_session(task_secret) as session:
@@ -769,8 +770,8 @@ async def test_an_update_that_changes_nothing_files_nothing(
 ) -> None:
     """Пустой `entries` — законный ответ, и по нему агент отличает «уже так было».
 
-    Отдельного признака рядом нет намеренно (`app/mcp/views.py`, `mutation`): два способа
-    узнать один факт разошлись бы при первой же правке. Значит пустой список обязан
+    Отдельного признака рядом нет намеренно (`app/mcp/tools/tasks/views.py`, `mutation`):
+    два способа узнать один факт разошлись бы при первой же правке. Значит пустой список обязан
     приходить именно тогда, когда версия не выросла, — это и проверяется.
     """
     async with mcp_session(task_secret) as session:
