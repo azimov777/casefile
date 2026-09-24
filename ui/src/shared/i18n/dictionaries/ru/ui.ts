@@ -28,6 +28,9 @@ export const ui = {
     unknown: 'Неизвестная ошибка.',
     unknownCode: 'Неизвестная ошибка ({{code}}).',
     withCode: '{{message}} ({{code}})',
+    // Причина у поля (`details.fields[].reason`), которой нет в словаре `fieldReasons`
+    // (`shared/i18n/dictionaries`): он не обязан покрывать причины целиком.
+    unknownFieldReason: 'Значение не подходит ({{reason}}).',
   },
 
   /**

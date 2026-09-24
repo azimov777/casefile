@@ -3,6 +3,7 @@ import { account } from './account';
 import { caseScreen } from './case';
 import { connect } from './connect';
 import { errors } from './errors';
+import { fieldReasons } from './field-reasons';
 import { login } from './login';
 import { moving } from './moving';
 import { people } from './people';
@@ -18,6 +19,7 @@ export const ru = {
   case: caseScreen,
   connect,
   errors,
+  fieldReasons,
   login,
   moving,
   people,

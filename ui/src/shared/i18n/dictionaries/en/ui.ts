@@ -34,6 +34,9 @@ export const ui = {
     // Фраза бэкенда, которую нечем заменить: код называется рядом, чтобы человеку
     // было что процитировать в задаче.
     withCode: '{{message}} ({{code}})',
+    // A field reason (`details.fields[].reason`) missing from `fieldReasons`
+    // (`shared/i18n/dictionaries`): that dictionary is not required to cover them all.
+    unknownFieldReason: 'This value is not valid ({{reason}}).',
   },
 
   /**

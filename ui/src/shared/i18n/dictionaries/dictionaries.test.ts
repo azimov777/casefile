@@ -131,11 +131,22 @@ function phrase(language: keyof typeof dictionaries, key: string): unknown {
  */
 const COUNTS = [0, 1, 2, 5, 11, 21];
 
+/**
+ * Пространства, чьи ключи — коды бэкенда (`error.code`, `details.fields[].reason`), а
+ * не авторские фразы: те же, что `i18next.d.ts` объявляет `Record<string, string>`.
+ * Код случайно кончается на суффикс формы числа — `too_many` («элементов слишком
+ * много», `app/domain/fields.py`) читается как форма `_many` ключа `too` — и без
+ * исключения эвристика множественного числа приняла бы контрактный код за
+ * недописанную форму множественного числа.
+ */
+const CODE_NAMESPACES = new Set(['errors', 'fieldReasons']);
+
 /** Ключи, у которых в английском словаре есть формы: их и спрашиваем со счётчиком. */
 function pluralKeys(): { ns: string; key: string }[] {
   const seen = new Set<string>();
 
   for (const full of keysOf(dictionaries.en, '', false)) {
+    if (CODE_NAMESPACES.has(full.split('.', 1)[0] ?? '')) continue;
     if (!PLURAL_SUFFIX.test(full)) continue;
     seen.add(full.replace(PLURAL_SUFFIX, ''));
   }

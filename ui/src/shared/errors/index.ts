@@ -1,1 +1,1 @@
-export { errorMessage, errorText } from './text';
+export { errorMessage, errorText, fieldReasonText } from './text';
