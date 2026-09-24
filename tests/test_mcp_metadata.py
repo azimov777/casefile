@@ -345,6 +345,31 @@ async def test_shared_arguments_are_described_once_for_the_whole_server(
     assert all(len(texts) == 1 for texts in seen.values()), dict(seen)
 
 
+async def test_add_summary_does_not_repeat_the_instructions_rule_on_when_to_file(
+    tools: list[Tool],
+) -> None:
+    """TRK-165 (правило 5.5): «сводка после каждого значимого шага» стоит только в
+    `instructions`; `add_summary` называет лишь, что считается значимым шагом
+    (TRK-140#24, расхождение 1).
+    """
+    by_name = {tool.name: tool for tool in tools}
+    described = by_name["add_summary"].description or ""
+
+    assert "follows every significant step" not in described
+    assert "follows each significant step" not in described
+
+
+async def test_update_task_names_the_assignee_overwrite_fact(tools: list[Tool]) -> None:
+    """TRK-165 (правило 2.9): смена исполнителя перезаписывает прежнего и подшивает
+    `assignee_changed`, без совета «спросить» (снят по TRK-140#18).
+    """
+    update_task = next(tool for tool in tools if tool.name == "update_task")
+    described = "\n".join(text for _, text in model_reads(update_task))
+
+    assert "assignee_changed" in described
+    assert "takes the task over" in described
+
+
 def test_the_text_detectors_catch_what_they_are_for() -> None:
     """Сами детекторы: ловят предписание и не ловят описание, перенос вёрстки — не начало."""
     assert IMPERATIVE.search(unwrapped("Returns a page.\nUse `get_task` for one task."))
