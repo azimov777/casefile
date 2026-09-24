@@ -51,6 +51,8 @@ class NoFactsView(BaseModel):
         EntryType.REMARK,
         EntryType.NOTE,
         EntryType.CREATED,
+        EntryType.ARCHIVED,
+        EntryType.RESTORED,
     ]
 
 

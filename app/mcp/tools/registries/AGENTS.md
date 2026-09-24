@@ -12,6 +12,8 @@
 - `list_participants.py` — `list_participants`: реестр участников, страницами
 - `create_project.py` — `create_project`: ключ, название и описание нового проекта
 - `update_project.py` — `update_project`: новое название и описание, прежние — в `field_changed` дела проекта
+- `archive_project.py` — `archive_project`: заморозить проект и его задачи с причиной, запись `archived`
+- `restore_project.py` — `restore_project`: вернуть проект из архива с причиной, запись `restored`
 - `set_attribute.py` — `set_attribute`: завести атрибут проекта или изменить значение; тип записи выбирает трекер
 - `remove_attribute.py` — `remove_attribute`: снять атрибут с причиной, последнее значение — в `attribute_removed`
 - `register_participant.py` — `register_participant`: род и имя нового участника
