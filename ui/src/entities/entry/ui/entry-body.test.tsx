@@ -247,4 +247,31 @@ describe('служебная запись', () => {
     expect(card?.querySelectorAll('p')).toHaveLength(0);
     expect(card).toHaveTextContent(/backlog|open|in_progress/);
   });
+
+  /*
+   * jsdom не считает реальную геометрию строки — за неё отвечает сквозной тест
+   * (`e2e/reason-line.spec.ts`, UI-159). Здесь только застёжка от возврата причины
+   * в `BLOCK` (`flex flex-col`, `entry-body.tsx`): под ним текстовые узлы вокруг
+   * ссылки (до неё, сама ссылка, после неё) становятся отдельными флекс-элементами
+   * и встают друг под другом — «(», ссылка и «)» тремя строками, как было в UI-159.
+   * Обычный абзац оставляет их одним строчным потоком.
+   */
+  it('причина со ссылкой `KEY#N` не завёрнута в блочную колонку (UI-159)', () => {
+    const entry = entryOfType(8, 'DEMO-1', 'status_changed');
+    const withRef = {
+      ...entry,
+      payload: { ...entry.payload, reason: 'Заблокировано (DEMO-1#1) до ответа владельца' },
+    } as typeof entry;
+
+    const { container } = render(
+      <MemoryRouter>
+        <EntryCard entry={withRef} checks={[]} />
+      </MemoryRouter>,
+    );
+
+    const paragraph = container.querySelector('[data-type="status_changed"] p');
+    expect(paragraph).not.toBeNull();
+    expect(paragraph?.className.split(' ')).not.toEqual(expect.arrayContaining(['flex']));
+    expect(screen.getByRole('link', { name: 'DEMO-1#1' })).toBeVisible();
+  });
 });
