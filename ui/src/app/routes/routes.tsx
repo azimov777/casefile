@@ -6,6 +6,7 @@ import { ConnectPage } from '@/pages/connect';
 import { LoginPage } from '@/pages/login';
 import { MovingPage } from '@/pages/moving';
 import { PeoplePage } from '@/pages/people';
+import { ProjectPage } from '@/pages/project';
 import { QuestionsPage } from '@/pages/questions';
 import { TaskPage } from '@/pages/task';
 import { TasksPage } from '@/pages/tasks';
@@ -41,6 +42,7 @@ export const routes: RouteObject[] = [
           { path: 'tasks', element: <TasksPage /> },
           { path: 'tasks/:key', element: <TaskPage /> },
           { path: 'tasks/:key/case', element: <CasePage /> },
+          { path: 'projects/:key', element: <ProjectPage /> },
           { path: '*', element: <NotFound /> },
         ],
       },

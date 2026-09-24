@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Link2 } from 'lucide-react';
 import { entryAddress } from '../model/address';
+import type { EntryOwner } from '../model/owner';
 
 /**
  * Кнопка «скопировать ссылку на запись»: кладёт в буфер адрес, который открывается в
  * браузере (`entryAddress`), — в отличие от `KEY#N`, который понимают трекер и агент
- * (UI-155). Стоит и в описи карточки, и в ленте дела.
+ * (UI-155). Стоит и в описи карточки и экрана проекта, и в ленте дела.
  *
  * Знак, а не слово: в описи кнопка живёт в узкой ячейке номера, и подпись раздвинула
  * бы столбец у каждой строки. Имя для диктора и голосового управления — в
@@ -16,7 +17,7 @@ import { entryAddress } from '../model/address';
  * Исход виден тут же: удача меняет знак на галочку и объявляется вежливо, отказ буфера
  * сказан словами — молча не скопированную ссылку человек вставил бы старой.
  */
-export function CopyEntryLink({ taskKey, no }: { taskKey: string; no: number }) {
+export function CopyEntryLink({ owner, no }: { owner: EntryOwner; no: number }) {
   const { t } = useTranslation('ui');
   const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
 
@@ -24,7 +25,7 @@ export function CopyEntryLink({ taskKey, no }: { taskKey: string; no: number }) 
     try {
       // На незащищённой странице `navigator.clipboard` нет вовсе: это тот же отказ.
       if (navigator.clipboard === undefined) throw new Error('Clipboard is not available');
-      await navigator.clipboard.writeText(entryAddress(taskKey, no, window.location.origin));
+      await navigator.clipboard.writeText(entryAddress(owner, no, window.location.origin));
       setState('done');
     } catch {
       setState('failed');

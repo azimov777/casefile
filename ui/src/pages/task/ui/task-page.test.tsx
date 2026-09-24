@@ -157,7 +157,7 @@ describe('карточка задачи', () => {
       expect(within(summary as HTMLElement).getByText(part)).toBeInTheDocument();
     }
 
-    expect(screen.getByText(say.task('index.count', { count: 7 }))).toBeInTheDocument();
+    expect(screen.getByText(say.ui('index.count', { count: 7 }))).toBeInTheDocument();
     expect(seen).toHaveLength(1);
     expect(entriesCalls()).toEqual([]);
   });
@@ -177,7 +177,7 @@ describe('карточка задачи', () => {
     // поэтому ищем именно в раскрытой записи, а не в разделе «Обзорные проверки».
     // Ищем в пределах описи: тот же текст проверки стоит и в разделе «Обзорные
     // проверки» задачи, и поиск по всей странице нашёл бы оба.
-    const index = screen.getByRole('table', { name: say.task('index.count', { count: 7 }) });
+    const index = screen.getByRole('table', { name: say.ui('index.count', { count: 7 }) });
     const opened = (
       await within(index).findByText('Неприменимый оператор отвечает списком')
     ).closest('td') as HTMLElement;
@@ -277,7 +277,7 @@ describe('карточка задачи', () => {
       }),
     );
     await within(
-      screen.getByRole('table', { name: say.task('index.count', { count: 7 }) }),
+      screen.getByRole('table', { name: say.ui('index.count', { count: 7 }) }),
     ).findByText('Неприменимый оператор отвечает списком');
 
     // `DEMO-6#4` в тексте записи — ссылка на запись 4 той же задачи.
@@ -298,7 +298,7 @@ describe('карточка задачи', () => {
 
     // Таблицы описи ещё нет в первый кадр: пакет только загружается.
     const index = await screen.findByRole('table', {
-      name: say.task('index.count', { count: 7 }),
+      name: say.ui('index.count', { count: 7 }),
     });
     expect(
       await within(index).findByText('Неприменимый оператор отвечает списком'),
@@ -385,7 +385,7 @@ describe('карточка задачи', () => {
     const user = userEvent.setup();
 
     renderApp('/tasks/DEMO-4');
-    await screen.findByRole('table', { name: say.task('index.count', { count: 20 }) });
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 20 }) });
 
     await user.click(screen.getByRole('button', { name: say.task('index.toLatest') }));
 
@@ -408,7 +408,7 @@ describe('карточка задачи', () => {
     server.use(packageOf('DEMO-4'), entries('DEMO-4'));
 
     renderApp('/tasks/DEMO-4');
-    await screen.findByRole('table', { name: say.task('index.count', { count: 7 }) });
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 7 }) });
 
     expect(
       screen.queryByRole('button', { name: say.task('index.toLatest') }),
@@ -1060,7 +1060,7 @@ describe('опись: правки разделов одного действи�
     });
     expect(group).toHaveAttribute('aria-expanded', 'false');
     // Строк описи три: заведение, группа, решение — а не девять.
-    const table = screen.getByRole('table', { name: say.task('index.count', { count: 9 }) });
+    const table = screen.getByRole('table', { name: say.ui('index.count', { count: 9 }) });
     expect(within(table).getAllByRole('row')).toHaveLength(1 + 3);
     expect(nestedRows()).toHaveLength(0);
     // Заголовок группы называет все разделы идентификаторами контракта.
@@ -1125,7 +1125,7 @@ describe('опись: правки разделов одного действи�
     );
     renderApp('/tasks/DEMO-8');
     const table = await screen.findByRole('table', {
-      name: say.task('index.count', { count: 2 }),
+      name: say.ui('index.count', { count: 2 }),
     });
     expect(within(table).getAllByRole('row')).toHaveLength(1 + 2);
     expect(document.querySelector('tr[data-group]')).toBeNull();

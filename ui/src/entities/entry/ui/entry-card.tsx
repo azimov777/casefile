@@ -5,6 +5,7 @@ import { cn } from '@/shared/lib';
 import type { Entry } from '../api/entries';
 import { isServiceEntry } from '../api/entries';
 import { entryHeadline, factsOfEntry } from '../model/headline';
+import { entryReference, ownerOfEntry } from '../model/owner';
 import { AuthorName } from './author-name';
 import { CopyEntryLink } from './copy-entry-link';
 import { EntryBody } from './entry-body';
@@ -31,8 +32,9 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
   const { t } = useTranslation('ui');
   // Владелец записи — задача или проект (TRK-156): непуст ровно один ключ. Карточка живёт
   // в деле задачи, но адрес `TRK#7` у записи проекта собирается тем же способом.
-  const ownerKey = entry.task_key ?? entry.project_key ?? '';
-  const reference = `${ownerKey}#${entry.no}`;
+  const owner = ownerOfEntry(entry);
+  const ownerKey = owner.key;
+  const reference = entryReference(owner, entry.no);
   const headline = entryHeadline(factsOfEntry(entry), ownerKey, t);
   // Служебная запись несёт один факт и получает столько места, сколько в ней смысла:
   // строка вместо карточки. Прятать её нельзя — дело обязано быть полным.
@@ -97,7 +99,7 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
         <AuthorName author={entry.author} />
         <RelativeTime value={entry.created_at} />
         <CopyReference reference={reference} />
-        {entry.task_key !== null ? <CopyEntryLink taskKey={entry.task_key} no={entry.no} /> : null}
+        <CopyEntryLink owner={owner} no={entry.no} />
       </header>
 
       {/*

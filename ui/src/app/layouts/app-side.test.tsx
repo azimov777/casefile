@@ -77,7 +77,7 @@ describe('боковая панель', () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
     renderApp('/tasks?project=DEMO&view=board&status=open');
 
-    const demo = await screen.findByRole('link', { name: /DEMO/ });
+    const demo = await screen.findByRole('link', { name: /^DEMO/ });
     expect(demo).toHaveAttribute('aria-current', 'page');
     // Переход в проект сохраняет вид и остальной отбор: меняется только проект.
     expect(demo).toHaveAttribute('href', '/tasks?view=board&project=DEMO&status=open');

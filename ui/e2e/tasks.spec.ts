@@ -34,7 +34,7 @@ test('отбор по статусу open даёт ровно открытые �
 
   // Проект стоит там, где он теперь живёт, — местом в боковой панели, а не полем
   // формы: подсветка переживает перезагрузку вместе с адресом (UI-38).
-  await expect(side(page).getByRole('link', { name: /DEMO/ })).toHaveAttribute(
+  await expect(side(page).getByRole('link', { name: /^DEMO/ })).toHaveAttribute(
     'aria-current',
     'page',
   );

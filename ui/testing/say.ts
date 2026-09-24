@@ -25,6 +25,7 @@ export const say = {
   access: i18n.getFixedT(null, 'access'),
   account: i18n.getFixedT(null, 'account'),
   people: i18n.getFixedT(null, 'people'),
+  project: i18n.getFixedT(null, 'project'),
   questions: i18n.getFixedT(null, 'questions'),
   errors: i18n.getFixedT(null, 'errors'),
   fieldReasons: i18n.getFixedT(null, 'fieldReasons'),

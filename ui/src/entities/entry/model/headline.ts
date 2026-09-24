@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { components } from '@/shared/api';
-import type { Entry } from '../api/entries';
+import type { Entry, EntryHeading } from '../api/entries';
 
 /**
  * Факты записи из описи дела: то, чем её называют, не читая тела.
@@ -74,8 +74,9 @@ const id = (text: string): HeadlinePart => ({ kind: 'id', text });
  * сужает. Внешний `type` этого не умел — TypeScript про его связь с плоским объектом
  * не знал, и каждое поле приходилось проверять на `null` заново.
  *
- * `taskKey` нужен ответу и разбору замечания: они ссылаются на запись в той же
- * задаче, а в фактах описи лежит только её номер.
+ * `taskKey` — ключ владельца дела: задачи или проекта. Он нужен ответу и разбору
+ * замечания (они ссылаются на запись в той же задаче, а в фактах описи лежит только её
+ * номер) и заведению — «задача заведена» или «проект заведён».
  *
  * Подписи приходят функцией перевода, а не берутся из экземпляра `i18next`: заголовок
  * собирают компоненты, и они же обязаны быть подписаны на смену языка. Пространство
@@ -83,8 +84,19 @@ const id = (text: string): HeadlinePart => ({ kind: 'id', text });
  */
 export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'ui'>): Headline {
   switch (facts.type) {
+    // `created` подшивается и в дело проекта (TRK-156). Чьё это дело, видно по ключу
+    // владельца: дефис есть только в ключе задачи (`../docs/CONCEPT.md`, 3.4).
     case 'created':
-      return { kind: 'built', parts: [words(t('entry.headline.created'))] };
+      return {
+        kind: 'built',
+        parts: [
+          words(
+            taskKey.includes('-')
+              ? t('entry.headline.created')
+              : t('entry.headline.projectCreated'),
+          ),
+        ],
+      };
 
     case 'status_changed':
       return {
@@ -338,6 +350,26 @@ export function factsOfEntry(entry: Entry): EntryFacts {
     default:
       return { type: entry.type };
   }
+}
+
+/**
+ * Строка описи из записи целиком: то же, что бэкенд отдаёт описью в пакете задачи.
+ *
+ * У дела проекта описи в ответе нет — `GET /projects/{key}/entries` отдаёт записи с
+ * телами, — и строка собирается из полученного: поля записи как есть, факты — тем же
+ * `factsOfEntry`, что у ленты. Это проекция ответа, а не вычисление признака: ничего,
+ * чего нет в записи, строка не несёт (UI-174).
+ */
+export function headingOfEntry(entry: Entry): EntryHeading {
+  return {
+    no: entry.no,
+    type: entry.type,
+    author: entry.author,
+    created_at: entry.created_at,
+    title: entry.title,
+    action_id: entry.action_id ?? null,
+    facts: factsOfEntry(entry),
+  };
 }
 
 /** Строка заголовка словами: для подсказок, подписей и тестов. */

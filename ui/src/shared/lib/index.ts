@@ -8,6 +8,7 @@ export {
 } from './exit-hold';
 export {
   caseHref,
+  projectHref,
   projectOfKey,
   readEntryNo,
   splitTaskRefs,

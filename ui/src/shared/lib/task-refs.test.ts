@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { caseHref, readEntryNo, splitTaskRefs, taskRefHref } from './task-refs';
+import { caseHref, projectHref, readEntryNo, splitTaskRefs, taskRefHref } from './task-refs';
 
 describe('ссылки на задачи в тексте', () => {
   it('находит задачу и запись, сохраняя текст вокруг', () => {
     expect(splitTaskRefs('см. DEMO-2 и DEMO-6#4 — там всё')).toEqual([
       { kind: 'text', value: 'см. ' },
-      { kind: 'ref', value: 'DEMO-2', ref: { key: 'DEMO-2', entryNo: null } },
+      { kind: 'ref', value: 'DEMO-2', href: '/tasks/DEMO-2' },
       { kind: 'text', value: ' и ' },
-      { kind: 'ref', value: 'DEMO-6#4', ref: { key: 'DEMO-6', entryNo: 4 } },
+      { kind: 'ref', value: 'DEMO-6#4', href: '/tasks/DEMO-6?entry=4' },
       { kind: 'text', value: ' — там всё' },
     ]);
   });
@@ -20,6 +20,26 @@ describe('ссылки на задачи в тексте', () => {
     expect(splitTaskRefs('файл auth-2 и pull-42')).toEqual([
       { kind: 'text', value: 'файл auth-2 и pull-42' },
     ]);
+  });
+
+  it('запись дела проекта `TRK#7` ведёт на экран проекта с раскрытой записью', () => {
+    expect(splitTaskRefs('решено в TRK#7, см. и TRK-42#3')).toEqual([
+      { kind: 'text', value: 'решено в ' },
+      { kind: 'ref', value: 'TRK#7', href: '/projects/TRK?entry=7' },
+      { kind: 'text', value: ', см. и ' },
+      { kind: 'ref', value: 'TRK-42#3', href: '/tasks/TRK-42?entry=3' },
+    ]);
+  });
+
+  it('ключ проекта без номера записи и строчные `trk#7` ссылкой не становятся', () => {
+    expect(splitTaskRefs('проект TRK и trk#7')).toEqual([
+      { kind: 'text', value: 'проект TRK и trk#7' },
+    ]);
+  });
+
+  it('экран проекта — по ключу, запись — параметром `entry`', () => {
+    expect(projectHref('TRK')).toBe('/projects/TRK');
+    expect(projectHref('TRK', 7)).toBe('/projects/TRK?entry=7');
   });
 
   it('ведёт на карточку, а на запись — с её номером', () => {
