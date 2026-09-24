@@ -6,26 +6,25 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.mcp.arguments import (
+from app.mcp.arguments import IdempotencyKeyArg, TaskKeyArg
+from app.mcp.enums import TaskStatusSchema
+from app.mcp.idempotency import Once
+from app.mcp.tools.case.arguments import (
     CheckNoArg,
     EntryBodyArg,
     EntryRefsArg,
     EntryTitleArg,
     EntryTypeArg,
     EvidenceArg,
-    IdempotencyKeyArg,
     SummaryBlockersArg,
     SummaryDoneArg,
     SummaryNextStepArg,
     SummaryRemainingArg,
     SummaryUnmeasuredArg,
-    TaskKeyArg,
     VerdictOutcomeArg,
 )
-from app.mcp.enums import TaskStatusSchema
-from app.mcp.idempotency import Once
+from app.mcp.tools.case.views import AppendedEntryView, appended_entry
 from app.mcp.toolset import FILING, Toolset
-from app.mcp.views import AppendedEntryView, appended_entry
 from app.services import case as case_service
 from app.services import tasks as tasks_service
 from app.services.tasks import TaskClosure

@@ -480,7 +480,7 @@ FastAPI. С проверкой в заголовке REST отвечал бы о
 отсутствие. Проверяется так же, как здесь: сплошным перебором словаря типов, где у
 каждого члена перечисления либо своя форма, либо явно объявленное «формы нет».
 **Где:** `app/domain/case.py`, формы фактов и `FACTS_BY_ENTRY_TYPE`;
-`app/api/schemas/entries.py`, `EntryFactsRead`; `app/mcp/views.py`, `FactsView`;
+`app/api/schemas/entries.py`, `EntryFactsRead`; `app/mcp/tools/case/views.py`, `FactsView`;
 `tests/test_case_index_facts.py`.
 
 ## Молчаливо проглотить присланное — один класс ошибок на три двери

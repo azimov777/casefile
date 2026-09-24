@@ -24,7 +24,7 @@ from app.db.models.task import Task
 from app.domain.case import FACTS_BY_ENTRY_TYPE, EntryType, NoFacts
 from app.domain.links import LinkKind
 from app.domain.tasks import MAX_CHECK_LENGTH, MAX_TEXT_LENGTH, TaskStatus
-from app.mcp.views import FactsView
+from app.mcp.tools.case.views import FactsView
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service

@@ -10,9 +10,10 @@ from pydantic import BaseModel
 
 from app.mcp.arguments import TaskKeyArg
 from app.mcp.enums import LinkKindSchema, TaskStatusSchema
+from app.mcp.tools.case.views import EntryView, HeadingView, entry, heading
 from app.mcp.tools.tasks.views import FeaturesView, TaskView, features, task
 from app.mcp.toolset import READ_ONLY, Toolset
-from app.mcp.views import AuthorView, EntryView, HeadingView, author, entry, heading
+from app.mcp.views import AuthorView, author
 from app.services import tasks as tasks_service
 from app.services.links import TaskLink
 from app.services.tasks import TaskPackage

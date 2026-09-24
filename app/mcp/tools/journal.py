@@ -16,12 +16,13 @@ from app.mcp import views
 from app.mcp.arguments import (
     AfterArg,
     CursorArg,
-    EntryTypesArg,
     JournalQueueArg,
     JournalTaskArg,
     LimitArg,
     TimeoutArg,
 )
+from app.mcp.tools.case.arguments import EntryTypesArg
+from app.mcp.tools.case.views import EntryView, entry
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.services import journal as journal_service
 
@@ -40,7 +41,7 @@ def register(tools: Toolset) -> None:
         timeout: TimeoutArg = 0,
         limit: LimitArg = None,
         cursor: CursorArg = None,
-    ) -> views.PageView[views.EntryView]:
+    ) -> views.PageView[EntryView]:
         """Returns journal entries after the sequence number `after`, waiting for new ones.
 
         The journal is every case entry of the installation in one stream, in `seq`
@@ -64,6 +65,6 @@ def register(tools: Toolset) -> None:
                 wait=timeout,
             )
             return views.page(
-                (views.entry(item.entry, task_key=item.task_key) for item in page.items),
+                (entry(item.entry, task_key=item.task_key) for item in page.items),
                 next_cursor=page.next_cursor,
             )

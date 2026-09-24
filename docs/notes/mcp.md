@@ -254,7 +254,7 @@ REST поле в поле». Приведение времени к строке
 поведения чужой системы («назначатель сделает то-то») тестом не держится: запрет слова
 был бы тупым, и это остаётся на вычитке — в описании говорят, что делает трекер.
 **Где:** `tests/test_mcp_metadata.py`, `test_no_description_names_another_status_for_waiting_for_an_answer`;
-`app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/arguments.py`, `BlockingArg`.
+`app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/case/ask.py`, `BlockingArg`.
 **Обновлено TRK-145:** сверки со скилом больше нет — скил уходит (TRK-140#8), и статус ожидания
 ответа тест берёт из домена (`TaskStatus.WAITING`), а английские абзацы про ответ и ожидание
 ищет по всей метадате, включая схемы ответа: `tests/test_mcp_metadata.py`,
@@ -334,7 +334,7 @@ TRK-35) безопасно само по себе: сутки сосуществ
 **Как правильно:** замеряя, брать сводку той формы, какую пишут на самом деле, и называть в
 доказательстве обе цифры. Ответы `add_entry` и `ask` в замер не годятся вовсе: там заголовок
 прислал агент, в ответе стоит `null`, и размер не зависит от входа совсем.
-**Где:** `app/mcp/views.py`, `AppendedEntryView` и `appended_entry`; `app/domain/case.py`,
+**Где:** `app/mcp/tools/case/views.py`, `AppendedEntryView` и `appended_entry`; `app/domain/case.py`,
 `summary_title`.
 
 ## Токен разбирается в вызове, а не в рукопожатии: `initialize` отвечает и отозванным
@@ -441,7 +441,7 @@ Glama, а не кодом; stdio-путь держит `tests/test_mcp_stdio.py`
 Где развилки нет (`link`/`unlink`, `create_task`), фразы нет: описания едут в контекст
 каждого вызова. Меняя первую строку докстринга, поправить её английский пересказ в
 `README.md`, раздел `## Tools` (тест сверяет только имена, текст — нет).
-**Где:** `app/mcp/tools/registry.py`, `get_queue`; `app/mcp/tools/case.py`,
+**Где:** `app/mcp/tools/registry.py`, `get_queue`; `app/mcp/tools/case/read_entries.py`,
 `read_entries`; `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/tasks/transition.py`,
 `transition`; `app/domain/tasks.py`, `check_done_is_reached_by_closing`.
 **Обновлено TRK-145:** повелительное «бери `X`» теперь ловит
