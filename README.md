@@ -172,7 +172,7 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
-| Stay on one release | `CASEFILE_VERSION=0.2.0` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.3.0` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
@@ -190,9 +190,11 @@ restart. Commits to `main` without a tag never reach an installation. The update
 recreates the Casefile containers and keeps your data in its volumes. An agent in the
 middle of an MCP call when that happens gets a dropped connection and has to retry.
 
-The first release on this channel is 0.2.0; until it is out, there is nothing to update
-to. An installation from before it (on `latest`) moves to `stable` by itself the next
-time Docker starts, and from then on checks every hour. If you set
+The first release on this channel was 0.2.0. An installation from before it (on
+`latest`) moves to `stable` by itself the next time Docker starts, and from then on
+checks every hour. A release can also bring a new updater: the update to that release is
+still done by the old one, which is then replaced by itself, so what a new updater adds
+(such as the rollback below, new in 0.3.0) covers updates from the next release on. If you set
 `CASEFILE_VERSION=latest` in `.env` yourself, remove the line to follow releases.
 
 `CASEFILE_UPDATE_INTERVAL` sets how often to check (hours, or `30m`; `0` means only
