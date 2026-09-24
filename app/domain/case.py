@@ -97,6 +97,9 @@ class EntryType(StrEnum):
     ASSIGNEE_CHANGED = "assignee_changed"
     LINK_ADDED = "link_added"
     LINK_REMOVED = "link_removed"
+    ATTRIBUTE_CREATED = "attribute_created"
+    ATTRIBUTE_CHANGED = "attribute_changed"
+    ATTRIBUTE_REMOVED = "attribute_removed"
 
 
 class VerdictOutcome(StrEnum):
@@ -149,7 +152,17 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.ASSIGNEE_CHANGED,
         EntryType.LINK_ADDED,
         EntryType.LINK_REMOVED,
+        EntryType.ATTRIBUTE_CREATED,
+        EntryType.ATTRIBUTE_CHANGED,
+        EntryType.ATTRIBUTE_REMOVED,
     }
+)
+
+#: Служебные записи об атрибутах проекта (`CONCEPT.md`, 3.2 и 3.4): заведение, изменение и
+#: снятие. Бывают только в деле проекта — атрибутов у задач нет, — и тип из трёх выбирает
+#: сценарий `set_attribute`/`remove_attribute`, а не вызывающий.
+ATTRIBUTE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
+    {EntryType.ATTRIBUTE_CREATED, EntryType.ATTRIBUTE_CHANGED, EntryType.ATTRIBUTE_REMOVED}
 )
 
 #: Записи агента и человека — всё, что не служебное.
@@ -387,6 +400,21 @@ class ResolutionFacts:
     continuation_key: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class AttributeFacts:
+    """`attribute_created`, `attribute_changed`, `attribute_removed`: имя атрибута.
+
+    Имя ограничено шаблоном (`app/domain/attributes.py`) и потому едет в опись; значения
+    и причина — свободный текст, они остаются в записи. Один вариант на три типа, как у
+    связей: форма одна, разметку несёт `type`.
+    """
+
+    type: Literal[
+        EntryType.ATTRIBUTE_CREATED, EntryType.ATTRIBUTE_CHANGED, EntryType.ATTRIBUTE_REMOVED
+    ]
+    name: str | None = None
+
+
 type EntryFacts = (
     NoFacts
     | StatusChangedFacts
@@ -398,6 +426,7 @@ type EntryFacts = (
     | AnswerFacts
     | VerdictFacts
     | ResolutionFacts
+    | AttributeFacts
 )
 """Факты записи: размеченное по `type` объединение всех форм."""
 
@@ -425,6 +454,9 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     EntryType.ASSIGNEE_CHANGED: AssigneeChangedFacts,
     EntryType.LINK_ADDED: LinkFacts,
     EntryType.LINK_REMOVED: LinkFacts,
+    EntryType.ATTRIBUTE_CREATED: AttributeFacts,
+    EntryType.ATTRIBUTE_CHANGED: AttributeFacts,
+    EntryType.ATTRIBUTE_REMOVED: AttributeFacts,
 }
 
 

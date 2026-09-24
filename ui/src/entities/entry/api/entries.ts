@@ -39,6 +39,9 @@ const ENTRY_TYPE_SET = {
   assignee_changed: true,
   link_added: true,
   link_removed: true,
+  attribute_created: true,
+  attribute_changed: true,
+  attribute_removed: true,
 } satisfies Record<EntryType, true>;
 
 export const ENTRY_TYPES = Object.keys(ENTRY_TYPE_SET) as EntryType[];
@@ -58,6 +61,9 @@ const SERVICE_TYPES: Partial<Record<EntryType, true>> = {
   assignee_changed: true,
   link_added: true,
   link_removed: true,
+  attribute_created: true,
+  attribute_changed: true,
+  attribute_removed: true,
 };
 
 export function isServiceEntry(type: EntryType): boolean {

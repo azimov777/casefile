@@ -32,20 +32,26 @@ beforeEach(() => {
 });
 
 /** Дело из записи каждого типа: по нему видно и порядок, и отбор. */
+/*
+ * Типы записей, которые бывают в деле задачи: записи об атрибутах (TRK-157) принадлежат
+ * только делу проекта, и в ленте задачи их не бывает.
+ */
+const TASK_CASE_TYPES = ENTRY_TYPES.filter((type) => !type.startsWith('attribute_'));
+
 function wholeCase(): Entry[] {
-  return ENTRY_TYPES.map((type, index) => entryOfType(index + 1, 'DEMO-1', type));
+  return TASK_CASE_TYPES.map((type, index) => entryOfType(index + 1, 'DEMO-1', type));
 }
 
 /** Лента отвечает так же, как бэкенд: отбор по `types` сужает выдачу. */
 /**
  * Номер записи нужного типа в собранном деле.
  *
- * Считается от порядка `ENTRY_TYPES`, а не выписан числом: новый тип записи в
+ * Считается от порядка `TASK_CASE_TYPES`, а не выписан числом: новый тип записи в
  * контракте сдвигает номера, и тест, привязанный к «двенадцатой записи», после этого
  * проверяет соседнюю — молча и не падая по существу.
  */
 function noOf(type: EntryType): number {
-  return ENTRY_TYPES.indexOf(type) + 1;
+  return TASK_CASE_TYPES.indexOf(type) + 1;
 }
 
 function feed(entries = wholeCase()) {
@@ -97,10 +103,10 @@ describe('дело лентой', () => {
 
     renderApp('/tasks/DEMO-1/case');
 
-    await screen.findByText(say.case('end', { count: ENTRY_TYPES.length }));
+    await screen.findByText(say.case('end', { count: TASK_CASE_TYPES.length }));
     const numbers = cards().map((card) => card.getAttribute('aria-label'));
     expect(numbers[0]).toBe('DEMO-1#1');
-    expect(numbers.at(-1)).toBe(`DEMO-1#${ENTRY_TYPES.length}`);
+    expect(numbers.at(-1)).toBe(`DEMO-1#${TASK_CASE_TYPES.length}`);
 
     expect(seen).toHaveLength(1);
     expect(seen[0]?.searchParams.getAll('types')).toEqual([]);
@@ -148,7 +154,7 @@ describe('дело лентой', () => {
   it('«было / стало» и причина перехода видны прямо в ленте', async () => {
     server.use(feed());
     renderApp('/tasks/DEMO-1/case');
-    await screen.findByText(say.case('end', { count: ENTRY_TYPES.length }));
+    await screen.findByText(say.case('end', { count: TASK_CASE_TYPES.length }));
 
     const section = screen.getByLabelText(`DEMO-1#${noOf('section_changed')}`);
     expect(within(section).getByText(say.ui('entry.was'))).toBeInTheDocument();

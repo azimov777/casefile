@@ -610,3 +610,22 @@ FastAPI. С проверкой в заголовке REST отвечал бы о
 `app/api/deps.py` для дела задачи и дела проекта.
 **Где:** `app/api/schemas/entries.py`, `_ProjectOwnableEntryRead`, `entry_read`,
 `ProjectEntryCreate`; `app/api/routes/projects.py`, `create_project_entry`; `app/api/deps.py`.
+
+## Атрибут задают `PUT`, а снимают действием `POST …/remove` с причиной в теле
+
+**Что:** `PUT /api/v1/projects/{key}/attributes/{name}` с телом `value` и необязательной
+`reason` заводит или меняет атрибут и отвечает `200` с атрибутом; снятие — `POST
+/api/v1/projects/{key}/attributes/{name}/remove` с обязательной `reason`, ответ — подшитая
+запись `attribute_removed`. Оба принимают `Idempotency-Key` (TRK-157).
+**Почему важно:** причина снятия обязательна, а тело у `DELETE` клиенты и посредники
+теряют, в адресе же свободному тексту не место — форма та же, что у `transition`. Длину
+значения схема не ограничивает: `max_length` отдал бы общий `validation_error`, а домен
+отвечает `attribute_value_too_long` одинаково в REST и MCP. Атрибуты едут в ответе одного
+проекта (`ProjectDetailRead`: чтение и правка карточки), а не в `ProjectRead`: список и
+`bootstrap` их не показывают. `create_project` отвечает прежним `ProjectRead` — форму ответа
+создающего вызова расширять нельзя, ключи идемпотентности хранят её сутки.
+**Как правильно:** записи об атрибутах бывают только в деле проекта, их варианты
+наследуют `_ProjectEntryRead` (`task_key` всегда `null`, `project_key` строка).
+**Где:** `app/api/routes/projects.py`, `set_project_attribute`, `remove_project_attribute`,
+`_detail`; `app/api/schemas/projects.py`, `ProjectDetailRead`, `AttributeSet`;
+`app/api/schemas/entries.py`, `_ProjectEntryRead`.

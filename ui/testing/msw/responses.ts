@@ -416,6 +416,39 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
       return { ...base, body: '', type, payload: { kind: 'blocked_by', other: 'DEMO-2' } };
     case 'resolution':
       return { ...base, type, payload: { remark_no: 1, outcome: 'accepted', task: 'DEMO-2' } };
+    // Записи об атрибутах бывают только в деле проекта (TRK-157): владелец — проект.
+    case 'attribute_created':
+      return {
+        ...base,
+        task_key: null,
+        project_key: 'DEMO',
+        body: '',
+        type,
+        payload: { name: 'repo', after: 'github.com/demo', reason: null },
+      };
+    case 'attribute_changed':
+      return {
+        ...base,
+        task_key: null,
+        project_key: 'DEMO',
+        body: '',
+        type,
+        payload: {
+          name: 'repo',
+          before: 'github.com/old',
+          after: 'github.com/demo',
+          reason: 'Репозиторий переехал',
+        },
+      };
+    case 'attribute_removed':
+      return {
+        ...base,
+        task_key: null,
+        project_key: 'DEMO',
+        body: '',
+        type,
+        payload: { name: 'repo', before: 'github.com/demo', reason: 'Репозиторий закрыт' },
+      };
     default:
       // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`:
       // общая форма.

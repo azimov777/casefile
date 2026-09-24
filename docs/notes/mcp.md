@@ -575,3 +575,20 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 Опись дела проекта едет в `get_project` полем `index` теми же `HeadingView`, что у `get_task`.
 **Где:** `app/mcp/tools/case/views.py`, `EntryView`, `AppendedProjectEntryView`;
 `app/mcp/tools/case/add_project_entry.py`; `app/mcp/tools/registries/get_project.py`.
+
+## `set_attribute` — одно действие на заведение и изменение, тип записи выбирает сценарий
+
+**Что:** `set_attribute(key, name, value, reason?)` и `remove_attribute(key, name, reason)` —
+в группе `registries`, набор `task`, оба с `idempotency_key`. Есть ли атрибут, агенту знать
+не нужно (`TRK-164#9`): нет — `attribute_created`, причина необязательна; другое значение —
+`attribute_changed`, причина обязательна; то же значение — ничего, `no: null` в ответе
+(TRK-157).
+**Почему важно:** аннотации по поведению повтора без ключа: `set_attribute` —
+`IDEMPOTENT_TASK_UPDATE` (то же значение второй раз ничего не подшивает, прежнее остаётся в
+деле), `remove_attribute` — `FILING` (повтор отвечает `attribute_not_found`). `creating=True`
+у обоих только ради обязательного `idempotency_key`: повтор `set_attribute` после чужой правки
+иначе вернул бы прежнее значение поверх новой.
+**Как правильно:** нынешние значения отдаёт `get_project` полем `attributes`, историю —
+`read_project_entries` с отбором по типам записей об атрибутах.
+**Где:** `app/mcp/tools/registries/set_attribute.py`; `app/mcp/tools/registries/remove_attribute.py`;
+`app/mcp/tools/registries/get_project.py`; `app/services/attributes.py`.

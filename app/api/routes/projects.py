@@ -7,6 +7,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Path, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     ActorDep,
@@ -20,16 +21,38 @@ from app.api.deps import (
 from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.entries import EntryRead, ProjectEntryCreate, entry_read
-from app.api.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
+from app.api.schemas.projects import (
+    AttributeRead,
+    AttributeRemoval,
+    AttributeSet,
+    ProjectCreate,
+    ProjectDetailRead,
+    ProjectRead,
+    ProjectUpdate,
+)
+from app.db.models.project import Project
 from app.db.pagination import DEFAULT_PAGE_SIZE
+from app.services import attributes as attributes_service
 from app.services import case as case_service
 from app.services import projects as service
+from app.services.auth import Actor
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 ProjectKeyPath = Annotated[
     str,
     Path(description="Project key; matching ignores case", examples=["TRK"]),
+]
+
+AttributeNamePath = Annotated[
+    str,
+    Path(
+        description=(
+            "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; "
+            "matching ignores case"
+        ),
+        examples=["repo"],
+    ),
 ]
 
 ProjectEntryNoPath = Annotated[
@@ -67,6 +90,8 @@ async def create_project(
     проектом, а не `409 project_key_taken`.
     """
 
+    # Ответ без атрибутов: у нового проекта их нет, а форма ответа создающего вызова
+    # живёт сутки в ключах идемпотентности, и расширять её нельзя (`docs/notes/mcp.md`).
     async def create() -> DataResponse[ProjectRead]:
         project = await service.create_project(
             session,
@@ -85,14 +110,15 @@ async def read_project(
     project_key: ProjectKeyPath,
     session: SessionDep,
     actor: ActorDep,
-) -> DataResponse[ProjectRead]:
-    """Карточка проекта вместе с описанием — общим контекстом всех его задач.
+) -> DataResponse[ProjectDetailRead]:
+    """Карточка проекта вместе с описанием и нынешними значениями атрибутов.
 
     Агент запрашивает её отдельно: в карточке задачи лежат только ключ и название, а
     описание бывает длинным, и таскать его в каждом ответе значило бы тратить контекст.
+    История атрибутов — записи дела проекта (`/projects/{key}/entries`).
     """
     project = await service.read_project(session, project_key, actor=actor)
-    return DataResponse[ProjectRead](data=ProjectRead.model_validate(project))
+    return await _detail(session, project, actor=actor)
 
 
 @router.patch("/{project_key}", summary="Update a project")
@@ -101,7 +127,7 @@ async def update_project(
     payload: ProjectUpdate,
     session: SessionDep,
     actor: ActorDep,
-) -> DataResponse[ProjectRead]:
+) -> DataResponse[ProjectDetailRead]:
     """Меняет название и описание; ключ неизменяем. Требует набора `main`.
 
     Поле `key` в теле — ошибка `422`, а не молчаливый пропуск: клиент должен узнать,
@@ -112,7 +138,86 @@ async def update_project(
     # поэтому «не передано» здесь не может притвориться «передано как null».
     changes = payload.model_dump(exclude_unset=True)
     project = await service.update_project(session, project, actor=actor, **changes)
-    return DataResponse[ProjectRead](data=ProjectRead.model_validate(project))
+    return await _detail(session, project, actor=actor)
+
+
+@router.put("/{project_key}/attributes/{attribute_name}", summary="Set a project attribute")
+async def set_project_attribute(
+    project_key: ProjectKeyPath,
+    attribute_name: AttributeNamePath,
+    payload: AttributeSet,
+    session: SessionDep,
+    actor: ActorDep,
+    once: OnceDep,
+) -> DataResponse[AttributeRead]:
+    """Заводит атрибут проекта или меняет его значение. Набор `task`.
+
+    Одно действие на оба случая, запись выбирает трекер: атрибута с таким именем (без
+    учёта регистра) нет — `attribute_created`, причина необязательна; есть с другим
+    значением — `attribute_changed`, без причины `422 attribute_reason_required`; есть с
+    тем же значением — ничего не подшивается. Имя хранится так, как его завели, и другое
+    написание его не меняет. Имя не по шаблону — `422 invalid_attribute_name`, значение
+    длиннее предела — `422 attribute_value_too_long`.
+
+    Повтор с тем же `Idempotency-Key` отвечает первым результатом и не применяет
+    значение второй раз поверх чужой правки.
+    """
+    project = await service.get_project(session, project_key)
+    given = payload.model_dump()
+
+    async def put() -> DataResponse[AttributeRead]:
+        result = await attributes_service.set_attribute(
+            session,
+            project,
+            actor=actor,
+            name=attribute_name,
+            value=given["value"],
+            reason=given["reason"],
+        )
+        return DataResponse[AttributeRead](data=AttributeRead.model_validate(result.attribute))
+
+    return await once.run(
+        DataResponse[AttributeRead],
+        request={"project": project.key, "name": attribute_name.lower(), "attribute": given},
+        build=put,
+    )
+
+
+@router.post(
+    "/{project_key}/attributes/{attribute_name}/remove",
+    summary="Remove a project attribute",
+)
+async def remove_project_attribute(
+    project_key: ProjectKeyPath,
+    attribute_name: AttributeNamePath,
+    payload: AttributeRemoval,
+    session: SessionDep,
+    actor: ActorDep,
+    once: OnceDep,
+) -> DataResponse[EntryRead]:
+    """Снимает атрибут проекта с причиной и отдаёт подшитую запись `attribute_removed`.
+
+    Набор `task`. Действие, а не `DELETE`: причина обязательна, а тело у `DELETE` клиенты
+    и посредники теряют. Атрибута с таким именем (без учёта регистра) нет — `404
+    attribute_not_found`, пустая причина — `422 attribute_reason_required`. Запись хранит
+    последнее значение: снятый атрибут восстанавливается из дела, а не из корзины.
+
+    Повтор с тем же `Idempotency-Key` отвечает первой записью, а не `404`.
+    """
+    project = await service.get_project(session, project_key)
+    given = payload.model_dump()
+
+    async def remove() -> DataResponse[EntryRead]:
+        entry = await attributes_service.remove_attribute(
+            session, project, actor=actor, name=attribute_name, reason=given["reason"]
+        )
+        return DataResponse[EntryRead](data=entry_read(entry, project_key=project.key))
+
+    return await once.run(
+        DataResponse[EntryRead],
+        request={"project": project.key, "name": attribute_name.lower(), "removal": given},
+        build=remove,
+    )
 
 
 @router.post(
@@ -207,3 +312,18 @@ async def read_project_entry(
     project = await service.get_project(session, project_key)
     entry = await case_service.read_project_entry(session, project, entry_no, actor=actor)
     return DataResponse[EntryRead](data=entry_read(entry, project_key=project.key))
+
+
+async def _detail(
+    session: AsyncSession, project: Project, *, actor: Actor
+) -> DataResponse[ProjectDetailRead]:
+    """Проект с атрибутами: тот же ответ у чтения, заведения и правки карточки."""
+    attributes = await attributes_service.list_attributes(session, project, actor=actor)
+    return DataResponse[ProjectDetailRead](
+        data=ProjectDetailRead.model_validate(
+            {
+                **ProjectRead.model_validate(project).model_dump(),
+                "attributes": [AttributeRead.model_validate(item) for item in attributes],
+            }
+        )
+    )

@@ -154,6 +154,25 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
         ],
       };
 
+    // Атрибут проекта (TRK-157): что случилось и имя. Значения и причина — в теле
+    // записи: это свободный текст, а в описи от записи остаётся одна строка.
+    case 'attribute_created':
+    case 'attribute_changed':
+    case 'attribute_removed':
+      return {
+        kind: 'built',
+        parts: [
+          words(
+            facts.type === 'attribute_created'
+              ? t('entry.headline.attributeCreated')
+              : facts.type === 'attribute_changed'
+                ? t('entry.headline.attributeChanged')
+                : t('entry.headline.attributeRemoved'),
+          ),
+          ...(facts.name == null ? [] : [id(facts.name)]),
+        ],
+      };
+
     case 'answer':
       return {
         kind: 'built',
@@ -312,6 +331,10 @@ export function factsOfEntry(entry: Entry): EntryFacts {
         outcome: entry.payload.outcome,
         continuation_key: entry.payload.task,
       };
+    case 'attribute_created':
+    case 'attribute_changed':
+    case 'attribute_removed':
+      return { type: entry.type, name: entry.payload.name };
     default:
       return { type: entry.type };
   }

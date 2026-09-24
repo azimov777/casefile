@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
+from app.domain.attributes import MAX_ATTRIBUTE_REASON_LENGTH, MAX_ATTRIBUTE_VALUE_LENGTH
 from app.domain.projects import PROJECT_KEY_PATTERN
 
 _TITLE_MAX = 255
@@ -71,4 +72,78 @@ class ProjectUpdate(BaseModel):
     description: str = unset_field(
         max_length=_DESCRIPTION_MAX,
         examples=["Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"],
+    )
+
+
+class AttributeRead(BaseModel):
+    """Атрибут проекта: нынешнее значение. История — записями дела проекта."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(
+        examples=["repo"],
+        description="Name as it was first set; matching ignores case",
+    )
+    value: str = Field(
+        examples=["https://github.com/azimov777/casefile"],
+        description="Plain text, not interpreted by the tracker",
+    )
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectDetailRead(ProjectRead):
+    """Один проект с нынешними значениями атрибутов.
+
+    Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов
+    не показывают, и запрос атрибутов на каждый проект списка стоил бы им без пользы.
+    """
+
+    attributes: list[AttributeRead] = Field(
+        description=(
+            "Current attribute values, ordered by name ignoring case. Every change is an "
+            "entry of the project's case: `attribute_created`, `attribute_changed`, "
+            "`attribute_removed`"
+        )
+    )
+
+
+class AttributeSet(BaseModel):
+    """Значение атрибута: заводит его или меняет нынешнее."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Без `max_length`: длину проверяет домен, и длинное значение отвечает предметным
+    # `attribute_value_too_long` одинаково в REST и в MCP, а не общим `validation_error`.
+    value: str = Field(
+        examples=["https://github.com/azimov777/casefile"],
+        description=(
+            f"Plain text up to {MAX_ATTRIBUTE_VALUE_LENGTH} characters, stored as sent; a "
+            "longer one answers `attribute_value_too_long`. A value equal to the current "
+            "one changes nothing and files no entry"
+        ),
+    )
+    reason: str | None = Field(
+        default=None,
+        max_length=MAX_ATTRIBUTE_REASON_LENGTH,
+        examples=["Репозиторий переехал в организацию"],
+        description=(
+            "Why the value changes. Required when the attribute already exists with "
+            "another value (`attribute_reason_required`); optional when it is created"
+        ),
+    )
+
+
+class AttributeRemoval(BaseModel):
+    """Снятие атрибута: причина обязательна."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        max_length=MAX_ATTRIBUTE_REASON_LENGTH,
+        examples=["Проект больше не публикуется в реестре"],
+        description=(
+            "Why the attribute is removed; a blank one answers `attribute_reason_required`. "
+            "Recorded in the `attribute_removed` entry together with the last value"
+        ),
     )

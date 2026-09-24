@@ -13,6 +13,7 @@
   с живой сводкой и с провальным вердиктом, держащим выход в `done`;
 - записи **всех** типов, включая служебные `section_changed`, `assignee_changed`,
   `link_added` и `link_removed`: экран дела иначе показывал бы половину словаря;
+- атрибуты проекта с историей в его деле: заведение, изменение с причиной и снятие;
 - открытый блокирующий вопрос, адресованный человеку, — «входящая» и первый экран
   без него пусты;
 - связи всех трёх видов;
@@ -40,6 +41,7 @@ from app.domain.participants import ParticipantKind
 from app.domain.projects import normalize_project_key
 from app.domain.tasks import TaskPriority, TaskStatus
 from app.domain.tokens import TokenScope
+from app.services import attributes as attributes_service
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import participants as participants_service
@@ -137,9 +139,48 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     )
     await links_service.add_link(session, candidate, waiting, actor=agent, kind=LinkKind.RELATES)
 
+    await _attributes(session, project, agent=agent)
+
     return DemoData(
         project=project,
         tasks=[done, in_progress, candidate, waiting, child, checking, cancelled],
+    )
+
+
+async def _attributes(session: AsyncSession, project: Project, *, agent: Actor) -> None:
+    """Атрибуты проекта с историей: заведение, изменение с причиной и снятие.
+
+    Без них в деле проекта нет ни одной из трёх записей об атрибутах, а карточка проекта
+    показывала бы пустой список справочных фактов.
+    """
+    await attributes_service.set_attribute(
+        session, project, actor=agent, name="repo", value="github.com/demo/tracker"
+    )
+    await attributes_service.set_attribute(
+        session,
+        project,
+        actor=agent,
+        name="branch",
+        value="main",
+        reason="Так названа ветка по умолчанию в git",
+    )
+    await attributes_service.set_attribute(
+        session, project, actor=agent, name="docs", value="docs/CONCEPT.md"
+    )
+    await attributes_service.set_attribute(
+        session,
+        project,
+        actor=agent,
+        name="repo",
+        value="github.com/demo/casefile",
+        reason="Репозиторий переименован вместе с проектом",
+    )
+    await attributes_service.remove_attribute(
+        session,
+        project,
+        actor=agent,
+        name="docs",
+        reason="Концепция переехала в описание проекта",
     )
 
 

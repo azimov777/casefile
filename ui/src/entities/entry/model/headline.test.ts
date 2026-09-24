@@ -48,6 +48,9 @@ const FACTS = {
   assignee_changed: { type: 'assignee_changed', assignee_to: 'owner' },
   link_added: { type: 'link_added', link_kind: 'blocked_by', other_key: 'DEMO-2' },
   link_removed: { type: 'link_removed', link_kind: 'relates', other_key: 'DEMO-3' },
+  attribute_created: { type: 'attribute_created', name: 'repo' },
+  attribute_changed: { type: 'attribute_changed', name: 'repo' },
+  attribute_removed: { type: 'attribute_removed', name: 'repo' },
 } satisfies Record<EntryType, EntryFacts>;
 
 describe('названия типов записи в словарях', () => {

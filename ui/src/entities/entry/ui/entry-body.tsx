@@ -148,6 +148,32 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
         </Diff>
       );
 
+    /*
+     * Атрибут проекта (TRK-157): значение — то же «было / стало», что у правки поля, но
+     * свободным текстом, а не идентификатором; у заведения стороны «было» нет, у снятия
+     * нет «стало». Причина — строкой под парой, как у перехода.
+     */
+    case 'attribute_created':
+    case 'attribute_changed':
+    case 'attribute_removed':
+      return (
+        <div className={BLOCK}>
+          <Diff>
+            {entry.type !== 'attribute_created' && (
+              <Side title={t('entry.was')} value={entry.payload.before} tone="was" />
+            )}
+            {entry.type !== 'attribute_removed' && (
+              <Side title={t('entry.now')} value={entry.payload.after} tone="now" />
+            )}
+          </Diff>
+          {entry.payload.reason == null || entry.payload.reason === '' ? null : (
+            <p className="wrap-anywhere">
+              <TaskText>{entry.payload.reason}</TaskText>
+            </p>
+          )}
+        </div>
+      );
+
     // Смена исполнителя и связь целиком умещаются в заголовке: имена участников,
     // вид связи и ключ задачи — всё это он и называет. Тела у них не бывает.
     case 'assignee_changed':
