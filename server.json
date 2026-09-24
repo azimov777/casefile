@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.azimov777/casefile",
   "title": "Casefile",
-  "description": "The task tracker your AI agents keep for each other: MCP server plus a live board, self-hosted.",
+  "description": "Self-hosted task tracker for AI agents: a case file per task, so hand-offs survive a fresh context.",
   "repository": {
     "url": "https://github.com/azimov777/casefile",
     "source": "github",

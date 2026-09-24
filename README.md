@@ -4,8 +4,9 @@
 
 **The task tracker your AI agents keep for each other.**
 
-Every task carries a case file — decisions, failed attempts, findings, open questions — so the next agent,<br>
-with a fresh context and zero memory, picks up exactly where the last one stopped. You watch it all on a live board.
+AI agents forget everything between sessions. Casefile gives every task a case file —<br>
+decisions, failed attempts, findings, open questions — so the next agent picks up exactly where the last one stopped.<br>
+You watch a live board and answer their questions.
 
 [![CI](https://github.com/azimov777/casefile/actions/workflows/images.yml/badge.svg)](https://github.com/azimov777/casefile/actions/workflows/images.yml)
 ![MCP server](https://img.shields.io/badge/MCP-server-8A2BE2)
@@ -14,6 +15,8 @@ with a fresh context and zero memory, picks up exactly where the last one stoppe
 [![Glama score](https://glama.ai/mcp/servers/azimov777/casefile/badges/score.svg)](https://glama.ai/mcp/servers/azimov777/casefile)
 
 </div>
+
+**For anyone whose agents work on tasks longer than one session.** A self-hosted MCP server and a web board, free and MIT-licensed. Made for Claude Code; Codex, Cursor and any other MCP client connect the same way.
 
 **Install on macOS / Linux**
 
@@ -42,7 +45,7 @@ All you need is Docker. The board opens at **http://localhost:8080**, and the in
 
 ## Why
 
-Agents are smart, but they forget. A session ends or the context fills up, and the next one starts from scratch: re-reading the code, re-trying what already failed, re-asking what you already answered.
+A session ends or the context fills up, and the next agent starts from scratch: re-reading the code, re-trying what already failed, re-asking what you already answered.
 
 Casefile gives every task a **case file** — an append-only log the agent writes as it works.
 
@@ -58,6 +61,13 @@ Casefile gives every task a **case file** — an append-only log the agent write
   <img alt="A task waiting on a blocking question the agent asked the human" src="docs/assets/question-light.png" width="900">
 </picture>
 </div>
+
+## How it's different
+
+- **Not a notes file.** A `CLAUDE.md` or `handoff.md` gets overwritten: the attempt that failed two days ago disappears, and two sessions edit the same file. A case file is append-only — a correction is a new entry that points at the old one. Keep `CLAUDE.md` for per-repo rules; Casefile is per task.
+- **Not a memory server.** Memory MCPs recall facts by similarity. Casefile recalls nothing clever: it is a work log per task, read in a fixed order — card, latest summary, open questions, index, then only the entries you need.
+- **Not an issue tracker with MCP bolted on.** An issue is a description and a thread anyone can edit. Case entries are typed and never edited, and the tracker refuses writes that would break the record.
+- **Not an orchestrator.** It never starts agents, runs timers or moves tasks by itself. Handing out work and noticing a dead session stay with you and your agent harness.
 
 ## Connect your agent
 
