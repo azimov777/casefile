@@ -29,8 +29,11 @@ interface EntryCardProps {
  */
 export function EntryCard({ entry, checks, highlighted = false, children }: EntryCardProps) {
   const { t } = useTranslation('ui');
-  const reference = `${entry.task_key}#${entry.no}`;
-  const headline = entryHeadline(factsOfEntry(entry), entry.task_key, t);
+  // Владелец записи — задача или проект (TRK-156): непуст ровно один ключ. Карточка живёт
+  // в деле задачи, но адрес `TRK#7` у записи проекта собирается тем же способом.
+  const ownerKey = entry.task_key ?? entry.project_key ?? '';
+  const reference = `${ownerKey}#${entry.no}`;
+  const headline = entryHeadline(factsOfEntry(entry), ownerKey, t);
   // Служебная запись несёт один факт и получает столько места, сколько в ней смысла:
   // строка вместо карточки. Прятать её нельзя — дело обязано быть полным.
   const service = isServiceEntry(entry.type);
@@ -94,7 +97,7 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
         <AuthorName author={entry.author} />
         <RelativeTime value={entry.created_at} />
         <CopyReference reference={reference} />
-        <CopyEntryLink taskKey={entry.task_key} no={entry.no} />
+        {entry.task_key !== null ? <CopyEntryLink taskKey={entry.task_key} no={entry.no} /> : null}
       </header>
 
       {/*

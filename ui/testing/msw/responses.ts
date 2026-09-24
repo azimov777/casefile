@@ -240,6 +240,8 @@ function entryBase(no: number, taskKey: string, title: string, body: string) {
     seq: 100 + no,
     no,
     task_key: taskKey,
+    // Запись задачи: ключ проекта у неё всегда `null` (TRK-156).
+    project_key: null,
     author: AGENT,
     title,
     body,
