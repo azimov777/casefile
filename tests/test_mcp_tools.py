@@ -1578,6 +1578,42 @@ async def test_a_link_is_named_from_the_side_that_asks(
     assert unlinked["features"]["blocked"] is False
 
 
+async def test_link_and_unlink_answer_with_the_filed_entry_numbers(
+    mcp_session: Connect, task_secret: str, task: Task, queue: Queue
+) -> None:
+    """TRK-144: ответ `link`/`unlink` называет номера обеих подшитых записей, без эха
+    входа (`kind`, `other`) и без выдуманного `removed`, которое иначе не бывает.
+    """
+    del queue
+    key = task.key
+    async with mcp_session(task_secret) as session:
+        other = await call(session, "create_task", queue="TRK", title="Другая", description="д")
+        other_key = other["key"]
+
+        linked = await call(session, "link", key=key, kind="blocks", other=other_key)
+        own_after_link = await call(session, "get_task", key=key)
+        other_after_link = await call(session, "get_task", key=other_key)
+
+        unlinked = await call(session, "unlink", key=key, kind="blocks", other=other_key)
+        own_after_unlink = await call(session, "get_task", key=key)
+        other_after_unlink = await call(session, "get_task", key=other_key)
+
+    assert set(linked) == {"key", "entry", "other_entry"}
+    assert linked["key"] == key
+    own_added = own_after_link["index"][-1]
+    other_added = other_after_link["index"][-1]
+    assert (own_added["no"], own_added["type"]) == (linked["entry"], "link_added")
+    assert (other_added["no"], other_added["type"]) == (linked["other_entry"], "link_added")
+    assert other_added["facts"]["other_key"] == key
+
+    assert set(unlinked) == {"key", "entry", "other_entry"}
+    assert unlinked["key"] == key
+    own_removed = own_after_unlink["index"][-1]
+    other_removed = other_after_unlink["index"][-1]
+    assert (own_removed["no"], own_removed["type"]) == (unlinked["entry"], "link_removed")
+    assert (other_removed["no"], other_removed["type"]) == (unlinked["other_entry"], "link_removed")
+
+
 async def test_a_link_to_itself_is_refused(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
@@ -1680,7 +1716,13 @@ async def test_list_queues_is_the_entry_point_when_no_key_is_known(
 async def test_the_main_scope_runs_the_registries(
     mcp_session: Connect, main_secret: str, queue: Queue
 ) -> None:
-    """Очереди и участники заводятся из MCP; токены — нет, и не будут."""
+    """Очереди и участники заводятся из MCP; токены — нет, и не будут.
+
+    TRK-144: ответы `create_queue`/`update_queue`/`register_participant`/
+    `update_participant` называют только ключ или имя — без эха названия, описания и
+    рода, которые вызывающий и так прислал сам. Итог проверяется чтением: `get_queue`
+    и `list_participants` — источник правды, а не короткий ответ правки.
+    """
     del queue
     async with mcp_session(main_secret) as session:
         created = await call(
@@ -1697,16 +1739,25 @@ async def test_the_main_scope_runs_the_registries(
         described = await call(
             session, "update_participant", name="release_bot", description="Ведёт выкладки"
         )
+        stored_queue = await call(session, "get_queue", key="OPS")
+        participants = await call(session, "list_participants")
 
-    assert created["key"] == "OPS"
-    assert renamed["title"] == "Эксплуатация и дежурства"
-    assert renamed["description"] == "Дежурства", "правка названия стёрла описание"
-    assert registered == {
-        "kind": "agent",
-        "name": "release_bot",
-        "description": "Релизный бот",
+    # Ответ короткий: ключ или имя, канонизированные по регистру, и ничего сверх.
+    assert created == {"key": "OPS"}
+    assert renamed == {"key": "OPS"}
+    assert registered == {"name": "release_bot"}
+    assert described == {"name": "release_bot"}
+
+    # Итог правки — у того, кто его хранит: переименование не стёрло описание
+    # («Дежурства» пережили `update_queue` без своего поля), а `update_participant`
+    # переписало только описание, не тронув род.
+    assert stored_queue == {
+        "key": "OPS",
+        "title": "Эксплуатация и дежурства",
+        "description": "Дежурства",
     }
-    assert described["description"] == "Ведёт выкладки"
+    bot = next(item for item in participants["items"] if item["name"] == "release_bot")
+    assert bot == {"kind": "agent", "name": "release_bot", "description": "Ведёт выкладки"}
 
 
 async def test_a_shared_token_signs_its_entries_with_the_label(

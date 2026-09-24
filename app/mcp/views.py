@@ -453,13 +453,23 @@ def link(value: TaskLink) -> LinkView:
     )
 
 
-class UnlinkView(BaseModel):
-    """Ответ `unlink`: какая связь снята и с какой стороны её назвали."""
+class LinkFilingView(BaseModel):
+    """Ответ `link` и `unlink`: номера записей, которые вызов подшил в оба дела.
+
+    `kind` и ключ `other` здесь не повторяются: вызывающий прислал их сам, а `removed`
+    у прежнего `unlink` был не нужен и вовсе — отказ приходит исключением, и успешный
+    ответ всегда означал одно и то же значение (TRK-144).
+
+    `key` — тот же адрес, что в запросе, по тому же правилу, что у `MutationView`: ответ
+    должен читаться сам по себе. `entry` — номер записи (`link_added` у `link`,
+    `link_removed` у `unlink`) в деле `key`, `other_entry` — та же запись в деле `other`.
+    Ключ `other` в ответе не нужен: вызывающий его и так прислал, а `TRK-42#12` строится
+    его собственным ключом плюс этим номером.
+    """
 
     key: str
-    kind: LinkKind
-    other: str
-    removed: bool
+    entry: int
+    other_entry: int
 
 
 class NoFactsView(BaseModel):
@@ -835,6 +845,23 @@ def queue(item: Queue) -> QueueView:
     return QueueView(key=item.key, title=item.title, description=item.description)
 
 
+class QueueKeyView(BaseModel):
+    """Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания.
+
+    `create_queue` канонизирует регистр — это единственное, чего вызывающий не мог
+    знать заранее. `update_queue` ключ не меняет вовсе, но повторяет его по тому же
+    правилу, что и `MutationView`: ответ должен читаться сам по себе. Название и
+    описание вызывающий прислал сам; итог, если нужен, отдаёт `get_queue` (TRK-144).
+    """
+
+    key: str
+
+
+def queue_key(item: Queue) -> QueueKeyView:
+    """Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания."""
+    return QueueKeyView(key=item.key)
+
+
 class ParticipantView(BaseModel):
     """Участник реестра: кому можно адресовать вопрос и что о нём известно."""
 
@@ -846,6 +873,23 @@ class ParticipantView(BaseModel):
 def participant(item: Participant) -> ParticipantView:
     """Участник реестра: кому можно адресовать вопрос и что о нём известно."""
     return ParticipantView(kind=item.kind, name=item.name, description=item.description)
+
+
+class ParticipantNameView(BaseModel):
+    """Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания.
+
+    `register_participant` канонизирует регистр — единственное новое здесь. `name` у
+    правки не меняется вовсе, но остаётся в ответе по тому же правилу, что и ключ у
+    `MutationView`: ответ должен читаться сам по себе. Род и описание вызывающий
+    прислал сам; реестр целиком, если нужен итог, отдаёт `list_participants` (TRK-144).
+    """
+
+    name: str
+
+
+def participant_name(item: Participant) -> ParticipantNameView:
+    """Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания."""
+    return ParticipantNameView(name=item.name)
 
 
 class PageView[ItemT](BaseModel):

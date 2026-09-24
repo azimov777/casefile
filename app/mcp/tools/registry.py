@@ -91,23 +91,27 @@ def register(tools: Toolset) -> None:
         title: QueueTitleArg,
         description: QueueDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.QueueView:
+    ) -> views.QueueKeyView:
         """Заводит очередь. Требует набора `main`.
 
         Ключ хранится в верхнем регистре и дальше неизменяем: он идёт в ключ каждой
         задачи очереди. В описании — общий контекст всех её задач.
+
+        Ответ называет только ключ — единственное, чего вызывающий не знал заранее
+        (регистр канонизирован). Название и описание он прислал сам; очередь целиком
+        отдаёт `get_queue`.
         """
         async with runtime.call() as (session, actor):
 
-            async def create() -> views.QueueView:
-                return views.queue(
+            async def create() -> views.QueueKeyView:
+                return views.queue_key(
                     await queues_service.create_queue(
                         session, actor=actor, key=key, title=title, description=description
                     )
                 )
 
             return await Once.of(create_queue, session, actor, idempotency_key).run(
-                result=views.QueueView,
+                result=views.QueueKeyView,
                 request={"key": key, "title": title, "description": description},
                 build=create,
             )
@@ -117,15 +121,18 @@ def register(tools: Toolset) -> None:
         key: QueueKeyArg,
         title: QueueTitleChangeArg = None,
         description: QueueDescriptionChangeArg = None,
-    ) -> views.QueueView:
+    ) -> views.QueueKeyView:
         """Меняет название и описание очереди. Требует набора `main`.
 
         Ключ не меняется никогда: он вшит в ключ каждой задачи очереди. Непереданное
         поле не трогается; осмысленного `null` ни у названия, ни у описания нет.
+
+        Ответ называет только ключ, тем же правилом, что и `MutationView`: ответ
+        должен читаться сам по себе. Итог правки, если нужен, отдаёт `get_queue`.
         """
         async with runtime.call() as (session, actor):
             queue = await queues_service.get_queue(session, key)
-            return views.queue(
+            return views.queue_key(
                 await queues_service.update_queue(
                     session, queue, actor=actor, title=title, description=description
                 )
@@ -137,7 +144,7 @@ def register(tools: Toolset) -> None:
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.ParticipantView:
+    ) -> views.ParticipantNameView:
         """Регистрирует человека или постоянного агента. Требует набора `main`.
 
         Имя хранится в нижнем регистре и дальше неизменяемо: оно стоит подписью в уже
@@ -145,18 +152,22 @@ def register(tools: Toolset) -> None:
 
         Имя уже в реестре — отказ `participant_name_taken`; описание существующего
         участника меняет `update_participant`.
+
+        Ответ называет только имя — единственное, чего вызывающий не знал заранее
+        (регистр канонизирован). Род и описание он прислал сам; реестр целиком отдаёт
+        `list_participants`.
         """
         async with runtime.call() as (session, actor):
 
-            async def create() -> views.ParticipantView:
-                return views.participant(
+            async def create() -> views.ParticipantNameView:
+                return views.participant_name(
                     await participants_service.register_participant(
                         session, actor=actor, kind=kind, name=name, description=description
                     )
                 )
 
             return await Once.of(register_participant, session, actor, idempotency_key).run(
-                result=views.ParticipantView,
+                result=views.ParticipantNameView,
                 request={"kind": kind, "name": name, "description": description},
                 build=create,
             )
@@ -165,16 +176,19 @@ def register(tools: Toolset) -> None:
     async def update_participant(
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg,
-    ) -> views.ParticipantView:
+    ) -> views.ParticipantNameView:
         """Меняет описание участника. Требует набора `main`.
 
         Имя и род неизменяемы: имя стоит подписью в записях дела, род объясняет
         читателю, кто говорит, — переписать их задним числом значило бы переписать
         историю, которую дело обязано хранить неизменной.
+
+        Ответ называет только имя, тем же правилом, что и `MutationView`: ответ должен
+        читаться сам по себе. Итог правки, если нужен, отдаёт `list_participants`.
         """
         async with runtime.call() as (session, actor):
             participant = await participants_service.get_participant(session, name)
-            return views.participant(
+            return views.participant_name(
                 await participants_service.update_participant(
                     session, participant, actor=actor, description=description
                 )

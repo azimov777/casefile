@@ -19,6 +19,7 @@ from app.mcp.arguments import (
 )
 from app.mcp.idempotency import Once
 from app.mcp.toolset import FILING, Toolset
+from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
 
@@ -33,7 +34,7 @@ def register(tools: Toolset) -> None:
         kind: LinkKindArg,
         other: OtherTaskKeyArg,
         idempotency_key: IdempotencyKeyArg = None,
-    ) -> views.LinkView:
+    ) -> views.LinkFilingView:
         """Связывает две задачи и подшивает `link_added` в дела обеих; обе записи
         сразу видны в ленте и человеку в интерфейсе.
 
@@ -52,6 +53,10 @@ def register(tools: Toolset) -> None:
         С закрытой задачей (`done`, `cancelled`) ставится только `relates` — им и
         связывают её с продолжением, выросшим из неё. `parent` и `blocks` у закрытой
         задачи отклоняются: они меняли бы смысл уже случившегося.
+
+        Ответ короткий: `key`, номер записи `link_added` в его деле и номер той же
+        записи в деле `other`. Вид и обе задачи вызывающий уже прислал сам; карточку
+        `other` целиком, если она вдруг нужна, отдаёт `get_task`.
         """
         async with runtime.call() as (session, actor):
             # Ключи разрешаются до занятия ключа идемпотентности: вызов, отклонённый до
@@ -59,13 +64,17 @@ def register(tools: Toolset) -> None:
             task = await tasks_service.get_task(session, key)
             other_task = await tasks_service.get_task(session, other)
 
-            async def add() -> views.LinkView:
-                return views.link(
-                    await links_service.add_link(session, task, other_task, actor=actor, kind=kind)
-                )
+            async def add() -> views.LinkFilingView:
+                await links_service.add_link(session, task, other_task, actor=actor, kind=kind)
+                # Номера читаются из обоих дел, а не протаскиваются через `add_link`
+                # (`docs/notes/mcp.md`): под общей блокировкой изменений последняя
+                # запись каждого дела — только что подшитый `link_added`.
+                entry = await case_service.latest_entry_no(session, task, actor=actor)
+                other_entry = await case_service.latest_entry_no(session, other_task, actor=actor)
+                return views.LinkFilingView(key=task.key, entry=entry, other_entry=other_entry)
 
             return await Once.of(link, session, actor, idempotency_key).run(
-                result=views.LinkView,
+                result=views.LinkFilingView,
                 request={"task": task.key, "kind": kind, "other": other_task.key},
                 build=add,
             )
@@ -73,15 +82,20 @@ def register(tools: Toolset) -> None:
     @tools.tool(annotations=FILING)
     async def unlink(
         key: TaskKeyArg, kind: LinkKindArg, other: OtherTaskKeyArg
-    ) -> views.UnlinkView:
+    ) -> views.LinkFilingView:
         """Снимает связь и подшивает `link_removed` в дела обеих задач.
 
         Снять можно с любой стороны и любым её именем: «снять с `TRK-1` связь `blocks` с
         `TRK-7`» и «снять с `TRK-7` связь `blocked_by` с `TRK-1`» — это одна и та же
         строка. У закрытой задачи не снимаются `parent` и `blocks`, `relates` снимается.
+
+        Ответ короткий: `key`, номер записи `link_removed` в его деле и номер той же
+        записи в деле `other`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
             other_task = await tasks_service.get_task(session, other)
             await links_service.remove_link(session, task, other_task, actor=actor, kind=kind)
-            return views.UnlinkView(key=task.key, kind=kind, other=other_task.key, removed=True)
+            entry = await case_service.latest_entry_no(session, task, actor=actor)
+            other_entry = await case_service.latest_entry_no(session, other_task, actor=actor)
+            return views.LinkFilingView(key=task.key, entry=entry, other_entry=other_entry)

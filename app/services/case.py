@@ -168,6 +168,22 @@ async def case_index(session: AsyncSession, task: Task, *, actor: Actor) -> list
     return mark_outdated_verdicts(await EntryRepository(session).headings(task.id))
 
 
+async def latest_entry_no(session: AsyncSession, task: Task, *, actor: Actor) -> int:
+    """Номер последней записи дела — адрес того, что вызывающий только что в него подшил.
+
+    Не общего назначения: годится сразу после подшивки, в той же транзакции, под общей
+    блокировкой изменений (`app/db/locks.py`, `lock_changes`) — она не отпускает других
+    писателей до конца вызова, и «последняя запись» здесь факт, а не гонка. Так `link` и
+    `unlink` называют номер `link_added`/`link_removed`, подшитый в дело **другой**
+    задачи, не читая его целиком и не протаскивая номер через сигнатуру `links_service`
+    (`docs/notes/mcp.md`).
+    """
+    ensure_scope(actor, TokenScope.TASK, action="case.read")
+    no = await EntryRepository(session).latest_no(task.id)
+    assert no is not None  # у любой задачи есть хотя бы `created`
+    return no
+
+
 async def last_summary(session: AsyncSession, task: Task, *, actor: Actor) -> Entry | None:
     """Последняя сводка задачи целиком: точка входа преемника (`CONCEPT.md`, 4.2)."""
     ensure_scope(actor, TokenScope.TASK, action="case.read")
