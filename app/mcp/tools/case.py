@@ -63,13 +63,15 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.EntryView]:
-        """Отдаёт тела записей одного дела с нагрузкой, в порядке номеров.
+        """Returns entry bodies of one task's case, with payload, in number order.
 
-        Фильтры складываются по «и»: `types=["summary"]` даёт все сводки, `after_no` —
-        всё, что подшито после названной записи, вместе — всё подшитое после неё этих
-        типов.
+        Filters combine with `and`: `types=["summary"]` gives every summary, `after_no`
+        everything filed after the named entry, and both together the entries of those
+        types filed after it. `decision` and `attempt` entries hold the choices already
+        made and the attempts already tried, failed ones included.
 
-        Записи многих дел одним потоком, с ожиданием новых, — `wait_journal`.
+        Entries of many cases in one stream, with a wait for new ones, come from
+        `wait_journal`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -97,18 +99,15 @@ def register(tools: Toolset) -> None:
         next_step: SummaryNextStepArg,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.AppendedEntryView:
-        """Подшивает сводку: справку при передаче дела.
+        """Files a summary: the handover note of a case, in four parts, none of them empty
+        (`entry_fields_invalid` lists the empty ones).
 
-        Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
-        `wait_journal`. Отказ: пустая часть — `entry_fields_invalid` со списком полей.
+        A summary follows each significant step: a decision made, a finished part of the
+        work, a failure that changes the plan, any point where a colleague would need an
+        explanation of where the work stands.
 
-        Заголовок не принимается: им становится первая строка `done`. В описи сводка
-        говорит о случившемся, как и все соседние строки. Финальную сводку, с
-        `unmeasured`, подшивает `close_task` вместе с закрытием.
-
-        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
-        трекером заголовок. Присланное обратно не едет; запись целиком — в
-        `read_entries`.
+        Its index title is the first line of `done`, returned in the response. The final
+        summary, with `unmeasured`, is filed by `close_task`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -146,21 +145,15 @@ def register(tools: Toolset) -> None:
         refs: EntryRefsArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.AppendedEntryView:
-        """Подшивает запись без нагрузки: решение, попытку, находку, артефакт,
-        замечание, заметку.
+        """Files an entry without payload: a decision, attempt, finding, artifact, remark
+        or note.
 
-        Записи неизменяемы: правки и удаления нет ни здесь, ни в REST — есть только
-        следующая запись со ссылкой на прежнюю в `refs`. У сводки, вопроса, ответа,
-        вердикта и резолюции свои инструменты: `add_summary`, `ask`, `answer`,
-        `add_verdict`, `resolve`.
+        Entries are immutable: no call edits or deletes one, and a mistaken entry is
+        corrected by a new entry that references it in `refs`. Summaries, questions,
+        answers, verdicts and resolutions have their own tools: `add_summary`, `ask`,
+        `answer`, `add_verdict`, `resolve`.
 
-        Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
-        `wait_journal`. Отказ: тип не из списка, пустой заголовок, ссылка в никуда —
-        `entry_fields_invalid` со списком полей.
-
-        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор и время; `title` в нём
-        пуст — в описи стоит присланный заголовок. Присланное обратно не едет; запись
-        целиком — в `read_entries`.
+        An empty title is refused with `entry_fields_invalid`, which lists the fields.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -198,19 +191,15 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.AppendedEntryView:
-        """Задаёт вопрос участникам реестра. Доставки в трекере нет: адресат увидит
-        вопрос, читая ленту или свою входящую.
+        """Files a question to registry participants. The tracker delivers nothing: an
+        addressee sees the question when reading the feed or their inbox.
 
-        Вопрос открыт, пока в этой же задаче нет `answer` с его номером, и держит
-        признак `open_questions`, а с `blocking` — и `open_blocking_questions`.
+        A question stays open until an `answer` with its number is filed in the same
+        task; it counts toward `open_questions`, and with `blocking` toward
+        `open_blocking_questions`.
 
-        Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
-        `wait_journal`. Отказ: адресата нет в реестре — `entry_fields_invalid`,
-        `reason: unknown_participant`.
-
-        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор и время; `title` в нём
-        пуст — в описи стоит присланный заголовок. Присланное обратно не едет; запись
-        целиком — в `read_entries`.
+        What the cases of the parent, its ancestors and sibling tasks already record is
+        readable through `get_task` and `read_entries`, without a question.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -246,19 +235,12 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.AppendedEntryView:
-        """Отвечает на вопрос той же задачи. Отвечает любой держатель токена `task`, в
-        том числе в чужой задаче.
+        """Answers a question of the same task. Any holder of a `task` token answers, in
+        any task.
 
-        Первый ответ закрывает вопрос, остальные дополняют; статус задачи ответ не
-        меняет. Заголовок не принимается: он собирается из ссылки на вопрос.
-
-        Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
-        `wait_journal`. Отказ: номер не указывает на `question` этой задачи —
-        `entry_fields_invalid`, `reason: unknown_entry` или `not_a_question`.
-
-        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
-        трекером заголовок. Присланное обратно не едет; запись целиком — в
-        `read_entries`.
+        The first answer closes the question and later ones add to it; neither a
+        question nor an answer changes the task status. The tracker builds the title
+        from the question reference.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -284,20 +266,12 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.AppendedEntryView:
-        """Разбирает замечание к задаче: чем кончилось и куда ушла работа.
+        """Resolves a remark on a task: its outcome and where the work went.
 
-        Разбирает замечание любой исход, в том числе `needs_detail`: резолюция снимает
-        замечание с признака `open_remarks`, а `accepted` держит его в `remarks_in_work`,
-        пока задача-продолжение не закрыта. Заголовок не принимается: он собирается из
-        ссылки на замечание и исхода.
-
-        Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
-        `wait_journal`. Отказ: номер не указывает на `remark` этой задачи, `accepted`
-        без `task` или `task` при другом исходе — `entry_fields_invalid`.
-
-        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
-        трекером заголовок. Присланное обратно не едет; запись целиком — в
-        `read_entries`.
+        Any outcome resolves the remark, `needs_detail` included: the resolution removes
+        it from `open_remarks`, while `accepted` keeps it in `remarks_in_work` until the
+        continuation task is closed. Its title is made of the remark reference and the
+        outcome.
         """
         async with runtime.call() as (session, actor):
             entry_task = await tasks_service.get_task(session, key)
@@ -334,20 +308,14 @@ def register(tools: Toolset) -> None:
         evidence: EvidenceArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.AppendedEntryView:
-        """Подшивает исход одной обзорной проверки.
+        """Files the outcome of one review check, as run by the task's assignee within the
+        current pass.
 
-        `in_progress → done` смотрит на последний вердикт по каждой проверке и считает
-        только вердикты этого захода — подшитые после последнего входа в `in_progress`.
-        Вердикты прошлых заходов остаются в деле, но в счёт не идут. Вердикты вместе с
-        закрытием задачи принимает и `close_task`.
-
-        Запись немедленно видна в ленте и человеку в интерфейсе; будит ждущих
-        `wait_journal`. Отказ: проверки с таким номером в задаче нет —
-        `entry_fields_invalid`.
-
-        Ответ короткий: `no` записи, `seq` ленты, ключ задачи, автор, время и собранный
-        трекером заголовок. Присланное обратно не едет; запись целиком — в
-        `read_entries`.
+        A pass starts with each entry into `in_progress`, a return from `waiting`
+        included. Only verdicts of the current pass count for closing, and the latest
+        verdict on a check replaces the earlier ones: a `failed` verdict is filed when
+        it happens, like a `passed` one. Verdicts of earlier passes stay in the case
+        without counting. `close_task` also takes verdicts, together with the closing.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)

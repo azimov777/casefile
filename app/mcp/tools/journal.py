@@ -41,21 +41,15 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.EntryView]:
-        """Отдаёт записи журнала после номера `after`, дожидаясь новых.
+        """Returns journal entries after the sequence number `after`, waiting for new ones.
 
-        Журнал — это все записи дел установки одним потоком (`CONCEPT.md`, 4.1);
-        `task`, `queue` и `types` его сужают. Уже подшитое в одном деле, по номерам
-        записей, отдаёт `read_entries`. `task` принимает и один ключ, и список:
-        одно ожидание накрывает все названные дела сразу, и запись любого из них его
-        завершает.
+        The journal is every case entry of the installation in one stream, in `seq`
+        order; `task`, `queue` and `types` narrow it. The call returns as soon as a
+        matching entry appears, and after `timeout` seconds at the latest. The next call
+        continues from the `seq` of the last entry received. With `types=["answer"]` and
+        `task`, one call covers an answer expected within `timeout`.
 
-        Ответ приходит, как только появилась первая подходящая запись, и не позже, чем
-        через `timeout` секунд. Продолжение — `after`, равный `seq` последней
-        полученной записи: записи постоянны, и пропустить их нельзя.
-
-        Отказ: `timeout` больше потолка установки — `journal_wait_too_long` с числом в
-        подробностях; ключей задач больше потолка — `journal_too_many_tasks`, тоже с
-        числом.
+        Entries already filed in one case, by number, are returned by `read_entries`.
         """
         async with runtime.call() as (session, actor):
             page = await journal_service.wait_journal(

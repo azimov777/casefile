@@ -66,19 +66,26 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(annotations=READ_ONLY)
     async def get_task(key: TaskKeyArg) -> views.TaskPackageView:
-        """Отдаёт всё о задаче одним вызовом: карточка, родитель и дети, связи с обеих
-        сторон, вычисляемые признаки, последняя сводка, открытые вопросы, неразобранные
-        замечания, опись дела и переходы по таблице статусов.
+        """Returns everything about one task in a single call: card, parent and children,
+        links from both sides, computed features, latest summary, open questions,
+        unresolved remarks, case index and transition targets.
 
-        `parent` — родитель этой задачи (или `null`), `children` — её дети. Заводятся
-        они тем же `link`, что и остальные связи, но в `links` их нет: там `blocks`,
-        `blocked_by` и `relates`, вид назван ролью этой задачи.
+        `parent` and `children` are fields of their own and are absent from `links`,
+        which holds `blocks`, `blocked_by` and `relates`, each named by this task's
+        role. The parent's summary and decisions are in the parent's own case.
 
-        В описи только заголовки: тела записей отдаёт `read_entries`.
+        The summary covers the case up to its own `no`; entries with a greater `no` are
+        returned by `read_entries` with `after_no`. The index carries titles only, and
+        entry bodies come from `read_entries`.
 
-        `transitions` это цели по таблице из текущего статуса, а не ходы, которые
-        пройдут сейчас: разделы, сводку, вердикты, блокеры и детей трекер проверяет в
-        момент `transition`. Пустят ли в `in_progress`, говорит признак `blocked`.
+        A remark in `remarks` changes nothing in the task: it does not block
+        `in_progress`, does not change the status and does not unlock the sections. It
+        stays in `remarks` and in `open_remarks` until `resolve` gives it an outcome.
+
+        `transitions` lists the targets of the transition table from the current status,
+        not moves checked in advance: sections, summary, verdicts, blockers and children
+        are checked by the `transition` call itself. Whether `in_progress` is open shows
+        in the `blocked` feature.
         """
         async with runtime.call() as (session, actor):
             return views.task_package(
@@ -105,16 +112,17 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> views.PageView[views.FoundTaskView]:
-        """Ищет задачи строкой языка запросов, отдельными условиями или всем сразу.
+        """Searches tasks by a query language string, by separate conditions, or by both.
 
-        Условия из обоих источников складываются по «и» и дают тот же результат, что
-        одна строка того же смысла. Отбор без условий законен: это «все задачи».
+        Conditions from both sources combine with `and` and give the same result as one
+        string of the same meaning; no condition at all selects every task. Rows are
+        ordered by `sort`, by key when it is left out. A long text is cut at the
+        installation limit and marked by `<field>_truncated` and `<field>_length`; one
+        task in full, with its case and links, is returned by `get_task`.
 
-        Отказ: строка не разбирается — `invalid_search_query` с позицией символа;
-        неизвестное поле, оператор или значение — свой код и допустимые в `details`.
-
-        Здесь строки выборки с полями из `fields`; одна задача целиком, с делом и
-        связями, — `get_task`.
+        An unknown field, operator or value is refused with `search_field_unknown`,
+        `search_operator_not_supported` or `search_value_invalid`, the allowed values
+        listed in `details`.
         """
         async with runtime.call() as (session, actor):
             outcome = await search_service.search_tasks(
@@ -163,21 +171,19 @@ def register(tools: Toolset) -> None:
         priority: PriorityArg = DEFAULT_PRIORITY,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.MutationView:
-        """Заводит задачу в `backlog`. Статус не принимается: новая задача рождается там.
+        """Creates a task in `backlog`; a new task starts in no other status.
 
-        `parent` делает задачу ребёнком названной — ребёнок рождается со ссылкой на
-        родителя, это одно действие, а не два. Родитель не закроется — ни в `done`, ни в
-        `cancelled`, — пока дети не закрыты. Связь подшивает `link_added` не только в
-        дело новой задачи, но и в дело родителя — это его дело меняется, а не только
-        дело вызова; номер этой записи называет `parent_entry`.
+        With `parent`, the task is born as the parent's child in the same call: the link
+        files `link_added` both in the new task's case and in the parent's case, and
+        `parent_entry` in the response is the number of the parent's entry.
 
-        Отвечает коротко: ключ новой задачи, статус, версия и номера подшитых записей;
-        они сразу видны в ленте и человеку в интерфейсе. Карточку не возвращает — всё,
-        что в ней было бы, только что прислал сам вызов. Ключ приходит всегда: его выдал
-        трекер, и заранее знать его было неоткуда.
+        A child task takes a part of the parent's work when the parent's output falls
+        into separate results, its checks cannot all pass in one pass, the work does not
+        fit one pass, or it depends on something that does not exist yet. These signs
+        appear on entry into the parent and after each attempt.
 
-        Отказ: пустое название или описание — `task_fields_invalid`; очереди нет —
-        `queue_not_found`; родитель закрыт — `task_closed`.
+        The response carries the key issued by the tracker. An empty title or
+        description is refused with `task_fields_invalid`.
         """
         async with runtime.call() as (session, actor):
             # Всё, что может отказать, — до занятия ключа: отклонённый вызов не должен
@@ -247,21 +253,15 @@ def register(tools: Toolset) -> None:
         changes: TaskChanges,
         version: VersionArg = None,
     ) -> views.MutationView:
-        """Меняет переданные поля задачи; непереданное не трогает.
+        """Changes the given fields of a task; fields left out stay as they are.
 
-        Название, описание и пять разделов правятся только в `backlog`: в остальных
-        статусах — отказ `task_field_locked`.
+        Title, description and sections are fixed from `open` on. A task past `backlog`
+        has them edited by a return to `backlog` through `transition` with a reason,
+        this call, and a move forward again to `open` and `in_progress`.
 
-        Проверку переписывают точечно: `check={"no": 3, "text": "..."}`. Остальные
-        остаются теми же байтами, а служебная запись называет номер — по нему видно,
-        какой из подшитых вердиктов перестал относиться к нынешней формулировке.
-        Присылать `checks` списком нужно только когда меняется **состав**: проверка
-        добавляется, снимается или переставляется. Вместе они не принимаются.
-
-        Отвечает коротко: ключ, статус, новая версия и номера подшитых записей;
-        `section_changed` и `field_changed` сразу видны в ленте и человеку в интерфейсе.
-        Пустой `entries` означает «прислано то, что уже стоит» — версия тогда не
-        выросла.
+        Each changed field files `section_changed` or `field_changed`, an assignee
+        change files `assignee_changed`. An edit of one check names its number, and the
+        earlier verdicts on that check become `outdated`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -285,29 +285,27 @@ def register(tools: Toolset) -> None:
         to: TaskStatusArg,
         reason: ReasonArg = None,
     ) -> views.MutationView:
-        """Переводит задачу в другой статус по зашитой таблице переходов.
+        """Moves a task to another status along the fixed transition table.
 
-        Трекер откажет, если переход портит журнал: выход из `in_progress` без сводки,
-        подшитой после последнего входа в него (`summary_required`); вход в
-        `in_progress` без исполнителя (`assignee_required`) или не от него
-        (`assignee_mismatch`: исполнитель и подпись просящего в `details`) и при
-        открытом блокере (`task_blocked`); `cancelled` при незакрытых детях
-        (`task_has_unclosed_children`). В `done` этот вызов не ведёт: закрывает
-        `close_task`, а здесь цель `done` отвечает `closing_not_a_transition`. В отказе —
-        что именно мешает. Ни в `waiting`, ни из него трекер не переводит сам: оба хода
-        делает вызывающий.
+        Refusals: leaving `in_progress` without a summary filed since the last entry
+        into it — `summary_required`; entering `in_progress` without an assignee —
+        `assignee_required`, by anyone but the assignee — `assignee_mismatch` (assignee
+        and caller signature in `details`), with an open blocker — `task_blocked`;
+        `open` with incomplete sections — `task_sections_incomplete`; `cancelled` with
+        open children — `task_has_unclosed_children`; `done` —
+        `closing_not_a_transition`, since a task is closed by `close_task`; a move
+        outside the table — `transition_not_allowed`, the allowed targets in
+        `details.allowed`.
 
-        Вход в `in_progress` — из любого статуса, включая `waiting`, — открывает новый
-        заход: `in_progress → done` дальше зачтёт только вердикты, подшитые после этого
-        перехода, а прежние останутся в деле, но не в счёте. Переход в `cancelled`
-        снимает признак `blocked` у задач, которые эта блокировала (`blocks`), — без
-        записи в их деле; так же его снимает и `close_task`.
+        The tracker never moves a task into or out of `waiting` by itself: both moves
+        are the caller's. Each entry into `in_progress`, from any status including
+        `waiting`, starts a new pass of the task.
 
-        Этих проверок нет в `transitions` у `get_task`: там таблица переходов.
+        `cancelled` takes no verdicts. It clears the `blocked` feature of the tasks this
+        one blocked (`blocks`), with no entry in their cases.
 
-        Отвечает коротко: ключ, новый статус, новая версия и номер подшитой
-        `status_changed`; она сразу видна в ленте и человеку в интерфейсе. Карточку
-        целиком не возвращает.
+        The response names the new status and version and the number of the filed
+        `status_changed` entry.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
@@ -324,33 +322,22 @@ def register(tools: Toolset) -> None:
         entries: ClosingEntriesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> views.ClosedTaskView:
-        """Подшивает записи, вердикты и финальную сводку и переводит задачу в `done` —
-        всё одним вызовом и одной транзакцией.
+        """Closes a task: files the given entries, then the verdicts, then the final
+        summary, and moves the task to `done`, all in one transaction. It is the only
+        way into `done`.
 
-        Единственная дверь в `done`: у `transition` эта цель отвечает
-        `closing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части
-        не оставляет в деле ни одной записи и статуса не меняет.
+        A refusal of any part files nothing and leaves the status as it was. The exit
+        conditions are checked after filing: a passing latest verdict on every review
+        check within the current pass (`checks_not_passed`), closed children
+        (`task_has_unclosed_children`), the task in `in_progress`
+        (`transition_not_allowed`). An empty summary part is refused with
+        `entry_fields_invalid`.
 
-        Финальная сводка на одну часть длиннее промежуточной: сверх четырёх обычных она
-        требует `unmeasured` — какую часть цели не измерила ни одна обзорная проверка.
-        Пустой она быть не может, как и остальные: `entry_fields_invalid`.
+        For a parent task the final summary covers the whole work: the children's
+        results are in their own closing summaries.
 
-        Каждая запись получает свой номер в описи. Записи немедленно видны в ленте и
-        человеку в интерфейсе; будят ждущих `wait_journal`. Порядок подшивки: присланные
-        записи, вердикты, сводка.
-
-        Требования выхода прежние и проверяются после подшивки: положительный последний
-        вердикт по каждой обзорной проверке среди подшитых после последнего входа в
-        `in_progress` (`checks_not_passed`), закрытые дети
-        (`task_has_unclosed_children`), задача в `in_progress` (`transition_not_allowed`).
-        Вердикты этого вызова в счёт входят наравне с подшитыми раньше по ходу работы.
-
-        Задачи, которые эта блокировала (`blocks`), теряют признак `blocked` — без
-        записи в их деле.
-
-        Ответ короткий: ключ, новый статус, новая версия и строка на каждую подшитую
-        запись — `no`, `seq`, автор, время и заголовок там, где его собрал трекер.
-        Присланное обратно не едет; записи целиком — в `read_entries`.
+        Tasks this one blocked (`blocks`) lose the `blocked` feature, without an entry
+        in their cases.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
