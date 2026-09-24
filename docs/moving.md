@@ -18,7 +18,7 @@ still use [`backup-restore.md`](backup-restore.md); that procedure is unchanged.
   (`403 admin_required`): the archive carries every person's password hash and every
   token's hash.
 - **A fresh installation on the new machine**, made with the one-line installer from the
-  [README](../README.md). It must be **empty — no queues**: the archive replaces its data
+  [README](../README.md). It must be **empty — no projects**: the archive replaces its data
   whole, and two trackers are never merged (`409 installation_not_empty`).
 - **The same or a newer Casefile on the new machine** (see [Versions](#versions)).
 
@@ -111,7 +111,7 @@ installation is left exactly as it was.
 | Answer | Why | What to do |
 |---|---|---|
 | `403 admin_required` | The key is not an administrator's | Use the board's key, or sign in as an administrator |
-| `409 installation_not_empty` | The new installation already has queues | Import into a fresh installation |
+| `409 installation_not_empty` | The new installation already has projects | Import into a fresh installation |
 | `409 archive_revision_unknown` | The archive comes from a newer Casefile | Update this installation, then import |
 | `422 archive_format_unsupported` | The file is not a Casefile archive | Post the file the export saved, unedited |
 | `422 archive_invalid` | The archive contradicts itself or its schema; `details.reason` says how | Export again; do not edit the file |
@@ -125,4 +125,4 @@ Behind a reverse proxy of your own, its own limit on request size applies too.
 - **No merging.** The new installation must be empty; there is no way to add one
   tracker's tasks to another's.
 - **No moving back to an older version** (see [Versions](#versions)).
-- **No part of an installation.** The archive is everything; there is no per-queue export.
+- **No part of an installation.** The archive is everything; there is no per-project export.

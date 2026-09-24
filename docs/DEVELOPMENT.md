@@ -49,7 +49,7 @@ curl http://localhost:8000/health
 docker compose run --rm demo
 ```
 
-Заводит очередь `DEMO` и задачи на каждый статус: дела с записями всех типов,
+Заводит проект `DEMO` и задачи на каждый статус: дела с записями всех типов,
 связи всех видов, один открытый блокирующий вопрос владельцу,
 человек и постоянный агент в реестре и одна запись, подписанная меткой временного
 агента. Этого хватает, чтобы наполнить каждый экран интерфейса и увидеть цикл
@@ -58,11 +58,11 @@ docker compose run --rm demo
 ```bash
 # кандидаты: в демо такой ровно один — остальные заблокированы или ждут ответа
 curl -H "Authorization: Bearer $TOKEN" --get --data-urlencode \
-     'query=queue: DEMO and status: open and blocked: false and open_blocking_questions: 0' \
+     'query=project: DEMO and status: open and blocked: false and open_blocking_questions: 0' \
      http://localhost:8000/api/v1/tasks
 ```
 
-Команда идемпотентна: повторный запуск видит очередь `DEMO` и ничего не делает. Начать
+Команда идемпотентна: повторный запуск видит проект `DEMO` и ничего не делает. Начать
 заново — снести том с данными: `docker compose down -v`. В прод-контуре сервиса `demo`
 нет намеренно — демо-данные в рабочей установке мусор.
 
@@ -102,7 +102,7 @@ curl -H "Authorization: Bearer trk_..." http://localhost:8000/api/v1/participant
 ### Первый экран
 
 `GET /api/v1/bootstrap` отдаёт всё, чем интерфейс рисует первый кадр, одним запросом:
-участника за токеном, сам токен (`token`: его `id` и набор `scope`), очереди установки и
+участника за токеном, сам токен (`token`: его `id` и набор `scope`), проекты установки и
 число открытых вопросов, адресованных участнику.
 
 ```bash
@@ -277,15 +277,15 @@ docker compose run --rm local-token   # ключ интерфейсу в фай�
 | Набор | Что открывает |
 |---|---|
 | `task` | Рабочий цикл агента: задачи, дело, связи, поиск, лента, чтение реестров. |
-| `main` | То же плюс запись участников, токенов и очередей. |
+| `main` | То же плюс запись участников, токенов и проектов. |
 
-### Участники, токены и очереди
+### Участники, токены и проекты
 
 Человеку за этим в терминал ходить не нужно: участники и токены живут на экране «Доступы»
 (`/access`) — завести агенту участника, выпустить ему токен, увидеть, чем на установку
 ходят и когда ходили в последний раз, отозвать лишнее. На локальной установке экран открыт
 сразу, потому что ключ самого интерфейса набора `main` (раздел «Ключ для локального
-интерфейса»); список токенов виден и с ключом `task`, а запись — нет. Очереди в интерфейс
+интерфейса»); список токенов виден и с ключом `task`, а запись — нет. Проекты в интерфейс
 не входят намеренно (`ui/docs/CONCEPT.md`, 7) и заводятся отсюда.
 
 Ниже — тот же контракт напрямую: он нужен скриптам, установке, где ключа в браузере нет,
@@ -302,18 +302,18 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
      -d '{"name": "ci", "scope": "task", "participant": "release_bot"}' \
      http://localhost:8000/api/v1/tokens
 
-# завести очередь
+# завести проект
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      -d '{"key": "TRK", "title": "Трекер", "description": "Где лежит код, куда смотреть"}' \
-     http://localhost:8000/api/v1/queues
+     http://localhost:8000/api/v1/projects
 
 # отозвать токен
 curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tokens/$TOKEN_ID
 ```
 
-Имена участников уникальны без учёта регистра и хранятся в нижнем; ключи очередей — в
+Имена участников уникальны без учёта регистра и хранятся в нижнем; ключи проектов — в
 верхнем. Переименования нет ни у тех, ни у других: имя стоит подписью в записях дела, ключ
-вшит в ключ каждой задачи очереди. Удаления тоже нет — доступ снимается отзывом токена.
+вшит в ключ каждой задачи проекта. Удаления тоже нет — доступ снимается отзывом токена.
 
 ### Задачи и дело
 
@@ -326,7 +326,7 @@ in_progress → done`, из любого незакрытого статуса �
 ```bash
 # завести задачу (набора task достаточно)
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"queue": "TRK", "title": "Починить выдачу ключей", "description": "Ключ сгорает",
+     -d '{"project": "TRK", "title": "Починить выдачу ключей", "description": "Ключ сгорает",
           "goal": "...", "context": "...", "constraints": "...", "output": "...",
           "checks": ["Пустое название не тратит номер"]}' \
      http://localhost:8000/api/v1/tasks
@@ -357,8 +357,8 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/
 одинаковых условиях они дают одинаковый результат — это один и тот же код, а не две
 похожие реализации. Условия из обоих источников складываются по `and`.
 
-Поля отбора: `queue`, `parent` (прямые дети названной задачи; `empty()` — верхний
-уровень очереди), `status`, `assignee`, `priority`, `text` (подстрока в названии
+Поля отбора: `project`, `parent` (прямые дети названной задачи; `empty()` — верхний
+уровень проекта), `status`, `assignee`, `priority`, `text` (подстрока в названии
 и описании) и вычисляемые признаки — `blocked`, `open_questions` и соседи. Признаки не
 хранятся колонками, а считаются из связей и дела прямо в запросе, поэтому они всегда
 согласованы с карточкой. Полный список полей отбора трекер называет сам: отказ на
@@ -380,12 +380,12 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/
 ```bash
 # кандидаты назначателя одной строкой: что можно брать в работу прямо сейчас
 curl -H "Authorization: Bearer $TOKEN" --get --data-urlencode \
-     'query=queue: TRK and status: open and blocked: false and open_blocking_questions: 0' \
+     'query=project: TRK and status: open and blocked: false and open_blocking_questions: 0' \
      http://localhost:8000/api/v1/tasks
 
 # то же самое структурными параметрами — тот же список в том же порядке
 curl -H "Authorization: Bearer $TOKEN" \
-     'http://localhost:8000/api/v1/tasks?queue=TRK&status=open&blocked=false&open_blocking_questions=0'
+     'http://localhost:8000/api/v1/tasks?project=TRK&status=open&blocked=false&open_blocking_questions=0'
 
 # только нужные поля: полная задача с пятью разделами съедает контекст агента
 curl -H "Authorization: Bearer $TOKEN" \
@@ -477,7 +477,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 ```bash
 # входящая: по умолчанию открытые вопросы участника, чьим токеном сделан запрос
 curl -H "Authorization: Bearer $TOKEN" \
-     'http://localhost:8000/api/v1/questions?blocking=true&queue=TRK'
+     'http://localhost:8000/api/v1/questions?blocking=true&project=TRK'
 
 # ответить — записью в дело той задачи, где вопрос задан
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -501,9 +501,9 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 curl -H "Authorization: Bearer $TOKEN" \
      'http://localhost:8000/api/v1/journal?after=1024'
 
-# фильтры складываются по «и»: задача, очередь, типы записей
+# фильтры складываются по «и»: задача, проект, типы записей
 curl -H "Authorization: Bearer $TOKEN" \
-     'http://localhost:8000/api/v1/journal?queue=TRK&types=answer&types=status_changed'
+     'http://localhost:8000/api/v1/journal?project=TRK&types=answer&types=status_changed'
 
 # долгое ожидание: ответ приходит, как только появилась первая подходящая запись,
 # и не позже чем через 30 секунд. Потолок — 60, выше отвечает 422
@@ -541,7 +541,7 @@ done
 
 ```bash
 curl -N -H "Authorization: Bearer $TOKEN" -H 'Last-Event-ID: 1024' \
-     'http://localhost:8000/api/v1/journal/stream?queue=TRK'
+     'http://localhost:8000/api/v1/journal/stream?project=TRK'
 ```
 
 ```
@@ -575,7 +575,7 @@ data: {"id":"...","seq":1025,"no":4,"task_key":"TRK-1","type":"answer", ...}
 ```bash
 curl -X POST -H "Authorization: Bearer $SHARED_TOKEN" -H "X-Actor-Label: nightly_agent" \
      -H 'Content-Type: application/json' -d '{"key": "OPS", "title": "Эксплуатация"}' \
-     http://localhost:8000/api/v1/queues
+     http://localhost:8000/api/v1/projects
 ```
 
 Без заголовка запрос отклоняется с кодом `actor_label_required`: приписать действие некому.
@@ -586,13 +586,13 @@ curl -X POST -H "Authorization: Bearer $SHARED_TOKEN" -H "X-Actor-Label: nightly
 ### Повтор создающего вызова и `Idempotency-Key`
 
 Агент падает и повторяет запрос, не зная, прошёл ли предыдущий. Любой создающий вызов —
-задача, запись дела, связь, очередь, участник, токен — принимает заголовок с ключом,
+задача, запись дела, связь, проект, участник, токен — принимает заголовок с ключом,
 который клиент придумывает сам (обычно UUID):
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" -H "Idempotency-Key: $(uuidgen)" \
      -H 'Content-Type: application/json' \
-     -d '{"queue": "TRK", "title": "Починить выдачу ключей", "description": "..."}' \
+     -d '{"project": "TRK", "title": "Починить выдачу ключей", "description": "..."}' \
      http://localhost:8000/api/v1/tasks
 ```
 
@@ -654,7 +654,7 @@ MCP по другому адресу — через прокси или с др�
 ### Инструменты по наборам токена
 
 `tools/list` отдаёт только то, что открывает токен: набор `task` — рабочий цикл, набор
-`main` — то же плюс очереди и участники. Это не безопасность (вызов недоступного
+`main` — то же плюс проекты и участники. Это не безопасность (вызов недоступного
 инструмента всё равно отвечает `permission_denied`), а экономия контекста: описание
 инструмента, которым нельзя воспользоваться, модель читает зря.
 
@@ -710,7 +710,7 @@ claude mcp add --scope local --transport http tracker http://localhost:8100/mcp 
 claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 ```
 
-Дальше агент работает инструментами: `create_queue` токеном набора `task` отвечает
+Дальше агент работает инструментами: `create_project` токеном набора `task` отвечает
 `permission_denied` с нужным набором в подробностях.
 
 Если Claude Code работает не на той машине, где поднят контур, вместо `localhost` идёт
@@ -733,7 +733,7 @@ claude mcp list    # tracker: http://localhost:8100/mcp (HTTP) - ✔ Connected
 
 | Переменная | Что делает |
 |---|---|
-| `TRACKER_MCP_PAGE_SIZE` | размер страницы у `read_entries`, `search_tasks`, `wait_journal`, `list_queues`, `list_participants`; по умолчанию 25 — меньше, чем у REST |
+| `TRACKER_MCP_PAGE_SIZE` | размер страницы у `read_entries`, `search_tasks`, `wait_journal`, `list_projects`, `list_participants`; по умолчанию 25 — меньше, чем у REST |
 | `TRACKER_MCP_TEXT_LIMIT` | потолок длинного текста в выдаче `search_tasks`; обрезка объявлена полями `<поле>_truncated` и `<поле>_length`, а задача целиком — один `get_task` |
 
 `search_tasks` по умолчанию просит узкий набор полей (`key`, `title`, `status`,
@@ -801,7 +801,7 @@ docker compose run --rm migrate
 Автогенерация видит только те модели, которые импортированы в `app/db/models/__init__.py`.
 
 Цепочка ревизий начата заново задачей 20 и состоит из семи шагов: акторы и токены;
-участники, токены с наборами и очереди; задачи и записи дела; выборки по делу; связи;
+участники, токены с наборами и проекты; задачи и записи дела; выборки по делу; связи;
 индексы поиска; ключи идемпотентности. Прежняя схема живёт в git по коммиту `49e2e49`.
 
 `alembic check` на сошедшейся схеме штатно сообщает о снятии `CHECK` у каждой колонки-
@@ -887,9 +887,9 @@ pytest) — всегда, `pnpm check` в `ui/` — только если сам
 `main` прежний. Конфликты скрипт оставляет человеку — разобрать, `git add`, довести тем
 же скриптом с `--continue`.
 
-Ветки очереди `TRK`, трогающие `ui/`, сливаются этим же корневым скриптом: `pnpm check`
+Ветки проекта `TRK`, трогающие `ui/`, сливаются этим же корневым скриптом: `pnpm check`
 запускается на хосте (нужен Node рядом с Docker-контуром бэкенда), из каталога `ui/`.
-Сквозной `pnpm e2e` в этот скрипт не входит — им сливают только ветки очереди `UI`,
+Сквозной `pnpm e2e` в этот скрипт не входит — им сливают только ветки проекта `UI`,
 своим `ui/scripts/merge-task-branch.sh`.
 
 Зачем это отдельный шаг: у слияния два зелёных родителя не означают зелёного результата.

@@ -126,11 +126,11 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table("check_h", sa.Column("id", sa.Integer(), primary_key=True))
-    op.add_column("queues", sa.Column("check_h", sa.Text(), nullable=True))
+    op.add_column("projects", sa.Column("check_h", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("queues", "check_h")
+    op.drop_column("projects", "check_h")
     op.drop_table("check_h")
 PY
     echo 'COPY 29990101_0000_check_h.py /app/app/db/migrations/versions/' >>"$ctx/Dockerfile"
@@ -207,7 +207,7 @@ docker network connect --alias casefile-main "${P}_default" "$P-web"
 latest_api=$(release_id casefile latest) latest_ui=$(release_id casefile-ui latest)
 on_release "$latest_api" "$latest_ui" || fail "the old installation is not on latest"
 api -X POST -H 'Content-Type: application/json' -d '{"key":"KEEP","title":"survives updates"}' \
-  "http://127.0.0.1:$UI_PORT/api/v1/queues" >/dev/null
+  "http://127.0.0.1:$UI_PORT/api/v1/projects" >/dev/null
 services | tee "$EVIDENCE/A-before.txt"
 
 say "A. release 0.2.0 under stable; main gets the new compose file; Docker restarts"
@@ -239,8 +239,8 @@ r2_api=$(release_id casefile 0.2.1) r2_ui=$(release_id casefile-ui 0.2.1)
 wait_for 600 on_release "$r2_api" "$r2_ui" || fail "0.2.1 did not arrive"
 note "running $(($(date -u +%s) - published))s after the push (interval $INTERVAL)"
 services | tee "$EVIDENCE/B-after.txt"
-api "http://127.0.0.1:$UI_PORT/api/v1/queues/KEEP" | tee "$EVIDENCE/B-data.json" | grep -q '"KEEP"' ||
-  fail "the queue created before the updates is gone"
+api "http://127.0.0.1:$UI_PORT/api/v1/projects/KEEP" | tee "$EVIDENCE/B-data.json" | grep -q '"KEEP"' ||
+  fail "the project created before the updates is gone"
 dc logs --no-color -t updater >"$EVIDENCE/B-updater.log"
 note "B passed"
 
@@ -347,8 +347,8 @@ bad_api=$(release_id casefile 0.3.0)
 rolled_back() { dc logs --no-color updater 2>/dev/null | grep -q "rolled back to 0.2.2"; }
 wait_for 900 rolled_back || fail "no rollback logged"
 on_release "$r3_api" "$r3_ui" || fail "services are not back on 0.2.2"
-api "http://127.0.0.1:$UI_PORT/api/v1/queues/KEEP" | tee "$EVIDENCE/G-data.json" | grep -q '"KEEP"' ||
-  fail "the queue created before the updates is gone after the rollback"
+api "http://127.0.0.1:$UI_PORT/api/v1/projects/KEEP" | tee "$EVIDENCE/G-data.json" | grep -q '"KEEP"' ||
+  fail "the project created before the updates is gone after the rollback"
 [ "$(docker image inspect -f '{{.Id}}' "casefile-updater/$P/api:failed")" = "$bad_api" ] ||
   fail "the failed release is not remembered"
 services | tee "$EVIDENCE/G-after-rollback.txt"
@@ -372,7 +372,7 @@ say "G. release 0.3.1 under stable after the failed one"
 publish 0.3.1 "" stable
 r4_api=$(release_id casefile 0.3.1) r4_ui=$(release_id casefile-ui 0.3.1)
 wait_for 600 on_release "$r4_api" "$r4_ui" || fail "0.3.1 did not arrive after the failed 0.3.0"
-api "http://127.0.0.1:$UI_PORT/api/v1/queues/KEEP" | grep -q '"KEEP"' || fail "the queue is gone"
+api "http://127.0.0.1:$UI_PORT/api/v1/projects/KEEP" | grep -q '"KEEP"' || fail "the project is gone"
 # Службы уже на 0.3.1, а обновлятор ещё ждёт их здоровья: свои теги он снимает после.
 updated() { dc logs --no-color updater 2>/dev/null | grep -q "updated to 0.3.1"; }
 wait_for 300 updated || fail "no successful update to 0.3.1 logged"
@@ -387,8 +387,8 @@ note "G passed"
 say "H. release 0.4.0 under stable: brings a migration, its api never gets healthy"
 db() { dc exec -T db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -tAc \"$1\""; }
 api -X POST -H 'Content-Type: application/json' -d '{"key":"HOLD","title":"written before 0.4.0"}' \
-  "http://127.0.0.1:$UI_PORT/api/v1/queues" >/dev/null
-api "http://127.0.0.1:$UI_PORT/api/v1/queues" >"$EVIDENCE/H-queues-before.json"
+  "http://127.0.0.1:$UI_PORT/api/v1/projects" >/dev/null
+api "http://127.0.0.1:$UI_PORT/api/v1/projects" >"$EVIDENCE/H-projects-before.json"
 schema_before=$(db "SELECT version_num FROM alembic_version")
 note "schema before: $schema_before"
 services >"$EVIDENCE/H-before.txt"
@@ -407,10 +407,10 @@ on_release "$r4_api" "$r4_ui" || fail "services are not back on 0.3.1"
   fail "the schema is not back at $schema_before"
 [ -z "$(db "SELECT 1 FROM pg_tables WHERE tablename = 'check_h'")" ] ||
   fail "the table of the failed release is still there"
-[ -z "$(db "SELECT 1 FROM information_schema.columns WHERE table_name = 'queues' AND column_name = 'check_h'")" ] ||
+[ -z "$(db "SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'check_h'")" ] ||
   fail "the column of the failed release is still there"
-api "http://127.0.0.1:$UI_PORT/api/v1/queues" >"$EVIDENCE/H-queues-after.json"
-diff "$EVIDENCE/H-queues-before.json" "$EVIDENCE/H-queues-after.json" ||
+api "http://127.0.0.1:$UI_PORT/api/v1/projects" >"$EVIDENCE/H-projects-after.json"
+diff "$EVIDENCE/H-projects-before.json" "$EVIDENCE/H-projects-after.json" ||
   fail "the data differs from before the update"
 note "H: back on 0.3.1, schema $schema_before, data as before the update"
 
@@ -418,7 +418,7 @@ say "H. a manual docker compose up -d after the rollback"
 dc up -d >"$EVIDENCE/H-manual-up.log" 2>&1 || { cat "$EVIDENCE/H-manual-up.log"; fail "manual up -d failed"; }
 dc logs --no-color migrate | tail -5 | tee -a "$EVIDENCE/run.log"
 on_release "$r4_api" "$r4_ui" || fail "the manual up left 0.3.1"
-api "http://127.0.0.1:$UI_PORT/api/v1/queues/HOLD" | grep -q '"HOLD"' || fail "HOLD is gone"
+api "http://127.0.0.1:$UI_PORT/api/v1/projects/HOLD" | grep -q '"HOLD"' || fail "HOLD is gone"
 services | tee "$EVIDENCE/H-after-manual-up.txt"
 note "H passed"
 
