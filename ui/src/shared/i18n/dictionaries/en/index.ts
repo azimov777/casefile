@@ -7,6 +7,7 @@ import { fieldReasons } from './field-reasons';
 import { login } from './login';
 import { moving } from './moving';
 import { people } from './people';
+import { project } from './project';
 import { questions } from './questions';
 import { task } from './task';
 import { tasks } from './tasks';
@@ -36,6 +37,7 @@ export const en = {
   login,
   moving,
   people,
+  project,
   questions,
   task,
   tasks,

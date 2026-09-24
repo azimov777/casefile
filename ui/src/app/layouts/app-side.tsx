@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
-import { ArrowLeftRight, Inbox, KeyRound, Plug, UserRound, Users } from 'lucide-react';
+import { ArrowLeftRight, Inbox, Info, KeyRound, Plug, UserRound, Users } from 'lucide-react';
 import { bootstrapQueryOptions, useInstallKey, useInstallLocked } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { tasksHref } from '@/features/task-filters';
 import { Button, QueryState } from '@/shared/ui';
-import { cn } from '@/shared/lib';
+import { cn, projectHref } from '@/shared/lib';
 import { readPlace } from './place';
 
 /**
@@ -54,7 +54,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
    * переключатель вида. Условия берутся из адреса только на самом списке: на карточке
    * задачи и во входящей в адресе стоит чужое состояние, и тащить его в отбор нельзя.
    */
-  function projectHref(project: string): string {
+  function tasksOf(project: string): string {
     return tasksHref(onList ? searchParams : new URLSearchParams(), { project });
   }
 
@@ -77,31 +77,55 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
 
         {/* «Все задачи» — то же самое, что пустой проект в отборе: без этого пункта
             из проекта некуда вернуться, кроме как снятием чипа в форме. */}
-        <SideLink
-          to={projectHref('')}
-          current={place.project === null && onList}
-          onClick={onNavigate}
-        >
+        <SideLink to={tasksOf('')} current={place.project === null && onList} onClick={onNavigate}>
           {t('app.allTasks')}
         </SideLink>
 
-        {projects.map((project) => (
-          <SideLink
-            key={project.key}
-            to={projectHref(project.key)}
-            current={place.project === project.key}
-            title={project.title}
-            onClick={onNavigate}
-          >
-            {/*
-             * Название проекта переносится, а не режется многоточием (UI-153): полное
-             * название было только в подсказке `title`, а на телефоне, где панель —
-             * выдвижной лист, наведения нет. Ключ стоит на первой строке названия.
-             */}
-            <span className="shrink-0 font-mono">{project.key}</span>
-            <span className="min-w-0 text-faint wrap-anywhere">{project.title}</span>
-          </SideLink>
-        ))}
+        {projects.map((project) => {
+          const onProject = place.section === 'project' && place.project === project.key;
+          return (
+            /*
+             * Строка проекта ведёт в его задачи, знак справа — на экран самого проекта
+             * (UI-174): оба — одно движение, и второго переключателя списка нет. Знак
+             * стоит в той же строке, а не отдельным пунктом ниже: проект — одно место,
+             * у которого два вида — работа в нём и он сам.
+             */
+            <div key={project.key} className="flex items-stretch gap-px [&>:first-child]:grow">
+              <SideLink
+                to={tasksOf(project.key)}
+                current={place.project === project.key}
+                title={project.title}
+                onClick={onNavigate}
+              >
+                {/*
+                 * Название проекта переносится, а не режется многоточием (UI-153): полное
+                 * название было только в подсказке `title`, а на телефоне, где панель —
+                 * выдвижной лист, наведения нет. Ключ стоит на первой строке названия.
+                 */}
+                <span className="shrink-0 font-mono">{project.key}</span>
+                <span className="min-w-0 text-faint wrap-anywhere">{project.title}</span>
+              </SideLink>
+              <Link
+                to={projectHref(project.key)}
+                onClick={onNavigate}
+                aria-label={t('app.aboutProject', { key: project.key })}
+                title={t('app.aboutProject', { key: project.key })}
+                aria-current={onProject ? 'page' : undefined}
+                className={cn(
+                  // Мишень не меньше 24 px и на столе, и на телефоне (`--ui-tap`, UI-154):
+                  // знак без подписи мельче строки текста рядом.
+                  'grid min-h-(--ui-tap) min-w-(--ui-tap) shrink-0 place-items-center rounded-control no-underline',
+                  'transition-colors duration-(--motion-fast) ease-fast',
+                  onProject
+                    ? 'bg-accent-soft text-accent'
+                    : 'text-faint hover:bg-sunken hover:text-text',
+                )}
+              >
+                <Info className="size-(--ui-mark)" aria-hidden="true" />
+              </Link>
+            </div>
+          );
+        })}
 
         <p className="mt-3 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">
           {t('app.mine')}
@@ -258,7 +282,7 @@ function SideLink({
       onClick={onClick}
       aria-current={current ? 'page' : undefined}
       className={cn(
-        'flex items-baseline gap-2 overflow-hidden rounded-control px-2 py-1 text-meta no-underline',
+        'flex min-w-0 items-baseline gap-2 overflow-hidden rounded-control px-2 py-1 text-meta no-underline',
         'transition-colors duration-(--motion-fast) ease-fast',
         current
           ? 'bg-accent-soft font-semibold text-accent'

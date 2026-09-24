@@ -458,7 +458,7 @@ describe('полоса над таблицей считает с последн�
     await screen.findByText(say.ui('live.changed', { count: 1 }));
 
     const sections = screen.getByRole('navigation', { name: say.ui('app.sections') });
-    await user.click(within(sections).getByRole('link', { name: /DEMO/ }));
+    await user.click(within(sections).getByRole('link', { name: /^DEMO/ }));
 
     expect(await within(row('DEMO-1')).findByText('in_progress')).toBeInTheDocument();
     expect(tableRequests()).toHaveLength(2);

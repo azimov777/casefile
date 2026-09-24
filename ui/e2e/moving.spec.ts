@@ -132,7 +132,7 @@ test('администратор скачивает архив и принима
   // Доска новой установки продолжает работать её собственным ключом, без перезагрузки
   // (решение TRK-100#19/#20), и показывает тот же проект и те же задачи, что источник.
   await target.goto('/tasks');
-  await expect(side(target).getByRole('link', { name: /DEMO/ })).toBeVisible();
+  await expect(side(target).getByRole('link', { name: /^DEMO/ })).toBeVisible();
   expect(await found(target)).toBe(sourceProjects);
 
   // Повторный приём того же архива — установка больше не пустая.

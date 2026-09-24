@@ -193,6 +193,12 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     expect(line(FACTS.created)).toBe(say.ui('entry.headline.created'));
   });
 
+  it('заведение в деле проекта — «проект заведён», а не «задача заведена»', () => {
+    expect(headlineText(entryHeadline(FACTS.created, 'TRK', say.ui))).toBe(
+      say.ui('entry.headline.projectCreated'),
+    );
+  });
+
   it('у записи агента заголовок остаётся авторским, у сводки — выведенным', () => {
     for (const type of [
       'decision',

@@ -2,13 +2,22 @@ import { projectOfKey } from '@/shared/lib';
 
 /** Раздел, в котором человек находится. Совпадает с таблицей экранов `CONCEPT.md`, 3. */
 export type Section =
-  'tasks' | 'task' | 'case' | 'questions' | 'connect' | 'access' | 'people' | 'account' | 'other';
+  | 'tasks'
+  | 'task'
+  | 'case'
+  | 'project'
+  | 'questions'
+  | 'connect'
+  | 'access'
+  | 'people'
+  | 'account'
+  | 'other';
 
 export interface Place {
   section: Section;
   /**
    * Проект, в котором человек работает: на списке — из отбора, внутри задачи —
-   * из её ключа. `null` — проект не выбран (все задачи) или к месту не относится.
+   * из её ключа, на экране проекта — из адреса. `null` — проект не выбран (все задачи) или к месту не относится.
    */
   project: string | null;
   /** Ключ задачи, если человек внутри неё. */
@@ -47,6 +56,18 @@ export function readPlace(pathname: string, params: URLSearchParams): Place {
   if (pathname === '/tasks') {
     const project = params.get('project') ?? '';
     return { section: 'tasks', project: project === '' ? null : project, taskKey: null };
+  }
+
+  // `/projects/TRK`: экран проекта — тоже место проекта, и панель помечает его так же,
+  // как список и карточку его задачи. Ключ в верхнем регистре: бэкенд находит проект
+  // без учёта регистра, а панель сравнивает с ключом из `bootstrap` как есть.
+  const project = /^\/projects\/([^/]+)$/.exec(pathname);
+  if (project?.[1] !== undefined) {
+    return {
+      section: 'project',
+      project: decodeURIComponent(project[1]).toUpperCase(),
+      taskKey: null,
+    };
   }
 
   // `/tasks/UI-38` и `/tasks/UI-38/case`: проект читается из ключа задачи, а не

@@ -8,7 +8,7 @@ describe('ссылка на запись', () => {
   it('кладёт в буфер адрес карточки с номером записи и говорит, что скопировала', async () => {
     // `setup()` ставит буфер обмена user-event: в jsdom своего нет.
     const user = userEvent.setup();
-    render(<CopyEntryLink taskKey="UI-124" no={16} />);
+    render(<CopyEntryLink owner={{ kind: 'task', key: 'UI-124' }} no={16} />);
 
     await user.click(screen.getByRole('button', { name: say.ui('entry.copyLink', { no: 16 }) }));
 
@@ -23,7 +23,7 @@ describe('ссылка на запись', () => {
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(
       new DOMException('Denied', 'NotAllowedError'),
     );
-    render(<CopyEntryLink taskKey="UI-124" no={16} />);
+    render(<CopyEntryLink owner={{ kind: 'task', key: 'UI-124' }} no={16} />);
 
     await user.click(screen.getByRole('button', { name: say.ui('entry.copyLink', { no: 16 }) }));
 

@@ -102,7 +102,7 @@ test('проект остаётся подсвеченным внутри зад
 
   // Проект задачи прочитан из её ключа: подсветка не пропадает от того, что
   // человек ушёл со списка.
-  await expect(side(page).getByRole('link', { name: /DEMO/ })).toHaveAttribute(
+  await expect(side(page).getByRole('link', { name: /^DEMO/ })).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -141,7 +141,7 @@ test('старый параметр адреса проектом не чита�
     'aria-current',
     'page',
   );
-  await expect(side(page).getByRole('link', { name: /DEMO/ })).not.toHaveAttribute(
+  await expect(side(page).getByRole('link', { name: /^DEMO/ })).not.toHaveAttribute(
     'aria-current',
     'page',
   );

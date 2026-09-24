@@ -16,7 +16,7 @@ import { fontsReady, readE2eToken, silenceJournal } from './contour';
  * Проверка снимает вертикаль трёх узлов вокруг ссылки — текста перед ней, самой ссылки
  * и текста после — в обоих местах, где причина показана целиком: в ленте дела
  * (`pages/case/ui/case-page.tsx`) и в раскрытой строке описи карточки
- * (`pages/task/ui/task-index.tsx`), — оба идут через один и тот же `EntryBody`, и правка
+ * (`entities/entry/ui/entry-index.tsx`), — оба идут через один и тот же `EntryBody`, и правка
  * одна на двоих.
  */
 
@@ -154,7 +154,7 @@ test('причина перехода со ссылкой стоит в одну
       `лента дела: текст после ссылки ${JSON.stringify(feedTops)}`,
     ).toBeLessThanOrEqual(SAME_LINE_TOLERANCE);
 
-    // Опись карточки: `pages/task/ui/task-index.tsx` → `EntryDetails` → `EntryBody`, та же
+    // Опись карточки: `entities/entry/ui/entry-index.tsx` → `EntryDetails` → `EntryBody`, та же
     // причина, но раскрытая по клику, а не готовой лентой.
     await page.goto(`/tasks/${key}`);
     await page.getByRole('button', { name: /причиной/ }).click();

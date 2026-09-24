@@ -1,5 +1,13 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query';
-import { apiClient, unwrapPage, type Page, type components, type operations } from '@/shared/api';
+import {
+  apiClient,
+  unwrap,
+  unwrapPage,
+  type Page,
+  type components,
+  type operations,
+} from '@/shared/api';
+import type { EntryOwner } from '../model/owner';
 
 /** Запись дела с телом и нагрузкой: объединение, размеченное полем `type`. */
 export type Entry = components['schemas']['EntryRead'];
@@ -78,24 +86,84 @@ export const entryKeys = {
   bodies: (taskKey: string, nos: number[]) => ['task', taskKey, 'entries', nos] as const,
   /** Лента дела: страницы копятся, поэтому свой ключ, а не ключ тел записей. */
   feed: (taskKey: string, params: EntryListParams) => ['task', taskKey, 'case', params] as const,
+  /** Тело одной записи дела проекта: под префиксом проекта, как тела задачи — под её. */
+  projectBody: (projectKey: string, no: number) => ['project', projectKey, 'entries', no] as const,
+  /** Дело проекта страницами, с отбором по типам или без. */
+  projectCase: (projectKey: string, params: ProjectEntryListParams) =>
+    ['project', projectKey, 'case', params] as const,
 };
 
+/** Параметры чтения дела проекта — из контракта. */
+export type ProjectEntryListParams = NonNullable<
+  operations['list_project_entries']['parameters']['query']
+>;
+
 /**
- * Тела названных записей одним запросом.
+ * Тело одной записи дела — задачи или проекта.
  *
- * Номера — часть ключа запроса, поэтому раскрытая запись читается один раз и живёт
- * в кэше: закрыть и открыть её снова второго запроса не стоит.
+ * Номер — часть ключа запроса, поэтому раскрытая запись читается один раз и живёт
+ * в кэше: закрыть и открыть её снова второго запроса не стоит. У задачи тело читается
+ * отбором `entries?nos=N` (тем же путём, что лента), у проекта — своим адресом записи
+ * `entries/{no}`: у дела проекта он есть, и отбор ради одной записи был бы обходом.
  */
-export function entryQueryOptions(taskKey: string, no: number) {
+export function entryQueryOptions(owner: EntryOwner, no: number) {
+  // Ключ объявлен общим типом: у двух владельцев разные префиксы (`task`, `project`), а
+  // запрос один — иначе вызывающий получил бы объединение двух видов опций.
+  const queryKey: readonly unknown[] =
+    owner.kind === 'project'
+      ? entryKeys.projectBody(owner.key, no)
+      : entryKeys.bodies(owner.key, [no]);
   return queryOptions({
-    queryKey: entryKeys.bodies(taskKey, [no]),
-    queryFn: (): Promise<Page<Entry>> =>
+    queryKey,
+    queryFn: (): Promise<Entry | null> =>
+      owner.kind === 'project' ? readProjectEntry(owner.key, no) : readTaskEntry(owner.key, no),
+  });
+}
+
+async function readTaskEntry(taskKey: string, no: number): Promise<Entry | null> {
+  const page = await unwrapPage(
+    apiClient.GET('/api/v1/tasks/{task_key}/entries', {
+      params: { path: { task_key: taskKey }, query: { nos: [no] } },
+    }),
+  );
+  return page.items[0] ?? null;
+}
+
+function readProjectEntry(projectKey: string, no: number): Promise<Entry> {
+  return unwrap(
+    apiClient.GET('/api/v1/projects/{project_key}/entries/{entry_no}', {
+      params: { path: { project_key: projectKey, entry_no: no } },
+    }),
+  );
+}
+
+/**
+ * Дело проекта одной страницы на запрос: предел контракта — 200 записей. Дело
+ * проекта короткое (ни сводок, ни вопросов, ни вердиктов), и больше страницы оно
+ * набирает редко, но «показать всё» и здесь не обещается: следующая страница — по
+ * кнопке, курсором бэкенда.
+ */
+export const PROJECT_ENTRY_PAGE_SIZE = 200;
+
+export function projectCaseQueryOptions(projectKey: string, params: ProjectEntryListParams = {}) {
+  return infiniteQueryOptions({
+    queryKey: entryKeys.projectCase(projectKey, params),
+    queryFn: ({ pageParam }): Promise<Page<Entry>> =>
       unwrapPage(
-        apiClient.GET('/api/v1/tasks/{task_key}/entries', {
-          params: { path: { task_key: taskKey }, query: { nos: [no] } },
+        apiClient.GET('/api/v1/projects/{project_key}/entries', {
+          params: {
+            path: { project_key: projectKey },
+            query: {
+              limit: PROJECT_ENTRY_PAGE_SIZE,
+              ...params,
+              cursor: pageParam === '' ? undefined : pageParam,
+            },
+          },
         }),
       ),
-    select: (page: Page<Entry>) => page.items[0] ?? null,
+    initialPageParam: '',
+    getNextPageParam: (last: Page<Entry>) =>
+      last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined,
   });
 }
 

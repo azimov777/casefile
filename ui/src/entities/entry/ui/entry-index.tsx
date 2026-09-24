@@ -2,40 +2,40 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'r
 import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import {
-  AuthorName,
-  CopyEntryLink,
-  EntryBody,
-  EntryHeadline,
-  EntryKind,
-  entryHeadline,
-  entryQueryOptions,
-  groupSectionEdits,
-  sectionEditsHeadline,
-  type EntryHeading,
-  type Headline,
-  type SectionEditsRun,
-} from '@/entities/entry';
 import { cn, useExitHold } from '@/shared/lib';
 import { QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
+import { entryQueryOptions, type EntryHeading } from '../api/entries';
+import { entryHeadline, type Headline } from '../model/headline';
+import type { EntryOwner } from '../model/owner';
+import {
+  groupSectionEdits,
+  sectionEditsHeadline,
+  type SectionEditsRun,
+} from '../model/section-edits';
+import { AuthorName } from './author-name';
+import { CopyEntryLink } from './copy-entry-link';
+import { EntryBody } from './entry-body';
+import { EntryHeadline } from './entry-headline';
+import { EntryKind } from './entry-kind';
 
-/** Императивная ручка `TaskIndex`: прыжок «в начало описи» стоит в шапке блока
+/** Императивная ручка `EntryIndex`: прыжок «в начало описи» стоит в шапке блока
  * (`task-page.tsx`, `INDEX_NAV`, UI-127) и дотягивается снаружи ровно до того узла,
  * куда раньше вела кнопка внутри самой описи, — второго пути прокрутки не заводим. */
-export interface TaskIndexHandle {
+export interface EntryIndexHandle {
   scrollToTop: () => void;
 }
 
-interface TaskIndexProps {
-  taskKey: string;
+interface EntryIndexProps {
+  /** Чьё это дело — задачи или проекта: от владельца зависят путь тела и адрес записи. */
+  owner: EntryOwner;
   index: EntryHeading[];
-  /** Обзорные проверки задачи: вердикту нужен текст его проверки. */
-  checks: string[];
+  /** Обзорные проверки задачи: вердикту нужен текст его проверки. У проекта их нет. */
+  checks?: string[];
   /**
    * Номер записи из адреса: ссылка `TRK-42#12` или загрузка страницы с `?entry=N`
    * открывает карточку уже раскрытой и приводит запись в поле зрения. Собственный
    * клик по описи меняет тот же параметр (`onOpenChange`), но не через этот проп:
-   * `TaskIndex` отличает пришедшее снаружи от своего клика сам (`internalChange`).
+   * `EntryIndex` отличает пришедшее снаружи от своего клика сам (`internalChange`).
    */
   openAt: number | null;
   /**
@@ -45,7 +45,7 @@ interface TaskIndexProps {
    */
   onOpenChange: (no: number | null) => void;
   /** Ручка на прыжок «в начало описи» — вызывается из шапки блока (`task-page.tsx`). */
-  ref?: Ref<TaskIndexHandle>;
+  ref?: Ref<EntryIndexHandle>;
 }
 
 /**
@@ -83,17 +83,32 @@ const ROW =
 /** Ячейка заголовка: в карточке — вся вторая строка. */
 const HEADLINE = '@max-index:basis-full';
 
+/** Столбцы описи по порядку: подписи к ним живут в словаре (`ui.index.columns`). */
+const INDEX_COLUMNS = ['no', 'type', 'author', 'when', 'headline'] as const;
+
+/** Пустой список проверок: у дела проекта их нет, а новый массив на каждый рендер не нужен. */
+const NO_CHECKS: string[] = [];
+
 /**
  * Опись дела: заголовок каждой записи, тело — по клику.
  *
  * Так дело и задумано читать (`CONCEPT.md`, 4): полное дело весит столько, что карточка
  * открывалась бы секундами, а нужны из него обычно две-три записи.
+ *
+ * Одна опись на оба дела — задачи и проекта (UI-174): механика у них одна, и вторая
+ * опись рядом с первой разошлась бы с ней в раскрытии, прокрутке к записи и группах
+ * правок. Раньше жила в `pages/task` — экран проекта, соседняя страница, дотянуться до
+ * неё оттуда не мог.
  */
-/** Столбцы описи по порядку: подписи к ним живут в словаре (`task.index.columns`). */
-const INDEX_COLUMNS = ['no', 'type', 'author', 'when', 'headline'] as const;
-
-export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }: TaskIndexProps) {
-  const { t } = useTranslation('task');
+export function EntryIndex({
+  owner,
+  index,
+  checks = NO_CHECKS,
+  openAt,
+  onOpenChange,
+  ref,
+}: EntryIndexProps) {
+  const { t } = useTranslation('ui');
 
   // Раскрытых может быть несколько — сравнивают соседние записи. В адрес уходит
   // последняя раскрытая: адрес называет запись, ради которой человек здесь, и
@@ -122,7 +137,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }:
   /** Метка «следующая правка `openAt` — от своего клика, не от прихода снаружи». */
   const internalChange = useRef(false);
   /** Начало описи: сюда возвращает прыжок «в начало» — кнопка стоит в шапке блока
-   * (`task-page.tsx`), а дотягивается до этого узла через `TaskIndexHandle`. */
+   * (`task-page.tsx`), а дотягивается до этого узла через `EntryIndexHandle`. */
   const scroller = useRef<HTMLDivElement>(null);
 
   useImperativeHandle(
@@ -233,7 +248,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }:
             run.kind === 'one' ? (
               <IndexRow
                 key={run.item.no}
-                taskKey={taskKey}
+                owner={owner}
                 heading={run.item}
                 checks={checks}
                 open={expanded.has(run.item.no)}
@@ -243,7 +258,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }:
             ) : (
               <GroupRows
                 key={`group-${run.first}`}
-                taskKey={taskKey}
+                owner={owner}
                 run={run}
                 checks={checks}
                 open={openGroups.has(run.first) || run.items.some((item) => expanded.has(item.no))}
@@ -261,7 +276,7 @@ export function TaskIndex({ taskKey, index, checks, openAt, onOpenChange, ref }:
 }
 
 interface GroupRowsProps {
-  taskKey: string;
+  owner: EntryOwner;
   run: Extract<SectionEditsRun<EntryHeading>, { kind: 'sections' }>;
   checks: string[];
   open: boolean;
@@ -281,7 +296,7 @@ interface GroupRowsProps {
  * остаются адресуемыми по номеру.
  */
 function GroupRows({
-  taskKey,
+  owner,
   run,
   checks,
   open,
@@ -344,7 +359,7 @@ function GroupRows({
         ? run.items.map((item) => (
             <IndexRow
               key={item.no}
-              taskKey={taskKey}
+              owner={owner}
               heading={item}
               checks={checks}
               open={expanded.has(item.no)}
@@ -359,7 +374,7 @@ function GroupRows({
 }
 
 interface IndexRowProps {
-  taskKey: string;
+  owner: EntryOwner;
   heading: EntryHeading;
   checks: string[];
   open: boolean;
@@ -378,7 +393,7 @@ interface IndexRowProps {
 }
 
 function IndexRow({
-  taskKey,
+  owner,
   heading,
   checks,
   open,
@@ -398,7 +413,7 @@ function IndexRow({
    * ключ запроса тот же, и ответ берётся из кэша.
    */
   const details = useExitHold(open);
-  const headline = entryHeadline(heading.facts, taskKey, brick);
+  const headline = entryHeadline(heading.facts, owner.key, brick);
   /* Раскрытая строка утоплена заливкой и так читается вместе со своим телом ниже. */
   const cell = open ? cn(CELL, 'bg-sunken') : CELL;
 
@@ -434,7 +449,7 @@ function IndexRow({
               для диктора (`rowheader`), и кнопка в нём вошла бы в имя каждой строки.
               Здесь она стоит столбцом на столе и у правого края первой строки на
               телефоне, как «Скопировать KEY#N» в ленте дела (UI-155). */}
-          <CopyEntryLink taskKey={taskKey} no={heading.no} />
+          <CopyEntryLink owner={owner} no={heading.no} />
         </td>
         <td className={cn(cell, HEADLINE, nested && 'pl-8')}>
           {/*
@@ -493,7 +508,7 @@ function IndexRow({
             <Reveal hold={details}>
               <div className="px-3 py-2">
                 <EntryDetails
-                  taskKey={taskKey}
+                  owner={owner}
                   no={heading.no}
                   checks={checks}
                   title={heading.title}
@@ -509,26 +524,26 @@ function IndexRow({
 }
 
 /**
- * Тело одной записи: свой запрос на свой номер (`entries?nos=N`).
+ * Тело одной записи: свой запрос на свой номер (`entryQueryOptions`).
  *
  * Ключ запроса — номер, поэтому закрытая и снова раскрытая запись берётся из кэша,
  * а не спрашивается второй раз.
  */
 function EntryDetails({
-  taskKey,
+  owner,
   no,
   checks,
   title,
   headline,
 }: {
-  taskKey: string;
+  owner: EntryOwner;
   no: number;
   checks: string[];
   title: string;
   headline: Headline;
 }) {
-  const entry = useQuery(entryQueryOptions(taskKey, no));
-  const { t } = useTranslation('task');
+  const entry = useQuery(entryQueryOptions(owner, no));
+  const { t } = useTranslation('ui');
 
   return (
     /*

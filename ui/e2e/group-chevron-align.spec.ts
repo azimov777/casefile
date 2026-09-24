@@ -5,7 +5,7 @@ import { fontsReady, readE2eToken, silenceJournal } from './contour';
  * UI-162: проверка находки UI-158 («иконки/`::before`-треугольник и текст на
  * `items-baseline` выравниваются не по оптическому центру, а по метрике каждого
  * своей») на втором узле с тем же паттерном — треугольник раскрытия группы правок
- * в описи задачи (`pages/task/ui/task-index.tsx`, `GroupRows`, `before:content-['▸']`
+ * в описи задачи (`entities/entry/ui/entry-index.tsx`, `GroupRows`, `before:content-['▸']`
  * / `before:content-['▾']` внутри `flex items-baseline`).
  *
  * UI-158 не измерял этот узел напрямую: там в строке только текст (`EntryHeadline`),
