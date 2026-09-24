@@ -319,6 +319,11 @@ async def archive_at(client: AsyncClient, session: AsyncSession, revision: str) 
         rows = await store.read_rows(
             session, store.PUBLIC_SCHEMA, RENAMED_TABLES.get(name, name), current
         )
+        if name == "entries" and "project_id" not in columns:
+            # Записей дела проекта (TRK-156) до их ревизии не было: архив той версии их
+            # не содержит, а в схеме той ревизии у записи без задачи нет владельца.
+            owner = list(columns).index("task_id")
+            rows = [row for row in rows if row[owner] is not None]
         tables.append({"name": name, "columns": list(columns), "rows": rows})
     return {
         **(await client.get(ARCHIVE)).json()["data"],

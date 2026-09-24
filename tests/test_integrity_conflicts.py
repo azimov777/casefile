@@ -102,6 +102,18 @@ async def committed_secret(
                 text("DELETE FROM participants WHERE id = :participant"),
                 {"participant": participant_id},
             )
+            # Заведённый проект открывает дело записью `created` (TRK-156): без неё строку
+            # проекта не удалить — внешний ключ записи. Записи неизменяемы триггером, и
+            # уборка закоммиченных строк — единственное место, где его законно выключить.
+            await session.execute(text("ALTER TABLE entries DISABLE TRIGGER entries_immutable"))
+            await session.execute(
+                text(
+                    "DELETE FROM entries WHERE project_id IN "
+                    "(SELECT id FROM projects WHERE key = :key)"
+                ),
+                {"key": PROJECT_KEY},
+            )
+            await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(
                 text("DELETE FROM projects WHERE key = :key"), {"key": PROJECT_KEY}
             )

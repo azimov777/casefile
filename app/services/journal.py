@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.shutdown import shutdown
+from app.db.models.entry import Entry
 from app.db.pagination import Page, decode_sort_cursor
 from app.db.repositories import EntryRepository
 from app.db.wakeup import journal_wakeup
@@ -64,7 +65,6 @@ from app.domain.tokens import TokenScope
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from app.services.case import TaskEntry
 from app.services.permissions import ensure_scope
 
 logger = get_logger("journal")
@@ -88,6 +88,24 @@ type SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 type ClientGone = Callable[[], Awaitable[bool]]
 
 
+# --- Запись ленты ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class JournalEntry:
+    """Запись ленты вместе с ключом своего владельца.
+
+    Владелец записи — задача или проект (`CONCEPT.md`, 3.4), и непуст ровно один ключ:
+    `task_key` у записи дела задачи, `project_key` у записи дела проекта. Так же, как
+    колонки владельца в базе (`ck_entries_one_owner`): ключ проекта у записи задачи был
+    бы вторым адресом одной записи.
+    """
+
+    entry: Entry
+    task_key: str | None
+    project_key: str | None
+
+
 # --- Фильтр ---------------------------------------------------------------------------
 
 
@@ -104,6 +122,8 @@ async def resolve_filter(
     как есть: опечатка в ключе иначе дала бы пустую ленту, неотличимую от «ничего не
     происходит», и ждущий висел бы до таймаута, считая установку спящей. Несуществующий
     ключ поэтому `task_not_found` или `project_not_found`.
+
+    Отбор по проекту берёт и дело самого проекта, и дела его задач.
 
     Задач называют сколько угодно в пределах потолка (`MAX_TASK_KEYS`): сессия, ведущая
     несколько дел, спрашивает про них одним вызовом, а не по вызову на каждое. Ключи
@@ -134,7 +154,7 @@ async def read_journal(
     after: int | None = None,
     cursor: str | None = None,
     limit: int | None = None,
-) -> Page[TaskEntry]:
+) -> Page[JournalEntry]:
     """Страница хвоста журнала: записи с номером больше `after`, по возрастанию `seq`.
 
     `after` и `cursor` — не дубль: первый задаёт клиент (это его курсор ленты, тот же
@@ -154,7 +174,10 @@ async def read_journal(
         limit=limit,
     )
     return Page(
-        items=[TaskEntry(entry=entry, task_key=key) for entry, key in page.items],
+        items=[
+            JournalEntry(entry=entry, task_key=task_key, project_key=project_key)
+            for entry, task_key, project_key in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 
@@ -169,7 +192,7 @@ async def wait_journal(
     limit: int | None = None,
     wait: float | None = None,
     client_gone: ClientGone | None = None,
-) -> Page[TaskEntry]:
+) -> Page[JournalEntry]:
     """Тот же хвост, но с ожиданием: возвращается, как только появилась первая запись.
 
     Основа цикла назначателя и живого харнесса (`CONCEPT.md`, 4.6): «прочитать хвост,
@@ -259,7 +282,7 @@ class JournalMessage:
     завершается вместо того, чтобы висеть до перезапуска процесса.
     """
 
-    item: TaskEntry | None = None
+    item: JournalEntry | None = None
     comment: str | None = None
 
     @property
@@ -374,9 +397,11 @@ async def stream_journal(
                     types=journal_filter.types,
                     limit=STREAM_BATCH_SIZE,
                 )
-            for entry, task_key in page.items:
+            for entry, task_key, project_key in page.items:
                 after = entry.seq
-                yield JournalMessage(item=TaskEntry(entry=entry, task_key=task_key))
+                yield JournalMessage(
+                    item=JournalEntry(entry=entry, task_key=task_key, project_key=project_key)
+                )
                 last_sent = loop.time()
 
             if len(page.items) == STREAM_BATCH_SIZE:
@@ -416,6 +441,7 @@ __all__ = [
     "JOURNAL_START",
     "RECONNECT_DELAY_MS",
     "ClientGone",
+    "JournalEntry",
     "JournalMessage",
     "SessionFactory",
     "connection_limit",
