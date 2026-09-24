@@ -154,6 +154,13 @@ function writes(): string[] {
   return sent.filter((call) => !call.startsWith('GET '));
 }
 
+/** Кнопки-действия: время — переключатель подписи (`aria-pressed`, UI-153), не действие. */
+function actions(scope: HTMLElement): HTMLElement[] {
+  return within(scope)
+    .queryAllByRole('button')
+    .filter((button) => !button.hasAttribute('aria-pressed'));
+}
+
 describe('экран «Доступы»', () => {
   it('открывается из навигации и показывает доступы установки, отмечая ключ этого сеанса', async () => {
     installation('main', [UI_TOKEN, AGENT_TOKEN, REVOKED_TOKEN]);
@@ -197,7 +204,9 @@ describe('экран «Доступы»', () => {
     expect(within(revoked).getByText(say.ui('token.revoked'))).toBeInTheDocument();
     expect(within(revoked).getByText(say.ui('token.shared'))).toBeInTheDocument();
     // Отозванный доступ отзывать нечего: кнопки у него нет.
-    expect(within(revoked).queryByRole('button')).toBeNull();
+    // Действий нет. Время — переключатель подписи на точное (`aria-pressed`, UI-153),
+    // а не действие над строкой, и в счёт не идёт.
+    expect(actions(revoked)).toEqual([]);
   });
 
   it('действующие идут раньше отозванных, даже если выдача их перемешала', async () => {
@@ -546,7 +555,9 @@ describe('чьи токены на экране (TRK-114)', () => {
     });
     expect(within(own).getByRole('button', { name: say.access('revoke.action') })).toBeEnabled();
     // Чужая строка — без кнопки: её отзыв ответил бы `403 not_own_token`.
-    expect(within(row('агент владельца')).queryByRole('button')).toBeNull();
+    // Действий нет. Время — переключатель подписи на точное (`aria-pressed`, UI-153),
+    // а не действие над строкой, и в счёт не идёт.
+    expect(actions(row('агент владельца'))).toEqual([]);
 
     // Выпуск открыт: за сеансом человек с учётной записью.
     await user.click(screen.getByRole('button', { name: say.access('actions.issue') }));

@@ -95,6 +95,8 @@ describe('карточка доски называет родителя', () => 
     );
     // Одна строка с многоточием, полный текст — подсказкой.
     expect(link).toHaveClass('truncate', 'min-w-0');
+    // Переноса на узком месте у карточки доски нет: она держит одну строку (UI-115).
+    expect(link).not.toHaveClass('@max-list:whitespace-normal');
     expect(link).toHaveAttribute('title', say.ui('task.parents.item', PROGRAM));
     // Ключ — идентификатор контракта: моноширинным, как всюду.
     expect(within(link).getByText('DEMO-2')).toHaveClass('font-mono');
@@ -171,6 +173,12 @@ describe('строка списка называет родителя', () => {
     expect(container.querySelector('tr')).toHaveClass('h-(--ui-row-height)');
     expect(shown).toHaveClass('max-w-2/5', 'shrink-0');
     expect(within(shown).getByRole('link')).toHaveClass('truncate');
+    // На телефоне строка — карточка, и там подпись переносится, а не режется: наведения
+    // нет, и подсказка `title` одна до полного названия не довела бы (UI-153).
+    expect(within(shown).getByRole('link')).toHaveClass(
+      '@max-list:whitespace-normal',
+      '@max-list:wrap-anywhere',
+    );
     // Растяжки у строки нет (UI-39), и поднимать подпись там не над чем.
     expect(within(shown).getByRole('link')).not.toHaveClass('z-1');
   });
