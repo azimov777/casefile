@@ -127,8 +127,6 @@ own and its case entries are signed with its name instead of one shared `agent`.
 shared installation every person does this for their own agents, without the
 administrator, and sees and revokes only the tokens they issued or that speak for them.
 
-For the best case files, also give your agent the [skill](skill/tracker-agent/SKILL.md) that teaches the discipline (Claude Code: `~/.claude/skills/tracker-agent/SKILL.md`).
-
 ## Tools
 
 Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`):

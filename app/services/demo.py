@@ -466,8 +466,8 @@ async def _candidate_task(session: AsyncSession, queue: Queue, *, agent: Actor) 
         goal="Понятно, откуда брать общий контекст очереди",
         context="`get_queue` отдаёт описание целиком; в карточке задачи его нет намеренно",
         constraints="Описание в карточку задачи не добавлять: оно длинное и съест контекст",
-        output="Строка в тексте скила о том, когда звать `get_queue`",
-        checks=["Скил называет `get_queue` в разделе о начале работы"],
+        output="Строка в `instructions` о том, когда звать `get_queue`",
+        checks=["`instructions` называют `get_queue` в разделе о начале работы"],
         priority=TaskPriority.LOW,
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
