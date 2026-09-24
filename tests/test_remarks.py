@@ -18,7 +18,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.authors import label_author
 from app.domain.case import EntryType, RemarkOutcome
@@ -32,11 +32,11 @@ from app.services.auth import Actor
 from conftest import Connect, call, refuse
 
 READY = {
-    "queue": "trk",
+    "project": "trk",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
-    "context": "Номер выдаёт очередь",
+    "context": "Номер выдаёт проект",
     "constraints": "Счётчик не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
@@ -61,11 +61,11 @@ CLOSING_SUMMARY = {
 # --- Помощники ------------------------------------------------------------------------
 
 
-async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) -> Task:
+async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
     return await tasks_service.create_task(
         session,
         actor=actor,
-        queue=queue,
+        project=project,
         title=title,
         description="описание",
         goal="цель",
@@ -123,7 +123,7 @@ async def card(client: AsyncClient, key: str) -> dict[str, Any]:
 
 async def test_the_package_carries_every_open_remark_in_full(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 1 в REST: замечание из-под сводки и десятка записей видно сразу.
 
@@ -188,7 +188,7 @@ async def test_the_package_carries_every_open_remark_in_mcp_too(
 
 async def test_a_resolution_closes_the_remark_and_names_where_the_work_went(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2: исход читается значением, а ключ продолжения — ссылкой.
 
@@ -228,7 +228,7 @@ async def test_a_resolution_closes_the_remark_and_names_where_the_work_went(
 
 async def test_reviewed_but_unfinished_is_a_query_not_a_reading(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2, вторая половина: «разобрано, но работа не закрыта» — отбор.
 
@@ -265,7 +265,7 @@ async def test_reviewed_but_unfinished_is_a_query_not_a_reading(
 
 async def test_the_outcomes_are_told_apart_by_value(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """«Поправил сразу» и «принял в работу» — разные значения, а не разные слова.
 
@@ -323,10 +323,10 @@ async def test_the_outcomes_are_told_apart_by_value(
 async def test_each_remark_has_its_own_fate(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 3: частичный разбор не закрывает остальные замечания."""
-    task = await make(db_session, task_actor, queue, "три замечания разом")
+    task = await make(db_session, task_actor, project, "три замечания разом")
     first = await remark(db_session, task_actor, task, "первое")
     second = await remark(db_session, task_actor, task, "второе")
     third = await remark(db_session, task_actor, task, "третье")
@@ -342,10 +342,10 @@ async def test_each_remark_has_its_own_fate(
 async def test_a_resolution_points_at_a_remark_of_this_task(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Разбор сводки или чужого номера отклоняется: иначе признак не сошёлся бы с делом."""
-    task = await make(db_session, task_actor, queue, "проверка адресации")
+    task = await make(db_session, task_actor, project, "проверка адресации")
     summary = await case_service.add_summary(
         db_session,
         task,
@@ -372,10 +372,10 @@ async def test_a_resolution_points_at_a_remark_of_this_task(
 async def test_a_continuation_task_must_exist(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Ключ продолжения проверяется на существование: ссылка в никуда хуже её отсутствия."""
-    task = await make(db_session, task_actor, queue, "несуществующее продолжение")
+    task = await make(db_session, task_actor, project, "несуществующее продолжение")
     filed = await remark(db_session, task_actor, task, "вышло не то")
 
     with pytest.raises(EntryFieldsInvalidError) as error:
@@ -400,7 +400,7 @@ async def test_a_continuation_task_must_exist(
 
 async def test_a_remark_reaches_a_closed_task_and_leaves_its_card_alone(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорные проверки 4 и 5: закрытую задачу замечание пополняет, но не оживляет.
 
@@ -428,7 +428,7 @@ async def test_a_remark_reaches_a_closed_task_and_leaves_its_card_alone(
 
 async def test_an_open_remark_does_not_hold_the_work(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорные проверки 6 и 7: замечание не блокер, а сводка — не разбор."""
     key = await create(auth_client, "замечание не стоп-кран")
@@ -452,19 +452,19 @@ async def test_an_open_remark_does_not_hold_the_work(
 async def test_remarks_are_searchable_in_every_status(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 8: отбор работает и на закрытой задаче.
 
     Замечание к `done` — главный случай механики: именно на закрытое человек и смотрит,
     когда говорит «вышло не то». Отбор, теряющий такие задачи, обесценивает признак.
     """
-    cancelled = await make(db_session, task_actor, queue, "отменённая, замечание внутри")
+    cancelled = await make(db_session, task_actor, project, "отменённая, замечание внутри")
     await tasks_service.transition_task(
         db_session, cancelled, actor=task_actor, to=TaskStatus.CANCELLED, reason="не нужна"
     )
     await remark(db_session, task_actor, cancelled, "вышло не то")
-    quiet = await make(db_session, task_actor, queue, "без замечаний")
+    quiet = await make(db_session, task_actor, project, "без замечаний")
 
     found = await search_service.search_tasks(
         db_session, actor=task_actor, query="open_remarks: > 0"
@@ -477,10 +477,10 @@ async def test_remarks_are_searchable_in_every_status(
 async def test_an_unknown_field_names_the_new_ones_among_the_allowed(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 8, вторая половина: новые поля перечислены в отказе."""
-    del queue
+    del project
 
     with pytest.raises(SearchFieldUnknownError) as error:
         await search_service.search_tasks(db_session, actor=task_actor, query="remarks: > 0")
@@ -493,14 +493,14 @@ async def test_an_unknown_field_names_the_new_ones_among_the_allowed(
 async def test_the_feature_of_a_row_matches_the_card(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Счётчик в строке списка и в карточке — одно определение, а не два похожих.
 
     Проверяется на данных, где они могли бы разойтись: одно замечание разобрано, другое
     нет, а между ними лежат чужие записи.
     """
-    task = await make(db_session, task_actor, queue, "признак строки против карточки")
+    task = await make(db_session, task_actor, project, "признак строки против карточки")
     resolved = await remark(db_session, task_actor, task, "первое")
     await remark(db_session, task_actor, task, "второе")
     await case_service.resolve(
@@ -530,7 +530,7 @@ async def inbox(client: AsyncClient, **params: Any) -> list[tuple[str, int, str]
 
 async def test_the_inbox_returns_open_remarks_across_tasks_in_full(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 1 задачи TRK-11: один запрос — и текст, и адрес каждого замечания.
 
@@ -555,7 +555,7 @@ async def test_the_inbox_returns_open_remarks_across_tasks_in_full(
 
 async def test_a_resolved_remark_leaves_the_inbox_but_not_the_case(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2: выдача идёт от самого старого, разбор убирает строку.
 
@@ -580,7 +580,7 @@ async def test_a_resolved_remark_leaves_the_inbox_but_not_the_case(
 
 async def test_the_inbox_pages_by_seq_without_losing_or_repeating(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 3: подшивка во время листания не ломает страницы.
 
@@ -603,11 +603,11 @@ async def test_the_inbox_pages_by_seq_without_losing_or_repeating(
     assert len(seen) == len(set(seen))
 
 
-async def test_the_inbox_filters_by_author_and_by_queue(
+async def test_the_inbox_filters_by_author_and_by_project(
     db_session: AsyncSession,
     auth_client: AsyncClient,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 4: «мои» — это подпись, и агентская подпись ищется так же.
 
@@ -627,15 +627,15 @@ async def test_the_inbox_filters_by_author_and_by_queue(
         "от временного агента"
     ]
     assert await inbox(auth_client, author="никого_такого_нет") == []
-    assert len(await inbox(auth_client, queue="trk")) == 2
-    assert await inbox(auth_client, queue="TRK", author="owner") == [
+    assert len(await inbox(auth_client, project="trk")) == 2
+    assert await inbox(auth_client, project="TRK", author="owner") == [
         (key, 2, "от человека"),
     ]
 
 
 async def test_the_inbox_covers_closed_tasks(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 5: замечание к `done` и к `cancelled` не теряется.
 

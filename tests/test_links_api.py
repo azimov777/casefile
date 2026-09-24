@@ -8,14 +8,14 @@ from typing import Any
 
 from httpx import AsyncClient
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 
 READY = {
-    "queue": "trk",
+    "project": "trk",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
-    "context": "Номер выдаёт очередь",
+    "context": "Номер выдаёт проект",
     "constraints": "Счётчик не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
@@ -88,7 +88,7 @@ async def links_of(client: AsyncClient, key: str) -> list[tuple[str, str]]:
 
 async def test_a_link_shows_up_on_both_cards_under_its_own_kind(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорные проверки 5 и 7: имена с обеих сторон и статус задачи на другой стороне."""
     first = await create(auth_client, "первая")
@@ -106,7 +106,7 @@ async def test_a_link_shows_up_on_both_cards_under_its_own_kind(
 
 async def test_a_link_is_removed_from_either_side(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     first = await create(auth_client, "первая")
     second = await create(auth_client, "вторая")
@@ -121,7 +121,7 @@ async def test_a_link_is_removed_from_either_side(
 
 async def test_removing_a_link_that_is_not_there_answers_404(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     first = await create(auth_client, "первая")
     second = await create(auth_client, "вторая")
@@ -137,7 +137,7 @@ async def test_removing_a_link_that_is_not_there_answers_404(
 
 async def test_a_cycle_is_refused_in_the_hierarchy_and_in_blocking(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 3: кольцо из двух в иерархии и из трёх в блокировках."""
     first = await create(auth_client, "первая")
@@ -157,7 +157,7 @@ async def test_a_cycle_is_refused_in_the_hierarchy_and_in_blocking(
     assert blocking.json()["error"]["code"] == "link_cycle_detected"
 
 
-async def test_a_self_link_is_refused(auth_client: AsyncClient, queue: Queue) -> None:
+async def test_a_self_link_is_refused(auth_client: AsyncClient, project: Project) -> None:
     first = await create(auth_client, "первая")
 
     response = await link(auth_client, first, "relates", first)
@@ -168,7 +168,7 @@ async def test_a_self_link_is_refused(auth_client: AsyncClient, queue: Queue) ->
 
 async def test_a_closed_task_does_not_take_links_that_change_its_behaviour(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 6 задачи 24 и проверка 2 задачи TRK-10: две пары, обе стороны."""
     closed = await create(auth_client, "закрытая")
@@ -188,7 +188,7 @@ async def test_a_closed_task_does_not_take_links_that_change_its_behaviour(
 
 async def test_a_closed_task_shows_the_continuation_that_grew_from_it(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Главная проверка TRK-10 в REST: один `GET` на закрытой задаче отдаёт продолжение.
 
@@ -212,7 +212,7 @@ async def test_a_closed_task_shows_the_continuation_that_grew_from_it(
 
 async def test_a_continuation_leaves_the_closed_card_as_it_was(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 3 задачи TRK-10: закрытое дело не оживает от новой связи.
 
@@ -236,7 +236,7 @@ async def test_a_continuation_leaves_the_closed_card_as_it_was(
 
 async def test_relates_is_removed_from_a_closed_task_too(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Промах ключом у закрытой задачи снимается: правило одно и на постановку, и на снятие."""
     closed = await create(auth_client, "закрытая")
@@ -252,7 +252,7 @@ async def test_relates_is_removed_from_a_closed_task_too(
 
 async def test_an_unknown_kind_never_reaches_the_service(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Вид связи — перечисление в схеме, поэтому промах ловится схемой запроса."""
     first = await create(auth_client, "первая")
@@ -269,7 +269,7 @@ async def test_an_unknown_kind_never_reaches_the_service(
 
 async def test_a_blocker_keeps_the_task_out_of_work_until_it_closes(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 1: отказ со списком блокеров, после закрытия блокера — проход."""
     blocker = await create(auth_client, "блокер")
@@ -292,7 +292,7 @@ async def test_a_blocker_keeps_the_task_out_of_work_until_it_closes(
 
 async def test_a_parent_does_not_close_while_a_child_is_open(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2: отказ со списком детей, после отмены ребёнка — проход."""
     parent = await create(auth_client, "родитель")
@@ -317,7 +317,7 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
 
 async def test_a_parent_is_not_cancelled_while_a_child_is_open(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Отмена закрывает родителя так же окончательно, как `done`, и ждёт тех же детей.
 
@@ -346,7 +346,7 @@ async def test_a_parent_is_not_cancelled_while_a_child_is_open(
 
 async def test_a_waiting_child_holds_both_ways_of_closing_a_parent(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """`waiting` ребёнка не закрывает: это незаконченная работа, а не отменённая.
 
@@ -379,7 +379,7 @@ async def test_a_waiting_child_holds_both_ways_of_closing_a_parent(
 
 async def test_the_link_entry_is_read_back_by_its_own_variant(
     auth_client: AsyncClient,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорные проверки 4 и 4a: записи в обоих делах и чтение их вариантом `LinkEntryRead`."""
     first = await create(auth_client, "первая")

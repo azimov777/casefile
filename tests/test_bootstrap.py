@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.tokens import TokenScope, hash_token
@@ -24,17 +24,17 @@ from app.services.auth import TRACKER_ACTOR, Actor
 #: и поле, добавленное мимо него, обязано уронить тест, а не тихо уехать во фронтенд.
 #: `token` вошёл сюда с доводом, почему это первый кадр (`TRK-65#12`); адрес MCP — нет,
 #: он живёт в `GET /api/v1/installation`.
-BOOTSTRAP_FIELDS = ["account", "open_questions", "participant", "queues", "token"]
+BOOTSTRAP_FIELDS = ["account", "open_questions", "participant", "projects", "token"]
 
 #: Поля токена в первом кадре: чем узнать его в списке и что он открывает. Имя, автор
 #: выпуска и последнее использование сюда не входят — их отдаёт список по тому же `id`.
 TOKEN_FIELDS = ["id", "scope"]
 
 
-async def test_bootstrap_answers_with_the_participant_queues_and_question_count(
+async def test_bootstrap_answers_with_the_participant_projects_and_question_count(
     auth_client: AsyncClient,
     owner: Participant,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 4: один запрос отдаёт всё, чем рисуется первый кадр."""
     response = await auth_client.get("/api/v1/bootstrap")
@@ -49,7 +49,7 @@ async def test_bootstrap_answers_with_the_participant_queues_and_question_count(
     assert data["account"]["email"] == "owner@localhost"
     assert data["account"]["participant"] == owner.name
     assert data["account"]["is_admin"] is True
-    assert [item["key"] for item in data["queues"]] == [queue.key]
+    assert [item["key"] for item in data["projects"]] == [project.key]
     assert data["open_questions"] == 0
 
 
@@ -97,7 +97,7 @@ async def test_bootstrap_of_a_shared_token_has_no_participant(
 
     Ноль здесь — не умолчание и не пустой список вместо отказа: адресовать временного
     агента запрещено концепцией (3.6), поэтому число вопросов к нему равно нулю по
-    определению. Очереди при этом отдаются те же самые: они не зависят от того, кто
+    определению. Проекты при этом отдаются те же самые: они не зависят от того, кто
     спрашивает.
     """
     await case_service.ask(
@@ -118,7 +118,7 @@ async def test_bootstrap_of_a_shared_token_has_no_participant(
     assert data["participant"] is None
     assert data["account"] is None
     assert data["open_questions"] == 0
-    assert [item["key"] for item in data["queues"]] == [task.queue.key]
+    assert [item["key"] for item in data["projects"]] == [task.project.key]
 
 
 async def test_bootstrap_names_the_token_of_the_request_not_of_the_participant(

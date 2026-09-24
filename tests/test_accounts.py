@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import cli
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.repositories import AccountRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
@@ -191,12 +191,12 @@ async def test_only_an_administrator_manages_people(
 
 
 async def test_the_flag_gives_no_rights_on_tasks_and_its_absence_takes_none(
-    auth_client: AsyncClient, bob_token: str, queue: Queue
+    auth_client: AsyncClient, bob_token: str, project: Project
 ) -> None:
     """Все вошедшие видят всё: человек без флага заводит задачу и читает чужие."""
     created = await auth_client.post(
         "/api/v1/tasks",
-        json={"queue": queue.key, "title": "Задача Боба", "description": "Боб завёл сам"},
+        json={"project": project.key, "title": "Задача Боба", "description": "Боб завёл сам"},
         headers=bearer(bob_token),
     )
     listed = await auth_client.get("/api/v1/tasks", headers=bearer(bob_token))
@@ -398,7 +398,7 @@ async def test_the_local_administrator_sets_a_first_password_without_a_current_o
 
 
 async def test_two_people_see_the_same_tasks_and_sign_their_own_entries(
-    auth_client: AsyncClient, bob_token: str, queue: Queue
+    auth_client: AsyncClient, bob_token: str, project: Project
 ) -> None:
     """Обзорная проверка 2 на уровне API: одна команда, все видят всё, подпись своя."""
     await create(auth_client, email="carol@example.com", name="carol", password=PASSWORD)
@@ -406,7 +406,7 @@ async def test_two_people_see_the_same_tasks_and_sign_their_own_entries(
 
     created = await auth_client.post(
         "/api/v1/tasks",
-        json={"queue": queue.key, "title": "Общая задача", "description": "Видна всем"},
+        json={"project": project.key, "title": "Общая задача", "description": "Видна всем"},
         headers=bearer(bob_token),
     )
     key = created.json()["data"]["key"]

@@ -25,7 +25,7 @@ from app.services import participants as participants_service
 from app.services import search as search_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from app.services.demo import DEMO_LABEL, DEMO_QUEUE_KEY, seed_demo
+from app.services.demo import DEMO_LABEL, DEMO_PROJECT_KEY, seed_demo
 from app.services.setup import DEFAULT_OWNER_NAME
 
 
@@ -38,8 +38,8 @@ async def seeded(db_session: AsyncSession) -> demo_service.DemoData:
 @pytest.fixture
 def reader(seeded: demo_service.DemoData, db_session: AsyncSession) -> Actor:
     """Автор для чтения: набор `main`, потому что читается всё подряд."""
-    assert seeded.queue is not None
-    return Actor(author=seeded.queue.created_by, scope=TokenScope.MAIN)
+    assert seeded.project is not None
+    return Actor(author=seeded.project.created_by, scope=TokenScope.MAIN)
 
 
 async def _entry_types(
@@ -56,9 +56,9 @@ async def _entry_types(
 async def test_demo_fills_every_status(seeded: demo_service.DemoData) -> None:
     """Доска фронтенда — это столбцы по статусам, и пустой столбец читается как дефект."""
     assert seeded.created
-    assert seeded.queue is not None
-    assert seeded.queue.key == DEMO_QUEUE_KEY
-    assert seeded.queue.description, "очередь без описания не даёт агенту общего контекста"
+    assert seeded.project is not None
+    assert seeded.project.key == DEMO_PROJECT_KEY
+    assert seeded.project.description, "проект без описания не даёт агенту общего контекста"
 
     assert {task.status for task in seeded.tasks} == set(TaskStatus)
 
@@ -122,7 +122,7 @@ async def test_every_demo_row_carries_the_features_of_its_own_card(
     расхождение означало бы, что список и карточка отвечают по-разному на один вопрос.
     """
     outcome = await search_service.search_tasks(
-        db_session, actor=reader, query=f"queue: {DEMO_QUEUE_KEY}", limit=200
+        db_session, actor=reader, query=f"project: {DEMO_PROJECT_KEY}", limit=200
     )
     rows = {found.task.key: found.features for found in outcome.page.items}
 
@@ -147,7 +147,7 @@ async def test_every_demo_row_names_the_parent_its_card_shows(
     рядом с детьми есть и блокировки, и `relates`, которые в поле попасть не должны.
     """
     outcome = await search_service.search_tasks(
-        db_session, actor=reader, query=f"queue: {DEMO_QUEUE_KEY}", limit=200
+        db_session, actor=reader, query=f"project: {DEMO_PROJECT_KEY}", limit=200
     )
     rows = {found.task.key: found.parent for found in outcome.page.items}
 
@@ -179,7 +179,7 @@ async def test_decomposed_test_is_a_child_of_the_task_in_progress(
     assert child.status is TaskStatus.BACKLOG
 
     outcome = await search_service.search_tasks(
-        db_session, actor=reader, query=f"queue: {DEMO_QUEUE_KEY}", limit=200
+        db_session, actor=reader, query=f"project: {DEMO_PROJECT_KEY}", limit=200
     )
     rows = {found.task.key: found.parent for found in outcome.page.items}
 
@@ -207,7 +207,7 @@ async def test_demo_leaves_exactly_one_open_blocking_question(
         db_session,
         actor=reader,
         query=(
-            f"queue: {DEMO_QUEUE_KEY} and status: open and blocked: false "
+            f"project: {DEMO_PROJECT_KEY} and status: open and blocked: false "
             "and open_blocking_questions: 0"
         ),
     )
@@ -223,7 +223,7 @@ async def test_seeding_twice_changes_nothing(
     """Обзорная проверка 5: повтор не меняет ни числа задач, ни числа записей.
 
     Команда стоит в Compose рядом с миграциями, и её случайный повтор не должен
-    удваивать демо. Признак «уже наполнено» — сама очередь `DEMO`.
+    удваивать демо. Признак «уже наполнено» — сам проект `DEMO`.
     """
     before = await _entry_types(db_session, seeded, reader)
     tasks_before = len(

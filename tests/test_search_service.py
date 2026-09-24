@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.author import created_by_columns
 from app.db.models.link import Link
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import CursorWithOffsetError, InvalidPageOffsetError
 from app.domain.errors import (
@@ -28,7 +28,7 @@ from app.domain.search import MAX_VALUES_PER_CONDITION, Operator
 from app.domain.tasks import AskedParent, TaskFeatures, TaskParent, TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import search as service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -38,7 +38,7 @@ from app.services.search import StructuredTerm
 async def make(
     session: AsyncSession,
     actor: Actor,
-    queue: Queue,
+    project: Project,
     title: str,
     *,
     description: str = "описание",
@@ -49,7 +49,7 @@ async def make(
     return await tasks_service.create_task(
         session,
         actor=actor,
-        queue=queue,
+        project=project,
         title=title,
         description=description,
         goal="цель",
@@ -87,21 +87,21 @@ async def found_features(session: AsyncSession, actor: Actor, key: str) -> TaskF
 
 
 @pytest.fixture
-async def board(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> dict[str, Task]:
+async def board(db_session: AsyncSession, task_actor: Actor, project: Project) -> dict[str, Task]:
     """Набор назначателя: обычная открытая задача, заблокированная и с блокирующим вопросом.
 
     Ровно та расстановка, на которой проверяется обзорный запрос кандидатов: выдача
     обязана содержать только `plain`.
     """
-    plain = await make(db_session, task_actor, queue, "обычная")
+    plain = await make(db_session, task_actor, project, "обычная")
     plain = await open_task(db_session, task_actor, plain)
-    blocked = await make(db_session, task_actor, queue, "заблокированная")
-    blocker = await make(db_session, task_actor, queue, "блокер")
+    blocked = await make(db_session, task_actor, project, "заблокированная")
+    blocker = await make(db_session, task_actor, project, "блокер")
     await links_service.add_link(
         db_session, blocked, blocker, actor=task_actor, kind=LinkKind.BLOCKED_BY
     )
     blocked = await open_task(db_session, task_actor, blocked)
-    asking = await make(db_session, task_actor, queue, "вопрос без ответа")
+    asking = await make(db_session, task_actor, project, "вопрос без ответа")
     asking = await open_task(db_session, task_actor, asking)
     await case_service.ask(
         db_session,
@@ -128,7 +128,7 @@ async def test_the_assignee_query_finds_exactly_the_tasks_that_can_be_taken(
     found = await keys(
         db_session,
         task_actor,
-        query="queue: TRK and status: open and blocked: false and open_blocking_questions: 0",
+        query="project: TRK and status: open and blocked: false and open_blocking_questions: 0",
     )
 
     assert found == [board["plain"].key]
@@ -141,13 +141,13 @@ async def test_the_structured_filter_gives_the_same_list_in_the_same_order(
     by_query = await keys(
         db_session,
         task_actor,
-        query="queue: TRK and status: open and blocked: false and open_blocking_questions: 0",
+        query="project: TRK and status: open and blocked: false and open_blocking_questions: 0",
     )
     by_filter = await keys(
         db_session,
         task_actor,
         structured=[
-            StructuredTerm(name="queue", values=["TRK"]),
+            StructuredTerm(name="project", values=["TRK"]),
             StructuredTerm(name="status", values=["open"]),
             StructuredTerm(name="blocked", values=[False]),
             StructuredTerm(name="open_blocking_questions", values=[0]),
@@ -158,7 +158,7 @@ async def test_the_structured_filter_gives_the_same_list_in_the_same_order(
 
 
 async def test_a_structured_value_with_a_space_is_one_value_and_not_a_parse_error(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 1 TRK-21: `text=выдача ключей` ищет, а не отказывает.
 
@@ -167,8 +167,8 @@ async def test_a_structured_value_with_a_space_is_one_value_and_not_a_parse_erro
     правки такой отбор отвечал `invalid_search_query` на втором слове — а с ним
     отказывало и поле «Текст» в интерфейсе, где никакого запроса человек не писал.
     """
-    task = await make(db_session, task_actor, queue, "Ключ задачи сгорает на выдача ключей")
-    await make(db_session, task_actor, queue, "Другая задача про выдачу")
+    task = await make(db_session, task_actor, project, "Ключ задачи сгорает на выдача ключей")
+    await make(db_session, task_actor, project, "Другая задача про выдачу")
 
     by_filter = await keys(
         db_session,
@@ -186,11 +186,11 @@ async def test_a_structured_value_with_a_space_is_one_value_and_not_a_parse_erro
 
 
 async def test_a_free_string_field_takes_a_space_too(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Не только `text`: исполнитель — свободная строка, и пробел в ней законен."""
-    task = await make(db_session, task_actor, queue, "чужая работа", assignee="release bot")
-    await make(db_session, task_actor, queue, "своя работа", assignee="release_bot")
+    task = await make(db_session, task_actor, project, "чужая работа", assignee="release bot")
+    await make(db_session, task_actor, project, "своя работа", assignee="release_bot")
 
     by_filter = await keys(
         db_session, task_actor, structured=[StructuredTerm(name="assignee", values=["release bot"])]
@@ -202,15 +202,15 @@ async def test_a_free_string_field_takes_a_space_too(
 
 
 async def test_a_quote_inside_a_structured_value_is_searched_literally(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Кавычки — часть значения, а не его границы: разбирать структурный ввод нечем.
 
     Дописать кавычки вокруг значения было бы вторым способом сломать то же самое:
     значение с настоящей кавычкой внутри тогда разобралось бы неверно.
     """
-    task = await make(db_session, task_actor, queue, 'он сказал "нет" и ушёл')
-    await make(db_session, task_actor, queue, "он сказал нет и ушёл")
+    task = await make(db_session, task_actor, project, 'он сказал "нет" и ушёл')
+    await make(db_session, task_actor, project, "он сказал нет и ушёл")
 
     found = await keys(
         db_session,
@@ -224,15 +224,15 @@ async def test_a_quote_inside_a_structured_value_is_searched_literally(
 
 
 async def test_empty_still_means_no_value_on_both_inputs(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """`empty()` остаётся маркером, а не подстрокой: иначе правка сломала бы «без исполнителя».
 
     Маркер разбирается парсером языка, а не сравнением строк, — потому и совпадает
     с языком буква в букву, включая регистр и пробел перед скобками.
     """
-    await make(db_session, task_actor, queue, "задача Алисы", assignee="alice")
-    nobody = await make(db_session, task_actor, queue, "ничей")
+    await make(db_session, task_actor, project, "задача Алисы", assignee="alice")
+    nobody = await make(db_session, task_actor, project, "ничей")
 
     by_filter = await keys(
         db_session, task_actor, structured=[StructuredTerm(name="assignee", values=["empty()"])]
@@ -244,7 +244,7 @@ async def test_empty_still_means_no_value_on_both_inputs(
 
 
 async def test_the_shape_from_the_hint_finds_what_the_structured_filter_finds(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 2 TRK-13: подсказка чинит запрос, а не просто утешает.
 
@@ -253,12 +253,12 @@ async def test_the_shape_from_the_hint_finds_what_the_structured_filter_finds(
     последний шаг: починенный запрос находит ровно то же, что структурный отбор по двум
     статусам. Без этого подсказка была бы обещанием, которое никто не проверял.
     """
-    backlog = await make(db_session, task_actor, queue, "черновик")
+    backlog = await make(db_session, task_actor, project, "черновик")
     opened = await open_task(
-        db_session, task_actor, await make(db_session, task_actor, queue, "открытая")
+        db_session, task_actor, await make(db_session, task_actor, project, "открытая")
     )
     working = await make(
-        db_session, task_actor, queue, "в работе", assignee=task_actor.author.signature
+        db_session, task_actor, project, "в работе", assignee=task_actor.author.signature
     )
     working = await open_task(db_session, task_actor, working)
     working = (
@@ -280,18 +280,18 @@ async def test_the_shape_from_the_hint_finds_what_the_structured_filter_finds(
 
 
 @pytest.fixture
-async def family(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> dict[str, Task]:
+async def family(db_session: AsyncSession, task_actor: Actor, project: Project) -> dict[str, Task]:
     """Программа с тремя детьми: один открыт, два закрыты. Плюс чужая задача рядом.
 
     Ровно та расстановка, на которой стоит вопрос «можно ли закрывать программу»:
     закрытых больше, открытый один, и посторонняя задача обязана в выдачу не попасть.
     """
-    program = await make(db_session, task_actor, queue, "программа")
+    program = await make(db_session, task_actor, project, "программа")
     program = await open_task(db_session, task_actor, program)
 
     children: dict[str, Task] = {}
     for name in ("живой", "первый закрытый", "второй закрытый"):
-        child = await make(db_session, task_actor, queue, name)
+        child = await make(db_session, task_actor, project, name)
         await links_service.add_link(
             db_session, child, program, actor=task_actor, kind=LinkKind.CHILD
         )
@@ -306,7 +306,7 @@ async def family(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> d
 
     return {
         "program": program,
-        "outsider": await make(db_session, task_actor, queue, "чужая"),
+        "outsider": await make(db_session, task_actor, project, "чужая"),
         **children,
     }
 
@@ -351,7 +351,7 @@ async def test_children_are_selected_by_the_parent_field(
     assert by_filter_alive == alive
 
 
-async def test_parent_empty_gives_the_top_level_of_the_queue(
+async def test_parent_empty_gives_the_top_level_of_the_project(
     db_session: AsyncSession, task_actor: Actor, family: dict[str, Task]
 ) -> None:
     """Обзорная проверка 3: `parent: empty()` — верхний уровень, и ни одного ребёнка.
@@ -366,14 +366,14 @@ async def test_parent_empty_gives_the_top_level_of_the_queue(
 
 
 async def test_an_unknown_parent_key_is_refused_and_named(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 4: опечатка в ключе — отказ с ключом, а не пустая выдача.
 
     Пустота на этот вопрос читается как «детей нет» — то есть как ответ. На таком
     ответе программу закрывают, поэтому промах обязан быть назван.
     """
-    del queue
+    del project
     with pytest.raises(SearchValueInvalidError) as error:
         await keys(db_session, task_actor, query="parent: TRK-404")
 
@@ -407,12 +407,12 @@ async def test_a_row_names_its_direct_parent_by_key_and_title(
 
 
 async def test_a_row_names_the_direct_parent_and_not_the_grandparent(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Родство прямое, как у отбора `parent:`: цепочки предков в строке нет (`CONCEPT.md`, 4.4)."""
-    program = await make(db_session, task_actor, queue, "программа")
-    child = await make(db_session, task_actor, queue, "ребёнок")
-    grandchild = await make(db_session, task_actor, queue, "внук")
+    program = await make(db_session, task_actor, project, "программа")
+    child = await make(db_session, task_actor, project, "ребёнок")
+    grandchild = await make(db_session, task_actor, project, "внук")
     await links_service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
     await links_service.add_link(
         db_session, grandchild, child, actor=task_actor, kind=LinkKind.CHILD
@@ -426,7 +426,7 @@ async def test_a_row_names_the_direct_parent_and_not_the_grandparent(
 
 
 async def test_a_task_with_two_parents_from_older_data_shows_the_first_one(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Данные старше запрета (TRK-135): второй родитель мог появиться до него, и строка
     называет первого по времени связи — того же, что и карточка.
@@ -437,9 +437,9 @@ async def test_a_task_with_two_parents_from_older_data_shows_the_first_one(
     связей задано явно — в одной транзакции `now()` у обеих одно и то же, и выбор решал
     бы случайный `id`.
     """
-    linked_later = await make(db_session, task_actor, queue, "связан вторым")
-    linked_first = await make(db_session, task_actor, queue, "связан первым")
-    child = await make(db_session, task_actor, queue, "ребёнок двух программ")
+    linked_later = await make(db_session, task_actor, project, "связан вторым")
+    linked_first = await make(db_session, task_actor, project, "связан первым")
+    child = await make(db_session, task_actor, project, "ребёнок двух программ")
     await links_service.add_link(
         db_session, linked_first, child, actor=task_actor, kind=LinkKind.PARENT
     )
@@ -513,7 +513,7 @@ async def _page_selects(session: AsyncSession, actor: Actor, **call: Any) -> tup
 
 
 async def test_a_page_with_parents_costs_the_same_queries_whatever_its_size(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """TRK-95, проверка 4: родители страницы выбираются тем же запросом, что и страница.
 
@@ -521,10 +521,10 @@ async def test_a_page_with_parents_costs_the_same_queries_whatever_its_size(
     `SELECT`; отбор `parent:` добавляет постоянный запрос — ключ родителя разрешается в
     задачу, — и от размера страницы он тоже не зависит.
     """
-    program = await make(db_session, task_actor, queue, "программа")
-    other_program = await make(db_session, task_actor, queue, "вторая программа")
+    program = await make(db_session, task_actor, project, "программа")
+    other_program = await make(db_session, task_actor, project, "вторая программа")
     for index in range(60):
-        child = await make(db_session, task_actor, queue, f"ребёнок {index}")
+        child = await make(db_session, task_actor, project, f"ребёнок {index}")
         await links_service.add_link(
             db_session, program, child, actor=task_actor, kind=LinkKind.PARENT
         )
@@ -611,7 +611,7 @@ async def test_the_key_field_narrows_together_with_the_rest(
 
 
 async def test_an_unknown_key_is_refused_rather_than_answered_with_an_empty_page(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 1: несуществующий ключ — отказ, а не пустота.
 
@@ -619,7 +619,7 @@ async def test_an_unknown_key_is_refused_rather_than_answered_with_an_empty_page
     сейчас с этими задачами» читается как «по ним ничего», и опечатка спряталась бы за
     ответом, который выглядит осмысленным.
     """
-    del queue
+    del project
     with pytest.raises(SearchValueInvalidError) as error:
         await keys(db_session, task_actor, query="key: TRK-404")
 
@@ -630,10 +630,10 @@ async def test_an_unknown_key_is_refused_rather_than_answered_with_an_empty_page
 
 
 async def test_a_key_has_no_empty_state_and_the_marker_is_refused(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """`key: empty()` — непонимание модели: ключ есть у каждой задачи."""
-    del queue
+    del project
     with pytest.raises(SearchValueInvalidError) as error:
         await keys(db_session, task_actor, query="key: empty()")
 
@@ -681,7 +681,7 @@ async def test_both_inputs_narrow_each_other_instead_of_replacing(
 
 
 async def test_waiting_is_selected_by_status_without_touching_the_search(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue, board: dict[str, Task]
+    db_session: AsyncSession, task_actor: Actor, project: Project, board: dict[str, Task]
 ) -> None:
     """Обзорная проверка 6: новый статус находится отбором, и поиск для этого не правился.
 
@@ -690,7 +690,7 @@ async def test_waiting_is_selected_by_status_without_touching_the_search(
     поэтому новый член работает сам — тест стережёт, что это так и осталось, и заодно
     что `waiting` не подмешивается в выдачу `status: open`.
     """
-    parked = await make(db_session, task_actor, queue, "ждёт человека")
+    parked = await make(db_session, task_actor, project, "ждёт человека")
     parked = await open_task(db_session, task_actor, parked)
     await tasks_service.transition_task(
         db_session, parked, actor=task_actor, to=TaskStatus.WAITING, reason="Жду решения владельца"
@@ -710,14 +710,14 @@ async def test_waiting_is_selected_by_status_without_touching_the_search(
 
 
 async def test_waiting_does_not_touch_the_blocked_feature(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Признак `blocked` остался про `blocked_by` и нового смысла не приобрёл.
 
     Ожидание человека и блокировка задачей — разные вещи (`CONCEPT.md`, 4.6), и слить их
     в один признак значило бы потерять различие ровно там, где оно и нужно.
     """
-    parked = await make(db_session, task_actor, queue, "ждёт человека")
+    parked = await make(db_session, task_actor, project, "ждёт человека")
     parked = await open_task(db_session, task_actor, parked)
     await tasks_service.transition_task(
         db_session, parked, actor=task_actor, to=TaskStatus.WAITING, reason="Жду доступ"
@@ -759,11 +759,11 @@ async def test_the_search_and_the_card_agree_on_every_computed_feature(
 
 
 async def test_a_closed_blocker_stops_blocking(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Закрытый блокер связь не снимает, но признак опускает — как и в карточке."""
-    task = await make(db_session, task_actor, queue, "зависимая")
-    blocker = await make(db_session, task_actor, queue, "блокер")
+    task = await make(db_session, task_actor, project, "зависимая")
+    blocker = await make(db_session, task_actor, project, "блокер")
     await links_service.add_link(
         db_session, task, blocker, actor=task_actor, kind=LinkKind.BLOCKED_BY
     )
@@ -778,10 +778,10 @@ async def test_a_closed_blocker_stops_blocking(
 
 
 async def test_an_answered_question_stops_being_counted(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Открытость вопроса считается запросом, а не колонкой: ответ закрывает его сразу."""
-    task = await make(db_session, task_actor, queue, "вопрос без ответа")
+    task = await make(db_session, task_actor, project, "вопрос без ответа")
     question = await case_service.ask(
         db_session, task, actor=task_actor, addressees=["owner"], title="Как быть?", blocking=True
     )
@@ -793,9 +793,9 @@ async def test_an_answered_question_stops_being_counted(
 
 
 async def test_a_non_blocking_question_counts_only_in_the_wider_counter(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    task = await make(db_session, task_actor, queue, "вопрос без ответа")
+    task = await make(db_session, task_actor, project, "вопрос без ответа")
     await case_service.ask(
         db_session, task, actor=task_actor, addressees=["owner"], title="Уточнение?", blocking=False
     )
@@ -808,12 +808,12 @@ async def test_a_non_blocking_question_counts_only_in_the_wider_counter(
 
 
 async def test_negation_keeps_the_tasks_without_a_value(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """«Все, кроме Алисы» обязано включать неназначенные: NULL не выпадает молча."""
-    alice = await make(db_session, task_actor, queue, "задача Алисы", assignee="alice")
-    bob = await make(db_session, task_actor, queue, "задача Боба", assignee="bob")
-    nobody = await make(db_session, task_actor, queue, "ничей")
+    alice = await make(db_session, task_actor, project, "задача Алисы", assignee="alice")
+    bob = await make(db_session, task_actor, project, "задача Боба", assignee="bob")
+    nobody = await make(db_session, task_actor, project, "ничей")
 
     found = await keys(db_session, task_actor, query="assignee: != alice")
 
@@ -822,21 +822,21 @@ async def test_negation_keeps_the_tasks_without_a_value(
 
 
 async def test_empty_finds_the_tasks_without_a_value(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    await make(db_session, task_actor, queue, "задача Алисы", assignee="alice")
-    nobody = await make(db_session, task_actor, queue, "ничей")
+    await make(db_session, task_actor, project, "задача Алисы", assignee="alice")
+    nobody = await make(db_session, task_actor, project, "ничей")
 
     assert await keys(db_session, task_actor, query="assignee: empty()") == [nobody.key]
 
 
 async def test_empty_combines_with_values_by_or(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """`assignee: alice, empty()` — это «Алиса или никто», а не «Алиса и никто»."""
-    alice = await make(db_session, task_actor, queue, "задача Алисы", assignee="alice")
-    nobody = await make(db_session, task_actor, queue, "ничей")
-    await make(db_session, task_actor, queue, "задача Боба", assignee="bob")
+    alice = await make(db_session, task_actor, project, "задача Алисы", assignee="alice")
+    nobody = await make(db_session, task_actor, project, "ничей")
+    await make(db_session, task_actor, project, "задача Боба", assignee="bob")
 
     found = await keys(db_session, task_actor, query="assignee: alice, empty()")
 
@@ -844,13 +844,13 @@ async def test_empty_combines_with_values_by_or(
 
 
 async def test_text_looks_into_the_title_and_the_description(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    by_title = await make(db_session, task_actor, queue, "выдача ключей задач")
+    by_title = await make(db_session, task_actor, project, "выдача ключей задач")
     by_description = await make(
-        db_session, task_actor, queue, "другая", description="ключей не хватает"
+        db_session, task_actor, project, "другая", description="ключей не хватает"
     )
-    await make(db_session, task_actor, queue, "совсем другая", description="ничего похожего")
+    await make(db_session, task_actor, project, "совсем другая", description="ничего похожего")
 
     found = await keys(db_session, task_actor, query="text: ключей")
 
@@ -858,21 +858,23 @@ async def test_text_looks_into_the_title_and_the_description(
 
 
 async def test_a_like_wildcard_in_the_value_is_escaped(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """`_` в запросе ищется как символ, а не как «любой»: экранирование одно на проект."""
-    literal = await make(db_session, task_actor, queue, "сто_процентов")
-    await make(db_session, task_actor, queue, "стоипроцентов")
+    literal = await make(db_session, task_actor, project, "сто_процентов")
+    await make(db_session, task_actor, project, "стоипроцентов")
 
     assert await keys(db_session, task_actor, query="text: сто_процентов") == [literal.key]
 
 
 async def test_priority_compares_by_rank_and_not_by_alphabet(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    low = await make(db_session, task_actor, queue, "низкий", priority=TaskPriority.LOW)
-    high = await make(db_session, task_actor, queue, "высокий", priority=TaskPriority.HIGH)
-    critical = await make(db_session, task_actor, queue, "срочный", priority=TaskPriority.CRITICAL)
+    low = await make(db_session, task_actor, project, "низкий", priority=TaskPriority.LOW)
+    high = await make(db_session, task_actor, project, "высокий", priority=TaskPriority.HIGH)
+    critical = await make(
+        db_session, task_actor, project, "срочный", priority=TaskPriority.CRITICAL
+    )
 
     found = await keys(db_session, task_actor, query="priority: >= high")
 
@@ -884,11 +886,11 @@ async def test_priority_compares_by_rank_and_not_by_alphabet(
 
 
 async def test_the_default_order_puts_the_tenth_task_after_the_second(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Ключ сортируется числом, а не строкой: иначе `TRK-10` встал бы перед `TRK-2`."""
     made = [
-        await make(db_session, task_actor, queue, f"задача {number}") for number in range(1, 12)
+        await make(db_session, task_actor, project, f"задача {number}") for number in range(1, 12)
     ]
 
     found = await keys(db_session, task_actor, limit=200)
@@ -897,17 +899,19 @@ async def test_the_default_order_puts_the_tenth_task_after_the_second(
 
 
 async def test_an_insertion_between_pages_neither_duplicates_nor_loses_tasks(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 4: курсор задан значением ключа, а не смещением.
 
     Вставка идёт по возрастанию ключа, то есть **после** уже отданной страницы:
     смещение сдвинуло бы выдачу, а курсор — нет.
     """
-    before = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(6)]
+    before = [
+        await make(db_session, task_actor, project, f"задача {number}") for number in range(6)
+    ]
 
     first = await service.search_tasks(db_session, actor=task_actor, limit=3)
-    await make(db_session, task_actor, queue, "вставленная посреди обхода")
+    await make(db_session, task_actor, project, "вставленная посреди обхода")
     second = await service.search_tasks(
         db_session, actor=task_actor, limit=3, cursor=first.page.next_cursor
     )
@@ -918,7 +922,7 @@ async def test_an_insertion_between_pages_neither_duplicates_nor_loses_tasks(
 
 
 async def test_paging_holds_whether_or_not_the_features_were_asked_for(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Курсор берёт из строки только значения ключей порядка, а признаки в него не попадают.
 
@@ -928,7 +932,7 @@ async def test_paging_holds_whether_or_not_the_features_were_asked_for(
     счётчики, а страница продолжилась бы с чужого места. Поэтому обход проверяется обоими
     наборами полей и обязан дать один и тот же список.
     """
-    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(5)]
+    made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(5)]
 
     async def walk(fields: tuple[str, ...]) -> list[str]:
         """Полный обход по страницам в две задачи, от курсора к курсору."""
@@ -951,7 +955,7 @@ async def test_paging_holds_whether_or_not_the_features_were_asked_for(
 
 
 async def test_sorting_by_update_time_descending_puts_the_latest_first(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Направление задаётся явно: `-updated_at` ставит свежее впереди.
 
@@ -960,8 +964,8 @@ async def test_sorting_by_update_time_descending_puts_the_latest_first(
     правка проставила бы всем задачам одно и то же время, и порядок решал бы тайбрейкер
     по случайному `id` — проверка стала бы непроходимой через раз.
     """
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
     await db_session.execute(
         update(Task).where(Task.id == first.id).values(updated_at=text("now() + interval '1 hour'"))
     )
@@ -971,11 +975,11 @@ async def test_sorting_by_update_time_descending_puts_the_latest_first(
 
 
 async def test_a_cursor_from_another_order_is_refused(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Смена `sort` посреди обхода — не «начать сначала», а испорченный курсор."""
     for number in range(3):
-        await make(db_session, task_actor, queue, f"задача {number}")
+        await make(db_session, task_actor, project, f"задача {number}")
     page = await service.search_tasks(db_session, actor=task_actor, limit=1)
 
     with pytest.raises(Exception, match="cursor"):
@@ -1018,7 +1022,7 @@ async def test_an_unknown_field_lists_the_allowed_ones(
         await service.search_tasks(db_session, actor=task_actor, query="deadline: today")
 
     assert raised.value.details["field"] == "deadline"
-    assert "queue" in raised.value.details["allowed"]
+    assert "project" in raised.value.details["allowed"]
     assert raised.value.details["position"] == 0
 
 
@@ -1034,14 +1038,14 @@ async def test_an_unknown_status_lists_the_allowed_values(
     assert "open" in raised.value.details["allowed"]
 
 
-async def test_an_unknown_queue_is_a_wrong_value_and_not_an_empty_answer(
+async def test_an_unknown_project_is_a_wrong_value_and_not_an_empty_answer(
     db_session: AsyncSession, task_actor: Actor
 ) -> None:
-    """Опечатка в ключе очереди обязана назваться, а не дать пустую выдачу."""
+    """Опечатка в ключе проекта обязана назваться, а не дать пустую выдачу."""
     with pytest.raises(SearchValueInvalidError) as raised:
-        await service.search_tasks(db_session, actor=task_actor, query="queue: TKR")
+        await service.search_tasks(db_session, actor=task_actor, query="project: TKR")
 
-    assert raised.value.details["reason"] == "queue_not_found"
+    assert raised.value.details["reason"] == "project_not_found"
 
 
 async def test_an_operator_the_field_does_not_support_is_refused(
@@ -1058,7 +1062,7 @@ async def test_empty_is_refused_where_a_value_always_exists(
     db_session: AsyncSession, task_actor: Actor
 ) -> None:
     with pytest.raises(SearchValueInvalidError) as raised:
-        await service.search_tasks(db_session, actor=task_actor, query="queue: empty()")
+        await service.search_tasks(db_session, actor=task_actor, query="project: empty()")
 
     assert raised.value.details["reason"] == "empty_not_supported"
 
@@ -1102,27 +1106,27 @@ async def test_an_empty_value_points_at_the_marker_instead(
     assert "empty()" in raised.value.details["hint"]
 
 
-# --- Очередь как условие ----------------------------------------------------------------
+# --- Проект как условие ----------------------------------------------------------------
 
 
-async def test_a_queue_narrows_the_answer_to_its_own_tasks(
-    db_session: AsyncSession, main_actor: Actor, task_actor: Actor, queue: Queue
+async def test_a_project_narrows_the_answer_to_its_own_tasks(
+    db_session: AsyncSession, main_actor: Actor, task_actor: Actor, project: Project
 ) -> None:
-    other = await queues_service.create_queue(
-        db_session, actor=main_actor, key="OPS", title="Эксплуатация", description="вторая очередь"
+    other = await projects_service.create_project(
+        db_session, actor=main_actor, key="OPS", title="Эксплуатация", description="второй проект"
     )
-    mine = await make(db_session, task_actor, queue, "своя")
+    mine = await make(db_session, task_actor, project, "своя")
     theirs = await make(db_session, task_actor, other, "чужая")
 
-    assert await keys(db_session, task_actor, query="queue: TRK") == [mine.key]
-    assert await keys(db_session, task_actor, query="queue: ops") == [theirs.key]
+    assert await keys(db_session, task_actor, query="project: TRK") == [mine.key]
+    assert await keys(db_session, task_actor, query="project: ops") == [theirs.key]
 
 
 # --- Общее число выдачи и адрес страницы -------------------------------------------------
 
 
 async def test_the_total_is_not_counted_unless_it_was_asked_for(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Подсчёт — второй запрос, и по умолчанию его нет: агент за него не платит.
 
@@ -1130,7 +1134,7 @@ async def test_the_total_is_not_counted_unless_it_was_asked_for(
     подсчёта, и инструмент MCP просит страницу ровно так же, как до задачи TRK-41.
     """
     for number in range(5):
-        await make(db_session, task_actor, queue, f"задача {number}")
+        await make(db_session, task_actor, project, f"задача {number}")
 
     silent = await service.search_tasks(db_session, actor=task_actor, limit=2)
     counted = await service.search_tasks(db_session, actor=task_actor, limit=2, with_total=True)
@@ -1143,11 +1147,11 @@ async def test_the_total_is_not_counted_unless_it_was_asked_for(
 
 
 async def test_the_total_counts_the_filtered_selection_in_any_order(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Число зависит от отбора и не зависит от порядка: сортировка строк не добавляет."""
     for number in range(4):
-        task = await make(db_session, task_actor, queue, f"задача {number}")
+        task = await make(db_session, task_actor, project, f"задача {number}")
         if number % 2:
             await open_task(db_session, task_actor, task)
 
@@ -1166,10 +1170,10 @@ async def test_the_total_counts_the_filtered_selection_in_any_order(
 
 
 async def test_the_offset_lands_on_the_same_rows_the_walk_reaches(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Смещение — второй адрес той же страницы: порядок один, отбор один, строки те же."""
-    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(7)]
+    made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(7)]
 
     outcome = await service.search_tasks(db_session, actor=task_actor, limit=3, offset=3)
 
@@ -1178,11 +1182,11 @@ async def test_the_offset_lands_on_the_same_rows_the_walk_reaches(
 
 
 async def test_a_cursor_and_an_offset_together_are_refused_in_the_scenario(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Отказ живёт в пагинации, а не в параметре запроса: MCP идёт мимо схем FastAPI."""
     for number in range(4):
-        await make(db_session, task_actor, queue, f"задача {number}")
+        await make(db_session, task_actor, project, f"задача {number}")
     first = await service.search_tasks(db_session, actor=task_actor, limit=2)
 
     with pytest.raises(CursorWithOffsetError) as raised:

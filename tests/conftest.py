@@ -31,7 +31,7 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.session import get_session, transaction
 from app.domain.authors import ACTOR_LABEL_HEADER
@@ -41,7 +41,7 @@ from app.main import create_app
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
 from app.services import participants as participants_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
@@ -160,7 +160,7 @@ def mcp_sessions(db_session: AsyncSession) -> SessionFactory:
     Ради этого же — коммит **на входе**. Сессия теста живёт в режиме
     `create_savepoint`, и всё, что фикстуры записали без коммита, лежит внутри текущей
     точки сохранения: откат отклонённого вызова унёс бы вместе со своей работой и
-    очередь, и токен, а следующий вызов ответил бы `unauthorized` — далеко от места
+    проект, и токен, а следующий вызов ответил бы `unauthorized` — далеко от места
     ошибки. Коммит закрывает точку сохранения фикстур и открывает вызову свою.
 
     Следствие для тестов: после **отклонённого** вызова объекты ORM, прочитанные до
@@ -373,9 +373,9 @@ async def auth_client(client: AsyncClient, main_secret: str) -> AsyncClient:
 
 
 @pytest.fixture
-async def queue(db_session: AsyncSession, main_actor: Actor) -> Queue:
-    """Очередь `TRK`: на ней проверяется всё, что требует существующей очереди."""
-    return await queues_service.create_queue(
+async def project(db_session: AsyncSession, main_actor: Actor) -> Project:
+    """Проект `TRK`: на нём проверяется всё, что требует существующего проекта."""
+    return await projects_service.create_project(
         db_session,
         actor=main_actor,
         key="TRK",
@@ -385,7 +385,7 @@ async def queue(db_session: AsyncSession, main_actor: Actor) -> Queue:
 
 
 @pytest.fixture
-async def task(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> Task:
+async def task(db_session: AsyncSession, task_actor: Actor, project: Project) -> Task:
     """Задача `TRK-1` в `backlog` с заполненными разделами: готова к переходу в `open`.
 
     Заводится набором `task`, как это делает агент: автор её записей — владелец, но
@@ -394,12 +394,12 @@ async def task(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> Tas
     return await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
+        project=project,
         title="Починить выдачу ключей задач",
         description="Ключ выдаётся до валидации и сгорает на неудачном запросе",
         goal="Ключи не сгорают на отклонённых запросах",
-        context="Номер выдаёт `queues.next_task_number` последним",
-        constraints="Счётчик очереди не переписывать",
+        context="Номер выдаёт `projects.next_task_number` последним",
+        constraints="Счётчик проекта не переписывать",
         output="Тест на несгоревший номер",
         checks=["Создание задачи без названия не тратит номер"],
         # Исполнитель — тот, от чьего имени идут запросы тестов: в работу задачу берёт

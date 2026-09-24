@@ -108,14 +108,14 @@ SHARED_ARGUMENTS = frozenset({"key", "idempotency_key", "limit", "cursor"})
 #: Код отказа на конфликт у инструментов, которым есть с чем конфликтовать, кроме ключа
 #: повтора: занятый ключ, повтор связи, связи нет, участника нет.
 CONFLICT_CODES = {
-    ("create_queue", "key"): "queue_key_taken",
+    ("create_project", "key"): "project_key_taken",
     ("register_participant", "name"): "participant_name_taken",
     ("update_participant", "name"): "participant_not_found",
     ("link", None): "link_exists",
     ("unlink", None): "link_not_found",
 }
 
-#: Примеры формата: ключ задачи, ключ очереди, ссылка на запись, UUID, ключ сортировки.
+#: Примеры формата: ключ задачи, ключ проекта, ссылка на запись, UUID, ключ сортировки.
 FORMAT_EXAMPLE = re.compile(
     r"^(?:[A-Z][A-Z0-9]*-\d+(?:#\d+)?"
     r"|[A-Z][A-Z0-9]+"

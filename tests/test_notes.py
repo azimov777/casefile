@@ -362,7 +362,7 @@ def test_a_name_hidden_inside_a_token_is_taken_out_of_it() -> None:
         "response_class",
         "EventStreamResponse",
     ]
-    assert _names_in_token("set_committed_value(queue, 'last_task_number', number)") == [
+    assert _names_in_token("set_committed_value(project, 'last_task_number', number)") == [
         "set_committed_value",
         "last_task_number",
     ]

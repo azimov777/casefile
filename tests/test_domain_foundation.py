@@ -17,10 +17,10 @@ from app.domain.authors import (
 from app.domain.errors import (
     InvalidActorLabelError,
     InvalidParticipantNameError,
-    InvalidQueueKeyError,
+    InvalidProjectKeyError,
 )
 from app.domain.participants import ParticipantKind, validate_participant_name
-from app.domain.queues import validate_queue_key
+from app.domain.projects import validate_project_key
 from app.domain.tokens import TOKEN_PREFIX, TokenScope, generate_token, hash_token
 
 # --- Имена участников --------------------------------------------------------------
@@ -50,21 +50,21 @@ def test_a_malformed_name_is_rejected_with_the_pattern(raw: str) -> None:
     assert error.value.details["pattern"]
 
 
-# --- Ключи очередей ----------------------------------------------------------------
+# --- Ключи проектов ----------------------------------------------------------------
 
 
 @pytest.mark.parametrize(("raw", "expected"), [("TRK", "TRK"), ("trk", "TRK"), (" Ops2 ", "OPS2")])
-def test_a_queue_key_is_canonicalised_to_uppercase(raw: str, expected: str) -> None:
+def test_a_project_key_is_canonicalised_to_uppercase(raw: str, expected: str) -> None:
     """Ключ идёт в ключ задачи (`TRK-42`) и там обязан читаться как ключ."""
-    assert validate_queue_key(raw) == expected
+    assert validate_project_key(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["", "T", "1TRK", "TRK-1", "TRK_OPS", "ОЧЕРЕДЬ", "T" * 17])
-def test_a_malformed_queue_key_is_rejected(raw: str) -> None:
-    with pytest.raises(InvalidQueueKeyError) as error:
-        validate_queue_key(raw)
+@pytest.mark.parametrize("raw", ["", "T", "1TRK", "TRK-1", "TRK_OPS", "ПРОЕКТ", "T" * 17])
+def test_a_malformed_project_key_is_rejected(raw: str) -> None:
+    with pytest.raises(InvalidProjectKeyError) as error:
+        validate_project_key(raw)
 
-    assert error.value.code == "invalid_queue_key"
+    assert error.value.code == "invalid_project_key"
 
 
 # --- Метка временного агента -------------------------------------------------------

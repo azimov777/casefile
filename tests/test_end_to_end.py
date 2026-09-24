@@ -27,7 +27,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.domain.case import SERVICE_ENTRY_TYPES, EntryType
 from app.services import case as case_service
 from app.services import tasks as tasks_service
@@ -74,8 +74,8 @@ CLOSING: dict[str, Any] = {
 #: положительного последнего вердикта по **каждой** проверке.
 SECTIONS: dict[str, Any] = {
     "goal": "Ключи не сгорают на отклонённых запросах",
-    "context": "Номер выдаёт `queues.next_task_number`",
-    "constraints": "Счётчик очереди не переписывать",
+    "context": "Номер выдаёт `projects.next_task_number`",
+    "constraints": "Счётчик проекта не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
 }
@@ -100,7 +100,7 @@ CLOSING_SUMMARY: dict[str, str] = {
 
 
 async def test_a_task_goes_the_whole_way_through_rest(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 6: создать, открыть, взять, подшить, свести, проверить, закрыть.
 
@@ -111,7 +111,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
     created = await auth_client.post(
         "/api/v1/tasks",
         json={
-            "queue": queue.key,
+            "project": project.key,
             "title": "Ключ задачи сгорает на отклонённом запросе",
             "description": "Номер выдаётся до валидации тела",
             "assignee": "owner",
@@ -120,7 +120,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
     )
     assert created.status_code == 201, created.text
     key = created.json()["data"]["key"]
-    assert key.startswith(f"{queue.key}-")
+    assert key.startswith(f"{project.key}-")
 
     for target in ("open", "in_progress"):
         moved = await auth_client.post(f"/api/v1/tasks/{key}/transition", json={"to": target})
@@ -180,20 +180,20 @@ async def test_a_task_goes_the_whole_way_through_rest(
 
 
 async def test_a_task_goes_the_whole_way_through_mcp(
-    mcp_session: Connect, task_secret: str, queue: Queue
+    mcp_session: Connect, task_secret: str, project: Project
 ) -> None:
     """Обзорная проверка 7: те же шаги инструментами дают ту же опись.
 
-    Ключ очереди запоминается строкой до подключения: сессия MCP коммитит на входе, и
+    Ключ проекта запоминается строкой до подключения: сессия MCP коммитит на входе, и
     обращение к полю ORM-объекта после этого ушло бы в базу вне async-контекста.
     """
-    queue_key = queue.key
+    project_key = project.key
 
     async with mcp_session(task_secret) as session:
         created = await call(
             session,
             "create_task",
-            queue=queue_key,
+            project=project_key,
             title="Ключ задачи сгорает на отклонённом запросе",
             description="Номер выдаётся до валидации тела",
             assignee="owner",
@@ -251,7 +251,7 @@ async def test_a_blocking_question_takes_the_task_out_of_the_candidates(
     db_session: AsyncSession,
     task_actor: Actor,
     owner: Participant,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 8: сценарий ожидания из `CONCEPT.md`, 4.6.
 
@@ -264,7 +264,7 @@ async def test_a_blocking_question_takes_the_task_out_of_the_candidates(
     task = await tasks_service.create_task(
         db_session,
         actor=task_actor,
-        queue=queue,
+        project=project,
         title="Удалять ли дела отменённых задач",
         description="Решение принимает владелец, не агент",
         assignee=task_actor.author.signature,

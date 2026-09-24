@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.entry import Entry
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import (
@@ -25,12 +25,12 @@ from app.services import tasks as tasks_service
 from app.services.auth import Actor
 
 
-async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) -> Task:
+async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
     """Задача в `backlog` с заполненными разделами: готова идти по цепочке статусов."""
     return await tasks_service.create_task(
         session,
         actor=actor,
-        queue=queue,
+        project=project,
         title=title,
         description="описание",
         goal="цель",
@@ -117,12 +117,12 @@ async def link_entries(session: AsyncSession, task: Task, actor: Actor) -> list[
 async def test_a_link_is_seen_from_both_sides_under_its_own_kind(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 5: `blocks` у одной, `blocked_by` у другой, `relates` — одинаково."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
-    third = await make(db_session, task_actor, queue, "третья")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
+    third = await make(db_session, task_actor, project, "третья")
 
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
     await service.add_link(db_session, first, third, actor=task_actor, kind=LinkKind.RELATES)
@@ -149,11 +149,11 @@ async def test_a_link_is_seen_from_both_sides_under_its_own_kind(
 async def test_the_other_side_carries_its_status(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 7, первая половина: статус задачи на другой стороне в связи есть."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
     await move(db_session, second, task_actor, TaskStatus.OPEN)
 
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKED_BY)
@@ -166,11 +166,11 @@ async def test_the_other_side_carries_its_status(
 async def test_the_same_link_from_the_other_side_is_a_duplicate(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Связь хранится один раз: «B blocked_by A» после «A blocks B» — повтор, а не вторая."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
 
     with pytest.raises(LinkExistsError) as error:
@@ -185,11 +185,11 @@ async def test_the_same_link_from_the_other_side_is_a_duplicate(
 async def test_a_symmetric_link_is_a_duplicate_from_either_side(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """У `relates` дубликат ловится только благодаря упорядочиванию пары по ключу."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
     await service.add_link(db_session, second, first, actor=task_actor, kind=LinkKind.RELATES)
 
     with pytest.raises(LinkExistsError):
@@ -199,10 +199,10 @@ async def test_a_symmetric_link_is_a_duplicate_from_either_side(
 async def test_a_link_can_be_removed_from_the_other_side(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
 
     await service.remove_link(db_session, second, first, actor=task_actor, kind=LinkKind.BLOCKED_BY)
@@ -214,10 +214,10 @@ async def test_a_link_can_be_removed_from_the_other_side(
 async def test_removing_a_link_that_is_not_there_is_a_miss(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
 
     with pytest.raises(LinkNotFoundError) as error:
         await service.remove_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
@@ -231,11 +231,11 @@ async def test_removing_a_link_that_is_not_there_is_a_miss(
 async def test_both_cases_get_the_link_entry_under_their_own_kind(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 4: `link_added` в обоих делах, вид — со стороны своей задачи."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
 
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
 
@@ -261,7 +261,7 @@ async def test_both_cases_get_the_link_entry_under_their_own_kind(
 async def test_both_sides_of_one_link_share_one_action_id(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка TRK-118: обе стороны одной связи — одно действие.
 
@@ -269,8 +269,8 @@ async def test_both_sides_of_one_link_share_one_action_id(
     интерфейс обязан показать его одной группой в каждом деле, а не двумя разными.
     Снятие связи — отдельный вызов и отдельное значение.
     """
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
 
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
 
@@ -311,11 +311,11 @@ async def test_both_sides_of_one_link_share_one_action_id(
 async def test_the_link_entry_is_signed_by_the_author_of_the_action(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Служебную запись подписывает автор действия, а не трекер (`docs/notes/tasks.md`)."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
 
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.PARENT)
 
@@ -334,9 +334,9 @@ async def test_the_link_entry_is_signed_by_the_author_of_the_action(
 async def test_a_task_cannot_be_linked_to_itself(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
-    first = await make(db_session, task_actor, queue, "первая")
+    first = await make(db_session, task_actor, project, "первая")
 
     with pytest.raises(LinkSelfError):
         await service.add_link(db_session, first, first, actor=task_actor, kind=LinkKind.RELATES)
@@ -345,15 +345,15 @@ async def test_a_task_cannot_be_linked_to_itself(
 async def test_a_closed_task_takes_no_link_that_changes_its_behaviour(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2 задачи TRK-10: у закрытой задачи не заводится ни родитель, ни блокер.
 
     Проверяются все четыре имени двух пар и обе стороны каждого: правило принадлежит
     связи, а не той задаче, с которой её попросили.
     """
-    closed = await make(db_session, task_actor, queue, "закрытая")
-    other = await make(db_session, task_actor, queue, "живая")
+    closed = await make(db_session, task_actor, project, "закрытая")
+    other = await make(db_session, task_actor, project, "живая")
     await move(db_session, closed, task_actor, TaskStatus.CANCELLED, reason="не нужна")
 
     for kind in (LinkKind.PARENT, LinkKind.CHILD, LinkKind.BLOCKS, LinkKind.BLOCKED_BY):
@@ -370,10 +370,10 @@ async def test_a_closed_task_takes_no_link_that_changes_its_behaviour(
 async def test_a_link_that_changes_behaviour_cannot_be_removed_from_a_closed_task_either(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
     await move(db_session, second, task_actor, TaskStatus.CANCELLED, reason="не нужна")
 
@@ -384,14 +384,14 @@ async def test_a_link_that_changes_behaviour_cannot_be_removed_from_a_closed_tas
 async def test_a_continuation_relates_to_the_closed_task_it_grew_from(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Главная проверка TRK-10: родословная ставится с обеих сторон и читается из связей.
 
     Закрытая задача отдаёт ключ продолжения и его статус в своём списке связей — то
     есть в пакете преемника, без чтения дела.
     """
-    closed = await make(db_session, task_actor, queue, "сделанная")
+    closed = await make(db_session, task_actor, project, "сделанная")
     await move(
         db_session,
         closed,
@@ -400,7 +400,7 @@ async def test_a_continuation_relates_to_the_closed_task_it_grew_from(
         TaskStatus.IN_PROGRESS,
         TaskStatus.DONE,
     )
-    continuation = await make(db_session, task_actor, queue, "продолжение")
+    continuation = await make(db_session, task_actor, project, "продолжение")
 
     added = await service.add_link(
         db_session, continuation, closed, actor=task_actor, kind=LinkKind.RELATES
@@ -417,11 +417,11 @@ async def test_a_continuation_relates_to_the_closed_task_it_grew_from(
 async def test_relates_is_removed_from_a_closed_task_as_well(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Ошибочная родословная снимается: иначе промах ключом остался бы у закрытой навсегда."""
-    closed = await make(db_session, task_actor, queue, "закрытая")
-    other = await make(db_session, task_actor, queue, "живая")
+    closed = await make(db_session, task_actor, project, "закрытая")
+    other = await make(db_session, task_actor, project, "живая")
     await move(db_session, closed, task_actor, TaskStatus.CANCELLED, reason="не нужна")
     await service.add_link(db_session, other, closed, actor=task_actor, kind=LinkKind.RELATES)
 
@@ -440,7 +440,7 @@ async def test_relates_is_removed_from_a_closed_task_as_well(
 async def test_a_second_parent_is_refused_from_either_side(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
     from_child_side: bool,
 ) -> None:
     """Родитель у задачи один (TRK-135): второй — `task_has_parent`, как ни проси.
@@ -449,9 +449,9 @@ async def test_a_second_parent_is_refused_from_either_side(
     и отказ у них один. В подробностях — ребёнок и его нынешний родитель: агенту, который
     хотел перевесить задачу, сразу видно, какую связь снять.
     """
-    first = await make(db_session, task_actor, queue, "первая программа")
-    second = await make(db_session, task_actor, queue, "вторая программа")
-    child = await make(db_session, task_actor, queue, "часть")
+    first = await make(db_session, task_actor, project, "первая программа")
+    second = await make(db_session, task_actor, project, "вторая программа")
+    child = await make(db_session, task_actor, project, "часть")
     await service.add_link(db_session, first, child, actor=task_actor, kind=LinkKind.PARENT)
 
     with pytest.raises(TaskHasParentError) as error:
@@ -472,16 +472,16 @@ async def test_a_second_parent_is_refused_from_either_side(
 async def test_a_parent_takes_many_children_and_a_child_can_change_its_parent(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Запрет касается только числа родителей: детей сколько угодно, перевесить можно.
 
     Перевесить — снять нынешнюю связь и поставить новую: после снятия родителя нет, и
     вторая программа принимается.
     """
-    program = await make(db_session, task_actor, queue, "программа")
-    other = await make(db_session, task_actor, queue, "другая программа")
-    children = [await make(db_session, task_actor, queue, f"часть {n}") for n in range(3)]
+    program = await make(db_session, task_actor, project, "программа")
+    other = await make(db_session, task_actor, project, "другая программа")
+    children = [await make(db_session, task_actor, project, f"часть {n}") for n in range(3)]
     for child in children:
         await service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
 
@@ -502,11 +502,11 @@ async def test_a_parent_takes_many_children_and_a_child_can_change_its_parent(
 async def test_an_exact_repeat_of_the_parent_link_is_still_a_duplicate(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Повтор той же связи — `link_exists`, а не «второй родитель»: родитель тот же."""
-    program = await make(db_session, task_actor, queue, "программа")
-    child = await make(db_session, task_actor, queue, "часть")
+    program = await make(db_session, task_actor, project, "программа")
+    child = await make(db_session, task_actor, project, "часть")
     await service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
 
     with pytest.raises(LinkExistsError):
@@ -519,11 +519,11 @@ async def test_an_exact_repeat_of_the_parent_link_is_still_a_duplicate(
 async def test_a_two_task_hierarchy_cycle_is_refused(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 3, первая половина."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.PARENT)
 
     with pytest.raises(LinkCycleError) as error:
@@ -535,12 +535,12 @@ async def test_a_two_task_hierarchy_cycle_is_refused(
 async def test_a_three_task_blocking_cycle_is_refused(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 3, вторая половина: кольцо длиной три ловится обходом графа."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
-    third = await make(db_session, task_actor, queue, "третья")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
+    third = await make(db_session, task_actor, project, "третья")
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.BLOCKS)
     await service.add_link(db_session, second, third, actor=task_actor, kind=LinkKind.BLOCKS)
 
@@ -554,11 +554,11 @@ async def test_a_three_task_blocking_cycle_is_refused(
 async def test_a_parent_may_be_blocked_by_its_own_child(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Иерархия и блокировки — два независимых графа: так выражается «жду декомпозицию»."""
-    parent = await make(db_session, task_actor, queue, "родитель")
-    child = await make(db_session, task_actor, queue, "ребёнок")
+    parent = await make(db_session, task_actor, project, "родитель")
+    child = await make(db_session, task_actor, project, "ребёнок")
     await service.add_link(db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT)
 
     await service.add_link(db_session, parent, child, actor=task_actor, kind=LinkKind.BLOCKED_BY)
@@ -570,12 +570,12 @@ async def test_a_parent_may_be_blocked_by_its_own_child(
 async def test_relates_never_makes_a_cycle(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """`relates` — только контекст, и кольца из него законны."""
-    first = await make(db_session, task_actor, queue, "первая")
-    second = await make(db_session, task_actor, queue, "вторая")
-    third = await make(db_session, task_actor, queue, "третья")
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
+    third = await make(db_session, task_actor, project, "третья")
 
     await service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.RELATES)
     await service.add_link(db_session, second, third, actor=task_actor, kind=LinkKind.RELATES)
@@ -590,11 +590,11 @@ async def test_relates_never_makes_a_cycle(
 async def test_blocked_is_true_exactly_while_a_blocker_is_open(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 7, вторая половина: закрытый блокер признак не поднимает."""
-    blocker = await make(db_session, task_actor, queue, "блокер")
-    blocked = await make(db_session, task_actor, queue, "заблокированная")
+    blocker = await make(db_session, task_actor, project, "блокер")
+    blocked = await make(db_session, task_actor, project, "заблокированная")
     await service.add_link(db_session, blocker, blocked, actor=task_actor, kind=LinkKind.BLOCKS)
 
     package = await tasks_service.read_task_package(db_session, blocked.key, actor=task_actor)
@@ -619,11 +619,11 @@ async def test_blocked_is_true_exactly_while_a_blocker_is_open(
 async def test_a_blocked_task_is_not_taken_into_work_until_the_blocker_closes(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 1: отказ со списком блокеров, а после закрытия блокера — проход."""
-    blocker = await make(db_session, task_actor, queue, "блокер")
-    blocked = await make(db_session, task_actor, queue, "заблокированная")
+    blocker = await make(db_session, task_actor, project, "блокер")
+    blocked = await make(db_session, task_actor, project, "заблокированная")
     await service.add_link(db_session, blocker, blocked, actor=task_actor, kind=LinkKind.BLOCKS)
     await move(db_session, blocked, task_actor, TaskStatus.OPEN)
 
@@ -652,11 +652,11 @@ async def test_a_blocked_task_is_not_taken_into_work_until_the_blocker_closes(
 async def test_a_parent_does_not_close_while_a_child_is_open(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 2: отказ со списком детей, после отмены ребёнка — проход."""
-    parent = await make(db_session, task_actor, queue, "родитель")
-    child = await make(db_session, task_actor, queue, "ребёнок")
+    parent = await make(db_session, task_actor, project, "родитель")
+    child = await make(db_session, task_actor, project, "ребёнок")
     await service.add_link(db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT)
     await move(db_session, child, task_actor, TaskStatus.OPEN)
     await move(
@@ -681,7 +681,7 @@ async def test_a_parent_does_not_close_while_a_child_is_open(
 async def test_a_waiting_child_keeps_the_parent_from_closing(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
 ) -> None:
     """Обзорная проверка 5 задачи TRK-15: `waiting` ребёнка не закрывает.
 
@@ -690,8 +690,8 @@ async def test_a_waiting_child_keeps_the_parent_from_closing(
     (`CONCEPT.md`, 3.3). Отказ обязан назвать ключ ребёнка: иначе родитель большой
     декомпозиции придётся искать виновника перебором.
     """
-    parent = await make(db_session, task_actor, queue, "родитель")
-    child = await make(db_session, task_actor, queue, "ребёнок")
+    parent = await make(db_session, task_actor, project, "родитель")
+    child = await make(db_session, task_actor, project, "ребёнок")
     await service.add_link(db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT)
     await move(db_session, child, task_actor, TaskStatus.OPEN)
     await tasks_service.transition_task(

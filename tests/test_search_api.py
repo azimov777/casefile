@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas.search import TaskParentRead, TaskSearchRead
 from app.api.schemas.tasks import TaskFeaturesRead, TaskRead
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.links import LinkKind
 from app.domain.search import FEATURES_FIELD, PARENT_FIELD, SELECTABLE_FIELDS
@@ -23,14 +23,16 @@ from app.services import links as links_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 
-CANDIDATES = "queue: TRK and status: open and blocked: false and open_blocking_questions: 0"
+CANDIDATES = "project: TRK and status: open and blocked: false and open_blocking_questions: 0"
 
 
-async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str, **rest: Any) -> Task:
+async def make(
+    session: AsyncSession, actor: Actor, project: Project, title: str, **rest: Any
+) -> Task:
     return await tasks_service.create_task(
         session,
         actor=actor,
-        queue=queue,
+        project=project,
         title=title,
         description=rest.pop("description", "описание"),
         goal="цель",
@@ -58,15 +60,15 @@ async def listed_keys(client: AsyncClient, **params: Any) -> list[str]:
 
 
 @pytest.fixture
-async def board(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> dict[str, Task]:
+async def board(db_session: AsyncSession, task_actor: Actor, project: Project) -> dict[str, Task]:
     """Обычная открытая задача, заблокированная и открытая с блокирующим вопросом."""
-    plain = await make(db_session, task_actor, queue, "обычная")
+    plain = await make(db_session, task_actor, project, "обычная")
     plain = (
         await tasks_service.transition_task(db_session, plain, actor=task_actor, to=TaskStatus.OPEN)
     ).task
 
-    blocked = await make(db_session, task_actor, queue, "заблокированная")
-    blocker = await make(db_session, task_actor, queue, "блокер")
+    blocked = await make(db_session, task_actor, project, "заблокированная")
+    blocker = await make(db_session, task_actor, project, "блокер")
     await links_service.add_link(
         db_session, blocked, blocker, actor=task_actor, kind=LinkKind.BLOCKED_BY
     )
@@ -76,7 +78,7 @@ async def board(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> di
         )
     ).task
 
-    asking = await make(db_session, task_actor, queue, "вопрос без ответа")
+    asking = await make(db_session, task_actor, project, "вопрос без ответа")
     asking = (
         await tasks_service.transition_task(
             db_session, asking, actor=task_actor, to=TaskStatus.OPEN
@@ -110,7 +112,7 @@ async def test_the_structured_filter_returns_the_same_list_in_the_same_order(
     by_query = await listed_keys(auth_client, query=CANDIDATES)
     by_filter = await listed_keys(
         auth_client,
-        queue="TRK",
+        project="TRK",
         status="open",
         blocked="false",
         open_blocking_questions=0,
@@ -133,14 +135,16 @@ async def test_a_typo_in_a_value_answers_with_the_position_and_the_allowed_value
 
 
 async def test_an_insertion_between_pages_neither_duplicates_nor_loses_tasks(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Проверка 4: страницы устойчивы к вставке — курсор задан значением, а не смещением."""
-    before = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(6)]
+    before = [
+        await make(db_session, task_actor, project, f"задача {number}") for number in range(6)
+    ]
 
     first = await auth_client.get("/api/v1/tasks", params={"limit": 3})
     assert first.status_code == 200
-    await make(db_session, task_actor, queue, "вставленная посреди обхода")
+    await make(db_session, task_actor, project, "вставленная посреди обхода")
     second = await auth_client.get(
         "/api/v1/tasks", params={"limit": 3, "cursor": first.json()["meta"]["next_cursor"]}
     )
@@ -248,7 +252,7 @@ async def test_every_declared_parameter_still_passes(
     """
     everything: dict[str, Any] = {
         "key": [board["plain"].key],
-        "queue": ["TRK"],
+        "project": ["TRK"],
         "parent": ["empty()"],
         "status": ["open", "backlog"],
         "assignee": ["empty()"],
@@ -259,7 +263,7 @@ async def test_every_declared_parameter_still_passes(
         "open_remarks": 0,
         "remarks_in_work": 0,
         "text": "задача",
-        "query": "queue: TRK",
+        "query": "project: TRK",
         "sort": ["-updated_at", "key"],
         "fields": ["key", "status"],
         "limit": 10,
@@ -315,7 +319,7 @@ async def test_a_repeated_parameter_accepts_any_of_the_values(
     auth_client: AsyncClient, board: dict[str, Task]
 ) -> None:
     """Значения одного параметра складываются по `or`, параметры между собой — по `and`."""
-    found = await listed_keys(auth_client, status=["open", "backlog"], queue="TRK")
+    found = await listed_keys(auth_client, status=["open", "backlog"], project="TRK")
 
     assert set(found) == {task.key for task in board.values()}
 
@@ -353,20 +357,20 @@ async def test_an_unknown_key_in_the_filter_is_refused_and_named(
 
 
 async def test_the_empty_marker_travels_through_a_structural_parameter(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """`?assignee=empty()` разбирается той же грамматикой, что и значение языка."""
-    await make(db_session, task_actor, queue, "назначенная", assignee="release_bot")
-    nobody = await make(db_session, task_actor, queue, "ничья")
+    await make(db_session, task_actor, project, "назначенная", assignee="release_bot")
+    nobody = await make(db_session, task_actor, project, "ничья")
 
     assert await listed_keys(auth_client, assignee="empty()") == [nobody.key]
 
 
 async def test_sorting_is_explicit_in_direction(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     for number in range(3):
-        await make(db_session, task_actor, queue, f"задача {number}")
+        await make(db_session, task_actor, project, f"задача {number}")
 
     ascending = await listed_keys(auth_client, sort="key")
     descending = await listed_keys(auth_client, sort="-key")
@@ -425,7 +429,9 @@ async def test_every_row_carries_the_features_of_its_own_card(
     прочитанным делом, — и сойтись обязаны на каждой задаче. Пока проверка зелёная, две
     формы одного определения не разъехались.
     """
-    rows = {item["key"]: item["features"] for item in await listed(auth_client, query="queue: TRK")}
+    rows = {
+        item["key"]: item["features"] for item in await listed(auth_client, query="project: TRK")
+    }
 
     assert set(rows) == {task.key for task in board.values()}
     for key, features in rows.items():
@@ -504,16 +510,16 @@ async def test_a_narrow_field_set_leaves_the_features_out_entirely(
 
 
 @pytest.fixture
-async def program(db_session: AsyncSession, task_actor: Actor, queue: Queue) -> dict[str, Task]:
+async def program(db_session: AsyncSession, task_actor: Actor, project: Project) -> dict[str, Task]:
     """Программа с двумя детьми и задача без родителя рядом."""
-    parent = await make(db_session, task_actor, queue, "программа длинного названия")
-    first = await make(db_session, task_actor, queue, "первый ребёнок")
-    second = await make(db_session, task_actor, queue, "второй ребёнок")
+    parent = await make(db_session, task_actor, project, "программа длинного названия")
+    first = await make(db_session, task_actor, project, "первый ребёнок")
+    second = await make(db_session, task_actor, project, "второй ребёнок")
     for child in (first, second):
         await links_service.add_link(
             db_session, child, parent, actor=task_actor, kind=LinkKind.CHILD
         )
-    lone = await make(db_session, task_actor, queue, "одиночка")
+    lone = await make(db_session, task_actor, project, "одиночка")
     return {"parent": parent, "first": first, "second": second, "lone": lone}
 
 
@@ -592,7 +598,7 @@ async def test_parents_are_picked_by_name_and_are_absent_when_not_asked(
 
 
 async def test_the_total_counts_the_selection_and_not_the_page(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Из `meta.total` и `limit` собирается «страница 1 из 3, всего 7».
 
@@ -600,7 +606,7 @@ async def test_the_total_counts_the_selection_and_not_the_page(
     без второго числа интерфейсу неоткуда узнать, сколько страниц он рисует.
     """
     for number in range(7):
-        await make(db_session, task_actor, queue, f"задача {number}")
+        await make(db_session, task_actor, project, f"задача {number}")
 
     response = await auth_client.get("/api/v1/tasks", params={"limit": 3})
 
@@ -641,7 +647,7 @@ async def test_an_empty_selection_counts_zero_and_not_null(
 
 
 async def test_the_offset_addresses_the_same_page_the_cursor_leads_to(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 1: страница по адресу — та же, что и по курсору.
 
@@ -649,7 +655,7 @@ async def test_the_offset_addresses_the_same_page_the_cursor_leads_to(
     отличается не результатом, а тем, что не требует пройти предыдущие страницы.
     """
     for number in range(7):
-        await make(db_session, task_actor, queue, f"задача {number}")
+        await make(db_session, task_actor, project, f"задача {number}")
 
     first = await auth_client.get("/api/v1/tasks", params={"limit": 3})
     assert first.status_code == 200, first.text
@@ -664,7 +670,7 @@ async def test_the_offset_addresses_the_same_page_the_cursor_leads_to(
 
 
 async def test_the_pages_of_any_order_are_addressable_and_counted_the_same(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 4: и число, и адрес работают при любом `sort`, а не при умолчании.
 
@@ -675,7 +681,7 @@ async def test_the_pages_of_any_order_are_addressable_and_counted_the_same(
         await make(
             db_session,
             task_actor,
-            queue,
+            project,
             f"задача {number}",
             priority=TaskPriority.HIGH if number % 2 else TaskPriority.LOW,
         )
@@ -714,7 +720,7 @@ async def test_a_page_beyond_the_end_is_empty_and_still_knows_the_total(
 
 
 async def test_an_insertion_shifts_the_page_addressed_by_offset(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Цена смещения, записанная тестом: вставка между запросами сдвигает границу.
 
@@ -724,12 +730,12 @@ async def test_an_insertion_shifts_the_page_addressed_by_offset(
     адресует позицию в порядке, а не номер строки. Обе выдачи законны, и разница между
     ними — то, за что платит выбор смещения (`docs/notes/api.md`).
     """
-    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(6)]
+    made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(6)]
 
     first = await auth_client.get("/api/v1/tasks", params={"limit": 3, "sort": "-key"})
     assert first.status_code == 200, first.text
     seen = [item["key"] for item in first.json()["data"]]
-    await make(db_session, task_actor, queue, "вставленная посреди обхода")
+    await make(db_session, task_actor, project, "вставленная посреди обхода")
 
     by_offset = await auth_client.get(
         "/api/v1/tasks", params={"limit": 3, "sort": "-key", "offset": 3}
@@ -748,11 +754,11 @@ async def test_an_insertion_shifts_the_page_addressed_by_offset(
 
 
 async def test_a_cursor_and_an_offset_together_are_refused(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Два адреса одной страницы в одном запросе — отказ, а не выбор за клиента."""
     for number in range(4):
-        await make(db_session, task_actor, queue, f"задача {number}")
+        await make(db_session, task_actor, project, f"задача {number}")
     first = await auth_client.get("/api/v1/tasks", params={"limit": 2})
 
     response = await auth_client.get(
@@ -775,14 +781,14 @@ async def test_a_negative_offset_is_refused_by_the_parameter(auth_client: AsyncC
 
 
 async def test_the_answer_without_the_new_parameters_is_the_former_one(
-    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, queue: Queue
+    auth_client: AsyncClient, db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 3: прежний вызов отвечает прежним, а `total` только дописан.
 
     Страница, её порядок, курсор и `has_more` — те же, что и до задачи; из нового в
     ответе одно поле `meta`, и старый клиент, читающий два прежних, ничего не заметил.
     """
-    made = [await make(db_session, task_actor, queue, f"задача {number}") for number in range(4)]
+    made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(4)]
 
     response = await auth_client.get("/api/v1/tasks", params={"limit": 2, "fields": "key"})
 

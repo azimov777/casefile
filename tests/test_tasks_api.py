@@ -6,15 +6,15 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from httpx import AsyncClient
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 
 READY = {
-    "queue": "trk",
+    "project": "trk",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
-    "context": "Номер выдаёт очередь",
+    "context": "Номер выдаёт проект",
     "constraints": "Счётчик не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
@@ -91,7 +91,7 @@ async def case(client: AsyncClient, key: str) -> list[dict[str, Any]]:
 
 
 async def test_creation_answers_with_backlog_and_a_created_entry(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 1."""
     data = await create(auth_client)
@@ -99,7 +99,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     assert data["key"] == "TRK-1"
     assert data["status"] == "backlog"
     assert data["version"] == 1
-    assert data["queue"] == {"key": "TRK", "title": "Трекер"}
+    assert data["project"] == {"key": "TRK", "title": "Трекер"}
     assert data["created_by"] == {"kind": "human", "signature": "owner"}
 
     package = (await auth_client.get("/api/v1/tasks/trk-1")).json()["data"]
@@ -151,7 +151,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     assert heading["action_id"] is not None
 
 
-async def test_a_status_at_creation_is_rejected(auth_client: AsyncClient, queue: Queue) -> None:
+async def test_a_status_at_creation_is_rejected(auth_client: AsyncClient, project: Project) -> None:
     response = await auth_client.post("/api/v1/tasks", json={**READY, "status": "open"})
 
     assert response.status_code == 422
@@ -159,7 +159,7 @@ async def test_a_status_at_creation_is_rejected(auth_client: AsyncClient, queue:
 
 
 async def test_opening_without_checks_lists_the_unfilled_sections(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 2."""
     await create(auth_client, checks=[], output="")
@@ -173,7 +173,7 @@ async def test_opening_without_checks_lists_the_unfilled_sections(
 
 
 async def test_a_move_outside_the_table_is_a_conflict_with_the_allowed_list(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 3."""
     await create(auth_client)
@@ -188,7 +188,7 @@ async def test_a_move_outside_the_table_is_a_conflict_with_the_allowed_list(
 
 
 async def test_a_step_back_needs_a_reason_that_lands_in_the_case(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 4."""
     await create(auth_client)
@@ -214,7 +214,9 @@ async def test_a_step_back_needs_a_reason_that_lands_in_the_case(
     assert last["author"] == {"kind": "human", "signature": "owner"}
 
 
-async def test_sections_are_locked_outside_backlog(auth_client: AsyncClient, queue: Queue) -> None:
+async def test_sections_are_locked_outside_backlog(
+    auth_client: AsyncClient, project: Project
+) -> None:
     """Обзорная проверка 5."""
     await create(auth_client)
 
@@ -242,7 +244,7 @@ async def test_sections_are_locked_outside_backlog(auth_client: AsyncClient, que
 
 
 async def test_the_assignee_changes_in_progress_but_not_in_done(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 6."""
     await create(auth_client)
@@ -262,7 +264,7 @@ async def test_the_assignee_changes_in_progress_but_not_in_done(
 
 
 async def test_null_unassigns_and_an_omitted_field_stays(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     await create(auth_client, assignee="release_bot", priority="high")
 
@@ -275,7 +277,7 @@ async def test_null_unassigns_and_an_omitted_field_stays(
 
 
 async def test_a_stale_version_is_a_version_conflict(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 7."""
     await create(auth_client)
@@ -289,7 +291,7 @@ async def test_a_stale_version_is_a_version_conflict(
     assert error["details"] == {"key": "TRK-1", "expected": 1, "actual": 2}
 
 
-async def test_the_status_cannot_be_patched(auth_client: AsyncClient, queue: Queue) -> None:
+async def test_the_status_cannot_be_patched(auth_client: AsyncClient, project: Project) -> None:
     await create(auth_client)
 
     response = await auth_client.patch("/api/v1/tasks/TRK-1", json={"status": "open"})
@@ -298,14 +300,16 @@ async def test_the_status_cannot_be_patched(auth_client: AsyncClient, queue: Que
     assert response.json()["error"]["code"] == "validation_error"
 
 
-async def test_seq_is_monotonic_across_queues_and_no_restarts_per_task(
-    auth_client: AsyncClient, queue: Queue
+async def test_seq_is_monotonic_across_projects_and_no_restarts_per_task(
+    auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 8."""
-    created = await auth_client.post("/api/v1/queues", json={"key": "OPS", "title": "Эксплуатация"})
+    created = await auth_client.post(
+        "/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация"}
+    )
     assert created.status_code == 201, created.text
     await create(auth_client)
-    await create(auth_client, queue="ops", title="Дежурство")
+    await create(auth_client, project="ops", title="Дежурство")
     await auth_client.patch("/api/v1/tasks/TRK-1", json={"goal": "a"})
     await auth_client.patch("/api/v1/tasks/OPS-1", json={"goal": "b"})
     await auth_client.patch("/api/v1/tasks/TRK-1", json={"goal": "c"})
@@ -338,7 +342,7 @@ def test_entries_have_no_patch_or_delete_routes(app: FastAPI) -> None:
 
 
 async def test_a_removed_field_is_refused_and_not_silently_dropped(
-    auth_client: AsyncClient, queue: Queue, task: Task
+    auth_client: AsyncClient, project: Project, task: Task
 ) -> None:
     """Метки сняты (`CONCEPT.md`, 6), и запрос с ними обязан отказать, а не промолчать.
 
@@ -358,7 +362,7 @@ async def test_a_removed_field_is_refused_and_not_silently_dropped(
 
 
 async def test_an_unknown_key_and_a_malformed_key_answer_differently(
-    auth_client: AsyncClient, queue: Queue
+    auth_client: AsyncClient, project: Project
 ) -> None:
     missing = await auth_client.get("/api/v1/tasks/TRK-99")
     assert missing.status_code == 404
@@ -370,7 +374,7 @@ async def test_an_unknown_key_and_a_malformed_key_answer_differently(
 
 
 async def test_the_task_scope_runs_the_cycle(
-    client: AsyncClient, task_secret: str, queue: Queue, task: Task
+    client: AsyncClient, task_secret: str, project: Project, task: Task
 ) -> None:
     """Рабочий цикл агента открыт набору `task`."""
     client.headers["Authorization"] = f"Bearer {task_secret}"
@@ -384,7 +388,7 @@ async def test_the_task_scope_runs_the_cycle(
     assert package["transitions"] == ["done", "waiting", "open", "backlog", "cancelled"]
 
 
-async def test_entries_are_paged_by_number(auth_client: AsyncClient, queue: Queue) -> None:
+async def test_entries_are_paged_by_number(auth_client: AsyncClient, project: Project) -> None:
     await create(auth_client)
     for goal in ("a", "b", "c"):
         await auth_client.patch("/api/v1/tasks/TRK-1", json={"goal": goal})

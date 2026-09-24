@@ -30,7 +30,7 @@ REVISION_ANCHOR = "x-updater-revision: &updater-revision"
 #: Где compose-файл лежит в образе выпуска.
 COMPOSE_IN_IMAGE = "/app/docker-compose.prod.yml"
 
-#: Сняты заменой (правило замены очереди TRK): compose-файл больше не берётся по адресу.
+#: Сняты заменой (правило замены проекта TRK): compose-файл больше не берётся по адресу.
 REMOVED_VARIABLES = ("CASEFILE_COMPOSE_URL", "CASEFILE_SOURCE")
 
 

@@ -52,14 +52,14 @@ async def count(session: AsyncSession, model: type[Any]) -> int:
 
 async def populate(client: AsyncClient) -> None:
     """Очередь, две задачи со связью, записи дела разных типов — через REST, как агент."""
-    queue = await client.post(
-        "/api/v1/queues", json={"key": "TRK", "title": "Трекер", "description": "Бэкенд"}
+    project = await client.post(
+        "/api/v1/projects", json={"key": "TRK", "title": "Трекер", "description": "Бэкенд"}
     )
-    assert queue.status_code == 201, queue.text
+    assert project.status_code == 201, project.text
     for title in ("Первая", "Вторая"):
         created = await client.post(
             "/api/v1/tasks",
-            json={"queue": "TRK", "title": title, "description": "tab\there"},
+            json={"project": "TRK", "title": title, "description": "tab\there"},
         )
         assert created.status_code == 201, created.text
     for entry in (
@@ -259,7 +259,7 @@ async def test_a_fresh_installation_takes_the_archive_whole(
     assert left == 0
 
 
-async def test_an_installation_with_queues_refuses_the_archive(
+async def test_an_installation_with_projects_refuses_the_archive(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await populate(auth_client)
@@ -269,7 +269,7 @@ async def test_an_installation_with_queues_refuses_the_archive(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "installation_not_empty"
-    assert response.json()["error"]["details"] == {"queues": 1}
+    assert response.json()["error"]["details"] == {"projects": 1}
     assert await count(db_session, Task) == 2
 
 
@@ -289,35 +289,54 @@ async def test_an_archive_from_a_newer_casefile_is_refused(
     assert error["details"] == {"schema_revision": "ffffffffffff", "head": store.head_revision()}
 
 
+#: Ревизия последнего выпуска v0.3 — последняя, где проект звался очередью.
+#: Литерал, а не «ревизия перед head»: тест держит формат архивов, которые уже лежат у
+#: людей, и следующая миграция не должна подменить его другим.
+V0_3_REVISION = "7f4089f291b8"
+
+#: Имена v0.3, которые ревизия `3b8e6d2f9a41` переименовала (`CONCEPT.md`, «Архив v0.3»).
+#: Старое имя — как оно лежит в архиве, новое — как его читать из нынешней базы.
+RENAMED_TABLES = {"queues": "projects"}
+RENAMED_COLUMNS = {("tasks", "queue_id"): "project_id"}
+
+
+async def archive_at(client: AsyncClient, session: AsyncSession, revision: str) -> dict[str, Any]:
+    """Архив ревизии `revision` — таким, каким его снял бы тот Casefile.
+
+    Таблицы и колонки — схемы той ревизии (её строит тот же `build_scratch`), строки — из
+    наполненной базы на head. Имена, переименованные после той ревизии, читаются из базы
+    нынешними, а в архив уходят прежними.
+    """
+    await store.build_scratch(session, revision)
+    old_tables = await store.table_columns(session, store.SCRATCH_SCHEMA)
+    await session.execute(text(f"DROP SCHEMA {store.SCRATCH_SCHEMA} CASCADE"))
+    await session.execute(text("SET LOCAL search_path TO DEFAULT"))
+    tables = []
+    for name, columns in old_tables.items():
+        if name in EXCLUDED_TABLES:
+            continue
+        current = [RENAMED_COLUMNS.get((name, column), column) for column in columns]
+        rows = await store.read_rows(
+            session, store.PUBLIC_SCHEMA, RENAMED_TABLES.get(name, name), current
+        )
+        tables.append({"name": name, "columns": list(columns), "rows": rows})
+    return {
+        **(await client.get(ARCHIVE)).json()["data"],
+        "schema_revision": revision,
+        "tables": tables,
+    }
+
+
 async def test_an_archive_of_an_older_revision_is_brought_up_to_head(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """Архив ревизии до head принимается: миграции приёмника доводят его строки до своей схемы.
-
-    Архив старой ревизии собирается так, как его снял бы тот Casefile: таблицы и колонки
-    схемы той ревизии (её строит тот же `build_scratch`), строки — из наполненной базы.
-    """
+    """Архив ревизии до head принимается: миграции приёмника доводят его строки до своей схемы."""
     await populate(auth_client)
     script = ScriptDirectory.from_config(store._alembic_config())
     head = script.get_revision(store.head_revision())
     assert head is not None and isinstance(head.down_revision, str)
     previous = head.down_revision
-
-    await store.build_scratch(db_session, previous)
-    old_tables = await store.table_columns(db_session, store.SCRATCH_SCHEMA)
-    await db_session.execute(text(f"DROP SCHEMA {store.SCRATCH_SCHEMA} CASCADE"))
-    await db_session.execute(text("SET LOCAL search_path TO DEFAULT"))
-    tables = []
-    for name, columns in old_tables.items():
-        if name in EXCLUDED_TABLES:
-            continue
-        rows = await store.read_rows(db_session, store.PUBLIC_SCHEMA, name, columns)
-        tables.append({"name": name, "columns": list(columns), "rows": rows})
-    archive = {
-        **(await auth_client.get(ARCHIVE)).json()["data"],
-        "schema_revision": previous,
-        "tables": tables,
-    }
+    archive = await archive_at(auth_client, db_session, previous)
 
     await wipe(db_session)
     target_ui, _ = await fresh_installation(db_session)
@@ -332,6 +351,35 @@ async def test_an_archive_of_an_older_revision_is_brought_up_to_head(
     assert me.status_code == 200, me.text
     # Ключу интерфейса достаётся учётная запись администратора, как при подъёме.
     assert me.json()["data"]["account"]["is_admin"] is True
+
+
+async def test_an_archive_of_v0_3_brings_its_queues_in_as_projects(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Архив v0.3 несёт таблицу `queues` и колонку `tasks.queue_id` — и принимается.
+
+    Отличать старый формат отдельным кодом не нужно: архив называет свою ревизию,
+    временная схема строится на ней, и строки доходят до `projects` той же миграцией,
+    что переименовала таблицу у работающих установок.
+    """
+    await populate(auth_client)
+    archive = await archive_at(auth_client, db_session, V0_3_REVISION)
+    assert "queues" in {item["name"] for item in archive["tables"]}
+    assert "projects" not in {item["name"] for item in archive["tables"]}
+    assert "queue_id" in table(archive, "tasks")["columns"]
+
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=bearer(target_ui))
+
+    assert response.status_code == 200, response.text
+    assert "projects" in {item["name"] for item in response.json()["data"]["tables"]}
+    task = await auth_client.get("/api/v1/tasks/TRK-2", headers=bearer(target_ui))
+    assert task.status_code == 200, task.text
+    assert task.json()["data"]["task"]["project"] == {"key": "TRK", "title": "Трекер"}
+    project = await auth_client.get("/api/v1/projects/TRK", headers=bearer(target_ui))
+    assert project.status_code == 200, project.text
+    assert project.json()["data"]["last_task_number"] == 2
 
 
 @pytest.mark.parametrize(

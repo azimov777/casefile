@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.case import AGENT_ENTRY_TYPES, SERVICE_ENTRY_TYPES, EntryType
 from app.domain.errors import SearchFieldUnknownError, SearchValueInvalidError
@@ -26,11 +26,11 @@ from app.services import tasks as tasks_service
 from app.services.auth import Actor
 
 
-async def make(session: AsyncSession, actor: Actor, queue: Queue, title: str) -> Task:
+async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
     return await tasks_service.create_task(
         session,
         actor=actor,
-        queue=queue,
+        project=project,
         title=title,
         description="описание",
         goal="цель",
@@ -58,12 +58,12 @@ async def feature_of(session: AsyncSession, actor: Actor, task: Task) -> Any:
 async def test_an_entry_of_an_agent_moves_the_feature(
     db_session: AsyncSession,
     task_actor: Actor,
-    queue: Queue,
+    project: Project,
     owner: Any,
     entry_type: EntryType,
 ) -> None:
     """Каждый учтённый тип двигает признак — ровно по списку из решения TRK-6."""
-    task = await make(db_session, task_actor, queue, f"учтённый {entry_type.value}")
+    task = await make(db_session, task_actor, project, f"учтённый {entry_type.value}")
     assert await feature_of(db_session, task_actor, task) is None
 
     entry = await _file(db_session, task_actor, task, entry_type)
@@ -123,7 +123,7 @@ async def _file(session: AsyncSession, actor: Actor, task: Task, entry_type: Ent
 
 
 async def test_a_service_entry_does_not_move_the_feature(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Служебные записи признак не двигают — все шесть.
 
@@ -131,8 +131,8 @@ async def test_a_service_entry_does_not_move_the_feature(
     появляется в обоих делах. Считай мы служебные, задача, которой месяц никто не
     касался, выглядела бы живой от чужого действия.
     """
-    task = await make(db_session, task_actor, queue, "служебные не считаются")
-    other = await make(db_session, task_actor, queue, "соседняя задача")
+    task = await make(db_session, task_actor, project, "служебные не считаются")
+    other = await make(db_session, task_actor, project, "соседняя задача")
 
     # Заведение уже подшило `created` — служебную. Признак пуст.
     assert await feature_of(db_session, task_actor, task) is None
@@ -157,10 +157,10 @@ async def test_a_service_entry_does_not_move_the_feature(
 
 
 async def test_filing_an_entry_touches_neither_updated_at_nor_version(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Подшивка записи — не правка карточки: `updated_at` и `version` стоят на месте."""
-    task = await make(db_session, task_actor, queue, "подшивка не трогает карточку")
+    task = await make(db_session, task_actor, project, "подшивка не трогает карточку")
     before_updated, before_version = task.updated_at, task.version
 
     await case_service.add_entry(
@@ -177,16 +177,16 @@ async def test_filing_an_entry_touches_neither_updated_at_nor_version(
 
 
 async def test_a_fresh_task_has_no_value_and_sorts_last_in_both_directions(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Пустое значение осмысленно и в обоих направлениях лежит в конце.
 
-    Пустое — это «агент в дело ещё ничего не писал», и таких задач в очереди много.
+    Пустое — это «агент в дело ещё ничего не писал», и таких задач в проекте много.
     Всплывай они наверх при `-last_entry_at`, сортировка «сначала где шевелилось»
     показывала бы ровно то, где не шевелилось.
     """
-    fresh = await make(db_session, task_actor, queue, "свежая задача без записей")
-    busy = await make(db_session, task_actor, queue, "задача, где уже есть запись")
+    fresh = await make(db_session, task_actor, project, "свежая задача без записей")
+    busy = await make(db_session, task_actor, project, "задача, где уже есть запись")
     await case_service.add_entry(
         db_session, busy, actor=task_actor, type=EntryType.NOTE, title="Заметка"
     )
@@ -200,11 +200,11 @@ async def test_a_fresh_task_has_no_value_and_sorts_last_in_both_directions(
 
 
 async def test_paging_by_cursor_does_not_repeat_or_lose_tasks_with_no_value(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Курсор устойчив на пустых значениях: страницы не пересекаются и не теряют строк."""
     for index in range(7):
-        task = await make(db_session, task_actor, queue, f"задача {index}")
+        task = await make(db_session, task_actor, project, f"задача {index}")
         if index % 2 == 0:
             await case_service.add_entry(
                 db_session, task, actor=task_actor, type=EntryType.NOTE, title="Заметка"
@@ -229,11 +229,11 @@ async def test_paging_by_cursor_does_not_repeat_or_lose_tasks_with_no_value(
 
 
 async def test_the_field_filters_in_every_declared_operator(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Все заявленные операторы работают, и `empty()` находит задачи без записей."""
-    fresh = await make(db_session, task_actor, queue, "без записей")
-    busy = await make(db_session, task_actor, queue, "есть запись")
+    fresh = await make(db_session, task_actor, project, "без записей")
+    busy = await make(db_session, task_actor, project, "есть запись")
     entry = await case_service.add_entry(
         db_session, busy, actor=task_actor, type=EntryType.NOTE, title="Заметка"
     )
@@ -260,7 +260,7 @@ async def test_the_field_filters_in_every_declared_operator(
 
 
 async def test_a_broken_moment_is_named_and_not_swallowed(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Негодное значение объясняется, а не даёт пустую выдачу."""
     with pytest.raises(SearchValueInvalidError) as raised:
@@ -271,7 +271,7 @@ async def test_a_broken_moment_is_named_and_not_swallowed(
 
 
 async def test_the_field_is_listed_among_the_allowed_ones(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Ошибка разбора перечисляет новое поле среди допустимых — и в отборе, и в порядке."""
     with pytest.raises(SearchFieldUnknownError) as raised:
@@ -285,7 +285,7 @@ async def test_the_field_is_listed_among_the_allowed_ones(
 
 
 async def test_a_page_of_fifty_tasks_still_costs_one_query(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Выдача списка не получила запроса на строку: признак считается подзапросом.
 
@@ -293,7 +293,7 @@ async def test_a_page_of_fifty_tasks_still_costs_one_query(
     за признаком не виден ни по времени, ни по ответу — только по их числу.
     """
     for index in range(50):
-        task = await make(db_session, task_actor, queue, f"строка {index}")
+        task = await make(db_session, task_actor, project, f"строка {index}")
         await case_service.add_entry(
             db_session, task, actor=task_actor, type=EntryType.NOTE, title="Заметка"
         )
@@ -316,7 +316,7 @@ async def test_a_page_of_fifty_tasks_still_costs_one_query(
 
 
 async def test_sorting_by_the_new_key_is_not_slower_by_an_order_of_magnitude(
-    db_session: AsyncSession, task_actor: Actor, queue: Queue
+    db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Замер стоимости: порядок по новому ключу против порядка по `updated_at`.
 
@@ -324,7 +324,7 @@ async def test_sorting_by_the_new_key_is_not_slower_by_an_order_of_magnitude(
     относительное: подзапрос по каждой строке не должен превращать выдачу в другую
     задачу по стоимости.
     """
-    await _seed_many(db_session, task_actor, queue, tasks=200, entries_per_task=5)
+    await _seed_many(db_session, task_actor, project, tasks=200, entries_per_task=5)
 
     async def measure(sort: list[str]) -> float:
         started = time.perf_counter()
@@ -340,11 +340,11 @@ async def test_sorting_by_the_new_key_is_not_slower_by_an_order_of_magnitude(
 
 
 async def _seed_many(
-    session: AsyncSession, actor: Actor, queue: Queue, *, tasks: int, entries_per_task: int
+    session: AsyncSession, actor: Actor, project: Project, *, tasks: int, entries_per_task: int
 ) -> None:
     """Расстановка для замера. Записи подшиваются напрямую: сценарий здесь не проверяется."""
     for index in range(tasks):
-        task = await make(session, actor, queue, f"нагрузка {index}")
+        task = await make(session, actor, project, f"нагрузка {index}")
         for number in range(entries_per_task):
             await session.execute(
                 text(

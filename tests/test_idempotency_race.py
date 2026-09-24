@@ -41,13 +41,13 @@ from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenScope
 from app.main import create_app
 from app.services import participants as participants_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
 
 CONCURRENCY = 10
 KEY = "race-key"
-QUEUE_KEY = "RACEIDEM"
+PROJECT_KEY = "RACEIDEM"
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ async def committed_installation(
     committing_sessions: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[str]:
-    """Участник, токен и очередь, видимые другим соединениям; отдаёт секрет токена.
+    """Участник, токен и проект, видимые другим соединениям; отдаёт секрет токена.
 
     Заодно переводит фабрику сессий приложения на движок прогона: приложение обязано
     ходить настоящей зависимостью `get_session`, иначе десять «одновременных» запросов
@@ -88,10 +88,10 @@ async def committed_installation(
             scope=TokenScope.MAIN,
             name="race",
         )
-        await queues_service.create_queue(
+        await projects_service.create_project(
             session,
             actor=TRACKER_ACTOR,
-            key=QUEUE_KEY,
+            key=PROJECT_KEY,
             title="Гонка ключей",
         )
         await session.commit()
@@ -106,19 +106,22 @@ async def committed_installation(
             await session.execute(text("ALTER TABLE entries DISABLE TRIGGER entries_immutable"))
             await session.execute(
                 text(
-                    "DELETE FROM entries WHERE task_id IN (SELECT id FROM tasks WHERE queue_id "
-                    "IN (SELECT id FROM queues WHERE key = :key))"
+                    "DELETE FROM entries WHERE task_id IN (SELECT id FROM tasks WHERE project_id "
+                    "IN (SELECT id FROM projects WHERE key = :key))"
                 ),
-                {"key": QUEUE_KEY},
+                {"key": PROJECT_KEY},
             )
             await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(
                 text(
-                    "DELETE FROM tasks WHERE queue_id IN (SELECT id FROM queues WHERE key = :key)"
+                    "DELETE FROM tasks "
+                    "WHERE project_id IN (SELECT id FROM projects WHERE key = :key)"
                 ),
-                {"key": QUEUE_KEY},
+                {"key": PROJECT_KEY},
             )
-            await session.execute(text("DELETE FROM queues WHERE key = :key"), {"key": QUEUE_KEY})
+            await session.execute(
+                text("DELETE FROM projects WHERE key = :key"), {"key": PROJECT_KEY}
+            )
             # Ключи идемпотентности уезжают каскадом за токеном, токены — за участником.
             await session.execute(text("DELETE FROM participants WHERE id = :id"), {"id": owner_id})
             await session.commit()
@@ -144,12 +147,12 @@ async def live_client(committed_installation: str) -> AsyncIterator[AsyncClient]
 async def test_ten_parallel_repeats_create_one_task(live_client: AsyncClient) -> None:
     """Обзорная проверка 4: одна задача, десять одинаковых ответов."""
     body = {
-        "queue": QUEUE_KEY,
+        "project": PROJECT_KEY,
         "title": "Гонка одинаковых ключей",
         "description": "Десять повторов одного вызова",
     }
     # Прогрев: снимает блокировку строки токена с гоночных запросов, см. шапку файла.
-    await live_client.get("/api/v1/queues")
+    await live_client.get("/api/v1/projects")
     barrier = asyncio.Barrier(CONCURRENCY)
 
     async def create() -> tuple[int, dict]:
@@ -165,12 +168,12 @@ async def test_ten_parallel_repeats_create_one_task(live_client: AsyncClient) ->
 
     assert {status for status, _ in answers} == {201}, [status for status, _ in answers]
     keys = {payload["data"]["key"] for _, payload in answers}
-    assert keys == {f"{QUEUE_KEY}-1"}, keys
+    assert keys == {f"{PROJECT_KEY}-1"}, keys
     # Ответы совпадают целиком, а не только ключом задачи: проигравшие отдают
     # сохранённый ответ победителя, а не собирают похожий из базы.
     assert all(payload == answers[0][1] for _, payload in answers)
 
-    listing = await live_client.get("/api/v1/tasks", params={"queue": QUEUE_KEY})
+    listing = await live_client.get("/api/v1/tasks", params={"project": PROJECT_KEY})
     assert len(listing.json()["data"]) == 1
 
 
@@ -184,14 +187,14 @@ async def test_a_failed_call_frees_the_key(live_client: AsyncClient) -> None:
     key = "race-key-after-failure"
     rejected = await live_client.post(
         "/api/v1/tasks",
-        json={"queue": QUEUE_KEY, "title": "", "description": "Пустое название"},
+        json={"project": PROJECT_KEY, "title": "", "description": "Пустое название"},
         headers={IDEMPOTENCY_KEY_HEADER: key},
     )
     assert rejected.status_code == 422, rejected.text
 
     accepted = await live_client.post(
         "/api/v1/tasks",
-        json={"queue": QUEUE_KEY, "title": "Теперь название есть", "description": "Есть"},
+        json={"project": PROJECT_KEY, "title": "Теперь название есть", "description": "Есть"},
         headers={IDEMPOTENCY_KEY_HEADER: key},
     )
 
@@ -207,7 +210,7 @@ async def test_an_uncommitted_key_is_invisible_to_another_connection(
     del committed_installation
     await live_client.post(
         "/api/v1/tasks",
-        json={"queue": QUEUE_KEY, "title": "Ключ вместе ответом", "description": "Есть"},
+        json={"project": PROJECT_KEY, "title": "Ключ вместе ответом", "description": "Есть"},
         headers={IDEMPOTENCY_KEY_HEADER: "visible-key"},
     )
 

@@ -19,7 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.db.models.author import created_by_columns
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.authors import TRACKER
 from app.domain.tasks import TaskField
@@ -38,21 +38,21 @@ def committing_sessions(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]
 async def committed_task(
     committing_sessions: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[uuid.UUID]:
-    """Задача, видимая другим соединениям, и уборка за собой вместе с очередью."""
+    """Задача, видимая другим соединениям, и уборка за собой вместе с проектом."""
     async with committing_sessions() as session:
-        queue = Queue(key="RACEENTRY", title="Гонка", **created_by_columns(TRACKER))
-        session.add(queue)
+        project = Project(key="RACEENTRY", title="Гонка", **created_by_columns(TRACKER))
+        session.add(project)
         await session.flush()
         task = Task(
             key="RACEENTRY-1",
-            queue=queue,
+            project=project,
             title="Гонка за номером записи",
             description="Есть",
             **created_by_columns(TRACKER),
         )
         session.add(task)
         await session.commit()
-        task_id, queue_id = task.id, queue.id
+        task_id, project_id = task.id, project.id
 
     try:
         yield task_id
@@ -67,7 +67,7 @@ async def committed_task(
                 text("DELETE FROM tasks WHERE id = :task_id"), {"task_id": task_id}
             )
             await session.execute(
-                text("DELETE FROM queues WHERE id = :queue_id"), {"queue_id": queue_id}
+                text("DELETE FROM projects WHERE id = :project_id"), {"project_id": project_id}
             )
             await session.commit()
 
