@@ -9,11 +9,36 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.db.models.project import Project
 from app.db.models.task import Task
+from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.domain.tasks import TaskFeatures
 from app.mcp.enums import TaskPrioritySchema, TaskStatusSchema
-from app.mcp.views import AuthorView, ProjectRefView, author, project_ref
+from app.mcp.views import AuthorView, ProjectRefView, author
 from app.services.tasks import TaskMutation
+
+
+# Проект в карточке задачи — тот же набор полей, что у `TaskProjectRead` в REST.
+class TaskProjectView(ProjectRefView):
+    """Project of the task: key, title and its short description."""
+
+    description: str = Field(
+        description=(
+            f'Short "what this is" of the project, up to {MAX_PROJECT_DESCRIPTION_LENGTH} '
+            "characters; may be empty. Attributes and the project's case are returned by "
+            "`get_project`"
+        )
+    )
+
+
+def task_project(project: Project) -> TaskProjectView:
+    """Проект в карточке задачи: строка проекта и его описание (`CONCEPT.md`, 4.2).
+
+    Описание короткое ровно затем, чтобы ехать здесь: агент получает контекст проекта
+    тем же `get_task`. Выдача поиска описания не несёт — там проект строкой
+    (`project_ref`).
+    """
+    return TaskProjectView(key=project.key, title=project.title, description=project.description)
 
 
 # Карточка задачи — тот же набор полей, что у `TaskRead` в REST.
@@ -22,7 +47,7 @@ class TaskView(BaseModel):
 
     id: str
     key: str
-    project: ProjectRefView
+    project: TaskProjectView
     title: str
     description: str
     goal: str
@@ -44,7 +69,7 @@ def task(item: Task) -> TaskView:
     return TaskView(
         id=str(item.id),
         key=item.key,
-        project=project_ref(item.project),
+        project=task_project(item.project),
         title=item.title,
         description=item.description,
         goal=item.goal,

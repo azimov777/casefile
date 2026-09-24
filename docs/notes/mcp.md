@@ -592,3 +592,18 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 `read_project_entries` с отбором по типам записей об атрибутах.
 **Где:** `app/mcp/tools/registries/set_attribute.py`; `app/mcp/tools/registries/remove_attribute.py`;
 `app/mcp/tools/registries/get_project.py`; `app/services/attributes.py`.
+
+## Карточка задачи несёт описание проекта, строка `search_tasks` — нет
+
+**Что:** `TaskView.project` — `TaskProjectView` (ключ, название, описание до 320 знаков);
+`list_projects` и строка `search_tasks` отдают `ProjectRefView` — ключ и название. Строка
+поиска собирается из карточки (`dict(task(...))`), поэтому `found_task` заменяет в ней
+проект на `project_ref` явно (TRK-158).
+**Почему важно:** без замены описание приехало бы в каждой строке выдачи: pydantic
+принимает экземпляр наследника (`TaskProjectView`) в поле базового типа, и что уйдёт в
+ответ, зависело бы от режима сериализации, а не от объявленной схемы.
+**Как правильно:** предел и код отказа названы в описаниях аргументов `create_project` и
+`update_project` (`project_description_too_long`); `app/mcp/instructions.md` этого не
+повторяет — лимит его длины почти исчерпан.
+**Где:** `app/mcp/tools/tasks/views.py`, `TaskProjectView`, `task_project`;
+`app/mcp/tools/tasks/search_tasks.py`, `found_task`; `app/mcp/views.py`, `project_ref`.

@@ -99,7 +99,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     assert data["key"] == "TRK-1"
     assert data["status"] == "backlog"
     assert data["version"] == 1
-    assert data["project"] == {"key": "TRK", "title": "Трекер"}
+    assert data["project"] == {"key": "TRK", "title": "Трекер", "description": "Бэкенд трекера"}
     assert data["created_by"] == {"kind": "human", "signature": "owner"}
 
     package = (await auth_client.get("/api/v1/tasks/trk-1")).json()["data"]

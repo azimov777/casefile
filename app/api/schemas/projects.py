@@ -8,10 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
 from app.domain.attributes import MAX_ATTRIBUTE_REASON_LENGTH, MAX_ATTRIBUTE_VALUE_LENGTH
-from app.domain.projects import PROJECT_KEY_PATTERN
+from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH, PROJECT_KEY_PATTERN
 
 _TITLE_MAX = 255
-_DESCRIPTION_MAX = 20_000
+_DESCRIPTION_EXAMPLE = "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
+# Без `max_length`: длину проверяет домен, и длинное описание отвечает предметным
+# `project_description_too_long` одинаково в REST и в MCP, а не общим `validation_error`.
+_DESCRIPTION_RULE = (
+    f'Short "what this is", up to {MAX_PROJECT_DESCRIPTION_LENGTH} characters after trimming; '
+    "a longer one answers `project_description_too_long`. It rides in the card of every "
+    "task of the project"
+)
 
 
 class ProjectRead(BaseModel):
@@ -23,8 +30,11 @@ class ProjectRead(BaseModel):
     key: str = Field(examples=["TRK"])
     title: str = Field(examples=["Трекер"])
     description: str = Field(
-        examples=["Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"],
-        description="Markdown context shared by every task of the project",
+        examples=[_DESCRIPTION_EXAMPLE],
+        description=(
+            f'Short "what this is", up to {MAX_PROJECT_DESCRIPTION_LENGTH} characters; may '
+            "be empty. It rides in the card of every task of the project"
+        ),
     )
     last_task_number: int = Field(
         examples=[42],
@@ -51,9 +61,7 @@ class ProjectCreate(BaseModel):
     )
     title: str = Field(min_length=1, max_length=_TITLE_MAX, examples=["Трекер"])
     description: str = Field(
-        default="",
-        max_length=_DESCRIPTION_MAX,
-        examples=["Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"],
+        default="", examples=[_DESCRIPTION_EXAMPLE], description=_DESCRIPTION_RULE
     )
 
 
@@ -69,10 +77,7 @@ class ProjectUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = unset_field(min_length=1, max_length=_TITLE_MAX, examples=["Трекер"])
-    description: str = unset_field(
-        max_length=_DESCRIPTION_MAX,
-        examples=["Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"],
-    )
+    description: str = unset_field(examples=[_DESCRIPTION_EXAMPLE], description=_DESCRIPTION_RULE)
 
 
 class AttributeRead(BaseModel):

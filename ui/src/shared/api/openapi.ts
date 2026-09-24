@@ -393,9 +393,9 @@ export interface paths {
          * Read a project
          * @description Карточка проекта вместе с описанием и нынешними значениями атрибутов.
          *
-         *     Агент запрашивает её отдельно: в карточке задачи лежат только ключ и название, а
-         *     описание бывает длинным, и таскать его в каждом ответе значило бы тратить контекст.
-         *     История атрибутов — записи дела проекта (`/projects/{key}/entries`).
+         *     Описание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и
+         *     таскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи
+         *     дела проекта (`/projects/{key}/entries`).
          */
         get: operations["read_project"];
         put?: never;
@@ -2935,8 +2935,9 @@ export interface components {
             title: string;
             /**
              * Description
+             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `project_description_too_long`. It rides in the card of every task of the project
              * @default
-             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
+             * @example Бэкенд трекера задач для агентов: REST API и MCP-сервер
              */
             description: string;
         };
@@ -2965,8 +2966,8 @@ export interface components {
             title: string;
             /**
              * Description
-             * @description Markdown context shared by every task of the project
-             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
+             * @description Short "what this is", up to 320 characters; may be empty. It rides in the card of every task of the project
+             * @example Бэкенд трекера задач для агентов: REST API и MCP-сервер
              */
             description: string;
             /**
@@ -3047,8 +3048,8 @@ export interface components {
             title: string;
             /**
              * Description
-             * @description Markdown context shared by every task of the project
-             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
+             * @description Short "what this is", up to 320 characters; may be empty. It rides in the card of every task of the project
+             * @example Бэкенд трекера задач для агентов: REST API и MCP-сервер
              */
             description: string;
             /**
@@ -3070,6 +3071,26 @@ export interface components {
             updated_at: string;
         };
         /**
+         * ProjectRefRead
+         * @description Проект одной строкой: ключ и название — в строке выдачи поиска.
+         *
+         *     Описания здесь нет намеренно: строк в выдаче много, и одно и то же описание проекта
+         *     на каждой стоило бы контекста без новой информации. Его несёт карточка задачи
+         *     (`TaskProjectRead`).
+         */
+        ProjectRefRead: {
+            /**
+             * Key
+             * @example TRK
+             */
+            key: string;
+            /**
+             * Title
+             * @example Трекер
+             */
+            title: string;
+        };
+        /**
          * ProjectUpdate
          * @description Частичное обновление: применяется только переданное.
          *
@@ -3086,7 +3107,8 @@ export interface components {
             title?: string;
             /**
              * Description
-             * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
+             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `project_description_too_long`. It rides in the card of every task of the project
+             * @example Бэкенд трекера задач для агентов: REST API и MCP-сервер
              */
             description?: string;
         };
@@ -4234,7 +4256,10 @@ export interface components {
         TaskPriority: "low" | "normal" | "high" | "critical";
         /**
          * TaskProjectRead
-         * @description Проект в карточке задачи: ключ и название. Описание запрашивается отдельно.
+         * @description Проект в карточке задачи: ключ, название и короткое описание (`CONCEPT.md`, 4.2).
+         *
+         *     Описание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает
+         *     контекст проекта тем же чтением задачи, без второго вызова.
          */
         TaskProjectRead: {
             /**
@@ -4247,6 +4272,12 @@ export interface components {
              * @example Трекер
              */
             title: string;
+            /**
+             * Description
+             * @description Short "what this is" of the project, up to 320 characters; may be empty
+             * @example Бэкенд трекера задач для агентов: REST API и MCP-сервер
+             */
+            description: string;
         };
         /**
          * TaskRead
@@ -4347,7 +4378,7 @@ export interface components {
             key: string;
             /** Id */
             id?: string | null;
-            project?: components["schemas"]["TaskProjectRead"] | null;
+            project?: components["schemas"]["ProjectRefRead"] | null;
             /** Title */
             title?: string | null;
             /** Description */

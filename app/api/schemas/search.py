@@ -37,7 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse
-from app.api.schemas.tasks import TaskFeaturesRead, TaskProjectRead
+from app.api.schemas.tasks import ProjectRefRead, TaskFeaturesRead
 from app.domain.query_language import (
     QUERY_EXAMPLES,
     QUERY_RIGHT_SHAPE,
@@ -292,7 +292,7 @@ class TaskSearchRead(BaseModel):
 
     key: str = Field(examples=["TRK-42"], description="Immutable and never reused")
     id: uuid.UUID | None = None
-    project: TaskProjectRead | None = None
+    project: ProjectRefRead | None = None
     title: str | None = None
     description: str | None = None
     goal: str | None = None
@@ -336,7 +336,7 @@ class TaskSearchRead(BaseModel):
         payload: dict[str, object] = {
             "id": task.id,
             "key": task.key,
-            "project": TaskProjectRead.model_validate(task.project),
+            "project": ProjectRefRead.model_validate(task.project),
             "title": task.title,
             "description": task.description,
             "goal": task.goal,

@@ -15,7 +15,11 @@ from app.db.models.project import Project
 from app.db.pagination import Page
 from app.db.repositories import ProjectRepository
 from app.domain.errors import ProjectKeyTakenError, ProjectNotFoundError
-from app.domain.projects import normalize_project_key, validate_project_key
+from app.domain.projects import (
+    normalize_project_key,
+    validate_project_description,
+    validate_project_key,
+)
 from app.domain.tasks import TaskField
 from app.domain.tokens import TokenScope
 from app.services import case as case_service
@@ -71,6 +75,7 @@ async def create_project(
     ensure_scope(actor, TokenScope.MAIN, action="project.create")
 
     canonical = validate_project_key(key)
+    description = validate_project_description(description)
     repository = ProjectRepository(session)
     if await repository.get_by_key(canonical) is not None:
         raise ProjectKeyTakenError(details={"key": canonical})
@@ -79,7 +84,7 @@ async def create_project(
         Project(
             key=canonical,
             title=title.strip(),
-            description=description.strip(),
+            description=description,
             **created_by_columns(actor.author),
         )
     )
@@ -116,7 +121,9 @@ async def update_project(
 
     changes = {
         TaskField.TITLE: None if title is None else title.strip(),
-        TaskField.DESCRIPTION: None if description is None else description.strip(),
+        TaskField.DESCRIPTION: (
+            None if description is None else validate_project_description(description)
+        ),
     }
     action_id = uuid.uuid4()
     for field, after in changes.items():

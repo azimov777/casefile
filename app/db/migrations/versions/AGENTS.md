@@ -29,3 +29,4 @@
 - `20260924_2100_queues_become_projects.py` — очередь становится проектом: `queues` → `projects`, `tasks.queue_id` → `project_id` и выведенные из них имена ограничений и индексов; строки не трогаются
 - `20260924_2300_project_case.py` — дело проекта: `entries.task_id` допускает `NULL`, `entries.project_id`, владелец ровно один (`ck_entries_one_owner`), номер уникален внутри проекта; откат отказывает, пока есть записи проекта
 - `20260925_0100_project_attributes.py` — атрибуты проекта: таблица `project_attributes` с уникальностью `(project_id, lower(name))`, типы записей `attribute_created`/`attribute_changed`/`attribute_removed`; откат отказывает, пока такие записи есть
+- `20260925_0300_project_description_limit.py` — описание проекта не длиннее 320 знаков: длинное уезжает записью `note` «Описание до v0.4.0» в дело проекта, поле пустеет, ограничение `ck_projects_description_length`; откат снимает только ограничение

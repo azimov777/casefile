@@ -629,3 +629,21 @@ FastAPI. С проверкой в заголовке REST отвечал бы о
 **Где:** `app/api/routes/projects.py`, `set_project_attribute`, `remove_project_attribute`,
 `_detail`; `app/api/schemas/projects.py`, `ProjectDetailRead`, `AttributeSet`;
 `app/api/schemas/entries.py`, `_ProjectEntryRead`.
+
+## Проект в карточке задачи — с описанием, в строке поиска — без
+
+**Что:** `TaskRead.project` — `TaskProjectRead` (ключ, название, `description` до 320 знаков),
+`TaskSearchRead.project` — `ProjectRefRead` (ключ и название). Длину описания в
+`ProjectCreate`/`ProjectUpdate` схема не ограничивает: её проверяет домен и отвечает
+`project_description_too_long` с `details.length` и `details.max_length` (TRK-158).
+**Почему важно:** описание короткое ровно затем, чтобы ехать в пакете преемника
+(`CONCEPT.md`, 4.2) — агент получает контекст проекта тем же чтением задачи. В выдаче
+поиска строк много, и одно описание на каждой стоило бы контекста без новой информации.
+`max_length` в схеме отдал бы общий `validation_error` вместо предметного кода — та же
+развилка, что у значения атрибута. `TaskProjectRead` наследует `ProjectRefRead`, поэтому
+клиент, которому нужен только ключ и название, читает обе формы одним кодом.
+**Как правильно:** новое место, где задача отдаётся строкой среди многих, берёт
+`ProjectRefRead`; место, где задача — главный предмет ответа, — `TaskProjectRead`.
+**Где:** `app/api/schemas/tasks.py`, `ProjectRefRead`, `TaskProjectRead`;
+`app/api/schemas/search.py`, `TaskSearchRead`; `app/api/schemas/projects.py`;
+`app/domain/projects.py`, `validate_project_description`.

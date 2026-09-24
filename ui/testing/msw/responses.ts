@@ -188,7 +188,11 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
   return {
     id: '33333333-3333-3333-3333-333333333333',
     key,
-    project: { key: key.split('-')[0] ?? 'DEMO', title: 'Демонстрация' },
+    project: {
+      key: key.split('-')[0] ?? 'DEMO',
+      title: 'Демонстрация',
+      description: 'Демонстрационный проект: на нём видно каждый экран интерфейса.',
+    },
     title: `Задача ${key}`,
     description: 'Отказ разбора запроса приходит без списка допустимых полей.',
     goal: 'Отказ поиска чинится с первой попытки',

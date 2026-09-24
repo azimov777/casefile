@@ -381,10 +381,47 @@ async def test_an_archive_of_v0_3_brings_its_queues_in_as_projects(
     assert "projects" in {item["name"] for item in response.json()["data"]["tables"]}
     task = await auth_client.get("/api/v1/tasks/TRK-2", headers=bearer(target_ui))
     assert task.status_code == 200, task.text
-    assert task.json()["data"]["task"]["project"] == {"key": "TRK", "title": "Трекер"}
+    assert task.json()["data"]["task"]["project"] == {
+        "key": "TRK",
+        "title": "Трекер",
+        "description": "Бэкенд",
+    }
     project = await auth_client.get("/api/v1/projects/TRK", headers=bearer(target_ui))
     assert project.status_code == 200, project.text
     assert project.json()["data"]["last_task_number"] == 2
+
+
+async def test_a_long_queue_description_of_a_v0_3_archive_moves_into_the_project_case(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Описание очереди длиннее 320 знаков уезжает записью «Описание до v0.4.0» (TRK-158).
+
+    Правило то же, что при обновлении живой установки (`CONCEPT.md`, 5.5): архив доходит
+    до head теми же миграциями, и перенос делает ревизия `b7d2f94c0e15`. Длинное описание
+    вписывается в архив руками — на head его уже не завести.
+    """
+    await populate(auth_client)
+    archive = await archive_at(auth_client, db_session, V0_3_REVISION)
+    queues = table(archive, "queues")
+    column = queues["columns"].index("description")
+    long = "Очередь бэкенда: код в app/, соглашения в docs/. " * 8
+    assert len(long) > 320
+    [row] = queues["rows"]
+    row[column] = long
+
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=bearer(target_ui))
+    assert response.status_code == 200, response.text
+
+    project = await auth_client.get("/api/v1/projects/TRK", headers=bearer(target_ui))
+    assert project.json()["data"]["description"] == ""
+    entries = await auth_client.get("/api/v1/projects/TRK/entries", headers=bearer(target_ui))
+    assert entries.status_code == 200, entries.text
+    [note] = entries.json()["data"]
+    assert (note["no"], note["type"], note["title"]) == (1, "note", "Описание до v0.4.0")
+    assert note["body"] == long
+    assert note["author"] == {"kind": "tracker", "signature": None}
 
 
 @pytest.mark.parametrize(

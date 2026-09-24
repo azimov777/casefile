@@ -24,6 +24,7 @@ from app.api.schemas.entries import (
 )
 from app.api.schemas.links import LinkTaskRead, TaskLinkRead
 from app.domain.case import MAX_ENTRY_BODY_LENGTH, MAX_SUMMARY_PART_LENGTH, VerdictOutcome
+from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     MAX_ASSIGNEE_LENGTH,
@@ -51,13 +52,34 @@ _ASSIGNEE_DESCRIPTION = (
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
 
 
-class TaskProjectRead(BaseModel):
-    """Проект в карточке задачи: ключ и название. Описание запрашивается отдельно."""
+class ProjectRefRead(BaseModel):
+    """Проект одной строкой: ключ и название — в строке выдачи поиска.
+
+    Описания здесь нет намеренно: строк в выдаче много, и одно и то же описание проекта
+    на каждой стоило бы контекста без новой информации. Его несёт карточка задачи
+    (`TaskProjectRead`).
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     key: str = Field(examples=["TRK"])
     title: str = Field(examples=["Трекер"])
+
+
+class TaskProjectRead(ProjectRefRead):
+    """Проект в карточке задачи: ключ, название и короткое описание (`CONCEPT.md`, 4.2).
+
+    Описание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает
+    контекст проекта тем же чтением задачи, без второго вызова.
+    """
+
+    description: str = Field(
+        examples=["Бэкенд трекера задач для агентов: REST API и MCP-сервер"],
+        description=(
+            f'Short "what this is" of the project, up to {MAX_PROJECT_DESCRIPTION_LENGTH} '
+            "characters; may be empty"
+        ),
+    )
 
 
 class TaskRead(BaseModel):

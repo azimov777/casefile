@@ -1,24 +1,34 @@
 """Проект: единственный уровень группировки задач."""
 
-from sqlalchemy import Integer, String, Text, text
+from sqlalchemy import CheckConstraint, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import BaseModel
 from app.db.models.author import CreatedByMixin
+from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 
 
 class Project(BaseModel, CreatedByMixin):
     """Строка реестра проектов.
 
     Проект отвечает на вопрос «про что задачи», а не «кто делает» (`CONCEPT.md`, 3.2).
-    Описание — общий контекст всех его задач в markdown: где лежит код, на какие документы
-    смотреть, чего не делать. Агент получает ключ и название в карточке задачи, а
-    описание запрашивает отдельно, чтобы не тащить его в каждый ответ.
+    Описание — короткое «что это», не длиннее `MAX_PROJECT_DESCRIPTION_LENGTH` знаков: оно
+    едет в карточке каждой задачи проекта вместе с ключом и названием. Факты проекта живут
+    в атрибутах, решения — в его деле.
 
     Удаления нет, ключ неизменяем: ключ вшит в ключ каждой задачи проекта.
     """
 
     __tablename__ = "projects"
+    __table_args__ = (
+        # Предел проверяет домен (`validate_project_description`) и отвечает предметным
+        # кодом; ограничение в схеме — страховка от записи мимо сценариев (миграция,
+        # приём архива переноса). `char_length` считает знаки, как `len` в Python.
+        CheckConstraint(
+            f"char_length(description) <= {MAX_PROJECT_DESCRIPTION_LENGTH}",
+            name="description_length",
+        ),
+    )
 
     # Ключ хранится канонизированным (верхний регистр) — как и имя участника, только в
     # другую сторону. Уникальность без учёта регистра держит обычное `UNIQUE`.

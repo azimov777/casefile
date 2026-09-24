@@ -73,6 +73,7 @@ export const errors = {
     'This is a shared agent token: there is no participant behind it. A person’s token from the participant registry is required.',
   password_attempts_exceeded: 'Too many failed sign-in attempts. Try again later.',
   permission_denied: 'This token is not allowed to do that.',
+  project_description_too_long: 'The project description is longer than 320 characters.',
   project_key_taken: 'The project key is taken.',
   project_not_found: 'There is no project with that key.',
   search_field_unknown: 'There is no such field to filter by.',
