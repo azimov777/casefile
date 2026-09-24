@@ -74,8 +74,9 @@ const id = (text: string): HeadlinePart => ({ kind: 'id', text });
  * сужает. Внешний `type` этого не умел — TypeScript про его связь с плоским объектом
  * не знал, и каждое поле приходилось проверять на `null` заново.
  *
- * `taskKey` нужен ответу и разбору замечания: они ссылаются на запись в той же
- * задаче, а в фактах описи лежит только её номер.
+ * `taskKey` — ключ владельца дела: задачи или проекта. Он нужен ответу и разбору
+ * замечания (они ссылаются на запись в той же задаче, а в фактах описи лежит только её
+ * номер) и заведению — «задача заведена» или «проект заведён».
  *
  * Подписи приходят функцией перевода, а не берутся из экземпляра `i18next`: заголовок
  * собирают компоненты, и они же обязаны быть подписаны на смену языка. Пространство
@@ -83,8 +84,19 @@ const id = (text: string): HeadlinePart => ({ kind: 'id', text });
  */
 export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'ui'>): Headline {
   switch (facts.type) {
+    // `created` подшивается и в дело проекта (TRK-156). Чьё это дело, видно по ключу
+    // владельца: дефис есть только в ключе задачи (`../docs/CONCEPT.md`, 3.4).
     case 'created':
-      return { kind: 'built', parts: [words(t('entry.headline.created'))] };
+      return {
+        kind: 'built',
+        parts: [
+          words(
+            taskKey.includes('-')
+              ? t('entry.headline.created')
+              : t('entry.headline.projectCreated'),
+          ),
+        ],
+      };
 
     case 'status_changed':
       return {

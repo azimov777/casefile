@@ -287,6 +287,7 @@ export const ui = {
     } satisfies Record<RemarkOutcome, string>,
     headline: {
       created: 'Task created',
+      projectCreated: 'Project created',
       status: 'Status',
       withReason: '· with a reason',
       sectionEdited: 'Section edit',

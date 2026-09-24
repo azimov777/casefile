@@ -279,6 +279,7 @@ export const ui = {
     } satisfies Record<RemarkOutcome, string>,
     headline: {
       created: 'Задача заведена',
+      projectCreated: 'Проект заведён',
       status: 'Статус',
       withReason: '· с причиной',
       sectionEdited: 'Правка раздела',
