@@ -156,6 +156,7 @@ export function TaskRow({ task }: { task: Task }) {
           <TaskParents
             parents={task.parents ?? []}
             className="max-w-2/5 shrink-0 @max-list:max-w-full"
+            wrapNarrow
           />
         </div>
       </td>
@@ -193,7 +194,7 @@ export function TaskRow({ task }: { task: Task }) {
         {activity === null ? (
           <span aria-hidden="true">{t('task.emptyCase')}</span>
         ) : (
-          <RelativeTime value={activity} />
+          <RelativeTime value={activity} plain />
         )}
       </td>
     </tr>

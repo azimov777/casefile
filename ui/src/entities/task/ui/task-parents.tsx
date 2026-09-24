@@ -14,6 +14,13 @@ interface TaskParentsProps {
   raised?: boolean;
   /** Место подписи в раскладке того, кто её ставит: ширина, отступ, сжатие. */
   className?: string;
+  /**
+   * Там, где строка таблицы стала карточкой (`@max-list:`, телефон), подпись
+   * переносится, а не режется многоточием (UI-153): полное название родителя было
+   * только в подсказке `title`, а наведения на телефоне нет. Нужно только строке
+   * таблицы: карточка доски держит подпись в одну строку (UI-115).
+   */
+  wrapNarrow?: boolean;
 }
 
 /**
@@ -38,8 +45,18 @@ interface TaskParentsProps {
  * расти от длинного названия, а столбец доски — шириться от слова с путём (UI-115).
  * Поэтому у ссылки `min-w-0`: без него флекс-элемент не сжимается меньше своего
  * содержимого, а содержимое под `nowrap` длиной во всё название.
+ *
+ * Подсказка — путь только для мыши. Без наведения полный текст достижим нажатием: ссылка
+ * ведёт в родителя, и там его название — заголовок страницы, а «+N» ведёт в саму задачу,
+ * где все родители названы в блоке связей. В строке таблицы на телефоне подпись к тому же
+ * переносится целиком (`wrapNarrow`, UI-153).
  */
-export function TaskParents({ parents, raised = false, className }: TaskParentsProps) {
+export function TaskParents({
+  parents,
+  raised = false,
+  className,
+  wrapNarrow = false,
+}: TaskParentsProps) {
   const { search } = useLocation();
   const { t } = useTranslation('ui');
   const [first, ...others] = parents;
@@ -64,7 +81,11 @@ export function TaskParents({ parents, raised = false, className }: TaskParentsP
   return (
     <span
       data-mark="parents"
-      className={cn('flex min-w-0 items-center gap-1 text-meta text-muted', className)}
+      className={cn(
+        'flex min-w-0 items-center gap-1 text-meta text-muted',
+        wrapNarrow && '@max-list:items-baseline',
+        className,
+      )}
     >
       <CornerLeftUp className="size-(--ui-mark) shrink-0" aria-hidden="true" />
       <Link
@@ -76,6 +97,7 @@ export function TaskParents({ parents, raised = false, className }: TaskParentsP
          */
         className={cn(
           'min-w-0 truncate text-muted no-underline [-webkit-user-drag:none] hover:text-text hover:underline',
+          wrapNarrow && '@max-list:whitespace-normal @max-list:wrap-anywhere',
           lift,
         )}
         to={taskRefHref({ key: first.key, entryNo: null })}

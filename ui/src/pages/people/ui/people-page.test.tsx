@@ -57,6 +57,13 @@ function card(email: string): HTMLElement {
   return screen.getByRole('article', { name: say.ui('account.label', { email }) });
 }
 
+/** Кнопки-действия: время — переключатель подписи (`aria-pressed`, UI-153), не действие. */
+function actions(scope: HTMLElement): HTMLElement[] {
+  return within(scope)
+    .queryAllByRole('button')
+    .filter((button) => !button.hasAttribute('aria-pressed'));
+}
+
 describe('экран «Люди»', () => {
   it('администратору: пункт в панели, список учётных записей, у своей нет действий', async () => {
     signedInAs(ADMIN);
@@ -71,7 +78,9 @@ describe('экран «Люди»', () => {
     ).toBeVisible();
     await screen.findByText(ALICE.email);
     expect(within(card(ADMIN.email)).getByText(say.ui('account.you'))).toBeInTheDocument();
-    expect(within(card(ADMIN.email)).queryByRole('button')).toBeNull();
+    // Действий нет. Время — переключатель подписи на точное (`aria-pressed`, UI-153),
+    // а не действие над строкой, и в счёт не идёт.
+    expect(actions(card(ADMIN.email))).toEqual([]);
     expect(within(card(BOB.email)).getByText(say.ui('account.disabled'))).toBeInTheDocument();
     // У отключённого сброса нет — только включение.
     expect(
