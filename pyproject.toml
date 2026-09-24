@@ -1,6 +1,6 @@
 [project]
 name = "tracker"
-version = "0.3.0"
+version = "0.3.1"
 license = "MIT"
 description = "Бэкенд таск-трекера: REST API для фронтенда и MCP-сервер для агентов"
 requires-python = ">=3.14"
