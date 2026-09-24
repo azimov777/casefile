@@ -17,7 +17,6 @@ QueueTitleChangeArg = Annotated[
     str | None, Field(description="New title; when left out, the title stays")
 ]
 
-
 QueueDescriptionChangeArg = Annotated[
     str | None, Field(description="New description; when left out, the description stays")
 ]

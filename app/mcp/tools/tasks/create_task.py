@@ -29,7 +29,6 @@ ParentKeyArg = Annotated[
     ),
 ]
 
-
 TaskTitleArg = Annotated[str, Field(description="Task title, one line")]
 
 
@@ -43,7 +42,6 @@ TaskDescriptionArg = Annotated[
     ),
 ]
 
-
 AssigneeArg = Annotated[
     str | None,
     Field(
@@ -54,7 +52,6 @@ AssigneeArg = Annotated[
         )
     ),
 ]
-
 
 PriorityArg = Annotated[TaskPrioritySchema, Field(description="Task priority")]
 

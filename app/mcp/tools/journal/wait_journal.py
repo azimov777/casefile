@@ -23,7 +23,6 @@ AfterArg = Annotated[
     ),
 ]
 
-
 JournalTaskArg = Annotated[
     list[str] | str | None,
     Field(
@@ -37,12 +36,10 @@ JournalTaskArg = Annotated[
     ),
 ]
 
-
 JournalQueueArg = Annotated[
     str | None,
     Field(description="Only entries of tasks in this queue", examples=["TRK"]),
 ]
-
 
 TimeoutArg = Annotated[
     float,

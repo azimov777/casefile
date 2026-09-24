@@ -23,7 +23,6 @@ RemarkNoArg = Annotated[
     ),
 ]
 
-
 RemarkOutcomeArg = Annotated[
     RemarkOutcomeSchema,
     Field(
@@ -37,7 +36,6 @@ RemarkOutcomeArg = Annotated[
         )
     ),
 ]
-
 
 ContinuationKeyArg = Annotated[
     str | None,

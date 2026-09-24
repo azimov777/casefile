@@ -55,7 +55,6 @@ DEFAULT_SEARCH_FIELDS: tuple[str, ...] = (
     PARENT_FIELD,
 )
 
-
 QueryArg = Annotated[
     str | None,
     Field(
@@ -81,7 +80,6 @@ QueryArg = Annotated[
     ),
 ]
 
-
 SortArg = Annotated[
     list[str] | None,
     Field(
@@ -92,7 +90,6 @@ SortArg = Annotated[
         examples=[["-updated_at"]],
     ),
 ]
-
 
 # Домен значений называется целиком и собирается из домена, а не переписывается словами:
 # описание и `details.allowed` отказа обязаны быть одним списком в одном порядке, иначе
@@ -112,7 +109,6 @@ FieldsArg = Annotated[
     ),
 ]
 
-
 # Структурный отбор: по аргументу на поле. Значения одного аргумента складываются по
 # «или», аргументы между собой — по «и». Тот же разбор значений, что и у языка, поэтому
 # `assignee: ["empty()"]` и строка `assignee: empty()` значат буквально одно и то же:
@@ -127,7 +123,6 @@ KeysArg = Annotated[
         examples=[["TRK-42", "TRK-43"]],
     ),
 ]
-
 
 QueuesArg = Annotated[list[str] | None, Field(description="Queue keys", examples=[["TRK"]])]
 
@@ -146,7 +141,6 @@ AssigneesArg = Annotated[
     ),
 ]
 
-
 ParentFilterArg = Annotated[
     list[str] | None,
     Field(
@@ -158,7 +152,6 @@ ParentFilterArg = Annotated[
         examples=[["TRK-7"]],
     ),
 ]
-
 
 PrioritiesArg = Annotated[list[TaskPrioritySchema] | None, Field(description="Priorities")]
 
@@ -172,24 +165,20 @@ BlockedArg = Annotated[
     ),
 ]
 
-
 OpenQuestionsArg = Annotated[
     int | None,
     Field(description="Exact number of unanswered questions; ranges go in `query`"),
 ]
-
 
 OpenBlockingQuestionsArg = Annotated[
     int | None,
     Field(description="Exact number of unanswered `blocking` questions; `0` means none blocks"),
 ]
 
-
 OpenRemarksArg = Annotated[
     int | None,
     Field(description="Exact number of unresolved remarks; ranges go in `query`"),
 ]
-
 
 RemarksInWorkArg = Annotated[
     int | None,
@@ -200,12 +189,10 @@ RemarksInWorkArg = Annotated[
     ),
 ]
 
-
 TextArg = Annotated[
     str | None,
     Field(description="Substring of the title or description, case-insensitive"),
 ]
-
 
 #: Поля задачи, которые бывают длинными: описание и пять разделов. Обрезаются только они
 #: и только в выдаче поиска.

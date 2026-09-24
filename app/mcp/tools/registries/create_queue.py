@@ -24,7 +24,6 @@ NewQueueKeyArg = Annotated[
     ),
 ]
 
-
 QueueTitleArg = Annotated[str, Field(description="Queue title")]
 
 

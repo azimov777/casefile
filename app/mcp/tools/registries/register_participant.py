@@ -27,7 +27,6 @@ NewParticipantNameArg = Annotated[
     ),
 ]
 
-
 ParticipantKindArg = Annotated[ParticipantKindSchema, Field(description="Human or permanent agent")]
 
 

@@ -23,7 +23,6 @@ EntryBodyArg = Annotated[
     ),
 ]
 
-
 EntryRefsArg = Annotated[
     list[str] | None,
     Field(
@@ -34,7 +33,6 @@ EntryRefsArg = Annotated[
         examples=[["TRK-42#12"]],
     ),
 ]
-
 
 #: Типы, которые подшивает `add_entry`, — те, у которых нет нагрузки. Структурные записи
 #: идут своими инструментами: у сводки, вопроса, ответа и вердикта нагрузка есть, и
@@ -72,7 +70,6 @@ EntryTypeArg = Annotated[
     ),
 ]
 
-
 EntryTitleArg = Annotated[
     str,
     Field(
@@ -83,16 +80,13 @@ EntryTitleArg = Annotated[
     ),
 ]
 
-
 VerdictOutcomeArg = Annotated[
     VerdictOutcomeSchema, Field(description="Outcome of the check; there is no third state")
 ]
 
-
 EntryTypesArg = Annotated[
     list[EntryTypeSchema] | None, Field(description="Only entries of these types")
 ]
-
 
 SummaryDoneArg = Annotated[
     str,
@@ -104,7 +98,6 @@ SummaryDoneArg = Annotated[
         )
     ),
 ]
-
 
 SummaryRemainingArg = Annotated[str, Field(description="What remains before the task is done")]
 
@@ -119,7 +112,6 @@ SummaryBlockersArg = Annotated[
     ),
 ]
 
-
 SummaryNextStepArg = Annotated[
     str,
     Field(
@@ -131,7 +123,6 @@ SummaryNextStepArg = Annotated[
         )
     ),
 ]
-
 
 SummaryUnmeasuredArg = Annotated[
     str,
@@ -146,7 +137,6 @@ SummaryUnmeasuredArg = Annotated[
     ),
 ]
 
-
 CheckNoArg = Annotated[
     int,
     Field(
@@ -156,7 +146,6 @@ CheckNoArg = Annotated[
         )
     ),
 ]
-
 
 EvidenceArg = Annotated[
     str,

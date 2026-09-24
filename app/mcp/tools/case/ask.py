@@ -23,7 +23,6 @@ AddresseesArg = Annotated[
     ),
 ]
 
-
 BlockingArg = Annotated[
     bool,
     Field(

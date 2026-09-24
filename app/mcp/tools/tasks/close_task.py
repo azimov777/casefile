@@ -83,7 +83,6 @@ ClosingSummaryArg = Annotated[
     ),
 ]
 
-
 ClosingVerdictsArg = Annotated[
     list[ClosingVerdict] | None,
     Field(
@@ -95,7 +94,6 @@ ClosingVerdictsArg = Annotated[
         )
     ),
 ]
-
 
 ClosingEntriesArg = Annotated[
     list[ClosingEntry] | None,

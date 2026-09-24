@@ -23,7 +23,6 @@ ReasonArg = Annotated[
     ),
 ]
 
-
 TaskStatusArg = Annotated[TaskStatusSchema, Field(description="Target status")]
 
 

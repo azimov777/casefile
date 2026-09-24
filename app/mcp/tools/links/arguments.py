@@ -17,7 +17,6 @@ LinkKindArg = Annotated[
     ),
 ]
 
-
 OtherTaskKeyArg = Annotated[
     str,
     Field(description="Key of the task on the other side of the link", examples=["TRK-7"]),
