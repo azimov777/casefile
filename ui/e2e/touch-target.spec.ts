@@ -157,6 +157,81 @@ test('вкладки клиента на /connect не мельче 24×24 px н
   }
 });
 
+/**
+ * Чип отбора (`FilterChip`) и «Сбросить» (`FilterResetButton`) не рендерятся вовсе, пока
+ * условие не применено, — экраны из `SCREENS` их поэтому не ловят (UI-164). Общий кирпич
+ * `shared/ui/filter-chip.tsx` держит отбор задач и отбор записей дела одним компонентом,
+ * но замер на каждой странице свой: у кнопки-текста и крестика чипа разные проверяемые
+ * подписи, а без применённого условия сама мишень не появляется на экране.
+ */
+test('чип отбора и «Сбросить» не мельче 24×24 px на 390: список задач с условием', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+  await page.goto('/tasks?queue=DEMO&status=open');
+  await expect(page.getByRole('main')).toBeVisible();
+  await expect(page.locator('tbody tr').first()).toBeVisible();
+  await fontsReady(page);
+
+  // Кнопка-текст чипа: открывает панель «Фильтр» — вторая мишень, отдельная от крестика.
+  const chipText = page.getByRole('button', { name: 'статус open', exact: true });
+  const textBox = await chipText.boundingBox();
+  expect(textBox, 'кнопка-текст чипа «статус open» не найдена').not.toBeNull();
+  expect(
+    Math.min(textBox!.width, textBox!.height),
+    'чип «статус open»: кнопка-текст',
+  ).toBeGreaterThanOrEqual(MIN);
+
+  const chipRemove = page.getByRole('button', { name: 'Убрать условие: статус open' });
+  const removeBox = await chipRemove.boundingBox();
+  expect(removeBox, 'крестик чипа «статус open» не найден').not.toBeNull();
+  expect(
+    Math.min(removeBox!.width, removeBox!.height),
+    'чип «статус open»: крестик',
+  ).toBeGreaterThanOrEqual(MIN);
+
+  const reset = page.getByRole('button', { name: 'Сбросить', exact: true });
+  const resetBox = await reset.boundingBox();
+  expect(resetBox, 'кнопка «Сбросить» не найдена').not.toBeNull();
+  expect(Math.min(resetBox!.width, resetBox!.height), '«Сбросить»').toBeGreaterThanOrEqual(MIN);
+});
+
+test('чип отбора и «Сбросить» не мельче 24×24 px на 390: дело с отбором записей', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+  // DEMO-1 — единственная демо-задача с записью `decision` в деле (`_done_task`),
+  // отбор по типу без совпадений оставил бы страницу без самого дела, но не без
+  // строки отбора — чипу для рендера совпадения не нужны, только применённое условие.
+  await page.goto('/tasks/DEMO-1/case?type=decision');
+  await expect(page.getByRole('main')).toBeVisible();
+  await expect(page.locator('article').first()).toBeVisible();
+  await fontsReady(page);
+
+  const chipText = page.getByRole('button', { name: 'decision', exact: true });
+  const textBox = await chipText.boundingBox();
+  expect(textBox, 'кнопка-текст чипа «decision» не найдена').not.toBeNull();
+  expect(
+    Math.min(textBox!.width, textBox!.height),
+    'чип «decision»: кнопка-текст',
+  ).toBeGreaterThanOrEqual(MIN);
+
+  const chipRemove = page.getByRole('button', { name: 'Убрать тип: decision' });
+  const removeBox = await chipRemove.boundingBox();
+  expect(removeBox, 'крестик чипа «decision» не найден').not.toBeNull();
+  expect(
+    Math.min(removeBox!.width, removeBox!.height),
+    'чип «decision»: крестик',
+  ).toBeGreaterThanOrEqual(MIN);
+
+  const reset = page.getByRole('button', { name: 'Сбросить', exact: true });
+  const resetBox = await reset.boundingBox();
+  expect(resetBox, 'кнопка «Сбросить» не найдена').not.toBeNull();
+  expect(Math.min(resetBox!.width, resetBox!.height), '«Сбросить»').toBeGreaterThanOrEqual(MIN);
+});
+
 test.describe('тёмная тема', () => {
   test.use({ colorScheme: 'dark' });
 
@@ -176,5 +251,37 @@ test.describe('тёмная тема', () => {
         `«${target.label}» (${target.tag}): ${target.width}×${target.height}`,
       ).toBeGreaterThanOrEqual(MIN);
     }
+  });
+
+  test('чип отбора и «Сбросить» не мельче 24×24 px на 390: список задач с условием', async ({
+    page,
+  }) => {
+    await silenceJournal(page);
+    await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+    await page.goto('/tasks?queue=DEMO&status=open');
+    await expect(page.getByRole('main')).toBeVisible();
+    await expect(page.locator('tbody tr').first()).toBeVisible();
+    await fontsReady(page);
+
+    const chipText = page.getByRole('button', { name: 'статус open', exact: true });
+    const textBox = await chipText.boundingBox();
+    expect(textBox, 'кнопка-текст чипа «статус open» не найдена').not.toBeNull();
+    expect(
+      Math.min(textBox!.width, textBox!.height),
+      'чип «статус open»: кнопка-текст',
+    ).toBeGreaterThanOrEqual(MIN);
+
+    const chipRemove = page.getByRole('button', { name: 'Убрать условие: статус open' });
+    const removeBox = await chipRemove.boundingBox();
+    expect(removeBox, 'крестик чипа «статус open» не найден').not.toBeNull();
+    expect(
+      Math.min(removeBox!.width, removeBox!.height),
+      'чип «статус open»: крестик',
+    ).toBeGreaterThanOrEqual(MIN);
+
+    const reset = page.getByRole('button', { name: 'Сбросить', exact: true });
+    const resetBox = await reset.boundingBox();
+    expect(resetBox, 'кнопка «Сбросить» не найдена').not.toBeNull();
+    expect(Math.min(resetBox!.width, resetBox!.height), '«Сбросить»').toBeGreaterThanOrEqual(MIN);
   });
 });

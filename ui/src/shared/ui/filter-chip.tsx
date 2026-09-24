@@ -40,12 +40,29 @@ interface FilterChipProps {
 export function FilterChip({ label, removeLabel, onOpen, onRemove }: FilterChipProps) {
   return (
     <li className="inline-flex items-center rounded-pill bg-accent-soft text-mark whitespace-nowrap text-text">
-      <button type="button" className={cn(CHIP_PART, 'py-0.5 pr-1 pl-2.5')} onClick={onOpen}>
-        {label}
-      </button>
+      {/* Минимум высоты только на телефоне (`max-fold:`): на столе строка чипа уже
+          выше 24px, а на 390 px кнопка-текст была голой строкой в py-0.5 — 18-20px
+          (UI-164). `inline-flex items-center` — свой, не в `CHIP_PART`: у соседней
+          кнопки-крестика там `grid`, общий класс развёл бы им display между собой. */}
       <button
         type="button"
-        className={cn(CHIP_PART, 'mr-0.5 grid size-5 place-items-center text-muted')}
+        className={cn(
+          CHIP_PART,
+          'inline-flex items-center py-0.5 pr-1 pl-2.5 max-fold:min-h-(--ui-tap)',
+        )}
+        onClick={onOpen}
+      >
+        {label}
+      </button>
+      {/* `max-fold:size-(--ui-tap)` поверх `size-5`: крестик снятия условия мерился
+          20×20 на 390 px, меньше минимума по обоим измерениям (UI-164). На столе
+          `size-5` остаётся как было. */}
+      <button
+        type="button"
+        className={cn(
+          CHIP_PART,
+          'mr-0.5 grid size-5 place-items-center text-muted max-fold:size-(--ui-tap)',
+        )}
         aria-label={removeLabel}
         onClick={onRemove}
       >
@@ -66,7 +83,10 @@ export function FilterResetButton({
   return (
     <button
       type="button"
-      className="rounded-mark border-none bg-transparent p-0 text-meta text-muted underline underline-offset-2 hover:text-text focus-visible:outline-2 focus-visible:outline-focus"
+      /* `inline-flex items-center` и минимум высоты только на телефоне (`max-fold:`):
+       * на столе кнопка была уже строки состояния отбора, а на 390 px была голой
+       * строкой текста без своей высоты (UI-164). */
+      className="inline-flex items-center rounded-mark border-none bg-transparent p-0 text-meta text-muted underline underline-offset-2 max-fold:min-h-(--ui-tap) hover:text-text focus-visible:outline-2 focus-visible:outline-focus"
       onClick={onClick}
     >
       {children}
