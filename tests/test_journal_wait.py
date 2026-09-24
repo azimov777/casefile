@@ -460,3 +460,73 @@ async def test_a_hundred_parallel_entries_reach_the_reader_without_losses(
         f"хвост ленты потерял, задвоил или переставил записи: получено {len(seen)} из {CONCURRENCY}"
     )
     assert seen == sorted(seen), "курсор ленты обязан двигаться только вперёд"
+
+
+# --- Дело проекта (TRK-156) ------------------------------------------------------------
+
+
+@pytest.fixture
+async def committed_project(
+    committing_sessions: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[uuid.UUID]:
+    """Проект, видимый другим соединениям, и уборка его дела за собой."""
+    async with committing_sessions() as session:
+        project = Project(
+            key=f"PWAIT{uuid.uuid4().hex[:6].upper()}",
+            title="Ожидание дела проекта",
+            **created_by_columns(TRACKER),
+        )
+        session.add(project)
+        await session.commit()
+        project_id = project.id
+
+    try:
+        yield project_id
+    finally:
+        async with committing_sessions() as session:
+            await session.execute(text("ALTER TABLE entries DISABLE TRIGGER entries_immutable"))
+            await session.execute(
+                text("DELETE FROM entries WHERE project_id = :id"), {"id": project_id}
+            )
+            await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
+            await session.execute(text("DELETE FROM projects WHERE id = :id"), {"id": project_id})
+            await session.commit()
+
+
+async def test_the_wait_wakes_on_a_project_entry(
+    committing_sessions: async_sessionmaker[AsyncSession],
+    committed_project: uuid.UUID,
+    listening: None,
+) -> None:
+    """Обзорная проверка 3 TRK-156: ожидание с отбором `project` просыпается на записи
+    дела проекта — оповещением, а не контрольным опросом."""
+    start = await _latest_seq(committing_sessions)
+    loop = asyncio.get_running_loop()
+
+    async def write_later() -> int:
+        await asyncio.sleep(0.5)
+        async with committing_sessions() as session:
+            project = await session.get(Project, committed_project)
+            assert project is not None
+            entry = await case_service.append_project_entry(
+                session, project, actor=TRACKER_ACTOR, type="note", title="Разбудили"
+            )
+            await session.commit()
+            return entry.seq
+
+    writer = asyncio.create_task(write_later())
+    began = loop.time()
+    async with committing_sessions() as session:
+        page = await journal_service.wait_journal(
+            session,
+            actor=TRACKER_ACTOR,
+            journal_filter=JournalFilter(project_id=committed_project),
+            after=start,
+            wait=30.0,
+        )
+    elapsed = loop.time() - began
+    written = await writer
+
+    assert [(item.entry.seq, item.task_key) for item in page.items] == [(written, None)]
+    assert page.items[0].project_key is not None
+    assert elapsed < 2.0, f"ожидание длилось {elapsed:.1f}: разбудил опрос, не оповещение"

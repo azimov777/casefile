@@ -252,7 +252,15 @@ class EntryView(BaseModel):
     id: str
     seq: int = Field(description="Journal sequence number, usable as `after` of `wait_journal`")
     no: int
-    task_key: str
+    task_key: str | None = Field(
+        description="Key of the owning task; `null` for an entry of a project's case"
+    )
+    project_key: str | None = Field(
+        description=(
+            "Key of the owning project for an entry of a project's case (`TRK#7`); "
+            "`null` for a task entry"
+        )
+    )
     type: EntryTypeSchema
     author: AuthorView
     title: str
@@ -270,13 +278,18 @@ class EntryView(BaseModel):
     )
 
 
-def entry(value: Entry, *, task_key: str) -> EntryView:
-    """Запись дела целиком. Ключ задачи приходит извне: у записи только `task_id`."""
+def entry(
+    value: Entry, *, task_key: str | None = None, project_key: str | None = None
+) -> EntryView:
+    """Запись дела целиком. Ключ владельца приходит извне: у записи только `task_id` или
+    `project_id`. Передаётся ровно один — как и в REST (`entry_read`)."""
+    assert (task_key is None) != (project_key is None), "entry owner is exactly one key"
     return EntryView(
         id=str(value.id),
         seq=value.seq,
         no=value.no,
         task_key=task_key,
+        project_key=project_key,
         type=value.type,
         author=author(value.author),
         title=value.title,
@@ -327,5 +340,31 @@ def appended_entry(value: Entry, *, task_key: str) -> AppendedEntryView:
         task_key=task_key,
         author=author(value.author),
         title=None if value.type in TITLED_ENTRY_TYPES else value.title,
+        created_at=value.created_at,
+    )
+
+
+# Ответ `add_project_entry`: то же, что у записи задачи, но адрес — ключ проекта, и
+# заголовка нет вовсе: у всех типов записи проекта его присылает сам агент
+# (`app/domain/case.py`, `PROJECT_ENTRY_TYPES`), и поле всегда было бы `null`.
+class AppendedProjectEntryView(BaseModel):
+    """A filed project case entry, by its address rather than its content; the entry in
+    full is returned by `read_project_entries`.
+    """
+
+    no: int = Field(description="Entry number in the project's case; with the key it forms `TRK#7`")
+    seq: int = Field(description="Journal sequence number, usable as `after` of `wait_journal`")
+    project_key: str
+    author: AuthorView
+    created_at: datetime
+
+
+def appended_project_entry(value: Entry, *, project_key: str) -> AppendedProjectEntryView:
+    """Ответ `add_project_entry`: адрес записи в деле проекта, без самой записи."""
+    return AppendedProjectEntryView(
+        no=value.no,
+        seq=value.seq,
+        project_key=project_key,
+        author=author(value.author),
         created_at=value.created_at,
     )

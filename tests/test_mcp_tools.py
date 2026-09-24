@@ -66,6 +66,8 @@ TASK_TOOLS = {
     "answer",
     "add_verdict",
     "resolve",
+    "read_project_entries",
+    "add_project_entry",
     "link",
     "unlink",
     "get_project",
@@ -118,7 +120,7 @@ async def open_task(db_session: AsyncSession, task_actor: Actor, task: Task) -> 
 async def test_a_task_token_sees_exactly_the_working_cycle(
     mcp_session: Connect, task_secret: str
 ) -> None:
-    """Обзорная проверка 1: девятнадцать инструментов рабочего цикла и ни одного лишнего."""
+    """Обзорная проверка 1: инструменты рабочего цикла и ни одного лишнего."""
     async with mcp_session(task_secret) as session:
         listed = {tool.name for tool in (await session.list_tools()).tools}
 
@@ -180,6 +182,7 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     "list_projects": (True, False, True),
     "list_participants": (True, False, True),
     "read_entries": (True, False, True),
+    "read_project_entries": (True, False, True),
     "wait_journal": (True, False, True),
     # Подшивающие и переводящие: дело только дописывается — не разрушают, — но без
     # ключа идемпотентности повтор с теми же аргументами не гарантирует то же
@@ -189,6 +192,7 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     "create_project": (False, False, False),
     "register_participant": (False, False, False),
     "add_entry": (False, False, False),
+    "add_project_entry": (False, False, False),
     "add_summary": (False, False, False),
     "ask": (False, False, False),
     "answer": (False, False, False),
@@ -202,10 +206,11 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     # поднимает версию — идемпотентна; не разрушает ничего, потому что правка хранит
     # `before`/`after` в `section_changed`/`field_changed`.
     "update_task": (False, False, True),
-    # Правка проекта и участника: идемпотентна тем же способом, но, в отличие от
-    # задачи, у проекта и участника нет журнала правок — прежние название и описание
-    # перезаписываются без следа. Разрушающее обновление в буквальном смысле хинта.
-    "update_project": (False, True, True),
+    # Правка карточки проекта — так же: с TRK-156 у проекта есть дело, и прежние
+    # название и описание остаются в `field_changed`.
+    "update_project": (False, False, True),
+    # Правка участника: идемпотентна тем же способом, но у участника нет дела — прежнее
+    # описание перезаписывается без следа. Разрушающее обновление в буквальном смысле хинта.
     "update_participant": (False, True, True),
 }
 
@@ -1675,7 +1680,13 @@ async def test_get_project_carries_the_context_shared_by_its_tasks(
     async with mcp_session(task_secret) as session:
         read = await call(session, "get_project", key="trk")
 
+    index = read.pop("index")
     assert read == {"key": project.key, "title": project.title, "description": project.description}
+    # Дело проекта открывается записью `created` (TRK-156): опись едет той же строкой, что
+    # у задачи.
+    assert [(line["no"], line["type"], line["title"]) for line in index] == [
+        (1, "created", "Project created")
+    ]
 
 
 async def test_list_projects_is_the_entry_point_when_no_key_is_known(
@@ -1754,11 +1765,17 @@ async def test_the_main_scope_runs_the_registries(
     # Итог правки — у того, кто его хранит: переименование не стёрло описание
     # («Дежурства» пережили `update_project` без своего поля), а `update_participant`
     # переписало только описание, не тронув род.
+    index = stored_project.pop("index")
     assert stored_project == {
         "key": "OPS",
         "title": "Эксплуатация и дежурства",
         "description": "Дежурства",
     }
+    # Правка названия осталась в деле проекта (TRK-156), а не пропала без следа.
+    assert [(line["type"], line["facts"]) for line in index] == [
+        ("created", {"type": "created"}),
+        ("field_changed", {"type": "field_changed", "field": "title"}),
+    ]
     bot = next(item for item in participants["items"] if item["name"] == "release_bot")
     assert bot == {"kind": "agent", "name": "release_bot", "description": "Ведёт выкладки"}
 

@@ -111,6 +111,14 @@ async def committed_installation(
                 ),
                 {"key": PROJECT_KEY},
             )
+            # И дело самого проекта: заведённый проект открывает его записью `created`.
+            await session.execute(
+                text(
+                    "DELETE FROM entries WHERE project_id IN "
+                    "(SELECT id FROM projects WHERE key = :key)"
+                ),
+                {"key": PROJECT_KEY},
+            )
             await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(
                 text(

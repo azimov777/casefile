@@ -33,14 +33,28 @@
 
 ## Ссылка либо тракторная, либо адрес
 
-`refs` содержит ссылки на записи (`TRK-42#12`), на задачи (`TRK-7`) и адреса. Первые
-две трекер проверяет на существование, адреса не проверяет вовсе (`CONCEPT.md`, 3.4).
-Различить их можно только по форме, поэтому правило простое: если строка разбирается
-как ключ задачи — это ссылка внутрь трекера, иначе адрес. Ловушка здесь одна и она
-закрыта: `TRK-42#абв` разбирается как ключ задачи с испорченным номером записи, и
-молча считать такую строку адресом нельзя — это опечатка в ссылке, а не URL.
+`refs` содержит ссылки на записи задач (`TRK-42#12`), на записи проекта (`TRK#7`), на
+задачи (`TRK-7`) и адреса. Ссылки внутрь трекера он проверяет на существование, адреса не
+проверяет вовсе (`CONCEPT.md`, 3.4). Различить их можно только по форме, поэтому правило
+простое: если голова разбирается как ключ задачи — это ссылка внутрь трекера, иначе адрес.
+Ловушка здесь одна и она закрыта: `TRK-42#абв` разбирается как ключ задачи с испорченным
+номером записи, и молча считать такую строку адресом нельзя — это опечатка в ссылке, а
+не URL.
+
+Запись проекта узнаётся уже: голова по шаблону ключа проекта **и** хвост из цифр.
+Шаблон ключа проекта ловит любое слово (`README`, `notes`), и ссылка `README#usage` была
+адресом до того, как у проекта появилось дело; с нецифровым хвостом она им и остаётся.
+Цифровой хвост — уже ссылка: `TRK#007` и `TRK#0` — опечатки, а не адреса.
+
+## Дело проекта
+
+У проекта своё дело с той же механикой (`CONCEPT.md`, 3.4, «Дело проекта»), но из
+записей агента в нём только `note`, `decision`, `finding` и `artifact`: у проекта нет
+ни хода работы, ни проверок, ни исполнителя. Форму такой записи проверяет
+`build_project_entry` теми же функциями полей, что и `build_entry`.
 """
 
+import re
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -52,6 +66,7 @@ from app.domain.authors import Author
 from app.domain.errors import EntryFieldsInvalidError, InvalidTaskKeyError
 from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.links import LinkKind
+from app.domain.projects import PROJECT_KEY_PATTERN, normalize_project_key
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     TaskField,
@@ -140,6 +155,13 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
 #: Записи агента и человека — всё, что не служебное.
 AGENT_ENTRY_TYPES: frozenset[EntryType] = frozenset(EntryType) - SERVICE_ENTRY_TYPES
 
+#: Записи агента и человека в деле проекта (`CONCEPT.md`, 3.4, «Дело проекта»). Сводок,
+#: вопросов, вердиктов, замечаний и попыток у проекта нет: у него нет ни хода работы, ни
+#: проверок, ни исполнителя, а спрашивают и возражают в делах задач.
+PROJECT_ENTRY_TYPES: frozenset[EntryType] = frozenset(
+    {EntryType.NOTE, EntryType.DECISION, EntryType.FINDING, EntryType.ARTIFACT}
+)
+
 #: Типы, у которых заголовок пишет автор. У остальных он выводится из нагрузки — см.
 #: раздел «Заголовок либо пишут, либо выводят» в начале файла.
 TITLED_ENTRY_TYPES: frozenset[EntryType] = frozenset(
@@ -200,8 +222,15 @@ CLOSING_SUMMARY_PARTS: tuple[str, ...] = (*SUMMARY_PARTS, CLOSING_SUMMARY_PART)
 #: Разделитель ссылки на запись: `TRK-42#12` — двенадцатая запись задачи `TRK-42`.
 ENTRY_REF_SEPARATOR = "#"
 
-#: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку.
-ENTRY_REF_SHAPE = f"<PROJECT>-<task number>{ENTRY_REF_SEPARATOR}<entry number>"
+#: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку. Форм две —
+#: запись задачи и запись проекта; дефис есть только в ключе задачи.
+ENTRY_REF_SHAPE = (
+    f"<PROJECT>-<task number>{ENTRY_REF_SEPARATOR}<entry number> or "
+    f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number>"
+)
+
+#: Голова ссылки на запись проекта: ключ проекта по его шаблону.
+_PROJECT_KEY_RE = re.compile(PROJECT_KEY_PATTERN)
 
 #: Чем обрезается слишком длинный выведенный заголовок. Обрезка, а не отказ: у сводки
 #: заголовок берётся из текста автора, и отклонять справку из-за длинной первой строки
@@ -214,7 +243,11 @@ TITLE_CUT_TRAILING = " ,;:.-—"
 
 
 def format_entry_ref(task_key: str, no: int) -> str:
-    """Ссылка на запись: ключ задачи и номер записи в ней."""
+    """Ссылка на запись: ключ задачи и номер записи в ней.
+
+    Та же форма у записи проекта — `TRK#7`: ключ проекта на месте ключа задачи. Функция
+    одна, потому что разделитель один; различает их дефис в ключе.
+    """
     return f"{task_key}{ENTRY_REF_SEPARATOR}{no}"
 
 
@@ -466,32 +499,53 @@ class TaskRef:
 
 @dataclass(frozen=True, slots=True)
 class EntryRef:
-    """Ссылка на запись: `TRK-42#12`. Ключ уже канонизирован."""
+    """Ссылка на запись задачи: `TRK-42#12`. Ключ уже канонизирован."""
 
     key: str
     no: int
 
 
-def parse_ref(ref: str) -> TaskRef | EntryRef | None:
+@dataclass(frozen=True, slots=True)
+class ProjectEntryRef:
+    """Ссылка на запись дела проекта: `TRK#7`. Ключ проекта уже канонизирован."""
+
+    key: str
+    no: int
+
+
+type TrackerRef = TaskRef | EntryRef | ProjectEntryRef
+"""Ссылка внутрь трекера: её существование проверяет сценарий."""
+
+
+def parse_ref(ref: str) -> TrackerRef | None:
     """Разбирает ссылку. `None` означает «это адрес» — его трекер не проверяет.
 
     Бросает `FieldProblem`, если строка выглядит ссылкой внутрь трекера, но номер
-    записи в ней испорчен (`TRK-42#0`, `TRK-42#абв`): молча превратить такую строку в
-    непроверяемый адрес значило бы потерять опечатку ровно там, где ссылка нужна
-    надёжной.
+    записи в ней испорчен (`TRK-42#0`, `TRK-42#абв`, `TRK#007`): молча превратить такую
+    строку в непроверяемый адрес значило бы потерять опечатку ровно там, где ссылка
+    нужна надёжной.
     """
     head, separator, tail = ref.partition(ENTRY_REF_SEPARATOR)
     try:
         key = normalize_task_key(head)
     except InvalidTaskKeyError:
-        # Голова не ключ задачи — значит, вся строка адрес. Сюда попадает и URL с
-        # якорем (`https://example.com/a#b`): его голова ключом не разбирается.
+        # Голова не ключ задачи. Запись проекта — голова по шаблону ключа проекта и
+        # хвост из цифр; всё прочее адрес. Сюда попадает и URL с якорем
+        # (`https://example.com/a#b`), и `README#usage`: у первого голова не ключ, у
+        # второго хвост не номер.
+        if separator and _PROJECT_KEY_RE.match(head.strip()) and tail.isascii() and tail.isdigit():
+            return ProjectEntryRef(key=normalize_project_key(head), no=_entry_ref_no(ref, tail))
         return None
     if not separator:
         return TaskRef(key=key)
+    return EntryRef(key=key, no=_entry_ref_no(ref, tail))
+
+
+def _entry_ref_no(ref: str, tail: str) -> int:
+    """Номер записи из хвоста ссылки: число без ведущих нулей, с 1."""
     if not is_plain_number(tail) or int(tail) < FIRST_ENTRY_NUMBER:
         raise FieldProblem("malformed_entry_ref", ref=ref, expected=ENTRY_REF_SHAPE)
-    return EntryRef(key=key, no=int(tail))
+    return int(tail)
 
 
 # --- Запись агента ------------------------------------------------------------------
@@ -511,7 +565,7 @@ class EntryDraft:
     payload: dict[str, Any]
     refs: list[str]
     #: Ссылки внутрь трекера, уже разобранные: их существование проверяет сценарий.
-    tracker_refs: tuple[TaskRef | EntryRef, ...] = ()
+    tracker_refs: tuple[TrackerRef, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -574,6 +628,43 @@ def build_entry(
         title=entry_title,
         body=body_text,
         payload=payload_values,
+        refs=ref_strings,
+        tracker_refs=tracker_refs,
+    )
+
+
+def build_project_entry(
+    project_key: str,
+    *,
+    type: Any,
+    title: Any,
+    body: Any = "",
+    refs: Any = (),
+) -> EntryDraft:
+    """Проверяет запись агента в дело проекта и приводит её к каноническому виду.
+
+    Поля и их правила — те же функции, что у `build_entry`: заголовок, тело и ссылки
+    записи проекта не отличаются от записи задачи ничем. Отличается набор типов
+    (`PROJECT_ENTRY_TYPES`), и нагрузки у них нет ни у одного, поэтому ни контекста
+    задачи, ни построителей нагрузки здесь не нужно. Тип задачи (`summary`, `question`,
+    `attempt`, ...) — `not_allowed` со списком допустимых, служебный — `service_type`,
+    как и в деле задачи.
+    """
+    problems = FieldProblems()
+    entry_type = _project_entry_type(type, problems)
+    body_text = _entry_body(body, problems)
+    tracker_refs, ref_strings = _entry_refs(refs, problems)
+    entry_title = ""
+    with problems.field("title"):
+        entry_title = _entry_title(title)
+    problems.raise_as(EntryFieldsInvalidError, key=project_key)
+
+    assert entry_type is not None  # иначе замечание о типе уже прервало бы работу
+    return EntryDraft(
+        type=entry_type,
+        title=entry_title,
+        body=body_text,
+        payload={},
         refs=ref_strings,
         tracker_refs=tracker_refs,
     )
@@ -646,6 +737,23 @@ def _entry_type(value: Any, problems: FieldProblems) -> EntryType | None:
     return entry_type
 
 
+def _project_entry_type(value: Any, problems: FieldProblems) -> EntryType | None:
+    """Тип записи агента в деле проекта: `note`, `decision`, `finding`, `artifact`."""
+    allowed = sorted(PROJECT_ENTRY_TYPES)
+    try:
+        entry_type = EntryType(value)
+    except ValueError:
+        problems.add("type", "not_allowed", allowed=allowed)
+        return None
+    if entry_type in SERVICE_ENTRY_TYPES:
+        problems.add("type", "service_type", allowed=allowed, got=entry_type.value)
+        return None
+    if entry_type not in PROJECT_ENTRY_TYPES:
+        problems.add("type", "not_allowed", allowed=allowed, got=entry_type.value)
+        return None
+    return entry_type
+
+
 def _entry_title(value: Any) -> str:
     title = _text(value).strip()
     if not title:
@@ -671,13 +779,13 @@ def _entry_body(value: Any, problems: FieldProblems) -> str:
 def _entry_refs(
     value: Any,
     problems: FieldProblems,
-) -> tuple[tuple[TaskRef | EntryRef, ...], list[str]]:
+) -> tuple[tuple[TrackerRef, ...], list[str]]:
     """Разбирает ссылки: трекерные отдельно для проверки существования, все — строками."""
     if isinstance(value, str) or not isinstance(value, Sequence):
         problems.add("refs", "not_a_list")
         return (), []
 
-    parsed: list[TaskRef | EntryRef] = []
+    parsed: list[TrackerRef] = []
     strings: list[str] = []
     seen: set[str] = set()
     for item in value:
@@ -701,8 +809,8 @@ def _entry_refs(
     return tuple(parsed), strings
 
 
-def _format_ref(target: TaskRef | EntryRef) -> str:
-    if isinstance(target, EntryRef):
+def _format_ref(target: TrackerRef) -> str:
+    if isinstance(target, EntryRef | ProjectEntryRef):
         return format_entry_ref(target.key, target.no)
     return target.key
 

@@ -205,14 +205,11 @@ OUTSIDE_NAMES = frozenset(
         "_get_flat_fields_from_params",  # внутренность разбора параметров FastAPI
         "ServerMiddleware",  # SDK MCP, промежуточный слой сервера
         "_handle_list_tools",  # SDK MCP, обработчик tools/list
-        "num_nonnulls",  # функция PostgreSQL
         "pg_stat_activity",  # представление PostgreSQL
         "pg_available_extensions",  # представление PostgreSQL
         "clock_timestamp",  # функция PostgreSQL
         "statement_timestamp",  # функция PostgreSQL
         "remove_constraint",  # строка вывода `alembic check`
-        "drop_constraint",  # Alembic, метод `op`
-        "type_",  # Alembic, аргумент того же метода
         "MutableList",  # SQLAlchemy, обёртка изменяемого списка
         "as_mutable",  # SQLAlchemy, метод той же обёртки
         "greenlet_spawn",  # SQLAlchemy, имя из текста ошибки `MissingGreenlet`

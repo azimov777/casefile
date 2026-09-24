@@ -7,7 +7,7 @@ from pydantic import Field
 from app.domain.tokens import TokenScope
 from app.mcp.arguments import ProjectKeyArg
 from app.mcp.tools.registries.views import ProjectKeyView, project_key
-from app.mcp.toolset import OVERWRITING_UPDATE, Toolset
+from app.mcp.toolset import IDEMPOTENT_TASK_UPDATE, Toolset
 from app.services import projects as projects_service
 
 # Отдельные аннотации для правки: `None` здесь означает «не передано». Осмысленного
@@ -26,15 +26,16 @@ def register(tools: Toolset) -> None:
     """Объявляет `update_project` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=OVERWRITING_UPDATE, scope=TokenScope.MAIN)
+    @tools.tool(annotations=IDEMPOTENT_TASK_UPDATE, scope=TokenScope.MAIN)
     async def update_project(
         key: ProjectKeyArg,
         title: ProjectTitleChangeArg = None,
         description: ProjectDescriptionChangeArg = None,
     ) -> ProjectKeyView:
         """Changes a project's title and description; a field left out stays. Only a `main`
-        token edits projects. The key never changes, and the previous title and
-        description are not kept.
+        token edits projects. The key never changes. Each changed field files a
+        `field_changed` entry with the previous and the new value in the project's case;
+        a value equal to the current one files nothing.
         """
         async with runtime.call() as (session, actor):
             project = await projects_service.get_project(session, key)

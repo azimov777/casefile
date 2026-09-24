@@ -11,7 +11,8 @@
 одно.
 
 Каждый инструмент зовёт **свою обёртку** сценария (`app/services/case.py`,
-`add_summary`, `ask`, `answer`, `add_verdict`, `add_entry`), а не собирает нагрузку сам:
+`add_summary`, `ask`, `answer`, `add_verdict`, `add_entry`, `append_project_entry`), а не
+собирает нагрузку сам:
 форма нагрузки — знание домена, и второй его копией в слое MCP она разошлась бы с
 первой на первой же правке.
 
@@ -24,11 +25,13 @@ from types import ModuleType
 
 from app.mcp.tools.case import (
     add_entry,
+    add_project_entry,
     add_summary,
     add_verdict,
     answer,
     ask,
     read_entries,
+    read_project_entries,
     resolve,
 )
 from app.mcp.toolset import Toolset
@@ -42,6 +45,8 @@ TOOLS: Sequence[ModuleType] = (
     answer,
     resolve,
     add_verdict,
+    read_project_entries,
+    add_project_entry,
 )
 
 

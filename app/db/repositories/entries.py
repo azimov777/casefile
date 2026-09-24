@@ -20,12 +20,13 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, case, distinct, func, select, text
+from sqlalchemy import Select, case, distinct, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.entry import Entry
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import (
     InvalidCursorError,
@@ -86,9 +87,25 @@ class EntryRepository:
             # Строка исчезнуть не может — задачи не удаляются, — но молчаливый `None`
             # превратился бы в запись без задачи.
             raise RuntimeError(f"Task {task_id} disappeared while allocating an entry number")
-        highest = select(func.coalesce(func.max(Entry.no), FIRST_ENTRY_NUMBER - 1)).where(
-            Entry.task_id == task_id
-        )
+        return await self._next_no(Entry.task_id == task_id)
+
+    async def allocate_project_no(self, project_id: uuid.UUID) -> int:
+        """Следующий номер записи в деле проекта — тем же способом, что у задачи.
+
+        Блокируется строка проекта, а не задачи: номер считается внутри проекта
+        (`TRK#7`). Порядок захвата тот же — после очереди изменений (`lock_changes`).
+        Строку проекта берёт и `ProjectRepository.allocate_task_number` (создание
+        задачи); обе блокировки идут под очередью изменений, поэтому взаимной блокировки
+        между ними нет.
+        """
+        lock = select(Project.id).where(Project.id == project_id).with_for_update()
+        if await self._session.scalar(lock) is None:
+            raise RuntimeError(f"Project {project_id} disappeared while allocating an entry number")
+        return await self._next_no(Entry.project_id == project_id)
+
+    async def _next_no(self, owned: ColumnElement[bool]) -> int:
+        """`max(no) + 1` среди записей владельца; вызывается под блокировкой его строки."""
+        highest = select(func.coalesce(func.max(Entry.no), FIRST_ENTRY_NUMBER - 1)).where(owned)
         return int(await self._session.scalar(highest)) + 1
 
     async def add(self, entry: Entry) -> Entry:
@@ -119,7 +136,14 @@ class EntryRepository:
 
     async def get_by_no(self, task_id: uuid.UUID, no: int) -> Entry | None:
         """Одна запись по её номеру внутри задачи — адрес из ссылки `TRK-42#12`."""
-        statement = select(Entry).where(Entry.task_id == task_id, Entry.no == no)
+        return await self._get(Entry.task_id == task_id, no)
+
+    async def get_by_project_no(self, project_id: uuid.UUID, no: int) -> Entry | None:
+        """Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`."""
+        return await self._get(Entry.project_id == project_id, no)
+
+    async def _get(self, owned: ColumnElement[bool], no: int) -> Entry | None:
+        statement = select(Entry).where(owned, Entry.no == no)
         return (await self._session.scalars(statement)).one_or_none()
 
     async def existing_nos(self, task_id: uuid.UUID, nos: Sequence[int]) -> set[int]:
@@ -128,9 +152,16 @@ class EntryRepository:
         Проверка ссылок записи идёт по этому методу: список `refs` короткий, но запрос
         на каждую ссылку превратил бы подшивку записи в десяток обращений к базе.
         """
+        return await self._existing(Entry.task_id == task_id, nos)
+
+    async def existing_project_nos(self, project_id: uuid.UUID, nos: Sequence[int]) -> set[int]:
+        """Какие из перечисленных номеров есть в деле проекта — для ссылок `TRK#7`."""
+        return await self._existing(Entry.project_id == project_id, nos)
+
+    async def _existing(self, owned: ColumnElement[bool], nos: Sequence[int]) -> set[int]:
         if not nos:
             return set()
-        statement = select(Entry.no).where(Entry.task_id == task_id, Entry.no.in_(set(nos)))
+        statement = select(Entry.no).where(owned, Entry.no.in_(set(nos)))
         return set(await self._session.scalars(statement))
 
     async def list_page(
@@ -154,12 +185,47 @@ class EntryRepository:
         последней сводки»), второй продолжает страницу и приезжает из `meta`. Действуют
         оба сразу, побеждает больший.
         """
-        size = resolve_limit(limit)
-        statement = self._filtered(
-            select(Entry).where(Entry.task_id == task_id),
+        return await self._list_page(
+            Entry.task_id == task_id,
             nos=nos,
             types=types,
+            after_no=after_no,
+            limit=limit,
+            cursor=cursor,
         )
+
+    async def list_project_page(
+        self,
+        project_id: uuid.UUID,
+        *,
+        nos: Sequence[int] | None = None,
+        types: Sequence[EntryType] | None = None,
+        after_no: int | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[Entry]:
+        """Страница записей дела проекта в порядке `no` — то же, что `list_page` задачи."""
+        return await self._list_page(
+            Entry.project_id == project_id,
+            nos=nos,
+            types=types,
+            after_no=after_no,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    async def _list_page(
+        self,
+        owned: ColumnElement[bool],
+        *,
+        nos: Sequence[int] | None,
+        types: Sequence[EntryType] | None,
+        after_no: int | None,
+        limit: int | None,
+        cursor: str | None,
+    ) -> Page[Entry]:
+        size = resolve_limit(limit)
+        statement = self._filtered(select(Entry).where(owned), nos=nos, types=types)
         boundary = after_no
         if cursor is not None:
             (cursor_no,), _ = decode_sort_cursor(cursor, arity=1)
@@ -199,6 +265,13 @@ class EntryRepository:
         входит в каждый пакет преемника и обязана оставаться дешёвой. Факты записи
         вырезаются из нагрузки прямо в запросе — см. `_facts_json`.
         """
+        return await self._headings(Entry.task_id == task_id)
+
+    async def project_headings(self, project_id: uuid.UUID) -> list[EntryHeading]:
+        """Опись дела проекта: те же строки, что у задачи, — для `get_project`."""
+        return await self._headings(Entry.project_id == project_id)
+
+    async def _headings(self, owned: ColumnElement[bool]) -> list[EntryHeading]:
         statement = (
             select(
                 Entry.no,
@@ -210,7 +283,7 @@ class EntryRepository:
                 Entry.action_id,
                 _facts_json().label("facts"),
             )
-            .where(Entry.task_id == task_id)
+            .where(owned)
             .order_by(Entry.no)
         )
         rows: list[Any] = list(await self._session.execute(statement))
@@ -479,15 +552,20 @@ class EntryRepository:
         project_id: uuid.UUID | None = None,
         types: Sequence[EntryType] | None = None,
         limit: int | None = None,
-    ) -> Page[tuple[Entry, str]]:
+    ) -> Page[tuple[Entry, str | None, str | None]]:
         """Хвост журнала: записи со сквозным номером больше `after`, по возрастанию.
 
         Отдельной таблицы событий нет — лента это та же таблица записей
         (`CONCEPT.md`, 4.1), поэтому и метод живёт здесь, а не в своём репозитории.
 
-        Отдаёт пары «запись, ключ задачи»: у записи связи с задачей нет, только
-        `task_id`, а кадром ленты нечего адресовать без ключа. Соединение с задачами
-        нужно и для фильтра по проекту — у записи его нет.
+        Отдаёт тройки «запись, ключ задачи, ключ проекта»: у записи связи с владельцем
+        нет, только `task_id` или `project_id`, а кадром ленты нечего адресовать без
+        ключа. Непуст ровно один ключ — ключ владельца: у записи задачи это ключ задачи,
+        у записи дела проекта — ключ проекта. Соединения оба внешние: запись проекта
+        задачи не имеет, запись задачи — проекта напрямую.
+
+        Отбор по проекту берёт и дело проекта, и дела его задач: «всё о проекте» — одна
+        лента.
 
         `task_ids` сужает хвост набором задач, а не одной: сессия ведёт несколько дел и
         ждёт новостей по ним одним вызовом. `None` — «все задачи»; пустой набор сюда не
@@ -498,18 +576,26 @@ class EntryRepository:
         """
         size = resolve_limit(limit)
         statement = (
-            select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(Entry.seq > after)
+            select(Entry, Task.key, Project.key)
+            .outerjoin(Task, Task.id == Entry.task_id)
+            .outerjoin(Project, Project.id == Entry.project_id)
+            .where(Entry.seq > after)
         )
         if task_ids is not None:
             statement = statement.where(Entry.task_id.in_(list(task_ids)))
         if project_id is not None:
-            statement = statement.where(Task.project_id == project_id)
+            statement = statement.where(
+                or_(Task.project_id == project_id, Entry.project_id == project_id)
+            )
         if types is not None:
             # Пустой список — это «ничего», а не «всё»: клиент, отобравший нулевой набор
             # типов, обязан получить пустую ленту, а не всю. Поэтому `is None`.
             statement = statement.where(Entry.type.in_(list(types)))
         statement = statement.order_by(Entry.seq).limit(size + 1)
-        rows = [(entry, key) for entry, key in await self._session.execute(statement)]
+        rows = [
+            (entry, task_key, project_key)
+            for entry, task_key, project_key in await self._session.execute(statement)
+        ]
         if len(rows) <= size:
             return Page(items=rows, next_cursor=None)
         page = rows[:size]

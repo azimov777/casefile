@@ -241,3 +241,19 @@
 на каком обороте цикла событий это случится.
 **Где:** `app/db/wakeup.py`, `JournalWakeup` (`close`, `_on_termination`);
 `tests/test_wakeup.py`.
+
+## Отбор ленты по проекту берёт и дело проекта, и дела его задач
+
+**Что:** с TRK-156 в ленте есть записи дела проекта. Отбор `project` отдаёт записи самого
+проекта **и** записи его задач одним хвостом (`Task.project_id = … OR Entry.project_id = …`);
+отбор `task` записей проекта не отдаёт никогда; лента без отбора отдаёт всё. Каждая запись
+ленты несёт ключ владельца: `task_key` у записи задачи, `project_key` у записи проекта,
+второй — `null` (`JournalEntry`, `EntryRead`).
+**Почему важно:** потребитель ленты, который адресует запись как `task_key#no`, на записи
+проекта получит `null#2`. Сторож журнала, ждущий `wait_journal(project=…)`, просыпается и на
+заметку проекта — ради этого дело проекта и заведено в общей таблице.
+**Как правильно:** адрес записи — ключ того владельца, что непуст (`TRK-42#3` или `TRK#7`).
+**Где:** `app/db/repositories/entries.py`, `journal_page`; `app/services/journal.py`,
+`JournalEntry`; `tests/test_project_case.py`, `test_the_journal_gives_project_entries_under_the_project_filter`;
+`tests/test_journal_wait.py`, `test_the_wait_wakes_on_a_project_entry`.
+

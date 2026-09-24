@@ -292,3 +292,29 @@ async def test_a_stream_over_the_connection_limit_is_refused_before_the_first_by
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "journal_stream_limit"
     assert journal_service.slots.open == 0, "отказ не должен занимать место в лимите"
+
+
+async def test_the_stream_gives_project_entries_under_the_project_filter(
+    streaming_app: FastAPI,
+    main_secret: str,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    task: Task,
+    entries: list[Entry],
+) -> None:
+    """Обзорная проверка 3 TRK-156: поток с отбором `project` отдаёт и запись дела проекта
+    — с ключом проекта и без ключа задачи."""
+    note = await case_service.append_project_entry(
+        db_session, task.project, actor=task_actor, type="note", title="Заметка проекта"
+    )
+
+    frames = await read_frames(
+        streaming_app,
+        main_secret,
+        params={"after": entries[-1].seq, "project": "TRK"},
+        count=1,
+    )
+
+    payload = json.loads(frames[0]["data"])
+    assert frames[0]["id"] == str(note.seq)
+    assert (payload["task_key"], payload["project_key"], payload["no"]) == (None, "TRK", note.no)

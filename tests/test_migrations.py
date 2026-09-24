@@ -400,3 +400,75 @@ async def test_the_projects_migration_rolls_back_and_reapplies(
 
     await migrate(url, PROJECTS_REVISION)
     assert await _projects_state(migration_engine, "projects", "project_id") == before
+
+
+# --- Дело проекта (TRK-156) -------------------------------------------------------------
+
+#: Ревизия, давшая записи владельца «проект».
+PROJECT_CASE_REVISION = "5c1d8e7a2b90"
+
+_INSERT_PROJECT_ENTRY = """
+INSERT INTO entries (project_id, no, type, title, created_by_kind, created_by_signature)
+SELECT id, 1, 'note', 'Заметка проекта', 'agent', 'claude' FROM projects WHERE key = 'OLD'
+"""
+
+
+async def test_the_project_case_migration_keeps_task_entries_and_takes_project_ones(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, PROJECTS_PREVIOUS)
+    await _seed_queues(migration_engine)
+    await migrate(url, PROJECTS_REVISION)
+    async with migration_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO entries (task_id, no, type, title, created_by_kind, "
+                "created_by_signature) SELECT id, 1, 'created', 'Task created', 'agent', "
+                "'claude' FROM tasks WHERE key = 'OLD-1'"
+            )
+        )
+
+    await migrate(url, PROJECT_CASE_REVISION)
+
+    async with migration_engine.begin() as connection:
+        await connection.execute(text(_INSERT_PROJECT_ENTRY))
+        owners = list(
+            await connection.execute(
+                text(
+                    "SELECT (task_id IS NOT NULL), (project_id IS NOT NULL), no "
+                    "FROM entries ORDER BY seq"
+                )
+            )
+        )
+    assert [tuple(row) for row in owners] == [(True, False, 1), (False, True, 1)]
+
+    for both_or_none in (
+        "INSERT INTO entries (no, type, title, created_by_kind, created_by_signature) "
+        "VALUES (9, 'note', 'Ничья', 'agent', 'claude')",
+        "INSERT INTO entries (task_id, project_id, no, type, title, created_by_kind, "
+        "created_by_signature) SELECT tasks.id, tasks.project_id, 9, 'note', 'Обоих', "
+        "'agent', 'claude' FROM tasks WHERE key = 'OLD-1'",
+    ):
+        with pytest.raises(Exception, match="ck_entries_one_owner"):
+            async with migration_engine.begin() as connection:
+                await connection.execute(text(both_or_none))
+
+
+async def test_the_project_case_rollback_refuses_while_project_entries_exist(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, PROJECTS_PREVIOUS)
+    await _seed_queues(migration_engine)
+    await migrate(url, PROJECT_CASE_REVISION)
+
+    # Без записей проекта откат и повтор проходят.
+    await migrate(url, PROJECTS_REVISION, down=True)
+    await migrate(url, PROJECT_CASE_REVISION)
+
+    async with migration_engine.begin() as connection:
+        await connection.execute(text(_INSERT_PROJECT_ENTRY))
+
+    with pytest.raises(Exception, match="task_id"):
+        await migrate(url, PROJECTS_REVISION, down=True)

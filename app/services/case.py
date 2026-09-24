@@ -1,8 +1,9 @@
-"""Дело: записи агента, служебные записи и чтение.
+"""Дело: записи агента, служебные записи и чтение — у задачи и у проекта.
 
 ## Одна точка подшивки
 
-Любая запись — и агентская, и служебная — попадает в дело через `_append`. Тип
+Любая запись — и агентская, и служебная, в дело задачи и в дело проекта — попадает в
+дело через `_append`. Тип
 служебной записи выводится из сценария (`record_status_changed` пишет
 `status_changed`), а не передаётся вызывающим кодом: два независимых словаря имён
 разъехались бы, и новое действие молча осталось бы без записи.
@@ -37,6 +38,15 @@
 достаточности нет: им нужно одно значение на **все** свои записи, и они генерируют
 его сами, до первого вызова сюда, и передают явно в каждый — подробности в
 `app/db/models/entry.py`.
+
+## Дело проекта
+
+Та же механика, что у задачи (`CONCEPT.md`, 3.4, «Дело проекта»): одна таблица, одна
+точка подшивки, одна лента. Отличаются набор типов (`build_project_entry` в домене) и
+номер: `no` считается внутри проекта под блокировкой строки проекта. Права — набор
+`task`, как у записей дела задачи: «любую запись может сделать любой участник». Служебные
+записи проекта — `created` при заведении и `field_changed` при правке карточки — ставит
+`app/services/projects.py`.
 """
 
 import uuid
@@ -54,7 +64,12 @@ from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import Page
-from app.db.repositories import EntryRepository, ParticipantRepository, TaskRepository
+from app.db.repositories import (
+    EntryRepository,
+    ParticipantRepository,
+    ProjectRepository,
+    TaskRepository,
+)
 from app.db.wakeup import journal_wakeup
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
@@ -64,10 +79,12 @@ from app.domain.case import (
     EntryHeading,
     EntryRef,
     EntryType,
+    ProjectEntryRef,
     QuestionOrder,
-    TaskRef,
+    TrackerRef,
     VerdictOutcome,
     build_entry,
+    build_project_entry,
     continuation_key,
     format_entry_ref,
     is_blocking_question,
@@ -637,6 +654,119 @@ async def add_entry(
     )
 
 
+# --- Дело проекта ---------------------------------------------------------------------
+
+
+async def append_project_entry(
+    session: AsyncSession,
+    project: Project,
+    *,
+    actor: Actor,
+    type: Any,
+    title: Any,
+    body: Any = "",
+    refs: Any = (),
+) -> Entry:
+    """Подшивает запись агента в дело проекта: `note`, `decision`, `finding`, `artifact`.
+
+    Набор `task`, как и у записей дела задачи (`CONCEPT.md`, 3.2, «Права»). Форму
+    проверяет домен (`build_project_entry`), существование ссылок — здесь, тем же
+    `_check_refs`, что у задачи: ссылка `TRK#7` из дела задачи и `TRK-42#3` из дела
+    проекта проверяются одним кодом.
+    """
+    ensure_scope(actor, TokenScope.TASK, action="project_case.append")
+    draft = build_project_entry(project.key, type=type, title=title, body=body, refs=refs)
+    problems = FieldProblems()
+    await _check_refs(session, project, draft, problems)
+    problems.raise_as(EntryFieldsInvalidError, key=project.key)
+    return await _append(
+        session,
+        project,
+        actor=actor,
+        type=draft.type,
+        title=draft.title,
+        body=draft.body,
+        refs=draft.refs,
+    )
+
+
+async def list_project_entries(
+    session: AsyncSession,
+    project: Project,
+    *,
+    actor: Actor,
+    nos: Sequence[int] | None = None,
+    types: Sequence[EntryType] | None = None,
+    after_no: int | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> Page[Entry]:
+    """Записи дела проекта страницами в порядке `no` — те же фильтры, что у задачи."""
+    ensure_scope(actor, TokenScope.TASK, action="project_case.read")
+    return await EntryRepository(session).list_project_page(
+        project.id, nos=nos, types=types, after_no=after_no, limit=limit, cursor=cursor
+    )
+
+
+async def read_project_entry(
+    session: AsyncSession, project: Project, no: int, *, actor: Actor
+) -> Entry:
+    """Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`."""
+    ensure_scope(actor, TokenScope.TASK, action="project_case.read")
+    entry = await EntryRepository(session).get_by_project_no(project.id, no)
+    if entry is None:
+        raise EntryNotFoundError(details={"key": project.key, "no": no})
+    return entry
+
+
+async def project_case_index(
+    session: AsyncSession, project: Project, *, actor: Actor
+) -> list[EntryHeading]:
+    """Опись дела проекта: заголовки без тел. Вердиктов в деле проекта нет, и помечать
+    устаревшие незачем — опись отдаётся как есть."""
+    ensure_scope(actor, TokenScope.TASK, action="project_case.read")
+    return await EntryRepository(session).project_headings(project.id)
+
+
+async def record_project_created(session: AsyncSession, project: Project, *, actor: Actor) -> Entry:
+    """Первая страница дела нового проекта. Нагрузки нет — карточка и есть содержание.
+
+    Проектам, заведённым до появления дела, эта запись задним числом не подшивается:
+    их первая запись — перенос длинного описания (TRK-158), и номер 1 держится за ним.
+    """
+    return await _append(
+        session, project, actor=actor, type=EntryType.CREATED, title="Project created"
+    )
+
+
+async def record_project_field_changed(
+    session: AsyncSession,
+    project: Project,
+    *,
+    actor: Actor,
+    field: TaskField,
+    before: str,
+    after: str,
+    action_id: uuid.UUID | None = None,
+) -> Entry:
+    """Правка карточки проекта: название или описание, «было / стало» целиком.
+
+    Тот же тип и та же нагрузка, что у правки обвязки задачи (`CONCEPT.md`, 3.4):
+    `field`, `before`, `after`. Имя поля берётся из `TaskField`: значения `title` и
+    `description` у карточки проекта те же, и опись с фактами (`FieldChangedFacts`)
+    читает их одним перечислением, а не двумя с совпадающими строками.
+    """
+    return await _append(
+        session,
+        project,
+        actor=actor,
+        type=EntryType.FIELD_CHANGED,
+        title=f"Field changed: {field.value}",
+        payload={"field": field.value, "before": before, "after": after},
+        action_id=action_id,
+    )
+
+
 # --- Служебные записи -----------------------------------------------------------------
 #
 # Прав здесь не проверяют: это не точки входа, а продолжение сценария, который права уже
@@ -914,42 +1044,68 @@ async def _check_continuation(
 
 
 async def _check_refs(
-    session: AsyncSession, task: Task, draft: EntryDraft, problems: FieldProblems
+    session: AsyncSession, owner: Task | Project, draft: EntryDraft, problems: FieldProblems
 ) -> None:
     """Ссылки на задачи и записи существуют; адреса не проверяются вовсе.
 
     Задачи собираются в один запрос, записи — по одному запросу на задачу: ссылок в
-    записи единицы, и разбор их по задачам дешевле, чем `IN` по парам.
+    записи единицы, и разбор их по задачам дешевле, чем `IN` по парам. Записи проекта
+    (`TRK#7`) — так же, по запросу на проект; неизвестный проект — `unknown_project`.
+    Владелец подшиваемой записи — задача или проект — не влияет ни на что: ссылка из
+    дела задачи на запись проекта и обратно проверяются одинаково.
     """
-    if not draft.tracker_refs:
-        return
-    keys = {ref.key for ref in draft.tracker_refs}
-    # Сама задача уже прочитана: запрашивать её второй раз ради ссылки на соседнюю
-    # запись значило бы платить лишним запросом за каждый `refs: ["TRK-1#3"]`.
-    tasks = {task.key: task}
-    tasks.update(await TaskRepository(session).get_by_keys(sorted(keys - {task.key})))
-
+    task_refs = [ref for ref in draft.tracker_refs if not isinstance(ref, ProjectEntryRef)]
+    project_refs = [ref for ref in draft.tracker_refs if isinstance(ref, ProjectEntryRef)]
     entries = EntryRepository(session)
-    wanted: dict[str, set[int]] = {}
-    for ref in draft.tracker_refs:
-        if ref.key not in tasks:
-            problems.add("refs", "unknown_task", ref=_ref_text(ref))
-        elif isinstance(ref, EntryRef):
-            wanted.setdefault(ref.key, set()).add(ref.no)
-    for key, nos in wanted.items():
-        existing = await entries.existing_nos(tasks[key].id, sorted(nos))
-        for no in sorted(nos - existing):
-            problems.add("refs", "unknown_entry", ref=_ref_text(EntryRef(key=key, no=no)))
+
+    if task_refs:
+        keys = {ref.key for ref in task_refs}
+        # Сама задача уже прочитана: запрашивать её второй раз ради ссылки на соседнюю
+        # запись значило бы платить лишним запросом за каждый `refs: ["TRK-1#3"]`.
+        tasks = {owner.key: owner} if isinstance(owner, Task) else {}
+        tasks.update(await TaskRepository(session).get_by_keys(sorted(keys - set(tasks))))
+        wanted: dict[str, set[int]] = {}
+        for ref in task_refs:
+            if ref.key not in tasks:
+                problems.add("refs", "unknown_task", ref=_ref_text(ref))
+            elif isinstance(ref, EntryRef):
+                wanted.setdefault(ref.key, set()).add(ref.no)
+        for key, nos in wanted.items():
+            existing = await entries.existing_nos(tasks[key].id, sorted(nos))
+            for no in sorted(nos - existing):
+                problems.add("refs", "unknown_entry", ref=_ref_text(EntryRef(key=key, no=no)))
+
+    if project_refs:
+        projects = {owner.key: owner} if isinstance(owner, Project) else {}
+        project_wanted: dict[str, set[int]] = {}
+        for ref in project_refs:
+            project_wanted.setdefault(ref.key, set()).add(ref.no)
+        repository = ProjectRepository(session)
+        for key, nos in project_wanted.items():
+            project = projects.get(key) or await repository.get_by_key(key)
+            if project is None:
+                for no in sorted(nos):
+                    problems.add(
+                        "refs", "unknown_project", ref=_ref_text(ProjectEntryRef(key=key, no=no))
+                    )
+                continue
+            existing = await entries.existing_project_nos(project.id, sorted(nos))
+            for no in sorted(nos - existing):
+                problems.add(
+                    "refs", "unknown_entry", ref=_ref_text(ProjectEntryRef(key=key, no=no))
+                )
 
 
-def _ref_text(ref: TaskRef | EntryRef) -> str:
+def _ref_text(ref: TrackerRef) -> str:
     """Ссылка в каноническом виде — та же строка, что уедет в `refs` записи."""
-    return format_entry_ref(ref.key, ref.no) if isinstance(ref, EntryRef) else ref.key
+    if isinstance(ref, EntryRef | ProjectEntryRef):
+        return format_entry_ref(ref.key, ref.no)
+    return ref.key
 
 
 async def _append(
     session: AsyncSession,
-    task: Task,
+    owner: Task | Project,
     *,
     actor: Actor,
     type: EntryType,
@@ -959,7 +1115,10 @@ async def _append(
     refs: Sequence[str] = (),
     action_id: uuid.UUID | None = None,
 ) -> Entry:
-    """Подшивает запись: номер в задаче выдаётся под блокировкой строки задачи.
+    """Подшивает запись: номер в деле выдаётся под блокировкой строки владельца.
+
+    Владелец — задача или проект (`CONCEPT.md`, 3.4): одна точка подшивки на оба дела,
+    иначе у дела проекта была бы своя очередь, своё оповещение и свой порядок `seq`.
 
     Автор раскладывается по колонкам общей функцией `created_by_columns` и берётся
     только из структуры автора действия — второй раскладки в проекте нет.
@@ -974,7 +1133,7 @@ async def _append(
     неверна. Порядок обязателен и объяснён в самих методах:
 
     1. `lock_changes` — очередь изменений, из-за которой порядок `seq` совпадает с
-       порядком фиксации. Берётся **до** блокировки строки задачи: обратный порядок
+       порядком фиксации. Берётся **до** блокировки строки владельца: обратный порядок
        даёт взаимную блокировку. Мутирующий сценарий занял её ещё до чтения фактов, но
        повторный захват в той же транзакции законен и ничего не стоит, — а подшивка,
        которая полагалась бы на чужой захват, однажды пришла бы из сценария, где его
@@ -985,9 +1144,14 @@ async def _append(
     """
     repository = EntryRepository(session)
     await lock_changes(session)
-    no = await repository.allocate_no(task.id)
+    if isinstance(owner, Task):
+        no = await repository.allocate_no(owner.id)
+        ownership = {"task_id": owner.id}
+    else:
+        no = await repository.allocate_project_no(owner.id)
+        ownership = {"project_id": owner.id}
     entry = Entry(
-        task_id=task.id,
+        **ownership,
         no=no,
         type=type,
         title=title,

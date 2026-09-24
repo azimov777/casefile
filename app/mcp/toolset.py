@@ -107,6 +107,10 @@ FILING = ToolAnnotations(
 #: `apply_task_changes`, `_same`) — повтор с теми же аргументами не меняет состояние
 #: второй раз. Не разрушает ничего: правка полей задачи хранит `before`/`after` в
 #: `section_changed`/`field_changed`, то есть прежнее значение остаётся в деле.
+#:
+#: Та же форма у правки карточки проекта (`update_project`) с TRK-156: у проекта есть
+#: дело, и правка названия и описания подшивает `field_changed` с прежним значением
+#: (`app/services/projects.py`, `update_project`).
 IDEMPOTENT_TASK_UPDATE = ToolAnnotations(
     read_only_hint=False,
     destructive_hint=False,
@@ -114,11 +118,10 @@ IDEMPOTENT_TASK_UPDATE = ToolAnnotations(
     open_world_hint=False,
 )
 
-#: Правка проекта или участника (`update_project`, `update_participant`): тоже
-#: идемпотентна — то же значение второй раз ничего не меняет, — но, в отличие от
-#: задачи, у проекта и участника нет журнала правок: прежние название и описание
-#: перезаписываются без следа (`app/services/projects.py`, `app/services/participants.py`).
-#: Разрушающее обновление в буквальном смысле хинта.
+#: Правка участника (`update_participant`): тоже идемпотентна — то же значение второй раз
+#: ничего не меняет, — но, в отличие от задачи и проекта, у участника нет дела: прежнее
+#: описание перезаписывается без следа (`app/services/participants.py`). Разрушающее
+#: обновление в буквальном смысле хинта.
 OVERWRITING_UPDATE = ToolAnnotations(
     read_only_hint=False,
     destructive_hint=True,

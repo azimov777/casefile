@@ -1,14 +1,24 @@
-"""Сценарии по проектам."""
+"""Сценарии по проектам.
+
+Карточка проекта меняется со служебной записью в его деле (`CONCEPT.md`, 3.4, «Дело
+проекта»): заведение подшивает `created`, правка названия и описания — `field_changed`
+на каждое изменённое поле. Изменение, не оставившее записи, не доходит до ленты (4.1).
+"""
+
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.locks import lock_changes
 from app.db.models.author import created_by_columns
 from app.db.models.project import Project
 from app.db.pagination import Page
 from app.db.repositories import ProjectRepository
 from app.domain.errors import ProjectKeyTakenError, ProjectNotFoundError
 from app.domain.projects import normalize_project_key, validate_project_key
+from app.domain.tasks import TaskField
 from app.domain.tokens import TokenScope
+from app.services import case as case_service
 from app.services.auth import Actor
 from app.services.permissions import ensure_scope
 
@@ -46,7 +56,18 @@ async def create_project(
     title: str,
     description: str = "",
 ) -> Project:
-    """Заводит проект. Ключ канонизируется и дальше неизменяем."""
+    """Заводит проект. Ключ канонизируется и дальше неизменяем.
+
+    Первая страница дела нового проекта — `created`, в той же транзакции.
+
+    Очередь изменений (`lock_changes`) здесь берёт подшивка `created`, то есть **после**
+    вставки строки, а не первым делом, как в остальных мутирующих сценариях. Фактов,
+    которые надо читать под очередью, у заведения нет: занятость ключа решает уникальный
+    индекс, а проверка `get_by_key` — лишь ранний доменный отказ. Взятая первой, очередь
+    сериализовала бы две гонящихся попытки до проверки, и второй всегда доставался бы
+    `project_key_taken`; гонку, которую разводит индекс и переводит в `conflict` граница
+    транзакции, стережёт `tests/test_integrity_conflicts.py`, и её поведение не меняется.
+    """
     ensure_scope(actor, TokenScope.MAIN, action="project.create")
 
     canonical = validate_project_key(key)
@@ -54,7 +75,7 @@ async def create_project(
     if await repository.get_by_key(canonical) is not None:
         raise ProjectKeyTakenError(details={"key": canonical})
 
-    return await repository.add(
+    project = await repository.add(
         Project(
             key=canonical,
             title=title.strip(),
@@ -62,6 +83,8 @@ async def create_project(
             **created_by_columns(actor.author),
         )
     )
+    await case_service.record_project_created(session, project, actor=actor)
+    return project
 
 
 async def update_project(
@@ -80,13 +103,36 @@ async def update_project(
 
     `None` означает «поле не передано»: ни у названия, ни у описания нет осмысленного
     значения `null`, поэтому схема `ProjectUpdate` отвергает явный `null` сама.
+
+    Каждое изменённое поле подшивает `field_changed` с прежним и новым значением; все
+    записи одного вызова делят `action_id`. Присланное значение, равное нынешнему, записи
+    не оставляет: правки не было.
     """
     ensure_scope(actor, TokenScope.MAIN, action="project.update")
+    await lock_changes(session)
+    # Под очередью изменений перечитать: проект разрешён из ключа до неё, и «было» в
+    # записи иначе могло бы оказаться чужим устаревшим снимком.
+    await session.refresh(project)
 
-    if title is not None:
-        project.title = title.strip()
-    if description is not None:
-        project.description = description.strip()
+    changes = {
+        TaskField.TITLE: None if title is None else title.strip(),
+        TaskField.DESCRIPTION: None if description is None else description.strip(),
+    }
+    action_id = uuid.uuid4()
+    for field, after in changes.items():
+        before: str = getattr(project, field.value)
+        if after is None or after == before:
+            continue
+        setattr(project, field.value, after)
+        await case_service.record_project_field_changed(
+            session,
+            project,
+            actor=actor,
+            field=field,
+            before=before,
+            after=after,
+            action_id=action_id,
+        )
     await session.flush()
     return project
 

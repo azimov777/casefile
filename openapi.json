@@ -2764,6 +2764,529 @@
         }
       }
     },
+    "/api/v1/projects/{project_key}/entries": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Append a project case entry",
+        "description": "Подшивает запись в дело проекта: заметку, решение, находку или артефакт.\n\nНабор `task`, как у записей дела задачи. Номер `no` считается внутри проекта, ссылка\nна запись — `TRK#7`. Типы задачи (`summary`, `question`, `verdict`, ...) в деле\nпроекта не принимаются, служебные (`created`, `field_changed`) подшивает сам трекер.\nЗамечания к форме и ссылкам приходят разом в `422 entry_fields_invalid`. Записи\nнеизменяемы.\n\nПовтор с тем же `Idempotency-Key` отвечает первой записью, а не подшивает вторую.",
+        "operationId": "create_project_entry",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectEntryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Read project case entries",
+        "description": "Записи дела проекта с телами и нагрузкой, в порядке `no`.\n\nФильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,\n`after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют\nоба, побеждает больший.",
+        "operationId": "list_project_entries",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "nos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only these entry numbers",
+              "examples": [
+                [
+                  3,
+                  12
+                ]
+              ],
+              "title": "Nos"
+            },
+            "description": "Read only these entry numbers"
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EntryType"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries of these types",
+              "examples": [
+                [
+                  "summary"
+                ]
+              ],
+              "title": "Types"
+            },
+            "description": "Read only entries of these types"
+          },
+          {
+            "name": "after_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries after this number — what happened since",
+              "examples": [
+                12
+              ],
+              "title": "After No"
+            },
+            "description": "Read only entries after this number — what happened since"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/entries/{entry_no}": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Read one project case entry",
+        "description": "Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`.\n\nНомера, которого в деле проекта нет, — `404 entry_not_found`.",
+        "operationId": "read_project_entry",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "entry_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Entry number inside the project, from 1",
+              "examples": [
+                7
+              ],
+              "title": "Entry No"
+            },
+            "description": "Entry number inside the project, from 1"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tasks": {
       "post": {
         "tags": [
@@ -5329,13 +5852,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Only entries of tasks in this project; matching ignores case",
+              "description": "Only entries of this project: its own case and the cases of its tasks; matching ignores case",
               "examples": [
                 "TRK"
               ],
               "title": "Project"
             },
-            "description": "Only entries of tasks in this project; matching ignores case"
+            "description": "Only entries of this project: its own case and the cases of its tasks; matching ignores case"
           },
           {
             "name": "types",
@@ -5563,13 +6086,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Only entries of tasks in this project; matching ignores case",
+              "description": "Only entries of this project: its own case and the cases of its tasks; matching ignores case",
               "examples": [
                 "TRK"
               ],
               "title": "Project"
             },
-            "description": "Only entries of tasks in this project; matching ignores case"
+            "description": "Only entries of this project: its own case and the cases of its tasks; matching ignores case"
           },
           {
             "name": "types",
@@ -6317,7 +6840,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               []
             ]
@@ -6358,7 +6881,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -6368,6 +6891,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -6395,7 +6926,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -6439,6 +6970,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -6517,7 +7049,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -6527,6 +7059,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -6554,7 +7094,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -6606,6 +7146,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -6770,7 +7311,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -6780,6 +7321,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -6807,7 +7356,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -6851,6 +7400,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -7561,7 +8111,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -7769,16 +8319,39 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
           },
           "task_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Task Key",
+            "description": "Key of the owning task; `null` for an entry of a project's case",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Key",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -7806,7 +8379,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -7850,6 +8423,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -7858,7 +8432,7 @@
           "payload"
         ],
         "title": "FieldChangedEntryRead",
-        "description": "Служебная запись о правке обвязки: сегодня это только `priority`."
+        "description": "Служебная запись о правке обвязки задачи (`priority`) или карточки проекта\n(название, описание)."
       },
       "FieldChangedFactsRead": {
         "properties": {
@@ -8120,7 +8694,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -8130,6 +8704,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -8157,7 +8739,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8204,6 +8786,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -8576,7 +9159,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               []
             ]
@@ -8630,16 +9213,39 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
           },
           "task_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Task Key",
+            "description": "Key of the owning task; `null` for an entry of a project's case",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Key",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -8667,7 +9273,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8718,6 +9324,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -8725,7 +9332,7 @@
           "type"
         ],
         "title": "PlainEntryRead",
-        "description": "Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи."
+        "description": "Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи\nили проекта."
       },
       "ProjectCreate": {
         "properties": {
@@ -8765,6 +9372,57 @@
         ],
         "title": "ProjectCreate",
         "description": "Создание проекта.\n\nКлюч принимается в любом регистре и хранится в верхнем: он идёт в ключ каждой задачи\n(`TRK-42`) и там обязан читаться как ключ. Уникальность — без учёта регистра."
+      },
+      "ProjectEntryCreate": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Markdown body of the entry",
+            "default": ""
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              []
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Номер задачи выдаётся до валидации"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "note",
+              "decision",
+              "finding",
+              "artifact"
+            ],
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "type"
+        ],
+        "title": "ProjectEntryCreate",
+        "description": "Запись агента или человека в деле проекта: заметка, решение, находка, артефакт.\n\nОтдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой\n(`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не\nотказом `entry_fields_invalid` после."
       },
       "ProjectRead": {
         "properties": {
@@ -8872,7 +9530,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               []
             ]
@@ -8924,7 +9582,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -8934,6 +9592,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -8961,7 +9627,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9005,6 +9671,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -9117,7 +9784,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               []
             ]
@@ -9165,7 +9832,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -9175,6 +9842,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -9202,7 +9877,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9246,6 +9921,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -9315,7 +9991,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               []
             ]
@@ -9356,7 +10032,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -9366,6 +10042,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -9393,7 +10077,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9437,6 +10121,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -9564,7 +10249,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -9574,6 +10259,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -9601,7 +10294,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9645,6 +10338,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -9842,7 +10536,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -9852,6 +10546,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -9879,7 +10581,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9923,6 +10625,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -10039,7 +10742,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               []
             ]
@@ -10080,7 +10783,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -10090,6 +10793,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -10117,7 +10828,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10161,6 +10872,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",
@@ -11565,7 +12277,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               []
             ]
@@ -11606,7 +12318,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the task, from 1; `TRK-42#12`",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
             "examples": [
               12
             ]
@@ -11616,6 +12328,14 @@
             "title": "Task Key",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -11643,7 +12363,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11687,6 +12407,7 @@
           "seq",
           "no",
           "task_key",
+          "project_key",
           "author",
           "title",
           "body",

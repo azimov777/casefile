@@ -7,10 +7,10 @@
 - `__init__.py` — реестр группы: модули инструментов по порядку `tools/list`
 - `arguments.py` — описание участника, общее для регистрации и правки
 - `views.py` — короткие ответы записи: ключ проекта, имя участника
-- `get_project.py` — `get_project`: проект с описанием
+- `get_project.py` — `get_project`: проект с описанием и описью его дела
 - `list_projects.py` — `list_projects`: проекты строкой, страницами
 - `list_participants.py` — `list_participants`: реестр участников, страницами
 - `create_project.py` — `create_project`: ключ, название и описание нового проекта
-- `update_project.py` — `update_project`: новое название и описание, без следа прежних
+- `update_project.py` — `update_project`: новое название и описание, прежние — в `field_changed` дела проекта
 - `register_participant.py` — `register_participant`: род и имя нового участника
 - `update_participant.py` — `update_participant`: новое описание участника

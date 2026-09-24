@@ -412,6 +412,64 @@ export interface paths {
         patch: operations["update_project"];
         trace?: never;
     };
+    "/api/v1/projects/{project_key}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read project case entries
+         * @description Записи дела проекта с телами и нагрузкой, в порядке `no`.
+         *
+         *     Фильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,
+         *     `after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют
+         *     оба, побеждает больший.
+         */
+        get: operations["list_project_entries"];
+        put?: never;
+        /**
+         * Append a project case entry
+         * @description Подшивает запись в дело проекта: заметку, решение, находку или артефакт.
+         *
+         *     Набор `task`, как у записей дела задачи. Номер `no` считается внутри проекта, ссылка
+         *     на запись — `TRK#7`. Типы задачи (`summary`, `question`, `verdict`, ...) в деле
+         *     проекта не принимаются, служебные (`created`, `field_changed`) подшивает сам трекер.
+         *     Замечания к форме и ссылкам приходят разом в `422 entry_fields_invalid`. Записи
+         *     неизменяемы.
+         *
+         *     Повтор с тем же `Idempotency-Key` отвечает первой записью, а не подшивает вторую.
+         */
+        post: operations["create_project_entry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/entries/{entry_no}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one project case entry
+         * @description Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`.
+         *
+         *     Номера, которого в деле проекта нет, — `404 entry_not_found`.
+         */
+        get: operations["read_project_entry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -1091,7 +1149,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example []
              */
             refs?: string[];
@@ -1120,7 +1178,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -1129,6 +1187,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1144,7 +1208,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1221,7 +1285,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -1230,6 +1294,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1245,7 +1315,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1373,7 +1443,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -1382,6 +1452,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1397,7 +1473,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1716,7 +1792,7 @@ export interface components {
         EntryHeadingRead: {
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -1778,7 +1854,8 @@ export interface components {
         };
         /**
          * FieldChangedEntryRead
-         * @description Служебная запись о правке обвязки: сегодня это только `priority`.
+         * @description Служебная запись о правке обвязки задачи (`priority`) или карточки проекта
+         *     (название, описание).
          */
         FieldChangedEntryRead: {
             /**
@@ -1794,15 +1871,22 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
+             * @description Key of the owning task; `null` for an entry of a project's case
              * @example TRK-42
              */
-            task_key: string;
+            task_key: string | null;
+            /**
+             * Project Key
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`
+             * @example null
+             */
+            project_key: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1818,7 +1902,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2014,7 +2098,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -2023,6 +2107,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2038,7 +2128,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2295,7 +2385,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example []
              */
             refs?: string[];
@@ -2313,7 +2403,8 @@ export interface components {
         };
         /**
          * PlainEntryRead
-         * @description Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи.
+         * @description Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи
+         *     или проекта.
          */
         PlainEntryRead: {
             /**
@@ -2329,15 +2420,22 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
+             * @description Key of the owning task; `null` for an entry of a project's case
              * @example TRK-42
              */
-            task_key: string;
+            task_key: string | null;
+            /**
+             * Project Key
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`
+             * @example null
+             */
+            project_key: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2353,7 +2451,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2403,6 +2501,39 @@ export interface components {
              * @example Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`
              */
             description: string;
+        };
+        /**
+         * ProjectEntryCreate
+         * @description Запись агента или человека в деле проекта: заметка, решение, находка, артефакт.
+         *
+         *     Отдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой
+         *     (`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не
+         *     отказом `entry_fields_invalid` после.
+         */
+        ProjectEntryCreate: {
+            /**
+             * Body
+             * @description Markdown body of the entry
+             * @default
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example []
+             */
+            refs?: string[];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Номер задачи выдаётся до валидации
+             */
+            title: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "note" | "decision" | "finding" | "artifact";
         };
         /**
          * ProjectRead
@@ -2482,7 +2613,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example []
              */
             refs?: string[];
@@ -2517,7 +2648,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -2526,6 +2657,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2541,7 +2678,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2630,7 +2767,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example []
              */
             refs?: string[];
@@ -2664,7 +2801,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -2673,6 +2810,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2688,7 +2831,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2757,7 +2900,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example []
              */
             refs?: string[];
@@ -2786,7 +2929,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -2795,6 +2938,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2810,7 +2959,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2901,7 +3050,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -2910,6 +3059,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2925,7 +3080,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3054,7 +3209,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -3063,6 +3218,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3078,7 +3239,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3161,7 +3322,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example []
              */
             refs?: string[];
@@ -3190,7 +3351,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -3199,6 +3360,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3214,7 +3381,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3968,7 +4135,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example []
              */
             refs?: string[];
@@ -3997,7 +4164,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the task, from 1; `TRK-42#12`
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
              * @example 12
              */
             no: number;
@@ -4006,6 +4173,12 @@ export interface components {
              * @example TRK-42
              */
             task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4021,7 +4194,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to entries `KEY-N#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5841,6 +6014,265 @@ export interface operations {
             };
         };
     };
+    list_project_entries: {
+        parameters: {
+            query?: {
+                /** @description Read only these entry numbers */
+                nos?: number[] | null;
+                /** @description Read only entries of these types */
+                types?: components["schemas"]["EntryType"][] | null;
+                /** @description Read only entries after this number — what happened since */
+                after_no?: number | null;
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_project_entry: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_project_entry: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Entry number inside the project, from 1 */
+                entry_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_tasks: {
         parameters: {
             query?: {
@@ -6988,7 +7420,7 @@ export interface operations {
                 after?: number;
                 /** @description Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail */
                 task?: string[] | null;
-                /** @description Only entries of tasks in this project; matching ignores case */
+                /** @description Only entries of this project: its own case and the cases of its tasks; matching ignores case */
                 project?: string | null;
                 /** @description Only entries of these types */
                 types?: components["schemas"]["EntryType"][] | null;
@@ -7078,7 +7510,7 @@ export interface operations {
             query?: {
                 /** @description Only entries of these tasks; matching ignores case. Repeat the parameter or separate the keys with commas — one key narrows the tail exactly as it always did, and at most 50 keys fit in one filter. A session leading several cases asks about all of them at once instead of polling them one by one. An unknown key answers 422 instead of a silent empty tail */
                 task?: string[] | null;
-                /** @description Only entries of tasks in this project; matching ignores case */
+                /** @description Only entries of this project: its own case and the cases of its tasks; matching ignores case */
                 project?: string | null;
                 /** @description Only entries of these types */
                 types?: components["schemas"]["EntryType"][] | null;

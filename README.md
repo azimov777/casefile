@@ -147,17 +147,19 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `answer` — answers a question of the same task
 - `resolve` — resolves a remark on a task: its outcome and where the work went
 - `add_verdict` — files the outcome of one review check
+- `read_project_entries` — returns entry bodies of one project's case, with payload, in number order
+- `add_project_entry` — files a decision, finding, artifact or note in a project's case
 
 **Links**
 - `link` — links two tasks and files `link_added` in both cases
 - `unlink` — removes a link and files `link_removed` in both cases
 
 **Projects & participants**
-- `get_project` — returns one project by its key: key, title and description
+- `get_project` — returns one project by its key: key, title, description and the index of its case
 - `list_projects` — lists the installation's projects: key and title
 - `list_participants` — lists the participant registry: the possible addressees of a question
 - `create_project` — creates a project (`main` token only)
-- `update_project` — changes a project's title and description (`main` token only)
+- `update_project` — changes a project's title and description, recording each change in its case (`main` token only)
 - `register_participant` — registers a human or a permanent agent (`main` token only)
 - `update_participant` — changes a participant's description (`main` token only)
 
