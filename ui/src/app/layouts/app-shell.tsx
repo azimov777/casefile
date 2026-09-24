@@ -52,7 +52,7 @@ export function AppShell() {
           aria-label={t('app.trackerSections')}
           className="col-start-1 row-start-1 row-end-[span_99] hidden border-r border-line bg-surface fold:block"
         >
-          {/* Панель прилипает: очередь — то, куда переходят с любой глубины прокрутки. */}
+          {/* Панель прилипает: проект — то, куда переходят с любой глубины прокрутки. */}
           <div className="sticky top-0 h-dvh">
             <AppSide />
           </div>

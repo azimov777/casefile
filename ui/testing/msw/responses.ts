@@ -57,7 +57,7 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
       ...STAMPS,
     },
     token: { id: '33333333-3333-3333-3333-333333333333', scope: 'task' },
-    queues: [
+    projects: [
       {
         id: '22222222-2222-2222-2222-222222222222',
         key: 'DEMO',
@@ -188,7 +188,7 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
   return {
     id: '33333333-3333-3333-3333-333333333333',
     key,
-    queue: { key: key.split('-')[0] ?? 'DEMO', title: 'Демонстрация' },
+    project: { key: key.split('-')[0] ?? 'DEMO', title: 'Демонстрация' },
     title: `Задача ${key}`,
     description: 'Отказ разбора запроса приходит без списка допустимых полей.',
     goal: 'Отказ поиска чинится с первой попытки',

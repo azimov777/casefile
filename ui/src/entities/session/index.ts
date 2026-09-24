@@ -4,7 +4,7 @@ export {
   sessionKeys,
   type Bootstrap,
   type Participant,
-  type Queue,
+  type Project,
 } from './api/bootstrap';
 export { markSessionExpired, resetSessionExpiry } from './model/expiry';
 export { useInstallKey } from './model/use-install-key';

@@ -21,7 +21,7 @@ export type TaskView = 'table' | 'board';
 export interface TaskFilters {
   /** Режим отображения. Живёт в адресе, как и отбор: ссылка на доску открывает доску. */
   view: TaskView;
-  queue: string;
+  project: string;
   status: TaskStatus[];
   priority: TaskPriority[];
   assignee: string;
@@ -70,7 +70,7 @@ export interface TaskFilters {
  * `waiting` сюда не входит, хотя работа в нём не идёт. Свёрнуто здесь то, что **уже
  * не в работе**, а ждущее из работы не вышло — оно ждёт хода, и ход этот человеческий
  * (`../docs/CONCEPT.md`, 3.3). Свернув его, доска спрятала бы от человека
- * единственный столбец, адресованный лично ему, — и он узнавал бы о своей очереди
+ * единственный столбец, адресованный лично ему, — и он узнавал бы о своём ходе
  * только отбором, ради отмены которого статус и заводился.
  */
 export const DEFAULT_COLLAPSED: TaskStatus[] = ['done', 'cancelled'];
@@ -135,7 +135,7 @@ export const OPEN_REMARKS_CONDITION = 'open_remarks: > 0';
 
 export const EMPTY_FILTERS: TaskFilters = {
   view: 'table',
-  queue: '',
+  project: '',
   status: [],
   priority: [],
   assignee: '',
@@ -163,7 +163,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
 
   return {
     view: params.get('view') === 'board' ? 'board' : 'table',
-    queue: params.get('queue') ?? '',
+    project: params.get('project') ?? '',
     status: keepKnown(params.getAll('status'), TASK_STATUSES),
     priority: keepKnown(params.getAll('priority'), TASK_PRIORITIES),
     assignee: params.get('assignee') ?? '',
@@ -178,7 +178,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
       ? keepKnown(params.getAll('collapsed'), TASK_STATUSES)
       : DEFAULT_COLLAPSED,
     // Любое другое значение — умолчание: архив скрыт. Опечатка в адресе не вправе
-    // вывалить человеку всю историю очереди.
+    // вывалить человеку всю историю проекта.
     showArchive: params.get('archive') === ARCHIVE_SHOWN,
   };
 }
@@ -188,7 +188,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   const params = new URLSearchParams();
 
   if (filters.view === 'board') params.set('view', 'board');
-  if (filters.queue !== '') params.set('queue', filters.queue);
+  if (filters.project !== '') params.set('project', filters.project);
   for (const status of filters.status) params.append('status', status);
   for (const priority of filters.priority) params.append('priority', priority);
   if (filters.assignee.trim() !== '') params.set('assignee', filters.assignee.trim());
@@ -262,7 +262,7 @@ export function filtersToListParams(filters: TaskFilters): TaskListRequest {
   if (query !== '') return { query, ...paging, ...archive };
 
   return {
-    queue: filters.queue === '' ? undefined : [filters.queue],
+    project: filters.project === '' ? undefined : [filters.project],
     // Столбцы доски и есть отбор по статусу: отбирать ещё и параметром значило бы
     // показывать пустые столбцы рядом с непустыми и врать, что задач в них нет.
     status: !board && filters.status.length > 0 ? filters.status : undefined,
@@ -295,15 +295,15 @@ function conditionsOf(filters: TaskFilters): string | undefined {
  *
  * Считается через запись в адрес, а не своим перечислением полей: новый фильтр иначе
  * пришлось бы вспомнить в двух местах, и забытый здесь тихо превратил бы «ничего не
- * нашлось по вашим условиям» в «в очереди пусто».
+ * нашлось по вашим условиям» в «в проекте пусто».
  *
- * Очередь условием не считается: она стала местом в интерфейсе (UI-38). Пустая очередь
+ * Проект условием не считается: он стал местом в интерфейсе (UI-38). Пустой проект
  * — это «здесь пока ничего нет», а не «ваши условия ничего не нашли», и предлагать
- * сброс, который вынесет человека из очереди, здесь нечего.
+ * сброс, который вынесет человека из проекта, здесь нечего.
  *
  * Показ архива условием тоже не считается: он выдачу расширяет, а не сужает, и сброс
  * его не трогает (UI-97). Без условий и с показанным архивом пустота — это пустота
- * очереди.
+ * проекта.
  */
 export function hasConditions(filters: TaskFilters): boolean {
   const conditions = writeFilters({
@@ -318,12 +318,12 @@ export function hasConditions(filters: TaskFilters): boolean {
 }
 
 /**
- * Что в адресе списка называет место, а не условие: очередь и вид.
+ * Что в адресе списка называет место, а не условие: проект и вид.
  *
  * Сброс отбора их не трогает — человек остаётся там, где стоял, и смотрит тем же
- * видом; «уйти из очереди» — отдельное действие, и делается оно в боковой панели.
+ * видом; «уйти из проекта» — отдельное действие, и делается оно в боковой панели.
  */
-export const PLACE: Pick<TaskFilters, 'queue' | 'view'> = { queue: '', view: 'table' };
+export const PLACE: Pick<TaskFilters, 'project' | 'view'> = { project: '', view: 'table' };
 
 /**
  * Номер страницы из адреса. Всё, что не целое число больше нуля, читается как первая

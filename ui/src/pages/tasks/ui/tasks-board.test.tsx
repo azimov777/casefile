@@ -60,7 +60,7 @@ describe('доска', () => {
   it('знак статуса стоит в заголовке столбца, а приоритет карточки назван родом', async () => {
     server.use(listing([task('DEMO-9', { status: 'open', priority: 'critical' })]));
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
 
     // Тот же словарь форм, что в списке и на карточке (решение Д20).
     const open = await screen.findByRole('region', { name: 'open' });
@@ -75,7 +75,7 @@ describe('доска', () => {
   it('раскладывает задачи по столбцу на каждое значение статуса из контракта', async () => {
     server.use(listing());
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
 
     await screen.findByRole('region', { name: TASK_STATUSES[0] as string });
 
@@ -102,7 +102,7 @@ describe('доска', () => {
   it('на отрисовку доски уходит по запросу на столбец и один на число выдачи', async () => {
     server.use(listing());
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
     await screen.findByRole('region', { name: 'open' });
     await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
 
@@ -142,7 +142,7 @@ describe('доска', () => {
       }),
     );
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
 
     const child = await within(column('backlog')).findByRole('article');
     expect(within(child).getByRole('link', { name: /DEMO-2/ })).toHaveAttribute(
@@ -163,7 +163,7 @@ describe('доска', () => {
 
   it('закрытые и отменённые свёрнуты и показывают число, клик раскрывает', async () => {
     server.use(listing());
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
 
     await screen.findByRole('region', { name: 'done' });
     const done = column('done');
@@ -184,7 +184,7 @@ describe('доска', () => {
   it('статус отбора на доску не уходит: столбец спрашивает только свой', async () => {
     server.use(listing());
 
-    renderApp('/tasks?queue=DEMO&view=board&status=open&assignee=owner&sort=key');
+    renderApp('/tasks?project=DEMO&view=board&status=open&assignee=owner&sort=key');
     await screen.findByRole('region', { name: 'open' });
     await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
 
@@ -204,7 +204,7 @@ describe('доска', () => {
 
   it('переключение в таблицу сохраняет отбор и меняет адрес', async () => {
     server.use(listing());
-    renderApp('/tasks?queue=DEMO&view=board&assignee=owner');
+    renderApp('/tasks?project=DEMO&view=board&assignee=owner');
     await screen.findByRole('region', { name: 'open' });
 
     const user = userEvent.setup();
@@ -230,7 +230,7 @@ describe('дочитывание столбца', () => {
   it('столбец рисует первую страницу, а остальное приносит прокрутка', async () => {
     server.use(listing(LONG));
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
     const open = await screen.findByRole('region', { name: 'open' });
 
     // Сразу после отрисовки в разметке ровно страница, а не вся выдача, — при том
@@ -260,7 +260,7 @@ describe('дочитывание столбца', () => {
   it('дочитанный столбец сторожа снимает: спрашивать больше нечего', async () => {
     server.use(listing([task('DEMO-1', { status: 'open' })]));
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
     const open = await screen.findByRole('region', { name: 'open' });
     await within(open).findByRole('article');
 
@@ -285,7 +285,7 @@ describe('дочитывание столбца', () => {
       }),
     );
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
     const open = await screen.findByRole('region', { name: 'open' });
     await waitFor(() =>
       expect(within(open).getAllByRole('article')).toHaveLength(TASK_COLUMN_PAGE_SIZE),
@@ -322,7 +322,7 @@ describe('дочитывание столбца', () => {
       }),
     );
 
-    renderApp('/tasks?queue=DEMO&view=board');
+    renderApp('/tasks?project=DEMO&view=board');
     const open = await screen.findByRole('region', { name: 'open' });
 
     // Пустой столбец и непрочитанный — разные беды, и путать их нельзя: у первого

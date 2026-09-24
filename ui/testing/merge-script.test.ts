@@ -25,7 +25,7 @@
  * те же, но команда одна (`docker compose run --rm test`), а здесь их две разной цены
  * (`pnpm check`, `pnpm e2e`), и обе обязаны быть названы. Проверки конфликта там нет —
  * тот же дефект живёт и в `../scripts/merge-task-branch.sh`, но это отдельная
- * задача очереди `TRK`, не этого файла.
+ * задача проекта `TRK`, не этого файла.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';

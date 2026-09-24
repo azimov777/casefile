@@ -73,26 +73,26 @@ describe('боковая панель', () => {
     expect(counter).not.toHaveClass('text-attention');
   });
 
-  it('очереди из bootstrap — места, и текущее помечено `aria-current`', async () => {
+  it('проекты из bootstrap — места, и текущее помечено `aria-current`', async () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
-    renderApp('/tasks?queue=DEMO&view=board&status=open');
+    renderApp('/tasks?project=DEMO&view=board&status=open');
 
     const demo = await screen.findByRole('link', { name: /DEMO/ });
     expect(demo).toHaveAttribute('aria-current', 'page');
-    // Переход в очередь сохраняет вид и остальной отбор: меняется только очередь.
-    expect(demo).toHaveAttribute('href', '/tasks?view=board&queue=DEMO&status=open');
+    // Переход в проект сохраняет вид и остальной отбор: меняется только проект.
+    expect(demo).toHaveAttribute('href', '/tasks?view=board&project=DEMO&status=open');
 
     const all = screen.getByRole('link', { name: say.ui('app.allTasks') });
     expect(all).not.toHaveAttribute('aria-current');
     expect(all).toHaveAttribute('href', '/tasks?view=board&status=open');
   });
 
-  it('длинное название очереди видно целиком, переносом, а не только в подсказке', async () => {
+  it('длинное название проекта видно целиком, переносом, а не только в подсказке', async () => {
     const title = 'Трекер: интерфейс человека, который ведут агенты, и его доводка';
     const base = bootstrap();
     server.use(
       http.get(`${API}/api/v1/bootstrap`, () =>
-        data(bootstrap({ queues: [{ ...base.queues[0]!, key: 'UI', title }] })),
+        data(bootstrap({ projects: [{ ...base.projects[0]!, key: 'UI', title }] })),
       ),
     );
     renderApp('/tasks');
@@ -108,7 +108,7 @@ describe('боковая панель', () => {
     expect(shown).toHaveClass('wrap-anywhere');
   });
 
-  it('во входящей помечен раздел, а не очередь', async () => {
+  it('во входящей помечен раздел, а не проект', async () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
     server.use(http.get(`${API}/api/v1/questions`, () => collection([])));
     server.use(http.get(`${API}/api/v1/remarks`, () => collection([])));

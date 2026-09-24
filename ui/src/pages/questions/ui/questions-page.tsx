@@ -59,15 +59,15 @@ function Inbox() {
   const [searchParams, setSearchParams] = useSearchParams();
   const bootstrap = useQuery(bootstrapQueryOptions());
 
-  const queue = searchParams.get('queue') ?? '';
+  const project = searchParams.get('project') ?? '';
   const blocking = searchParams.get('blocking') === 'true';
 
   const params = useMemo(
     () => ({
-      ...(queue === '' ? {} : { queue }),
+      ...(project === '' ? {} : { project }),
       ...(blocking ? { blocking: true } : {}),
     }),
-    [queue, blocking],
+    [project, blocking],
   );
 
   const questions = useInfiniteQuery(questionsQueryOptions(params));
@@ -75,7 +75,7 @@ function Inbox() {
 
   const author = bootstrap.data?.participant?.name ?? '';
   const remarks = useInfiniteQuery({
-    ...remarksQueryOptions({ ...(queue === '' ? {} : { queue }), author }),
+    ...remarksQueryOptions({ ...(project === '' ? {} : { project }), author }),
     // Пока неизвестно, кто вошёл, спрашивать нечего: без подписи выдача показала бы
     // чужие замечания под заголовком «мои».
     enabled: author !== '',
@@ -96,15 +96,15 @@ function Inbox() {
    * ни о чём не спрашивают, — а прежний текст утверждал именно это.
    */
   const questionConditions = [
-    ...(queue === '' ? [] : [t('condition.queue', { queue })]),
+    ...(project === '' ? [] : [t('condition.project', { project })]),
     ...(blocking ? [t('condition.blocking')] : []),
   ];
 
-  function apply(changes: { queue?: string; blocking?: boolean }) {
+  function apply(changes: { project?: string; blocking?: boolean }) {
     const updated = new URLSearchParams(searchParams);
-    if (changes.queue !== undefined) {
-      if (changes.queue === '') updated.delete('queue');
-      else updated.set('queue', changes.queue);
+    if (changes.project !== undefined) {
+      if (changes.project === '') updated.delete('project');
+      else updated.set('project', changes.project);
     }
     if (changes.blocking !== undefined) {
       if (changes.blocking) updated.set('blocking', 'true');
@@ -134,17 +134,17 @@ function Inbox() {
         aria-label={t('filterLabel')}
       >
         <label className="flex flex-col gap-1">
-          <span className="text-meta text-muted">{t('queue')}</span>
+          <span className="text-meta text-muted">{t('project')}</span>
           {/* Фон и цвет названы у поля явно: у `select` есть системная палитра формы,
               и без объявления цвет достаётся ему от браузера, а не от нашей темы
               (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`»). */}
           <select
             className="rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
-            value={queue}
-            onChange={(event) => apply({ queue: event.target.value })}
+            value={project}
+            onChange={(event) => apply({ project: event.target.value })}
           >
-            <option value="">{t('allQueues')}</option>
-            {(bootstrap.data?.queues ?? []).map((item) => (
+            <option value="">{t('allProjects')}</option>
+            {(bootstrap.data?.projects ?? []).map((item) => (
               <option key={item.key} value={item.key}>
                 {item.key} — {item.title}
               </option>
@@ -152,9 +152,9 @@ function Inbox() {
           </select>
         </label>
 
-        {/* Область действия названа рядом с полем: очередь отбирает обе половины,
+        {/* Область действия названа рядом с полем: проект отбирает обе половины,
             а «только блокирующие» стоит внутри вопросов и к замечаниям не относится. */}
-        <p className="text-meta text-faint">{t('queueNote')}</p>
+        <p className="text-meta text-faint">{t('projectNote')}</p>
       </form>
 
       {/*
@@ -205,7 +205,7 @@ function Inbox() {
                   ? t('noQuestions')
                   : emptyByFilter(
                       questionConditions,
-                      () => apply({ queue: '', blocking: false }),
+                      () => apply({ project: '', blocking: false }),
                       t,
                     )
                 : undefined
@@ -245,9 +245,13 @@ function Inbox() {
             loading={t('loadingRemarks')}
             empty={
               myRemarks.length === 0
-                ? queue === ''
+                ? project === ''
                   ? t('noRemarks')
-                  : emptyByFilter([t('condition.queue', { queue })], () => apply({ queue: '' }), t)
+                  : emptyByFilter(
+                      [t('condition.project', { project })],
+                      () => apply({ project: '' }),
+                      t,
+                    )
                 : undefined
             }
           />
@@ -437,8 +441,8 @@ type QuestionsView = 'inbox' | 'history';
 const VIEWS: QuestionsView[] = ['inbox', 'history'];
 
 /**
- * Адрес вида поверх текущего отбора. Очередь переезжает между видами — человек
- * смотрит одну и ту же очередь двумя способами, — а условия, которых у другого вида
+ * Адрес вида поверх текущего отбора. Проект переезжает между видами — человек
+ * смотрит один и тот же проект двумя способами, — а условия, которых у другого вида
  * нет, снимаются: «только блокирующие» принадлежит входящей, «кому угодно» — истории,
  * и молча унесённые в чужой вид, они вернулись бы при обратном переходе как отбор,
  * которого человек не видел.
@@ -499,24 +503,24 @@ function QuestionHistory() {
   const { t } = useTranslation('questions');
   const { t: brick } = useTranslation('ui');
 
-  const queue = searchParams.get('queue') ?? '';
+  const project = searchParams.get('project') ?? '';
   const anyone = searchParams.get('to') === 'anyone';
 
   const params = useMemo(
     () => ({
-      ...(queue === '' ? {} : { queue }),
+      ...(project === '' ? {} : { project }),
       ...(anyone ? { any_addressee: true } : {}),
     }),
-    [queue, anyone],
+    [project, anyone],
   );
   const history = useInfiniteQuery(questionHistoryQueryOptions(params));
   const items = history.data?.pages.flatMap((page) => page.items) ?? [];
 
-  function apply(changes: { queue?: string; anyone?: boolean }) {
+  function apply(changes: { project?: string; anyone?: boolean }) {
     const updated = new URLSearchParams(searchParams);
-    if (changes.queue !== undefined) {
-      if (changes.queue === '') updated.delete('queue');
-      else updated.set('queue', changes.queue);
+    if (changes.project !== undefined) {
+      if (changes.project === '') updated.delete('project');
+      else updated.set('project', changes.project);
     }
     if (changes.anyone !== undefined) {
       if (changes.anyone) updated.set('to', 'anyone');
@@ -539,15 +543,15 @@ function QuestionHistory() {
         aria-label={t('historyFilterLabel')}
       >
         <label className="flex flex-col gap-1">
-          <span className="text-meta text-muted">{t('queue')}</span>
+          <span className="text-meta text-muted">{t('project')}</span>
           {/* Фон и цвет названы явно по той же причине, что и во входящей. */}
           <select
             className="rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
-            value={queue}
-            onChange={(event) => apply({ queue: event.target.value })}
+            value={project}
+            onChange={(event) => apply({ project: event.target.value })}
           >
-            <option value="">{t('allQueues')}</option>
-            {(bootstrap.data?.queues ?? []).map((item) => (
+            <option value="">{t('allProjects')}</option>
+            {(bootstrap.data?.projects ?? []).map((item) => (
               <option key={item.key} value={item.key}>
                 {item.key} — {item.title}
               </option>
@@ -577,11 +581,15 @@ function QuestionHistory() {
           loading={t('loadingHistory')}
           empty={
             items.length === 0
-              ? queue === ''
+              ? project === ''
                 ? anyone
                   ? t('noHistoryAnyone')
                   : t('noHistory')
-                : emptyByFilter([t('condition.queue', { queue })], () => apply({ queue: '' }), t)
+                : emptyByFilter(
+                    [t('condition.project', { project })],
+                    () => apply({ project: '' }),
+                    t,
+                  )
               : undefined
           }
         />
