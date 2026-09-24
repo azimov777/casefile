@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.api.schemas.accounts import AccountRead
 from app.api.schemas.participants import ParticipantRead
-from app.api.schemas.queues import QueueRead
+from app.api.schemas.projects import ProjectRead
 from app.api.schemas.tokens import CurrentTokenRead
 
 
@@ -31,10 +31,10 @@ class BootstrapRead(BaseModel):
             "token, a shared agent one included, where `participant` is null"
         ),
     )
-    queues: list[QueueRead] = Field(
+    projects: list[ProjectRead] = Field(
         description=(
-            "Queues of the installation, one page capped at the common page ceiling. "
-            "An installation with more queues than that pages `GET /api/v1/queues`"
+            "Projects of the installation, one page capped at the common page ceiling. "
+            "An installation with more projects than that pages `GET /api/v1/projects`"
         ),
     )
     open_questions: int = Field(

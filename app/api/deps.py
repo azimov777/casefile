@@ -153,7 +153,7 @@ OffsetQuery = Annotated[
 # и MCP; адресация мягкая — `trk-42` находит `TRK-42`.
 TaskKeyPath = Annotated[
     str,
-    Path(description="Task key `QUEUE-number`; matching ignores case", examples=["TRK-42"]),
+    Path(description="Task key `PROJECT-number`; matching ignores case", examples=["TRK-42"]),
 ]
 
 

@@ -49,7 +49,7 @@ from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.case import EntryType
 from app.domain.tasks import CheckEdit
 from app.services import case as case_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import tasks as service
 from app.services.tasks import TaskChanges
@@ -89,26 +89,26 @@ async def create_task(
     actor: ActorDep,
     once: OnceDep,
 ) -> DataResponse[TaskRead]:
-    """Заводит задачу в `backlog`. Ключ выдаёт счётчик очереди, статус не принимается.
+    """Заводит задачу в `backlog`. Ключ выдаёт счётчик проекта, статус не принимается.
 
     В деле сразу появляется запись `created` с автором из токена. Разделы можно
     оставить пустыми и дописать в `backlog`; перед переходом в `open` четыре раздела
     должны быть заполнены, а `checks` — содержать хотя бы одну проверку.
 
     Повтор с тем же `Idempotency-Key` и тем же телом отвечает первой задачей, а не
-    заводит вторую: номер очереди на этом не тратится.
+    заводит вторую: номер проекта на этом не тратится.
     """
 
-    # Очередь разрешается **до** занятия ключа: запрос, отклонённый до работы, не должен
+    # Проект разрешается **до** занятия ключа: запрос, отклонённый до работы, не должен
     # тратить ключ. Он же уезжает в отпечаток разрешённым (`TRK`, а не `trk`) — адресация
     # в проекте мягкая, и иначе повтор тем же ключом отвечал бы конфликтом.
-    queue = await queues_service.get_queue(session, payload.queue)
+    project = await projects_service.get_project(session, payload.project)
 
     async def create() -> DataResponse[TaskRead]:
         task = await service.create_task(
             session,
             actor=actor,
-            queue=queue,
+            project=project,
             title=payload.title,
             description=payload.description,
             goal=payload.goal,
@@ -123,7 +123,10 @@ async def create_task(
 
     return await once.run(
         DataResponse[TaskRead],
-        request={"queue": queue.key, "task": payload.model_dump(mode="json", exclude={"queue"})},
+        request={
+            "project": project.key,
+            "task": payload.model_dump(mode="json", exclude={"project"}),
+        },
         build=create,
     )
 
@@ -143,8 +146,8 @@ async def list_tasks(
     """Задачи по строке запроса, по структурному фильтру или по обоим сразу.
 
     Оба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый
-    результат в одинаковом порядке: `?query=queue: TRK and status: open` и
-    `?queue=TRK&status=open` — это буквально один путь исполнения. Условия из разных
+    результат в одинаковом порядке: `?query=project: TRK and status: open` и
+    `?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных
     источников складываются по `and`.
 
     Запрос без условий — законный: это «все задачи» по ключу, и отдельного способа
@@ -155,7 +158,7 @@ async def list_tasks(
     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
     связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
-    `queue: TRK and status: open and blocked: false and open_blocking_questions: 0`.
+    `project: TRK and status: open and blocked: false and open_blocking_questions: 0`.
     Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
     названная задача ещё не закрыта».
 

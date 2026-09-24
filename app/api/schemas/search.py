@@ -37,7 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse
-from app.api.schemas.tasks import TaskFeaturesRead, TaskQueueRead
+from app.api.schemas.tasks import TaskFeaturesRead, TaskProjectRead
 from app.domain.query_language import (
     QUERY_EXAMPLES,
     QUERY_RIGHT_SHAPE,
@@ -58,7 +58,7 @@ from app.domain.tasks import TaskPriority, TaskStatus, feature_names
 from app.services.search import FoundTask, SearchOutcome, StructuredTerm
 
 _QUERY_DESCRIPTION = (
-    "Query language string, for example `queue: TRK and status: open and blocked: false "
+    "Query language string, for example `project: TRK and status: open and blocked: false "
     "and open_blocking_questions: 0`. Fields: "
     + ", ".join(f"`{name}`" for name in searchable_names())
     + ". Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, "
@@ -75,7 +75,7 @@ _QUERY_DESCRIPTION = (
 _SORT_DESCRIPTION = (
     "Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. "
     "Sortable: " + ", ".join(f"`{name}`" for name in sortable_names()) + ". `key` orders "
-    "by queue and task number, so `TRK-10` follows `TRK-2`. The result is always "
+    "by project and task number, so `TRK-10` follows `TRK-2`. The result is always "
     "tie-broken by task id, so paging stays stable while tasks are being created"
 )
 _FIELDS_DESCRIPTION = (
@@ -92,7 +92,7 @@ QueryParam = Annotated[
     str | None,
     Query(
         max_length=MAX_QUERY_LENGTH,
-        examples=["queue: TRK and status: open and blocked: false"],
+        examples=["project: TRK and status: open and blocked: false"],
         description=_QUERY_DESCRIPTION,
     ),
 ]
@@ -135,12 +135,12 @@ class TaskFilters:
             ),
         ),
     ] = None
-    queue: Annotated[
+    project: Annotated[
         list[str] | None,
         Query(
             max_length=MAX_VALUES_PER_CONDITION,
             examples=[["TRK"]],
-            description="Queue keys; matching ignores case",
+            description="Project keys; matching ignores case",
         ),
     ] = None
     parent: Annotated[
@@ -150,7 +150,7 @@ class TaskFilters:
             examples=[["TRK-7"]],
             description=(
                 "Parent task keys: the answer holds their direct children, one level "
-                "deep. `empty()` finds tasks with no parent — the top level of a queue. "
+                "deep. `empty()` finds tasks with no parent — the top level of a project. "
                 "An unknown key answers 422 instead of an empty page: emptiness here "
                 "reads as «no children» and would hide the typo"
             ),
@@ -236,7 +236,7 @@ class TaskFilters:
             StructuredTerm(name=name, values=values)
             for name, values in (
                 ("key", self.key),
-                ("queue", self.queue),
+                ("project", self.project),
                 ("parent", self.parent),
                 ("status", None if self.status is None else [item.value for item in self.status]),
                 ("assignee", self.assignee),
@@ -292,7 +292,7 @@ class TaskSearchRead(BaseModel):
 
     key: str = Field(examples=["TRK-42"], description="Immutable and never reused")
     id: uuid.UUID | None = None
-    queue: TaskQueueRead | None = None
+    project: TaskProjectRead | None = None
     title: str | None = None
     description: str | None = None
     goal: str | None = None
@@ -336,7 +336,7 @@ class TaskSearchRead(BaseModel):
         payload: dict[str, object] = {
             "id": task.id,
             "key": task.key,
-            "queue": TaskQueueRead.model_validate(task.queue),
+            "project": TaskProjectRead.model_validate(task.project),
             "title": task.title,
             "description": task.description,
             "goal": task.goal,

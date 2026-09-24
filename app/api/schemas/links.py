@@ -33,7 +33,7 @@ class LinkTaskRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     key: str = Field(examples=["TRK-7"])
-    title: str = Field(examples=["Выдать номера очередям"])
+    title: str = Field(examples=["Выдать номера проектам"])
     status: TaskStatus = Field(
         examples=[TaskStatus.OPEN],
         description="Status of the other task; `blocked` is computed from exactly this",

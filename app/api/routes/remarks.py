@@ -19,7 +19,7 @@ from app.api.schemas.common import CollectionResponse
 from app.api.schemas.entries import RemarkEntryRead, entry_read
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.services import case as case_service
-from app.services import queues as queues_service
+from app.services import projects as projects_service
 
 router = APIRouter(prefix="/remarks", tags=["remarks"])
 
@@ -33,9 +33,9 @@ AuthorQuery = Annotated[
         examples=["owner"],
     ),
 ]
-QueueQuery = Annotated[
+ProjectQuery = Annotated[
     str | None,
-    Query(description="Queue key of the remark's task; matching ignores case", examples=["TRK"]),
+    Query(description="Project key of the remark's task; matching ignores case", examples=["TRK"]),
 ]
 OpenQuery = Annotated[
     bool,
@@ -55,7 +55,7 @@ async def list_remarks(
     session: SessionDep,
     actor: ActorDep,
     author: AuthorQuery = None,
-    queue: QueueQuery = None,
+    project: ProjectQuery = None,
     open_only: OpenQuery = True,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
@@ -73,7 +73,7 @@ async def list_remarks(
         session,
         actor=actor,
         author=author,
-        queue=None if queue is None else await queues_service.get_queue(session, queue),
+        project=None if project is None else await projects_service.get_project(session, project),
         open_only=open_only,
         limit=limit,
         cursor=cursor,

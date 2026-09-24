@@ -113,7 +113,7 @@ class CurrentTokenRead(BaseModel):
         examples=[TokenScope.TASK],
         description=(
             "Scope of that token, the only right in the tracker: `task` opens the working "
-            "cycle, `main` adds writes to queues, participants and tokens. A write beyond "
+            "cycle, `main` adds writes to projects, participants and tokens. A write beyond "
             "it answers `403 permission_denied`"
         ),
     )
