@@ -30,7 +30,7 @@ from app.mcp.arguments import CursorArg, LimitArg
 from app.mcp.enums import TaskPrioritySchema, TaskStatusSchema
 from app.mcp.tools.tasks.views import FeaturesView, features, task
 from app.mcp.toolset import READ_ONLY, Toolset
-from app.mcp.views import AuthorView, PageView, ProjectRefView, page
+from app.mcp.views import AuthorView, PageView, ProjectRefView, page, project_ref
 from app.services import search as search_service
 from app.services.search import FoundTask, StructuredTerm
 
@@ -292,6 +292,9 @@ def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> F
     разъехалось бы с первым на первом же новом поле.
     """
     payload: dict[str, Any] = dict(task(found.task))
+    # Проект строкой выдачи — ключ и название, без описания карточки: одно и то же
+    # описание на каждой строке стоило бы контекста без новой информации.
+    payload["project"] = project_ref(found.task.project)
     if found.features is not None:
         payload[FEATURES_FIELD] = features(found.features)
     if found.parent is not None:

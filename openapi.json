@@ -2514,7 +2514,7 @@
           "projects"
         ],
         "summary": "Read a project",
-        "description": "Карточка проекта вместе с описанием и нынешними значениями атрибутов.\n\nАгент запрашивает её отдельно: в карточке задачи лежат только ключ и название, а\nописание бывает длинным, и таскать его в каждом ответе значило бы тратить контекст.\nИстория атрибутов — записи дела проекта (`/projects/{key}/entries`).",
+        "description": "Карточка проекта вместе с описанием и нынешними значениями атрибутов.\n\nОписание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и\nтаскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи\nдела проекта (`/projects/{key}/entries`).",
         "operationId": "read_project",
         "security": [
           {
@@ -10353,11 +10353,11 @@
           },
           "description": {
             "type": "string",
-            "maxLength": 20000,
             "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `project_description_too_long`. It rides in the card of every task of the project",
             "default": "",
             "examples": [
-              "Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"
+              "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
             ]
           }
         },
@@ -10394,9 +10394,9 @@
           "description": {
             "type": "string",
             "title": "Description",
-            "description": "Markdown context shared by every task of the project",
+            "description": "Short \"what this is\", up to 320 characters; may be empty. It rides in the card of every task of the project",
             "examples": [
-              "Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"
+              "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
             ]
           },
           "last_task_number": {
@@ -10519,9 +10519,9 @@
           "description": {
             "type": "string",
             "title": "Description",
-            "description": "Markdown context shared by every task of the project",
+            "description": "Short \"what this is\", up to 320 characters; may be empty. It rides in the card of every task of the project",
             "examples": [
-              "Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"
+              "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
             ]
           },
           "last_task_number": {
@@ -10560,6 +10560,31 @@
         "title": "ProjectRead",
         "description": "Проект в ответе."
       },
+      "ProjectRefRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Трекер"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "ProjectRefRead",
+        "description": "Проект одной строкой: ключ и название — в строке выдачи поиска.\n\nОписания здесь нет намеренно: строк в выдаче много, и одно и то же описание проекта\nна каждой стоило бы контекста без новой информации. Его несёт карточка задачи\n(`TaskProjectRead`)."
+      },
       "ProjectUpdate": {
         "properties": {
           "title": {
@@ -10573,10 +10598,10 @@
           },
           "description": {
             "type": "string",
-            "maxLength": 20000,
             "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `project_description_too_long`. It rides in the card of every task of the project",
             "examples": [
-              "Бэкенд трекера. Код в `app/`, соглашения в `docs/CONVENTIONS.md`"
+              "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
             ]
           }
         },
@@ -12539,15 +12564,24 @@
             "examples": [
               "Трекер"
             ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\" of the project, up to 320 characters; may be empty",
+            "examples": [
+              "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
+            ]
           }
         },
         "type": "object",
         "required": [
           "key",
-          "title"
+          "title",
+          "description"
         ],
         "title": "TaskProjectRead",
-        "description": "Проект в карточке задачи: ключ и название. Описание запрашивается отдельно."
+        "description": "Проект в карточке задачи: ключ, название и короткое описание (`CONCEPT.md`, 4.2).\n\nОписание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает\nконтекст проекта тем же чтением задачи, без второго вызова."
       },
       "TaskRead": {
         "properties": {
@@ -12719,7 +12753,7 @@
           "project": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TaskProjectRead"
+                "$ref": "#/components/schemas/ProjectRefRead"
               },
               {
                 "type": "null"
