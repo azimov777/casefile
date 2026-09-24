@@ -2764,6 +2764,274 @@
         }
       }
     },
+    "/api/v1/projects/{project_key}/archive": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Archive a project",
+        "description": "Архивирует проект с причиной. Требует набора `main`.\n\nПроект и его задачи замораживаются как есть: закрывать задачи не нужно, статусы не\nменяются. Дальше любое изменение в проекте и его задачах — новая задача, запись в\nдело, переход, правка, атрибут, новая связь — отвечает `409 project_archived`;\nснять связь с его задачей можно. Чтение работает как раньше. Причина уезжает в\nзапись `archived` дела проекта; пустая — `422 project_reason_required`. Проект уже в\nархиве — `409 project_archived`.",
+        "operationId": "archive_project",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectArchiving"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_ProjectDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/restore": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Restore an archived project",
+        "description": "Восстанавливает проект из архива с причиной. Требует набора `main`.\n\nЗадачи продолжаются с того места, где их застал архив. Причина уезжает в запись\n`restored` дела проекта; пустая — `422 project_reason_required`. Проект не в архиве —\n`409 project_not_archived`.",
+        "operationId": "restore_project",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectArchiving"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_ProjectDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_key}/attributes/{attribute_name}": {
       "put": {
         "tags": [
@@ -6547,6 +6815,7 @@
                   "discriminator": {
                     "mapping": {
                       "answer": "#/components/schemas/AnswerEntryRead",
+                      "archived": "#/components/schemas/ProjectArchiveEntryRead",
                       "artifact": "#/components/schemas/PlainEntryRead",
                       "assignee_changed": "#/components/schemas/AssigneeChangedEntryRead",
                       "attempt": "#/components/schemas/PlainEntryRead",
@@ -6563,6 +6832,7 @@
                       "question": "#/components/schemas/QuestionEntryRead",
                       "remark": "#/components/schemas/RemarkEntryRead",
                       "resolution": "#/components/schemas/ResolutionEntryRead",
+                      "restored": "#/components/schemas/ProjectArchiveEntryRead",
                       "section_changed": "#/components/schemas/SectionChangedEntryRead",
                       "status_changed": "#/components/schemas/StatusChangedEntryRead",
                       "summary": "#/components/schemas/SummaryEntryRead",
@@ -6615,6 +6885,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/AttributeRemovedEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ProjectArchiveEntryRead"
                     }
                   ]
                 }
@@ -9065,6 +9338,7 @@
           "propertyName": "type",
           "mapping": {
             "answer": "#/components/schemas/AnswerFactsRead",
+            "archived": "#/components/schemas/NoFactsRead",
             "artifact": "#/components/schemas/NoFactsRead",
             "assignee_changed": "#/components/schemas/AssigneeChangedFactsRead",
             "attempt": "#/components/schemas/NoFactsRead",
@@ -9081,6 +9355,7 @@
             "question": "#/components/schemas/QuestionFactsRead",
             "remark": "#/components/schemas/NoFactsRead",
             "resolution": "#/components/schemas/ResolutionFactsRead",
+            "restored": "#/components/schemas/NoFactsRead",
             "section_changed": "#/components/schemas/SectionChangedFactsRead",
             "status_changed": "#/components/schemas/StatusChangedFactsRead",
             "summary": "#/components/schemas/NoFactsRead",
@@ -9198,12 +9473,16 @@
           },
           {
             "$ref": "#/components/schemas/AttributeRemovedEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/ProjectArchiveEntryRead"
           }
         ],
         "discriminator": {
           "propertyName": "type",
           "mapping": {
             "answer": "#/components/schemas/AnswerEntryRead",
+            "archived": "#/components/schemas/ProjectArchiveEntryRead",
             "artifact": "#/components/schemas/PlainEntryRead",
             "assignee_changed": "#/components/schemas/AssigneeChangedEntryRead",
             "attempt": "#/components/schemas/PlainEntryRead",
@@ -9220,6 +9499,7 @@
             "question": "#/components/schemas/QuestionEntryRead",
             "remark": "#/components/schemas/RemarkEntryRead",
             "resolution": "#/components/schemas/ResolutionEntryRead",
+            "restored": "#/components/schemas/ProjectArchiveEntryRead",
             "section_changed": "#/components/schemas/SectionChangedEntryRead",
             "status_changed": "#/components/schemas/StatusChangedEntryRead",
             "summary": "#/components/schemas/SummaryEntryRead",
@@ -9250,7 +9530,9 @@
           "link_removed",
           "attribute_created",
           "attribute_changed",
-          "attribute_removed"
+          "attribute_removed",
+          "archived",
+          "restored"
         ],
         "title": "EntryType",
         "description": "Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после."
@@ -9922,7 +10204,9 @@
               "artifact",
               "remark",
               "note",
-              "created"
+              "created",
+              "archived",
+              "restored"
             ],
             "title": "Type"
           }
@@ -10331,6 +10615,167 @@
         "title": "PlainEntryRead",
         "description": "Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи\nили проекта."
       },
+      "ProjectArchiveEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "null",
+            "title": "Task Key",
+            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "examples": [
+              null
+            ]
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "archived",
+              "restored"
+            ],
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ProjectArchivePayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "ProjectArchiveEntryRead",
+        "description": "Служебная запись: проект архивирован (`archived`) или восстановлен (`restored`)."
+      },
+      "ProjectArchivePayload": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why the project was archived or restored",
+            "examples": [
+              "Репозиторий заброшен, работа перенесена в CORE"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ProjectArchivePayload",
+        "description": "Проект архивирован или восстановлен: причина действия."
+      },
+      "ProjectArchiving": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Reason",
+            "description": "Why the project is archived or restored; a blank one answers `422 project_reason_required`. Filed in the `archived` or `restored` entry of the project's case",
+            "examples": [
+              "Репозиторий заброшен, работа перенесена в CORE"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ProjectArchiving",
+        "description": "Архивирование или восстановление проекта: причина обязательна в обе стороны."
+      },
       "ProjectCreate": {
         "properties": {
           "key": {
@@ -10405,6 +10850,22 @@
             "description": "Last task number handed out; numbers are never reused",
             "examples": [
               42
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the project was archived; `null` while it is active. An archived project and its tasks are frozen: every change answers `409 project_archived`, except `restore` and removing a link. Reading works as usual",
+            "examples": [
+              null
             ]
           },
           "created_by": {
@@ -10530,6 +10991,22 @@
             "description": "Last task number handed out; numbers are never reused",
             "examples": [
               42
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the project was archived; `null` while it is active. An archived project and its tasks are frozen: every change answers `409 project_archived`, except `restore` and removing a link. Reading works as usual",
+            "examples": [
+              null
             ]
           },
           "created_by": {
