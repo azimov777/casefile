@@ -58,6 +58,7 @@ from app.domain.errors import (
     LinkExistsError,
     LinkNotFoundError,
     TaskClosedError,
+    TaskHasParentError,
 )
 from app.domain.links import (
     LinkKind,
@@ -141,9 +142,9 @@ async def add_link(
     """Ставит связь `task <kind> other` и подшивает `link_added` в оба дела.
 
     Порядок проверок — от дешёвых к дорогим и от формы к состоянию: вид связи, связь с
-    самой собой, закрытые задачи, дубликат, кольцо. Кольцо последним не случайно: это
-    единственная проверка с обходом графа, и платить за неё на заведомо неверном
-    запросе незачем.
+    самой собой, закрытые задачи, дубликат, второй родитель, кольцо. Кольцо последним
+    не случайно: это единственная проверка с обходом графа, и платить за неё на
+    заведомо неверном запросе незачем.
 
     Очередь изменений занимается после проверок формы и до первой проверки состояния:
     форма не зависит от того, что делают соседи, а всё остальное — зависит.
@@ -159,6 +160,14 @@ async def add_link(
     existing = await repository.find(source_id=source.id, target_id=target.id, kind=stored_kind)
     if existing is not None:
         raise LinkExistsError(details=_sides(task, other, requested))
+    if stored_kind is LinkKind.PARENT:
+        # Родитель один (TRK-135). Гонки двух запросов здесь нет: очередь изменений
+        # (`lock_changes` выше) пускает сценарии по одному, и второй прочтёт связь первого.
+        current = await repository.parent_key(target.id)
+        if current is not None:
+            raise TaskHasParentError(
+                details=_sides(task, other, requested) | {"child": target.key, "parent": current}
+            )
     if is_acyclic(stored_kind) and await repository.reaches(
         kind=stored_kind, from_id=target.id, to_id=source.id
     ):

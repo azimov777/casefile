@@ -977,6 +977,53 @@ async def test_create_task_is_born_in_backlog_with_its_parent(
     ]
 
 
+async def test_a_child_born_with_a_parent_takes_no_second_one(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Родитель один, детей много (TRK-135): `create_task(parent=)` даёт первого, второй —
+    отказ `task_has_parent` с любой стороны `link`, и связей у ребёнка не прибавляется.
+    """
+    sections = {
+        "goal": "цель",
+        "context": "контекст",
+        "constraints": "ограничения",
+        "output": "выход",
+        "checks": ["проверка"],
+    }
+    async with mcp_session(task_secret) as session:
+        other = await call(
+            session, "create_task", queue="trk", title="Вторая программа", description="д"
+        )
+        children = [
+            await call(
+                session,
+                "create_task",
+                queue="trk",
+                title=f"Часть {n}",
+                description="д",
+                sections=sections,
+                parent=task.key,
+            )
+            for n in range(2)
+        ]
+        child = children[0]["key"]
+        from_parent = await refuse(session, "link", key=other["key"], kind="parent", other=child)
+        from_child = await refuse(session, "link", key=child, kind="child", other=other["key"])
+        package = await call(session, "get_task", key=child)
+        program = await call(session, "get_task", key=task.key)
+
+    for text in (from_parent, from_child):
+        assert "task_has_parent" in text
+        assert task.key in text
+    assert [(item["kind"], item["other"]["key"]) for item in package["links"]] == [
+        ("child", task.key)
+    ]
+    # Время связей в одной транзакции одно, и порядок детей между собой решает `id`.
+    assert sorted((item["kind"], item["other"]["key"]) for item in program["links"]) == sorted(
+        ("parent", item["key"]) for item in children
+    )
+
+
 async def test_a_repeated_create_task_answers_with_the_first_task(
     mcp_session: Connect, task_secret: str, queue: Queue
 ) -> None:

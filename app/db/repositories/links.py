@@ -52,6 +52,24 @@ class LinkRepository:
         )
         return (await self._session.scalars(statement)).unique().one_or_none()
 
+    async def parent_key(self, task_id: uuid.UUID) -> str | None:
+        """Ключ родителя задачи — источника связи `parent`, где она цель, — или `None`.
+
+        Закрытый родитель тоже родитель: статус здесь не отбирается, в отличие от
+        `related_task_keys`. Родитель у задачи один (TRK-135); если данные старше этого
+        правила и родителей больше, берётся первый по времени связи — ответ «родитель
+        уже есть» от этого не меняется.
+        """
+        parent = aliased(Task, name="parent_task")
+        statement = (
+            select(parent.key)
+            .join(Link, parent.id == Link.source_id)
+            .where(Link.target_id == task_id, Link.kind == LinkKind.PARENT)
+            .order_by(Link.created_at, Link.id)
+            .limit(1)
+        )
+        return await self._session.scalar(statement)
+
     async def list_for_task(self, task_id: uuid.UUID) -> list[Link]:
         """Все связи задачи: и те, где она источник, и те, где она цель.
 

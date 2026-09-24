@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import event, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.author import created_by_columns
 from app.db.models.link import Link
 from app.db.models.queue import Queue
 from app.db.models.task import Task
@@ -425,21 +426,31 @@ async def test_a_row_names_the_direct_parent_and_not_the_grandparent(
 async def test_a_task_with_two_parents_names_both_in_the_order_the_links_were_made(
     db_session: AsyncSession, task_actor: Actor, queue: Queue
 ) -> None:
-    """Родителей бывает несколько (`docs/notes/links.md`), и строка отдаёт всех.
+    """Данные старше запрета (TRK-135): второй родитель мог появиться до него, и строка
+    отдаёт всех, а не прячет лишнего.
 
-    Второй родитель ставится обычной связью и принимается: ограничения «не больше одного»
-    нет ни в базе, ни в сценарии. Порядок — появление связи, как у связей в карточке, а
-    не ключ: родитель с меньшим ключом связан позже и стоит вторым. Время связей задано
-    явно — в одной транзакции `now()` у обеих одно и то же, и порядок решал бы случайный
-    `id`.
+    Сценарий второго родителя уже не поставит (`task_has_parent`), поэтому вторая связь
+    кладётся прямо в таблицу — так, как она лежит в базе, заведённой раньше. Порядок —
+    появление связи, как у связей в карточке, а не ключ: родитель с меньшим ключом связан
+    позже и стоит вторым. Время связей задано явно — в одной транзакции `now()` у обеих
+    одно и то же, и порядок решал бы случайный `id`.
     """
     linked_later = await make(db_session, task_actor, queue, "связан вторым")
     linked_first = await make(db_session, task_actor, queue, "связан первым")
     child = await make(db_session, task_actor, queue, "ребёнок двух программ")
-    for parent, moment in ((linked_first, 1), (linked_later, 2)):
-        await links_service.add_link(
-            db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT
+    await links_service.add_link(
+        db_session, linked_first, child, actor=task_actor, kind=LinkKind.PARENT
+    )
+    db_session.add(
+        Link(
+            source=linked_later,
+            target=child,
+            kind=LinkKind.PARENT,
+            **created_by_columns(task_actor.author),
         )
+    )
+    await db_session.flush()
+    for parent, moment in ((linked_first, 1), (linked_later, 2)):
         await db_session.execute(
             update(Link)
             .where(Link.source_id == parent.id, Link.target_id == child.id)
@@ -512,9 +523,17 @@ async def test_a_page_with_parents_costs_the_same_queries_whatever_its_size(
             db_session, program, child, actor=task_actor, kind=LinkKind.PARENT
         )
         if index % 2:
-            await links_service.add_link(
-                db_session, other_program, child, actor=task_actor, kind=LinkKind.PARENT
+            # Второй родитель — из данных старше запрета (TRK-135): сценарий его уже не
+            # поставит, а подзапрос родителей обязан стоить столько же и с ним.
+            db_session.add(
+                Link(
+                    source=other_program,
+                    target=child,
+                    kind=LinkKind.PARENT,
+                    **created_by_columns(task_actor.author),
+                )
             )
+            await db_session.flush()
 
     assert await _page_selects(db_session, task_actor, limit=1) == (1, 0)
     assert await _page_selects(db_session, task_actor, limit=50) == (1, 48)
