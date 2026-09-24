@@ -129,7 +129,7 @@ test('на доске у задачи с родителем видны его к
   await expect(page).toHaveURL(new RegExp(`/tasks/${child.key}$`));
 });
 
-test('в таблице родитель виден и ведёт в родителя, а высота строки с ним и без него одна', async ({
+test('в таблице родитель — плашка «родитель KEY»: нажатие открывает панель «Родитель задачи X», высота строк одна', async ({
   page,
   request,
 }) => {
@@ -140,40 +140,61 @@ test('в таблице родитель виден и ведёт в родит�
   await shellReady(page);
 
   const row = rowOf(page, child);
-  const shown = caption(row);
-  await expect(shown).toBeVisible();
-  await expect(shown).toContainText(parent.key);
-  await expect(shown).toContainText(parent.title);
+  const badge = caption(row);
+  await expect(badge).toBeVisible();
+  // Словом, а не одной стрелкой: в какую сторону связь, сказано (UI-152).
+  await expect(badge).toHaveText(new RegExp(`родитель\\s*${parent.key}`));
   await expect(caption(rowOf(page, top))).toHaveCount(0);
 
   /*
-   * Высота строки задана токеном и от подписи не растёт (решение Д4). Меряется после
+   * Высота строки задана токеном и от плашки не растёт (решение Д4). Меряется после
    * подстановки шрифта: Fira меняет метрику, и замер до неё сравнивал бы гарнитуры.
    */
   await fontsReady(page);
   const heights = await page
     .locator('tbody tr')
     .evaluateAll((rows) => rows.map((node) => node.getBoundingClientRect().height));
-  const withParent = await row.evaluate((node) => node.getBoundingClientRect().height);
-  const without = await rowOf(page, top).evaluate((node) => node.getBoundingClientRect().height);
   await test.info().attach('высоты строк таблицы', {
-    body: JSON.stringify({ withParent, without, heights }),
+    body: JSON.stringify({ heights }),
     contentType: 'application/json',
   });
-  expect(withParent).toBe(without);
   expect(new Set(heights).size, `высоты строк: ${JSON.stringify(heights)}`).toBe(1);
 
-  // Подпись — одна строка: её высота не больше высоты строки текста ссылки.
-  const lines = await shown.getByRole('link').evaluate((node) => {
-    const style = getComputedStyle(node);
-    return { height: node.getBoundingClientRect().height, line: parseFloat(style.lineHeight) };
-  });
-  expect(lines.height).toBeLessThanOrEqual(lines.line + 1);
+  // Название задачи с родителем и без стоит на одном месте и одной ширины: гнездо
+  // под плашку одно у всех строк (UI-152).
+  const title = (scope: Locator) =>
+    scope.locator('a[data-link="task"] span').evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const tr = (node.closest('tr') as Element).getBoundingClientRect();
+      return { left: box.left, top: box.top - tr.top, width: box.width };
+    });
+  expect(await title(row)).toEqual(await title(rowOf(page, top)));
 
-  // Клик по подписи — в родителя; клик по остальной строке — в саму задачу.
-  await shown.getByRole('link').click();
+  // Нажатие раскрывает панель, а не уводит в задачу.
+  await badge.click();
+  const panel = page.getByRole('dialog');
+  await expect(panel).toBeVisible();
+  await expect(page).toHaveURL(/\/tasks\?/);
+  await expect(badge).toHaveAttribute('aria-expanded', 'true');
+  // Панель называет задачу строки: чей это родитель, а не чей ребёнок.
+  await expect(panel).toContainText(`Родитель задачи ${child.key}`);
+  await expect(panel.getByRole('link')).toHaveText(`${parent.key} · ${parent.title}`);
+
+  // Клик по тексту панели не всплывает через портал в обработчик строки.
+  await panel.getByText(`Родитель задачи`).click();
+  await expect(page).toHaveURL(/\/tasks\?/);
+
+  // Esc закрывает панель и возвращает фокус на плашку.
+  await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0);
+  await expect(badge).toBeFocused();
+
+  // Ссылка в панели ведёт в родителя.
+  await badge.click();
+  await page.getByRole('dialog').getByRole('link').click();
   await expect(page).toHaveURL(new RegExp(`/tasks/${parent.key}$`));
 
+  // Клик по остальной строке — в саму задачу.
   await page.goBack();
   await expect(rowOf(page, child)).toBeVisible();
   await rowOf(page, child).getByRole('cell').last().click();
@@ -247,7 +268,7 @@ test('родителя приносит та же выдача: запросов
   for (const params of reading) expect(params.getAll('fields')).toContain('parents');
 });
 
-test('ссылка на родителя — своя остановка табом, и строку задачи она не обводит', async ({
+test('плашка родителя — своя остановка табом, и строку задачи она не обводит', async ({
   page,
   request,
 }) => {
@@ -260,14 +281,18 @@ test('ссылка на родителя — своя остановка таб�
   await row.locator('a[data-link="task"]').focus();
   await page.keyboard.press('Tab');
 
-  // За своей ссылкой строки — ссылка на родителя, и фокус на ней виден.
-  const parent = caption(row).getByRole('link');
-  await expect(parent).toBeFocused();
-  const drawn = await parent.evaluate((node) => ({
+  // За своей ссылкой строки — плашка родителя, и фокус на ней виден.
+  const badge = caption(row);
+  await expect(badge).toBeFocused();
+  const drawn = await badge.evaluate((node) => ({
     own: getComputedStyle(node).outlineStyle,
     row: getComputedStyle(node.closest('tr') as Element).outlineStyle,
   }));
   expect(drawn.own).not.toBe('none');
-  // Обведённая строка обещала бы Enter в эту задачу, а Enter уведёт в родителя.
+  // Обведённая строка обещала бы Enter в эту задачу, а Enter раскроет родителя.
   expect(drawn.row).toBe('none');
+
+  // Enter раскрывает панель — с клавиатуры так же, как нажатием.
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toContainText(`Родитель задачи ${child.key}`);
 });
