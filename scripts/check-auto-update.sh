@@ -16,7 +16,8 @@
 #   D. новый образ под `latest` и новый compose-файл «в main» установку не трогают;
 #   E. закреплённый `CASEFILE_VERSION` и `CASEFILE_AUTO_UPDATE=false` останавливают
 #      обновление, а снятое выключение его возвращает;
-#   F. повторный запуск `install.sh` берёт compose-файл из образа выпуска;
+#   F. повторный запуск `install.sh` посреди проверки обновлятора кончается успехом и берёт
+#      compose-файл из образа выпуска, а обновлятор своего `up` не зовёт (TRK-131);
 #   G. выпуск, у которого api не проходит проверку здоровья, откатывается на прежний, данные
 #      на месте; следующие проверки его не пробуют и не пересоздают служб; следующий выпуск
 #      после него доходит как обычно (TRK-122).
@@ -277,18 +278,35 @@ note "E passed"
 
 # --- F. Повторный запуск установщика --------------------------------------------------------
 
-say "F. install.sh again, compose file from the release image"
-# Обновлятор — на время установщика остановлен: иначе его проверка, пришедшаяся на миг без
-# файла, сочла бы службы устаревшими и звала бы `up` наперегонки с установщиком (TRK-122,
-# прогон live-1). Запустит его `up` самого установщика.
-docker stop "$(dc ps -q updater)" >/dev/null
+say "F. install.sh again in the middle of an updater check, compose file from the release image"
+# Установщик — посреди проверки обновлятора, как в прогоне live-1 TRK-122. Разовый
+# контейнер (`compose run`, как у самого установщика) держит проверку в ожидании тишины:
+# перезапущенный обновлятор начинает её сразу, и она идёт, пока тот не кончится. Скрипт
+# ждёт её признака и убирает файл, как его нет у новой установки. Обновлятор не должен
+# звать свой `up`, а установщик — дождаться конца проверки и кончиться успехом (TRK-131).
+restarted=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+checked=$(dc ps -q updater)
+dc run -d --rm --no-deps --entrypoint sleep agent-token 45 >/dev/null
+docker restart "$checked" >/dev/null
+checking() { docker exec "$checked" test -e /tmp/checking 2>/dev/null; }
+wait_for 60 checking || fail "the restarted updater never started a check"
 rm "$DIR/docker-compose.prod.yml"
 CASEFILE_DIR=$DIR sh "$ROOT/install.sh" </dev/null >"$EVIDENCE/F-install.txt" 2>&1 ||
   { cat "$EVIDENCE/F-install.txt"; fail "install.sh failed"; }
 grep -q "Casefile is running." "$EVIDENCE/F-install.txt" || fail "no final message"
+grep -q "Waiting for the updater to finish its check" "$EVIDENCE/F-install.txt" ||
+  fail "the installer did not wait for the updater check"
 cmp -s "$DIR/docker-compose.prod.yml" "$ROOT/docker-compose.prod.yml" ||
   fail "install.sh did not take the compose file of the release"
 sed -i.bak 's/Bearer [^"]*/Bearer <token>/' "$EVIDENCE/F-install.txt" && rm "$EVIDENCE/F-install.txt.bak"
+[ -n "$(docker ps -q --filter "label=com.docker.compose.project=$P" --filter label=com.docker.compose.service=updater)" ] ||
+  fail "the updater is not running after the installer"
+# Лог того самого контейнера: установщик его останавливает и запускает, но не пересоздаёт.
+docker logs -t --since "$restarted" "$checked" >"$EVIDENCE/F-updater.log" 2>&1 ||
+  fail "the updater that was checking is gone"
+tee -a "$EVIDENCE/run.log" <"$EVIDENCE/F-updater.log"
+! grep -qE "updated to|failed to start" "$EVIDENCE/F-updater.log" ||
+  fail "the updater brought the services up during the installer"
 note "F passed"
 
 # --- G. Выпуск, который не поднялся ---------------------------------------------------------
