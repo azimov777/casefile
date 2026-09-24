@@ -281,6 +281,8 @@ export const ui = {
     copy: 'Скопировать {{reference}}',
     copied: 'скопировано',
     clipboardUnavailable: 'буфер обмена недоступен',
+    copyLink: 'Скопировать ссылку на запись #{{no}}',
+    linkCopied: 'Ссылка на запись скопирована',
     group: {
       range: '{{first}}–{{last}}',
       label: 'Записи {{first}}–{{last}}: правка разделов одним действием',

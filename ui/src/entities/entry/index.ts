@@ -42,6 +42,7 @@ export {
   type SectionEditsRun,
 } from './model/section-edits';
 export { AuthorName } from './ui/author-name';
+export { CopyEntryLink } from './ui/copy-entry-link';
 export { EntryBody } from './ui/entry-body';
 export { EntryCard } from './ui/entry-card';
 export { EntryHeadline } from './ui/entry-headline';
