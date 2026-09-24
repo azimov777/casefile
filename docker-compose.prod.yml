@@ -83,7 +83,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "c85862ce1a3f"
+x-updater-revision: &updater-revision "332195ccf849"
 
 services:
   db:
@@ -492,6 +492,40 @@ services:
             docker compose up -d --no-deps db api mcp ui && settled
         }
 
+        # Снимок базы на время обновления с миграцией (TRK-134): формат и команда те же, что
+        # у ручной процедуры (`docs/backup-restore.md`), — годится и для ручного `pg_restore`.
+        # Лежит в своём `/tmp`, не в каталоге установки.
+        SNAPSHOT=/tmp/casefile-before-update.dump
+
+        # Ревизия схемы базы; пусто — базы или таблицы версии нет.
+        schema_revision() {
+          docker compose exec -T db sh -c \
+            'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT version_num FROM alembic_version"' \
+            </dev/null 2>/dev/null
+        }
+
+        # Последняя ревизия, которую знает образ: без сети и без базы.
+        image_head() {
+          docker run --rm --pull never --network none --entrypoint alembic "$$1" heads 2>/dev/null |
+            awk 'NR == 1 { print $$1 }'
+        }
+
+        take_snapshot() {
+          docker compose exec -T db sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' \
+            </dev/null >"$$SNAPSHOT" 2>/dev/null && [ -s "$$SNAPSHOT" ]
+        }
+
+        # Базу — в вид снимка одной транзакцией: схема `public` заново, затем SQL снимка.
+        # Не `pg_restore --clean`: он снимает только то, что есть в снимке, и таблицы,
+        # заведённые миграцией упавшего выпуска, остались бы. Пишущих служб в это время нет.
+        restore_snapshot() {
+          docker compose stop api mcp ui >/dev/null 2>&1
+          docker compose exec -T db sh -c 'pg_restore -f /tmp/restore.sql --no-owner --no-privileges &&
+            { echo "BEGIN; DROP SCHEMA public CASCADE; CREATE SCHEMA public;"; cat /tmp/restore.sql; echo "COMMIT;"; } |
+            PGOPTIONS="-c client_min_messages=warning" psql -q -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" >/dev/null
+            status=$$?; rm -f /tmp/restore.sql; exit $$status' <"$$SNAPSHOT"
+        }
+
         update() {
           # Файл не прочёлся — в каталоге его нет посреди установщика или он испорчен:
           # тогда и «служба не запущена» было бы неправдой, и `up` звать не с чем.
@@ -540,6 +574,21 @@ services:
             log "another docker compose is starting this installation right now; skipping this check"
             return 0
           fi
+          # Выпуск несёт миграцию — снимок базы до неё: откат вернёт базу в этот вид.
+          # Без миграции снимка нет: платить за него на каждом обновлении незачем.
+          rm -f "$$SNAPSHOT"
+          schema_before=$$(schema_revision)
+          schema_after=$$([ -z "$$schema_before" ] || image_head "$$(image_of api)")
+          if [ -n "$$schema_after" ] && [ "$$schema_after" != "$$schema_before" ]; then
+            if ! take_snapshot; then
+              rm -f "$$SNAPSHOT"
+              [ -z "$$changed" ] || cat /tmp/previous-compose.yml >"$$COMPOSE_FILE"
+              hold_back
+              log "could not take a snapshot of the database before a release that changes it; not updating this time"
+              return 0
+            fi
+            log "the release changes the database ($$schema_before -> $$schema_after); snapshot taken first ($$(wc -c <"$$SNAPSHOT") bytes)"
+          fi
           previous=$$(running_images)
           running=$$(running_of api)
           before=$$([ -z "$$running" ] || version "$$running")
@@ -551,12 +600,23 @@ services:
           after=$$(version "$$image")
           if docker compose up -d db api mcp ui && settled; then
             log "updated to $${after:-$$image}"
+            rm -f "$$SNAPSHOT"
             docker rmi "$$(kept api:failed)" >/dev/null 2>&1 || true
             docker rmi "$$(kept ui:failed)" >/dev/null 2>&1 || true
           else
             log "$${after:-$$image} failed to start, see: docker compose logs; going back to $${before:-the previous release}"
             docker tag "$$image" "$$(kept api:failed)"
             docker tag "$$(image_of ui)" "$$(kept ui:failed)"
+            # Упавший выпуск успел сдвинуть схему — базу обратно из снимка. Записи после
+            # снимка при этом теряются: это цена отката на прежний код с его схемой.
+            if [ -s "$$SNAPSHOT" ] && [ "$$(schema_revision)" != "$$schema_before" ]; then
+              if restore_snapshot; then
+                rm -f "$$SNAPSHOT"
+                log "database restored from the snapshot taken before the update (schema $$schema_before); changes made since then are gone"
+              else
+                log "could not restore the database snapshot; the previous release will run on the new schema. The snapshot is kept: docker compose cp updater:$$SNAPSHOT ."
+              fi
+            fi
             if roll_back; then
               log "rolled back to $${before:-the previous release}; $${after:-this release} will not be tried again, only the next release"
             else
