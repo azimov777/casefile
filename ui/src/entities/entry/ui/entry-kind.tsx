@@ -6,6 +6,7 @@ import {
   CircleCheck,
   CircleHelp,
   CornerDownRight,
+  Eraser,
   Flag,
   Link,
   Package,
@@ -15,6 +16,8 @@ import {
   Search,
   SquarePen,
   StickyNote,
+  Tag,
+  Tags,
   Unlink,
   User,
 } from 'lucide-react';
@@ -48,6 +51,9 @@ const KIND_ICON = {
   assignee_changed: User,
   link_added: Link,
   link_removed: Unlink,
+  attribute_created: Tag,
+  attribute_changed: Tags,
+  attribute_removed: Eraser,
 } satisfies Record<EntryType, typeof Check>;
 
 /**
@@ -74,6 +80,9 @@ const KIND_COLOR = {
   assignee_changed: 'text-faint',
   link_added: 'text-faint',
   link_removed: 'text-faint',
+  attribute_created: 'text-faint',
+  attribute_changed: 'text-faint',
+  attribute_removed: 'text-faint',
 } satisfies Record<EntryType, string>;
 
 interface EntryKindProps {

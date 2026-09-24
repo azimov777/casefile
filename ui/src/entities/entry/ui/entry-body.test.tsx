@@ -74,6 +74,22 @@ function expected(): Record<EntryType, (string | RegExp)[]> {
     ],
     link_added: [say.ui('entry.headline.linkAdded'), 'blocked_by', 'DEMO-2'],
     link_removed: [say.ui('entry.headline.linkRemoved'), 'blocked_by', 'DEMO-2'],
+    attribute_created: [say.ui('entry.headline.attributeCreated'), 'repo', 'github.com/demo'],
+    attribute_changed: [
+      say.ui('entry.headline.attributeChanged'),
+      'repo',
+      say.ui('entry.was'),
+      say.ui('entry.now'),
+      'github.com/old',
+      'github.com/demo',
+      /Репозиторий переехал/,
+    ],
+    attribute_removed: [
+      say.ui('entry.headline.attributeRemoved'),
+      'repo',
+      'github.com/demo',
+      /Репозиторий закрыт/,
+    ],
   };
 }
 
@@ -92,6 +108,9 @@ const BUILT_HEADLINE: EntryType[] = [
   'assignee_changed',
   'link_added',
   'link_removed',
+  'attribute_created',
+  'attribute_changed',
+  'attribute_removed',
 ];
 
 function show(type: EntryType) {
