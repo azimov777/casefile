@@ -490,7 +490,7 @@ REST, и `services/demo.py`. `latest_no` дешевле `case_index`/`headings`:
 заголовки задачи целиком, только `max(no)`, — годится именно потому, что вызывающий и
 так знает, что только что писал в эту задачу, а не читает её общей описью.
 **Где:** `app/db/repositories/entries.py`, `latest_no`; `app/services/case.py`,
-`latest_entry_no`; `app/mcp/tools/links.py`, `link`, `unlink`; `app/mcp/tools/tasks/create_task.py`,
+`latest_entry_no`; `app/mcp/tools/links/link.py`, `link`; `app/mcp/tools/links/unlink.py`, `unlink`; `app/mcp/tools/tasks/create_task.py`,
 `create_task` (там же чтение через `case_index`, поскольку номер там нужен рядом с
 полной описью ребёнка, а не отдельным дешёвым запросом).
 

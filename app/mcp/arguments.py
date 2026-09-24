@@ -43,7 +43,7 @@ from pydantic import Field
 
 from app.domain.idempotency import KEY_TTL
 from app.domain.journal import JOURNAL_START, MAX_TASK_KEYS, MAX_WAIT_SECONDS
-from app.mcp.enums import LinkKindSchema, ParticipantKindSchema
+from app.mcp.enums import ParticipantKindSchema
 
 # --- Адресация ------------------------------------------------------------------------
 
@@ -123,23 +123,6 @@ IdempotencyKeyArg = Annotated[
         ),
         examples=["6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"],
     ),
-]
-
-# --- Связи ----------------------------------------------------------------------------
-
-LinkKindArg = Annotated[
-    LinkKindSchema,
-    Field(
-        description=(
-            "Role of the task `key` toward the task `other`: "
-            "`link(key='TRK-1', kind='blocks', other='TRK-7')` means TRK-1 blocks TRK-7, "
-            "and the card of TRK-7 shows the same link as `blocked_by`"
-        )
-    ),
-]
-OtherTaskKeyArg = Annotated[
-    str,
-    Field(description="Key of the task on the other side of the link", examples=["TRK-7"]),
 ]
 
 # --- Лента --------------------------------------------------------------------------
