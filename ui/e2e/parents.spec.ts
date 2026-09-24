@@ -168,7 +168,11 @@ test('в таблице родитель — плашка «родитель KEY
       const tr = (node.closest('tr') as Element).getBoundingClientRect();
       return { left: box.left, top: box.top - tr.top, width: box.width };
     });
-  expect(await title(row)).toEqual(await title(rowOf(page, top)));
+  const [mine, plain] = [await title(row), await title(rowOf(page, top))];
+  expect(mine.left).toBe(plain.left);
+  expect(mine.width).toBe(plain.width);
+  // Четверть пикселя по высоте даёт `truncate` у одного из названий, а не родитель.
+  expect(Math.abs(mine.top - plain.top)).toBeLessThanOrEqual(0.5);
 
   // Нажатие раскрывает панель, а не уводит в задачу.
   await badge.click();

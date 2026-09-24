@@ -264,7 +264,9 @@ test('длинное название родителя — одна строка
       for (const top of without) {
         expect(child.width, JSON.stringify(titles)).toBeGreaterThanOrEqual(top.width);
         expect(child.left).toBe(top.left);
-        expect(child.top).toBe(top.top);
+        // Четверть пикселя по высоте даёт `truncate` (overflow: hidden сдвигает базовую
+        // линию), а не родитель: у урезанного и неурезанного названия без родителя она та же.
+        expect(Math.abs(child.top - top.top)).toBeLessThanOrEqual(0.5);
       }
     }
 
