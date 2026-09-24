@@ -755,7 +755,9 @@ async def test_the_short_answer_carries_enough_for_the_next_move(
     # Переход всегда что-то меняет, поэтому запись ровно одна — подшитая `status_changed`.
     assert len(moved["entries"]) == 1
     # Карточки в ответе больше нет: это и есть снятое поведение.
-    assert set(moved) == {"key", "status", "version", "entries"}
+    assert set(moved) == {"key", "status", "version", "entries", "parent_entry"}
+    # `transition` не трогает чужих дел: поле стоит только у `create_task` с `parent`.
+    assert moved["parent_entry"] is None
 
     assert updated["version"] == moved["version"] + 1
     assert updated["entries"] == [moved["entries"][0] + 1]
@@ -954,7 +956,7 @@ async def test_create_task_is_born_in_backlog_with_its_parent(
 
     # Ответ короткий, и карточки в нём нет: всё, что в ней было бы, вызывающий прислал
     # сам. Остаётся то, чего он знать не мог, — ключ выдал трекер.
-    assert set(child) == {"key", "status", "version", "entries"}
+    assert set(child) == {"key", "status", "version", "entries", "parent_entry"}
     assert child["status"] == "backlog"
     assert child["version"] == 1
 
@@ -963,6 +965,14 @@ async def test_create_task_is_born_in_backlog_with_its_parent(
     assert child["entries"] == [1, 2]
     assert [item["no"] for item in package["index"]] == child["entries"]
     assert [item["type"] for item in package["index"]] == ["created", "link_added"]
+
+    # `link_added` подшивается и в дело родителя (TRK-143): фикстура `task` заводит его
+    # напрямую сценарием, минуя MCP, и в его деле до этого вызова стояла ровно одна
+    # запись — `created`, `no=1`. Родительский `link_added` поэтому обязан лечь вторым.
+    assert child["parent_entry"] == 2
+    assert [item["no"] for item in parent_package["index"]] == [1, child["parent_entry"]]
+    assert parent_package["index"][-1]["type"] == "link_added"
+    assert parent_package["index"][-1]["facts"]["other_key"] == child["key"]
 
     # Обзорная проверка 2: ключ из короткого ответа сразу адресует задачу — `get_task`
     # выше вызван именно им, без промежуточного поиска.
@@ -1045,7 +1055,8 @@ async def test_a_repeated_create_task_answers_with_the_first_task(
     assert "idempotency_key_reused" in conflict
     assert [item["key"] for item in found["items"]].count(first["key"]) == 1
     # Ответ короткий уже здесь: повтор отдаёт ровно то, что ушло в первый раз.
-    assert set(first) == {"key", "status", "version", "entries"}
+    assert set(first) == {"key", "status", "version", "entries", "parent_entry"}
+    assert first["parent_entry"] is None
 
 
 # --- Дело -----------------------------------------------------------------------------
