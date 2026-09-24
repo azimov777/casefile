@@ -103,6 +103,20 @@ class EntryRepository:
 
     # --- Чтение записей задачи -------------------------------------------------------
 
+    async def latest_no(self, task_id: uuid.UUID) -> int | None:
+        """Номер последней записи задачи, без заголовков и без тел.
+
+        Годится только адресом того, что вызывающий только что сам подшил в **чужое**
+        дело, — не наугад: под общей блокировкой изменений (`app/db/locks.py`,
+        `lock_changes`) до конца его транзакции никто другой не мог подшить в это дело
+        ничего, и последняя запись — та самая. Общий вопрос «что нового в деле с такого
+        момента» этот метод не решает: для него есть `after_no` у `list_page` и
+        `headings`.
+        """
+        return await self._session.scalar(
+            select(func.max(Entry.no)).where(Entry.task_id == task_id)
+        )
+
     async def get_by_no(self, task_id: uuid.UUID, no: int) -> Entry | None:
         """Одна запись по её номеру внутри задачи — адрес из ссылки `TRK-42#12`."""
         statement = select(Entry).where(Entry.task_id == task_id, Entry.no == no)
