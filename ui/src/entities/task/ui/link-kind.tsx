@@ -71,12 +71,24 @@ export function LinkKindMark({ kind, className }: LinkKindMarkProps) {
   const Icon = KIND_ICON[kind];
   const { t } = useTranslation('ui');
 
+  /*
+   * Части стоят по базовой линии текста, а знак — по центру строки (UI-168). Прежде ряд
+   * был `items-center`, а первым в нём шёл знак: у svg базовой линии нет, и базовой
+   * линией всего ряда браузер брал низ знака. Счётчик рядом в заголовке группы
+   * выравнивался по ней и стоял на 3–4 px ниже идентификатора и подписи, а сами они
+   * расходились ещё на 0,7 px — разный кегль, поставленный по центру, а не по линии.
+   * `self-center` выводит знак из выравнивания по линии, и базовой линией ряда
+   * становится идентификатор — та же, что у подписи и счётчика.
+   */
   return (
     <span
       data-mark="link-kind"
-      className={cn('inline-flex items-center gap-1.5 whitespace-nowrap', className)}
+      className={cn('inline-flex items-baseline gap-1.5 whitespace-nowrap', className)}
     >
-      <Icon className={cn('size-(--ui-mark) shrink-0', KIND_COLOR[kind])} aria-hidden="true" />
+      <Icon
+        className={cn('size-(--ui-mark) shrink-0 self-center', KIND_COLOR[kind])}
+        aria-hidden="true"
+      />
       <span className="font-mono text-mark text-muted">{kind}</span>
       <span className="text-meta text-muted">{t(`task.links.kind.${kind}`)}</span>
     </span>

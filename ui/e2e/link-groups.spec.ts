@@ -108,6 +108,43 @@ async function rowGaps(page: Page): Promise<{ inside: number[]; between: number[
   });
 }
 
+/**
+ * Заголовки групп блока «Связи» по линиям (UI-168): базовая линия каждой текстовой части
+ * заголовка — идентификатора, подписи, счётчика — и сколько строк он занял. Базовую
+ * линию даёт нулевой `inline-block` в конце текста части: его верх стоит ровно на ней.
+ * Высота строки берётся у самого заголовка: одна строка — высота не больше полутора.
+ */
+async function headingLines(
+  page: Page,
+): Promise<{ text: string; baselines: number[]; height: number; lineHeight: number }[]> {
+  return linksSection(page).evaluate((region) =>
+    Array.from(region.querySelectorAll('h3')).map((heading) => {
+      const parts = Array.from(heading.querySelectorAll('span')).filter(
+        (part) => part.children.length === 0 && (part.textContent ?? '').trim() !== '',
+      );
+      const baselines = parts.map((part) => {
+        const probe = document.createElement('span');
+        probe.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+        part.appendChild(probe);
+        const y = probe.getBoundingClientRect().top;
+        probe.remove();
+        return y;
+      });
+      const style = getComputedStyle(heading);
+      const lineHeight =
+        style.lineHeight === 'normal'
+          ? parseFloat(style.fontSize) * 1.2
+          : parseFloat(style.lineHeight);
+      return {
+        text: heading.textContent ?? '',
+        baselines,
+        height: heading.getBoundingClientRect().height,
+        lineHeight,
+      };
+    }),
+  );
+}
+
 const LONG_CHILD_TITLE =
   'Задача этого вида связи с названием такой длины, что на узком экране ей есть, где перенестись: src/pages/task/ui/task-links.tsx';
 
@@ -190,6 +227,20 @@ test('насыщенный блок «Связи»: заголовок груп�
       );
       for (const item of clipped) {
         expect(item.clipped, `${width}px, ${JSON.stringify(item)}`).toBe(false);
+      }
+
+      // Заголовок группы — одна строка на одной оси (UI-168): прежде базовой линией
+      // знака вида браузер брал низ его иконки, и счётчик стоял на 3–4 px ниже подписи.
+      for (const heading of await headingLines(page)) {
+        const label = `${width}px, «${heading.text}»: ${heading.baselines.join(', ')}`;
+        expect(heading.baselines.length, label).toBeGreaterThanOrEqual(2);
+        expect(
+          Math.max(...heading.baselines) - Math.min(...heading.baselines),
+          label,
+        ).toBeLessThanOrEqual(0.5);
+        expect(heading.height, `${label}; высота ${heading.height}`).toBeLessThanOrEqual(
+          heading.lineHeight * 1.5,
+        );
       }
 
       // Все три ребёнка перечислены под общим заголовком — ни один не потерялся
