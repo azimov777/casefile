@@ -38,7 +38,10 @@ JournalTaskArg = Annotated[
 
 JournalProjectArg = Annotated[
     str | None,
-    Field(description="Only entries of tasks in this project", examples=["TRK"]),
+    Field(
+        description="Only entries of this project: its own case and the cases of its tasks",
+        examples=["TRK"],
+    ),
 ]
 
 TimeoutArg = Annotated[
@@ -70,13 +73,15 @@ def register(tools: Toolset) -> None:
     ) -> PageView[EntryView]:
         """Returns journal entries after the sequence number `after`, waiting for new ones.
 
-        The journal is every case entry of the installation in one stream, in `seq`
-        order; `task`, `project` and `types` narrow it. The call returns as soon as a
-        matching entry appears, and after `timeout` seconds at the latest. The next call
+        The journal is every case entry of the installation in one stream, task cases
+        and project cases alike, in `seq` order; `task`, `project` and `types` narrow
+        it. The call returns as soon as a matching entry appears, and after `timeout`
+        seconds at the latest. The next call
         continues from the `seq` of the last entry received. With `types=["answer"]` and
         `task`, one call covers an answer expected within `timeout`.
 
-        Entries already filed in one case, by number, are returned by `read_entries`.
+        Entries already filed in one case, by number, are returned by `read_entries` and
+        `read_project_entries`.
         """
         async with runtime.call() as (session, actor):
             listed = await journal_service.wait_journal(
@@ -91,6 +96,9 @@ def register(tools: Toolset) -> None:
                 wait=timeout,
             )
             return page(
-                (entry(item.entry, task_key=item.task_key) for item in listed.items),
+                (
+                    entry(item.entry, task_key=item.task_key, project_key=item.project_key)
+                    for item in listed.items
+                ),
                 next_cursor=listed.next_cursor,
             )

@@ -422,6 +422,13 @@ TRK-35) безопасно само по себе: сутки сосуществ
 коммита аннотаций 6e5f7321 (2026-09-24). Лечится повторной синхронизацией сервера в админке
 Glama, а не кодом; stdio-путь держит `tests/test_mcp_stdio.py`,
 `test_stdio_lists_annotations_for_every_tool`.
+**Обновлено TRK-156:** у проекта появилось дело, и `update_project` подшивает `field_changed`
+с прежним и новым значением на каждое изменённое поле — прежние название и описание больше не
+теряются. Поэтому `update_project` теперь `destructiveHint: false` и носит ту же форму, что
+`update_task` (`IDEMPOTENT_TASK_UPDATE`); `OVERWRITING_UPDATE` остался у одного
+`update_participant` — у участника дела нет. Чтение дела проекта `read_project_entries` —
+`READ_ONLY`, подшивка `add_project_entry` — `FILING`. Где: `app/mcp/tools/registries/update_project.py`;
+`app/services/projects.py`, `update_project`; `tests/test_mcp_tools.py`, `TOOL_ANNOTATIONS`.
 
 ## Сосед называется одной безличной фразой и только там, где выбор реален
 
@@ -551,3 +558,20 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 `tests/test_mcp_tool_files.py`.
 **Где:** `app/mcp/tools/__init__.py`, `REGISTRARS`; `app/mcp/tools/tasks/__init__.py`,
 `TOOLS`; `tests/test_mcp_tool_files.py`.
+
+## Запись дела проекта адресуется ключом проекта, и в ответах два поля владельца
+
+**Что:** `EntryView` (и `EntryRead` в REST) несёт `task_key` и `project_key`, и непусто ровно
+одно: у записи задачи — ключ задачи, у записи дела проекта (`add_project_entry`) — ключ
+проекта. Короткий ответ подшивки в дело проекта — своя форма `AppendedProjectEntryView`: в
+ней `project_key` вместо `task_key` и нет `title` — у всех типов записи проекта заголовок
+присылает агент, и поле всегда было бы `null`.
+**Почему важно:** `wait_journal` без отбора и с отбором `project` отдаёт записи обоих
+владельцев одним списком; код, читающий `task_key` как строку, на записи проекта получит
+`null`. Набор типов `add_project_entry` объявлен `Literal` в схеме (как у `add_entry`), и тип
+задачи отсекает проверка аргументов до сценария — `entry_fields_invalid` с `allowed` дело
+проекта отдаёт только на входе сценария (REST-схема и MCP-схема его туда не пускают).
+**Как правильно:** адрес записи собирать из того ключа, что непуст: `TRK-42#3` или `TRK#7`.
+Опись дела проекта едет в `get_project` полем `index` теми же `HeadingView`, что у `get_task`.
+**Где:** `app/mcp/tools/case/views.py`, `EntryView`, `AppendedProjectEntryView`;
+`app/mcp/tools/case/add_project_entry.py`; `app/mcp/tools/registries/get_project.py`.

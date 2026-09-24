@@ -1,8 +1,9 @@
 """Аргументы записи дела, общие для нескольких инструментов: поля записи без нагрузки,
-части сводки, исход проверки.
+фильтры чтения, части сводки, исход проверки.
 
 Их же берут `close_task` — поля его вложенных моделей объявлены теми же аннотациями — и
-`wait_journal` (`EntryTypesArg`): описание поля одно на весь сервер.
+`wait_journal` (`EntryTypesArg`): описание поля одно на весь сервер. Тело, ссылки и
+фильтры чтения общие у дела задачи и дела проекта.
 """
 
 from typing import Annotated, Literal
@@ -27,8 +28,9 @@ EntryRefsArg = Annotated[
     list[str] | None,
     Field(
         description=(
-            "References: entries `TRK-42#12`, tasks `TRK-7`, URLs. An entry or task that "
-            "does not exist is refused with `entry_fields_invalid`; URLs are not checked"
+            "References: task entries `TRK-42#12`, project entries `TRK#7`, tasks `TRK-7`, "
+            "URLs. An entry, task or project that does not exist is refused with "
+            "`entry_fields_invalid`; URLs are not checked"
         ),
         examples=[["TRK-42#12"]],
     ),
@@ -86,6 +88,12 @@ VerdictOutcomeArg = Annotated[
 
 EntryTypesArg = Annotated[
     list[EntryTypeSchema] | None, Field(description="Only entries of these types")
+]
+
+EntryNosArg = Annotated[list[int] | None, Field(description="Only entries with these numbers")]
+
+AfterNoArg = Annotated[
+    int | None, Field(description="Only entries filed after the entry with this number")
 ]
 
 SummaryDoneArg = Annotated[

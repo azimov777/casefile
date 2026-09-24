@@ -1,23 +1,12 @@
 """Инструмент `read_entries`: тела записей одного дела по номерам, типам и «после»."""
 
-from typing import Annotated
-
-from pydantic import Field
-
 from app.mcp.arguments import CursorArg, LimitArg, TaskKeyArg
-from app.mcp.tools.case.arguments import EntryTypesArg
+from app.mcp.tools.case.arguments import AfterNoArg, EntryNosArg, EntryTypesArg
 from app.mcp.tools.case.views import EntryView, entry
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import PageView, page
 from app.services import case as case_service
 from app.services import tasks as tasks_service
-
-EntryNosArg = Annotated[list[int] | None, Field(description="Only entries with these numbers")]
-
-
-AfterNoArg = Annotated[
-    int | None, Field(description="Only entries filed after the entry with this number")
-]
 
 
 def register(tools: Toolset) -> None:
