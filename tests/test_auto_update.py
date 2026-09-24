@@ -134,6 +134,12 @@ def test_a_release_tag_publishes_the_version_and_the_channel() -> None:
 #: Подставной `docker`: пишет каждый вызов в `$CALLS` и отвечает по файлам сценария.
 FAKE_DOCKER = r"""#!/bin/sh
 echo "$*" >>"$CALLS"
+# Compose without its file fails, the way the real one does.
+case "$1" in
+  compose)
+    [ "$2" = "-f" ] || [ -f "$COMPOSE_FILE" ] ||
+      { echo "no configuration file provided: not found" >&2; exit 1; } ;;
+esac
 # Pops the first line of the scene file $1; prints $2 when there is none.
 next() {
   if [ -s "$SCENE/$1" ]; then
@@ -149,8 +155,16 @@ case "$*" in
   "inspect -f {{.Image}} "*) echo "$(cat "$SCENE/running")" ;;
   "compose ps -q "*) echo "container-$4" ;;
   "ps -q "*) echo container-updater ;;
+  "ps --filter "*) cat "$SCENE/containers" 2>/dev/null ;;
   "inspect -f {{range .Mounts}}"*) cat "$SCENE/directory" ;;
-  "compose pull"*) exit "$(cat "$SCENE/pull" 2>/dev/null || echo 0)" ;;
+  "compose pull"*)
+    [ ! -e "$CHECKING" ] || echo "(checking)" >>"$CALLS"
+    # What happens on the machine while the pull runs: the file goes, or another up starts.
+    case "$(cat "$SCENE/after-pull" 2>/dev/null)" in
+      vanish) rm -f "$COMPOSE_FILE" ;;
+      busy) echo "migrate  Up 1 second" >"$SCENE/containers" ;;
+    esac
+    exit "$(cat "$SCENE/pull" 2>/dev/null || echo 0)" ;;
   "compose config")
     printf 'name: test\nservices:\n  api:\n    depends_on:\n      db:\n'
     printf '        condition: service_healthy\n    image: registry/casefile:stable\n'
@@ -200,6 +214,7 @@ class Updater:
             "COMPOSE_FILE": "docker-compose.prod.yml",
             "CASEFILE_AUTO_UPDATE": "true",
             "CASEFILE_UPDATE_INTERVAL": "1",
+            "CHECKING": str(root / "checking"),
         }
         self.set(
             running="sha256:old",
@@ -217,6 +232,7 @@ class Updater:
         script = _script(service).replace("/tmp/compose.yml", str(self.root / "fetched.yml"))
         script = script.replace("/tmp/previous-compose.yml", str(self.root / "previous.yml"))
         script = script.replace("sleep 5", "sleep 0")
+        script = script.replace("/tmp/checking", str(self.root / "checking"))
         if tail:
             script = script[: script.index("trap 'exit 0' TERM INT")] + tail
         done = subprocess.run(
@@ -449,3 +465,94 @@ def test_the_renewal_leaves_a_current_updater_alone(updater: Updater) -> None:
 
     assert not updater.called("run ")
     assert not updater.called("top")
+
+
+# --- Обновлятор и чужой `up` (TRK-131) ------------------------------------------------
+
+
+def test_a_check_without_the_compose_file_does_not_call_up(updater: Updater) -> None:
+    """Файла нет посреди установщика: не «службы не запущены», а пропуск с причиной."""
+    (updater.project / "docker-compose.prod.yml").unlink()
+    updater.set(wanted="sha256:new")
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose up")
+    assert not updater.called("compose pull")
+    assert "cannot read docker-compose.prod.yml here (no configuration file provided" in out
+    assert "skipping this check" in out
+
+
+def test_a_compose_file_gone_after_the_pull_is_not_taken_for_missing_services(
+    updater: Updater,
+) -> None:
+    """Файл пропал между `pull` и сверкой (live-1 TRK-122): `compose ps` падает, и это не
+    «служба не запущена», а пропуск проверки."""
+    updater.set(wanted="sha256:new", after_pull="vanish")
+
+    out = updater.run("updater", "update\n")
+
+    assert updater.called("compose pull")
+    assert not updater.called("compose up")
+    assert "cannot read the state of the services here; skipping this check" in out
+
+
+def test_a_check_waits_while_another_compose_starts_the_installation(
+    updater: Updater,
+) -> None:
+    """Идёт чужой `up` (разовый шаг, `compose run`, первая проверка здоровья) — ждать,
+    а не затихло за три минуты — пропустить проверку, не трогая служб."""
+    updater.set(
+        wanted="sha256:new",
+        containers="updater  Up 1 hour\napi  Up 5 seconds (health: starting)\n"
+        "agent-token True Up 1 second\n",
+    )
+
+    out = updater.run("updater", "update\n")
+
+    assert "another docker compose is still starting this installation" in out
+    assert not updater.called("compose pull")
+    assert not updater.called("compose up")
+    assert len(updater.called("ps --filter")) == 37
+
+
+def test_its_own_services_do_not_make_the_installation_busy(updater: Updater) -> None:
+    """Сам обновлятор и `updater-renew`, здоровые и упавшие службы — не чужой `up`."""
+    updater.set(
+        wanted="sha256:new",
+        containers="updater  Up 1 hour\nupdater-renew  Up 2 seconds\n"
+        "api  Up 1 hour (healthy)\nmcp  Up 1 hour (unhealthy)\nui  Restarting (1) 3 seconds ago\n",
+    )
+
+    out = updater.run("updater", "update\n")
+
+    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+    assert "updated to 0.2.0" in out
+
+
+def test_an_up_started_elsewhere_during_the_check_is_not_raced(updater: Updater) -> None:
+    """Установщик начал свой `up`, пока шёл `pull`: второй `up` не звать."""
+    updater.set(wanted="sha256:new", after_pull="busy")
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose up")
+    assert "another docker compose is starting this installation right now" in out
+
+
+def test_a_check_in_progress_is_visible_to_the_installer(updater: Updater) -> None:
+    """Пока идёт проверка, в `/tmp` обновлятора лежит файл; кончилась — его нет.
+
+    По процессу `docker` проверку видно не всё время: её ожидания — `sleep`."""
+    (updater.root / "checking").write_text("", encoding="utf-8")  # остался от остановки
+    loop = _script("updater")[_script("updater").index("trap 'exit 0' TERM INT") :]
+    out = updater.run(
+        "updater",
+        loop.split("seconds=$(period)", 1)[0] + 'echo "after=$(ls ../checking 2>&1)"\n',
+    )
+
+    assert "(checking)" in updater.calls.read_text()
+    assert "No such file" in out.split("after=", 1)[1]
+    lines = [line.strip() for line in loop.splitlines()]
+    assert "update" not in lines, "цикл зовёт проверку только через `check`"
+    assert lines.count("check") == 2

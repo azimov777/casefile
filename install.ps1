@@ -93,9 +93,40 @@ $copied = $LASTEXITCODE
 if ($copied -ne 0) { Fail "$image carries no $Compose; releases before 0.2.0 cannot be installed this way" }
 Move-Item -Force "$Compose.download" $Compose
 
-Write-Host 'Starting Casefile (the first run downloads the images)...' -ForegroundColor White
-Invoke-Docker compose pull --quiet
-Invoke-Docker compose up -d --remove-orphans
+# Обновлятор установки на время установщика стоит — как в `install.sh` (TRK-131): его
+# проверка, пришедшаяся на `pull` и `up` установщика, звала бы свой `up`, и два compose
+# останавливали бы контейнеры друг друга. Идущую проверку он доводит до конца: её видно по
+# файлу `/tmp/checking` в контейнере, а у обновлятора прежних выпусков — по процессу
+# `docker` в нём. Запускает его снова `up` установщика, а если установщик упал раньше —
+# `finally`: остановленный руками контейнер Docker сам уже не поднимет.
+# `Continue` внутри функции: stderr внешней команды при `Stop` в PowerShell 5.1 — исключение.
+function Stop-Updater {
+    $ErrorActionPreference = 'Continue'
+    $id = (& docker compose ps -q updater 2>$null | Out-String).Trim()
+    if (-not $id) { return '' }
+    for ($i = 0; $i -lt 120; $i++) {
+        & docker exec $id test -e /tmp/checking *> $null
+        $busy = $LASTEXITCODE -eq 0
+        if (-not $busy) {
+            $busy = & docker top $id -o 'pid,comm' 2>$null | Select-Object -Skip 1 |
+                Where-Object { ($_.Trim() -split '\s+')[1] -like 'docker*' }
+        }
+        if (-not $busy) { break }
+        if ($i -eq 0) { Write-Host 'Waiting for the updater to finish its check...' -ForegroundColor White }
+        Start-Sleep -Seconds 5
+    }
+    & docker stop $id *> $null
+    return $id
+}
+$updater = Stop-Updater
+
+try {
+    Write-Host 'Starting Casefile (the first run downloads the images)...' -ForegroundColor White
+    Invoke-Docker compose pull --quiet
+    Invoke-Docker compose up -d --remove-orphans
+} finally {
+    if ($updater) { & docker start $updater *> $null; $global:LASTEXITCODE = 0 }
+}
 
 # Токен агента лежит в томе установки; читается разовым контейнером и попадает только в
 # это окно — ни в журнал, ни в файл на диске.
