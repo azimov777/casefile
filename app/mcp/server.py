@@ -11,12 +11,22 @@
    точки прав, что и в REST (`app/mcp/toolset.py`).
 2. **Промпт `tracker-discipline`** — текст скила целиком. Показывать ли его модели,
    решает клиент; надёжный путь — скил, установленный в харнесс (`CONCEPT.md`, 5.3).
-3. **`instructions`** — раздел «Кратко» из того же скила. Он уезжает клиенту при
-   подключении и читается моделью раньше любого вызова, поэтому там дисциплина, а не
-   «добро пожаловать».
+3. **`instructions`** — как пользоваться сервером, своим текстом в
+   `app/mcp/instructions.md`: что такое трекер, что видит человек, что считать
+   заданием, цикл работы. Они уезжают клиенту при подключении и читаются моделью
+   раньше любого вызова. Механики отдельных инструментов в них нет: она в метадате.
 
-Второго исходного текста дисциплины в коде нет: и промпт, и инструкции читают
-`skill/tracker-agent/SKILL.md` (`app/mcp/skill.py`).
+## Почему instructions — отдельный файл и держат длину
+
+Claude Code обрезает `instructions` на 2048-м символе строки JS (единица UTF-16, не
+байт; переменная клиента `CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH`) и дописывает
+«… [truncated]». Всё после обрезки модель не видит, и никто об этом не узнает: сервер
+здоров, агент работает без хвоста правил. Поэтому длину стережёт тест
+(`tests/test_mcp_instructions.py`), а текст лежит своим файлом, а не строкой в коде
+сборки: правят его как текст, а не как код (`TRK-142`).
+
+Файл читается при импорте: без него процесс не поднимется, а не отдаст пустые
+`instructions`.
 
 ## Чего сервер не делает
 
@@ -25,6 +35,8 @@
 слушателя в сборке дал бы десятки соединений к базе и, хуже, занятого слушателя не на той
 базе, из-за которого ожидание ленты молча перешло бы на контрольный опрос.
 """
+
+from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy import text
@@ -35,13 +47,19 @@ from app import __version__
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.mcp.runtime import Runtime, headers_middleware
-from app.mcp.skill import INSTRUCTIONS, PROMPT_NAME, SKILL_TEXT
+from app.mcp.skill import PROMPT_NAME, SKILL_TEXT
 from app.mcp.tools import register_tools
 from app.mcp.toolset import Toolset
 
 logger = get_logger("mcp")
 
-__all__ = ["INSTRUCTIONS", "create_server"]
+__all__ = ["INSTRUCTIONS", "INSTRUCTIONS_PATH", "create_server"]
+
+#: Текст `instructions`: лежит рядом со сборкой и уезжает в образ вместе с `app/`.
+INSTRUCTIONS_PATH = Path(__file__).with_name("instructions.md")
+
+#: То, что сервер отдаёт в `initialize`. Концевой перевод строки файла клиенту не нужен.
+INSTRUCTIONS = INSTRUCTIONS_PATH.read_text(encoding="utf-8").strip()
 
 
 def create_server(
