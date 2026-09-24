@@ -15,6 +15,7 @@ from app.domain.case import (
     TITLED_ENTRY_TYPES,
     AnswerFacts,
     AssigneeChangedFacts,
+    AttributeFacts,
     EntryFacts,
     EntryHeading,
     EntryType,
@@ -126,6 +127,15 @@ class ResolutionFactsView(BaseModel):
     continuation_key: str | None
 
 
+class AttributeFactsView(BaseModel):
+    """Project attribute created, changed or removed: its name."""
+
+    type: Literal[
+        EntryType.ATTRIBUTE_CREATED, EntryType.ATTRIBUTE_CHANGED, EntryType.ATTRIBUTE_REMOVED
+    ]
+    name: str | None
+
+
 type FactsView = Annotated[
     NoFactsView
     | StatusChangedFactsView
@@ -136,7 +146,8 @@ type FactsView = Annotated[
     | QuestionFactsView
     | AnswerFactsView
     | VerdictFactsView
-    | ResolutionFactsView,
+    | ResolutionFactsView
+    | AttributeFactsView,
     Field(discriminator="type"),
 ]
 """Факты записи: те же формы и те же поля в том же порядке, что в схеме REST."""
@@ -151,8 +162,8 @@ def facts(value: EntryFacts) -> FactsView:
     `type` едет и сюда — по ней агент видит состав полей своей записи в `outputSchema`
     инструмента, до вызова, а не по тому, какие ключи пришли непустыми.
 
-    Разбор — по форме факта, а не по типу записи: типов восемнадцать, а форм десять, и
-    сопоставление одного с другим живёт в одном месте, в домене.
+    Разбор — по форме факта, а не по типу записи: форм меньше, чем типов, и
+    сопоставление одного с другим живёт в одном месте, в домене (`FACTS_BY_ENTRY_TYPE`).
     """
     match value:
         case NoFacts():
@@ -202,6 +213,8 @@ def facts(value: EntryFacts) -> FactsView:
                 outcome=value.outcome,
                 continuation_key=value.continuation_key,
             )
+        case AttributeFacts():
+            return AttributeFactsView(type=value.type, name=value.name)
     # Форма фактов, заведённая в домене без представления здесь, — дефект объединения, а
     # не рабочее состояние: молча вернуть `None` значило бы отдать агенту опись без строки.
     raise TypeError(f"форма фактов без представления MCP: {type(value).__name__}")
