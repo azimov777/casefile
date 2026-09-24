@@ -98,7 +98,10 @@ export function EntryKind({ type, withName = true, className }: EntryKindProps) 
       <EntryTypeIcon type={type} />
       {/* Название словами — для диктора: `section_changed` вслух не читается. */}
       <span className="sr-only">{t(`entry.type.${type}`)}: </span>
-      <span className={withName ? 'font-mono text-mark text-muted' : 'sr-only'}>{type}</span>
+      {/* Идентификатор и скрытым остаётся идентификатором — моноширинным, как видимый. */}
+      <span className={withName ? 'font-mono text-mark text-muted' : 'font-mono sr-only'}>
+        {type}
+      </span>
     </span>
   );
 }

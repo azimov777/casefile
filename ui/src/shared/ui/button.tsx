@@ -65,5 +65,15 @@ export function Button({
 }: ButtonProps) {
   const Tag = asChild ? Slot : 'button';
 
-  return <Tag {...rest} type={type} className={cn(button({ tone, size }), className)} />;
+  /*
+   * `type` — атрибут кнопки: ссылке или подписи, которые одолжили вид кнопки (`asChild`),
+   * он чужой, и `<label type="button">` был бы неверной разметкой (UI-140).
+   */
+  return (
+    <Tag
+      {...rest}
+      {...(asChild ? {} : { type })}
+      className={cn(button({ tone, size }), className)}
+    />
+  );
 }

@@ -14,7 +14,9 @@ export function AuthorName({ author }: { author: Author }) {
     <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
       {/* Подпись — идентификатор контракта, и набрана она тем же, чем ключ задачи. */}
       <span className="font-mono">{signature ?? t('entry.tracker')}</span>
-      {signature === null ? null : <span className="text-label text-muted">{author.kind}</span>}
+      {signature === null ? null : (
+        <span className="text-label text-muted">{t(`participantKind.${author.kind}`)}</span>
+      )}
     </span>
   );
 }

@@ -12,6 +12,7 @@ import {
   groupSectionEdits,
   sectionEditsHeadline,
   type EntryHeading,
+  type Headline,
   type SectionEditsRun,
 } from '@/entities/entry';
 import { cn, useExitHold } from '@/shared/lib';
@@ -490,6 +491,7 @@ function IndexRow({
                   no={heading.no}
                   checks={checks}
                   title={heading.title}
+                  headline={headline}
                 />
               </div>
             </Reveal>
@@ -511,11 +513,13 @@ function EntryDetails({
   no,
   checks,
   title,
+  headline,
 }: {
   taskKey: string;
   no: number;
   checks: string[];
   title: string;
+  headline: Headline;
 }) {
   const entry = useQuery(entryQueryOptions(taskKey, no));
   const { t } = useTranslation('task');
@@ -526,8 +530,18 @@ function EntryDetails({
      * уже и обрезал бы таблицы и блоки кода, которые в теле записи бывают.
      */
     <div className="flex max-w-[60rem] flex-col gap-2">
+      {/*
+       * Заголовок над телом — тот же, что в строке описи: у служебных записей, ответа
+       * и вердикта он собран из фактов на языке интерфейса. Готовый `title` бэкенд
+       * строит по-английски («Status changed: backlog -> open»), и до UI-140 здесь
+       * стоял именно он — единственная английская строка раскрытой описи на русском.
+       */}
       <p className="font-semibold">
-        <TaskText>{title}</TaskText>
+        {headline.kind === 'built' ? (
+          <EntryHeadline headline={headline} />
+        ) : (
+          <TaskText>{title}</TaskText>
+        )}
       </p>
       <QueryState query={entry} loading={t('index.loadingEntry')} />
       {entry.data == null ? null : <EntryBody entry={entry.data} checks={checks} />}

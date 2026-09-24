@@ -57,6 +57,8 @@ export function IssueDialog({
   const nameHintId = useId();
   const scopeName = useId();
   const { t } = useTranslation('access');
+  // Род участника — подпись кирпича (`ui`), а не экрана: та же, что у автора записи.
+  const { t: brick } = useTranslation('ui');
 
   const known = (participants.data ?? []).filter(
     (item) => admin || item.kind !== 'human' || item.name === me,
@@ -124,7 +126,7 @@ export function IssueDialog({
             )}
             {known.map((item) => (
               <option key={item.id} value={item.name}>
-                {item.name} — {item.kind}
+                {item.name} — {brick(`participantKind.${item.kind}`)}
               </option>
             ))}
             <option value={SHARED}>{t('issue.whomShared')}</option>

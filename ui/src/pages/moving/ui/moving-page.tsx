@@ -42,6 +42,7 @@ export function MovingPage() {
 
   const [selected, setSelected] = useState<Selected | null>(null);
   const [parseError, setParseError] = useState<unknown>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ArchiveImportRead | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +57,7 @@ export function MovingPage() {
     setResult(null);
     setParseError(null);
     setSelected(null);
+    setFileName(file?.name ?? null);
     if (file === undefined) return;
 
     try {
@@ -70,6 +72,7 @@ export function MovingPage() {
     setConfirming(false);
     setResult(archiveImport);
     setSelected(null);
+    setFileName(null);
     if (fileInputRef.current !== null) fileInputRef.current.value = '';
   }
 
@@ -114,14 +117,34 @@ export function MovingPage() {
               <label className="text-meta text-muted" htmlFor={fileInputId}>
                 {t('import.fileLabel')}
               </label>
-              <input
-                ref={fileInputRef}
-                id={fileInputId}
-                type="file"
-                accept="application/json,.json"
-                onChange={(event) => void chooseFile(event.target.files?.[0])}
-                className="text-meta"
-              />
+              {/*
+               * Поле выбора файла браузер подписывает сам и на своём языке («Choose File»,
+               * «No file chosen») — не на языке интерфейса (UI-140). Поэтому само поле
+               * скрыто для глаза, но остаётся в фокусе и у диктора, а видна своя кнопка:
+               * подпись `label`, которая открывает то же окно выбора, и имя файла рядом.
+               * Кольцо фокуса поля рисует кнопка — через `peer`.
+               */}
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  id={fileInputId}
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(event) => void chooseFile(event.target.files?.[0])}
+                  className="peer sr-only"
+                />
+                <Button
+                  asChild
+                  tone="quiet"
+                  size="sm"
+                  className="cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus"
+                >
+                  <label htmlFor={fileInputId}>{t('import.choose')}</label>
+                </Button>
+                <span className="text-meta break-all text-muted">
+                  {fileName ?? t('import.noFile')}
+                </span>
+              </div>
             </div>
 
             {parseError === null ? null : (
