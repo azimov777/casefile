@@ -1,0 +1,58 @@
+# Публикует `server.json` в официальный реестр MCP (registry.modelcontextprotocol.io)
+# на каждый тег выпуска `vX.Y.Z`, независимо от `images.yml` — она не трогается и не
+# ждёт эту публикацию, эта публикация не ждёт её. Сбой одной не должен запирать другую:
+# запись в стороннем реестре и образы установки — разные потребители одного тега.
+#
+# Вход — GitHub OIDC (`mcp-publisher login github-oidc`): доступ подтверждает сама
+# сборка, запущенная в этом репозитории с правом `id-token: write`, долгоживущего
+# секрета нет и заводить не нужно (TRK-133). Разовая ручная публикация версии 0.2.0
+# (TRK-83) прошла тем же способом входа, но браузерным `login github` от владельца —
+# здесь его заменяет OIDC, и человек в публикации больше не участвует.
+#
+# Версия в закоммиченном `server.json` — не источник истины, а памятка о последнем
+# выпуске: этот workflow подставляет её из тега (`vX.Y.Z` → `X.Y.Z`) во временную копию
+# прямо перед публикацией и ничего не коммитит обратно. Файл в репозитории руками перед
+# каждым выпуском не правится (`docs/DEVELOPMENT.md`, раздел «Выпуск»).
+#
+# Пре-релиз (`v0.3.0-rc.1`) публикуется наравне с обычным выпуском — реестр сам не решает,
+# какая версия «последняя»: `isLatest` у него считает публикатор по порядку публикаций, и
+# пре-релиз, опубликованный после стабильного, стал бы им. Из `images.yml` для сравнения:
+# там канал `stable` пре-релиз не двигает, но это тег Docker, а не поле реестра MCP.
+
+name: MCP Registry
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write # OIDC-вход mcp-publisher, без долгоживущего секрета
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version from tag in server.json
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' server.json > server.json.tmp
+          mv server.json.tmp server.json
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Validate server.json against the registry schema
+        run: ./mcp-publisher validate server.json
+
+      - name: Authenticate to MCP Registry via GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json to MCP Registry
+        run: ./mcp-publisher publish

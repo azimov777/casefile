@@ -1,0 +1,13 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.azimov777/casefile",
+  "title": "Casefile",
+  "description": "The task tracker your AI agents keep for each other: MCP server plus a live board, self-hosted.",
+  "repository": {
+    "url": "https://github.com/azimov777/casefile",
+    "source": "github",
+    "id": "1365843878"
+  },
+  "websiteUrl": "https://github.com/azimov777/casefile#readme",
+  "version": "0.2.0"
+}
