@@ -211,11 +211,9 @@ describe('экран «Подключить агента»', () => {
     );
     expect(
       steps.map((step) => within(step).getByRole('heading', { level: 2 }).textContent),
-    ).toEqual([
-      say.connect('token.title'),
-      say.connect('snippets.title'),
-      `${say.connect('skill.title')}${say.connect('skill.optional')}`,
-    ]);
+    ).toEqual([say.connect('token.title'), say.connect('snippets.title')]);
+    // Место снятого шага установки скила — одна фраза под списком, а не шаг (UI-171).
+    expect(screen.getByText(say.connect('discipline'))).toBeInTheDocument();
   });
 
   it('вид с меткой открывается по адресу', async () => {
@@ -260,11 +258,9 @@ describe('экран «Подключить агента»', () => {
     renderApp('/connect');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(say.errors('database_unavailable'));
-    // Откуда взять токен и как поставить скил, человек читает и без адреса.
+    // Откуда взять токен и фраза о дисциплине сервера человек читает и без адреса.
     expect(screen.getByRole('heading', { name: say.connect('token.title') })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: new RegExp(say.connect('skill.title')) }),
-    ).toBeInTheDocument();
+    expect(screen.getByText(say.connect('discipline'))).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: say.ui('query.retry') }));
 
