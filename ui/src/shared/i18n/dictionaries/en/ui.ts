@@ -3,6 +3,7 @@ import type { components } from '@/shared/api';
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
 type LinkKind = components['schemas']['LinkKind'];
+type AuthorKind = components['schemas']['AuthorKind'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -18,6 +19,15 @@ type LinkKind = components['schemas']['LinkKind'];
  */
 export const ui = {
   language: 'Interface language',
+  /**
+   * Род участника словом (UI-140): значение контракта (`agent`, `human`), но стоит оно
+   * подписью рядом с именем, а не идентификатором, — как тип записи и вид связи.
+   */
+  participantKind: {
+    agent: 'agent',
+    human: 'human',
+    tracker: 'tracker',
+  } satisfies Record<AuthorKind, string>,
   error: {
     unknown: 'Unknown error.',
     unknownCode: 'Unknown error ({{code}}).',

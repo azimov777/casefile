@@ -27,6 +27,10 @@ export const moving = {
     intro:
       'Bring an archive exported from another installation up here. This only works into an installation that has no queues yet — a fresh one from the one-line installer — and it replaces every table this installation has with the archive.',
     fileLabel: 'Archive file',
+    // Своя кнопка выбора файла вместо подписи браузера (UI-140): та говорит на языке
+    // браузера, а не интерфейса.
+    choose: 'Choose a file',
+    noFile: 'No file chosen',
     action: 'Import',
     confirmTitle: 'Replace this installation with the archive?',
     confirmIntro: 'Every table this installation has is about to be replaced.',

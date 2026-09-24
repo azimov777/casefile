@@ -143,8 +143,8 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     case 'field_changed':
       return (
         <Diff>
-          <Side title={t('entry.was')} value={entry.payload.before} tone="was" />
-          <Side title={t('entry.now')} value={entry.payload.after} tone="now" />
+          <Side title={t('entry.was')} value={entry.payload.before} tone="was" identifier />
+          <Side title={t('entry.now')} value={entry.payload.after} tone="now" identifier />
         </Diff>
       );
 
@@ -264,15 +264,22 @@ const sideTitle = cva(PART_TITLE, {
 
 /**
  * Сторона сравнения: `checks` приходит списком, остальные разделы — строкой.
+ *
+ * `identifier` — у правки обвязки (`field_changed`, сегодня только `priority`):
+ * её значения не текст агента, а значения контракта (`normal`, `high`), и стоят они
+ * тем же моноширинным идентификатором, что приоритет в карточке, а не абзацем
+ * прозы — на русском экране абзац `high` читался бы непереведённой подписью (UI-140).
  */
 function Side({
   title,
   value,
   tone,
+  identifier = false,
 }: {
   title: string;
   value?: string | string[] | null;
   tone: 'was' | 'now';
+  identifier?: boolean;
 }) {
   const { t } = useTranslation('ui');
 
@@ -284,6 +291,10 @@ function Side({
       <span className={sideTitle({ tone })}>{title}</span>
       {value === null || value === undefined || value === '' ? (
         <p className="text-muted italic">{t('entry.emptyValue')}</p>
+      ) : identifier && !Array.isArray(value) ? (
+        <p>
+          <code className={REF}>{value}</code>
+        </p>
       ) : Array.isArray(value) ? (
         <ol className="pl-6">
           {value.map((item, index) => (
