@@ -1308,9 +1308,8 @@ test('знак края есть у переполненного столбца 
     expect(seen.gap, report).toBeLessThanOrEqual(2);
     expect(seen.gap, report).toBeGreaterThanOrEqual(0);
     expect(seen.width, report).toBeLessThanOrEqual(2);
-    // Высота знака — нижнее поле столбца: место, где содержимое бывает только
-    // на прокрутке.
-    expect(seen.height, report).toBe(12);
+    // Высота затухания — `h-8` (UI-169): последние 32 px видимого столбца тают в его цвет.
+    expect(seen.height, report).toBe(32);
     /*
      * Каждый край по отдельности (UI-145): при видимой полосе прокрутки столбца
      * знак обязан совпадать с внутренними краями столбца, а не просто иметь ту же
@@ -1486,54 +1485,35 @@ test('знак края читается в своей теме и не съед
   expect(measured.position, report).toBe('sticky');
   expect(measured.raised, report).toBeGreaterThan(measured.inCard);
   expect(measured.through, report).toBe(measured.points);
-  // Заливки в старом смысле у знака больше нет (UI-145) — он рисуется затуханием.
+  // Заливки в старом смысле у знака нет (UI-145) — он рисуется затуханием.
   expect(measured.backgroundColor, report).toMatch(/, ?0\)$/);
 
   /*
-   * Знак — симметричное затухание одним цветом, без жёсткой линии и тени (UI-145):
-   * `from-transparent via-<цвет> to-transparent`. Оба конца обязаны быть честно
-   * прозрачными — иначе у затухания осталась бы своя резкая граница, ровно та, которую
-   * убирали, — а середина (пик, `via`) несёт весь контраст без ослабления в своей же
-   * точке.
+   * Знак — затухание карточек в цвет столбца (UI-169, выбор владельца UI-169#10):
+   * `from-sunken to-transparent`, снизу вверх. Две точки и ни одной третьей. Нижняя
+   * точка — **ровно** заливка столбца: тогда у знака нет своего цвета и нет шва ни
+   * с рамкой снизу, ни у полосы прокрутки справа, где под прозрачной дорожкой тот же
+   * столбец. Именно шов справа владелец видел у чёткой кромки (вариант C, UI-169#10).
+   * Верхняя точка честно прозрачна: иначе у затухания осталась бы своя резкая граница
+   * поверх текста карточки.
+   *
+   * Серой полосы с пиком посередине, какой знак был с UI-145 по UI-169, больше нет:
+   * она лежала поверх текста последней карточки и читалась размытой (UI-169#5).
    */
   const stops = [...measured.backgroundImage.matchAll(/(rgba?\([^)]*\))\s*(\d+)%/g)].map(
     ([, color, at]) => ({ color, at: Number(at) }),
   );
-  expect(stops.length, report).toBe(3);
-  expect(stops[0]?.at, report).toBe(0);
-  expect(stops[0]?.color, report).toMatch(/, ?0\)$/);
-  expect(stops[2]?.at, report).toBe(100);
-  expect(stops[2]?.color, report).toMatch(/, ?0\)$/);
-  expect(stops[1]?.at, report).toBe(50);
-  expect(stops[1]?.color, report).not.toMatch(/, ?0\)$/);
-
-  /*
-   * Контраст считается у пика затухания (он один, `via`, и не ослаблен затуханием в
-   * своей же точке) к обеим поверхностям, на которые ложится знак: к карточке, которая
-   * уходит под край, и к заливке столбца — в промежутке между карточками. Второе и есть
-   * худший случай прежнего знака: карточка кончилась у самого края, и под пиком нет
-   * ничего, кроме заливки.
-   */
-  const peak = stops[1]?.color as string;
-  const ratios = {
-    card: contrast(peak, measured.card),
-    column: contrast(peak, measured.column),
-  };
-  await test.info().attach(`контраст пика затухания (${status})`, {
-    body: JSON.stringify({ peak, card: measured.card, column: measured.column, ratios }, null, 2),
+  await test.info().attach(`точки затухания знака (${status})`, {
+    body: JSON.stringify({ stops, column: measured.column, card: measured.card }, null, 2),
     contentType: 'application/json',
   });
-  /*
-   * Порог — не AA для текста: знак не текст и не элемент управления, а оформление
-   * границы, и держится он на тех же линиях, что и все границы в проекте. Порог
-   * стережёт другое: `--color-sunken` (свой цвет столбца) даёт с заливкой карточки
-   * только 1.14 и не был бы виден вовсе, а `--color-line-strong` даёт не меньше 1.29 —
-   * тот же порядок, что держала прежняя жёсткая линия до UI-145.
-   */
-  expect(
-    Math.min(ratios.card, ratios.column),
-    `${report} ${JSON.stringify(ratios)}`,
-  ).toBeGreaterThanOrEqual(1.25);
+  expect(stops.length, report).toBe(2);
+  expect(stops[0]?.at, report).toBe(0);
+  expect(stops[0]?.color, report).toBe(measured.column);
+  expect(stops[1]?.at, report).toBe(100);
+  expect(stops[1]?.color, report).toMatch(/, ?0\)$/);
+  // Затуханию есть что показать: карточка светлее или темнее столбца, а не того же цвета.
+  expect(measured.card, report).not.toBe(measured.column);
 
   // `axe` смотрит на доску со знаком: он декоративный и в дереве доступности его нет.
   const result = await new AxeBuilder({ page }).analyze();
