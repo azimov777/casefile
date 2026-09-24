@@ -1,5 +1,9 @@
 """Выборки, вставки и выдача номеров по проектам."""
 
+import uuid
+from collections.abc import Collection
+from datetime import datetime
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
@@ -18,6 +22,29 @@ class ProjectRepository:
         """Поиск по уже канонизированному ключу: канонизацию делает домен, не запрос."""
         statement = select(Project).where(Project.key == key)
         return (await self._session.scalars(statement)).one_or_none()
+
+    async def first_archived(
+        self, project_ids: Collection[uuid.UUID]
+    ) -> tuple[str, datetime] | None:
+        """Ключ и время архивирования первого по ключу архивного проекта среди названных.
+
+        Колонки, а не объект: объект проекта в карте сессии мог быть прочитан до очереди
+        изменений или нести незаписанную правку сценария, и выборка сущности вернула бы
+        его как есть. Запрос колонок под очередью видит состояние после всех
+        зафиксировавшихся соседей (`READ COMMITTED`) и чужих объектов не трогает.
+        """
+        if not project_ids:
+            return None
+        statement = (
+            select(Project.key, Project.archived_at)
+            .where(Project.id.in_(project_ids), Project.archived_at.is_not(None))
+            .order_by(Project.key)
+            .limit(1)
+        )
+        row = (await self._session.execute(statement)).one_or_none()
+        if row is None or row.archived_at is None:
+            return None
+        return row.key, row.archived_at
 
     async def list_page(
         self,

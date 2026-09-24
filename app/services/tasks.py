@@ -48,7 +48,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.core.sentinels import UNSET, is_set
-from app.db.locks import lock_changes
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.project import Project
@@ -89,6 +88,7 @@ from app.domain.tasks import (
 )
 from app.domain.tokens import TokenScope
 from app.services import case as case_service
+from app.services import freeze
 from app.services import links as links_service
 from app.services import projects as projects_service
 from app.services.auth import Actor
@@ -310,7 +310,8 @@ async def create_task(
     (`app/db/locks.py`) — то, чем два одновременных создания не встают друг о друга.
     """
     ensure_scope(actor, TokenScope.TASK, action="task.create")
-    await lock_changes(session)
+    # Заморозка архива — до номера, как и всякая проверка создания.
+    await freeze.lock_unfrozen(session, project=project)
 
     stored = normalize_fields(
         {
@@ -427,7 +428,7 @@ async def close_task(
     записи выше него.
     """
     ensure_scope(actor, TokenScope.TASK, action="task.close")
-    await lock_changes(session, task)
+    await freeze.lock_unfrozen(session, task)
     _ensure_version(task, expected_version)
     action_id = uuid.uuid4()
 
@@ -523,7 +524,7 @@ async def apply_task_changes(
     поданных им до перехода.
     """
     ensure_scope(actor, TokenScope.TASK, action=action)
-    await lock_changes(session, task)
+    await freeze.lock_unfrozen(session, task)
     _ensure_version(task, expected_version)
 
     given = changes.given()

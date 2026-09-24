@@ -100,6 +100,8 @@ class EntryType(StrEnum):
     ATTRIBUTE_CREATED = "attribute_created"
     ATTRIBUTE_CHANGED = "attribute_changed"
     ATTRIBUTE_REMOVED = "attribute_removed"
+    ARCHIVED = "archived"
+    RESTORED = "restored"
 
 
 class VerdictOutcome(StrEnum):
@@ -155,6 +157,8 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.ATTRIBUTE_CREATED,
         EntryType.ATTRIBUTE_CHANGED,
         EntryType.ATTRIBUTE_REMOVED,
+        EntryType.ARCHIVED,
+        EntryType.RESTORED,
     }
 )
 
@@ -164,6 +168,10 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
 ATTRIBUTE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     {EntryType.ATTRIBUTE_CREATED, EntryType.ATTRIBUTE_CHANGED, EntryType.ATTRIBUTE_REMOVED}
 )
+
+#: Служебные записи об архивировании проекта (`CONCEPT.md`, 3.2): `archived` и `restored` с
+#: причиной. Бывают только в деле проекта — отдельного архива у задачи нет.
+ARCHIVE_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.ARCHIVED, EntryType.RESTORED})
 
 #: Записи агента и человека — всё, что не служебное.
 AGENT_ENTRY_TYPES: frozenset[EntryType] = frozenset(EntryType) - SERVICE_ENTRY_TYPES
@@ -457,6 +465,9 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     EntryType.ATTRIBUTE_CREATED: AttributeFacts,
     EntryType.ATTRIBUTE_CHANGED: AttributeFacts,
     EntryType.ATTRIBUTE_REMOVED: AttributeFacts,
+    # Причина — свободный текст и остаётся в записи, в опись ехать нечему.
+    EntryType.ARCHIVED: NoFacts,
+    EntryType.RESTORED: NoFacts,
 }
 
 

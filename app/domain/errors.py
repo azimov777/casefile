@@ -117,6 +117,32 @@ class ProjectDescriptionTooLongError(ValidationError):
     message = "Project description is too long"
 
 
+class ProjectArchivedError(ConflictError):
+    """Проект в архиве: он и его задачи заморожены для изменений (`CONCEPT.md`, 3.2).
+
+    Возникает в одном месте — `app/services/freeze.py`. Единственное изменение, которое
+    архив пропускает, — снятие связи с его задачей (`unlink`); всё остальное ждёт
+    восстановления проекта.
+    """
+
+    code = "project_archived"
+    message = "Project is archived: it and its tasks are frozen"
+
+
+class ProjectNotArchivedError(ConflictError):
+    """Восстанавливать нечего: проект не в архиве."""
+
+    code = "project_not_archived"
+    message = "Project is not archived"
+
+
+class ProjectReasonRequiredError(ValidationError):
+    """Архивирование и восстановление проекта требуют непустой причины `reason`."""
+
+    code = "project_reason_required"
+    message = "Archiving or restoring a project requires a reason"
+
+
 # --- Атрибуты проекта ----------------------------------------------------------------
 
 

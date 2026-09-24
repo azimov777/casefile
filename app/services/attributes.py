@@ -22,7 +22,6 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.locks import lock_changes
 from app.db.models.attribute import ProjectAttribute
 from app.db.models.entry import Entry
 from app.db.models.project import Project
@@ -37,6 +36,7 @@ from app.domain.attributes import (
 from app.domain.errors import AttributeNotFoundError
 from app.domain.tokens import TokenScope
 from app.services import case as case_service
+from app.services import freeze
 from app.services.auth import Actor
 from app.services.permissions import ensure_scope
 
@@ -80,7 +80,7 @@ async def set_attribute(
     ensure_scope(actor, TokenScope.TASK, action="project_attribute.set")
     name = validate_attribute_name(name)
     value = validate_attribute_value(value)
-    await lock_changes(session)
+    await freeze.lock_unfrozen(session, project=project)
 
     repository = AttributeRepository(session)
     attribute = await repository.get_by_name(project.id, attribute_lookup_name(name))
@@ -136,7 +136,7 @@ async def remove_attribute(
     """
     ensure_scope(actor, TokenScope.TASK, action="project_attribute.remove")
     name = validate_attribute_name(name)
-    await lock_changes(session)
+    await freeze.lock_unfrozen(session, project=project)
 
     repository = AttributeRepository(session)
     attribute = await repository.get_by_name(project.id, attribute_lookup_name(name))
