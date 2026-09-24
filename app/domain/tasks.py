@@ -39,7 +39,7 @@ from app.domain.errors import (
     AssigneeRequiredError,
     ChecksNotPassedError,
     ClosingNotATransitionError,
-    InvalidQueueKeyError,
+    InvalidProjectKeyError,
     InvalidTaskKeyError,
     SummaryRequiredError,
     TaskBlockedError,
@@ -50,26 +50,26 @@ from app.domain.errors import (
     TransitionReasonRequiredError,
 )
 from app.domain.fields import FieldProblem, FieldProblems
-from app.domain.queues import MAX_QUEUE_KEY_LENGTH, validate_queue_key
+from app.domain.projects import MAX_PROJECT_KEY_LENGTH, validate_project_key
 
 # --- Ключ задачи ----------------------------------------------------------------
 
-#: Разделитель ключа задачи. В ключе очереди его быть не может — см. шаблон очередей.
+#: Разделитель ключа задачи. В ключе проекта его быть не может — см. шаблон проектов.
 TASK_KEY_SEPARATOR = "-"
 
-#: Номер первой задачи в очереди. Счётчик хранит номер последней выданной, поэтому
-#: пустая очередь держит 0, а первая задача получает 1.
+#: Номер первой задачи в проекте. Счётчик хранит номер последней выданной, поэтому
+#: пустой проект держит 0, а первая задача получает 1.
 FIRST_TASK_NUMBER = 1
 
-#: Предел длины ключа задачи: ключ очереди, разделитель и номер. Номер — целое до 19
-#: цифр, и в такой ключ не упрётся ни одна реальная очередь. Нужен только затем, чтобы
+#: Предел длины ключа задачи: ключ проекта, разделитель и номер. Номер — целое до 19
+#: цифр, и в такой ключ не упрётся ни один реальный проект. Нужен только затем, чтобы
 #: у колонки была явная граница, а не `TEXT` без предела.
-MAX_TASK_KEY_LENGTH = MAX_QUEUE_KEY_LENGTH + len(TASK_KEY_SEPARATOR) + 19
+MAX_TASK_KEY_LENGTH = MAX_PROJECT_KEY_LENGTH + len(TASK_KEY_SEPARATOR) + 19
 
 
-def format_task_key(queue_key: str, number: int) -> str:
+def format_task_key(project_key: str, number: int) -> str:
     """Собирает ключ задачи: `TRK` + `42` → `TRK-42`."""
-    return f"{queue_key}{TASK_KEY_SEPARATOR}{number}"
+    return f"{project_key}{TASK_KEY_SEPARATOR}{number}"
 
 
 def parse_task_key(key: str) -> tuple[str, int]:
@@ -82,13 +82,13 @@ def parse_task_key(key: str) -> tuple[str, int]:
     `TRK-0`, `TRK-1-2` и `TRK-007` — не ключи задач, и молча истолковать их нельзя —
     ключ приезжает в ссылках записей дела и в строке поиска.
     """
-    queue_part, separator, number_part = key.strip().partition(TASK_KEY_SEPARATOR)
+    project_part, separator, number_part = key.strip().partition(TASK_KEY_SEPARATOR)
     if not separator or not is_plain_number(number_part):
         raise InvalidTaskKeyError(
             details={
                 "key": key,
                 "reason": "pattern_mismatch",
-                "expected": f"<QUEUE>{TASK_KEY_SEPARATOR}<number>",
+                "expected": f"<PROJECT>{TASK_KEY_SEPARATOR}<number>",
             },
         )
     number = int(number_part)
@@ -97,18 +97,18 @@ def parse_task_key(key: str) -> tuple[str, int]:
             details={"key": key, "reason": "number_out_of_range", "min": FIRST_TASK_NUMBER},
         )
     try:
-        queue_key = validate_queue_key(queue_part)
-    except InvalidQueueKeyError as exc:
-        # Клиент адресовал задачу, а не очередь: ответ должен говорить про ключ задачи,
-        # а шаблон очереди приезжает в подробностях, чтобы было понятно, что не так.
+        project_key = validate_project_key(project_part)
+    except InvalidProjectKeyError as exc:
+        # Клиент адресовал задачу, а не проект: ответ должен говорить про ключ задачи,
+        # а шаблон проекта приезжает в подробностях, чтобы было понятно, что не так.
         raise InvalidTaskKeyError(
-            details={"key": key, "reason": "queue_key_mismatch", **exc.details},
+            details={"key": key, "reason": "project_key_mismatch", **exc.details},
         ) from exc
-    return queue_key, number
+    return project_key, number
 
 
 def normalize_task_key(key: str) -> str:
-    """Канонический вид ключа: очередь в верхнем регистре, номер без ведущих нулей."""
+    """Канонический вид ключа: проект в верхнем регистре, номер без ведущих нулей."""
     return format_task_key(*parse_task_key(key))
 
 

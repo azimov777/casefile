@@ -7,7 +7,7 @@
 Базовые семейства (`not_found`, `conflict`, `validation_error`, ...) живут в
 `app/core/errors.py`; здесь только их наследники со своим стабильным кодом.
 
-В списке фундамент (участники, токены, метка временного агента, очереди), задача с
+В списке фундамент (участники, токены, метка временного агента, проекты), задача с
 переходами (задача 22), дело — записи агента, обязательная сводка, вердикты
 (задача 23), связи между задачами (задача 24) — и отбор задач: разбор языка запросов,
 имена полей, операторы и значения (задача 25).
@@ -82,28 +82,28 @@ class TokenNotFoundError(NotFoundError):
     message = "Token not found"
 
 
-# --- Очереди --------------------------------------------------------------------
+# --- Проекты --------------------------------------------------------------------
 
 
-class QueueNotFoundError(NotFoundError):
-    """Очереди с таким ключом нет."""
+class ProjectNotFoundError(NotFoundError):
+    """Проекта с таким ключом нет."""
 
-    code = "queue_not_found"
-    message = "Queue not found"
-
-
-class QueueKeyTakenError(ConflictError):
-    """Ключ очереди уже занят: ключи уникальны без учёта регистра."""
-
-    code = "queue_key_taken"
-    message = "Queue key is already taken"
+    code = "project_not_found"
+    message = "Project not found"
 
 
-class InvalidQueueKeyError(ValidationError):
-    """Ключ очереди не соответствует шаблону."""
+class ProjectKeyTakenError(ConflictError):
+    """Ключ проекта уже занят: ключи уникальны без учёта регистра."""
 
-    code = "invalid_queue_key"
-    message = "Queue key is invalid"
+    code = "project_key_taken"
+    message = "Project key is already taken"
+
+
+class InvalidProjectKeyError(ValidationError):
+    """Ключ проекта не соответствует шаблону."""
+
+    code = "invalid_project_key"
+    message = "Project key is invalid"
 
 
 # --- Задачи ---------------------------------------------------------------------------
@@ -436,7 +436,7 @@ class SearchOperatorNotSupportedError(ValidationError):
 
 
 class SearchValueInvalidError(ValidationError):
-    """Значение условия не разрешается: нет такой очереди, статуса, не число.
+    """Значение условия не разрешается: нет такого проекта, статуса, не число.
 
     В `details` — имя поля, позиция значения в исходной строке и причина; у полей с
     конечным набором значений там же `allowed`.
@@ -663,12 +663,12 @@ class ArchiveRevisionUnknownError(ConflictError):
 
 
 class InstallationNotEmptyError(ConflictError):
-    """Приём архива в установку, где уже есть очереди.
+    """Приём архива в установку, где уже есть проекты.
 
     Архив заменяет данные приёмника целиком, а слияния двух трекеров нет: принять его
-    может только пустая установка — свежая, где никто ещё не завёл ни одной очереди.
-    `details.queues` — сколько их на приёмнике.
+    может только пустая установка — свежая, где никто ещё не завёл ни одного проекта.
+    `details.projects` — сколько их на приёмнике.
     """
 
     code = "installation_not_empty"
-    message = "Only an installation without queues can take an archive"
+    message = "Only an installation without projects can take an archive"

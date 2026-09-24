@@ -69,7 +69,7 @@ class JournalFilter:
     """
 
     task_ids: tuple[uuid.UUID, ...] | None = None
-    queue_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
     types: tuple[EntryType, ...] | None = None
 
 
