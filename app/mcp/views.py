@@ -1,6 +1,6 @@
 """Данные, которые инструмент отдаёт агенту: формы, общие для разных групп, и правила всех форм.
 
-Здесь — автор, очередь строкой и страница выдачи. Форма ответа одного инструмента стоит в
+Здесь — автор, проект строкой и страница выдачи. Форма ответа одного инструмента стоит в
 его файле (`app/mcp/tools/<группа>/<имя>.py`), общая для нескольких инструментов группы —
 в `views.py` группы. Доводы ниже относятся ко всем этим местам.
 
@@ -42,7 +42,7 @@ SDK строит из возвращаемого типа `outputSchema`, кла
 ## Что совпадает с REST, а что нарочно короче
 
 Пакет преемника (`task_package`) совпадает **целиком**: это вход агента в задачу, и
-терять в нём поля нельзя. Справочные представления — очередь и участник — короче: агенту
+терять в нём поля нельзя. Справочные представления — проект и участник — короче: агенту
 нужен контекст, а не строка реестра, и `id`, времена правки и подпись заводившего съели
 бы контекст, ничего не добавив к решению.
 
@@ -103,7 +103,7 @@ in_progress → done`, карточка приезжала четыре раза
 Второго, полного режима у этих инструментов нет намеренно: параметр вроде `fields` дал бы
 два поведения, из которых проверяется одно. Кому нужна карточка целиком — зовёт
 `get_task`, запись целиком — `read_entries`, и это сказано один раз, в описании формы
-ответа (`AppendedEntryView`, `QueueKeyView`, `ParticipantNameView`), а не в описании каждого
+ответа (`AppendedEntryView`, `ProjectKeyView`, `ParticipantNameView`), а не в описании каждого
 инструмента (TRK-145).
 
 Докстрока модели представления — её описание в `outputSchema`, то есть метадата:
@@ -128,7 +128,7 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel, Field
 
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 from app.domain.authors import Author
 from app.mcp.enums import AuthorKindSchema
 
@@ -145,20 +145,20 @@ def author(value: Author) -> AuthorView:
     return AuthorView(kind=value.kind, signature=value.signature)
 
 
-class QueueRefView(BaseModel):
-    """Queue in one line: key and title."""
+class ProjectRefView(BaseModel):
+    """Project in one line: key and title."""
 
     key: str
     title: str
 
 
-def queue_ref(queue: Queue) -> QueueRefView:
-    """Очередь одной строкой: ключ и название. Описание запрашивают `get_queue`.
+def project_ref(project: Project) -> ProjectRefView:
+    """Проект одной строкой: ключ и название. Описание запрашивают `get_project`.
 
-    Одно представление на карточку задачи и на выдачу `list_queues`: очередь, названная
-    коротко, обязана выглядеть одинаково везде, где она не главный предмет ответа.
+    Одно представление на карточку задачи и на выдачу `list_projects`: проект, названный
+    коротко, обязан выглядеть одинаково везде, где он не главный предмет ответа.
     """
-    return QueueRefView(key=queue.key, title=queue.title)
+    return ProjectRefView(key=project.key, title=project.title)
 
 
 # Страница выдачи. Форма одна у всех инструментов, которые её отдают.

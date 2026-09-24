@@ -114,10 +114,10 @@ IDEMPOTENT_TASK_UPDATE = ToolAnnotations(
     open_world_hint=False,
 )
 
-#: Правка очереди или участника (`update_queue`, `update_participant`): тоже
+#: Правка проекта или участника (`update_project`, `update_participant`): тоже
 #: идемпотентна — то же значение второй раз ничего не меняет, — но, в отличие от
-#: задачи, у очереди и участника нет журнала правок: прежние название и описание
-#: перезаписываются без следа (`app/services/queues.py`, `app/services/participants.py`).
+#: задачи, у проекта и участника нет журнала правок: прежние название и описание
+#: перезаписываются без следа (`app/services/projects.py`, `app/services/participants.py`).
 #: Разрушающее обновление в буквальном смысле хинта.
 OVERWRITING_UPDATE = ToolAnnotations(
     read_only_hint=False,

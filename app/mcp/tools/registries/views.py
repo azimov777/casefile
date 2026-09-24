@@ -1,28 +1,28 @@
-"""Короткие ответы записи в реестры: ключ очереди и имя участника без эха присланного."""
+"""Короткие ответы записи в реестры: ключ проекта и имя участника без эха присланного."""
 
 from pydantic import BaseModel
 
 from app.db.models.participant import Participant
-from app.db.models.queue import Queue
+from app.db.models.project import Project
 
 
-# Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания.
+# Ответ `create_project`/`update_project`: только ключ, без эха названия и описания.
 #
-# `create_queue` канонизирует регистр — это единственное, чего вызывающий не мог
-# знать заранее. `update_queue` ключ не меняет вовсе, но повторяет его по тому же
+# `create_project` канонизирует регистр — это единственное, чего вызывающий не мог
+# знать заранее. `update_project` ключ не меняет вовсе, но повторяет его по тому же
 # правилу, что и `MutationView`: ответ должен читаться сам по себе. Название и
-# описание вызывающий прислал сам; итог, если нужен, отдаёт `get_queue` (TRK-144).
-class QueueKeyView(BaseModel):
-    """Queue key in its stored, upper-case form; the queue in full is returned by
-    `get_queue`.
+# описание вызывающий прислал сам; итог, если нужен, отдаёт `get_project` (TRK-144).
+class ProjectKeyView(BaseModel):
+    """Project key in its stored, upper-case form; the project in full is returned by
+    `get_project`.
     """
 
     key: str
 
 
-def queue_key(item: Queue) -> QueueKeyView:
-    """Ответ `create_queue`/`update_queue`: только ключ, без эха названия и описания."""
-    return QueueKeyView(key=item.key)
+def project_key(item: Project) -> ProjectKeyView:
+    """Ответ `create_project`/`update_project`: только ключ, без эха названия и описания."""
+    return ProjectKeyView(key=item.key)
 
 
 # Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания.

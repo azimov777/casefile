@@ -1,4 +1,4 @@
-"""Аргументы, общие для инструментов разных групп: ключ задачи, ключ очереди, страница, ключ
+"""Аргументы, общие для инструментов разных групп: ключ задачи, ключ проекта, страница, ключ
 повтора.
 
 Описание аргумента — то, что модель читает о поле в `tools/list`: смысл, формат,
@@ -58,16 +58,17 @@ TaskKeyArg = Annotated[
     str,
     Field(
         description=(
-            "Task key `QUEUE-N`, case-insensitive. An unknown key is refused with `task_not_found`"
+            "Task key `PROJECT-N`, case-insensitive. "
+            "An unknown key is refused with `task_not_found`"
         ),
         examples=["TRK-42"],
     ),
 ]
-QueueKeyArg = Annotated[
+ProjectKeyArg = Annotated[
     str,
     Field(
         description=(
-            "Queue key, case-insensitive. An unknown key is refused with `queue_not_found`"
+            "Project key, case-insensitive. An unknown key is refused with `project_not_found`"
         ),
         examples=["TRK"],
     ),
