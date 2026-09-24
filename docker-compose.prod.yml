@@ -83,7 +83,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "b26f11d0a12a"
+x-updater-revision: &updater-revision "c85862ce1a3f"
 
 services:
   db:
@@ -268,6 +268,11 @@ services:
   # `…:failed`. Пока под тегом канала стоит он же, проверки его не пробуют, а следующий
   # выпуск идёт как обычно (TRK-122, `docs/notes/docker.md`).
   #
+  # Чужой `up` служба не перебивает: не прочёлся этот файл или состояние служб — проверка
+  # пропускается, а не зовёт `up`; идёт разовый шаг, `docker compose run` или первая
+  # проверка здоровья — ждёт тишины или пропускает. Установщик дожидается конца её
+  # проверки (`/tmp/checking` в контейнере) и на своё время её останавливает (TRK-131).
+  #
   # `pull`, а не отдельный запрос к манифесту: `pull` неизменного тега и есть запрос
   # манифеста, а образ всё равно нужен локально — достать из него этот файл. Раз в час два
   # образа — далеко от лимитов анонимного ghcr.io. Проверки идут не по часам, а от старта
@@ -337,8 +342,10 @@ services:
 
         # Образ службы по этому файлу. Не `config --images <служба>`: та печатает и образы
         # всех её зависимостей.
+        # Не прочёлся файл — неудача, а не пустой ответ.
         image_of() {
-          docker compose config |
+          config=$$(docker compose config) || return 1
+          printf '%s\n' "$$config" |
             awk -v s="$$1" '/^  [^ ]/ { cur = $$1 } cur == s ":" && /^    image: / { print $$2; exit }'
         }
 
@@ -365,28 +372,61 @@ services:
           fi
         }
 
-        # Id образа, на котором служба работает; пусто — её контейнера нет.
+        # Id образа, на котором служба работает; пусто — её контейнера нет. Неудача —
+        # compose не прочёл файл или не ответил: это не «службы нет» (TRK-131).
         running_of() {
-          container=$$(docker compose ps -q "$$1")
+          container=$$(docker compose ps -q "$$1") || return 1
           [ -z "$$container" ] || docker inspect -f '{{.Image}}' "$$container"
         }
 
-        # Id образа, который сейчас стоит под тегом, заданным службе этим файлом.
+        # Id образа, который сейчас стоит под тегом, заданным службе этим файлом. Код 2 —
+        # файл не прочёлся; 1 — образа под тегом нет.
         wanted_of() {
-          docker image inspect -f '{{.Id}}' "$$(image_of "$$1")" 2>/dev/null
+          image=$$(image_of "$$1") || return 2
+          docker image inspect -f '{{.Id}}' "$$image" 2>/dev/null
         }
 
-        # Успех — какая-то служба не запущена или запущена не на том образе, что сейчас
-        # стоит под тегом, который ей задаёт этот файл. Сверка с тегом файла, а не с тегом
-        # контейнера: иначе смена канала или закрепление выпуска не применялись бы.
+        # 0 — какая-то служба не запущена или запущена не на том образе, что сейчас стоит
+        # под тегом, который ей задаёт этот файл; 1 — всё на месте; 2 — состояние служб не
+        # прочлось, и судить не по чему. Сверка с тегом файла, а не с тегом контейнера:
+        # иначе смена канала или закрепление выпуска не применялись бы.
         outdated() {
           for service in api mcp ui; do
-            running=$$(running_of "$$service")
+            running=$$(running_of "$$service") || return 2
             [ -n "$$running" ] || return 0
-            wanted=$$(wanted_of "$$service") || return 0
+            wanted=$$(wanted_of "$$service")
+            case $$? in
+              0) ;;
+              2) return 2 ;;
+              *) return 0 ;;
+            esac
             [ "$$running" = "$$wanted" ] || return 0
           done
           return 1
+        }
+
+        # Успех — контур сейчас поднимает другой compose: установщик или человек. Признаки —
+        # то, что бывает только посреди `up`: идёт разовый шаг (`migrate`, ключи) или
+        # `docker compose run`, служба ещё не прошла первую проверку здоровья. Себя и
+        # `updater-renew` не считать: та ждёт обновлятор сама. Упавшие и перезапускающиеся
+        # службы — не признак: они бывают и навсегда, и проверка не шла бы никогда.
+        busy() {
+          docker ps --filter "label=com.docker.compose.project=$$COMPOSE_PROJECT_NAME" \
+            --format '{{.Label "com.docker.compose.service"}} {{.Label "com.docker.compose.oneoff"}} {{.Status}}' |
+            awk '$$1 == "updater" || $$1 == "updater-renew" { next }
+              $$2 == "True" || $$1 == "migrate" || $$1 == "local-token" || $$1 == "agent-token" ||
+              /health: starting/ { found = 1 }
+              END { exit !found }'
+        }
+
+        # Успех — контур затих за три минуты: столько длится подъём после старта Docker.
+        quiet() {
+          i=0
+          while busy; do
+            [ "$$i" -lt 36 ] || return 1
+            sleep 5
+            i=$$((i + 1))
+          done
         }
 
         # Образы, на которых службы работают сейчас: после обновления их убирают.
@@ -453,6 +493,16 @@ services:
         }
 
         update() {
+          # Файл не прочёлся — в каталоге его нет посреди установщика или он испорчен:
+          # тогда и «служба не запущена» было бы неправдой, и `up` звать не с чем.
+          if ! problem=$$(docker compose config --quiet 2>&1); then
+            log "cannot read $$COMPOSE_FILE here ($$(printf '%s' "$$problem" | head -n 1)); skipping this check"
+            return 0
+          fi
+          if ! quiet; then
+            log "another docker compose is still starting this installation; skipping this check"
+            return 0
+          fi
           if ! docker compose pull --quiet api ui; then
             log "could not pull images (offline?), keeping the current ones"
             return 0
@@ -471,8 +521,23 @@ services:
             log "could not pull images (offline?), keeping the current ones"
             return 0
           fi
-          if [ -z "$$changed" ] && ! outdated; then
-            log "already up to date"
+          if [ -z "$$changed" ]; then
+            outdated
+            case $$? in
+              1)
+                log "already up to date"
+                return 0
+                ;;
+              2)
+                log "cannot read the state of the services here; skipping this check"
+                return 0
+                ;;
+            esac
+          fi
+          # Другой compose начал `up`, пока шли `pull` и сверка: два `up` разом
+          # останавливают контейнеры друг друга. Его `up` сделает то же, что сделал бы этот.
+          if busy; then
+            log "another docker compose is starting this installation right now; skipping this check"
             return 0
           fi
           previous=$$(running_images)
@@ -508,12 +573,23 @@ services:
           done
         }
 
+        # Идёт проверка — в своём `/tmp` лежит файл: по нему установщик ждёт её конца.
+        # Процесс `docker` в `docker top` виден не всё время проверки: её ожидания —
+        # `sleep`. Остановленный посреди проверки обновлятор оставил бы файл, поэтому на
+        # старте он снимается.
+        check() {
+          touch /tmp/checking
+          update
+          rm -f /tmp/checking
+        }
+
         trap 'exit 0' TERM INT
+        rm -f /tmp/checking
         if [ "$$CASEFILE_AUTO_UPDATE" = "false" ]; then
           log "auto-update is off (CASEFILE_AUTO_UPDATE=false)"
           while :; do sleep 86400 & wait $$!; done
         fi
-        update
+        check
         seconds=$$(period)
         if [ "$$seconds" -eq 0 ]; then
           log "periodic checks are off (CASEFILE_UPDATE_INTERVAL=$$CASEFILE_UPDATE_INTERVAL), next check at the next Docker start"
@@ -522,7 +598,7 @@ services:
         while :; do
           jitter=$$(($$(od -An -N2 -tu2 /dev/urandom) % (seconds / 6 + 1)))
           sleep "$$((seconds + jitter))" & wait $$!
-          update
+          check
         done
 
   # Замена самого обновлятора. `updater` не пересоздаёт себя, поэтому его новая команда из
