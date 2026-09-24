@@ -67,14 +67,15 @@ async def test_stdio_lists_annotations_for_every_tool(
     assert all(tool.annotations.read_only_hint is not None for tool in listed if tool.annotations)
 
 
-async def test_stdio_offers_the_discipline_prompt(
+async def test_stdio_lists_no_prompts(
     mcp_sessions: SessionFactory,
     main_secret: str,
 ) -> None:
+    """Сервер не заводит скила или промпта (`TRK-140#8`): `prompts/list` пуст и через stdio."""
     async with Client(stdio_server(mcp_sessions, main_secret)) as stdio:
-        prompts = {prompt.name for prompt in (await stdio.list_prompts()).prompts}
+        prompts = (await stdio.list_prompts()).prompts
 
-    assert "tracker-discipline" in prompts
+    assert prompts == []
 
 
 async def test_a_stdio_call_is_signed_by_the_token_participant(

@@ -1,20 +1,20 @@
-"""Сборка MCP-сервера: инструменты, промпт дисциплины, инструкции и проверка здоровья.
+"""Сборка MCP-сервера: инструменты, инструкции и проверка здоровья.
 
 Сервер собирается фабрикой, а не заводится глобальным объектом: тесты поднимают свой
 экземпляр с сессией, привязанной к откатываемой транзакции, — ровно как это делает
 `create_app` для REST.
 
-## Три вещи, которые сервер отдаёт агенту
+## Две вещи, которые сервер отдаёт агенту
 
 1. **Инструменты** рабочего цикла (`app/mcp/tools/`). Состав `tools/list` зависит от
    набора токена; отказ на вызове недоступного инструмента приходит из той же единой
    точки прав, что и в REST (`app/mcp/toolset.py`).
-2. **Промпт `tracker-discipline`** — текст скила целиком. Показывать ли его модели,
-   решает клиент; надёжный путь — скил, установленный в харнесс (`CONCEPT.md`, 5.3).
-3. **`instructions`** — как пользоваться сервером, своим текстом в
+2. **`instructions`** — как пользоваться сервером, своим текстом в
    `app/mcp/instructions.md`: что такое трекер, что видит человек, что считать
    заданием, цикл работы. Они уезжают клиенту при подключении и читаются моделью
-   раньше любого вызова. Механики отдельных инструментов в них нет: она в метадате.
+   раньше любого вызова. Механики отдельных инструментов в них нет: она в метадате
+   (`CONCEPT.md`, 5.2). Отдельного скила или промпта сервер не заводит: решение
+   владельца `TRK-140#8`.
 
 ## Почему instructions — отдельный файл и держат длину
 
@@ -47,7 +47,6 @@ from app import __version__
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.mcp.runtime import Runtime, headers_middleware
-from app.mcp.skill import PROMPT_NAME, SKILL_TEXT
 from app.mcp.tools import register_tools
 from app.mcp.toolset import Toolset
 
@@ -77,7 +76,6 @@ def create_server(
     tools = Toolset(server=_bare_server(settings), runtime=runtime, settings=settings)
 
     register_tools(tools)
-    _register_prompt(tools.server)
     _register_health(tools.server, runtime)
     # Промежуточный слой ставится после регистрации: он спрашивает у набора состав
     # инструментов, и пустой набор оставил бы `tools/list` пустым навсегда.
@@ -101,26 +99,6 @@ def _bare_server(settings: Settings) -> MCPServer:
         middleware=[headers_middleware],
         debug=settings.debug,
     )
-
-
-def _register_prompt(server: MCPServer) -> None:
-    """Промпт дисциплины: текст скила целиком, без аргументов.
-
-    Аргументов у промпта нет намеренно. Дисциплина одна на всех агентов и не зависит ни
-    от задачи, ни от очереди: параметр здесь означал бы, что бывают задачи, где сводку
-    можно не писать.
-    """
-
-    @server.prompt(
-        name=PROMPT_NAME,
-        title="Дисциплина работы над задачей",
-        description=(
-            "Как вести дело по задаче, чтобы преемник продолжил работу без твоего "
-            "контекста. Полный текст скила `tracker-agent`"
-        ),
-    )
-    async def tracker_discipline() -> str:
-        return SKILL_TEXT
 
 
 def _register_health(server: MCPServer, runtime: Runtime) -> None:

@@ -71,25 +71,13 @@ What the user should know, in one line each:
 - If their account is disabled, every token they issued stops working at once, yours
   included, and enabling the account again does not bring those tokens back.
 
-## 4. Install the skill (recommended)
-
-The skill teaches how to keep a good case file. For Claude Code:
-
-```bash
-mkdir -p ~/.claude/skills/tracker-agent
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/skill/tracker-agent/SKILL.md \
-  -o ~/.claude/skills/tracker-agent/SKILL.md
-```
-
-Other agents: put the same file wherever your harness keeps skills or instructions.
-
-## 5. Verify
+## 4. Verify
 
 - `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/` prints `200`: the board is up.
 - `claude mcp list` shows `casefile` as connected (other clients: list the MCP tools and
   look for `list_queues`).
 
-## 6. Learn about news in your tasks
+## 5. Learn about news in your tasks
 
 Casefile never pushes anything to you. If the owner answers a question or leaves a
 remark while you are not reading the case, that answer just sits in the journal until
@@ -105,8 +93,8 @@ entries are permanent — no expiry, no outbox — so you can always resume from
 you resume from exactly that number.
 
 While your session is open on a task, this is nothing new: it is the same
-`wait_journal(task=key, after=<last seq>, types=["answer"], timeout=...)` the skill
-already covers ("Вопросы", "Ждать живым"). The gap this section is about is different —
+`wait_journal(task=key, after=<last seq>, types=["answer"], timeout=...)` a blocking
+question already calls for. The gap this section is about is different —
 **between one harness run and the next**, when no session is open at all. Nothing in
 Casefile starts a harness or writes into a closed session; some outside process has to
 do that, and Casefile does not ship one:
@@ -128,7 +116,7 @@ Either way, the recipe is the same three things: which tasks to watch, which `se
 resume from, and how long a poll may wait before it comes back empty. The script's
 header names the exact variables.
 
-## 7. Report to the user
+## 6. Report to the user
 
 In one short message: the board URL, that you are connected, and that Casefile updates
 itself to each new release (it checks every hour). To remove it later: `docker compose down -v` in `~/casefile`.
