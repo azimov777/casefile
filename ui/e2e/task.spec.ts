@@ -27,7 +27,10 @@ test('карточка DEMO-6 рисуется одним запросом па�
   // Кто именно держит — видно из связей, с ключом и статусом другой стороны.
   const links = page.getByRole('region', { name: 'Связи' });
   await expect(links.getByRole('link', { name: 'DEMO-2' })).toBeVisible();
-  await expect(links.getByText('blocked_by')).toBeVisible();
+  // Группа названа глазами этой задачи, без идентификатора вида (UI-168).
+  await expect(
+    links.getByRole('heading', { level: 3, name: /^Блокирует эту задачу/ }),
+  ).toBeVisible();
 
   // Сводка целиком, без клика.
   const summary = page.getByRole('region', { name: 'Последняя сводка' });
