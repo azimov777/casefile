@@ -118,32 +118,17 @@ in_progress → done`, карточка приезжала четыре раза
 
 REST этого правила не знает и знать не должен: там потребитель другой — интерфейс,
 который перерисовывает карточку после каждого действия и ходит за ней в ту же секунду.
-
-## Обрезка длинного текста
-
-Единственное место обрезки — выдача `search_tasks` (`TRACKER_MCP_TEXT_LIMIT`): только там
-в одном ответе может оказаться два десятка описаний и разделов. Обрезка объявлена рядом
-со значением (`<поле>_truncated`, `<поле>_length`), а полный текст — один вызов
-`get_task`. Тела записей дела не обрезаются нигде: их запрашивают по номеру, и взять
-полный текст было бы больше неоткуда.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from pydantic import (
-    BaseModel,
-    Field,
-    JsonValue,
-    SerializerFunctionWrapHandler,
-    model_serializer,
-)
+from pydantic import BaseModel, Field, JsonValue
 
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.queue import Queue
-from app.db.models.task import Task
 from app.domain.authors import Author
 from app.domain.case import (
     TITLED_ENTRY_TYPES,
@@ -161,8 +146,6 @@ from app.domain.case import (
     StatusChangedFacts,
     VerdictFacts,
 )
-from app.domain.search import FEATURES_FIELD, MANDATORY_FIELD, PARENT_FIELD
-from app.domain.tasks import TaskFeatures, TaskParent
 from app.mcp.enums import (
     AuthorKindSchema,
     EntryTypeSchema,
@@ -170,18 +153,8 @@ from app.mcp.enums import (
     ParticipantKindSchema,
     RemarkOutcomeSchema,
     TaskFieldSchema,
-    TaskPrioritySchema,
     TaskStatusSchema,
     VerdictOutcomeSchema,
-)
-from app.services.links import TaskLink
-from app.services.search import FoundTask
-from app.services.tasks import TaskClosure, TaskMutation, TaskPackage
-
-#: Поля задачи, которые бывают длинными: описание и пять разделов. Обрезаются только они
-#: и только в выдаче поиска.
-LONG_TEXT_FIELDS: frozenset[str] = frozenset(
-    {"description", "goal", "context", "constraints", "output"}
 )
 
 
@@ -211,268 +184,6 @@ def queue_ref(queue: Queue) -> QueueRefView:
     коротко, обязана выглядеть одинаково везде, где она не главный предмет ответа.
     """
     return QueueRefView(key=queue.key, title=queue.title)
-
-
-# Карточка задачи — тот же набор полей, что у `TaskRead` в REST.
-class TaskView(BaseModel):
-    """Task card."""
-
-    id: str
-    key: str
-    queue: QueueRefView
-    title: str
-    description: str
-    goal: str
-    context: str
-    constraints: str
-    output: str
-    checks: list[str]
-    status: TaskStatusSchema
-    assignee: str | None
-    priority: TaskPrioritySchema
-    version: int
-    created_by: AuthorView
-    created_at: datetime
-    updated_at: datetime
-
-
-def task(item: Task) -> TaskView:
-    """Карточка задачи — тот же набор полей, что у `TaskRead` в REST."""
-    return TaskView(
-        id=str(item.id),
-        key=item.key,
-        queue=queue_ref(item.queue),
-        title=item.title,
-        description=item.description,
-        goal=item.goal,
-        context=item.context,
-        constraints=item.constraints,
-        output=item.output,
-        checks=list(item.checks),
-        status=item.status,
-        assignee=item.assignee,
-        priority=item.priority,
-        version=item.version,
-        created_by=author(item.created_by),
-        created_at=item.created_at,
-        updated_at=item.updated_at,
-    )
-
-
-class MutationView(BaseModel):
-    """Task state after the call and the entries it filed; the card in full is returned
-    by `get_task`.
-    """
-
-    key: str
-    status: TaskStatusSchema
-    version: int = Field(description="Task version after the call")
-    entries: list[int] = Field(
-        description=(
-            "Numbers of the entries filed in this task's case, in filing order. Empty when "
-            "the sent values were already in place; the version then stays the same"
-        )
-    )
-    parent_entry: int | None = Field(
-        default=None,
-        description=(
-            "Number of the `link_added` entry filed into the parent task's own case "
-            "when `create_task` was given `parent`. `null` when no `parent` was given, "
-            "and always `null` for `transition` and `update_task`: they touch no other "
-            "task's case."
-        ),
-    )
-
-
-def mutation(value: TaskMutation, *, parent_entry: int | None = None) -> MutationView:
-    """Ответ изменяющего инструмента: что стало и чем это подшито, без карточки.
-
-    Почему не карточка — в шапке модуля. Здесь важно, что `entries` бывает пустым, и
-    это законный ответ: клиент прислал то, что уже стоит, — версия не выросла, дело не
-    пополнилось. Отличать «применилось» от «уже так было» агент будет именно по нему,
-    поэтому отдельного поля `changed` рядом нет: два способа узнать один факт разошлись
-    бы при первой же правке.
-
-    `parent_entry` называет номер записи в **чужом** деле — родителя, которого дал
-    `create_task`; `entries`, наоборот, всегда о деле **своей** задачи, и смешивать два
-    дела в одном списке значило бы отдать номер без адреса, к какому делу он относится.
-    У `transition` и `update_task` параметр не передаётся и остаётся `null`: они не
-    трогают чужих дел вовсе.
-    """
-    return MutationView(
-        key=value.task.key,
-        status=value.task.status,
-        version=value.task.version,
-        entries=list(value.entries),
-        parent_entry=parent_entry,
-    )
-
-
-# Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).
-class FeaturesView(BaseModel):
-    """Computed task features."""
-
-    blocked: bool
-    open_questions: int
-    open_blocking_questions: int
-    open_remarks: int
-    last_summary_at: datetime | None
-    last_entry_at: datetime | None
-
-
-def features(value: TaskFeatures) -> FeaturesView:
-    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
-    return FeaturesView(
-        blocked=value.blocked,
-        open_questions=value.open_questions,
-        open_blocking_questions=value.open_blocking_questions,
-        open_remarks=value.open_remarks,
-        last_summary_at=value.last_summary_at,
-        last_entry_at=value.last_entry_at,
-    )
-
-
-# Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
-class ParentView(BaseModel):
-    """Parent task: key and title."""
-
-    key: str
-    title: str
-
-
-def parent_row(value: TaskParent) -> ParentView:
-    """Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4)."""
-    return ParentView(key=value.key, title=value.title)
-
-
-# Строка выдачи поиска: карточка задачи, у которой любое поле может отсутствовать.
-#
-# Единственная модель слоя с необязательными полями, и это не послабление типизации, а
-# её предмет. Список умеет отдавать подмножество полей (`fields`), и схема обязана
-# честно это показывать — ровно так же, как `TaskSearchRead` в REST.
-#
-# Отсюда же сериализатор ниже. SDK сворачивает результат вызовом
-# `model_dump(mode="json")` — **без** `exclude_unset`, — и незапрошенное поле приезжало
-# бы агенту как `null`. Это не то же самое, что «поля нет»: пакет обязан совпадать с
-# ответом REST поле в поле, а тот отдаётся с `response_model_exclude_unset`.
-#
-# Схему сериализатор не портит, и это проверено: SDK строит `outputSchema` через
-# `TypeAdapter(...).json_schema()`, у которого режим по умолчанию — **валидация**, а
-# обёрточный сериализатор действует только на схему сериализации. У FastAPI режим
-# противоположный, поэтому предупреждение заметки `docs/notes/api.md` («Отбросить
-# пустые поля в ответе — значит потерять схему у клиента») сюда не переносится.
-class FoundTaskView(BaseModel):
-    """Search result row: the requested fields of one task."""
-
-    key: str
-    id: str | None = None
-    queue: QueueRefView | None = None
-    title: str | None = None
-    description: str | None = None
-    goal: str | None = None
-    context: str | None = None
-    constraints: str | None = None
-    output: str | None = None
-    checks: list[str] | None = None
-    status: TaskStatusSchema | None = None
-    assignee: str | None = None
-    priority: TaskPrioritySchema | None = None
-    version: int | None = None
-    created_by: AuthorView | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-    features: FeaturesView | None = None
-    parent: ParentView | None = None
-    # Обрезка объявляется рядом со значением, поэтому у каждого длинного поля своя пара
-    # признаков. Пять полей, десять имён — перечислены, а не собраны генератором:
-    # схему инструмента читает модель, и имя поля в ней должно быть видно как имя.
-    description_truncated: bool | None = None
-    description_length: int | None = None
-    goal_truncated: bool | None = None
-    goal_length: int | None = None
-    context_truncated: bool | None = None
-    context_length: int | None = None
-    constraints_truncated: bool | None = None
-    constraints_length: int | None = None
-    output_truncated: bool | None = None
-    output_length: int | None = None
-
-    @model_serializer(mode="wrap")
-    def _only_what_was_asked(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """Оставляет в ответе только заданные поля: «поля нет» — не то же, что `null`."""
-        return {
-            name: value for name, value in handler(self).items() if name in self.model_fields_set
-        }
-
-
-def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> FoundTaskView:
-    """Строка выдачи поиска: только запрошенные поля, длинные тексты с потолком.
-
-    Пустой набор полей означает «вся задача» — то же правило, что в REST. Ключ остаётся
-    всегда: выдача без него бесполезна, по ней нельзя ни прочитать задачу, ни сослаться
-    на неё.
-
-    Признаки идут вложенным объектом, тем же, что в пакете преемника: агент, выбирающий
-    задачу из списка, видит `blocked` и открытые вопросы сразу, а не вызывает `get_task`
-    на каждую строку. Их нет в ответе, если их не просили (`fields` без `features`).
-    Родитель — по тому же правилу: ключ и название, `null` у задачи верхнего уровня, и
-    поля нет вовсе, если его не просили.
-
-    Карточка разбирается на словарь через `dict()`, а не собирается вторым списком
-    полей: набор полей строки — это набор полей `TaskView`, и второе его перечисление
-    разъехалось бы с первым на первом же новом поле.
-    """
-    payload: dict[str, Any] = dict(task(found.task))
-    if found.features is not None:
-        payload[FEATURES_FIELD] = features(found.features)
-    if found.parent is not None:
-        asked = found.parent.value
-        payload[PARENT_FIELD] = None if asked is None else parent_row(asked)
-    if fields:
-        selected = {*fields, MANDATORY_FIELD}
-        payload = {name: value for name, value in payload.items() if name in selected}
-    for name in LONG_TEXT_FIELDS & payload.keys():
-        _clip_into(payload, name, text_limit)
-    return FoundTaskView(**payload)
-
-
-class LinkOtherView(BaseModel):
-    """Task on the other side of a link."""
-
-    key: str
-    title: str
-    status: TaskStatusSchema
-
-
-class LinkView(BaseModel):
-    """Link seen from this task: `kind` is the role of this task."""
-
-    kind: LinkKindSchema
-    other: LinkOtherView
-    author: AuthorView
-    created_at: datetime
-
-
-def link_other(value: TaskLink) -> LinkOtherView:
-    """Задача на другом конце связи: ключ, название и статус — родитель или ребёнок."""
-    return LinkOtherView(key=value.other.key, title=value.other.title, status=value.other.status)
-
-
-def link(value: TaskLink) -> LinkView:
-    """Связь со стороны своей задачи: вид назван ролью **этой** задачи.
-
-    В `other` лежит задача на **другом** конце — сторону вычислил сценарий, и определять
-    её здесь во второй раз не нужно и неверно: канонизация могла записать связь в
-    обратном порядке (`docs/notes/mcp.md`).
-    """
-    return LinkView(
-        kind=value.kind,
-        other=LinkOtherView(
-            key=value.other.key, title=value.other.title, status=value.other.status
-        ),
-        author=author(value.author),
-        created_at=value.created_at,
-    )
 
 
 # Ответ `link` и `unlink`: номера записей, которые вызов подшил в оба дела.
@@ -787,85 +498,6 @@ def appended_entry(value: Entry, *, task_key: str) -> AppendedEntryView:
     )
 
 
-# Ответ закрытия: чем стала задача и чем это подшито, без карточки и без записей.
-#
-# Элемент списка — то же `AppendedEntryView`, каким отвечает подшивающий инструмент,
-# поэтому ключ задачи повторяется в каждом: восьмое представление ради двадцати
-# сэкономленных байт развело бы две формы одной и той же записи, которые разойдутся
-# при первой правке.
-#
-# Поле, добавленное сюда позже, обязано иметь значение по умолчанию: ответ создающего
-# инструмента живёт сутки в ключах идемпотентности, и вчерашнее тело без нового поля
-# не поднимется (`docs/notes/mcp.md`, «Сузить форму ответа создающего инструмента
-# можно, расширить — нельзя»).
-class ClosedTaskView(BaseModel):
-    """Closed task: key, new status and version, and every entry the call filed."""
-
-    key: str
-    status: TaskStatusSchema
-    version: int
-    entries: list[AppendedEntryView] = Field(
-        default_factory=list,
-        description="Filed entries in filing order, ending with `status_changed`",
-    )
-
-
-def closed_task(closure: TaskClosure) -> ClosedTaskView:
-    """Ответ закрытия: чем стала задача и чем это подшито, без карточки и без записей.
-
-    Записи идут в порядке подшивки и кончаются `status_changed`: то, что задача закрыта,
-    — такая же страница дела, как вердикт, и её номер приезжает тем же списком.
-    """
-    return ClosedTaskView(
-        key=closure.task.key,
-        status=closure.task.status,
-        version=closure.task.version,
-        entries=[appended_entry(item, task_key=closure.task.key) for item in closure.entries],
-    )
-
-
-# Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
-class TaskPackageView(BaseModel):
-    """Everything about one task: card, parent and children, links, features, latest
-    summary, open questions, unresolved remarks, transition targets and case index.
-    """
-
-    task: TaskView
-    #: Родитель и дети — полями, а не видами в `links` (TRK-135): имя поля и есть ответ
-    #: на «кто родитель», направление разбирать не нужно.
-    parent: LinkOtherView | None
-    children: list[LinkOtherView]
-    links: list[LinkView]
-    features: FeaturesView
-    summary: EntryView | None
-    questions: list[EntryView]
-    remarks: list[EntryView]
-    transitions: list[TaskStatusSchema]
-    index: list[HeadingView]
-
-
-def task_package(package: TaskPackage) -> TaskPackageView:
-    """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
-
-    Совпадает с `GET /api/v1/tasks/{key}` поле в поле, и это проверяется тестом. Не
-    ради красоты: агент и человек обязаны видеть одну и ту же задачу, иначе разбор
-    «почему агент решил иначе, чем показывал интерфейс» упирается в два разных ответа.
-    """
-    key = package.task.key
-    return TaskPackageView(
-        task=task(package.task),
-        parent=None if package.parent is None else link_other(package.parent),
-        children=[link_other(item) for item in package.children],
-        links=[link(item) for item in package.links],
-        features=features(package.features),
-        summary=None if package.summary is None else entry(package.summary, task_key=key),
-        questions=[entry(question, task_key=key) for question in package.questions],
-        remarks=[entry(remark, task_key=key) for remark in package.remarks],
-        transitions=list(package.transitions),
-        index=[heading(item) for item in package.index],
-    )
-
-
 class QueueView(BaseModel):
     """Queue with its description."""
 
@@ -963,18 +595,3 @@ def page[ItemT](items: Iterable[ItemT], *, next_cursor: str | None) -> PageView[
     (`PageView[EntryView]`), и по нему же SDK строит схему результата.
     """
     return PageView(items=list(items), next_cursor=next_cursor)
-
-
-def _clip_into(payload: dict[str, Any], name: str, limit: int) -> None:
-    """Обрезает поле и объявляет обрезку рядом с ним.
-
-    Признак отдельным полем, а не многоточием в тексте: агент, сравнивающий строки, не
-    должен принимать метку за часть значения. Полная длина сообщается тем же ответом —
-    по ней видно, сколько осталось за краем.
-    """
-    text = payload[name]
-    if not isinstance(text, str) or len(text) <= limit:
-        return
-    payload[name] = text[:limit]
-    payload[f"{name}_truncated"] = True
-    payload[f"{name}_length"] = len(text)

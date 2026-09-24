@@ -37,7 +37,7 @@ SDK бросает `Context injection for static resources is not supported`. К
 **Как правильно:** `unset_field` живёт в `app/core/sentinels.py` и общий для схем REST и
 схем аргументов MCP. Новый инструмент с частичным изменением объявляет вложенную модель, а
 не набор плоских параметров со значением `None`.
-**Где:** `app/core/sentinels.py`; `app/mcp/arguments.py`, `TaskChanges`.
+**Где:** `app/core/sentinels.py`; `app/mcp/tools/tasks/update_task.py`, `TaskChanges`.
 
 ## Связь в выдаче названа со стороны спрашивающего, и вторая сторона уже вычислена
 
@@ -50,7 +50,7 @@ SDK бросает `Context injection for static resources is not supported`. К
 вычисляется второй раз по `source_id`/`target_id`. Правило общее для всего, что
 канонизируется при записи: направление определяется один раз, в одном месте, и наружу
 отдаётся уже разрешённым.
-**Где:** `app/services/links.py`, `TaskLink`; `app/mcp/views.py`, `link`.
+**Где:** `app/services/links.py`, `TaskLink`; `app/mcp/tools/tasks/get_task.py`, `link`.
 
 ## Инструмент MCP объявляет ровно один вид действия
 
@@ -66,7 +66,7 @@ SDK бросает `Context injection for static resources is not supported`. К
 именем и одной ошибкой, а не два действия под общим капотом. Ровно эта оговорка и
 сработала на `close_task` (`TRK-32`): частичное закрытие запрещено, значит закрытие —
 один сценарий, а не «подшить и перевести».
-**Где:** `app/mcp/tools/`; `app/mcp/tools/tasks.py`, `close_task`.
+**Где:** `app/mcp/tools/`; `app/mcp/tools/tasks/close_task.py`, `close_task`.
 
 ## Приложение MCP в тесте требует своего жизненного цикла, иначе группа задач не создана
 
@@ -112,7 +112,7 @@ SDK бросает `Context injection for static resources is not supported`. К
 в тесте явно — и то, что старое тело повтор не роняет, и то, что новое приходит новым
 вызовам. Рассчитывать на «за сутки само рассосётся» можно, но только вслух: молчаливое
 расхождение форм в одной таблице выглядит как поломка разбора.
-**Где:** `app/mcp/idempotency.py`, `Once`; `app/mcp/tools/tasks.py`, `create_task`.
+**Где:** `app/mcp/idempotency.py`, `Once`; `app/mcp/tools/tasks/create_task.py`, `create_task`.
 
 ## Ответ `tools/list` доезжает до промежуточного слоя словарём, а не моделью
 
@@ -442,7 +442,7 @@ Glama, а не кодом; stdio-путь держит `tests/test_mcp_stdio.py`
 каждого вызова. Меняя первую строку докстринга, поправить её английский пересказ в
 `README.md`, раздел `## Tools` (тест сверяет только имена, текст — нет).
 **Где:** `app/mcp/tools/registry.py`, `get_queue`; `app/mcp/tools/case.py`,
-`read_entries`; `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/tasks.py`,
+`read_entries`; `app/mcp/tools/journal.py`, `wait_journal`; `app/mcp/tools/tasks/transition.py`,
 `transition`; `app/domain/tasks.py`, `check_done_is_reached_by_closing`.
 **Обновлено TRK-145:** повелительное «бери `X`» теперь ловит
 `tests/test_mcp_metadata.py::test_no_metadata_prescribes_judges_or_explains`, а фраза о
@@ -484,13 +484,13 @@ max(no)` по чужой задаче сразу после вызова, кот
 записи в ту же чужую задачу с другой стороны.
 **Как правильно:** протаскивать номер записи через сигнатуру сервиса ради одного вызова
 MCP — тот же компромисс, что и с номерами записей ребёнка в `create_task` (соседняя
-заметка «Форма ответа…» этого файла и комментарий в `app/mcp/tools/tasks.py`,
+заметка «Форма ответа…» этого файла и комментарий в `app/mcp/tools/tasks/create_task.py`,
 `create_task`): читать из дела дешевле, чем усложнять сигнатуру, которой пользуются и
 REST, и `services/demo.py`. `latest_no` дешевле `case_index`/`headings`: он не тянет
 заголовки задачи целиком, только `max(no)`, — годится именно потому, что вызывающий и
 так знает, что только что писал в эту задачу, а не читает её общей описью.
 **Где:** `app/db/repositories/entries.py`, `latest_no`; `app/services/case.py`,
-`latest_entry_no`; `app/mcp/tools/links.py`, `link`, `unlink`; `app/mcp/tools/tasks.py`,
+`latest_entry_no`; `app/mcp/tools/links.py`, `link`, `unlink`; `app/mcp/tools/tasks/create_task.py`,
 `create_task` (там же чтение через `case_index`, поскольку номер там нужен рядом с
 полной описью ребёнка, а не отдельным дешёвым запросом).
 
