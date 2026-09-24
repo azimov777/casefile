@@ -46,7 +46,8 @@
 номер: `no` считается внутри проекта под блокировкой строки проекта. Права — набор
 `task`, как у записей дела задачи: «любую запись может сделать любой участник». Служебные
 записи проекта — `created` при заведении и `field_changed` при правке карточки — ставит
-`app/services/projects.py`.
+`app/services/projects.py`, записи об атрибутах (`attribute_created`, `attribute_changed`,
+`attribute_removed`) — `app/services/attributes.py`.
 """
 
 import uuid
@@ -764,6 +765,68 @@ async def record_project_field_changed(
         title=f"Field changed: {field.value}",
         payload={"field": field.value, "before": before, "after": after},
         action_id=action_id,
+    )
+
+
+async def record_attribute_created(
+    session: AsyncSession,
+    project: Project,
+    *,
+    actor: Actor,
+    name: str,
+    after: str,
+    reason: str | None,
+) -> Entry:
+    """Атрибут заведён: имя, значение и причина, если её назвали (`CONCEPT.md`, 3.4)."""
+    return await _append(
+        session,
+        project,
+        actor=actor,
+        type=EntryType.ATTRIBUTE_CREATED,
+        title=f"Attribute created: {name}",
+        payload={"name": name, "after": after, "reason": reason},
+    )
+
+
+async def record_attribute_changed(
+    session: AsyncSession,
+    project: Project,
+    *,
+    actor: Actor,
+    name: str,
+    before: str,
+    after: str,
+    reason: str,
+) -> Entry:
+    """Значение атрибута изменено: «было / стало» целиком и обязательная причина."""
+    return await _append(
+        session,
+        project,
+        actor=actor,
+        type=EntryType.ATTRIBUTE_CHANGED,
+        title=f"Attribute changed: {name}",
+        payload={"name": name, "before": before, "after": after, "reason": reason},
+    )
+
+
+async def record_attribute_removed(
+    session: AsyncSession,
+    project: Project,
+    *,
+    actor: Actor,
+    name: str,
+    before: str,
+    reason: str,
+) -> Entry:
+    """Атрибут снят: последнее значение и обязательная причина. Строки больше нет —
+    эта запись и есть всё, что о нём остаётся."""
+    return await _append(
+        session,
+        project,
+        actor=actor,
+        type=EntryType.ATTRIBUTE_REMOVED,
+        title=f"Attribute removed: {name}",
+        payload={"name": name, "before": before, "reason": reason},
     )
 
 

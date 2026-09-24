@@ -638,3 +638,23 @@ TRK-156.
 **Где:** `app/services/projects.py`, `create_project`, `update_project`;
 `tests/test_integrity_conflicts.py`, `test_two_parallel_create_project_calls_leave_mcp_a_domain_error`.
 
+
+## Атрибут проекта — строка с нынешним значением, история — в деле, уникальность — индекс по `lower(name)`
+
+**Что:** `project_attributes` хранит только нынешнее значение: `project_id`, `name` как его
+завели, `value`. Уникальность имени без учёта регистра — уникальный индекс
+`uq_project_attributes_project_id_lower_name` по `(project_id, lower(name))`, объявленный в
+модели и в ревизии `8e4a61c3d2f7` одним текстом `lower(name)`. Снятие удаляет строку; каждое
+заведение, изменение и снятие подшивает `attribute_created`/`attribute_changed`/
+`attribute_removed` в дело проекта той же транзакцией (TRK-157).
+**Почему важно:** отдельная таблица истории была бы вторым журналом, который концепция
+запрещает (`CONCEPT.md`, 4.1); последнее значение снятого атрибута живёт в `before` записи
+`attribute_removed`. Поиск по имени обязан сравнивать тем же выражением, что под индексом
+(`func.lower(ProjectAttribute.name) == ...`), иначе он идёт мимо индекса. Имя ограничено
+ASCII-шаблоном, поэтому `str.lower()` в домене и `lower()` в PostgreSQL дают одно и то же.
+**Как правильно:** «было» для записи читать под `lock_changes`, как у `update_project`: две
+параллельные попытки завести одно имя сериализуются очередью, и вторая становится
+изменением, а не нарушением индекса. Откат ревизии отказывает на сужении CHECK типов, пока в
+деле есть записи об атрибутах.
+**Где:** `app/db/models/attribute.py`; `app/db/repositories/attributes.py`;
+`app/db/migrations/versions/20260925_0100_project_attributes.py`; `app/services/attributes.py`.

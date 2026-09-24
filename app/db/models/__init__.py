@@ -7,6 +7,7 @@
 
 from app.db.base import Base, BaseModel
 from app.db.models.account import Account
+from app.db.models.attribute import ProjectAttribute
 from app.db.models.author import CreatedByMixin, created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.idempotency import IdempotencyKey
@@ -26,6 +27,7 @@ __all__ = [
     "Link",
     "Participant",
     "Project",
+    "ProjectAttribute",
     "Task",
     "Token",
     "created_by_columns",

@@ -106,6 +106,41 @@ class InvalidProjectKeyError(ValidationError):
     message = "Project key is invalid"
 
 
+# --- Атрибуты проекта ----------------------------------------------------------------
+
+
+class AttributeNotFoundError(NotFoundError):
+    """Атрибута с таким именем (без учёта регистра) у проекта нет."""
+
+    code = "attribute_not_found"
+    message = "Attribute not found"
+
+
+class InvalidAttributeNameError(ValidationError):
+    """Имя атрибута не соответствует шаблону."""
+
+    code = "invalid_attribute_name"
+    message = "Attribute name is invalid"
+
+
+class AttributeValueTooLongError(ValidationError):
+    """Значение атрибута длиннее предела (`app/domain/attributes.py`)."""
+
+    code = "attribute_value_too_long"
+    message = "Attribute value is too long"
+
+
+class AttributeReasonRequiredError(ValidationError):
+    """Изменение и снятие атрибута требуют непустой причины `reason`.
+
+    Заведение — нет: причина нужна там, где прежнее значение перестаёт быть верным, и
+    преемник должен узнать почему (`CONCEPT.md`, 3.2).
+    """
+
+    code = "attribute_reason_required"
+    message = "Changing or removing an attribute requires a reason"
+
+
 # --- Задачи ---------------------------------------------------------------------------
 
 

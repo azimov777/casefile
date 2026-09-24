@@ -28,3 +28,4 @@
 - `20260922_1900_accounts.py` — учётные записи людей и срок у токена сеанса; строк не заводит, администратора заводит шаг подъёма
 - `20260924_2100_queues_become_projects.py` — очередь становится проектом: `queues` → `projects`, `tasks.queue_id` → `project_id` и выведенные из них имена ограничений и индексов; строки не трогаются
 - `20260924_2300_project_case.py` — дело проекта: `entries.task_id` допускает `NULL`, `entries.project_id`, владелец ровно один (`ck_entries_one_owner`), номер уникален внутри проекта; откат отказывает, пока есть записи проекта
+- `20260925_0100_project_attributes.py` — атрибуты проекта: таблица `project_attributes` с уникальностью `(project_id, lower(name))`, типы записей `attribute_created`/`attribute_changed`/`attribute_removed`; откат отказывает, пока такие записи есть

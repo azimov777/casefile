@@ -38,10 +38,12 @@ from app.db.pagination import (
 from app.domain.authors import Author
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
+    ATTRIBUTE_ENTRY_TYPES,
     FIRST_ENTRY_NUMBER,
     OUTCOME_WITH_CONTINUATION,
     AnswerFacts,
     AssigneeChangedFacts,
+    AttributeFacts,
     EntryFacts,
     EntryHeading,
     EntryType,
@@ -893,6 +895,12 @@ def _facts_json() -> ColumnElement[Any]:
                 payload["task"],
             ),
         ),
+        # Записи об атрибутах проекта — только имя: оно ограничено шаблоном, а значения и
+        # причина — свободный текст и остаются в записи.
+        (
+            Entry.type.in_(ATTRIBUTE_ENTRY_TYPES),
+            func.jsonb_build_object("name", payload["name"]),
+        ),
         # Записи агента и человека: их заголовок пишет автор, и называть строку нечем,
         # кроме него самого.
         else_=text("'{}'::jsonb"),
@@ -953,6 +961,10 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
                 outcome=_as_enum(RemarkOutcome, values.get("outcome")),
                 continuation_key=values.get("continuation_key"),
             )
+        case (
+            EntryType.ATTRIBUTE_CREATED | EntryType.ATTRIBUTE_CHANGED | EntryType.ATTRIBUTE_REMOVED
+        ):
+            return AttributeFacts(type=entry_type, name=values.get("name"))
         case _:
             return NoFacts(type=entry_type)
 
