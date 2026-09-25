@@ -177,7 +177,7 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
-| Stay on one release | `CASEFILE_VERSION=0.4.0` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.5.0` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |

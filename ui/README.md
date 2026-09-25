@@ -8,7 +8,7 @@
 `docs/FRONTEND.md`.
 
 Что и зачем строим: `docs/CONCEPT.md`. Как строим: `docs/CONVENTIONS.md`. Задания
-приходят задачами трекера, проект `UI`.
+приходят задачами трекера, проект `TRK` — общий на весь репозиторий.
 
 Стек: React 19 и Vite, маршруты React Router, серверное состояние TanStack Query,
 клиент API из `openapi-typescript` и `openapi-fetch`. Оформление — Tailwind CSS 4
