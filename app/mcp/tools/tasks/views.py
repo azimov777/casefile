@@ -20,7 +20,7 @@ from app.services.tasks import TaskMutation
 
 # Проект в карточке задачи — тот же набор полей, что у `TaskProjectRead` в REST.
 class TaskProjectView(ProjectRefView):
-    """Project of the task: key, title and its short description."""
+    """Project of the task: key, title, its short description and archive time."""
 
     description: str = Field(
         description=(
@@ -29,16 +29,24 @@ class TaskProjectView(ProjectRefView):
             "`get_project`"
         )
     )
+    archived_at: datetime | None = Field(
+        description="When the project was archived; `null` while it is active"
+    )
 
 
 def task_project(project: Project) -> TaskProjectView:
-    """Проект в карточке задачи: строка проекта и его описание (`CONCEPT.md`, 4.2).
+    """Проект в карточке задачи: строка проекта, описание и архив (`CONCEPT.md`, 4.2).
 
-    Описание короткое ровно затем, чтобы ехать здесь: агент получает контекст проекта
-    тем же `get_task`. Выдача поиска описания не несёт — там проект строкой
-    (`project_ref`).
+    Описание короткое и признак архива едут здесь ровно затем, чтобы агент получал
+    контекст проекта и знал о заморозке тем же `get_task`, без `get_project` (TRK-167).
+    Выдача поиска ни того, ни другого не несёт — там проект строкой (`project_ref`).
     """
-    return TaskProjectView(key=project.key, title=project.title, description=project.description)
+    return TaskProjectView(
+        key=project.key,
+        title=project.title,
+        description=project.description,
+        archived_at=project.archived_at,
+    )
 
 
 # Карточка задачи — тот же набор полей, что у `TaskRead` в REST.

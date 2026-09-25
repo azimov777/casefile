@@ -642,3 +642,16 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 **Как правильно:** описание аргумента стоит в файле инструмента — у него один
 пользователь; `app/mcp/instructions.md` не трогается.
 **Где:** `app/mcp/tools/registries/list_projects.py`; `app/mcp/tools/tasks/search_tasks.py`.
+
+## Карточка `get_task` несёт `archived_at` проекта — тот же набор, что у REST
+
+**Что:** `TaskProjectView.archived_at` рядом с `description` в `TaskView.project`, тот же
+набор полей, что у `TaskProjectRead` REST. `task_project()` читает его из ORM-объекта
+проекта, как и остальные поля; строка `search_tasks` (`project_ref`) его не несёт —
+там же, где нет и описания (TRK-167).
+**Почему важно:** до этой задачи агент узнавал о заморозке проекта только на первом
+отказе `project_archived` или вторым вызовом `get_project`. Признак нужен заранее, не
+только в момент отказа: агент решает, стоит ли вообще предлагать действие с задачей.
+**Как правильно:** признак читается из `get_task`/`search_tasks` карточки, отдельного
+`get_project` ради одного поля звать не нужно.
+**Где:** `app/mcp/tools/tasks/views.py`, `TaskProjectView`, `task_project`.
