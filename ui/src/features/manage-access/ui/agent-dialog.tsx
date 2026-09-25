@@ -1,8 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '@/shared/errors';
+import { complainsAbout, errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog, Input } from '@/shared/ui';
-import { complainsAbout } from '../model/problem';
 import { useRegisterAgent } from '../model/use-access-actions';
 
 /**

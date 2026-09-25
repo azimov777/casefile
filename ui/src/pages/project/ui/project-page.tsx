@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { projectQueryOptions } from '@/entities/project';
+import { EditProject, useProjectRights } from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
 import { readEntryNo } from '@/shared/lib';
@@ -21,13 +22,16 @@ const SCREEN = 'flex max-w-(--ui-page-max) flex-col gap-4';
  * — атрибут, чья история открыта. Ссылку можно переслать, перезагрузка возвращает тот
  * же экран.
  *
- * Действий здесь нет: создание, правка, атрибуты, заметки и архив — соседние дети
- * `UI-173` (`UI-175`, `UI-176`).
+ * Действия с проектом (`UI-175`) стоят там, где лежит то, что они меняют: «Изменить»
+ * — у карточки, «Добавить атрибут», «Изменить» и «Снять» — у атрибутов, «Написать
+ * заметку» — у дела. Какие из них видны, решает набор ключа (`useProjectRights`):
+ * карточку правит только `main`, атрибуты и заметки — любой. Архив — `UI-176`.
  */
 export function ProjectPage() {
   const { key = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const project = useQuery(projectQueryOptions(key));
+  const rights = useProjectRights();
   const { t } = useTranslation('project');
 
   const openAt = readEntryNo(searchParams.get('entry'));
@@ -103,10 +107,12 @@ export function ProjectPage() {
             <Markdown>{card.description}</Markdown>
           </div>
         )}
-        {/* Задачи проекта — тот же адрес, что у строки проекта в панели. */}
-        <p>
+        {/* Задачи проекта — тот же адрес, что у строки проекта в панели. Правка карточки
+            стоит в той же строке: она меняет то, что написано прямо над ней. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Link to={tasksHref('', { project: card.key })}>{t('tasks')}</Link>
-        </p>
+          {rights.manage ? <EditProject project={card} /> : null}
+        </div>
       </header>
 
       {/*
@@ -120,12 +126,18 @@ export function ProjectPage() {
           <ProjectAttributes
             projectKey={card.key}
             attributes={card.attributes}
+            canWrite={rights.write}
             open={attribute}
             onOpenChange={rememberAttribute}
           />
         </div>
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
-          <ProjectCase projectKey={card.key} openAt={openAt} onOpenChange={rememberEntry} />
+          <ProjectCase
+            projectKey={card.key}
+            canWrite={rights.write}
+            openAt={openAt}
+            onOpenChange={rememberEntry}
+          />
         </div>
       </div>
     </main>

@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
 import { errorMessage, fieldReasonText } from '@/shared/errors';
+import { titleFromText } from '@/shared/lib';
 import { Composer, Receipt } from '@/shared/ui';
 import { remarkDraftKey } from '../model/draft';
-import { remarkTitle, useLeaveRemark } from '../model/use-leave-remark';
+import { useLeaveRemark } from '../model/use-leave-remark';
 
 interface RemarkFormProps {
   taskKey: string;
@@ -26,7 +27,7 @@ interface RemarkFormProps {
  * когда кадр живого потока пришёл раньше ответа сервера.
  *
  * Заголовок отдельным полем не спрашивается: он выводится из первой строки текста
- * (`remarkTitle`). Человеку, который увидел «вышло не то», надо сказать это одним
+ * (`titleFromText`). Человеку, который увидел «вышло не то», надо сказать это одним
  * действием, а не заполнить два поля.
  */
 export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
@@ -44,7 +45,7 @@ export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
       <Receipt
         label={t('remark.receiptLabel', { key: taskKey })}
         headline={t('remark.receiptHeadline')}
-        taskKey={taskKey}
+        owner={{ kind: 'task', key: taskKey }}
         entryNo={filed.entryNo}
         body={filed.body}
         onClose={() => setFiled(null)}
@@ -75,7 +76,7 @@ export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
         try {
           const entry = await remark.mutateAsync({
             taskKey,
-            title: remarkTitle(body),
+            title: titleFromText(body),
             body,
             idempotencyKey,
           });

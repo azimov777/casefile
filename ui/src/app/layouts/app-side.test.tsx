@@ -143,7 +143,7 @@ describe('боковая панель', () => {
     expect(name).toHaveClass(/break-all/);
   });
 
-  it('действий, меняющих данные, в панели нет: единственная кнопка — выход', async () => {
+  it('ключом набора `task` действий, меняющих данные, в панели нет: единственная кнопка — выход', async () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
     renderApp('/tasks');
     await screen.findByText('owner');
@@ -153,6 +153,22 @@ describe('боковая панель', () => {
       .getAllByRole('button')
       .map((button) => button.textContent);
     expect(buttons).toEqual([say.ui('app.signOut')]);
+  });
+
+  it('ключом набора `main` у проектов есть «Новый проект» — и больше ничего сверх выхода', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () =>
+        data(bootstrap({ token: { id: '33333333-3333-3333-3333-333333333333', scope: 'main' } })),
+      ),
+    );
+    renderApp('/tasks');
+    await screen.findByText('owner');
+
+    const side = screen.getByRole('complementary', { name: say.ui('app.trackerSections') });
+    const buttons = within(side)
+      .getAllByRole('button')
+      .map((button) => button.textContent);
+    expect(buttons).toEqual([say.project('create.open'), say.ui('app.signOut')]);
   });
 
   it('неизвестный код показывает фразу бэкенда и сам код', async () => {

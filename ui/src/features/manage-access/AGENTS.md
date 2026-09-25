@@ -15,9 +15,9 @@ TanStack Query, а прямым вызовом, и секрет уезжает �
 ## Папки
 
 - `api/` — запросы реестра и токенов: участники, выпуск, отзыв
-- `model/` — ключ повтора, привязанный к запросу; состояние трёх действий; разбор полей и причины отказа
+- `model/` — состояние трёх действий с ключом повтора из `shared/lib`; причина отказа в праве
 - `ui/` — окна: заведение агента, выпуск, секрет один раз, подтверждение отзыва
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `AgentDialog`, `IssueDialog`, `SecretDialog`, `RevokeDialog`, `participantsQueryOptions`, `participantKeys`, `invalidFields`, `complainsAbout`, типы `IssuedToken`, `Participant`, `IssueInput`, `AgentInput`, `TokenScope`
+- `index.ts` — публичный интерфейс среза: `AgentDialog`, `IssueDialog`, `SecretDialog`, `RevokeDialog`, `participantsQueryOptions`, `participantKeys`, типы `IssuedToken`, `Participant`, `IssueInput`, `AgentInput`, `TokenScope`

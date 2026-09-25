@@ -1,10 +1,10 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '@/shared/errors';
+import { complainsAbout, errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog, Input, QueryState } from '@/shared/ui';
 import { participantsQueryOptions, type IssuedToken, type TokenScope } from '../api/access';
-import { complainsAbout, denialReason } from '../model/problem';
+import { denialReason } from '../model/problem';
 import { useIssueToken } from '../model/use-access-actions';
 
 /**

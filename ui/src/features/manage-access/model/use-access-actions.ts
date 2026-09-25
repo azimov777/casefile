@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { tokenKeys } from '@/entities/token';
+import { useOnceKey } from '@/shared/lib';
 import {
   issueToken,
   participantKeys,
@@ -11,7 +12,6 @@ import {
   type IssuedToken,
   type Participant,
 } from '../api/access';
-import { useOnceKey } from './once-key';
 
 type Input<TInput> = Omit<TInput, 'idempotencyKey'>;
 

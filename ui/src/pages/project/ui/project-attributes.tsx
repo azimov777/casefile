@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { EntryCard, projectCaseQueryOptions, type Entry } from '@/entities/entry';
 import type { ProjectAttribute } from '@/entities/project';
+import { AddAttribute, ChangeAttribute, RemoveAttribute } from '@/features/manage-project';
 import { Button, QueryState, RelativeTime } from '@/shared/ui';
 
 /** Блок-список, как у дела рядом: строки атрибутов идут до краёв поверхности. */
@@ -23,6 +24,8 @@ const ATTRIBUTE_TYPES: Entry['type'][] = [
 interface ProjectAttributesProps {
   projectKey: string;
   attributes: ProjectAttribute[];
+  /** Ставить, менять и снимать атрибуты: любой набор ключа (`useProjectRights`). */
+  canWrite: boolean;
   /** Имя атрибута из адреса (`?attribute=`), чья история открыта; `null` — ничья. */
   open: string | null;
   onOpenChange: (name: string | null) => void;
@@ -39,6 +42,7 @@ interface ProjectAttributesProps {
 export function ProjectAttributes({
   projectKey,
   attributes,
+  canWrite,
   open,
   onOpenChange,
 }: ProjectAttributesProps) {
@@ -47,9 +51,12 @@ export function ProjectAttributes({
   return (
     <section className={LIST_BLOCK} aria-labelledby="project-attributes">
       <div className={BLOCK_HEAD}>
-        <h2 className="text-screen" id="project-attributes">
-          {t('attributes')}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-screen" id="project-attributes">
+            {t('attributes')}
+          </h2>
+          {canWrite ? <AddAttribute projectKey={projectKey} /> : null}
+        </div>
         {attributes.length > 0 ? (
           <p className="text-meta text-muted">{t('attributesHint')}</p>
         ) : null}
@@ -91,6 +98,15 @@ export function ProjectAttributes({
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap wrap-anywhere">{attribute.value}</p>
+                {/* Действия — под значением, а не в строке имени: на 390 px имя, время и
+                    две кнопки в одну строку не встают, а перенос посреди них читается
+                    хуже, чем своя строка. */}
+                {canWrite ? (
+                  <div className="flex flex-wrap gap-2">
+                    <ChangeAttribute projectKey={projectKey} attribute={attribute} />
+                    <RemoveAttribute projectKey={projectKey} attribute={attribute} />
+                  </div>
+                ) : null}
                 {expanded ? (
                   <AttributeHistory projectKey={projectKey} name={attribute.name} id={historyId} />
                 ) : null}
