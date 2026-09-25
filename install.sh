@@ -143,7 +143,11 @@ main() {
   [ -n "$mcp_url" ] ||
     fail "the installation did not report its MCP address; see: docker compose logs api"
 
-  ui_port=$(setting CASEFILE_PORT 8080)
+  # Тот же порядок, что у compose и уже у `registry`/`image` выше: окружение, затем
+  # `.env`, затем умолчание. Раньше здесь стоял один `setting`, и заданный установщику
+  # `CASEFILE_PORT` в окружении не менял напечатанный адрес, хотя двигал реальную публикацию
+  # порта — установщик рапортовал про порт, на котором доска не поднималась (TRK-169).
+  ui_port=${CASEFILE_PORT:-$(setting CASEFILE_PORT 8080)}
 
   echo
   bold "Casefile is running."

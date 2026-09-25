@@ -156,8 +156,21 @@ esac
 """
 
 
-def _install(tmp_path: Path, **scene: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    """`install.sh` против подставного `docker`; `sleep` — мгновенный."""
+def _install(
+    tmp_path: Path,
+    *,
+    extra_env: dict[str, str] | None = None,
+    dotenv: str | None = None,
+    **scene: str,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """`install.sh` против подставного `docker`; `sleep` — мгновенный.
+
+    `dotenv`, если задан, кладётся в `.env` каталога установки *до* запуска — так, как
+    он там лежит у существующей установки: сам установщик пишет в `.env` только
+    `COMPOSE_FILE`/`CASEFILE_REGISTRY`/`CASEFILE_VERSION` (и то один раз), а
+    `CASEFILE_PORT` в него добавляет только человек. `extra_env` — переменные
+    окружения самого вызова, поверх обязательных.
+    """
     bin_dir, scene_dir = tmp_path / "bin", tmp_path / "scene"
     bin_dir.mkdir()
     scene_dir.mkdir()
@@ -169,15 +182,21 @@ def _install(tmp_path: Path, **scene: str) -> tuple[subprocess.CompletedProcess[
         (scene_dir / name).write_text(body, encoding="utf-8")
     calls = tmp_path / "calls"
     calls.touch()
+    install_dir = tmp_path / "casefile"
+    if dotenv is not None:
+        install_dir.mkdir(parents=True, exist_ok=True)
+        (install_dir / ".env").write_text(dotenv, encoding="utf-8")
+    env = {
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "CASEFILE_DIR": str(install_dir),
+        "CALLS": str(calls),
+        "SCENE": str(scene_dir),
+    }
+    env.update(extra_env or {})
     done = subprocess.run(
         ["sh", str(INSTALL_SH)],
-        env={
-            "PATH": f"{bin_dir}:/usr/bin:/bin",
-            "HOME": str(tmp_path),
-            "CASEFILE_DIR": str(tmp_path / "casefile"),
-            "CALLS": str(calls),
-            "SCENE": str(scene_dir),
-        },
+        env=env,
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
@@ -241,3 +260,49 @@ def test_the_installer_waits_while_the_updater_check_sleeps(tmp_path: Path) -> N
 
 def test_install_ps1_sees_the_check_by_its_file_too() -> None:
     assert "docker exec $id test -e /tmp/checking" in _read(INSTALL_PS1)
+
+
+# --- Порт доски в напечатанном адресе (TRK-169) -----------------------------------------
+
+
+def test_the_installer_prints_the_port_from_the_environment_variable(tmp_path: Path) -> None:
+    """`CASEFILE_PORT` окружения красит вывод, даже если `.env` называет другой порт.
+
+    Реальная публикация порта (`docker-compose.prod.yml`, `${CASEFILE_PORT:-8080}`) уже
+    берёт окружение раньше `.env` — так работает подстановка переменных в самом compose.
+    Напечатанный адрес обязан следовать тому же порядку, а не только `.env` (TRK-169).
+    """
+    done, _ = _install(
+        tmp_path, extra_env={"CASEFILE_PORT": "18680"}, dotenv="CASEFILE_PORT=9091\n"
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "Board:  http://localhost:18680" in done.stdout
+    assert "9091" not in done.stdout
+
+
+def test_the_installer_prints_the_port_from_env_file_without_the_variable(tmp_path: Path) -> None:
+    """Без переменной окружения источник по-прежнему `.env` существующей установки."""
+    done, _ = _install(tmp_path, dotenv="CASEFILE_PORT=9091\n")
+
+    assert done.returncode == 0, done.stderr
+    assert "Board:  http://localhost:9091" in done.stdout
+
+
+def test_the_installer_prints_the_default_port_without_variable_or_env_file(tmp_path: Path) -> None:
+    """Ни переменной, ни настройки в `.env` — печатается умолчание compose-файла, 8080."""
+    done, _ = _install(tmp_path)
+
+    assert done.returncode == 0, done.stderr
+    assert "Board:  http://localhost:8080" in done.stdout
+
+
+def test_install_ps1_reads_the_port_the_same_order_as_install_sh() -> None:
+    """Близнец: `$env:CASEFILE_PORT` проверяется раньше `Get-Setting`, как и в install.sh."""
+    text = _read(INSTALL_PS1)
+
+    expected = (
+        "$uiPort = if ($env:CASEFILE_PORT) { $env:CASEFILE_PORT } "
+        "else { Get-Setting 'CASEFILE_PORT' '8080' }"
+    )
+    assert expected in text

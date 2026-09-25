@@ -146,7 +146,10 @@ if ($LASTEXITCODE -ne 0 -or -not $mcpUrl) {
     Fail 'the installation did not report its MCP address; see: docker compose logs api'
 }
 
-$uiPort = Get-Setting 'CASEFILE_PORT' '8080'
+# Тот же порядок, что у compose и уже у `$registry`/`$version` выше: окружение, затем
+# `.env`, затем умолчание (TRK-169: заданный установщику `CASEFILE_PORT` двигал реальную
+# публикацию порта, а напечатанный адрес брался только из `.env`).
+$uiPort = if ($env:CASEFILE_PORT) { $env:CASEFILE_PORT } else { Get-Setting 'CASEFILE_PORT' '8080' }
 
 Write-Host ''
 Write-Host 'Casefile is running.' -ForegroundColor Green
