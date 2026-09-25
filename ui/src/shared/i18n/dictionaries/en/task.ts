@@ -34,6 +34,8 @@ export const task = {
     status: 'Status',
     priority: 'Priority',
     assignee: 'Assignee',
+    /** Prior keys of a moved task (TRK-173): the cell shows up only when there are any. */
+    previousKeys: 'Previous keys',
     flags: 'Flags',
     unassigned: 'not assigned',
     updated: 'Updated',

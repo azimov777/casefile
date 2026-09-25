@@ -487,6 +487,73 @@ describe('карточка задачи', () => {
   });
 });
 
+describe('перенесённая задача: адрес по прежнему ключу (TRK-173)', () => {
+  it('открывает задачу и меняет адрес на текущий ключ, номер записи остаётся', async () => {
+    server.use(
+      packageOf('PREV-1', { task: taskDetails('DEMO-9', { previous_keys: ['PREV-1'] }) }),
+      packageOf('DEMO-9', { task: taskDetails('DEMO-9', { previous_keys: ['PREV-1'] }) }),
+    );
+
+    renderApp('/tasks/PREV-1?entry=6');
+
+    await screen.findByRole('heading', { name: /DEMO-9/ });
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-9?entry=6'));
+  });
+
+  it('без номера записи адрес заменяется на голый текущий ключ', async () => {
+    server.use(
+      packageOf('PREV-1', { task: taskDetails('DEMO-9', { previous_keys: ['PREV-1'] }) }),
+      packageOf('DEMO-9', { task: taskDetails('DEMO-9', { previous_keys: ['PREV-1'] }) }),
+    );
+
+    renderApp('/tasks/PREV-1');
+
+    await screen.findByRole('heading', { name: /DEMO-9/ });
+    await waitFor(() => expect(address.current).toBe('/tasks/DEMO-9'));
+  });
+
+  it('задача, открытая по текущему ключу, адрес не трогает и второй раз не читается', async () => {
+    server.use(packageOf('DEMO-9', { task: taskDetails('DEMO-9', { previous_keys: ['PREV-1'] }) }));
+
+    renderApp('/tasks/DEMO-9');
+
+    await screen.findByRole('heading', { name: /DEMO-9/ });
+    expect(address.current).toBe('/tasks/DEMO-9');
+    expect(seen.filter((url) => url.includes('/api/v1/tasks/DEMO-9'))).toHaveLength(1);
+  });
+
+  it('шапка показывает прежние ключи ссылками на ту же задачу', async () => {
+    server.use(
+      packageOf('DEMO-9', {
+        task: taskDetails('DEMO-9', { previous_keys: ['PREV-1', 'LEGACY-1'] }),
+      }),
+    );
+
+    renderApp('/tasks/DEMO-9');
+
+    const heading = await screen.findByRole('heading', { name: /DEMO-9/ });
+    const header = heading.closest('header') as HTMLElement;
+    expect(within(header).getByText(say.task('header.previousKeys'))).toBeInTheDocument();
+    expect(within(header).getByRole('link', { name: 'PREV-1' })).toHaveAttribute(
+      'href',
+      '/tasks/PREV-1',
+    );
+    expect(within(header).getByRole('link', { name: 'LEGACY-1' })).toHaveAttribute(
+      'href',
+      '/tasks/LEGACY-1',
+    );
+  });
+
+  it('задачу без переносов ячейка прежних ключей не упоминает вовсе', async () => {
+    server.use(packageOf('DEMO-6'), entries('DEMO-6'));
+    renderApp('/tasks/DEMO-6');
+
+    const heading = await screen.findByRole('heading', { name: /DEMO-6/ });
+    const header = heading.closest('header') as HTMLElement;
+    expect(within(header).queryByText(say.task('header.previousKeys'))).toBeNull();
+  });
+});
+
 describe('пустые состояния сводки, вопросов и замечаний (UI-132)', () => {
   it('все три пустых сшиты в одну рамку, а не рисуют по своей на каждое', async () => {
     server.use(packageOf('DEMO-4', { summary: null }));
