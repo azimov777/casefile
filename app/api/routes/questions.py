@@ -45,7 +45,11 @@ AnyAddresseeQuery = Annotated[
 ProjectQuery = Annotated[
     str | None,
     Query(
-        description="Project key of the question's task; matching ignores case", examples=["TRK"]
+        description=(
+            "Project key of the question's task; matching ignores case. Without it tasks of "
+            "archived projects are left out; a project named here is listed even archived"
+        ),
+        examples=["TRK"],
     ),
 ]
 BlockingQuery = Annotated[

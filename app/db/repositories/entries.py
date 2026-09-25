@@ -35,6 +35,7 @@ from app.db.pagination import (
     encode_sort_cursor,
     resolve_limit,
 )
+from app.db.repositories.projects import in_active_project
 from app.domain.authors import Author
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
@@ -61,6 +62,19 @@ from app.domain.case import (
 )
 from app.domain.links import LinkKind
 from app.domain.tasks import CLOSED_STATUSES, TaskField, TaskStatus
+
+
+def _in_project_or_active(project_id: uuid.UUID | None) -> ColumnElement[bool]:
+    """Отбор «входящей» по проекту: названный — любой, без названия — только живые.
+
+    Вопросы и замечания в задачах архивного проекта во «входящую» не попадают: ответить
+    и разобрать их нельзя, пока проект не восстановлен (`CONCEPT.md`, 3.6). Скрытие — по
+    умолчанию: проект, названный явно, показывается и из архива, как в поиске задач
+    (`CONCEPT.md`, 4.4).
+    """
+    if project_id is not None:
+        return Task.project_id == project_id
+    return in_active_project(Task.project_id)
 
 
 class EntryRepository:
@@ -422,13 +436,15 @@ class EntryRepository:
 
         Отдаёт пары «запись, ключ задачи»: у записи связи с задачей нет, только
         `task_id`, а читающему вопрос нужен адрес, по которому идти за делом.
+
+        Задачи архивных проектов не попадают сюда, пока проект не назван
+        `project_id` (`_in_project_or_active`).
         """
         size = resolve_limit(limit)
         statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_QUESTION)
         if addressee is not None:
             statement = statement.where(addressed_to(addressee))
-        if project_id is not None:
-            statement = statement.where(Task.project_id == project_id)
+        statement = statement.where(_in_project_or_active(project_id))
         if blocking is not None:
             statement = statement.where(blocking_is(blocking))
         if open_only:
@@ -506,8 +522,7 @@ class EntryRepository:
         statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_REMARK)
         if author is not None:
             statement = statement.where(authored_by(author))
-        if project_id is not None:
-            statement = statement.where(Task.project_id == project_id)
+        statement = statement.where(_in_project_or_active(project_id))
         if open_only:
             statement = _unresolved(statement)
         if cursor is not None:
@@ -534,9 +549,15 @@ class EntryRepository:
         ограничена размером, и первый экран показывал бы не число вопросов, а размер
         страницы. Условия те же самые и берутся из тех же функций — иначе «входящая» и
         счётчик на первом экране однажды разошлись бы на одних и тех же данных.
+
+        Вопросы в задачах архивных проектов не считаются — как во «входящей» без
+        названного проекта (`CONCEPT.md`, 3.6).
         """
         statement = (
-            select(func.count()).select_from(Entry).where(_IS_QUESTION, addressed_to(addressee))
+            select(func.count())
+            .select_from(Entry)
+            .join(Task, Task.id == Entry.task_id)
+            .where(_IS_QUESTION, addressed_to(addressee), in_active_project(Task.project_id))
         )
         if blocking is not None:
             statement = statement.where(blocking_is(blocking))

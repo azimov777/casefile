@@ -43,7 +43,7 @@
           "bootstrap"
         ],
         "summary": "Read the first screen",
-        "description": "Текущий участник, его учётная запись, токен с набором, проекты и число вопросов к нему.\n\nРовно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки\nзадач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,\nа сведения установки, одинаковые для любого токена, — `GET /api/v1/installation`.\n\n`token` — тот токен, что стоит в заголовке: `id` из `GET /api/v1/tokens` и набор. По\nнабору интерфейс решает, открыта ли запись, по `id` узнаёт свой ключ в списке токенов.\n\nУ общего агентского токена участника нет: `participant` приходит `null`, а\n`open_questions` — ноль, потому что временного агента нельзя адресовать вопросом\n(`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.",
+        "description": "Текущий участник, его учётная запись, токен с набором, проекты и число вопросов к нему.\n\nРовно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки\nзадач и вопросов приходят своими запросами, уже с фильтрами, которые выбрал человек,\nа сведения установки, одинаковые для любого токена, — `GET /api/v1/installation`.\n\n`token` — тот токен, что стоит в заголовке: `id` из `GET /api/v1/tokens` и набор. По\nнабору интерфейс решает, открыта ли запись, по `id` узнаёт свой ключ в списке токенов.\n\nУ общего агентского токена участника нет: `participant` приходит `null`, а\n`open_questions` — ноль, потому что временного агента нельзя адресовать вопросом\n(`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.\n\nАрхивные проекты — только с `include_archived=true`, как в `GET /api/v1/projects`;\nвопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6).",
         "operationId": "read_bootstrap",
         "security": [
           {
@@ -51,6 +51,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also list archived projects. Without it they are hidden from the list; a project is still read by its key either way",
+              "default": false,
+              "title": "Include Archived"
+            },
+            "description": "Also list archived projects. Without it they are hidden from the list; a project is still read by its key either way"
+          },
           {
             "name": "X-Actor-Label",
             "in": "header",
@@ -2233,7 +2245,7 @@
           "projects"
         ],
         "summary": "List projects",
-        "description": "Все проекты установки. Единственный уровень группировки: над ними ничего нет.",
+        "description": "Проекты установки. Единственный уровень группировки: над ними ничего нет.\n\nАрхивные — только с `include_archived=true`; по ключу архивный проект читается и без\nнего (`GET /api/v1/projects/{key}`).",
         "operationId": "list_projects",
         "security": [
           {
@@ -2241,6 +2253,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also list archived projects. Without it they are hidden from the list; a project is still read by its key either way",
+              "default": false,
+              "title": "Include Archived"
+            },
+            "description": "Also list archived projects. Without it they are hidden from the list; a project is still read by its key either way"
+          },
           {
             "name": "limit",
             "in": "query",
@@ -4038,7 +4062,7 @@
           "tasks"
         ],
         "summary": "List and search tasks",
-        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=project: TRK and status: open` и\n`?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из\nсвязей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:\n`project: TRK and status: open and blocked: false and open_blocking_questions: 0`.\nЕсть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а\nназванная задача ещё не закрыта».\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.\n\n**Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на\nстранице: из него и `limit` собирается «страница 3 из 7, всего 98». Это\nединственная коллекция API, которая его считает, и считает всегда — вторым запросом\nпо тому же отбору.\n\nСтраницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо\n`offset` — номер первой строки от начала выдачи: страница N размера L начинается с\n`(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных\nадреса одной страницы, и выбрать за клиента значило бы отдать не ту.\n\nЦена смещения названа честно: база читает и выбрасывает пропускаемые строки, а\nстраница сдвигается, если между двумя запросами задачу завели или подняли наверх\n(`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от\nэтого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.\nСмещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и\nпрежний `total`.",
+        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=project: TRK and status: open` и\n`?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nЗадачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством\nили вхождением: проект условием `project`, саму задачу — `key`, её родителя —\n`parent` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в языке нет.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из\nсвязей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:\n`project: TRK and status: open and blocked: false and open_blocking_questions: 0`.\nЕсть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а\nназванная задача ещё не закрыта».\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.\n\n**Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на\nстранице: из него и `limit` собирается «страница 3 из 7, всего 98». Это\nединственная коллекция API, которая его считает, и считает всегда — вторым запросом\nпо тому же отбору.\n\nСтраницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо\n`offset` — номер первой строки от начала выдачи: страница N размера L начинается с\n`(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных\nадреса одной страницы, и выбрать за клиента значило бы отдать не ту.\n\nЦена смещения названа честно: база читает и выбрасывает пропускаемые строки, а\nстраница сдвигается, если между двумя запросами задачу завели или подняли наверх\n(`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от\nэтого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.\nСмещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и\nпрежний `total`.",
         "operationId": "list_tasks",
         "security": [
           {
@@ -6015,13 +6039,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Project key of the question's task; matching ignores case",
+              "description": "Project key of the question's task; matching ignores case. Without it tasks of archived projects are left out; a project named here is listed even archived",
               "examples": [
                 "TRK"
               ],
               "title": "Project"
             },
-            "description": "Project key of the question's task; matching ignores case"
+            "description": "Project key of the question's task; matching ignores case. Without it tasks of archived projects are left out; a project named here is listed even archived"
           },
           {
             "name": "blocking",
@@ -6240,13 +6264,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Project key of the remark's task; matching ignores case",
+              "description": "Project key of the remark's task; matching ignores case. Without it tasks of archived projects are left out; a project named here is listed even archived",
               "examples": [
                 "TRK"
               ],
               "title": "Project"
             },
-            "description": "Project key of the remark's task; matching ignores case"
+            "description": "Project key of the remark's task; matching ignores case. Without it tasks of archived projects are left out; a project named here is listed even archived"
           },
           {
             "name": "open",
@@ -8786,12 +8810,12 @@
             },
             "type": "array",
             "title": "Projects",
-            "description": "Projects of the installation, one page capped at the common page ceiling. An installation with more projects than that pages `GET /api/v1/projects`"
+            "description": "Projects of the installation, one page capped at the common page ceiling; archived ones only with `include_archived`. An installation with more projects than that pages `GET /api/v1/projects`"
           },
           "open_questions": {
             "type": "integer",
             "title": "Open Questions",
-            "description": "Questions with no answer yet addressed to `participant`. Zero with a shared agent token: a temporary agent cannot be addressed at all",
+            "description": "Questions with no answer yet addressed to `participant`, in tasks of projects that are not archived. Zero with a shared agent token: a temporary agent cannot be addressed at all",
             "examples": [
               3
             ]

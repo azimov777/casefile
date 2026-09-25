@@ -628,3 +628,17 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 `app/mcp/tools/registries/restore_project.py`; `app/mcp/tools/registries/views.py`,
 `ProjectArchiveView`; `app/mcp/tools/registries/get_project.py`; `app/services/projects.py`,
 `archive_project`, `restore_project`.
+
+## `list_projects` скрывает архивные без `include_archived`, строка несёт `archived_at`
+
+**Что:** с TRK-160 у `list_projects` аргумент `include_archived` (по умолчанию `false`), а
+строка выдачи — `ProjectRowView`: строка проекта `ProjectRefView` плюс `archived_at`. В
+строке `search_tasks` этого поля нет. `search_tasks` не находит задач архивного проекта,
+пока отбор не назовёт проект, саму задачу или её родителя (`notes/search.md`); правило
+названо в описании инструмента. `get_project`, `get_task`, `read_entries` и
+`wait_journal` архив не скрывают.
+**Почему важно:** с `include_archived` в одной выдаче стоят живые и архивные проекты, и без
+`archived_at` агент не отличил бы их, не зовя `get_project` на каждую строку.
+**Как правильно:** описание аргумента стоит в файле инструмента — у него один
+пользователь; `app/mcp/instructions.md` не трогается.
+**Где:** `app/mcp/tools/registries/list_projects.py`; `app/mcp/tools/tasks/search_tasks.py`.

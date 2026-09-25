@@ -551,3 +551,48 @@ def iter_terms(node: Term | None) -> Iterable[SearchTerm]:
             yield from iter_terms(child)
     else:
         yield node
+
+
+# --- Архивный проект в выдаче ---------------------------------------------------------
+
+#: Операторы, которыми условие **называет** значение: равенство и вхождение в набор.
+#: Отрицание не называет ничего — `project: != OPS` не просит показать архивный TRK.
+NAMING_OPERATORS = frozenset({Operator.EQ, Operator.IN})
+
+
+@dataclass(frozen=True, slots=True)
+class NamedInFilter:
+    """Что отбор называет явно: проекты, ключи задач и родителей — идентификаторами.
+
+    Задачи архивного проекта в выдачу не попадают, пока отбор не назовёт их явно:
+    условием `project:` с этим проектом, ключом самой задачи (`key:`) или, для детей,
+    ключом родителя (`parent:`) (`CONCEPT.md`, 3.2 и 4.4; `TRK-164#9`, `TRK-151#17`).
+    Поля в языке запросов для этого нет намеренно: архив показывается названием, а не
+    отдельным флагом.
+
+    Названное собирается по всему дереву, в какой бы ветке `or` оно ни стояло: условие
+    видимости добавляется к отбору через `and` и пропускает только названное, поэтому
+    `key: TRK-1 or status: open` покажет архивную TRK-1, но не остальные открытые задачи
+    её проекта.
+    """
+
+    projects: frozenset[Any] = frozenset()
+    tasks: frozenset[Any] = frozenset()
+    parents: frozenset[Any] = frozenset()
+
+
+def named_in_filter(root: Term | None) -> NamedInFilter:
+    """Проекты, задачи и родители, названные условиями равенства или вхождения."""
+    found: dict[SearchField, set[Any]] = {
+        SearchField.PROJECT: set(),
+        SearchField.KEY: set(),
+        SearchField.PARENT: set(),
+    }
+    for term in iter_terms(root):
+        if term.field in found and term.operator in NAMING_OPERATORS:
+            found[term.field].update(term.values)
+    return NamedInFilter(
+        projects=frozenset(found[SearchField.PROJECT]),
+        tasks=frozenset(found[SearchField.KEY]),
+        parents=frozenset(found[SearchField.PARENT]),
+    )

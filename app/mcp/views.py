@@ -155,9 +155,11 @@ class ProjectRefView(BaseModel):
 def project_ref(project: Project) -> ProjectRefView:
     """Проект одной строкой: ключ и название. Описание несёт `get_project`.
 
-    Одно представление на выдачу `list_projects` и строку `search_tasks`: проект, названный
-    коротко, обязан выглядеть одинаково везде, где он не главный предмет ответа. Карточка
-    задачи дополняет его описанием (`TaskProjectView`, `app/mcp/tools/tasks/views.py`).
+    Одно представление на строку `search_tasks` и основа строки `list_projects`: проект,
+    названный коротко, обязан выглядеть одинаково везде, где он не главный предмет ответа.
+    Карточка задачи дополняет его описанием (`TaskProjectView`,
+    `app/mcp/tools/tasks/views.py`), список проектов — временем архива (`ProjectRowView`,
+    `app/mcp/tools/registries/list_projects.py`).
     """
     return ProjectRefView(key=project.key, title=project.title)
 

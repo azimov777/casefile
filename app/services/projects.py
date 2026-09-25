@@ -54,11 +54,19 @@ async def list_projects(
     session: AsyncSession,
     *,
     actor: Actor,
+    include_archived: bool = False,
     limit: int | None = None,
     cursor: str | None = None,
 ) -> Page[Project]:
+    """Проекты установки. Архивные скрыты, пока их не попросили `include_archived`.
+
+    Скрытие — только в списке: по ключу архивный проект читается как обычно
+    (`read_project`), и «нет такого» на него не отвечается (`CONCEPT.md`, 3.2).
+    """
     ensure_scope(actor, TokenScope.TASK, action="project.list")
-    return await ProjectRepository(session).list_page(limit=limit, cursor=cursor)
+    return await ProjectRepository(session).list_page(
+        include_archived=include_archived, limit=limit, cursor=cursor
+    )
 
 
 async def create_project(
