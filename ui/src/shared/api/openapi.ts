@@ -4429,10 +4429,11 @@ export interface components {
         TaskPriority: "low" | "normal" | "high" | "critical";
         /**
          * TaskProjectRead
-         * @description Проект в карточке задачи: ключ, название и короткое описание (`CONCEPT.md`, 4.2).
+         * @description Проект в карточке задачи: ключ, название, короткое описание и архив (`CONCEPT.md`, 4.2).
          *
          *     Описание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает
-         *     контекст проекта тем же чтением задачи, без второго вызова.
+         *     контекст проекта тем же чтением задачи, без второго вызова. `archived_at` по той же
+         *     причине: заморожен ли проект, видно до первого отказа `project_archived` (TRK-167).
          */
         TaskProjectRead: {
             /**
@@ -4451,6 +4452,12 @@ export interface components {
              * @example Бэкенд трекера задач для агентов: REST API и MCP-сервер
              */
             description: string;
+            /**
+             * Archived At
+             * @description When the project was archived; `null` while it is active
+             * @example null
+             */
+            archived_at: string | null;
         };
         /**
          * TaskRead

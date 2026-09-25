@@ -67,10 +67,11 @@ class ProjectRefRead(BaseModel):
 
 
 class TaskProjectRead(ProjectRefRead):
-    """Проект в карточке задачи: ключ, название и короткое описание (`CONCEPT.md`, 4.2).
+    """Проект в карточке задачи: ключ, название, короткое описание и архив (`CONCEPT.md`, 4.2).
 
     Описание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает
-    контекст проекта тем же чтением задачи, без второго вызова.
+    контекст проекта тем же чтением задачи, без второго вызова. `archived_at` по той же
+    причине: заморожен ли проект, видно до первого отказа `project_archived` (TRK-167).
     """
 
     description: str = Field(
@@ -79,6 +80,10 @@ class TaskProjectRead(ProjectRefRead):
             f'Short "what this is" of the project, up to {MAX_PROJECT_DESCRIPTION_LENGTH} '
             "characters; may be empty"
         ),
+    )
+    archived_at: datetime | None = Field(
+        examples=[None],
+        description="When the project was archived; `null` while it is active",
     )
 
 

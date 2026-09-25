@@ -13094,16 +13094,33 @@
             "examples": [
               "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
             ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the project was archived; `null` while it is active",
+            "examples": [
+              null
+            ]
           }
         },
         "type": "object",
         "required": [
           "key",
           "title",
-          "description"
+          "description",
+          "archived_at"
         ],
         "title": "TaskProjectRead",
-        "description": "Проект в карточке задачи: ключ, название и короткое описание (`CONCEPT.md`, 4.2).\n\nОписание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает\nконтекст проекта тем же чтением задачи, без второго вызова."
+        "description": "Проект в карточке задачи: ключ, название, короткое описание и архив (`CONCEPT.md`, 4.2).\n\nОписание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает\nконтекст проекта тем же чтением задачи, без второго вызова. `archived_at` по той же\nпричине: заморожен ли проект, видно до первого отказа `project_archived` (TRK-167)."
       },
       "TaskRead": {
         "properties": {
