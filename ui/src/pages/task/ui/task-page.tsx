@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
 import { EntryBody, EntryIndex, type EntryIndexHandle, type Question } from '@/entities/entry';
+import { projectQueryOptions } from '@/entities/project';
 import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
   AnswerForm,
@@ -16,7 +17,7 @@ import {
 import { RemarkForm } from '@/features/leave-remark';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
-import { caseHref, readEntryNo } from '@/shared/lib';
+import { caseHref, projectHref, projectOfKey, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
@@ -123,6 +124,27 @@ export function TaskPage() {
   const { key = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const pkg = useQuery(taskPackageQueryOptions(key));
+
+  /*
+   * Проект задачи — ради одного признака: в архиве ли он (`UI-176`). Задача архивного
+   * проекта читается, но ни ответа, ни замечания бэкенд не примет (`project_archived`),
+   * и интерфейс их не предлагает вовсе, а не «предлагает и падает». Признак — `archived_at`
+   * из контракта как есть. В карточке задачи его нет (`TaskProjectRead`, TRK-167), поэтому
+   * проект читается своим запросом — тем же, что у экрана проекта, и из того же кэша.
+   * Ключ проекта до прихода карточки берётся из адреса: запросы идут параллельно.
+   */
+  const projectKey = pkg.data?.task.project.key ?? projectOfKey(key);
+  const project = useQuery({
+    ...projectQueryOptions(projectKey ?? ''),
+    enabled: projectKey !== null,
+  });
+  const frozen = project.data?.archived_at != null;
+  /*
+   * Пока проект не прочитан, действий нет: кнопка, возникшая и исчезнувшая, хуже
+   * поздней. Чтение проекта упало — действия показываются: на архивном бэкенд всё равно
+   * ответит отказом, а прятать ответ на вопрос из-за сбоя второго запроса нечестно.
+   */
+  const canAct = !frozen && (project.data !== undefined || project.isError);
 
   // До ранних возвратов: хук нельзя позвать условно. Держит вопросы, по которым
   // отправка началась, — они остаются на экране вместе с подтверждением, даже когда
@@ -253,6 +275,7 @@ export function TaskPage() {
                 </p>
                 <EntryBody entry={question} />
                 <QuestionAnswer
+                  canAnswer={canAct}
                   taskKey={task.key}
                   question={question}
                   at={at}
@@ -267,7 +290,7 @@ export function TaskPage() {
     });
   }
 
-  const remarksEmpty = remarks.length === 0 && !remarkOpen;
+  const remarksEmpty = remarks.length === 0 && !(remarkOpen && canAct);
   if (remarksEmpty) {
     cardBlocks.push({
       empty: true,
@@ -309,7 +332,7 @@ export function TaskPage() {
            * её можно на задаче в любом статусе, включая закрытую: именно на сделанное
            * человек и смотрит, когда говорит «вышло не то».
            */}
-          {remarkOpen ? (
+          {remarkOpen && canAct ? (
             <RemarkForm taskKey={task.key} onCancel={() => setRemarkOpen(false)} />
           ) : null}
         </section>
@@ -333,7 +356,7 @@ export function TaskPage() {
         taskKey={task.key}
         view="card"
         action={
-          remarkOpen ? null : (
+          remarkOpen || !canAct ? null : (
             // Главное действие строки — акцентом и со знаком, но размером строки: рядом
             // стоит переключатель вида того же `sm`, и они одной высоты (UI-128).
             //
@@ -349,6 +372,17 @@ export function TaskPage() {
         }
       />
       <TaskHeader task={task} features={features} parent={parent ?? null} />
+
+      {/* Почему на карточке нет ни «Ответить», ни «Замечания», сказано словами — и
+          сказано, где задачу вернуть в работу: на экране её проекта. */}
+      {frozen ? (
+        <Callout>
+          {t('archived.notice', { key: task.project.key })}{' '}
+          <Link to={projectHref(task.project.key)}>
+            {t('archived.project', { key: task.project.key })}
+          </Link>
+        </Callout>
+      ) : null}
 
       {/*
        * Две колонки, каждая своим потоком, и делятся они на точке `card` (80rem).
@@ -524,6 +558,8 @@ function questionId(taskKey: string, question: Question): string {
 }
 
 interface QuestionAnswerProps {
+  /** Проект задачи не в архиве и прочитан: ответ бэкенд примет. */
+  canAnswer: boolean;
   taskKey: string;
   question: Question;
   at: number;
@@ -544,7 +580,14 @@ interface QuestionAnswerProps {
  * из входящей, то есть уже решив отвечать, — форма раскрыта сразу, и лишнего клика
  * между «меня спросили» и «отвечаю» нет.
  */
-function QuestionAnswer({ taskKey, question, at, answering, askedFor }: QuestionAnswerProps) {
+function QuestionAnswer({
+  canAnswer,
+  taskKey,
+  question,
+  at,
+  answering,
+  askedFor,
+}: QuestionAnswerProps) {
   const { t: brick } = useTranslation('ui');
   const id = questionId(taskKey, question);
   const answered = answering.answerOf(id);
@@ -568,6 +611,10 @@ function QuestionAnswer({ taskKey, question, at, answering, askedFor }: Question
       />
     );
   }
+
+  // Архивный проект: вопрос читается, а ответить на него нельзя (`UI-176`). Ответ,
+  // отправленный до архива, выше уже показан подтверждением.
+  if (!canAnswer && !answering.isHeld(id)) return null;
 
   if (!open && !answering.isHeld(id)) {
     return (

@@ -7,6 +7,7 @@ import {
   bootstrap,
   data,
   failure,
+  projectDetail,
   task,
   taskListing,
   taskPackage,
@@ -24,7 +25,13 @@ let seen: string[] = [];
 
 beforeEach(() => {
   seen = [];
-  server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
+  server.use(
+    http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+    // Переход в карточку читает проект ради признака архива (`UI-176`).
+    http.get(`${API}/api/v1/projects/:key`, ({ params }) =>
+      data(projectDetail(String(params.key))),
+    ),
+  );
 });
 
 function listing(respond: (url: URL) => Response) {

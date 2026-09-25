@@ -1,6 +1,6 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, collection, data, failure } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
@@ -169,6 +169,56 @@ describe('боковая панель', () => {
       .getAllByRole('button')
       .map((button) => button.textContent);
     expect(buttons).toEqual([say.project('create.open'), say.ui('app.signOut')]);
+  });
+
+  it('флажок «Архивные проекты» читает кадр с `include_archived` и помечает архивные (UI-176)', async () => {
+    const asked: (string | null)[] = [];
+    const active = bootstrap().projects[0]!;
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, ({ request }) => {
+        const withArchived = new URL(request.url).searchParams.get('include_archived');
+        asked.push(withArchived);
+        // Скрывает архивный бэкенд, а не интерфейс: без параметра его в кадре нет.
+        return data(
+          bootstrap({
+            projects:
+              withArchived === 'true'
+                ? [
+                    active,
+                    {
+                      ...active,
+                      key: 'OLD',
+                      title: 'Прежний',
+                      archived_at: '2026-09-20T10:00:00Z',
+                    },
+                  ]
+                : [active],
+          }),
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp('/tasks', { language: 'ru' });
+    await screen.findByText('owner');
+
+    const side = screen.getByRole('complementary', { name: say.ui('app.trackerSections') });
+    expect(within(side).queryByRole('link', { name: /^OLD/ })).toBeNull();
+    const toggle = within(side).getByRole('checkbox', { name: say.ui('app.showArchived') });
+    expect(toggle).not.toBeChecked();
+    expect(asked).not.toContain('true');
+
+    await user.click(toggle);
+    const old = await within(side).findByRole('link', { name: /^OLD/ });
+    expect(old).toHaveTextContent(say.ui('app.archivedMark'));
+    // Активный проект пометки не несёт.
+    expect(within(side).getByRole('link', { name: /^DEMO/ })).not.toHaveTextContent(
+      say.ui('app.archivedMark'),
+    );
+    expect(asked).toContain('true');
+
+    // Выбор — удобство браузера: переживает перерисовку, снимается тем же флажком.
+    await user.click(toggle);
+    await waitFor(() => expect(within(side).queryByRole('link', { name: /^OLD/ })).toBeNull());
   });
 
   it('неизвестный код показывает фразу бэкенда и сам код', async () => {

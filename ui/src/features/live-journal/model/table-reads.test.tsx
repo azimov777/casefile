@@ -9,6 +9,7 @@ import {
   collection,
   data,
   failure,
+  projectDetail,
   task,
   taskListing,
   taskPackage,
@@ -222,6 +223,7 @@ describe('полоса над таблицей считает с последн�
       }),
       http.get(`${API}/api/v1/tasks/DEMO-1`, () => data(taskPackage('DEMO-1'))),
       http.get(`${API}/api/v1/tasks/DEMO-1/entries`, () => collection([])),
+      http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail('DEMO'))),
     );
     setToken('trk_test');
   });

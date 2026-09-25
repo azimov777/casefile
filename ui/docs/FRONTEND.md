@@ -15,7 +15,7 @@
 |---|---|---|
 | Список задач | Задачи с фильтрами по проекту, статусу, исполнителю, приоритету, признаку «заблокирована», открытым вопросам; в каждой строке — вычисляемые признаки | `GET /api/v1/tasks?query=...` |
 | Карточка задачи | Поля, пять разделов, статус, связи, последняя сводка, открытые вопросы, неразобранные замечания, опись дела; тела записей по клику. Здесь же форма замечания | `GET /api/v1/tasks/{task_key}`, `GET /api/v1/tasks/{task_key}/entries`, `POST /api/v1/tasks/{task_key}/entries` с типом `remark` |
-| Проект | Карточка проекта (ключ, название, описание), атрибуты с историей по клику, опись дела проекта; тела по клику (UI-174). Действия (UI-175): «Новый проект» в панели и правка карточки набору `main`; атрибуты с причиной и заметка — любому набору | `GET /api/v1/projects/{project_key}`, `GET /api/v1/projects/{project_key}/entries`, `GET /api/v1/projects/{project_key}/entries/{entry_no}`, `POST /api/v1/projects`, `PATCH /api/v1/projects/{project_key}`, `PUT /api/v1/projects/{project_key}/attributes/{attribute_name}`, `POST /api/v1/projects/{project_key}/attributes/{attribute_name}/remove`, `POST /api/v1/projects/{project_key}/entries` |
+| Проект | Карточка проекта (ключ, название, описание), атрибуты с историей по клику, опись дела проекта; тела по клику (UI-174). Действия (UI-175): «Новый проект» в панели и правка карточки набору `main`; атрибуты с причиной и заметка — любому набору. Архив (UI-176): «В архив» и «Восстановить» с причиной набору `main`; архивный только читается | `GET /api/v1/projects/{project_key}`, `GET /api/v1/projects/{project_key}/entries`, `GET /api/v1/projects/{project_key}/entries/{entry_no}`, `POST /api/v1/projects`, `PATCH /api/v1/projects/{project_key}`, `PUT /api/v1/projects/{project_key}/attributes/{attribute_name}`, `POST /api/v1/projects/{project_key}/attributes/{attribute_name}/remove`, `POST /api/v1/projects/{project_key}/entries`, `POST /api/v1/projects/{project_key}/archive`, `POST /api/v1/projects/{project_key}/restore` |
 | Открытые вопросы | Вопросы без ответа, адресованные текущему участнику, с признаком «блокирующий» | `GET /api/v1/questions` |
 | История вопросов | Все вопросы с ответами, от свежих к старым; по умолчанию адресованные текущему участнику, условие снимается | `GET /api/v1/questions?open=false&order=newest` |
 | Ответ | Форма ответа на вопрос | `POST /api/v1/tasks/{task_key}/entries` с типом `answer` |
@@ -369,6 +369,18 @@ project_key_taken`) и `PATCH /api/v1/projects/{project_key}` (название 
 `attribute_removed`; `POST /api/v1/projects/{project_key}/entries` с `type` из `note`,
 `decision`, `finding`, `artifact` — человек пишет только `note`. Создание, атрибуты и
 записи принимают `Idempotency-Key`, правка карточки — нет.
+
+Архив проекта (UI-176). Набор `main` — `POST /api/v1/projects/{project_key}/archive` и
+`/restore` с телом `{reason}` (`ProjectArchiving`; пустая причина — `422
+project_reason_required`, повтор — `409 project_archived` или `project_not_archived`),
+ответ — `ProjectDetailRead`; ключа повтора у них нет. Признак — `archived_at` у
+`ProjectRead` и `ProjectDetailRead` (`null` у активного). Архивный проект и его задачи
+заморожены: любое изменение, кроме `restore` и снятия связи, — `409 project_archived`.
+`GET /api/v1/projects` и `GET /api/v1/bootstrap` архивные не отдают без
+`include_archived=true`; поиск задач находит задачи архивного проекта только по явно
+названным `project:`, `key:` или `parent:`; во входящую и в счётчик вопросов они не
+попадают. В пакете карточки задачи (`TaskProjectRead`) `archived_at` нет — карточка
+читает проект вторым запросом (TRK-167 вернёт поле в пакет).
 
 ## Строка списка: значок «заблокирована» и родитель без второго запроса
 

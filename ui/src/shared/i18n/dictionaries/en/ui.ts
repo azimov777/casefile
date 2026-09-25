@@ -66,6 +66,8 @@ export const ui = {
     projects: 'Projects',
     allTasks: 'All tasks',
     aboutProject: 'About project {{key}}',
+    showArchived: 'Archived projects',
+    archivedMark: 'archived',
     mine: 'Mine',
     inbox: 'Inbox',
     // Группа панели про саму установку, а не про работу в проектах: подключение

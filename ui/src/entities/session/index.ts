@@ -1,5 +1,6 @@
 export {
   bootstrapQueryOptions,
+  bootstrapWithArchivedQueryOptions,
   fetchBootstrap,
   sessionKeys,
   type Bootstrap,

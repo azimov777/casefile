@@ -1,13 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { questionKeys, remarkKeys } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
 import { sessionKeys } from '@/entities/session';
 import { useOnceKey } from '@/shared/lib';
 import {
+  archiveProject,
   createProject,
+  restoreProject,
   fileNote,
   removeAttribute,
   setAttribute,
   updateProject,
+  type ArchivingInput,
   type CreateProjectInput,
   type NoteInput,
   type RemoveAttributeInput,
@@ -98,4 +102,37 @@ export function useFileNote() {
       void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectKey) });
     },
   });
+}
+
+/**
+ * Архив и восстановление (`UI-176`). Меняется не только карточка: архивный проект
+ * бэкенд прячет из панели, из поиска задач и из входящей со счётчиком (TRK-160), —
+ * поэтому перечитываются и первый кадр, и списки задач, вопросов и замечаний. Что
+ * именно в них попадёт, решает бэкенд, а не интерфейс.
+ */
+function useArchiving(mutationFn: (input: ArchivingInput) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn,
+    onSuccess: (_project, { key }) => {
+      for (const queryKey of [
+        projectKeys.detail(key),
+        sessionKeys.bootstrap,
+        ['tasks'],
+        questionKeys.all,
+        remarkKeys.all,
+      ]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+}
+
+export function useArchiveProject() {
+  return useArchiving(archiveProject);
+}
+
+export function useRestoreProject() {
+  return useArchiving(restoreProject);
 }

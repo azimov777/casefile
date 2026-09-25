@@ -11,6 +11,7 @@ import {
   data,
   failure,
   heading,
+  projectDetail,
   questionEntry,
   remarkEntry,
   taskDetails,
@@ -30,7 +31,13 @@ let seen: string[] = [];
 
 beforeEach(() => {
   seen = [];
-  server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
+  server.use(
+    http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+    // Карточка читает проект ради признака архива (`UI-176`): по умолчанию он активный.
+    http.get(`${API}/api/v1/projects/:key`, ({ params }) =>
+      data(projectDetail(String(params.key))),
+    ),
+  );
   setToken('trk_test');
 });
 
@@ -1178,5 +1185,64 @@ describe('смысл признака в шапке достижим без на
     await user.keyboard('{Enter}');
     expect(within(blocked).getByText(say.ui('task.features.blocked'))).not.toHaveClass('sr-only');
     expect(mark).toHaveAttribute('aria-pressed', 'false');
+  });
+});
+
+describe('задача архивного проекта (UI-176)', () => {
+  const withQuestion = {
+    questions: [questionEntry(5, 'DEMO-4')],
+    features: {
+      blocked: false,
+      open_questions: 1,
+      open_blocking_questions: 1,
+      last_summary_at: null,
+    },
+  };
+
+  it('читается, но ни «Ответить», ни «Замечания» нет, и сказано почему', async () => {
+    server.use(
+      packageOf('DEMO-4', withQuestion),
+      entries('DEMO-4'),
+      http.get(`${API}/api/v1/projects/DEMO`, () =>
+        data(projectDetail('DEMO', { archived_at: '2026-09-20T10:00:00Z' })),
+      ),
+    );
+    renderApp('/tasks/DEMO-4', { language: 'ru' });
+
+    expect(
+      await screen.findByText(say.task('archived.notice', { key: 'DEMO' }), { exact: false }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: say.task('archived.project', { key: 'DEMO' }) }),
+    ).toHaveAttribute('href', '/projects/DEMO');
+    // Вопрос читается целиком — отвечать на него нечем.
+    expect(screen.getByText(/Хранение стоит денег/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.ui('answer.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.ui('remark.submit') })).toBeNull();
+  });
+
+  it('адрес, зовущий ответить, на архивном проекте формы не раскрывает', async () => {
+    server.use(
+      packageOf('DEMO-4', withQuestion),
+      entries('DEMO-4'),
+      http.get(`${API}/api/v1/projects/DEMO`, () =>
+        data(projectDetail('DEMO', { archived_at: '2026-09-20T10:00:00Z' })),
+      ),
+    );
+    renderApp('/tasks/DEMO-4?entry=5', { language: 'ru' });
+
+    await screen.findByText(say.task('archived.notice', { key: 'DEMO' }), { exact: false });
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('на задаче активного проекта «Ответить» и «Замечание» на месте, плашки нет', async () => {
+    server.use(packageOf('DEMO-4', withQuestion), entries('DEMO-4'));
+    renderApp('/tasks/DEMO-4', { language: 'ru' });
+
+    expect(await screen.findByRole('button', { name: say.ui('answer.open') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: say.ui('remark.submit') })).toBeInTheDocument();
+    expect(
+      screen.queryByText(say.task('archived.notice', { key: 'DEMO' }), { exact: false }),
+    ).toBeNull();
   });
 });

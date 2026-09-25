@@ -105,4 +105,38 @@ export const project = {
     receiptLabel: 'Note to the case of {{key}} filed',
     receiptHeadline: 'Note filed',
   },
+
+  /** Архив проекта (`UI-176`). */
+  archived: {
+    notice:
+      'The project has been archived since {{when}}: its card, attributes, case and tasks are read-only. To bring it back to work, restore it.',
+    noticeReadOnly:
+      'The project has been archived since {{when}}: its card, attributes, case and tasks are read-only.',
+  },
+
+  archive: {
+    open: 'Archive',
+    title: 'Archive {{key}}?',
+    intro:
+      'The project and all its tasks freeze as they are: agents get a refusal on any change until the project is restored. They can still be read; the project leaves the side panel.',
+    reasonLabel: 'Reason',
+    reasonHint: 'Why the project is archived. It will be read in the project case.',
+    reasonEmpty:
+      'A project is not archived without a reason: the project case must explain why it was frozen.',
+    submit: 'Archive the project',
+    pending: 'Archiving…',
+  },
+
+  restore: {
+    open: 'Restore',
+    title: 'Restore {{key}}',
+    intro:
+      'The project returns to the side panel, and its tasks continue from where the archive left them.',
+    reasonLabel: 'Reason',
+    reasonHint: 'Why the project returns to work. It will be read in the project case.',
+    reasonEmpty:
+      'A project is not restored without a reason: the project case must explain why it came back.',
+    submit: 'Restore the project',
+    pending: 'Restoring…',
+  },
 } as const;

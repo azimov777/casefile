@@ -3,10 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { projectQueryOptions } from '@/entities/project';
-import { EditProject, useProjectRights } from '@/features/manage-project';
+import { EditProject, ProjectArchiving, useProjectRights } from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
-import { readEntryNo } from '@/shared/lib';
+import { useLanguage } from '@/shared/i18n';
+import { exactTime, readEntryNo } from '@/shared/lib';
 import { Callout, Markdown, QueryState } from '@/shared/ui';
 import { ProjectAttributes } from './project-attributes';
 import { ProjectCase } from './project-case';
@@ -25,13 +26,19 @@ const SCREEN = 'flex max-w-(--ui-page-max) flex-col gap-4';
  * Действия с проектом (`UI-175`) стоят там, где лежит то, что они меняют: «Изменить»
  * — у карточки, «Добавить атрибут», «Изменить» и «Снять» — у атрибутов, «Написать
  * заметку» — у дела. Какие из них видны, решает набор ключа (`useProjectRights`):
- * карточку правит только `main`, атрибуты и заметки — любой. Архив — `UI-176`.
+ * карточку правит только `main`, атрибуты и заметки — любой.
+ *
+ * Архивный проект (`UI-176`, `archived_at` из контракта) только читается: правки
+ * карточки, атрибутов и заметки на нём нет вовсе, а не «есть и кончается отказом
+ * `project_archived`». Вместо них — плашка «в архиве с …», а кнопка «В архив» набора
+ * `main` становится «Восстановить» на том же месте (`ProjectArchiving`).
  */
 export function ProjectPage() {
   const { key = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const project = useQuery(projectQueryOptions(key));
   const rights = useProjectRights();
+  const { language } = useLanguage();
   const { t } = useTranslation('project');
 
   const openAt = readEntryNo(searchParams.get('entry'));
@@ -86,6 +93,10 @@ export function ProjectPage() {
   }
 
   const card = project.data;
+  // Признак берётся из контракта как есть: интерфейс архив не вычисляет.
+  const archivedAt = card.archived_at ?? null;
+  const frozen = archivedAt !== null;
+  const canWrite = rights.write && !frozen;
 
   return (
     <main className={SCREEN}>
@@ -111,8 +122,18 @@ export function ProjectPage() {
             стоит в той же строке: она меняет то, что написано прямо над ней. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Link to={tasksHref('', { project: card.key })}>{t('tasks')}</Link>
-          {rights.manage ? <EditProject project={card} /> : null}
+          {rights.manage && !frozen ? <EditProject project={card} /> : null}
+          {rights.manage ? <ProjectArchiving projectKey={card.key} archived={frozen} /> : null}
         </div>
+        {/* Архив сказан словами под карточкой, а не одним цветом: почему на экране нет
+            ни одной кнопки правки, человек читает здесь же. */}
+        {frozen ? (
+          <Callout>
+            {t(rights.manage ? 'archived.notice' : 'archived.noticeReadOnly', {
+              when: exactTime(archivedAt, language),
+            })}
+          </Callout>
+        ) : null}
       </header>
 
       {/*
@@ -126,7 +147,7 @@ export function ProjectPage() {
           <ProjectAttributes
             projectKey={card.key}
             attributes={card.attributes}
-            canWrite={rights.write}
+            canWrite={canWrite}
             open={attribute}
             onOpenChange={rememberAttribute}
           />
@@ -134,7 +155,7 @@ export function ProjectPage() {
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
           <ProjectCase
             projectKey={card.key}
-            canWrite={rights.write}
+            canWrite={canWrite}
             openAt={openAt}
             onOpenChange={rememberEntry}
           />

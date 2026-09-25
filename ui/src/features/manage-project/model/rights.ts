@@ -3,7 +3,7 @@ import { bootstrapQueryOptions } from '@/entities/session';
 
 /** Что человек вправе делать с проектом этим ключом. */
 export interface ProjectRights {
-  /** Завести проект, править название и описание: набор `main`. */
+  /** Завести проект, править название и описание, архивировать и восстановить: набор `main`. */
   manage: boolean;
   /** Атрибуты и заметки в дело проекта: любой набор, `task` тоже. */
   write: boolean;

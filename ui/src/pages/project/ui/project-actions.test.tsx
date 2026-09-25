@@ -7,6 +7,7 @@ import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { setToken, type components } from '@/shared/api';
+import { exactTime } from '@/shared/lib';
 
 /*
  * Действия человека с проектом (UI-175): что видно какому набору ключа, что уходит
@@ -63,6 +64,10 @@ beforeEach(() => {
   server.use(
     http.get(`${API}/api/v1/tasks`, () => collection([])),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail())),
+    http.get(`${API}/api/v1/projects/NEW`, () =>
+      data(projectDetail({ key: 'NEW', title: 'Новый', attributes: [] })),
+    ),
+    http.get(`${API}/api/v1/projects/NEW/entries`, () => collection([])),
     http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])),
     http.put(`${API}/api/v1/projects/DEMO/attributes/:name`, async ({ request, params }) => {
       await remember(request);
@@ -191,7 +196,7 @@ describe('создание проекта', () => {
       ).toBeInTheDocument();
       unmount();
     }
-    expect(say.errors('project_key_taken', { lng: 'en' })).not.toBe(
+    expect(say.errors('project_key_taken')).not.toBe(
       say.errors('project_key_taken', { lng: 'ru' }),
     );
   });
@@ -430,5 +435,144 @@ describe('заметка в дело проекта', () => {
     await user.click(await screen.findByRole('button', { name: say.project('note.open') }));
     await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
     expect(screen.getByRole('button', { name: say.project('note.open') })).toHaveFocus();
+  });
+});
+
+describe('архив и восстановление (UI-176)', () => {
+  const ARCHIVED_AT = '2026-09-20T10:00:00Z';
+
+  function archived() {
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO`, () =>
+        data(projectDetail({ archived_at: ARCHIVED_AT })),
+      ),
+    );
+  }
+
+  function archiving() {
+    server.use(
+      http.post(`${API}/api/v1/projects/DEMO/archive`, async ({ request }) => {
+        await remember(request);
+        return data(projectDetail({ archived_at: ARCHIVED_AT }));
+      }),
+      http.post(`${API}/api/v1/projects/DEMO/restore`, async ({ request }) => {
+        await remember(request);
+        return data(projectDetail());
+      }),
+    );
+  }
+
+  it('набор `task`: ни «В архив» у активного, ни «Восстановить» у архивного', async () => {
+    scope('task');
+    const { unmount } = renderApp('/projects/DEMO', { language: 'ru' });
+    // Кнопки атрибутов пришли — значит, набор ключа уже известен.
+    expect(
+      await screen.findByRole('button', { name: say.project('attribute.add') }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
+    unmount();
+
+    archived();
+    renderApp('/projects/DEMO', { language: 'ru' });
+    expect(
+      await screen.findByText(
+        say.project('archived.noticeReadOnly', { when: exactTime(ARCHIVED_AT, 'ru') }),
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.project('restore.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
+  });
+
+  it('архив без причины не отправляется и говорит почему; с причиной уходит `reason`', async () => {
+    scope('main');
+    archiving();
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO', { language: 'ru' });
+
+    await user.click(await screen.findByRole('button', { name: say.project('archive.open') }));
+    const dialog = await screen.findByRole('alertdialog', {
+      name: say.project('archive.title', { key: 'DEMO' }),
+    });
+    const submit = within(dialog).getByRole('button', { name: say.project('archive.submit') });
+
+    // Одни пробелы — та же пустота, что и ничего.
+    const reason = within(dialog).getByLabelText(say.project('archive.reasonLabel'));
+    await user.type(reason, '   ');
+    await user.click(submit);
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(say.project('archive.reasonEmpty'));
+    expect(reason).toHaveAttribute('aria-invalid', 'true');
+    expect(writes).toEqual([]);
+
+    await user.type(reason, 'Работа переехала в CORE');
+    await user.click(submit);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(writes).toEqual([
+      {
+        method: 'POST',
+        path: '/api/v1/projects/DEMO/archive',
+        body: { reason: 'Работа переехала в CORE' },
+      },
+    ]);
+  });
+
+  it('архивный проект только читается: правки нет, «Восстановить» с причиной уходит на `/restore`', async () => {
+    scope('main');
+    archived();
+    archiving();
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO', { language: 'ru' });
+
+    const restore = await screen.findByRole('button', { name: say.project('restore.open') });
+    expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.project('edit.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.project('attribute.add') })).toBeNull();
+    expect(
+      screen.queryByRole('button', {
+        name: say.project('attribute.changeLabel', { name: 'repo' }),
+      }),
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: say.project('note.open') })).toBeNull();
+    // Атрибуты при этом читаются, как и прежде.
+    expect(screen.getByRole('button', { name: 'repo' })).toBeInTheDocument();
+
+    await user.click(restore);
+    // Восстановление ничего не замораживает — обычное окно, а не `alertdialog`.
+    const dialog = await screen.findByRole('dialog', {
+      name: say.project('restore.title', { key: 'DEMO' }),
+    });
+    await user.click(within(dialog).getByRole('button', { name: say.project('restore.submit') }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(say.project('restore.reasonEmpty'));
+    expect(writes).toEqual([]);
+
+    await user.type(
+      within(dialog).getByLabelText(say.project('restore.reasonLabel')),
+      'Вернулись к работе',
+    );
+    await user.click(within(dialog).getByRole('button', { name: say.project('restore.submit') }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(writes).toEqual([
+      {
+        method: 'POST',
+        path: '/api/v1/projects/DEMO/restore',
+        body: { reason: 'Вернулись к работе' },
+      },
+    ]);
+  });
+
+  it('отказ бэкенда читается словами словаря, окно остаётся открытым', async () => {
+    scope('main');
+    server.use(
+      http.post(`${API}/api/v1/projects/DEMO/archive`, () =>
+        failure('project_archived', 409, 'Project is archived'),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO', { language: 'en' });
+
+    await user.click(await screen.findByRole('button', { name: say.project('archive.open') }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.type(within(dialog).getByLabelText(say.project('archive.reasonLabel')), 'Done');
+    await user.click(within(dialog).getByRole('button', { name: say.project('archive.submit') }));
+    expect(await within(dialog).findByText(say.errors('project_archived'))).toBeInTheDocument();
   });
 });

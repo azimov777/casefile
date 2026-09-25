@@ -9,6 +9,7 @@
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `bootstrapQueryOptions`, `fetchBootstrap`,
+- `index.ts` — публичный интерфейс среза: `bootstrapQueryOptions`,
+  `bootstrapWithArchivedQueryOptions` (панель с архивными проектами), `fetchBootstrap`,
   `sessionKeys`, `useSessionToken`, `useSessionExpired`, `markSessionExpired`,
   `resetSessionExpiry`, типы `Bootstrap`, `Participant`, `Project`

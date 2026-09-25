@@ -8,7 +8,7 @@
 сценарий просто открывает адрес и видит задачи. Сценариям запасного пути (экран входа)
 установка без ключа выдаётся поимённо — `installWithoutKey` в `contour.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts` и `moving.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts` и `moving.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -163,6 +163,7 @@ invalid_search_query`); ограничение снято (TRK-21).
   ссылка на родителя — своя остановка табом без обводки строки, запросов столько же и ни одного на родителя
 - `project-place.spec.ts` — проект как место (UI-172): заводит `UI` и `TRK`, переход через панель сохраняет вид и отбор, смена вида — проект и отбор; проект «запись»
 - `project-actions.spec.ts` — действия с проектом (UI-175): проект заводится из панели и открывается, повтор ключа объяснён, описание в 321 знак не уходит; атрибут без причины, изменение и снятие только с причиной — в истории и в деле; заметка встаёт в дело с подписью человека; `axe` в каждом окне и возврат фокуса на кнопку в обеих темах на 1440 и 390; заводит проекты с меткой прогона, проект «запись»
+- `project-archive.spec.ts` — архив проекта (UI-176): архив и восстановление только с причиной, проект уходит из панели и возвращается, флажок «Архивные проекты» показывает его с пометкой и переживает перезагрузку; на задаче архивного проекта нет ни ответа, ни замечания, на задаче активного — есть; `axe` в окнах, на экране архивного проекта и в панели с флажком в обеих темах на 1440 и 390; заводит проекты с меткой прогона, проект «запись»
 - `project-screen.spec.ts` — экран проекта (UI-174): заводит в `TRK` описание, атрибут с правкой, решение и задачу со ссылкой `TRK#N`; вход знаком из панели, карточка, опись с телом, ссылка на запись проекта, история атрибута; `axe` и отсутствие прокрутки вбок в обеих темах на 1440 и 390; проект «запись»
 - `parents-long.spec.ts` — родитель с названием из путей у двух задач и отказ второму родителю `409 task_has_parent`
   с обеих сторон связи (UI-167): подпись в одну строку с многоточием и подсказкой, без «+N», ширина столбца и

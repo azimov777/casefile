@@ -23,6 +23,7 @@ type Question = components['schemas']['QuestionEntryRead'];
 type Remark = components['schemas']['RemarkEntryRead'];
 type AccessToken = components['schemas']['TokenRead'];
 type Participant = components['schemas']['ParticipantRead'];
+type ProjectDetail = components['schemas']['ProjectDetailRead'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -468,4 +469,23 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
       // общая форма.
       return { ...base, type, refs: ['DEMO-2', 'https://example.test/build/42'] };
   }
+}
+
+/**
+ * Карточка проекта с атрибутами (`GET /projects/{key}`). Активный по умолчанию:
+ * `archived_at: null`; архивный тест называет время явно (`UI-176`).
+ */
+export function projectDetail(key: string, overrides: Partial<ProjectDetail> = {}): ProjectDetail {
+  return {
+    id: '22222222-2222-2222-2222-222222222222',
+    key,
+    title: 'Демонстрация',
+    description: '',
+    last_task_number: 7,
+    archived_at: null,
+    created_by: AUTHOR,
+    ...STAMPS,
+    attributes: [],
+    ...overrides,
+  };
 }
