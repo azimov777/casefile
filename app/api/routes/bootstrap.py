@@ -6,7 +6,7 @@
 
 from fastapi import APIRouter
 
-from app.api.deps import ActorDep, SessionDep
+from app.api.deps import ActorDep, IncludeArchivedQuery, SessionDep
 from app.api.schemas.accounts import AccountRead
 from app.api.schemas.bootstrap import BootstrapRead
 from app.api.schemas.common import DataResponse
@@ -19,7 +19,9 @@ router = APIRouter(prefix="/bootstrap", tags=["bootstrap"])
 
 
 @router.get("", summary="Read the first screen")
-async def read_bootstrap(session: SessionDep, actor: ActorDep) -> DataResponse[BootstrapRead]:
+async def read_bootstrap(
+    session: SessionDep, actor: ActorDep, include_archived: IncludeArchivedQuery = False
+) -> DataResponse[BootstrapRead]:
     """Текущий участник, его учётная запись, токен с набором, проекты и число вопросов к нему.
 
     Ровно то, что нужно интерфейсу до первой отрисовки, и ничего сверх этого: списки
@@ -32,8 +34,11 @@ async def read_bootstrap(session: SessionDep, actor: ActorDep) -> DataResponse[B
     У общего агентского токена участника нет: `participant` приходит `null`, а
     `open_questions` — ноль, потому что временного агента нельзя адресовать вопросом
     (`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.
+
+    Архивные проекты — только с `include_archived=true`, как в `GET /api/v1/projects`;
+    вопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6).
     """
-    state = await service.read_bootstrap(session, actor=actor)
+    state = await service.read_bootstrap(session, actor=actor, include_archived=include_archived)
     return DataResponse[BootstrapRead](
         data=BootstrapRead(
             participant=(

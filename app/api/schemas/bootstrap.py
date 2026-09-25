@@ -33,14 +33,16 @@ class BootstrapRead(BaseModel):
     )
     projects: list[ProjectRead] = Field(
         description=(
-            "Projects of the installation, one page capped at the common page ceiling. "
-            "An installation with more projects than that pages `GET /api/v1/projects`"
+            "Projects of the installation, one page capped at the common page ceiling; "
+            "archived ones only with `include_archived`. An installation with more projects "
+            "than that pages `GET /api/v1/projects`"
         ),
     )
     open_questions: int = Field(
         examples=[3],
         description=(
-            "Questions with no answer yet addressed to `participant`. Zero with a shared "
-            "agent token: a temporary agent cannot be addressed at all"
+            "Questions with no answer yet addressed to `participant`, in tasks of projects "
+            "that are not archived. Zero with a shared agent token: a temporary agent "
+            "cannot be addressed at all"
         ),
     )

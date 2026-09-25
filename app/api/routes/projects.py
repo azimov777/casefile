@@ -15,6 +15,7 @@ from app.api.deps import (
     CursorQuery,
     EntryNosQuery,
     EntryTypesQuery,
+    IncludeArchivedQuery,
     LimitQuery,
     SessionDep,
 )
@@ -66,11 +67,18 @@ ProjectEntryNoPath = Annotated[
 async def list_projects(
     session: SessionDep,
     actor: ActorDep,
+    include_archived: IncludeArchivedQuery = False,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
 ) -> CollectionResponse[ProjectRead]:
-    """Все проекты установки. Единственный уровень группировки: над ними ничего нет."""
-    page = await service.list_projects(session, actor=actor, limit=limit, cursor=cursor)
+    """Проекты установки. Единственный уровень группировки: над ними ничего нет.
+
+    Архивные — только с `include_archived=true`; по ключу архивный проект читается и без
+    него (`GET /api/v1/projects/{key}`).
+    """
+    page = await service.list_projects(
+        session, actor=actor, include_archived=include_archived, limit=limit, cursor=cursor
+    )
     return CollectionResponse[ProjectRead].of(
         [ProjectRead.model_validate(project) for project in page.items],
         next_cursor=page.next_cursor,

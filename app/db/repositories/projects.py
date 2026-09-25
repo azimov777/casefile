@@ -3,13 +3,30 @@
 import uuid
 from collections.abc import Collection
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import exists, not_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.project import Project
 from app.db.pagination import Page, paginate
+
+
+def in_active_project(project_id: Any) -> ColumnElement[bool]:
+    """Условие «проект с этим идентификатором не в архиве» — одно на все выборки.
+
+    Архивный проект скрыт по умолчанию из списка проектов, входящей, счётчика вопросов и
+    поиска задач (`CONCEPT.md`, 3.2), и все они спрашивают это одним условием: второе
+    написание разошлось бы с первым молча.
+
+    Псевдоним проекта обязателен: выборка, куда условие ложится, может уже соединять
+    таблицу проектов, и подзапрос без псевдонима сросся бы с её строкой автокорреляцией.
+    """
+    archived = aliased(Project)
+    return not_(exists().where(archived.id == project_id, archived.archived_at.is_not(None)))
 
 
 class ProjectRepository:
@@ -49,10 +66,15 @@ class ProjectRepository:
     async def list_page(
         self,
         *,
+        include_archived: bool = False,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Project]:
-        return await paginate(self._session, select(Project), Project, limit=limit, cursor=cursor)
+        """Страница проектов; архивные — только если их просили (`CONCEPT.md`, 3.2)."""
+        statement = select(Project)
+        if not include_archived:
+            statement = statement.where(Project.archived_at.is_(None))
+        return await paginate(self._session, statement, Project, limit=limit, cursor=cursor)
 
     async def add(self, project: Project) -> Project:
         self._session.add(project)

@@ -58,8 +58,14 @@ class Bootstrap:
     open_questions: int
 
 
-async def read_bootstrap(session: AsyncSession, *, actor: Actor) -> Bootstrap:
+async def read_bootstrap(
+    session: AsyncSession, *, actor: Actor, include_archived: bool = False
+) -> Bootstrap:
     """Текущий участник, его токен с набором, проекты установки и число вопросов к нему.
+
+    Архивные проекты в списке — только с `include_archived`, как у `list_projects`: это
+    тот же сценарий. Вопросы в задачах архивных проектов счётчик не считает никогда — их
+    не считает и «входящая» (`CONCEPT.md`, 3.6), а на ответ ей нечего предложить.
 
     Проекты читаются одной страницей с общим потолком размера: проект — единственный
     уровень группировки, и установка, у которой их больше двух сотен, первым экраном
@@ -77,7 +83,9 @@ async def read_bootstrap(session: AsyncSession, *, actor: Actor) -> Bootstrap:
             message="The first screen describes a token, and this action has none",
             details={"reason": "first_screen_requires_token"},
         )
-    page = await projects_service.list_projects(session, actor=actor, limit=MAX_PAGE_SIZE)
+    page = await projects_service.list_projects(
+        session, actor=actor, include_archived=include_archived, limit=MAX_PAGE_SIZE
+    )
     open_questions = (
         0
         if actor.participant is None

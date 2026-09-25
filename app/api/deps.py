@@ -147,6 +147,18 @@ OffsetQuery = Annotated[
 ]
 
 
+# Архивные проекты в списке: принимают `GET /projects` и `GET /bootstrap`, и описание у
+# одного по смыслу параметра обязано быть одним (`CONCEPT.md`, 3.2).
+IncludeArchivedQuery = Annotated[
+    bool,
+    Query(
+        description=(
+            "Also list archived projects. Without it they are hidden from the list; "
+            "a project is still read by its key either way"
+        )
+    ),
+]
+
 # Ключ задачи принимают роутеры задач, дела и связей (задачи 22–24), поэтому объявлен
 # здесь, а не по месту: объявленный в каждом роутере отдельно, он приезжал бы в схему с
 # разными описаниями, и в сгенерированном клиенте один параметр выглядел бы по-разному.

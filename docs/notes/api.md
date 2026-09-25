@@ -667,3 +667,20 @@ project_archived` с `details.key` и `details.archived_at`; `DELETE
 **Где:** `app/api/routes/projects.py`, `archive_project`, `restore_project`;
 `app/api/schemas/projects.py`, `ProjectArchiving`, `ProjectRead`;
 `app/api/schemas/entries.py`, `ProjectArchiveEntryRead`.
+
+## Архивные проекты скрыты по умолчанию: `include_archived` у списка и первого экрана
+
+**Что:** `GET /api/v1/projects` и `GET /api/v1/bootstrap` без `include_archived=true` не
+отдают архивных проектов; параметр один на оба маршрута (`IncludeArchivedQuery` в
+`deps.py`). `bootstrap.open_questions` вопросы в задачах архивных проектов не считает
+никогда. `GET /api/v1/questions` и `GET /api/v1/remarks` без `project` их не отдают, с
+названным `project` — отдают и из архива. `GET /api/v1/tasks` — по правилу поиска
+(`notes/search.md`). Лента (`/journal`, поток) и чтение по ключу не скрывают ничего:
+сторож журнала обязан увидеть само архивирование (TRK-160).
+**Почему важно:** «нет такого» на архивный проект не отвечается: `GET /projects/{key}`
+отдаёт его с `archived_at`. Интерфейс, которому нужен переключатель «архивные» в панели,
+просит `include_archived=true` и различает строки по `archived_at`.
+**Как правильно:** новое место, где перечисляются проекты или задачи поперёк проектов,
+берёт условие `in_active_project` (`app/db/repositories/projects.py`), а не пишет своё.
+**Где:** `app/api/routes/projects.py`, `list_projects`; `app/api/routes/bootstrap.py`;
+`app/db/repositories/entries.py`, `_in_project_or_active`, `count_questions`.

@@ -8,7 +8,7 @@
 - `arguments.py` — описание участника, общее для регистрации и правки; имя атрибута, общее для задания и снятия
 - `views.py` — короткие ответы записи: ключ проекта, имя участника
 - `get_project.py` — `get_project`: проект с описанием, атрибутами и описью его дела
-- `list_projects.py` — `list_projects`: проекты строкой, страницами
+- `list_projects.py` — `list_projects`: проекты строкой с временем архива, страницами; архивные — с `include_archived`
 - `list_participants.py` — `list_participants`: реестр участников, страницами
 - `create_project.py` — `create_project`: ключ, название и описание нового проекта
 - `update_project.py` — `update_project`: новое название и описание, прежние — в `field_changed` дела проекта
