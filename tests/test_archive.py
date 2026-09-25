@@ -259,6 +259,47 @@ async def test_a_fresh_installation_takes_the_archive_whole(
     assert left == 0
 
 
+async def test_a_moved_task_comes_in_with_its_previous_keys(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Прежние ключи едут колонкой задачи и после приёма ведут на неё (TRK-172).
+
+    Туда и обратно: TRK-1 → OPS-1 → TRK-1. Приёмник обязан помнить оба правила —
+    прежний ключ ведёт на задачу, и возврат в проект отдаёт ей её ключ, а не новый номер.
+    """
+    await populate(auth_client)
+    ops = await auth_client.post("/api/v1/projects", json={"key": "OPS", "title": "Соседний"})
+    assert ops.status_code == 201, ops.text
+    moved = await auth_client.post(
+        "/api/v1/tasks/TRK-1/move", json={"project": "OPS", "reason": "Переезд"}
+    )
+    assert moved.status_code == 200, moved.text
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+    tasks = table(archive, "tasks")
+    assert "previous_keys" in tasks["columns"]
+
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    ui = bearer(target_ui)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=ui)
+    assert response.status_code == 200, response.text
+
+    card = await auth_client.get("/api/v1/tasks/TRK-1", headers=ui)
+    assert card.status_code == 200, card.text
+    assert card.json()["data"]["task"]["key"] == "OPS-1"
+    assert card.json()["data"]["task"]["previous_keys"] == ["TRK-1"]
+    found = await auth_client.get("/api/v1/tasks", params={"query": "key: TRK-1"}, headers=ui)
+    assert [row["key"] for row in found.json()["data"]] == ["OPS-1"]
+    back = await auth_client.post(
+        "/api/v1/tasks/TRK-1/move", json={"project": "TRK", "reason": "Назад"}, headers=ui
+    )
+    assert back.status_code == 200, back.text
+    assert (back.json()["data"]["key"], back.json()["data"]["previous_keys"]) == (
+        "TRK-1",
+        ["OPS-1"],
+    )
+
+
 async def test_an_installation_with_projects_refuses_the_archive(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:

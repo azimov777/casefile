@@ -84,6 +84,7 @@ MAIN_TOOLS = {
     "update_project",
     "archive_project",
     "restore_project",
+    "move_task",
     "register_participant",
     "update_participant",
 }
@@ -113,6 +114,7 @@ MAIN_TOOL_CALLS: dict[str, dict[str, Any]] = {
     "update_project": {"key": "TRK", "title": "Другое название"},
     "archive_project": {"key": "TRK", "reason": "Заброшен"},
     "restore_project": {"key": "TRK", "reason": "Снова нужен"},
+    "move_task": {"key": "TRK-1", "project": "TRK", "reason": "Проекты объединены"},
     "register_participant": {"kind": "agent", "name": "nightly_bot"},
     "update_participant": {"name": "owner", "description": "Другое описание"},
 }
@@ -150,13 +152,15 @@ async def test_every_main_tool_refuses_a_task_token_with_the_rest_code(
     mcp_session: Connect,
     task_secret: str,
     project: Project,
+    task: Task,
 ) -> None:
     """Обзорная проверка 2: недоступный инструмент отвечает `permission_denied`.
 
     Проверяются все четыре, а не только `create_project`: объявленный набор инструмента —
     это описание списка, и разойтись с настоящими правами ему не даёт именно этот тест.
+    Задача `TRK-1` нужна переносу: без неё отказ пришёл бы из разбора ключа, а не из прав.
     """
-    del project
+    del project, task
     async with mcp_session(task_secret) as session:
         for name, arguments in MAIN_TOOL_CALLS.items():
             failure = await refuse(session, name, **arguments)
@@ -217,6 +221,9 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     # `project_not_archived`; причина остаётся записью в деле — не разрушают (TRK-159).
     "archive_project": (False, False, False),
     "restore_project": (False, False, False),
+    # Перенос: повтор без ключа отвечает `task_already_in_project`; прежний ключ остаётся
+    # в `previous_keys`, а ход — записью `moved` — не разрушает (TRK-172).
+    "move_task": (False, False, False),
     # Снятие атрибута: без ключа повтор отвечает `attribute_not_found`; последнее значение
     # остаётся в `attribute_removed` — не разрушает (TRK-157).
     "remove_attribute": (False, False, False),
