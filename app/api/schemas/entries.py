@@ -221,6 +221,16 @@ class AttributeFactsRead(_EntryFactsBase):
     name: str | None = Field(default=None, examples=["repo"], description="Attribute name")
 
 
+class MovedFactsRead(_EntryFactsBase):
+    """Перенос в другой проект: с какого ключа на какой."""
+
+    type: Literal[EntryType.MOVED]
+    from_key: str | None = Field(default=None, examples=["UI-124"], description="Key the task left")
+    to_key: str | None = Field(
+        default=None, examples=["TRK-300"], description="Key the task got in the new project"
+    )
+
+
 # Состав полей каждой формы объявлен схемой, а не угадывается по тому, какие ключи
 # пришли непустыми. Разметка повторяет `type` строки описи, и это осознанная плата за
 # то, чтобы `facts` читался сам по себе: клиент принимает его отдельным значением — и из
@@ -238,7 +248,8 @@ type EntryFactsRead = Annotated[
     | AnswerFactsRead
     | VerdictFactsRead
     | ResolutionFactsRead
-    | AttributeFactsRead,
+    | AttributeFactsRead
+    | MovedFactsRead,
     Field(discriminator="type"),
 ]
 """Факты записи: размеченное по `type` объединение всех форм."""
@@ -570,6 +581,29 @@ class ProjectArchivePayload(BaseModel):
     )
 
 
+class MovedPayload(BaseModel):
+    """Задача перенесена в другой проект: откуда, куда, ключи и причина (`CONCEPT.md`, 3.3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_project: str = Field(examples=["UI"], description="Project the task left")
+    to_project: str = Field(examples=["TRK"], description="Project the task moved to")
+    from_key: str = Field(
+        examples=["UI-124"], description="Key the task left; it keeps leading to the task"
+    )
+    to_key: str = Field(
+        examples=["TRK-300"],
+        description=(
+            "Key the task got: the next number of the new project, or the task's own "
+            "earlier key there when it returns"
+        ),
+    )
+    reason: str = Field(
+        examples=["Репозиторий один, задачи интерфейса ведутся в TRK"],
+        description="Why the task moved",
+    )
+
+
 # --- Запись в ответе ------------------------------------------------------------------
 
 
@@ -750,6 +784,13 @@ class LinkEntryRead(_EntryReadBase):
     payload: LinkPayload
 
 
+class MovedEntryRead(_EntryReadBase):
+    """Служебная запись о переносе задачи в другой проект."""
+
+    type: Literal[EntryType.MOVED]
+    payload: MovedPayload
+
+
 class AttributeCreatedEntryRead(_ProjectEntryRead):
     """Служебная запись: атрибут проекта заведён."""
 
@@ -791,6 +832,7 @@ type EntryRead = Annotated[
     | FieldChangedEntryRead
     | AssigneeChangedEntryRead
     | LinkEntryRead
+    | MovedEntryRead
     | AttributeCreatedEntryRead
     | AttributeChangedEntryRead
     | AttributeRemovedEntryRead
@@ -831,6 +873,7 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.ASSIGNEE_CHANGED: AssigneeChangedEntryRead,
     EntryType.LINK_ADDED: LinkEntryRead,
     EntryType.LINK_REMOVED: LinkEntryRead,
+    EntryType.MOVED: MovedEntryRead,
     EntryType.ATTRIBUTE_CREATED: AttributeCreatedEntryRead,
     EntryType.ATTRIBUTE_CHANGED: AttributeChangedEntryRead,
     EntryType.ATTRIBUTE_REMOVED: AttributeRemovedEntryRead,

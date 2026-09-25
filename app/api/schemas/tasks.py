@@ -93,7 +93,22 @@ class TaskRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    key: str = Field(examples=["TRK-42"], description="Immutable and never reused")
+    key: str = Field(
+        examples=["TRK-42"],
+        description=(
+            "Current key; changes only when the task moves to another project, and the "
+            "key it leaves keeps leading to the task (`previous_keys`). Never handed to "
+            "another task"
+        ),
+    )
+    previous_keys: list[str] = Field(
+        examples=[["UI-124"]],
+        description=(
+            "Keys the task had before moves to other projects, in the order they were "
+            "left; empty for a task never moved. Each one leads to this task wherever a "
+            "key is accepted"
+        ),
+    )
     project: TaskProjectRead
     title: str = Field(examples=[_TITLE_EXAMPLE])
     description: str = Field(examples=[_DESCRIPTION_EXAMPLE])
@@ -278,8 +293,9 @@ class TaskUpdate(BaseModel):
 
     `assignee` объявлен как `str | None`: `null` осмыслен и снимает исполнителя. У
     остальных полей `null` смысла не имеет, и схема его не пропустит. Статуса здесь нет
-    — он меняется переходом; ключа нет — он неизменяем. Лишнее поле схема отвергает, а
-    не игнорирует: клиент должен узнать, что изменения не произошло, из ответа.
+    — он меняется переходом; ключа нет — он меняется только переносом (`move`). Лишнее
+    поле схема отвергает, а не игнорирует: клиент должен узнать, что изменения не
+    произошло, из ответа.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -417,6 +433,32 @@ class TaskTransition(BaseModel):
         description=(
             "Why the task moves. Required for any step back along the chain and for "
             "`cancelled`; optional otherwise. Recorded in the `status_changed` entry"
+        ),
+    )
+    version: int | None = Field(
+        default=None,
+        ge=1,
+        examples=[3],
+        description="Version the client last saw; omit it to skip the check",
+    )
+
+
+class TaskMove(BaseModel):
+    """Перенос задачи в другой проект (`CONCEPT.md`, 3.3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project: str = Field(
+        min_length=1,
+        examples=["TRK"],
+        description="Key of the project the task moves to, case-insensitive",
+    )
+    reason: str = Field(
+        max_length=MAX_TEXT_LENGTH,
+        examples=["Репозиторий один, задачи интерфейса ведутся в TRK"],
+        description=(
+            "Why the task moves; a blank one answers `422 task_move_reason_required`. "
+            "Filed in the `moved` entry"
         ),
     )
     version: int | None = Field(
