@@ -166,6 +166,20 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
         ],
       };
 
+    // Перенос в другой проект (TRK-172): с какого ключа на какой. Оба ключа — ссылки:
+    // прежний ведёт на ту же задачу. Причина — свободный текст, она в теле.
+    case 'moved':
+      return {
+        kind: 'built',
+        parts: [
+          words(t('entry.headline.moved')),
+          ...(facts.from_key == null ? [] : [{ kind: 'task' as const, key: facts.from_key }]),
+          ...(facts.to_key == null
+            ? []
+            : [words('→'), { kind: 'task' as const, key: facts.to_key }]),
+        ],
+      };
+
     // Атрибут проекта (TRK-157): что случилось и имя. Значения и причина — в теле
     // записи: это свободный текст, а в описи от записи остаётся одна строка.
     case 'attribute_created':
@@ -353,6 +367,8 @@ export function factsOfEntry(entry: Entry): EntryFacts {
     case 'attribute_changed':
     case 'attribute_removed':
       return { type: entry.type, name: entry.payload.name };
+    case 'moved':
+      return { type: 'moved', from_key: entry.payload.from_key, to_key: entry.payload.to_key };
     default:
       return { type: entry.type };
   }

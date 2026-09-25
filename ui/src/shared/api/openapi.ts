@@ -747,6 +747,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_key}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a task to another project
+         * @description Переносит задачу в другой проект (`CONCEPT.md`, 3.3). Требует набора `main`.
+         *
+         *     Задача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —
+         *     этот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на
+         *     задачу везде, где принимается ключ. Статус не важен: закрытая задача переносится
+         *     тоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими
+         *     проектами, обоими ключами и причиной.
+         *
+         *     Отказы: набор `task` — `403 permission_denied`; пустая причина — `422
+         *     task_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий
+         *     или целевой проект в архиве — `409 project_archived`; целевой проект тот же, где
+         *     задача лежит, — `409 task_already_in_project`; устаревшая `version` — `409
+         *     version_conflict`.
+         */
+        post: operations["move_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_key}/close": {
         parameters: {
             query?: never;
@@ -2285,7 +2317,7 @@ export interface components {
          * @description Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках.
          */
         EmptyPayload: Record<string, never>;
-        EntryFactsRead: components["schemas"]["NoFactsRead"] | components["schemas"]["StatusChangedFactsRead"] | components["schemas"]["SectionChangedFactsRead"] | components["schemas"]["FieldChangedFactsRead"] | components["schemas"]["AssigneeChangedFactsRead"] | components["schemas"]["LinkFactsRead"] | components["schemas"]["QuestionFactsRead"] | components["schemas"]["AnswerFactsRead"] | components["schemas"]["VerdictFactsRead"] | components["schemas"]["ResolutionFactsRead"] | components["schemas"]["AttributeFactsRead"];
+        EntryFactsRead: components["schemas"]["NoFactsRead"] | components["schemas"]["StatusChangedFactsRead"] | components["schemas"]["SectionChangedFactsRead"] | components["schemas"]["FieldChangedFactsRead"] | components["schemas"]["AssigneeChangedFactsRead"] | components["schemas"]["LinkFactsRead"] | components["schemas"]["QuestionFactsRead"] | components["schemas"]["AnswerFactsRead"] | components["schemas"]["VerdictFactsRead"] | components["schemas"]["ResolutionFactsRead"] | components["schemas"]["AttributeFactsRead"] | components["schemas"]["MovedFactsRead"];
         /**
          * EntryHeadingRead
          * @description Строка описи дела: то, что видно о записи, не читая её тела.
@@ -2319,13 +2351,13 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
          * @enum {string}
          */
-        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
+        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "moved" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
         /**
          * ErrorDetail
          * @description Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд.
@@ -2720,6 +2752,138 @@ export interface components {
              * @example open
              */
             status: components["schemas"]["TaskStatus"];
+        };
+        /**
+         * MovedEntryRead
+         * @description Служебная запись о переносе задачи в другой проект.
+         */
+        MovedEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "moved";
+            payload: components["schemas"]["MovedPayload"];
+        };
+        /**
+         * MovedFactsRead
+         * @description Перенос в другой проект: с какого ключа на какой.
+         */
+        MovedFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "moved";
+            /**
+             * From Key
+             * @description Key the task left
+             * @example UI-124
+             */
+            from_key?: string | null;
+            /**
+             * To Key
+             * @description Key the task got in the new project
+             * @example TRK-300
+             */
+            to_key?: string | null;
+        };
+        /**
+         * MovedPayload
+         * @description Задача перенесена в другой проект: откуда, куда, ключи и причина (`CONCEPT.md`, 3.3).
+         */
+        MovedPayload: {
+            /**
+             * From Project
+             * @description Project the task left
+             * @example UI
+             */
+            from_project: string;
+            /**
+             * To Project
+             * @description Project the task moved to
+             * @example TRK
+             */
+            to_project: string;
+            /**
+             * From Key
+             * @description Key the task left; it keeps leading to the task
+             * @example UI-124
+             */
+            from_key: string;
+            /**
+             * To Key
+             * @description Key the task got: the next number of the new project, or the task's own earlier key there when it returns
+             * @example TRK-300
+             */
+            to_key: string;
+            /**
+             * Reason
+             * @description Why the task moved
+             * @example Репозиторий один, задачи интерфейса ведутся в TRK
+             */
+            reason: string;
         };
         /**
          * NoFactsRead
@@ -4352,6 +4516,30 @@ export interface components {
             created_at: string;
         };
         /**
+         * TaskMove
+         * @description Перенос задачи в другой проект (`CONCEPT.md`, 3.3).
+         */
+        TaskMove: {
+            /**
+             * Project
+             * @description Key of the project the task moves to, case-insensitive
+             * @example TRK
+             */
+            project: string;
+            /**
+             * Reason
+             * @description Why the task moves; a blank one answers `422 task_move_reason_required`. Filed in the `moved` entry
+             * @example Репозиторий один, задачи интерфейса ведутся в TRK
+             */
+            reason: string;
+            /**
+             * Version
+             * @description Version the client last saw; omit it to skip the check
+             * @example 3
+             */
+            version?: number | null;
+        };
+        /**
          * TaskPackageRead
          * @description Пакет преемника (`CONCEPT.md`, 4.2).
          *
@@ -4471,10 +4659,18 @@ export interface components {
             id: string;
             /**
              * Key
-             * @description Immutable and never reused
+             * @description Current key; changes only when the task moves to another project, and the key it leaves keeps leading to the task (`previous_keys`). Never handed to another task
              * @example TRK-42
              */
             key: string;
+            /**
+             * Previous Keys
+             * @description Keys the task had before moves to other projects, in the order they were left; empty for a task never moved. Each one leads to this task wherever a key is accepted
+             * @example [
+             *       "UI-124"
+             *     ]
+             */
+            previous_keys: string[];
             project: components["schemas"]["TaskProjectRead"];
             /**
              * Title
@@ -4552,12 +4748,17 @@ export interface components {
         TaskSearchRead: {
             /**
              * Key
-             * @description Immutable and never reused
+             * @description Current key; a condition on a previous key of a moved task finds it under this one
              * @example TRK-42
              */
             key: string;
             /** Id */
             id?: string | null;
+            /**
+             * Previous Keys
+             * @description Keys the task had before moves to other projects, in the order left
+             */
+            previous_keys?: string[] | null;
             project?: components["schemas"]["ProjectRefRead"] | null;
             /** Title */
             title?: string | null;
@@ -4624,8 +4825,9 @@ export interface components {
          *
          *     `assignee` объявлен как `str | None`: `null` осмыслен и снимает исполнителя. У
          *     остальных полей `null` смысла не имеет, и схема его не пропустит. Статуса здесь нет
-         *     — он меняется переходом; ключа нет — он неизменяем. Лишнее поле схема отвергает, а
-         *     не игнорирует: клиент должен узнать, что изменения не произошло, из ответа.
+         *     — он меняется переходом; ключа нет — он меняется только переносом (`move`). Лишнее
+         *     поле схема отвергает, а не игнорирует: клиент должен узнать, что изменения не
+         *     произошло, из ответа.
          */
         TaskUpdate: {
             /**
@@ -7332,7 +7534,7 @@ export interface operations {
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -7530,7 +7732,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
             };
             cookie?: never;
@@ -7610,7 +7812,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
             };
             cookie?: never;
@@ -7694,7 +7896,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
             };
             cookie?: never;
@@ -7702,6 +7904,90 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TaskTransition"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_TaskRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    move_task: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
+                task_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskMove"];
             };
         };
         responses: {
@@ -7780,7 +8066,7 @@ export interface operations {
                 "Idempotency-Key"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
             };
             cookie?: never;
@@ -7875,7 +8161,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
             };
             cookie?: never;
@@ -7957,7 +8243,7 @@ export interface operations {
                 "Idempotency-Key"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
             };
             cookie?: never;
@@ -8041,7 +8327,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
                 /** @description Entry number inside the task, from 1 */
                 entry_no: number;
@@ -8125,7 +8411,7 @@ export interface operations {
                 "Idempotency-Key"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
             };
             cookie?: never;
@@ -8209,7 +8495,7 @@ export interface operations {
                 "X-Actor-Label"?: string | null;
             };
             path: {
-                /** @description Task key `PROJECT-number`; matching ignores case */
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
                 task_key: string;
                 /** @description Link kind as seen from the task in the path, not from the other one */
                 kind: components["schemas"]["LinkKind"];
@@ -8587,7 +8873,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

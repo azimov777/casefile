@@ -74,6 +74,7 @@ function expected(): Record<EntryType, (string | RegExp)[]> {
     ],
     link_added: [say.ui('entry.headline.linkAdded'), 'blocked_by', 'DEMO-2'],
     link_removed: [say.ui('entry.headline.linkRemoved'), 'blocked_by', 'DEMO-2'],
+    moved: [say.ui('entry.headline.moved'), 'UI-5', 'DEMO-1', /задачи ведутся в DEMO/],
     attribute_created: [say.ui('entry.headline.attributeCreated'), 'repo', 'github.com/demo'],
     attribute_changed: [
       say.ui('entry.headline.attributeChanged'),
@@ -110,6 +111,7 @@ const BUILT_HEADLINE: EntryType[] = [
   'assignee_changed',
   'link_added',
   'link_removed',
+  'moved',
   'attribute_created',
   'attribute_changed',
   'attribute_removed',
