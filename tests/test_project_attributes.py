@@ -304,6 +304,37 @@ async def test_an_agent_cannot_file_an_attribute_entry_directly(
         )
 
 
+async def test_the_attribute_filter_narrows_case_entries_to_one_attributes_history(
+    db_session: AsyncSession, project: Project, task_actor: Actor
+) -> None:
+    """TRK-166: `attribute` у чтения дела проекта отдаёт ровно заведение, правки и
+    снятие одного атрибута, в порядке номеров, без учёта регистра и без записей других
+    имён и типов."""
+    await service.set_attribute(db_session, project, actor=task_actor, name="repo", value="a")
+    await service.set_attribute(db_session, project, actor=task_actor, name="branch", value="main")
+    await service.set_attribute(
+        db_session, project, actor=task_actor, name="REPO", value="b", reason="Переезд"
+    )
+    await service.remove_attribute(
+        db_session, project, actor=task_actor, name="repo", reason="Архив"
+    )
+    await service.remove_attribute(
+        db_session, project, actor=task_actor, name="branch", reason="Лишний"
+    )
+
+    page = await case_service.list_project_entries(
+        db_session, project, actor=task_actor, attribute="REPO"
+    )
+
+    assert [(entry.type, entry.payload["name"]) for entry in page.items] == [
+        (EntryType.ATTRIBUTE_CREATED, "repo"),
+        (EntryType.ATTRIBUTE_CHANGED, "repo"),
+        (EntryType.ATTRIBUTE_REMOVED, "repo"),
+    ]
+    nos = [entry.no for entry in page.items]
+    assert nos == sorted(nos)
+
+
 # --- REST -----------------------------------------------------------------------------
 
 
@@ -362,6 +393,30 @@ async def test_rest_sets_changes_and_removes_with_a_task_token(
         ("attribute_created", "branch"),
         ("attribute_changed", "Repo"),
         ("attribute_removed", "branch"),
+    ]
+
+
+async def test_rest_filters_case_entries_by_attribute_name(
+    task_client: AsyncClient, project: Project
+) -> None:
+    """TRK-166: `attribute=REPO` отдаёт ровно заведение, правку и снятие `repo`, без
+    учёта регистра и без записей `branch` и прочих типов."""
+    await task_client.put(ATTRIBUTES.format(key="TRK", name="repo"), json={"value": "a"})
+    await task_client.put(ATTRIBUTES.format(key="TRK", name="branch"), json={"value": "main"})
+    await task_client.put(
+        ATTRIBUTES.format(key="TRK", name="REPO"), json={"value": "b", "reason": "Переезд"}
+    )
+    await task_client.post(
+        ATTRIBUTES.format(key="TRK", name="repo") + "/remove", json={"reason": "Архив"}
+    )
+
+    case = await task_client.get("/api/v1/projects/TRK/entries", params={"attribute": "REPO"})
+
+    assert case.status_code == 200, case.text
+    assert [(item["type"], item["payload"]["name"]) for item in case.json()["data"]] == [
+        ("attribute_created", "repo"),
+        ("attribute_changed", "repo"),
+        ("attribute_removed", "repo"),
     ]
 
 
@@ -463,6 +518,26 @@ async def test_mcp_sets_and_removes_with_a_task_token(
     ]
     [entry] = bodies["items"]
     assert entry["payload"] == {"name": "branch", "before": "main", "reason": "Лишний"}
+
+
+async def test_mcp_read_project_entries_filters_by_attribute_name(
+    mcp_session: Connect, task_secret: str, project: Project
+) -> None:
+    """TRK-166: `attribute=REPO` у `read_project_entries` отдаёт ровно историю `repo`,
+    без учёта регистра и без записей `branch`."""
+    async with mcp_session(task_secret) as session:
+        await call(session, "set_attribute", key="TRK", name="repo", value="a")
+        await call(session, "set_attribute", key="TRK", name="branch", value="main")
+        await call(session, "set_attribute", key="TRK", name="REPO", value="b", reason="Переезд")
+        await call(session, "remove_attribute", key="TRK", name="repo", reason="Архив")
+
+        listed = await call(session, "read_project_entries", key="TRK", attribute="REPO")
+
+    assert [(item["type"], item["payload"]["name"]) for item in listed["items"]] == [
+        ("attribute_created", "repo"),
+        ("attribute_changed", "repo"),
+        ("attribute_removed", "repo"),
+    ]
 
 
 async def test_mcp_refusals_name_their_codes(
