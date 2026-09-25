@@ -659,3 +659,64 @@ async def test_the_archive_migration_rolls_back_and_refuses_while_archive_entrie
 
     with pytest.raises(Exception, match="ck_entries_entry_type"):
         await migrate(url, ARCHIVE_PREVIOUS, down=True)
+
+
+# --- Перенос задачи (TRK-172) ------------------------------------------------------------
+
+MOVE_REVISION = "6d2e9b41c7f3"
+MOVE_PREVIOUS = ARCHIVE_REVISION
+
+_INSERT_TASK = text(
+    "INSERT INTO tasks (key, project_id, title, description, created_by_kind, "
+    "created_by_signature) SELECT 'OLD-1', id, 'Старая', 'd', 'agent', 'claude' "
+    "FROM projects WHERE key = 'OLD'"
+)
+_INSERT_MOVED = text(
+    "INSERT INTO entries (task_id, no, type, title, payload, created_by_kind, "
+    "created_by_signature) SELECT id, 1, 'moved', 'Moved: NEW-1 -> OLD-1', "
+    """'{"from_project": "NEW", "to_project": "OLD", "from_key": "NEW-1", """
+    """"to_key": "OLD-1", "reason": "r"}'::jsonb, 'agent', 'claude' """
+    "FROM tasks WHERE key = 'OLD-1'"
+)
+
+
+async def test_existing_tasks_have_no_previous_keys_after_the_move_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """До ревизии переносов не было: у существующей задачи прежних ключей нет, а запись
+    `moved` появляется в схеме только этой ревизией."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, MOVE_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_TASK)
+    with pytest.raises(Exception, match="ck_entries_entry_type"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(_INSERT_MOVED)
+
+    await migrate(url, MOVE_REVISION)
+
+    async with migration_engine.begin() as connection:
+        previous = await connection.scalar(
+            text("SELECT previous_keys FROM tasks WHERE key = 'OLD-1'")
+        )
+        await connection.execute(_INSERT_MOVED)
+    assert previous == []
+
+
+async def test_the_move_migration_rolls_back_and_refuses_while_moved_entries_exist(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Откат снимает колонку и индекс; с записью `moved` в деле он спотыкается о сужение
+    типов — прежние ключи не перестают вести на задачу молча."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, MOVE_REVISION)
+    await migrate(url, MOVE_PREVIOUS, down=True)
+    await migrate(url, MOVE_REVISION)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_TASK)
+        await connection.execute(_INSERT_MOVED)
+
+    with pytest.raises(Exception, match="ck_entries_entry_type"):
+        await migrate(url, MOVE_PREVIOUS, down=True)
