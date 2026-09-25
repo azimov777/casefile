@@ -3309,3 +3309,32 @@ Playwright роняет сценарий, а `getByRole` Testing Library — с�
 **Как правильно:** строку проекта искать как `name: /^DEMO/` — её имя начинается с
 ключа, а имя знака — со слова; знак — по полному имени из словаря (`app.aboutProject`).
 **Где:** `src/app/layouts/app-side.tsx`, `AppSide`; `e2e/side.spec.ts`; `e2e/project-place.spec.ts`.
+
+## Окно `Dialog` без `trigger` роняет фокус на `body`: Radix возвращает его только кнопке-триггеру (UI-175)
+
+**Что:** модальное содержимое Radix Dialog на закрытии гасит возврат фокуса `FocusScope`
+(`event.preventDefault()` в `onCloseAutoFocus`) и фокусирует `triggerRef` — а он пуст,
+если окно открыли своей кнопкой с `setOpen(true)`, а не `Dialog.Trigger`. Фокус падает
+на `body`, и человек с клавиатуры после каждого окна начинает страницу сначала.
+**Почему важно:** снаружи ничего не видно: окно открывается и закрывается, `axe` молчит,
+страничный тест в jsdom фокус не проверял.
+**Как правильно:** кнопку, открывающую окно, передавать в `Dialog` пропсом `trigger` — она
+станет `Dialog.Trigger` (`asChild`), получит `aria-haspopup="dialog"` и фокус после `Esc`,
+крестика и «Отмены». Форму окна класть в `children`: содержимое монтируется только открытым,
+и прошлый отказ в новое окно не переезжает. Окнам, которые открывает ход работы, а не
+кнопка (секрет после выпуска токена), фокус возвращать некуда — у них `trigger` нет.
+**Где:** `src/shared/ui/dialog.tsx`, `Dialog`; `src/features/manage-project/ui/attribute-dialogs.tsx`, `ChangeAttribute`; `e2e/project-actions.spec.ts`.
+
+## Остаток описания проекта считает клиент — копией предела, которого в схеме нет (UI-175)
+
+**Что:** предел описания проекта (320) живёт в `../app/domain/projects.py`
+(`MAX_PROJECT_DESCRIPTION_LENGTH`), а в `openapi.json` у поля `description` нет `maxLength`:
+бэкенд меряет строку **после** обрезки пробелов по краям, и схема этого не выражает.
+Интерфейс держит копию предела в `PROJECT_DESCRIPTION_LIMIT` ради одного — остатка в поле
+— и меряет так же: кодовые точки обрезанной строки (`[...value.trim()].length`), а не
+`String.length`, который считает эмодзи за два знака.
+**Почему важно:** поменяют предел в домене — остаток в окне начнёт врать молча, пока
+отказ `project_description_too_long` не придёт на отправке (бэкенд по-прежнему решает).
+**Как правильно:** правка предела в бэкенде — правка `PROJECT_DESCRIPTION_LIMIT` тем же
+изменением; тест `description.test.ts` стережёт только само число.
+**Где:** `src/entities/project/model/description.ts`, `PROJECT_DESCRIPTION_LIMIT`, `descriptionLength`; `../app/domain/projects.py`.

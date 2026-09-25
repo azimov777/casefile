@@ -36,6 +36,7 @@ export function Dialog({
   description,
   closeLabel,
   alert = false,
+  trigger,
   children,
 }: {
   open: boolean;
@@ -55,10 +56,22 @@ export function Dialog({
    * ради этого не берём: у Radix роль перекрывается пропсом.
    */
   alert?: boolean;
+  /**
+   * Кнопка, которая открывает окно. Переданная сюда, она становится `Dialog.Trigger`
+   * Radix: после закрытия фокус возвращается на неё, и программа чтения с экрана
+   * слышит, что кнопка открывает окно. Без неё Radix возвращать фокус некуда — он
+   * падает на `body`, и человек с клавиатуры начинает страницу сначала (`UI-175`).
+   * Окна, которые открывает не кнопка, а ход работы (секрет после выпуска), её не
+   * передают.
+   */
+  trigger?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      {trigger === undefined ? null : (
+        <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>
+      )}
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ground/70" />
         <DialogPrimitive.Content

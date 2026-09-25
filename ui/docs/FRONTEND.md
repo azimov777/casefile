@@ -15,7 +15,7 @@
 |---|---|---|
 | Список задач | Задачи с фильтрами по проекту, статусу, исполнителю, приоритету, признаку «заблокирована», открытым вопросам; в каждой строке — вычисляемые признаки | `GET /api/v1/tasks?query=...` |
 | Карточка задачи | Поля, пять разделов, статус, связи, последняя сводка, открытые вопросы, неразобранные замечания, опись дела; тела записей по клику. Здесь же форма замечания | `GET /api/v1/tasks/{task_key}`, `GET /api/v1/tasks/{task_key}/entries`, `POST /api/v1/tasks/{task_key}/entries` с типом `remark` |
-| Проект | Карточка проекта (ключ, название, описание), атрибуты с историей по клику, опись дела проекта; тела по клику. Только чтение (UI-174) | `GET /api/v1/projects/{project_key}`, `GET /api/v1/projects/{project_key}/entries`, `GET /api/v1/projects/{project_key}/entries/{entry_no}` |
+| Проект | Карточка проекта (ключ, название, описание), атрибуты с историей по клику, опись дела проекта; тела по клику (UI-174). Действия (UI-175): «Новый проект» в панели и правка карточки набору `main`; атрибуты с причиной и заметка — любому набору | `GET /api/v1/projects/{project_key}`, `GET /api/v1/projects/{project_key}/entries`, `GET /api/v1/projects/{project_key}/entries/{entry_no}`, `POST /api/v1/projects`, `PATCH /api/v1/projects/{project_key}`, `PUT /api/v1/projects/{project_key}/attributes/{attribute_name}`, `POST /api/v1/projects/{project_key}/attributes/{attribute_name}/remove`, `POST /api/v1/projects/{project_key}/entries` |
 | Открытые вопросы | Вопросы без ответа, адресованные текущему участнику, с признаком «блокирующий» | `GET /api/v1/questions` |
 | История вопросов | Все вопросы с ответами, от свежих к старым; по умолчанию адресованные текущему участнику, условие снимается | `GET /api/v1/questions?open=false&order=newest` |
 | Ответ | Форма ответа на вопрос | `POST /api/v1/tasks/{task_key}/entries` с типом `answer` |
@@ -355,6 +355,20 @@ MCP не выводится из адреса страницы. Решение �
 
 Живой поток кадры записей проекта сегодня не разбирает (`parseFrame` берёт только записи
 с `task_key`): экран проекта обновляется перечитыванием.
+
+Запись проекта (UI-175). Набор `main` — `POST /api/v1/projects` (ключ, название,
+описание; ключ по образцу схемы `^[A-Za-z][A-Za-z0-9]{1,15}$`, хранится заглавными,
+неверный — `422 validation_error` с `loc` у поля `key`, занятый — `409
+project_key_taken`) и `PATCH /api/v1/projects/{project_key}` (название и описание, ключа
+нет). Описание — до 320 знаков **после обрезки** пробелов по краям, кодовыми точками;
+`maxLength` у поля схема не объявляет, длиннее — `422 project_description_too_long`.
+Любой набор — атрибуты и записи: `PUT …/attributes/{attribute_name}` с `value` и `reason`
+(причина обязательна, если атрибут уже есть с другим значением, иначе
+`attribute_reason_required`; то же значение записи не подшивает), снятие — `POST
+…/attributes/{attribute_name}/remove` с непустой `reason`, ответ — запись
+`attribute_removed`; `POST /api/v1/projects/{project_key}/entries` с `type` из `note`,
+`decision`, `finding`, `artifact` — человек пишет только `note`. Создание, атрибуты и
+записи принимают `Idempotency-Key`, правка карточки — нет.
 
 ## Строка списка: значок «заблокирована» и родитель без второго запроса
 

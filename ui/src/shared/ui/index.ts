@@ -10,6 +10,7 @@ export {
   FilterResetButton,
 } from './filter-chip';
 export { Input } from './input';
+export { Textarea } from './textarea';
 export { Composer } from './composer';
 export { CopyBlock } from './copy-block';
 export { Dialog } from './dialog';

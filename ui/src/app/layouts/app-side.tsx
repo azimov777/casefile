@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { ArrowLeftRight, Inbox, Info, KeyRound, Plug, UserRound, Users } from 'lucide-react';
 import { bootstrapQueryOptions, useInstallKey, useInstallLocked } from '@/entities/session';
 import { useLogout } from '@/features/auth';
+import { CreateProject, useProjectRights } from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
 import { Button, QueryState } from '@/shared/ui';
 import { cn, projectHref } from '@/shared/lib';
@@ -16,9 +17,11 @@ import { readPlace } from './place';
  * в `TRK`, человек разворачивал форму на 295 px, менял выпадающий список и сворачивал
  * обратно; при этом проект — первое, чем он делит работу.
  *
- * Действий, меняющих данные, здесь нет и не будет: человек наблюдает и отвечает,
- * остальное делают агенты (`CONCEPT.md`, 1 и 7). Единственная кнопка — выход, и та
- * стоит только там, где человек входил сам: ключ от установки отзывать нечем.
+ * Действие, меняющее данные, здесь одно — «Новый проект» (`UI-175`, решение 8
+ * `TRK-150`): проект — место панели, и заводят его там же, где его выбирают. Кнопка
+ * есть только у ключа набора `main` (`useProjectRights`). С задачами панель по-прежнему
+ * ничего не делает (`CONCEPT.md`, 1 и 7). Вторая кнопка — выход, и та стоит только там,
+ * где человек входил сам: ключ от установки отзывать нечем.
  */
 export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const bootstrap = useQuery(bootstrapQueryOptions());
@@ -28,6 +31,7 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const locked = useInstallLocked();
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const rights = useProjectRights();
   const { t } = useTranslation('ui');
 
   const projects = bootstrap.data?.projects ?? [];
@@ -126,6 +130,14 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           );
         })}
+
+        {/* Под списком, а не над ним: проекты — то, куда ходят каждый день, а заводят
+            их редко. Панель на телефоне закрывается вместе с переходом на новый проект. */}
+        {rights.manage ? (
+          <div className="mt-1 px-2">
+            <CreateProject onCreated={onNavigate} />
+          </div>
+        ) : null}
 
         <p className="mt-3 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">
           {t('app.mine')}

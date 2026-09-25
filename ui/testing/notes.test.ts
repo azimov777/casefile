@@ -105,6 +105,8 @@ const NOT_IN_CODE: Record<string, string> = {
   MutationCache: 'кэш мутаций TanStack Query: им объяснено, почему секрет выпуска не идёт мутацией',
   onlyBuiltDependencies: 'поле pnpm 10, названное как отменённое',
   resize_window: 'инструмент браузерного расширения, не код репозитория',
+  FocusScope: 'внутренний узел Radix Dialog: им объяснено, куда девается фокус без триггера',
+  triggerRef: 'поле контекста Radix Dialog: им объяснено, куда девается фокус без триггера',
   COMPOSE_PROJECT_NAME: 'переменная Docker Compose, не наш код',
   ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND: 'код ошибки pnpm, не наш код',
   shouldSkip: 'помощник внутри `eslint-plugin-i18next`: им объяснено поведение правила',

@@ -7,7 +7,8 @@
 ## Папки
 
 - `api/` — типы карточки и атрибута, ключи запросов и чтение проекта
+- `model/` — предел описания и его длина так, как её меряет бэкенд
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `projectQueryOptions`, `projectKeys`, типы `ProjectDetail`, `ProjectAttribute`
+- `index.ts` — публичный интерфейс среза: `projectQueryOptions`, `projectKeys`, `PROJECT_DESCRIPTION_LIMIT`, `descriptionLength`, `descriptionTooLong`, типы `ProjectDetail`, `ProjectAttribute`
