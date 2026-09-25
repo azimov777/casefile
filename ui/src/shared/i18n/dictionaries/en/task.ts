@@ -5,6 +5,12 @@ export const task = {
     'There is no task with this key: the key may be mistyped, or the task belongs to another installation.',
   backToList: 'Back to the task list',
   loading: 'Loading task {{key}}…',
+  /** Задача архивного проекта (`UI-176`): читается, но ни ответа, ни замечания. */
+  archived: {
+    notice:
+      'Project {{key}} is archived: the task is read-only. Answering a question or leaving a remark becomes possible once the project is restored.',
+    project: 'Open project {{key}}',
+  },
 
   summary: 'Latest summary',
   noSummary: 'There is no summary yet: nobody has reported on this task.',

@@ -6,6 +6,7 @@ import { ApiError } from '@/shared/api';
 import { complainsAbout, errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog, Input, Textarea } from '@/shared/ui';
 import { useRemoveAttribute, useSetAttribute } from '../model/use-project-actions';
+import { ReasonField } from './reason-field';
 
 /*
  * Окна атрибута (`UI-175`, решение 4 `TRK-150`): заведение — без причины, изменение и
@@ -182,6 +183,7 @@ function ChangeAttributeForm({
     <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
       <ValueField value={value} onChange={setValue} invalid={isValueProblem(set.error)} />
       <ReasonField
+        label={t('attribute.reasonLabel')}
         value={reason}
         onChange={(next) => {
           setReason(next);
@@ -280,6 +282,7 @@ function RemoveAttributeForm({
   return (
     <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
       <ReasonField
+        label={t('attribute.reasonLabel')}
         value={reason}
         onChange={(next) => {
           setReason(next);
@@ -337,54 +340,6 @@ function ValueField({
       <span className="text-meta text-muted" id={hintId}>
         {t('attribute.valueHint')}
       </span>
-    </div>
-  );
-}
-
-/**
- * Причина — обязательное поле: пустое не отправляется, и упрёк стоит под полем,
- * связанный с ним `aria-describedby`. `required` у поля — для программы чтения с
- * экрана; проверку браузера форма гасит (`noValidate`), чтобы упрёк был нашим словом
- * на языке интерфейса, а не всплывашкой браузера.
- */
-function ReasonField({
-  value,
-  onChange,
-  hint,
-  problem,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  hint: string;
-  problem: string | null;
-}) {
-  const id = useId();
-  const hintId = useId();
-  const problemId = useId();
-  const { t } = useTranslation('project');
-
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-meta text-muted" htmlFor={id}>
-        {t('attribute.reasonLabel')}
-      </label>
-      <Textarea
-        id={id}
-        rows={3}
-        required
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={problem !== null}
-        aria-describedby={problem === null ? hintId : `${hintId} ${problemId}`}
-      />
-      <span className="text-meta text-muted" id={hintId}>
-        {hint}
-      </span>
-      {problem === null ? null : (
-        <span className="text-meta text-danger" id={problemId} role="alert">
-          {problem}
-        </span>
-      )}
     </div>
   );
 }

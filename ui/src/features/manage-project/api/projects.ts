@@ -137,3 +137,38 @@ export function fileNote({ projectKey, title, body, idempotencyKey }: NoteInput)
     }),
   );
 }
+
+export type ProjectDetail = components['schemas']['ProjectDetailRead'];
+
+export interface ArchivingInput {
+  key: string;
+  /** Почему проект уходит в архив или возвращается из него; пустой бэкенд не примет. */
+  reason: string;
+}
+
+/**
+ * Архивирует проект с причиной (`UI-176`, `../docs/CONCEPT.md`, 3.2). Требует набора
+ * `main`. Проект и его задачи замораживаются как есть; причина уезжает в запись
+ * `archived` дела проекта.
+ *
+ * Ключа повтора у архива нет — контракт его не принимает: повтор отвечает
+ * `project_archived`, а не второй записью.
+ */
+export function archiveProject({ key, reason }: ArchivingInput): Promise<ProjectDetail> {
+  return unwrap(
+    apiClient.POST('/api/v1/projects/{project_key}/archive', {
+      params: { path: { project_key: key } },
+      body: { reason },
+    }),
+  );
+}
+
+/** Восстанавливает проект из архива с причиной; задачи продолжаются с того же места. */
+export function restoreProject({ key, reason }: ArchivingInput): Promise<ProjectDetail> {
+  return unwrap(
+    apiClient.POST('/api/v1/projects/{project_key}/restore', {
+      params: { path: { project_key: key } },
+      body: { reason },
+    }),
+  );
+}

@@ -2,13 +2,19 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import { ArrowLeftRight, Inbox, Info, KeyRound, Plug, UserRound, Users } from 'lucide-react';
-import { bootstrapQueryOptions, useInstallKey, useInstallLocked } from '@/entities/session';
+import {
+  bootstrapQueryOptions,
+  bootstrapWithArchivedQueryOptions,
+  useInstallKey,
+  useInstallLocked,
+} from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { CreateProject, useProjectRights } from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
 import { Button, QueryState } from '@/shared/ui';
 import { cn, projectHref } from '@/shared/lib';
 import { readPlace } from './place';
+import { useShowArchived } from './show-archived';
 
 /**
  * Содержимое боковой панели: где человек работает, кто он и жив ли поток.
@@ -22,6 +28,9 @@ import { readPlace } from './place';
  * есть только у ключа набора `main` (`useProjectRights`). С задачами панель по-прежнему
  * ничего не делает (`CONCEPT.md`, 1 и 7). Вторая кнопка — выход, и та стоит только там,
  * где человек входил сам: ключ от установки отзывать нечем.
+ *
+ * Флажок «Архивные проекты» (`UI-176`) данных не меняет: он добавляет в список проекты
+ * в архиве, помеченные плашкой (`useShowArchived`).
  */
 export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const bootstrap = useQuery(bootstrapQueryOptions());
@@ -32,9 +41,17 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const rights = useProjectRights();
+  const [showArchived, setShowArchived] = useShowArchived();
+  /*
+   * Архивные проекты бэкенд из первого кадра убирает сам (TRK-160); по просьбе человека
+   * панель читает кадр с ними (`include_archived`). Пока он едет, стоит прежний список:
+   * пустая панель на время запроса хуже списка, дополненного через миг.
+   */
+  const withArchived = useQuery({ ...bootstrapWithArchivedQueryOptions(), enabled: showArchived });
   const { t } = useTranslation('ui');
 
-  const projects = bootstrap.data?.projects ?? [];
+  const projects =
+    (showArchived ? withArchived.data?.projects : undefined) ?? bootstrap.data?.projects ?? [];
   /*
    * Учётная запись и люди — только в режиме входа (`TRK-113`). На своей машине владелец
    * тоже администратор (`owner@localhost`), но там человек один, пароля у него нет и
@@ -107,7 +124,26 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
                  * выдвижной лист, наведения нет. Ключ стоит на первой строке названия.
                  */}
                 <span className="shrink-0 font-mono">{project.key}</span>
-                <span className="min-w-0 text-faint wrap-anywhere">{project.title}</span>
+                <span className="min-w-0 text-faint wrap-anywhere">
+                  {project.title}
+                  {/*
+                   * Архивный помечен словом, а не только тоном: признак — `archived_at`
+                   * из контракта как есть, интерфейс его не вычисляет. Плашка входит в
+                   * имя ссылки, и диктор слышит «в архиве» вместе с проектом. Стоит она
+                   * в строке названия, а не отдельной колонкой: колонка отнимала бы
+                   * ширину у названия, и в шторке телефона оно шло бы по букве в строку.
+                   * Не `Badge`: тот обрезает метку многоточием, а в узкой колонке панели
+                   * от «в архиве» оставалось «в архи…». Тон — тот же `dropped`.
+                   */}
+                  {project.archived_at == null ? null : (
+                    <>
+                      {' '}
+                      <span className="inline-block rounded-mark border border-dashed border-dropped-line px-1 text-label whitespace-nowrap text-dropped">
+                        {t('app.archivedMark')}
+                      </span>
+                    </>
+                  )}
+                </span>
               </SideLink>
               <Link
                 to={projectHref(project.key)}
@@ -130,6 +166,22 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           );
         })}
+
+        {/*
+         * Флажок, а не кнопка: он ничего не меняет в данных, только то, что показано, —
+         * тот же приём, что у архива задач в строке отбора списка. Виден любому набору:
+         * читать архивный проект может каждый. Подпись кликабельна целиком, и мишень на
+         * телефоне не меньше `--ui-tap`.
+         */}
+        <label className="mt-1 flex min-h-(--ui-tap) items-center gap-2 px-2 text-meta text-muted">
+          <input
+            type="checkbox"
+            className="size-(--ui-mark) accent-accent"
+            checked={showArchived}
+            onChange={(event) => setShowArchived(event.target.checked)}
+          />
+          {t('app.showArchived')}
+        </label>
 
         {/* Под списком, а не над ним: проекты — то, куда ходят каждый день, а заводят
             их редко. Панель на телефоне закрывается вместе с переходом на новый проект. */}

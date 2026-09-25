@@ -59,6 +59,8 @@ export const ui = {
     projects: 'Проекты',
     allTasks: 'Все задачи',
     aboutProject: 'О проекте {{key}}',
+    showArchived: 'Архивные проекты',
+    archivedMark: 'в архиве',
     mine: 'Мне',
     inbox: 'Входящая',
     installation: 'Установка',
