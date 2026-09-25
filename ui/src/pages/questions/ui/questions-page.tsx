@@ -133,13 +133,18 @@ function Inbox() {
         className="flex flex-wrap items-end gap-4 rounded-control border border-line bg-surface px-4 py-3"
         aria-label={t('filterLabel')}
       >
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="text-meta text-muted">{t('project')}</span>
           {/* Фон и цвет названы у поля явно: у `select` есть системная палитра формы,
               и без объявления цвет достаётся ему от браузера, а не от нашей темы
-              (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`»). */}
+              (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`»).
+              `max-w-full` и усечение значения — тот же приём, что у `Select`
+              (`app-topbar.tsx`): без ширины закрытое поле растягивается по самой
+              длинной паре «ключ — название» среди проектов и раздвигает форму вбок
+              (UI-181). `min-w-0` у обёртки — рядом, обёртка `flex-col` в строке формы
+              сама не сжалась бы иначе ниже содержимого. */}
           <select
-            className="rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
+            className="max-w-full truncate rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
             value={project}
             onChange={(event) => apply({ project: event.target.value })}
           >
@@ -542,11 +547,12 @@ function QuestionHistory() {
         className="flex flex-wrap items-end gap-4 rounded-control border border-line bg-surface px-4 py-3"
         aria-label={t('historyFilterLabel')}
       >
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="text-meta text-muted">{t('project')}</span>
-          {/* Фон и цвет названы явно по той же причине, что и во входящей. */}
+          {/* Фон и цвет названы явно по той же причине, что и во входящей; ширина и
+              усечение — тем же приёмом (UI-181). */}
           <select
-            className="rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
+            className="max-w-full truncate rounded-mark border border-line-strong bg-surface px-2 py-1 text-text"
             value={project}
             onChange={(event) => apply({ project: event.target.value })}
           >
