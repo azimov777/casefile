@@ -44,19 +44,17 @@ import {
 const TOKENS_PARAM = 'tokens';
 const MINE = 'mine';
 
-/**
- * Что человек делает на экране прямо сейчас. Одно окно за раз: заведение участника,
- * выпуск, показ секрета и подтверждение отзыва — шаги одной дороги, а не соседи.
+/*
+ * Заведение участника, выпуск и показ секрета — шаги одной дороги (окна модальны, и
+ * Radix не даёт открыть второе поверх первого), но не общее состояние страницы: у
+ * каждого окна своя кнопка-триггер (`UI-175`), а Radix держит её смонтированной
+ * постоянно — иначе после `Esc` и «Закрыть» ему было бы некуда вернуть фокус
+ * (`UI-175#11`, `UI-178`). Отзыв — окно на каждую строку (`RevokeDialog`), своё
+ * состояние открытия внутри неё же.
  *
  * Секрет живёт здесь, в состоянии экрана, и нигде больше: ни в адресе, ни в
  * хранилищах браузера, ни в кэше запросов (`UI-106#18`). Закрытие окна стирает его.
  */
-type Flow =
-  | { kind: 'none' }
-  | { kind: 'agent' }
-  | { kind: 'issue'; participant: string | null }
-  | { kind: 'secret'; issued: IssuedToken }
-  | { kind: 'revoke'; token: Token };
 
 /**
  * Экран «Доступы»: ключи агентов и сеансы входа, заведение агента, выпуск и отзыв.
@@ -89,7 +87,11 @@ export function AccessPage() {
   // а администратор не получит сперва чужой вид, а потом свой.
   const mine = searchParams.get(TOKENS_PARAM) === MINE;
   const tokens = useInfiniteQuery(tokensQueryOptions({ mine }));
-  const [flow, setFlow] = useState<Flow>({ kind: 'none' });
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
+  /** Кому выпускаем: `null` — выбор в форме, имя — пришло из «Выпустить ему токен». */
+  const [issueParticipant, setIssueParticipant] = useState<string | null>(null);
+  const [issued, setIssued] = useState<IssuedToken | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const history = useExitHold(historyOpen);
   const { t } = useTranslation('access');
@@ -122,12 +124,12 @@ export function AccessPage() {
    * загрузки. Ответ держится всю жизнь вкладки (`installationQueryOptions`), поэтому
    * второго запроса не будет.
    */
-  const needsAddress = flow.kind === 'issue' || flow.kind === 'secret';
+  const needsAddress = issueOpen || issued !== null;
   const installation = useQuery({ ...installationQueryOptions(), enabled: needsAddress });
 
   /** Закрыть окно секрета: выбранный в нём клиент — вид окна, а не экрана, и уходит с ним. */
   function closeSecret() {
-    setFlow({ kind: 'none' });
+    setIssued(null);
     if (searchParams.has(CLIENT_PARAM)) {
       const updated = new URLSearchParams(searchParams);
       updated.delete(CLIENT_PARAM);
@@ -151,9 +153,7 @@ export function AccessPage() {
 
   function revokeAction(token: Token) {
     return canRevoke && !isRevoked(token) && (admin || belongsTo(token, me)) ? (
-      <Button tone="quiet" size="sm" onClick={() => setFlow({ kind: 'revoke', token })}>
-        {t('revoke.action')}
-      </Button>
+      <RevokeDialog token={token} current={session !== null && token.id === session.id} />
     ) : undefined;
   }
 
@@ -202,21 +202,42 @@ export function AccessPage() {
           </h2>
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={!canWrite}
-              aria-describedby={canWrite ? undefined : closedId}
-              onClick={() => setFlow({ kind: 'agent' })}
-            >
-              {t('actions.newAgent')}
-            </Button>
-            <Button
-              tone="quiet"
-              disabled={!canWrite}
-              aria-describedby={canWrite ? undefined : closedId}
-              onClick={() => setFlow({ kind: 'issue', participant: null })}
-            >
-              {t('actions.issue')}
-            </Button>
+            <AgentDialog
+              open={agentOpen}
+              onOpenChange={setAgentOpen}
+              trigger={
+                <Button disabled={!canWrite} aria-describedby={canWrite ? undefined : closedId}>
+                  {t('actions.newAgent')}
+                </Button>
+              }
+              onIssueFor={(participant) => {
+                setIssueParticipant(participant);
+                setIssueOpen(true);
+              }}
+            />
+            <IssueDialog
+              participant={issueParticipant}
+              me={me}
+              admin={admin}
+              open={issueOpen}
+              onOpenChange={setIssueOpen}
+              trigger={
+                <Button
+                  tone="quiet"
+                  disabled={!canWrite}
+                  aria-describedby={canWrite ? undefined : closedId}
+                  // Своя кнопка открывает выбором из формы: участник из «Выпустить ему
+                  // токен» не должен пережить закрытие и подставиться сюда молча.
+                  onClick={() => setIssueParticipant(null)}
+                >
+                  {t('actions.issue')}
+                </Button>
+              }
+              onIssued={(newlyIssued) => {
+                setIssueOpen(false);
+                setIssued(newlyIssued);
+              }}
+            />
           </div>
         </div>
 
@@ -303,45 +324,24 @@ export function AccessPage() {
         </section>
       )}
 
-      {flow.kind === 'agent' ? (
-        <AgentDialog
-          onClose={() => setFlow({ kind: 'none' })}
-          onIssueFor={(participant) => setFlow({ kind: 'issue', participant })}
-        />
-      ) : null}
-
-      {flow.kind === 'issue' ? (
-        <IssueDialog
-          participant={flow.participant}
-          me={me}
-          admin={admin}
-          onClose={() => setFlow({ kind: 'none' })}
-          onIssued={(issued) => setFlow({ kind: 'secret', issued })}
-        />
-      ) : null}
-
-      {flow.kind === 'secret' ? (
-        <SecretDialog issued={flow.issued} onClose={closeSecret}>
+      {/* Окно секрета — по-прежнему только по `issued`: открывает его не кнопка, а ход
+          работы (успешный выпуск), и триггера у него нет (`UI-175#11`, тот же случай,
+          что у пароля на экране «Люди»; фокус для таких окон — отдельное решение,
+          вне этой задачи). */}
+      {issued === null ? null : (
+        <SecretDialog issued={issued} onClose={closeSecret}>
           {/* Фрагменты подключения — тот же компонент, что и на экране «Подключить
               агента» (UI-105), только с настоящим секретом вместо подстановки. */}
           <QueryState query={installation} loading={t('secret.loadingAddress')} />
           {installation.data === undefined ? null : (
             <ConnectionSnippets
               mcpUrl={installation.data.mcp_url}
-              token={flow.issued.secret}
-              labelled={flow.issued.participant === null}
+              token={issued.secret}
+              labelled={issued.participant === null}
             />
           )}
         </SecretDialog>
-      ) : null}
-
-      {flow.kind === 'revoke' ? (
-        <RevokeDialog
-          token={flow.token}
-          current={session !== null && flow.token.id === session.id}
-          onClose={() => setFlow({ kind: 'none' })}
-        />
-      ) : null}
+      )}
     </main>
   );
 }

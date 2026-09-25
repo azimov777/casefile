@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode, type FormEvent } from 'react';
+import { useEffect, useId, useState, type ReactNode, type FormEvent, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EMPTY_DRAFT, clearDraft, readDraft, saveDraft, type Draft } from '@/shared/lib';
 import { Button } from './button';
@@ -131,14 +131,17 @@ export function Composer({
    * кнопки, ничего не отменяющей, был бы штрафом на пустом месте. Непустой сперва
    * спрашивает подтверждения: сообщением этого окна, а не браузерным `confirm`,
    * который не красится темой и не проходит `axe` этого проекта.
+   *
+   * Кнопка сама стоит `Dialog.Trigger` (`trigger`, ниже): её клик Radix и так открыл
+   * бы окно. Пустой черновик эту открывалку гасит `preventDefault` — иначе окно
+   * мигнуло бы вопросом, на который нечего отвечать (`UI-178`).
    */
-  function requestCancel() {
+  function requestCancel(event: MouseEvent<HTMLButtonElement>) {
     if (draft.body.trim() === '') {
+      event.preventDefault();
       clearDraft(storageKey);
       onCancel?.();
-      return;
     }
-    setConfirmDiscard(true);
   }
 
   function discardAndCancel() {
@@ -152,97 +155,96 @@ export function Composer({
   const shown = emptyBody ? emptyProblem : problem;
 
   return (
-    <>
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(event) => void submit(event)}
-        aria-label={label}
-      >
-        <div className="flex flex-col gap-1">
-          <label className={LABEL} htmlFor={bodyId}>
-            {fieldLabel}
-          </label>
-          <textarea
-            id={bodyId}
-            className="resize-y rounded-mark border border-line-strong bg-surface px-3 py-2 font-mono text-meta text-text aria-invalid:border-danger"
-            value={draft.body}
-            onChange={(event) => change({ body: event.target.value })}
-            rows={5}
-            placeholder={placeholder}
-            aria-invalid={shown !== undefined}
-            aria-describedby={shown === undefined ? undefined : `${bodyId}-problem`}
-          />
-        </div>
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={(event) => void submit(event)}
+      aria-label={label}
+    >
+      <div className="flex flex-col gap-1">
+        <label className={LABEL} htmlFor={bodyId}>
+          {fieldLabel}
+        </label>
+        <textarea
+          id={bodyId}
+          className="resize-y rounded-mark border border-line-strong bg-surface px-3 py-2 font-mono text-meta text-text aria-invalid:border-danger"
+          value={draft.body}
+          onChange={(event) => change({ body: event.target.value })}
+          rows={5}
+          placeholder={placeholder}
+          aria-invalid={shown !== undefined}
+          aria-describedby={shown === undefined ? undefined : `${bodyId}-problem`}
+        />
+      </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={isPending}>
-            {isPending ? pendingLabel : submitLabel}
-          </Button>
-          <Button tone="quiet" onClick={() => setShowPreview(!showPreview)}>
-            {showPreview ? t('composer.hidePreview') : t('composer.preview')}
-          </Button>
-          {/* Тон `quiet`, тот же, что у «Предпросмотра»: отмена второстепенна рядом с
-              отправкой, но не спрятана — найти путь назад должно быть так же просто,
-              как скрыть предпросмотр. */}
-          {onCancel === undefined ? null : (
-            <Button type="button" tone="quiet" onClick={requestCancel}>
-              {t('composer.cancel')}
-            </Button>
-          )}
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={isPending}>
+          {isPending ? pendingLabel : submitLabel}
+        </Button>
+        <Button tone="quiet" onClick={() => setShowPreview(!showPreview)}>
+          {showPreview ? t('composer.hidePreview') : t('composer.preview')}
+        </Button>
+        {/* Тон `quiet`, тот же, что у «Предпросмотра»: отмена второстепенна рядом с
+            отправкой, но не спрятана — найти путь назад должно быть так же просто,
+            как скрыть предпросмотр.
 
-        {/* Упрёк не отрывается от поля: связь держит `aria-describedby`, а глазами он
-            читается там, где человек только что нажал.
-
-            Места под него не резервируется: упрёк стоит под кнопками, его появление
-            растит форму вниз и ничего не сдвигает. Резервирование пробовалось и
-            оказалось хуже — строка, зарезервированная под одну строку текста, всё равно
-            двигала кнопку на 3 px (замерено сквозным тестом), а под две занимала бы
-            48 пикселей в форме, где обычно упрекать не за что. */}
-        {shown === undefined ? null : (
-          <span className="text-meta text-danger" id={`${bodyId}-problem`} role="alert">
-            {shown}
-          </span>
+            Кнопка сама стоит `Dialog.Trigger` (`trigger`): окно вопроса рождается
+            прямо здесь, на её месте в ряду, а не отдельным узлом после формы — иначе
+            Radix возвращать фокус после `Esc`/«Продолжить писать» было бы некуда, и
+            он падал на `body` (`UI-175#11`, `UI-178`). Щелчок по кнопке физически
+            остаётся внутри `<form>`, но её роль от этого не меняется: `type="button"`
+            не даёт ей отправить форму, а содержимое окна (`children` ниже) всё равно
+            уносится порталом и в разметку формы не попадает. Роль `alertdialog` —
+            окно спрашивает о необратимом, программе чтения с экрана положено сказать
+            это явно (`UI-142`: замена браузерному `confirm`, который не красится
+            темой). */}
+        {onCancel === undefined ? null : (
+          <Dialog
+            alert
+            open={confirmDiscard}
+            onOpenChange={setConfirmDiscard}
+            title={t('composer.discardTitle')}
+            description={t('composer.discardDescription')}
+            closeLabel={t('composer.close')}
+            trigger={
+              <Button type="button" tone="quiet" onClick={requestCancel}>
+                {t('composer.cancel')}
+              </Button>
+            }
+          >
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={discardAndCancel}>
+                {t('composer.discardConfirm')}
+              </Button>
+              <Button type="button" tone="quiet" onClick={() => setConfirmDiscard(false)}>
+                {t('composer.keepWriting')}
+              </Button>
+            </div>
+          </Dialog>
         )}
+      </div>
 
-        {showPreview && draft.body.trim() !== '' ? (
-          <div className="flex flex-col gap-1 rounded-mark border border-dashed border-line-strong p-3">
-            <span className={LABEL}>{t('composer.agentView')}</span>
-            <Markdown>{draft.body}</Markdown>
-          </div>
-        ) : null}
+      {/* Упрёк не отрывается от поля: связь держит `aria-describedby`, а глазами он
+          читается там, где человек только что нажал.
 
-        {failure === undefined ? null : <Callout tone="danger">{failure}</Callout>}
-      </form>
-
-      {/* Вне `<form>`: `Dialog` уносит содержимое в портал, и щелчок по кнопке внутри
-          него — не часть формы ни физически, ни по смыслу (`type="button"` тоже
-          стоит, на случай будущей правки разметки). Роль `alertdialog` — окно
-          спрашивает о необратимом, программе чтения с экрана положено сказать это
-          явно (`UI-142`: замена браузерному `confirm`, который не красится темой). */}
-      {onCancel === undefined ? null : (
-        <Dialog
-          alert
-          open={confirmDiscard}
-          onOpenChange={(open) => {
-            // Esc и крестик тоже значат «не выбрасывать»: случайное закрытие не
-            // должно решать за человека то, что решает только явная кнопка.
-            if (!open) setConfirmDiscard(false);
-          }}
-          title={t('composer.discardTitle')}
-          description={t('composer.discardDescription')}
-          closeLabel={t('composer.close')}
-        >
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={discardAndCancel}>
-              {t('composer.discardConfirm')}
-            </Button>
-            <Button type="button" tone="quiet" onClick={() => setConfirmDiscard(false)}>
-              {t('composer.keepWriting')}
-            </Button>
-          </div>
-        </Dialog>
+          Места под него не резервируется: упрёк стоит под кнопками, его появление
+          растит форму вниз и ничего не сдвигает. Резервирование пробовалось и
+          оказалось хуже — строка, зарезервированная под одну строку текста, всё равно
+          двигала кнопку на 3 px (замерено сквозным тестом), а под две занимала бы
+          48 пикселей в форме, где обычно упрекать не за что. */}
+      {shown === undefined ? null : (
+        <span className="text-meta text-danger" id={`${bodyId}-problem`} role="alert">
+          {shown}
+        </span>
       )}
-    </>
+
+      {showPreview && draft.body.trim() !== '' ? (
+        <div className="flex flex-col gap-1 rounded-mark border border-dashed border-line-strong p-3">
+          <span className={LABEL}>{t('composer.agentView')}</span>
+          <Markdown>{draft.body}</Markdown>
+        </div>
+      ) : null}
+
+      {failure === undefined ? null : <Callout tone="danger">{failure}</Callout>}
+    </form>
   );
 }

@@ -37,9 +37,10 @@ test.describe('входящая: DEMO-4#4', () => {
     await question.getByRole('button', { name: 'Ответить' }).click();
     await question.getByLabel(/^Ответ$/).fill('Пробный черновик — проверяю отмену.');
 
-    await question.getByRole('button', { name: 'Отмена' }).click();
+    const cancelButton = question.getByRole('button', { name: 'Отмена' });
+    await cancelButton.click();
 
-    const dialog = page.getByRole('alertdialog', { name: 'Выбросить черновик?' });
+    let dialog = page.getByRole('alertdialog', { name: 'Выбросить черновик?' });
     await expect(dialog).toBeVisible();
     // Диалог только спрашивает: форма и набранный текст ещё на экране. Поиск не через
     // `question` (`getByRole('article')`): пока диалог открыт, Radix прячет фон от
@@ -47,6 +48,15 @@ test.describe('входящая: DEMO-4#4', () => {
     // находить что угодно — `getByLabel` от `page` это не задевает.
     await expect(page.getByLabel(/^Ответ$/)).toHaveValue('Пробный черновик — проверяю отмену.');
 
+    // `Esc` тоже значит «не выбрасывать» и возвращает фокус на «Отмена»: она стоит
+    // `Dialog.Trigger`, и без этого Radix отправлял бы фокус на `body`
+    // (`UI-175#11`, `UI-178`).
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    await expect(cancelButton).toBeFocused();
+
+    await cancelButton.click();
+    dialog = page.getByRole('alertdialog', { name: 'Выбросить черновик?' });
     await dialog.getByRole('button', { name: 'Выбросить' }).click();
 
     await expect(page.getByRole('alertdialog')).toHaveCount(0);

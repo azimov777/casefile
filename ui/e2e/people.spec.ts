@@ -51,7 +51,17 @@ test('администратор заводит товарища, оба раб�
   await expect(page.getByRole('article', { name: `Учётная запись ${E2E_EMAIL}` })).toBeVisible();
 
   // Заводит товарища со сгенерированным паролем и видит пароль один раз.
-  await page.getByRole('button', { name: 'Завести человека' }).click();
+  const createButton = page.getByRole('button', { name: 'Завести человека' });
+  await createButton.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  // `Esc` закрывает окно и возвращает фокус на кнопку, которая его открыла: она
+  // стоит `Dialog.Trigger`, и без этого Radix отправлял бы фокус на `body`
+  // (`UI-175#11`, `UI-178`).
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(createButton).toBeFocused();
+
+  await createButton.click();
   const form = page.getByRole('dialog', { name: 'Завести человека' });
   await form.getByLabel('Почта').fill(email);
   await form.getByLabel('Имя').fill(name);
@@ -109,11 +119,19 @@ test('администратор заводит товарища, оба раб�
   // Товарищ входит снова, и администратор отключает его, пока тот работает.
   await signIn(mate, email, password);
   await expect(mate).toHaveURL(/\/tasks/);
-  await page
+  const disableButton = page
     .getByRole('article', { name: `Учётная запись ${email}` })
-    .getByRole('button', { name: 'Отключить' })
-    .click();
-  const confirm = page.getByRole('alertdialog', { name: `Отключить ${email}?` });
+    .getByRole('button', { name: 'Отключить' });
+  await disableButton.click();
+  let confirm = page.getByRole('alertdialog', { name: `Отключить ${email}?` });
+  await expect(confirm).toBeVisible();
+  // Своя кнопка на каждую карточку (`UI-178`): `Esc` возвращает фокус ровно на неё.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(disableButton).toBeFocused();
+
+  await disableButton.click();
+  confirm = page.getByRole('alertdialog', { name: `Отключить ${email}?` });
   await confirm.getByRole('button', { name: 'Отключить' }).click();
   await expect(confirm).toHaveCount(0);
   await expect(
