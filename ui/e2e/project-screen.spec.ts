@@ -16,6 +16,12 @@ const token = readE2eToken();
 const RUN = Date.now().toString(36);
 const REPO = `repo-${RUN}`;
 const DECISION = `Главная ветка — main, прогон ${RUN}`;
+/**
+ * Кнопка раскрытия истории атрибута: её имя — знак состояния псевдоэлементом и имя
+ * атрибута. Подстрокой `REPO` искать нельзя: с UI-175 у строки есть «Изменить атрибут
+ * REPO» и «Снять атрибут REPO».
+ */
+const REPO_TOGGLE = new RegExp(`^[▸▾] ${REPO}$`);
 const DESCRIPTION = 'Бэкенд трекера: REST для человека и MCP для агентов.';
 
 async function api(
@@ -103,7 +109,7 @@ test('экран проекта: вход из панели, карточка, �
   );
 
   const attributes = page.getByRole('region', { name: 'Атрибуты' });
-  await expect(attributes.getByRole('button', { name: REPO })).toBeVisible();
+  await expect(attributes.getByRole('button', { name: REPO_TOGGLE })).toBeVisible();
   await expect(attributes.getByText('github.com/azimov777/casefile')).toBeVisible();
 
   // Опись дела: клик по записи показывает тело и пишет номер в адрес.
@@ -125,7 +131,10 @@ test('экран проекта: вход из панели, карточка, �
   await expect(page.getByText('расходится с')).toBeVisible();
 
   // История атрибута: заведение и правка — прежнее и новое значение и причина.
-  await page.getByRole('region', { name: 'Атрибуты' }).getByRole('button', { name: REPO }).click();
+  await page
+    .getByRole('region', { name: 'Атрибуты' })
+    .getByRole('button', { name: REPO_TOGGLE })
+    .click();
   const history = page.getByRole('region', { name: `История атрибута ${REPO}` });
   await expect(history.getByRole('article')).toHaveCount(2);
   const change = history.locator('article[data-type="attribute_changed"]');
