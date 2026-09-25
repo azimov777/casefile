@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
@@ -122,7 +122,29 @@ const EMPTY_ROW = 'flex flex-row flex-wrap items-baseline gap-2';
 export function TaskPage() {
   const { key = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const pkg = useQuery(taskPackageQueryOptions(key));
+
+  /**
+   * Адрес с прежним ключом переносится на текущий (`CONCEPT.md`, «Карточка задачи»;
+   * TRK-171#9, п. 12). Текущий ключ берётся из ответа, а не вычисляется на клиенте:
+   * прежние ключи никогда не выдаются другой задаче, но какой из них ведёт на эту —
+   * знает только бэкенд (`previous_keys`, `named_by`). `replace`, а не новая запись
+   * истории: «назад» после перехода по старой ссылке должно вести туда, откуда human
+   * пришёл, а не на этот же адрес ещё раз. Номер записи (`entry`) едет тем же, каким
+   * был: ссылка `TRK-42#3`, написанная прежним ключом, обязана раскрыть ту же запись.
+   */
+  useEffect(() => {
+    const current = pkg.data?.task.key;
+    if (current !== undefined && current !== key) {
+      navigate(
+        { pathname: `/tasks/${current}`, search: searchParams.toString() },
+        {
+          replace: true,
+        },
+      );
+    }
+  }, [pkg.data, key, navigate, searchParams]);
 
   // До ранних возвратов: хук нельзя позвать условно. Держит вопросы, по которым
   // отправка началась, — они остаются на экране вместе с подтверждением, даже когда

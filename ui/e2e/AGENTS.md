@@ -8,7 +8,7 @@
 сценарий просто открывает адрес и видит задачи. Сценариям запасного пути (экран входа)
 установка без ключа выдаётся поимённо — `installWithoutKey` в `contour.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts` и `moving.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts` и `moving.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -83,7 +83,10 @@ invalid_search_query`); ограничение снято (TRK-21).
   объявленная на живой странице, применяется и гасит наш ползунок. Снимки столбца до и
   после — доказательство для дела. Полосу прогон видит потому, что `playwright.config.ts`
   снимает `--hide-scrollbars`; окна этот файл больше не поднимает
-- `task.spec.ts` — карточка и лента дела: пакет одним запросом, раскрытие записи, отбор по типам, `axe`
+- `task.spec.ts` — карточка и лента дела: пакет одним запросом, раскрытие записи, отбор по типам, `axe`;
+  перенесённая задача демо (TRK-173, DEMO-7 ↔ LEGACY-1): адрес по прежнему ключу заменяется на
+  текущий с тем же `entry`, прежний ключ виден в шапке, обе записи переноса — в ленте; `axe` карточки
+  перенесённой задачи на 1440 и 390 px
 - `entry-link.spec.ts` — ссылка на запись (UI-155): знак у записи в описи и в ленте дела на 1280 и 390 кладёт в буфер адрес карточки с `?entry=N`, адрес в новой странице открывает запись раскрытой, знак виден без наведения; прежнее «Скопировать KEY#N» и отказ буфера словами
 - `questions.spec.ts` — входящая: адресованный вопрос, отбор в адресе, ссылка вопроса открывает свою запись, область действия проекта, красная кромка блокирующего замером вычисленных стилей, `axe`; без параметров — входящая, история вторым видом и `axe` истории
 - `remarks.spec.ts` — чтение замечаний: карточка закрытой задачи, разбор под замечанием, признак и отбор, входящая, `axe`
@@ -225,6 +228,12 @@ invalid_search_query`); ограничение снято (TRK-21).
 - `task-list-screen.spec.ts` — первый экран списка: сколько строк видно, липкая шапка, отказ разбора без сдвига,
   активность в деле и порядок по ней, пересылка адреса, ширина названия на 900 px; заводит задачи сам,
   проект «запись»
+- `task-move.spec.ts` — перенос задачи между проектами в интерфейсе (TRK-173): настоящий REST
+  `POST /tasks/{key}/move`, затем голый прежний ключ и прежний ключ с `?entry=N` в адресе открывают
+  задачу и заменяются на текущий с тем же номером записи; прежний ключ виден в шапке карточки и сам
+  ведёт на неё; лента дела показывает перенос; ссылка `ПРЕЖНИЙ-N`, написанная в тексте записи другой,
+  не перенесённой задачи, тоже ведёт на перенесённую и переписывает адрес; заводит проекты и задачи
+  сам, проект «запись»
 - `resilience.spec.ts` — отказ запроса объясняется по коду и чинится кнопкой «Повторить»
 - `host-guard.spec.ts` — защита от DNS rebinding (UI-107): чужой `Host` не отдаёт
   `/config.json` и не проксирует `/api/v1/bootstrap`, свои адреса петли (`localhost`,

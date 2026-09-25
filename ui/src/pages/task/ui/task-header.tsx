@@ -122,6 +122,25 @@ export function TaskHeader({ task, features, parent }: TaskHeaderProps) {
           </dd>
         </div>
 
+        {/*
+         * Прежние ключи (TRK-173, `CONCEPT.md`, «Карточка задачи»): видны только у
+         * перенесённой задачи, ячейки нет вовсе, когда переносов не было — как у
+         * признаков ниже. Каждый ключ — ссылка на ту же задачу (`named_by` на
+         * бэкенде): адрес откроет её и сам заменится на текущий ключ.
+         */}
+        {task.previous_keys.length > 0 ? (
+          <div className={CELL}>
+            <dt className={LABEL}>{t('header.previousKeys')}</dt>
+            <dd className="flex flex-wrap gap-x-2 gap-y-1 font-mono text-mark text-muted">
+              {task.previous_keys.map((previousKey) => (
+                <Link key={previousKey} to={`/tasks/${previousKey}`} className="whitespace-nowrap">
+                  {previousKey}
+                </Link>
+              ))}
+            </dd>
+          </div>
+        ) : null}
+
         {/* Ячейки признаков нет, когда их нет: пустая подпись читалась бы как «данные не
             пришли». Решение то же, что у строки и карточки доски (`hasFeatureBadges`). */}
         {hasFeatureBadges(features) ? (

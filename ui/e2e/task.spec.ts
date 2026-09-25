@@ -354,3 +354,53 @@ for (const key of ['DEMO-1', 'DEMO-5']) {
     expect(updated.x - lastState).toBeGreaterThan(step * 4);
   });
 }
+
+/*
+ * Перенесённая задача (TRK-173, `CONCEPT.md`, «Карточка задачи»). Демо переносит
+ * отменённую задачу в соседний проект `LEGACY` и обратно (`app/services/demo.py`,
+ * `_moved_there_and_back`): она возвращается со своим прежним ключом DEMO-7, а
+ * `LEGACY-1` остаётся в её карточке прежним ключом.
+ */
+test('адрес по прежнему ключу LEGACY-1 открывает DEMO-7 и заменяется на текущий; прежний ключ и перенос видны', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+
+  // Номер записи в адресе — не свой: пришедший с прежним ключом остаётся тем же.
+  await page.goto('/tasks/LEGACY-1?entry=1');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-7');
+  await expect(page).toHaveURL(/\/tasks\/DEMO-7\?entry=1$/);
+
+  // Прежний ключ виден в шапке и сам ведёт на ту же задачу. `main header`, а не
+  // `getByRole('banner')`: своя шапка карточки вложена в `main` и роли `banner`
+  // не несёт (её несёт шапка оболочки) — тот же выбор, что у шапки на 1440 px выше.
+  const header = page.locator('main header');
+  const previousLink = header.getByRole('link', { name: 'LEGACY-1' });
+  await expect(previousLink).toBeVisible();
+  await expect(previousLink).toHaveAttribute('href', '/tasks/LEGACY-1');
+
+  // Дело показывает обе записи переноса: туда и обратно, оба ключа названы в каждой.
+  // Фильтр — по слову контракта `moved` (латиницей, как у прочих родов записи), а не по
+  // переведённому заголовку «Перенос»: он не спутается с текстом задачи регистронезависимо
+  // (`hasText` со строкой у Playwright не различает регистр).
+  await page.goto('/tasks/DEMO-7/case');
+  const moved = page.getByRole('article').filter({ hasText: 'moved' });
+  await expect(moved).toHaveCount(2);
+  for (const article of await moved.all()) {
+    await expect(article).toContainText('LEGACY-1');
+    await expect(article).toContainText('DEMO-7');
+  }
+});
+
+for (const width of [1440, 390]) {
+  test(`доступность карточки перенесённой задачи на ${width} px (TRK-173)`, async ({ page }) => {
+    await silenceJournal(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/tasks/DEMO-7');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('DEMO-7');
+    await fontsReady(page);
+
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  });
+}
