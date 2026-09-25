@@ -51,7 +51,7 @@ class CheckEditArg(BaseModel):
 
 # `null` осмыслен только у `assignee`: он снимает исполнителя. У остальных полей `null`
 # смысла не имеет, и схема его не пропустит. Статуса здесь нет — он меняется
-# `transition`; ключа нет — он неизменяем.
+# `transition`; ключа нет — он меняется только переносом (`move_task`).
 class TaskChanges(BaseModel):
     """Fields to change; a field left out stays as it is. Title, description, sections
     and checks are editable only in `backlog`; elsewhere they are refused with

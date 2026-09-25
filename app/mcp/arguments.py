@@ -58,8 +58,8 @@ TaskKeyArg = Annotated[
     str,
     Field(
         description=(
-            "Task key `PROJECT-N`, case-insensitive. "
-            "An unknown key is refused with `task_not_found`"
+            "Task key `PROJECT-N`, case-insensitive; a previous key of a moved task "
+            "addresses it as well. An unknown key is refused with `task_not_found`"
         ),
         examples=["TRK-42"],
     ),

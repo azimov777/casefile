@@ -21,6 +21,7 @@ from app.domain.case import (
     EntryType,
     FieldChangedFacts,
     LinkFacts,
+    MovedFacts,
     NoFacts,
     QuestionFacts,
     ResolutionFacts,
@@ -138,6 +139,14 @@ class AttributeFactsView(BaseModel):
     name: str | None
 
 
+class MovedFactsView(BaseModel):
+    """Task moved to another project: the key it left and the key it got."""
+
+    type: Literal[EntryType.MOVED]
+    from_key: str | None
+    to_key: str | None
+
+
 type FactsView = Annotated[
     NoFactsView
     | StatusChangedFactsView
@@ -149,7 +158,8 @@ type FactsView = Annotated[
     | AnswerFactsView
     | VerdictFactsView
     | ResolutionFactsView
-    | AttributeFactsView,
+    | AttributeFactsView
+    | MovedFactsView,
     Field(discriminator="type"),
 ]
 """Факты записи: те же формы и те же поля в том же порядке, что в схеме REST."""
@@ -217,6 +227,8 @@ def facts(value: EntryFacts) -> FactsView:
             )
         case AttributeFacts():
             return AttributeFactsView(type=value.type, name=value.name)
+        case MovedFacts():
+            return MovedFactsView(type=value.type, from_key=value.from_key, to_key=value.to_key)
     # Форма фактов, заведённая в домене без представления здесь, — дефект объединения, а
     # не рабочее состояние: молча вернуть `None` значило бы отдать агенту опись без строки.
     raise TypeError(f"форма фактов без представления MCP: {type(value).__name__}")

@@ -235,6 +235,7 @@ class FoundTaskView(BaseModel):
 
     key: str
     id: str | None = None
+    previous_keys: list[str] | None = None
     project: ProjectRefView | None = None
     title: str | None = None
     description: str | None = None
