@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { taskRefHref } from '@/shared/lib/task-refs';
+import { projectHref, taskRefHref } from '@/shared/lib/task-refs';
 import { Markdown } from './markdown';
 
 interface ReceiptProps {
@@ -8,7 +8,11 @@ interface ReceiptProps {
   label: string;
   /** Что случилось, словами: «Ответ подшит», «Замечание подшито». */
   headline: string;
-  taskKey: string;
+  /**
+   * Чьё дело: задача (`DEMO-1#7` ведёт в её карточку) или проект (`TRK#7` — на экран
+   * проекта с раскрытой записью). Форма та же, что у владельца описи (`EntryIndex`).
+   */
+  owner: { kind: 'task' | 'project'; key: string };
   /** Номер подшитой записи — из ответа сервера, не вычисленный. */
   entryNo: number;
   body: string;
@@ -24,10 +28,10 @@ interface ReceiptProps {
  * в шапке.
  *
  * Не гаснет по таймеру: подтверждение, которое человек не успел прочитать, ничем не
- * лучше отсутствующего. Общий для ответа и замечания: подтверждают они одно и то же —
- * «страница подшита, вот её адрес».
+ * лучше отсутствующего. Общий для ответа, замечания и заметки в дело проекта:
+ * подтверждают они одно и то же — «страница подшита, вот её адрес».
  */
-export function Receipt({ label, headline, taskKey, entryNo, body, onClose }: ReceiptProps) {
+export function Receipt({ label, headline, owner, entryNo, body, onClose }: ReceiptProps) {
   const { t } = useTranslation('ui');
 
   return (
@@ -41,9 +45,13 @@ export function Receipt({ label, headline, taskKey, entryNo, body, onClose }: Re
             `whitespace-nowrap` не даёт ключу разорваться по дефису (UI-151). */}
         <Link
           className="font-mono text-meta whitespace-nowrap"
-          to={taskRefHref({ key: taskKey, entryNo })}
+          to={
+            owner.kind === 'task'
+              ? taskRefHref({ key: owner.key, entryNo })
+              : projectHref(owner.key, entryNo)
+          }
         >
-          {taskKey}#{entryNo}
+          {owner.key}#{entryNo}
         </Link>
       </p>
 

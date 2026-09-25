@@ -9,9 +9,9 @@
 
 ## Папки
 
-- `model/` — ключ черновика, отправка и заголовок, выведенный из первой строки текста
+- `model/` — ключ черновика и отправка
 - `ui/` — форма замечания с подтверждением на её месте
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `RemarkForm`, `useLeaveRemark`, `remarkTitle`, `remarkDraftKey`
+- `index.ts` — публичный интерфейс среза: `RemarkForm`, `useLeaveRemark`, `remarkDraftKey`

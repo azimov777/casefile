@@ -23,7 +23,7 @@ export function AnswerReceipt({ taskKey, questionNo, answered, onClose }: Answer
     <Receipt
       label={t('answer.receiptLabel', { reference })}
       headline={t('answer.receiptHeadline')}
-      taskKey={taskKey}
+      owner={{ kind: 'task', key: taskKey }}
       entryNo={answered.entryNo}
       body={answered.body}
       onClose={onClose}
