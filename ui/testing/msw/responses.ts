@@ -193,6 +193,7 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
       key: key.split('-')[0] ?? 'DEMO',
       title: 'Демонстрация',
       description: 'Демонстрационный проект: на нём видно каждый экран интерфейса.',
+      archived_at: null,
     },
     title: `Задача ${key}`,
     description: 'Отказ разбора запроса приходит без списка допустимых полей.',
