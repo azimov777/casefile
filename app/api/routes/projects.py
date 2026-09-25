@@ -6,7 +6,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, status
+from fastapi import APIRouter, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -51,6 +51,18 @@ AttributeNamePath = Annotated[
         description=(
             "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; "
             "matching ignores case"
+        ),
+        examples=["repo"],
+    ),
+]
+
+AttributeQuery = Annotated[
+    str | None,
+    Query(
+        description=(
+            "Read only entries about the attribute with this name: `attribute_created`, "
+            "`attribute_changed`, `attribute_removed`; matching ignores case. Combines "
+            "with `types` and the other filters"
         ),
         examples=["repo"],
     ),
@@ -311,6 +323,7 @@ async def list_project_entries(
     actor: ActorDep,
     nos: EntryNosQuery = None,
     types: EntryTypesQuery = None,
+    attribute: AttributeQuery = None,
     after_no: AfterNoQuery = None,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
@@ -319,7 +332,9 @@ async def list_project_entries(
 
     Фильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,
     `after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют
-    оба, побеждает больший.
+    оба, побеждает больший. `attribute` отдаёт историю одного атрибута: только
+    `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта
+    регистра — без него история листается вперемешку с остальным делом проекта.
     """
     project = await service.get_project(session, project_key)
     page = await case_service.list_project_entries(
@@ -328,6 +343,7 @@ async def list_project_entries(
         actor=actor,
         nos=nos,
         types=types,
+        attribute=attribute,
         after_no=after_no,
         limit=limit,
         cursor=cursor,

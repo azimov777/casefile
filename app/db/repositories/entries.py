@@ -202,15 +202,23 @@ class EntryRepository:
         *,
         nos: Sequence[int] | None = None,
         types: Sequence[EntryType] | None = None,
+        attribute: str | None = None,
         after_no: int | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Entry]:
-        """Страница записей дела проекта в порядке `no` — то же, что `list_page` задачи."""
+        """Страница записей дела проекта в порядке `no` — то же, что `list_page` задачи.
+
+        `attribute` сужает выдачу до истории одного атрибута (`CONCEPT.md`, 3.2): только
+        `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем в
+        `payload.name`, без учёта регистра — то же сравнение, что у самих атрибутов
+        (`attribute_lookup_name`). Складывается с `types` по «и», как и остальные фильтры.
+        """
         return await self._list_page(
             Entry.project_id == project_id,
             nos=nos,
             types=types,
+            attribute=attribute,
             after_no=after_no,
             limit=limit,
             cursor=cursor,
@@ -225,9 +233,12 @@ class EntryRepository:
         after_no: int | None,
         limit: int | None,
         cursor: str | None,
+        attribute: str | None = None,
     ) -> Page[Entry]:
         size = resolve_limit(limit)
-        statement = self._filtered(select(Entry).where(owned), nos=nos, types=types)
+        statement = self._filtered(
+            select(Entry).where(owned), nos=nos, types=types, attribute=attribute
+        )
         boundary = after_no
         if cursor is not None:
             (cursor_no,), _ = decode_sort_cursor(cursor, arity=1)
@@ -248,16 +259,28 @@ class EntryRepository:
         *,
         nos: Sequence[int] | None,
         types: Sequence[EntryType] | None,
+        attribute: str | None = None,
     ) -> Select[Any]:
         """Фильтры выборки записей. Пустой список — это «ничего», а не «всё».
 
         Разница существенная: `types=[]` после отбора клиентом нулевого набора типов
         обязан дать пустую страницу, а не всё дело. Поэтому проверяется `is None`.
+
+        `attribute` (только у дела проекта, `CONCEPT.md`, 3.2) сам сужает тип до
+        `ATTRIBUTE_ENTRY_TYPES` и сравнивает `payload.name` без учёта регистра —
+        `types`, переданный вместе с ним, продолжает действовать своим условием, и
+        несовместимая пара (скажем, `types=["note"]` с `attribute=...`) даёт пустую
+        страницу, а не отказ: то же правило, что у пустого `nos`.
         """
         if nos is not None:
             statement = statement.where(Entry.no.in_(list(nos)))
         if types is not None:
             statement = statement.where(Entry.type.in_(list(types)))
+        if attribute is not None:
+            statement = statement.where(
+                Entry.type.in_(ATTRIBUTE_ENTRY_TYPES),
+                func.lower(Entry.payload["name"].astext) == attribute.lower(),
+            )
         return statement
 
     async def headings(self, task_id: uuid.UUID) -> list[EntryHeading]:
