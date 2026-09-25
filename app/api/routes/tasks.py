@@ -40,10 +40,15 @@ from app.api.schemas.search import (
     search_page,
 )
 from app.api.schemas.tasks import (
+    TaskAlreadyThereRead,
     TaskClosing,
     TaskCreate,
     TaskFeaturesRead,
     TaskMove,
+    TaskMoveBatch,
+    TaskMoveBatchRead,
+    TaskMovedRead,
+    TaskMoveRefusedRead,
     TaskPackageRead,
     TaskRead,
     TaskTransition,
@@ -55,7 +60,13 @@ from app.services import case as case_service
 from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import tasks as service
-from app.services.tasks import TaskChanges
+from app.services.tasks import (
+    TaskAlreadyThere,
+    TaskChanges,
+    TaskMoved,
+    TaskMoveOutcome,
+    TaskMoveRefused,
+)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -192,6 +203,66 @@ async def list_tasks(
         with_total=True,
     )
     return search_page(outcome)
+
+
+# Фиксированный сегмент `move` объявлен до маршрутов с `{task_key}` (`docs/notes/api.md`):
+# сейчас `POST /tasks/{task_key}` нет, но первый же такой маршрут перехватил бы пакет.
+@router.post("/move", summary="Move a list of tasks to another project")
+async def move_tasks(
+    payload: TaskMoveBatch,
+    session: SessionDep,
+    actor: ActorDep,
+) -> DataResponse[TaskMoveBatchRead]:
+    """Переносит задачи списка в один проект, каждую отдельно (TRK-309). Требует `main`.
+
+    Задачи переносятся по одной в порядке списка — по нему же идут новые номера — и
+    каждая получает свою запись `moved` с общей причиной. Ответ — итог по каждому
+    элементу списка, повторы тоже: `moved` (ключи до и после, номер записи), `already`
+    (задача уже в целевом проекте, `task_already_in_project`) или `error` с кодом,
+    сообщением и подробностями того отказа, каким ответил бы одиночный перенос
+    (`task_not_found`, `project_archived` исходного проекта…). Отказ одной задачи
+    остальных не откатывает.
+
+    Отказы всего вызова, до первого переноса: набор `task` — `403 permission_denied`;
+    пустая причина — `422 task_move_reason_required`; пустой список или длиннее
+    потолка — `422 task_move_batch_size_invalid`; неизвестный целевой проект — `404
+    project_not_found`; целевой проект в архиве — `409 project_archived`.
+    """
+    outcomes = await service.move_tasks(
+        session,
+        payload.keys,
+        actor=actor,
+        project_key=payload.project,
+        reason=payload.reason,
+    )
+    return DataResponse[TaskMoveBatchRead](
+        data=TaskMoveBatchRead(results=[_move_outcome_read(item) for item in outcomes])
+    )
+
+
+def _move_outcome_read(
+    value: TaskMoveOutcome,
+) -> TaskMovedRead | TaskAlreadyThereRead | TaskMoveRefusedRead:
+    """Итог пакетного переноса по одному ключу — в схему ответа."""
+    match value:
+        case TaskMoved():
+            return TaskMovedRead(
+                key=value.key,
+                outcome="moved",
+                from_key=value.from_key,
+                to_key=value.to_key,
+                no=value.no,
+            )
+        case TaskAlreadyThere():
+            return TaskAlreadyThereRead(key=value.key, outcome="already", to_key=value.to_key)
+        case TaskMoveRefused():
+            return TaskMoveRefusedRead(
+                key=value.key,
+                outcome="error",
+                code=value.refusal.code,
+                message=value.refusal.message,
+                details=value.refusal.details,
+            )
 
 
 @router.get("/{task_key}", summary="Read a task")

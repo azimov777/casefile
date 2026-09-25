@@ -47,6 +47,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
+from app.core.errors import AppError
 from app.core.sentinels import UNSET, is_set
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
@@ -86,6 +87,7 @@ from app.domain.tasks import (
     normalize_reason,
     normalize_task_key,
     parse_status,
+    require_move_keys,
     require_move_reason,
     returning_key,
     section_values,
@@ -559,6 +561,100 @@ async def move_task(
         reason=checked,
     )
     return TaskMove(task=task, entry=entry)
+
+
+# Итог пакетного переноса по одному элементу списка (TRK-309) — три формы, а не одна с
+# необязательными полями: у каждого исхода свои поля, и тип говорит, какие есть. `key` —
+# элемент списка как прислан: по нему звавший сверяет итог со своим списком. Значения, а
+# не объекты ORM: откат точки сохранения следующей задачи мог бы устареть объект задачи,
+# перенесённой раньше, и ответ читал бы его мимо `await`.
+@dataclass(frozen=True, slots=True)
+class TaskMoved:
+    """Задача перенесена: ключи до и после и номер записи `moved`."""
+
+    key: str
+    from_key: str
+    to_key: str
+    no: int
+
+
+@dataclass(frozen=True, slots=True)
+class TaskAlreadyThere:
+    """Задача уже лежит в целевом проекте под ключом `to_key` (`task_already_in_project`)."""
+
+    key: str
+    to_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class TaskMoveRefused:
+    """Отказ по этой задаче: доменная ошибка с кодом, сообщением и подробностями."""
+
+    key: str
+    refusal: AppError
+
+
+type TaskMoveOutcome = TaskMoved | TaskAlreadyThere | TaskMoveRefused
+
+
+async def move_tasks(
+    session: AsyncSession,
+    keys: Sequence[str],
+    *,
+    actor: Actor,
+    project_key: str,
+    reason: str | None,
+) -> tuple[TaskMoveOutcome, ...]:
+    """Переносит задачи списка в один проект по одной, в порядке списка; итог — по каждой.
+
+    Решение владельца (TRK-309#2): не «всё или ничего», а каждая задача сама по себе.
+    Отказы, общие для всего списка, отвечают целиком и до первого переноса: набор
+    `main`, причина, размер списка (`require_move_keys`), неизвестный и архивный
+    целевой проект — итог по каждой задаче повторял бы один и тот же отказ сотню раз.
+    Остальное — своё у каждой задачи и уходит в её итог: неизвестный ключ, задача уже
+    в целевом проекте, архивный исходный проект.
+
+    Каждая задача переносится в своей точке сохранения (`begin_nested`): отказ одной
+    откатывает только её правки, перенесённые до неё остаются в транзакции. Ловится
+    только `AppError` — доменный отказ с кодом. Непредвиденная ошибка роняет вызов
+    целиком, и граница транзакции откатывает весь пакет: ответ «перенесено» за
+    незафиксированный перенос не отдаётся никогда.
+
+    Очередь изменений занимается до первой задачи и держится до коммита, как у любого
+    сценария; пакет, таким образом, — одна транзакция, и потолок размера списка стоит
+    ради неё (`MAX_MOVE_KEYS`).
+    """
+    ensure_scope(actor, TokenScope.MAIN, action="task.move")
+    checked = require_move_reason(reason, key=None)
+    listed = require_move_keys(keys)
+    project = await projects_service.get_project(session, project_key)
+    await freeze.lock_unfrozen(session, project=project)
+
+    outcomes: list[TaskMoveOutcome] = []
+    for key in listed:
+        try:
+            async with session.begin_nested():
+                task = await get_task(session, key)
+                moved = await move_task(session, task, actor=actor, project=project, reason=checked)
+        except TaskAlreadyInProjectError as refusal:
+            outcomes.append(TaskAlreadyThere(key=key, to_key=refusal.details["key"]))
+        except AppError as refusal:
+            outcomes.append(TaskMoveRefused(key=key, refusal=refusal))
+        else:
+            outcomes.append(
+                TaskMoved(
+                    key=key,
+                    from_key=moved.entry.payload["from_key"],
+                    to_key=moved.task.key,
+                    no=moved.entry.no,
+                )
+            )
+            continue
+        # Откат точки сохранения устаревает объекты, тронутые в ней, а ленивой догрузки в
+        # асинхронной сессии нет: следующий перенос читал бы атрибуты проекта мимо
+        # `await` и падал. Перечитывание возвращает проект в карту объектов свежим.
+        await session.refresh(project)
+    return tuple(outcomes)
 
 
 async def apply_task_changes(

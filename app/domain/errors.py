@@ -283,6 +283,19 @@ class TaskMoveReasonRequiredError(ValidationError):
     message = "Moving a task to another project requires a reason"
 
 
+class TaskMoveBatchSizeInvalidError(ValidationError):
+    """Список ключей переноса пуст или длиннее потолка: границы и присланное — в `details`.
+
+    Отказ целиком и до первого переноса (TRK-309): пустой список — не «ничего не
+    перенесено успешно», а вызов без предмета; лишние ключи не отрезаются молча —
+    хвост списка, оставшийся на месте, читался бы как перенесённый. По числам в
+    подробностях звавший сразу режет список на пакеты.
+    """
+
+    code = "task_move_batch_size_invalid"
+    message = "Number of tasks in one move is outside the allowed range"
+
+
 class TaskAlreadyInProjectError(ConflictError):
     """Перенос в проект, где задача уже лежит: переносить некуда (`CONCEPT.md`, 3.3).
 

@@ -131,6 +131,7 @@
 | `search_operator_not_supported` | Operator is not supported for this field | Оператор к этому полю неприменим: допустимые перечислены в `details.allowed`. |
 | `search_value_invalid` | Search value is invalid | Значение условия не разрешается: нет такого проекта, статуса, не число. |
 | `task_fields_invalid` | Task fields are invalid | Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`. |
+| `task_move_batch_size_invalid` | Number of tasks in one move is outside the allowed range | Список ключей переноса пуст или длиннее потолка: границы и присланное — в `details`. |
 | `task_move_reason_required` | Moving a task to another project requires a reason | Перенос задачи в другой проект требует непустой причины `reason` (`CONCEPT.md`, 3.3). |
 | `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
 | `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`. |
