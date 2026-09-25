@@ -3,7 +3,7 @@
 
 # uv — тот же, что в дев-образе, и отдельной стадией по той же причине: бот обновлений
 # читает только строки FROM (`.github/dependabot.yml`).
-FROM ghcr.io/astral-sh/uv:0.12.18 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.19 AS uv
 
 FROM python:3.14-slim AS builder
 
