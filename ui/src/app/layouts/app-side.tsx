@@ -11,7 +11,7 @@ import {
 import { useLogout } from '@/features/auth';
 import { CreateProject, useProjectRights } from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
-import { Badge, Button, QueryState } from '@/shared/ui';
+import { Button, QueryState } from '@/shared/ui';
 import { cn, projectHref } from '@/shared/lib';
 import { readPlace } from './place';
 import { useShowArchived } from './show-archived';
@@ -132,11 +132,15 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
                    * имя ссылки, и диктор слышит «в архиве» вместе с проектом. Стоит она
                    * в строке названия, а не отдельной колонкой: колонка отнимала бы
                    * ширину у названия, и в шторке телефона оно шло бы по букве в строку.
+                   * Не `Badge`: тот обрезает метку многоточием, а в узкой колонке панели
+                   * от «в архиве» оставалось «в архи…». Тон — тот же `dropped`.
                    */}
                   {project.archived_at == null ? null : (
                     <>
                       {' '}
-                      <Badge tone="dropped">{t('app.archivedMark')}</Badge>
+                      <span className="inline-block rounded-mark border border-dashed border-dropped-line px-1 text-label whitespace-nowrap text-dropped">
+                        {t('app.archivedMark')}
+                      </span>
                     </>
                   )}
                 </span>
