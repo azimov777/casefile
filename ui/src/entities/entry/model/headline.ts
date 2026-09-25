@@ -185,6 +185,12 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
         ],
       };
 
+    // Архив проекта (TRK-159): что случилось. Причина — свободный текст, она в теле.
+    case 'archived':
+      return { kind: 'built', parts: [words(t('entry.headline.projectArchived'))] };
+    case 'restored':
+      return { kind: 'built', parts: [words(t('entry.headline.projectRestored'))] };
+
     case 'answer':
       return {
         kind: 'built',

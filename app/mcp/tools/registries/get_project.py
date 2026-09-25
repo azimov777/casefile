@@ -1,5 +1,7 @@
 """Инструмент `get_project`: проект с описанием, атрибутами и описью его дела."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from app.db.models.attribute import ProjectAttribute
@@ -32,6 +34,12 @@ class ProjectView(BaseModel):
             "characters; may be empty. Every task card carries it too"
         )
     )
+    archived_at: datetime | None = Field(
+        description=(
+            "When the project was archived, `null` while it is active. An archived project "
+            "and its tasks refuse changes with `project_archived`; `restore_project` lifts it"
+        )
+    )
     attributes: list[AttributeView] = Field(
         description=(
             "Current attribute values, ordered by name ignoring case. Their history is "
@@ -61,6 +69,7 @@ def project(
         key=item.key,
         title=item.title,
         description=item.description,
+        archived_at=item.archived_at,
         attributes=[AttributeView(name=a.name, value=a.value) for a in attributes],
         index=[heading(line) for line in index],
     )

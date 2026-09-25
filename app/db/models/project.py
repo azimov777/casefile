@@ -1,6 +1,8 @@
 """Проект: единственный уровень группировки задач."""
 
-from sqlalchemy import CheckConstraint, Integer, String, Text, text
+from datetime import datetime
+
+from sqlalchemy import CheckConstraint, DateTime, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import BaseModel
@@ -45,3 +47,8 @@ class Project(BaseModel, CreatedByMixin):
         server_default=text("0"),
         nullable=False,
     )
+
+    # Время архивирования или `NULL` у живого проекта (`CONCEPT.md`, 3.2). Признака архива
+    # у задачи нет: «архивна» задача, лежащая в проекте с непустым полем. Заморозку по нему
+    # проверяет одна точка — `app/services/freeze.py`.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -72,6 +72,7 @@ from app.domain.links import (
 from app.domain.tasks import is_closed
 from app.domain.tokens import TokenScope
 from app.services import case as case_service
+from app.services import freeze
 from app.services.auth import Actor
 from app.services.permissions import ensure_scope
 
@@ -177,7 +178,7 @@ async def add_link(
     ensure_scope(actor, TokenScope.TASK, action="link.add")
     requested = parse_link_kind(kind)
     ensure_not_self(task.key, other.key)
-    await lock_changes(session, task, other)
+    await freeze.lock_unfrozen(session, task, other)
     _ensure_changeable(task, other, kind=requested)
 
     source, target, stored_kind = _canonical_pair(task, other, requested)
@@ -187,7 +188,7 @@ async def add_link(
         raise LinkExistsError(details=_sides(task, other, requested))
     if stored_kind is LinkKind.PARENT:
         # Родитель один (TRK-135). Гонки двух запросов здесь нет: очередь изменений
-        # (`lock_changes` выше) пускает сценарии по одному, и второй прочтёт связь первого.
+        # (`lock_unfrozen` выше) пускает сценарии по одному, и второй прочтёт связь первого.
         current = await repository.parent_key(target.id)
         if current is not None:
             raise TaskHasParentError(
@@ -226,6 +227,11 @@ async def remove_link(
     Снять можно с любой стороны и любым её именем: `A blocks B` удаляется и запросом
     «снять с A связь `blocks` с B», и «снять с B связь `blocked_by` с A» — это одна
     строка, а не две.
+
+    Единственное изменение, которое пропускает архив (`app/services/freeze.py`): связь с
+    задачей архивного проекта снимается, не восстанавливая проект, и `link_removed`
+    ложится в оба дела, включая замороженное (`CONCEPT.md`, 3.2; `TRK-164#9`). Поэтому
+    здесь очередь без проверки заморозки — в отличие от `add_link`.
     """
     ensure_scope(actor, TokenScope.TASK, action="link.remove")
     requested = parse_link_kind(kind)

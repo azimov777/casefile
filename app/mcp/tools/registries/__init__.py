@@ -4,7 +4,8 @@
 чистым контекстом не найдёт, где вообще лежат задачи, без описания проекта не знает
 общего контекста его задач, без реестра участников ему некому адресовать вопрос.
 Запись требует набора `main`: заводить проекты и регистрировать участников — управление
-установкой, а не работа над задачей. Исключение — атрибуты проекта (`set_attribute`,
+установкой, а не работа над задачей; туда же — архивирование и восстановление проекта
+(`archive_project`, `restore_project`). Исключение — атрибуты проекта (`set_attribute`,
 `remove_attribute`): их ведёт рабочий цикл агента, набор `task` (`CONCEPT.md`, 3.2).
 
 Выпуска токенов здесь нет и не будет: выдача доступов остаётся за человеком и идёт
@@ -17,12 +18,14 @@ from collections.abc import Sequence
 from types import ModuleType
 
 from app.mcp.tools.registries import (
+    archive_project,
     create_project,
     get_project,
     list_participants,
     list_projects,
     register_participant,
     remove_attribute,
+    restore_project,
     set_attribute,
     update_participant,
     update_project,
@@ -36,6 +39,8 @@ TOOLS: Sequence[ModuleType] = (
     list_participants,
     create_project,
     update_project,
+    archive_project,
+    restore_project,
     set_attribute,
     remove_attribute,
     register_participant,

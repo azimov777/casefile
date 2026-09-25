@@ -607,3 +607,24 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 повторяет — лимит его длины почти исчерпан.
 **Где:** `app/mcp/tools/tasks/views.py`, `TaskProjectView`, `task_project`;
 `app/mcp/tools/tasks/search_tasks.py`, `found_task`; `app/mcp/views.py`, `project_ref`.
+
+## `archive_project` и `restore_project`: набор `main`, отказ архива назван один раз
+
+**Что:** оба инструмента в группе `registries`, набор `main`, аннотации `FILING`, без
+`idempotency_key`: повтор без ключа не повторяет действие, а отвечает `project_archived` или
+`project_not_archived`. Ответ — `ProjectArchiveView`: ключ, итоговый `archived_at` и номер
+подшитой записи `archived`/`restored` в деле проекта. `get_project` отдаёт `archived_at`
+(TRK-159).
+**Почему важно:** что именно замораживает архив и единственное исключение (`unlink`) описаны
+только в `archive_project`. Повторять это в описаниях каждого изменяющего инструмента
+значило бы размножить одну фразу (`tests/test_mcp_metadata.py` ловит повтор) и потратить
+контекст на то, что встречается редко; сам отказ приходит с кодом и `details.key`,
+`details.archived_at`. `app/mcp/instructions.md` не трогается — лимит его длины почти
+исчерпан.
+**Как правильно:** причина — общий аргумент `ProjectReasonArg`
+(`app/mcp/tools/registries/arguments.py`); пустая — `project_reason_required` из домена,
+а не из схемы, одинаково с REST.
+**Где:** `app/mcp/tools/registries/archive_project.py`;
+`app/mcp/tools/registries/restore_project.py`; `app/mcp/tools/registries/views.py`,
+`ProjectArchiveView`; `app/mcp/tools/registries/get_project.py`; `app/services/projects.py`,
+`archive_project`, `restore_project`.

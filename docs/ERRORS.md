@@ -82,7 +82,9 @@
 | `link_exists` | Link already exists | Такая связь между этими задачами уже есть. |
 | `participant_has_account` | Participant already has an account | У этого участника учётная запись уже есть: у человека она одна. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
+| `project_archived` | Project is archived: it and its tasks are frozen | Проект в архиве: он и его задачи заморожены для изменений (`CONCEPT.md`, 3.2). |
 | `project_key_taken` | Project key is already taken | Ключ проекта уже занят: ключи уникальны без учёта регистра. |
+| `project_not_archived` | Project is not archived | Восстанавливать нечего: проект не в архиве. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
@@ -123,6 +125,7 @@
 | `journal_wait_too_long` | Requested wait exceeds the ceiling | Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
 | `project_description_too_long` | Project description is too long | Описание проекта длиннее предела (`app/domain/projects.py`). |
+| `project_reason_required` | Archiving or restoring a project requires a reason | Архивирование и восстановление проекта требуют непустой причины `reason`. |
 | `search_field_unknown` | Search field is unknown | Имени поля отбора или ключа сортировки нет: допустимые перечислены в `details.allowed`. |
 | `search_operator_not_supported` | Operator is not supported for this field | Оператор к этому полю неприменим: допустимые перечислены в `details.allowed`. |
 | `search_value_invalid` | Search value is invalid | Значение условия не разрешается: нет такого проекта, статуса, не число. |

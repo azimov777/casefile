@@ -99,6 +99,8 @@ class NoFactsRead(_EntryFactsBase):
         EntryType.REMARK,
         EntryType.NOTE,
         EntryType.CREATED,
+        EntryType.ARCHIVED,
+        EntryType.RESTORED,
     ]
 
 
@@ -557,6 +559,17 @@ class AttributeRemovedPayload(BaseModel):
     )
 
 
+class ProjectArchivePayload(BaseModel):
+    """Проект архивирован или восстановлен: причина действия."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        examples=["Репозиторий заброшен, работа перенесена в CORE"],
+        description="Why the project was archived or restored",
+    )
+
+
 # --- Запись в ответе ------------------------------------------------------------------
 
 
@@ -758,6 +771,13 @@ class AttributeRemovedEntryRead(_ProjectEntryRead):
     payload: AttributeRemovedPayload
 
 
+class ProjectArchiveEntryRead(_ProjectEntryRead):
+    """Служебная запись: проект архивирован (`archived`) или восстановлен (`restored`)."""
+
+    type: Literal[EntryType.ARCHIVED, EntryType.RESTORED]
+    payload: ProjectArchivePayload
+
+
 type EntryRead = Annotated[
     PlainEntryRead
     | SummaryEntryRead
@@ -773,7 +793,8 @@ type EntryRead = Annotated[
     | LinkEntryRead
     | AttributeCreatedEntryRead
     | AttributeChangedEntryRead
-    | AttributeRemovedEntryRead,
+    | AttributeRemovedEntryRead
+    | ProjectArchiveEntryRead,
     Field(discriminator="type"),
 ]
 """Запись дела целиком: размеченное по `type` объединение всех форм нагрузки."""
@@ -813,6 +834,8 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.ATTRIBUTE_CREATED: AttributeCreatedEntryRead,
     EntryType.ATTRIBUTE_CHANGED: AttributeChangedEntryRead,
     EntryType.ATTRIBUTE_REMOVED: AttributeRemovedEntryRead,
+    EntryType.ARCHIVED: ProjectArchiveEntryRead,
+    EntryType.RESTORED: ProjectArchiveEntryRead,
 }
 
 

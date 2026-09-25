@@ -33,10 +33,13 @@ beforeEach(() => {
 
 /** Дело из записи каждого типа: по нему видно и порядок, и отбор. */
 /*
- * Типы записей, которые бывают в деле задачи: записи об атрибутах (TRK-157) принадлежат
- * только делу проекта, и в ленте задачи их не бывает.
+ * Типы записей, которые бывают в деле задачи: записи об атрибутах (TRK-157) и об архиве
+ * (TRK-159) принадлежат только делу проекта, и в ленте задачи их не бывает.
  */
-const TASK_CASE_TYPES = ENTRY_TYPES.filter((type) => !type.startsWith('attribute_'));
+const PROJECT_ONLY_TYPES: EntryType[] = ['archived', 'restored'];
+const TASK_CASE_TYPES = ENTRY_TYPES.filter(
+  (type) => !type.startsWith('attribute_') && !PROJECT_ONLY_TYPES.includes(type),
+);
 
 function wholeCase(): Entry[] {
   return TASK_CASE_TYPES.map((type, index) => entryOfType(index + 1, 'DEMO-1', type));
