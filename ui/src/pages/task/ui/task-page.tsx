@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
 import { EntryBody, EntryIndex, type EntryIndexHandle, type Question } from '@/entities/entry';
-import { projectQueryOptions } from '@/entities/project';
 import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
   AnswerForm,
@@ -17,7 +16,7 @@ import {
 import { RemarkForm } from '@/features/leave-remark';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
-import { caseHref, projectHref, projectOfKey, readEntryNo } from '@/shared/lib';
+import { caseHref, projectHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
@@ -125,27 +124,6 @@ export function TaskPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const pkg = useQuery(taskPackageQueryOptions(key));
 
-  /*
-   * Проект задачи — ради одного признака: в архиве ли он (`UI-176`). Задача архивного
-   * проекта читается, но ни ответа, ни замечания бэкенд не примет (`project_archived`),
-   * и интерфейс их не предлагает вовсе, а не «предлагает и падает». Признак — `archived_at`
-   * из контракта как есть. В карточке задачи его нет (`TaskProjectRead`, TRK-167), поэтому
-   * проект читается своим запросом — тем же, что у экрана проекта, и из того же кэша.
-   * Ключ проекта до прихода карточки берётся из адреса: запросы идут параллельно.
-   */
-  const projectKey = pkg.data?.task.project.key ?? projectOfKey(key);
-  const project = useQuery({
-    ...projectQueryOptions(projectKey ?? ''),
-    enabled: projectKey !== null,
-  });
-  const frozen = project.data?.archived_at != null;
-  /*
-   * Пока проект не прочитан, действий нет: кнопка, возникшая и исчезнувшая, хуже
-   * поздней. Чтение проекта упало — действия показываются: на архивном бэкенд всё равно
-   * ответит отказом, а прятать ответ на вопрос из-за сбоя второго запроса нечестно.
-   */
-  const canAct = !frozen && (project.data !== undefined || project.isError);
-
   // До ранних возвратов: хук нельзя позвать условно. Держит вопросы, по которым
   // отправка началась, — они остаются на экране вместе с подтверждением, даже когда
   // перечитанный пакет их уже не содержит.
@@ -217,6 +195,18 @@ export function TaskPage() {
   const questions = withHeld(pkg.data.questions, answering.held, (question) =>
     questionId(task.key, question),
   );
+
+  /*
+   * Заморожен ли проект задачи (`UI-176`): признак теперь в самом пакете, а не во
+   * втором запросе. Задача архивного проекта читается, но ни ответа, ни замечания
+   * бэкенд не примет (`project_archived`), и интерфейс их не предлагает вовсе, а не
+   * «предлагает и падает». `archived_at` едет в `task.project` контракта как есть
+   * (`TaskProjectRead`, TRK-167): второго чтения `GET /projects/{key}` ради одного
+   * поля больше нет (UI-180) — оно приходило бы одним и тем же кадром с пакетом,
+   * который его уже принёс.
+   */
+  const frozen = task.project.archived_at != null;
+  const canAct = !frozen;
 
   /*
    * Три блока левой колонки — сводка, вопросы, замечания — решают порознь, пусты ли
@@ -558,7 +548,7 @@ function questionId(taskKey: string, question: Question): string {
 }
 
 interface QuestionAnswerProps {
-  /** Проект задачи не в архиве и прочитан: ответ бэкенд примет. */
+  /** Проект задачи не в архиве: ответ бэкенд примет. */
   canAnswer: boolean;
   taskKey: string;
   question: Question;

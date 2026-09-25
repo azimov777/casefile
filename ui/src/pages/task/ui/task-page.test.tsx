@@ -11,7 +11,6 @@ import {
   data,
   failure,
   heading,
-  projectDetail,
   questionEntry,
   remarkEntry,
   taskDetails,
@@ -31,13 +30,7 @@ let seen: string[] = [];
 
 beforeEach(() => {
   seen = [];
-  server.use(
-    http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
-    // Карточка читает проект ради признака архива (`UI-176`): по умолчанию он активный.
-    http.get(`${API}/api/v1/projects/:key`, ({ params }) =>
-      data(projectDetail(String(params.key))),
-    ),
-  );
+  server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
   setToken('trk_test');
 });
 
@@ -1199,13 +1192,22 @@ describe('задача архивного проекта (UI-176)', () => {
     },
   };
 
+  /**
+   * Задача архивного проекта: `archived_at` едет прямо в `task.project` пакета
+   * (`TaskProjectRead`, TRK-167). Карточка больше не читает `GET /projects/{key}`
+   * вторым запросом (UI-180) — обработчик на этот путь здесь нарочно не
+   * регистрируется, чтобы случайный запрос упал явной ошибкой перехвата msw, а не
+   * тихо прошёл.
+   */
+  function frozenTask(key: string, archivedAt: string) {
+    const base = taskDetails(key);
+    return { ...base, project: { ...base.project, archived_at: archivedAt } };
+  }
+
   it('читается, но ни «Ответить», ни «Замечания» нет, и сказано почему', async () => {
     server.use(
-      packageOf('DEMO-4', withQuestion),
+      packageOf('DEMO-4', { ...withQuestion, task: frozenTask('DEMO-4', '2026-09-20T10:00:00Z') }),
       entries('DEMO-4'),
-      http.get(`${API}/api/v1/projects/DEMO`, () =>
-        data(projectDetail('DEMO', { archived_at: '2026-09-20T10:00:00Z' })),
-      ),
     );
     renderApp('/tasks/DEMO-4', { language: 'ru' });
 
@@ -1223,11 +1225,8 @@ describe('задача архивного проекта (UI-176)', () => {
 
   it('адрес, зовущий ответить, на архивном проекте формы не раскрывает', async () => {
     server.use(
-      packageOf('DEMO-4', withQuestion),
+      packageOf('DEMO-4', { ...withQuestion, task: frozenTask('DEMO-4', '2026-09-20T10:00:00Z') }),
       entries('DEMO-4'),
-      http.get(`${API}/api/v1/projects/DEMO`, () =>
-        data(projectDetail('DEMO', { archived_at: '2026-09-20T10:00:00Z' })),
-      ),
     );
     renderApp('/tasks/DEMO-4?entry=5', { language: 'ru' });
 
