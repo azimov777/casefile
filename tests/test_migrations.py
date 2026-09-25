@@ -603,3 +603,59 @@ async def test_the_description_migration_rolls_back_and_reapplies(
     assert [(key, no, body) for key, no, *_, body, _p, _r, _a, _t in notes[2:]] == [
         ("SHORT", 1, LONG_DESCRIPTION)
     ]
+
+
+# --- Архив проекта (TRK-159) ----------------------------------------------------------
+
+ARCHIVE_REVISION = "3f9a6c21d4b8"
+ARCHIVE_PREVIOUS = DESCRIPTION_REVISION
+
+_INSERT_PROJECT = text(
+    "INSERT INTO projects (key, title, created_by_kind, created_by_signature) "
+    "VALUES ('OLD', 'Старый', 'agent', 'claude')"
+)
+_INSERT_ARCHIVED = text(
+    "INSERT INTO entries (project_id, no, type, title, payload, created_by_kind, "
+    "created_by_signature) SELECT id, 1, 'archived', 'Project archived', "
+    """'{"reason": "Заброшен"}'::jsonb, 'human', 'owner' FROM projects WHERE key = 'OLD'"""
+)
+
+
+async def test_existing_projects_stay_active_after_the_archive_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Автоархива нет: у существующего проекта `archived_at` пуст, записи `archived`
+    появляются в схеме только этой ревизией."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, ARCHIVE_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+    with pytest.raises(Exception, match="ck_entries_entry_type"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(_INSERT_ARCHIVED)
+
+    await migrate(url, ARCHIVE_REVISION)
+
+    async with migration_engine.begin() as connection:
+        archived_at = await connection.scalar(
+            text("SELECT archived_at FROM projects WHERE key = 'OLD'")
+        )
+        await connection.execute(_INSERT_ARCHIVED)
+    assert archived_at is None
+
+
+async def test_the_archive_migration_rolls_back_and_refuses_while_archive_entries_exist(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Откат снимает колонку; с записью `archived` в деле он спотыкается о сужение типов —
+    архивный проект не становится живым молча."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, ARCHIVE_REVISION)
+    await migrate(url, ARCHIVE_PREVIOUS, down=True)
+    await migrate(url, ARCHIVE_REVISION)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_ARCHIVED)
+
+    with pytest.raises(Exception, match="ck_entries_entry_type"):
+        await migrate(url, ARCHIVE_PREVIOUS, down=True)

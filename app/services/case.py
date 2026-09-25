@@ -47,7 +47,8 @@
 `task`, как у записей дела задачи: «любую запись может сделать любой участник». Служебные
 записи проекта — `created` при заведении и `field_changed` при правке карточки — ставит
 `app/services/projects.py`, записи об атрибутах (`attribute_created`, `attribute_changed`,
-`attribute_removed`) — `app/services/attributes.py`.
+`attribute_removed`) — `app/services/attributes.py`, записи архива (`archived`, `restored`)
+— тоже `app/services/projects.py`.
 """
 
 import uuid
@@ -109,6 +110,7 @@ from app.domain.tasks import (
     checks_without_verdict,
 )
 from app.domain.tokens import TokenScope
+from app.services import freeze
 from app.services import participants as participants_service
 from app.services.auth import Actor
 from app.services.permissions import ensure_scope
@@ -830,6 +832,34 @@ async def record_attribute_removed(
     )
 
 
+async def record_archived(
+    session: AsyncSession, project: Project, *, actor: Actor, reason: str
+) -> Entry:
+    """Проект архивирован: причина — в записи `archived` его дела (`CONCEPT.md`, 3.2)."""
+    return await _append(
+        session,
+        project,
+        actor=actor,
+        type=EntryType.ARCHIVED,
+        title="Project archived",
+        payload={"reason": reason},
+    )
+
+
+async def record_restored(
+    session: AsyncSession, project: Project, *, actor: Actor, reason: str
+) -> Entry:
+    """Проект восстановлен из архива: причина — в записи `restored` его дела."""
+    return await _append(
+        session,
+        project,
+        actor=actor,
+        type=EntryType.RESTORED,
+        title="Project restored",
+        payload={"reason": reason},
+    )
+
+
 # --- Служебные записи -----------------------------------------------------------------
 #
 # Прав здесь не проверяют: это не точки входа, а продолжение сценария, который права уже
@@ -1193,7 +1223,8 @@ async def _append(
     заново на каждой.
 
     Здесь же, и только здесь, журнал получает две вещи, без которых лента (задача 26)
-    неверна. Порядок обязателен и объяснён в самих методах:
+    неверна, а заморозка архива — свою гарантию. Порядок обязателен и объяснён в самих
+    методах:
 
     1. `lock_changes` — очередь изменений, из-за которой порядок `seq` совпадает с
        порядком фиксации. Берётся **до** блокировки строки владельца: обратный порядок
@@ -1201,12 +1232,23 @@ async def _append(
        повторный захват в той же транзакции законен и ничего не стоит, — а подшивка,
        которая полагалась бы на чужой захват, однажды пришла бы из сценария, где его
        забыли сделать.
-    2. `announce` — оповещение ждущих ленту. После `add`, потому что номер выдаёт база;
+    2. Заморозка архива (`app/services/freeze.py`) — под очередью, до выдачи номера:
+       запись в дело архивного проекта или его задачи отклоняется здесь, в какой бы
+       сценарий её ни подал, кроме записей из `freeze.UNFROZEN_ENTRY_TYPES`. Это
+       гарантия правила; сценарии спрашивают ту же проверку ещё и первым шагом, чтобы
+       архив называл отказ раньше их собственных правил.
+    3. `announce` — оповещение ждущих ленту. После `add`, потому что номер выдаёт база;
        внутри транзакции, потому что доставить его PostgreSQL обязан при фиксации, а не
        раньше строки.
     """
     repository = EntryRepository(session)
     await lock_changes(session)
+    if type not in freeze.UNFROZEN_ENTRY_TYPES:
+        await freeze.ensure_unfrozen(
+            session,
+            tasks=(owner,) if isinstance(owner, Task) else (),
+            projects=(owner,) if isinstance(owner, Project) else (),
+        )
     if isinstance(owner, Task):
         no = await repository.allocate_no(owner.id)
         ownership = {"task_id": owner.id}

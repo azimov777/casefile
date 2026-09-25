@@ -270,6 +270,8 @@ export const ui = {
       attribute_created: 'атрибут заведён',
       attribute_changed: 'правка атрибута',
       attribute_removed: 'атрибут снят',
+      archived: 'архивирование',
+      restored: 'восстановление',
     } satisfies Record<EntryType, string>,
     remarkOutcome: {
       fixed: 'поправлено',
@@ -291,6 +293,8 @@ export const ui = {
       attributeCreated: 'Атрибут заведён',
       attributeChanged: 'Правка атрибута',
       attributeRemoved: 'Атрибут снят',
+      projectArchived: 'Проект в архиве',
+      projectRestored: 'Проект восстановлен',
       // Кем вторая задача приходится этой (UI-166). Только у `parent`/`child`: их
       // идентификатор, прочитанный фразой («parent DEMO-9»), называет роль наоборот —
       // у `blocks DEMO-3` и `relates DEMO-3` фраза читается верно и без слов.

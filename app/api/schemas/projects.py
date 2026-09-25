@@ -8,7 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
 from app.domain.attributes import MAX_ATTRIBUTE_REASON_LENGTH, MAX_ATTRIBUTE_VALUE_LENGTH
-from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH, PROJECT_KEY_PATTERN
+from app.domain.projects import (
+    MAX_PROJECT_DESCRIPTION_LENGTH,
+    MAX_PROJECT_REASON_LENGTH,
+    PROJECT_KEY_PATTERN,
+)
 
 _TITLE_MAX = 255
 _DESCRIPTION_EXAMPLE = "Бэкенд трекера задач для агентов: REST API и MCP-сервер"
@@ -39,6 +43,17 @@ class ProjectRead(BaseModel):
     last_task_number: int = Field(
         examples=[42],
         description="Last task number handed out; numbers are never reused",
+    )
+    # Умолчание `None` не для клиента — поле приходит всегда, — а для ответов `create_project`,
+    # сохранённых ключами идемпотентности до этого поля: повтор отвечает ими же сутки.
+    archived_at: datetime | None = Field(
+        default=None,
+        examples=[None],
+        description=(
+            "When the project was archived; `null` while it is active. An archived project "
+            "and its tasks are frozen: every change answers `409 project_archived`, except "
+            "`restore` and removing a link. Reading works as usual"
+        ),
     )
     created_by: AuthorRead
     created_at: datetime
@@ -150,5 +165,21 @@ class AttributeRemoval(BaseModel):
         description=(
             "Why the attribute is removed; a blank one answers `attribute_reason_required`. "
             "Recorded in the `attribute_removed` entry together with the last value"
+        ),
+    )
+
+
+class ProjectArchiving(BaseModel):
+    """Архивирование или восстановление проекта: причина обязательна в обе стороны."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        max_length=MAX_PROJECT_REASON_LENGTH,
+        examples=["Репозиторий заброшен, работа перенесена в CORE"],
+        description=(
+            "Why the project is archived or restored; a blank one answers "
+            "`422 project_reason_required`. Filed in the `archived` or `restored` entry of "
+            "the project's case"
         ),
     )

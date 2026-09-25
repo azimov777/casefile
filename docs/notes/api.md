@@ -647,3 +647,23 @@ FastAPI. С проверкой в заголовке REST отвечал бы о
 **Где:** `app/api/schemas/tasks.py`, `ProjectRefRead`, `TaskProjectRead`;
 `app/api/schemas/search.py`, `TaskSearchRead`; `app/api/schemas/projects.py`;
 `app/domain/projects.py`, `validate_project_description`.
+
+## Архив проекта — действия `POST …/archive` и `…/restore` с причиной в теле
+
+**Что:** `POST /api/v1/projects/{key}/archive` и `POST /api/v1/projects/{key}/restore` с
+телом `{"reason": "…"}`, набор `main`, ответ — `ProjectDetailRead` с `archived_at`. Пустая
+причина — `422 project_reason_required` (домен), отсутствующая — `422 validation_error`
+(схема). Повторный архив — `409 project_archived`, восстановление живого — `409
+project_not_archived`. Записи `archived`/`restored` — вариант `ProjectArchiveEntryRead`
+только для дела проекта (TRK-159).
+**Почему важно:** форма та же, что у перехода задачи: действие с причиной, а не `PATCH`
+поля `archived_at` — время ставит трекер, и причина без записи в деле потерялась бы.
+`ProjectRead.archived_at` объявлен с умолчанием `None`: ответы `create_project`,
+сохранённые ключами идемпотентности до этого поля, повторяются сутки и должны
+разбираться. `Idempotency-Key` оба маршрута не принимают: они не создающие.
+**Как правильно:** любое изменение в архивном проекте и его задачах отвечает `409
+project_archived` с `details.key` и `details.archived_at`; `DELETE
+/tasks/{key}/links/{kind}/{other}` с задачей архивного проекта проходит.
+**Где:** `app/api/routes/projects.py`, `archive_project`, `restore_project`;
+`app/api/schemas/projects.py`, `ProjectArchiving`, `ProjectRead`;
+`app/api/schemas/entries.py`, `ProjectArchiveEntryRead`.

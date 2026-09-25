@@ -18,7 +18,11 @@
 
 import re
 
-from app.domain.errors import InvalidProjectKeyError, ProjectDescriptionTooLongError
+from app.domain.errors import (
+    InvalidProjectKeyError,
+    ProjectDescriptionTooLongError,
+    ProjectReasonRequiredError,
+)
 
 #: Ключ проекта: латиница и цифры, без разделителей — он идёт в ключ задачи перед дефисом.
 PROJECT_KEY_PATTERN = r"^[A-Za-z][A-Za-z0-9]{1,15}$"
@@ -59,4 +63,20 @@ def validate_project_description(description: str) -> str:
         raise ProjectDescriptionTooLongError(
             details={"length": len(normalized), "max_length": MAX_PROJECT_DESCRIPTION_LENGTH}
         )
+    return normalized
+
+
+#: Предел причины архивирования и восстановления — тот же, что у причины перехода статуса.
+MAX_PROJECT_REASON_LENGTH = 65_536
+
+
+def require_project_reason(reason: str | None, *, key: str, action: str) -> str:
+    """Причина `archive`/`restore` без пробелов по краям; пустая — `project_reason_required`.
+
+    Причина обязательна в обе стороны (`CONCEPT.md`, 3.2): архив заменяет удаление, и
+    преемник, нашедший проект замороженным или снова живым, должен узнать почему.
+    """
+    normalized = (reason or "").strip()
+    if not normalized:
+        raise ProjectReasonRequiredError(details={"key": key, "action": action})
     return normalized

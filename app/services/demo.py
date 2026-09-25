@@ -137,6 +137,15 @@ async def seed_demo(session: AsyncSession) -> DemoData:
 
     await _attributes(session, project, agent=agent)
 
+    # Архив и возврат из него: без них в деле проекта нет записей `archived` и `restored`.
+    # Проект остаётся живым — демо показывает историю, а не замороженную доску.
+    await projects_service.archive_project(
+        session, project, actor=owner, reason="Пауза: демо-проект отложен до выпуска"
+    )
+    await projects_service.restore_project(
+        session, project, actor=owner, reason="Выпуск вышел, работа над демо продолжается"
+    )
+
     return DemoData(
         project=project,
         tasks=[done, in_progress, candidate, waiting, child, checking, cancelled],

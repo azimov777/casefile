@@ -453,6 +453,16 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         type,
         payload: { name: 'repo', before: 'github.com/demo', reason: 'Репозиторий закрыт' },
       };
+    case 'archived':
+    case 'restored':
+      return {
+        ...base,
+        task_key: null,
+        project_key: 'DEMO',
+        body: '',
+        type,
+        payload: { reason: 'Демо отложено до выпуска' },
+      };
     default:
       // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`:
       // общая форма.

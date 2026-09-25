@@ -25,6 +25,7 @@ from app.api.schemas.projects import (
     AttributeRead,
     AttributeRemoval,
     AttributeSet,
+    ProjectArchiving,
     ProjectCreate,
     ProjectDetailRead,
     ProjectRead,
@@ -138,6 +139,45 @@ async def update_project(
     # поэтому «не передано» здесь не может притвориться «передано как null».
     changes = payload.model_dump(exclude_unset=True)
     project = await service.update_project(session, project, actor=actor, **changes)
+    return await _detail(session, project, actor=actor)
+
+
+@router.post("/{project_key}/archive", summary="Archive a project")
+async def archive_project(
+    project_key: ProjectKeyPath,
+    payload: ProjectArchiving,
+    session: SessionDep,
+    actor: ActorDep,
+) -> DataResponse[ProjectDetailRead]:
+    """Архивирует проект с причиной. Требует набора `main`.
+
+    Проект и его задачи замораживаются как есть: закрывать задачи не нужно, статусы не
+    меняются. Дальше любое изменение в проекте и его задачах — новая задача, запись в
+    дело, переход, правка, атрибут, новая связь — отвечает `409 project_archived`;
+    снять связь с его задачей можно. Чтение работает как раньше. Причина уезжает в
+    запись `archived` дела проекта; пустая — `422 project_reason_required`. Проект уже в
+    архиве — `409 project_archived`.
+    """
+    project = await service.get_project(session, project_key)
+    await service.archive_project(session, project, actor=actor, reason=payload.reason)
+    return await _detail(session, project, actor=actor)
+
+
+@router.post("/{project_key}/restore", summary="Restore an archived project")
+async def restore_project(
+    project_key: ProjectKeyPath,
+    payload: ProjectArchiving,
+    session: SessionDep,
+    actor: ActorDep,
+) -> DataResponse[ProjectDetailRead]:
+    """Восстанавливает проект из архива с причиной. Требует набора `main`.
+
+    Задачи продолжаются с того места, где их застал архив. Причина уезжает в запись
+    `restored` дела проекта; пустая — `422 project_reason_required`. Проект не в архиве —
+    `409 project_not_archived`.
+    """
+    project = await service.get_project(session, project_key)
+    await service.restore_project(session, project, actor=actor, reason=payload.reason)
     return await _detail(session, project, actor=actor)
 
 

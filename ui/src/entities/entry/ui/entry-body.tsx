@@ -174,6 +174,15 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
         </div>
       );
 
+    // Архив проекта (TRK-159): заголовок называет действие, тело — причину.
+    case 'archived':
+    case 'restored':
+      return (
+        <p className="wrap-anywhere">
+          <TaskText>{entry.payload.reason}</TaskText>
+        </p>
+      );
+
     // Смена исполнителя и связь целиком умещаются в заголовке: имена участников,
     // вид связи и ключ задачи — всё это он и называет. Тела у них не бывает.
     case 'assignee_changed':

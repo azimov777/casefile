@@ -276,6 +276,8 @@ export const ui = {
       attribute_created: 'attribute created',
       attribute_changed: 'attribute change',
       attribute_removed: 'attribute removed',
+      archived: 'archiving',
+      restored: 'restoring',
     } satisfies Record<EntryType, string>,
     // Исход разбора замечания — словами, а не идентификатором контракта: замечание
     // оставляет человек, и это единственный ответ, которого он ждал.
@@ -300,6 +302,8 @@ export const ui = {
       attributeCreated: 'Attribute created',
       attributeChanged: 'Attribute change',
       attributeRemoved: 'Attribute removed',
+      projectArchived: 'Project archived',
+      projectRestored: 'Project restored',
       linkRole: {
         parent: '— child task',
         child: '— parent',

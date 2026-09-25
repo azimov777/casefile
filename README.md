@@ -160,6 +160,8 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `list_participants` — lists the participant registry: the possible addressees of a question
 - `create_project` — creates a project (`main` token only)
 - `update_project` — changes a project's title and description, recording each change in its case (`main` token only)
+- `archive_project` — archives a project with a reason, freezing it and its tasks against changes (`main` token only)
+- `restore_project` — restores an archived project with a reason (`main` token only)
 - `set_attribute` — sets the value of a project attribute, creating it or changing it with a reason; the history stays in the project's case
 - `remove_attribute` — removes a project attribute with a reason, filing its last value in the project's case
 - `register_participant` — registers a human or a permanent agent (`main` token only)

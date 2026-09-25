@@ -79,7 +79,14 @@ TASK_TOOLS = {
 }
 
 #: Что набор `main` добавляет сверху. Выпуска токенов среди них нет намеренно.
-MAIN_TOOLS = {"create_project", "update_project", "register_participant", "update_participant"}
+MAIN_TOOLS = {
+    "create_project",
+    "update_project",
+    "archive_project",
+    "restore_project",
+    "register_participant",
+    "update_participant",
+}
 
 #: «Сделано» из двух строк: заголовок сводки — только первая из них. Строки
 #: собираются соединением, а не одним литералом с `\n`: escape внутри русского текста
@@ -104,6 +111,8 @@ CLOSING_SUMMARY = {
 MAIN_TOOL_CALLS: dict[str, dict[str, Any]] = {
     "create_project": {"key": "OPS", "title": "Эксплуатация"},
     "update_project": {"key": "TRK", "title": "Другое название"},
+    "archive_project": {"key": "TRK", "reason": "Заброшен"},
+    "restore_project": {"key": "TRK", "reason": "Снова нужен"},
     "register_participant": {"kind": "agent", "name": "nightly_bot"},
     "update_participant": {"name": "owner", "description": "Другое описание"},
 }
@@ -130,7 +139,7 @@ async def test_a_task_token_sees_exactly_the_working_cycle(
 
 
 async def test_a_main_token_sees_the_registries_too(mcp_session: Connect, main_secret: str) -> None:
-    """Обзорная проверка 1: набор `main` добавляет четыре инструмента реестров."""
+    """Обзорная проверка 1: набор `main` добавляет инструменты реестров и архива."""
     async with mcp_session(main_secret) as session:
         listed = {tool.name for tool in (await session.list_tools()).tools}
 
@@ -204,6 +213,10 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     "unlink": (False, False, False),
     "transition": (False, False, False),
     "close_task": (False, False, False),
+    # Архив и восстановление: повтор без ключа отвечает `project_archived` или
+    # `project_not_archived`; причина остаётся записью в деле — не разрушают (TRK-159).
+    "archive_project": (False, False, False),
+    "restore_project": (False, False, False),
     # Снятие атрибута: без ключа повтор отвечает `attribute_not_found`; последнее значение
     # остаётся в `attribute_removed` — не разрушает (TRK-157).
     "remove_attribute": (False, False, False),
@@ -1694,6 +1707,7 @@ async def test_get_project_carries_the_context_shared_by_its_tasks(
         "key": project.key,
         "title": project.title,
         "description": project.description,
+        "archived_at": None,
         "attributes": [],
     }
     # Дело проекта открывается записью `created` (TRK-156): опись едет той же строкой, что
@@ -1784,6 +1798,7 @@ async def test_the_main_scope_runs_the_registries(
         "key": "OPS",
         "title": "Эксплуатация и дежурства",
         "description": "Дежурства",
+        "archived_at": None,
         "attributes": [],
     }
     # Правка названия осталась в деле проекта (TRK-156), а не пропала без следа.
