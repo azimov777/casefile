@@ -45,6 +45,9 @@ export interface paths {
          *     У общего агентского токена участника нет: `participant` приходит `null`, а
          *     `open_questions` — ноль, потому что временного агента нельзя адресовать вопросом
          *     (`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.
+         *
+         *     Архивные проекты — только с `include_archived=true`, как в `GET /api/v1/projects`;
+         *     вопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6).
          */
         get: operations["read_bootstrap"];
         put?: never;
@@ -363,7 +366,10 @@ export interface paths {
         };
         /**
          * List projects
-         * @description Все проекты установки. Единственный уровень группировки: над ними ничего нет.
+         * @description Проекты установки. Единственный уровень группировки: над ними ничего нет.
+         *
+         *     Архивные — только с `include_archived=true`; по ключу архивный проект читается и без
+         *     него (`GET /api/v1/projects/{key}`).
          */
         get: operations["list_projects"];
         put?: never;
@@ -599,6 +605,10 @@ export interface paths {
          *     сказать то же самое заводить незачем. Ошибка разбора приходит `422
          *     invalid_search_query` с позицией символа; незнакомое имя поля — `422
          *     search_field_unknown` со списком допустимых в `details.allowed`.
+         *
+         *     Задачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством
+         *     или вхождением: проект условием `project`, саму задачу — `key`, её родителя —
+         *     `parent` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в языке нет.
          *
          *     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
          *     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
@@ -2058,12 +2068,12 @@ export interface components {
             token: components["schemas"]["CurrentTokenRead"];
             /**
              * Projects
-             * @description Projects of the installation, one page capped at the common page ceiling. An installation with more projects than that pages `GET /api/v1/projects`
+             * @description Projects of the installation, one page capped at the common page ceiling; archived ones only with `include_archived`. An installation with more projects than that pages `GET /api/v1/projects`
              */
             projects: components["schemas"]["ProjectRead"][];
             /**
              * Open Questions
-             * @description Questions with no answer yet addressed to `participant`. Zero with a shared agent token: a temporary agent cannot be addressed at all
+             * @description Questions with no answer yet addressed to `participant`, in tasks of projects that are not archived. Zero with a shared agent token: a temporary agent cannot be addressed at all
              * @example 3
              */
             open_questions: number;
@@ -4986,7 +4996,10 @@ export interface operations {
     };
     read_bootstrap: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Also list archived projects. Without it they are hidden from the list; a project is still read by its key either way */
+                include_archived?: boolean;
+            };
             header?: {
                 /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
                 "X-Actor-Label"?: string | null;
@@ -6370,6 +6383,8 @@ export interface operations {
     list_projects: {
         parameters: {
             query?: {
+                /** @description Also list archived projects. Without it they are hidden from the list; a project is still read by its key either way */
+                include_archived?: boolean;
                 /** @description Page size */
                 limit?: number;
                 /** @description Cursor from `meta.next_cursor` of a previous page */
@@ -8264,7 +8279,7 @@ export interface operations {
                 addressee?: string | null;
                 /** @description true drops the addressee filter and returns questions to anyone. Not accepted together with `addressee` (`422 addressee_with_any_addressee`) */
                 any_addressee?: boolean;
-                /** @description Project key of the question's task; matching ignores case */
+                /** @description Project key of the question's task; matching ignores case. Without it tasks of archived projects are left out; a project named here is listed even archived */
                 project?: string | null;
                 /** @description Keep only questions that do (or do not) block the work */
                 blocking?: boolean | null;
@@ -8356,7 +8371,7 @@ export interface operations {
             query?: {
                 /** @description Signature the remark is filed under: a participant name or a temporary agent label; matching ignores case. Omit to get remarks by anyone */
                 author?: string | null;
-                /** @description Project key of the remark's task; matching ignores case */
+                /** @description Project key of the remark's task; matching ignores case. Without it tasks of archived projects are left out; a project named here is listed even archived */
                 project?: string | null;
                 /** @description true (the default) keeps only remarks with no resolution yet; false drops the filter and returns every remark, resolved or not. To read the remarks of one task use its case with `types=remark` */
                 open?: boolean;
