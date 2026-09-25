@@ -665,6 +665,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a list of tasks to another project
+         * @description Переносит задачи списка в один проект, каждую отдельно (TRK-309). Требует `main`.
+         *
+         *     Задачи переносятся по одной в порядке списка — по нему же идут новые номера — и
+         *     каждая получает свою запись `moved` с общей причиной. Ответ — итог по каждому
+         *     элементу списка, повторы тоже: `moved` (ключи до и после, номер записи), `already`
+         *     (задача уже в целевом проекте, `task_already_in_project`) или `error` с кодом,
+         *     сообщением и подробностями того отказа, каким ответил бы одиночный перенос
+         *     (`task_not_found`, `project_archived` исходного проекта…). Отказ одной задачи
+         *     остальных не откатывает.
+         *
+         *     Отказы всего вызова, до первого переноса: набор `task` — `403 permission_denied`;
+         *     пустая причина — `422 task_move_reason_required`; пустой список или длиннее
+         *     потолка — `422 task_move_batch_size_invalid`; неизвестный целевой проект — `404
+         *     project_not_found`; целевой проект в архиве — `409 project_archived`.
+         */
+        post: operations["move_tasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_key}": {
         parameters: {
             query?: never;
@@ -2299,6 +2332,10 @@ export interface components {
         /** DataResponse[TaskLinkRead] */
         DataResponse_TaskLinkRead_: {
             data: components["schemas"]["TaskLinkRead"];
+        };
+        /** DataResponse[TaskMoveBatchRead] */
+        DataResponse_TaskMoveBatchRead_: {
+            data: components["schemas"]["TaskMoveBatchRead"];
         };
         /** DataResponse[TaskPackageRead] */
         DataResponse_TaskPackageRead_: {
@@ -4334,6 +4371,27 @@ export interface components {
             unmeasured?: string | null;
         };
         /**
+         * TaskAlreadyThereRead
+         * @description Задача списка уже лежит в целевом проекте: `task_already_in_project`, записи нет.
+         */
+        TaskAlreadyThereRead: {
+            /**
+             * Key
+             * @description The key as listed
+             */
+            key: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            outcome: "already";
+            /**
+             * To Key
+             * @description Key the task holds in the target project
+             */
+            to_key: string;
+        };
+        /**
          * TaskClosing
          * @description Чем закрывают задачу: записи, вердикты и финальная сводка одного вызова.
          */
@@ -4538,6 +4596,109 @@ export interface components {
              * @example 3
              */
             version?: number | null;
+        };
+        /**
+         * TaskMoveBatch
+         * @description Перенос списка задач в один проект, каждой отдельно (TRK-309).
+         */
+        TaskMoveBatch: {
+            /**
+             * Keys
+             * @description Task keys, 1 to 100, moved one by one in list order; a previous key addresses its task as well. Repeats are kept, each one gets its own outcome. A list out of range answers `422 task_move_batch_size_invalid` before any move
+             * @example [
+             *       "UI-1",
+             *       "UI-2"
+             *     ]
+             */
+            keys: string[];
+            /**
+             * Project
+             * @description Key of the project the tasks move to, case-insensitive
+             * @example TRK
+             */
+            project: string;
+            /**
+             * Reason
+             * @description Why the tasks move, one for the whole list; a blank one answers `422 task_move_reason_required`. Filed in the `moved` entry of each moved task
+             * @example Репозиторий один, задачи интерфейса ведутся в TRK
+             */
+            reason: string;
+        };
+        /**
+         * TaskMoveBatchRead
+         * @description Итог пакетного переноса: по одному на каждый элемент списка, в его порядке.
+         */
+        TaskMoveBatchRead: {
+            /**
+             * Results
+             * @description One outcome per listed key, in list order
+             */
+            results: (components["schemas"]["TaskMovedRead"] | components["schemas"]["TaskAlreadyThereRead"] | components["schemas"]["TaskMoveRefusedRead"])[];
+        };
+        /**
+         * TaskMoveRefusedRead
+         * @description Задача списка не перенесена: отказ по ней одной, в форме оболочки ошибки.
+         */
+        TaskMoveRefusedRead: {
+            /**
+             * Key
+             * @description The key as listed
+             */
+            key: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            outcome: "error";
+            /**
+             * Code
+             * @description Error code a single move would answer
+             * @example task_not_found
+             */
+            code: string;
+            /**
+             * Message
+             * @description Error message, in English
+             */
+            message: string;
+            /**
+             * Details
+             * @description Error details, as in the error envelope
+             */
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * TaskMovedRead
+         * @description Задача списка перенесена.
+         */
+        TaskMovedRead: {
+            /**
+             * Key
+             * @description The key as listed
+             */
+            key: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            outcome: "moved";
+            /**
+             * From Key
+             * @description Key the task left
+             */
+            from_key: string;
+            /**
+             * To Key
+             * @description Key the task got in the new project
+             */
+            to_key: string;
+            /**
+             * No
+             * @description Number of the `moved` entry in the task's case
+             */
+            no: number;
         };
         /**
          * TaskPackageRead
@@ -7666,6 +7827,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_TaskRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    move_tasks: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskMoveBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_TaskMoveBatchRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
