@@ -90,6 +90,7 @@ export const errors = {
   task_fields_invalid: 'The task fields did not pass validation.',
   task_has_parent: 'The task already has a parent: a task has only one.',
   task_has_unclosed_children: 'The task has children that are not closed.',
+  task_move_batch_size_invalid: 'The list of tasks to move is empty or too long.',
   task_move_reason_required: 'Moving a task to another project requires a reason.',
   task_not_found: 'There is no task with that key.',
   task_sections_incomplete: 'The sections of the task are not filled in completely.',

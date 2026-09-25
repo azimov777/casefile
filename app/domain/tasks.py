@@ -45,6 +45,7 @@ from app.domain.errors import (
     TaskBlockedError,
     TaskFieldsInvalidError,
     TaskHasUnclosedChildrenError,
+    TaskMoveBatchSizeInvalidError,
     TaskMoveReasonRequiredError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
@@ -125,16 +126,39 @@ def project_of_key(key: str) -> str:
 # --- Перенос в другой проект -----------------------------------------------------------
 
 
-def require_move_reason(reason: str | None, *, key: str) -> str:
+#: Сколько задач переносит один пакетный вызов (TRK-309). Потолок держит не база, а
+#: очередь изменений: пакет — одна транзакция, и консультативная блокировка
+#: (`app/db/locks.py`) стоит до её коммита, то есть все записи установки ждут, пока пакет
+#: не кончится. Сотня — два вызова на переезд из TRK-174 (181 задача); замер пакета
+#: из сотни — `docs/notes/tasks.md`.
+MAX_MOVE_KEYS = 100
+
+
+def require_move_reason(reason: str | None, *, key: str | None) -> str:
     """Причина переноса без пробелов по краям; пустая — `task_move_reason_required`.
 
     Причина обязательна (`CONCEPT.md`, 3.3), как у архивирования: ключ задачи меняется, и
-    тот, кто придёт по прежнему ключу, узнаёт из записи `moved`, почему.
+    тот, кто придёт по прежнему ключу, узнаёт из записи `moved`, почему. `key` — ключ
+    одиночного переноса для `details`; у пакета его нет: причина одна на весь список.
     """
     normalized = (reason or "").strip()
     if not normalized:
-        raise TaskMoveReasonRequiredError(details={"key": key})
+        raise TaskMoveReasonRequiredError(details={} if key is None else {"key": key})
     return normalized
+
+
+def require_move_keys(keys: Sequence[str]) -> tuple[str, ...]:
+    """Ключи пакетного переноса как присланы; пустой список или больше потолка — отказ.
+
+    Повторы не снимаются и порядок не меняется: итог отдаётся по каждому элементу
+    списка, и от порядка зависят новые номера (TRK-309). Потолок — здесь, а не в схеме
+    параметра: сценарий один на REST и MCP, и отказ обязан быть одинаковым на обоих.
+    """
+    if not 1 <= len(keys) <= MAX_MOVE_KEYS:
+        raise TaskMoveBatchSizeInvalidError(
+            details={"tasks": len(keys), "min": 1, "max": MAX_MOVE_KEYS},
+        )
+    return tuple(keys)
 
 
 def returning_key(previous_keys: Sequence[str], *, to_project: str) -> str | None:

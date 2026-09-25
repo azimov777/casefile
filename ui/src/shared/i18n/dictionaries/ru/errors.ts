@@ -90,6 +90,7 @@ export const errors = {
   task_fields_invalid: 'Поля задачи не прошли проверку.',
   task_has_parent: 'У задачи уже есть родитель: второго не бывает, родитель у задачи один.',
   task_has_unclosed_children: 'У задачи есть незакрытые дети.',
+  task_move_batch_size_invalid: 'Список задач для переноса пуст или слишком длинный.',
   task_move_reason_required: 'Перенос задачи в другой проект требует причины.',
   task_not_found: 'Задачи с таким ключом нет.',
   task_sections_incomplete: 'Разделы задачи заполнены не полностью.',

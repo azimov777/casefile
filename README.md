@@ -138,7 +138,7 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `update_task` — changes the given fields of a task; fields left out stay as they are
 - `transition` — moves a task to another status along the fixed transition table
 - `close_task` — closes a task: files entries, verdicts and the final summary and moves it to `done`, in one transaction
-- `move_task` — moves a task to another project with a reason; its previous key keeps leading to it (`main` token only)
+- `move_task` — moves a task, or each task of a list with an outcome per key, to another project with a reason; its previous key keeps leading to it (`main` token only)
 
 **Case**
 - `read_entries` — returns entry bodies of one task's case, with payload, in number order

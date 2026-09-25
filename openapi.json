@@ -4594,6 +4594,126 @@
         }
       }
     },
+    "/api/v1/tasks/move": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Move a list of tasks to another project",
+        "description": "Переносит задачи списка в один проект, каждую отдельно (TRK-309). Требует `main`.\n\nЗадачи переносятся по одной в порядке списка — по нему же идут новые номера — и\nкаждая получает свою запись `moved` с общей причиной. Ответ — итог по каждому\nэлементу списка, повторы тоже: `moved` (ключи до и после, номер записи), `already`\n(задача уже в целевом проекте, `task_already_in_project`) или `error` с кодом,\nсообщением и подробностями того отказа, каким ответил бы одиночный перенос\n(`task_not_found`, `project_archived` исходного проекта…). Отказ одной задачи\nостальных не откатывает.\n\nОтказы всего вызова, до первого переноса: набор `task` — `403 permission_denied`;\nпустая причина — `422 task_move_reason_required`; пустой список или длиннее\nпотолка — `422 task_move_batch_size_invalid`; неизвестный целевой проект — `404\nproject_not_found`; целевой проект в архиве — `409 project_archived`.",
+        "operationId": "move_tasks",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskMoveBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_TaskMoveBatchRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tasks/{task_key}": {
       "get": {
         "tags": [
@@ -9438,6 +9558,18 @@
         ],
         "title": "DataResponse[TaskLinkRead]"
       },
+      "DataResponse_TaskMoveBatchRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TaskMoveBatchRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[TaskMoveBatchRead]"
+      },
       "DataResponse_TaskPackageRead_": {
         "properties": {
           "data": {
@@ -12991,6 +13123,33 @@
         "title": "SummaryPayload",
         "description": "Сводка, как её **читают**: четыре части и, у закрывающей, пятая.\n\nТерпимость к отсутствию `unmeasured` — свойство чтения, а не подшивки: читаются и\nпромежуточные сводки, у которых части не бывает, и все дела, закрытые до её\nпоявления. Отдельной моделью от `SummaryPartsPayload` она стоит именно поэтому:\nпока чтение и создание делили одну модель, необязательное поле уезжало в\n`model_dump()` маршрута создания значением `null` и роняло **всякую** обычную\nсводку — домен честно отвергал часть, которой в промежуточной сводке не место\n(TRK-78). Одна модель на две роли расходится молча; две расходиться не умеют."
       },
+      "TaskAlreadyThereRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "The key as listed"
+          },
+          "outcome": {
+            "type": "string",
+            "const": "already",
+            "title": "Outcome"
+          },
+          "to_key": {
+            "type": "string",
+            "title": "To Key",
+            "description": "Key the task holds in the target project"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "outcome",
+          "to_key"
+        ],
+        "title": "TaskAlreadyThereRead",
+        "description": "Задача списка уже лежит в целевом проекте: `task_already_in_project`, записи нет."
+      },
       "TaskClosing": {
         "properties": {
           "summary": {
@@ -13346,6 +13505,169 @@
         ],
         "title": "TaskMove",
         "description": "Перенос задачи в другой проект (`CONCEPT.md`, 3.3)."
+      },
+      "TaskMoveBatch": {
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Keys",
+            "description": "Task keys, 1 to 100, moved one by one in list order; a previous key addresses its task as well. Repeats are kept, each one gets its own outcome. A list out of range answers `422 task_move_batch_size_invalid` before any move",
+            "examples": [
+              [
+                "UI-1",
+                "UI-2"
+              ]
+            ]
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project",
+            "description": "Key of the project the tasks move to, case-insensitive",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Reason",
+            "description": "Why the tasks move, one for the whole list; a blank one answers `422 task_move_reason_required`. Filed in the `moved` entry of each moved task",
+            "examples": [
+              "Репозиторий один, задачи интерфейса ведутся в TRK"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "keys",
+          "project",
+          "reason"
+        ],
+        "title": "TaskMoveBatch",
+        "description": "Перенос списка задач в один проект, каждой отдельно (TRK-309)."
+      },
+      "TaskMoveBatchRead": {
+        "properties": {
+          "results": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/TaskMovedRead"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskAlreadyThereRead"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskMoveRefusedRead"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "outcome",
+                "mapping": {
+                  "already": "#/components/schemas/TaskAlreadyThereRead",
+                  "error": "#/components/schemas/TaskMoveRefusedRead",
+                  "moved": "#/components/schemas/TaskMovedRead"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "One outcome per listed key, in list order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "TaskMoveBatchRead",
+        "description": "Итог пакетного переноса: по одному на каждый элемент списка, в его порядке."
+      },
+      "TaskMoveRefusedRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "The key as listed"
+          },
+          "outcome": {
+            "type": "string",
+            "const": "error",
+            "title": "Outcome"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Error code a single move would answer",
+            "examples": [
+              "task_not_found"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Error message, in English"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details",
+            "description": "Error details, as in the error envelope"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "outcome",
+          "code",
+          "message",
+          "details"
+        ],
+        "title": "TaskMoveRefusedRead",
+        "description": "Задача списка не перенесена: отказ по ней одной, в форме оболочки ошибки."
+      },
+      "TaskMovedRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "The key as listed"
+          },
+          "outcome": {
+            "type": "string",
+            "const": "moved",
+            "title": "Outcome"
+          },
+          "from_key": {
+            "type": "string",
+            "title": "From Key",
+            "description": "Key the task left"
+          },
+          "to_key": {
+            "type": "string",
+            "title": "To Key",
+            "description": "Key the task got in the new project"
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number of the `moved` entry in the task's case"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "outcome",
+          "from_key",
+          "to_key",
+          "no"
+        ],
+        "title": "TaskMovedRead",
+        "description": "Задача списка перенесена."
       },
       "TaskPackageRead": {
         "properties": {
