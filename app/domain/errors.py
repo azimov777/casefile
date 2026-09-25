@@ -276,6 +276,28 @@ class TaskSectionsIncompleteError(ValidationError):
     message = "Task sections are incomplete"
 
 
+class TaskMoveReasonRequiredError(ValidationError):
+    """Перенос задачи в другой проект требует непустой причины `reason` (`CONCEPT.md`, 3.3)."""
+
+    code = "task_move_reason_required"
+    message = "Moving a task to another project requires a reason"
+
+
+class TaskAlreadyInProjectError(ConflictError):
+    """Перенос в проект, где задача уже лежит: переносить некуда (`CONCEPT.md`, 3.3).
+
+    Отказ, а не тихое «ничего не изменилось»: перенос — явное действие с причиной и
+    записью `moved`, и вызов, не сделавший ни того, ни другого, не должен отвечать так,
+    будто сделал. Чаще всего это повтор уже прошедшего переноса или опечатка в ключе
+    проекта — вызывающий узнаёт это из `details`, где названы текущий ключ задачи и её
+    проект. Конфликт состояния, а не ошибка формы: тот же запрос к задаче из другого
+    проекта прошёл бы.
+    """
+
+    code = "task_already_in_project"
+    message = "Task is already in this project"
+
+
 # --- Дело ---------------------------------------------------------------------------
 
 

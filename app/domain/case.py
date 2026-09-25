@@ -97,6 +97,7 @@ class EntryType(StrEnum):
     ASSIGNEE_CHANGED = "assignee_changed"
     LINK_ADDED = "link_added"
     LINK_REMOVED = "link_removed"
+    MOVED = "moved"
     ATTRIBUTE_CREATED = "attribute_created"
     ATTRIBUTE_CHANGED = "attribute_changed"
     ATTRIBUTE_REMOVED = "attribute_removed"
@@ -154,6 +155,7 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.ASSIGNEE_CHANGED,
         EntryType.LINK_ADDED,
         EntryType.LINK_REMOVED,
+        EntryType.MOVED,
         EntryType.ATTRIBUTE_CREATED,
         EntryType.ATTRIBUTE_CHANGED,
         EntryType.ATTRIBUTE_REMOVED,
@@ -423,6 +425,19 @@ class AttributeFacts:
     name: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class MovedFacts:
+    """`moved`: с какого ключа на какой перенесена задача (`CONCEPT.md`, 3.3).
+
+    Ключи — факты: они коротки и называют оба проекта своей левой частью. Причина —
+    свободный текст и остаётся в записи.
+    """
+
+    type: Literal[EntryType.MOVED] = EntryType.MOVED
+    from_key: str | None = None
+    to_key: str | None = None
+
+
 type EntryFacts = (
     NoFacts
     | StatusChangedFacts
@@ -435,6 +450,7 @@ type EntryFacts = (
     | VerdictFacts
     | ResolutionFacts
     | AttributeFacts
+    | MovedFacts
 )
 """Факты записи: размеченное по `type` объединение всех форм."""
 
@@ -462,6 +478,7 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     EntryType.ASSIGNEE_CHANGED: AssigneeChangedFacts,
     EntryType.LINK_ADDED: LinkFacts,
     EntryType.LINK_REMOVED: LinkFacts,
+    EntryType.MOVED: MovedFacts,
     EntryType.ATTRIBUTE_CREATED: AttributeFacts,
     EntryType.ATTRIBUTE_CHANGED: AttributeFacts,
     EntryType.ATTRIBUTE_REMOVED: AttributeFacts,

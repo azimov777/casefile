@@ -50,6 +50,7 @@ from app.domain.case import (
     EntryType,
     FieldChangedFacts,
     LinkFacts,
+    MovedFacts,
     NoFacts,
     QuestionFacts,
     QuestionOrder,
@@ -727,10 +728,20 @@ def remarks_in_work_count(task_id: Any) -> Select[tuple[int]]:
     того же замечания удвоил бы счёт, ничего не изменив по сути.
     """
     continuation = aliased(Task)
+    named = Entry.payload["task"].astext
     return (
         select(func.count(distinct(Entry.payload["remark_no"].as_integer())))
         .select_from(Entry)
-        .join(continuation, continuation.key == Entry.payload["task"].astext)
+        # Ключ продолжения хранится как написан, и задача с тех пор могла переехать в
+        # другой проект: названная прежним ключом, она находится так же, как текущим
+        # (`CONCEPT.md`, 3.3; `app/db/repositories/tasks.py`, `named_by`).
+        .join(
+            continuation,
+            or_(
+                continuation.key == named,
+                continuation.previous_keys.op("@>")(func.jsonb_build_array(named)),
+            ),
+        )
         .where(
             Entry.task_id == task_id,
             _IS_RESOLUTION,
@@ -939,6 +950,11 @@ def _facts_json() -> ColumnElement[Any]:
                 payload["task"],
             ),
         ),
+        # Перенос — оба ключа: они коротки и называют оба проекта; причина остаётся в записи.
+        (
+            Entry.type == EntryType.MOVED,
+            func.jsonb_build_object("from_key", payload["from_key"], "to_key", payload["to_key"]),
+        ),
         # Записи об атрибутах проекта — только имя: оно ограничено шаблоном, а значения и
         # причина — свободный текст и остаются в записи.
         (
@@ -1005,6 +1021,8 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
                 outcome=_as_enum(RemarkOutcome, values.get("outcome")),
                 continuation_key=values.get("continuation_key"),
             )
+        case EntryType.MOVED:
+            return MovedFacts(from_key=values.get("from_key"), to_key=values.get("to_key"))
         case (
             EntryType.ATTRIBUTE_CREATED | EntryType.ATTRIBUTE_CHANGED | EntryType.ATTRIBUTE_REMOVED
         ):

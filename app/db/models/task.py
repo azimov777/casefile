@@ -4,9 +4,10 @@
 список проверок — колонки, а не реестр полей. Статус — перечисление, а не ссылка на
 справочник: справочника статусов в базе нет.
 
-Ключ задачи (`TRK-42`) неизменяем и не переиспользуется. Ключ и проект — две колонки,
-а не ключ, вычисляемый из проекта: на ключ ссылаются записи дела и внешние системы, и
-он обязан пережить любую будущую правку принадлежности.
+Ключ задачи (`TRK-42`) не переиспользуется: выданный задаче, он закреплён за ней навсегда.
+Меняется он только переносом в другой проект (`CONCEPT.md`, 3.3), и тогда прежний ключ
+уходит в `previous_keys` и продолжает вести на задачу. Ключ и проект — две колонки, а не
+ключ, вычисляемый из проекта: на ключ ссылаются записи дела и внешние системы.
 """
 
 from __future__ import annotations
@@ -77,6 +78,15 @@ class Task(BaseModel, CreatedByMixin):
             postgresql_using="gin",
             postgresql_ops={"description": "gin_trgm_ops"},
         ),
+        # Задача по прежнему ключу — `previous_keys @> '["UI-5"]'`: адресация по прежнему
+        # ключу идёт на каждом обращении к задаче, как по текущему (`CONCEPT.md`, 3.3).
+        # `jsonb_path_ops` — ровно под `@>`, и меньше индекса по умолчанию.
+        Index(
+            "ix_tasks_previous_keys",
+            "previous_keys",
+            postgresql_using="gin",
+            postgresql_ops={"previous_keys": "jsonb_path_ops"},
+        ),
         # Версия только растёт и начинается с единицы: ноль означал бы, что счётчик
         # правили руками, и оптимистичная блокировка перестала бы ловить гонку.
         CheckConstraint("version >= 1", name="version_positive"),
@@ -84,6 +94,17 @@ class Task(BaseModel, CreatedByMixin):
 
     key: Mapped[str] = mapped_column(String(MAX_TASK_KEY_LENGTH), unique=True, nullable=False)
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    # Прежние ключи в порядке ухода: те, что задача носила до переносов (`CONCEPT.md`,
+    # 3.3). Список в строке задачи, а не таблица ключей: карточка и строка поиска читают
+    # его вместе с задачей, одним запросом, а уникальность ключа держит не индекс, а
+    # счётчик проекта — он только растёт, и в проект, где у задачи уже был ключ, она
+    # возвращается с ним (`app/domain/tasks.py`, `returning_key`).
+    previous_keys: Mapped[list[str]] = mapped_column(
+        JSONB,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+        nullable=False,
+    )
 
     title: Mapped[str] = mapped_column(String(MAX_TITLE_LENGTH), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
