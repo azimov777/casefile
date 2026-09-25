@@ -67,9 +67,21 @@ beforeEach(() => {
       const url = new URL(request.url);
       seen.push(url);
       const types = url.searchParams.getAll('types');
-      return collection(
-        types.length === 0 ? CASE : CASE.filter((entry) => types.includes(entry.type)),
-      );
+      let items = types.length === 0 ? CASE : CASE.filter((entry) => types.includes(entry.type));
+      // `attribute` — тот же отбор, что делает бэкенд (TRK-166): сужает до трёх типов
+      // записи об атрибутах и до имени, без учёта регистра, складывается с `types` по «и».
+      const attribute = url.searchParams.get('attribute');
+      if (attribute !== null) {
+        const wanted = attribute.toLowerCase();
+        items = items.filter(
+          (entry) =>
+            (entry.type === 'attribute_created' ||
+              entry.type === 'attribute_changed' ||
+              entry.type === 'attribute_removed') &&
+            entry.payload.name.toLowerCase() === wanted,
+        );
+      }
+      return collection(items);
     }),
     http.get(`${API}/api/v1/projects/DEMO/entries/:no`, ({ params, request }) => {
       seen.push(new URL(request.url));
@@ -126,18 +138,16 @@ describe('экран проекта', () => {
     const history = await screen.findByRole('region', {
       name: say.project('history', { name: 'repo' }),
     });
-    // Заведение и правка `repo`, а заведение `branch` сюда не попало.
+    // Заведение и правка `repo`, а заведение `branch` сюда не попало: сеть мокается
+    // отбором по `attribute`, а не по `types` — клиентского фильтра по имени больше нет.
     expect(await within(history).findAllByRole('article')).toHaveLength(2);
     expect(within(history).getByText('github.com/old')).toBeInTheDocument();
     expect(within(history).getByText('Репозиторий переехал')).toBeInTheDocument();
     expect(within(history).queryByText('main')).not.toBeInTheDocument();
-    // Отбор по типу делает бэкенд — все три типа истории названы в запросе.
-    const historyCall = seen.find((url) => url.searchParams.has('types'));
-    expect(historyCall?.searchParams.getAll('types')).toEqual([
-      'attribute_created',
-      'attribute_changed',
-      'attribute_removed',
-    ]);
+    // Отбор по имени уходит на сервер параметром `attribute` (TRK-166, UI-179), не по `types`.
+    const historyCall = seen.find((url) => url.searchParams.has('attribute'));
+    expect(historyCall?.searchParams.get('attribute')).toBe('repo');
+    expect(historyCall?.searchParams.has('types')).toBe(false);
     expect(address.current).toBe('/projects/DEMO?attribute=repo');
 
     // Второй клик сворачивает историю и убирает имя из адреса.

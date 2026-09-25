@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { EntryCard, projectCaseQueryOptions, type Entry } from '@/entities/entry';
+import { EntryCard, projectCaseQueryOptions } from '@/entities/entry';
 import type { ProjectAttribute } from '@/entities/project';
 import { AddAttribute, ChangeAttribute, RemoveAttribute } from '@/features/manage-project';
 import { Button, QueryState, RelativeTime } from '@/shared/ui';
@@ -10,16 +10,6 @@ const LIST_BLOCK = 'flex flex-col gap-0 rounded-control border border-line bg-su
 
 /** Заголовок блока-списка: поля и линия под ним. */
 const BLOCK_HEAD = 'flex flex-col gap-1 border-b border-b-line px-3 pt-3 pb-2';
-
-/**
- * Типы записей истории атрибута (`../docs/CONCEPT.md`, 3.2; UI-174#7): заведение,
- * изменение и снятие. Отбор по типу делает бэкенд (`types`), по имени — экран.
- */
-const ATTRIBUTE_TYPES: Entry['type'][] = [
-  'attribute_created',
-  'attribute_changed',
-  'attribute_removed',
-];
 
 interface ProjectAttributesProps {
   projectKey: string;
@@ -123,9 +113,12 @@ export function ProjectAttributes({
  * История одного атрибута: записи дела проекта о нём, по порядку номеров — заведение,
  * изменения с прежним и новым значением и снятие, каждая с причиной.
  *
- * Бэкенд отбирает записи по типу; по имени отбирает экран — параметра имени у выдачи
- * дела нет. Записи показаны теми же карточками, что в ленте дела задачи (`EntryCard`):
- * «было / стало» и причина под ним.
+ * Отбор — серверный параметр `attribute` (TRK-166): бэкенд сам сужает выдачу до трёх
+ * типов записи об атрибутах и до этого имени, без учёта регистра, страницами по курсору.
+ * У проекта с записями многих атрибутов история одного открывается без страниц чужих
+ * записей между нужными — раньше экран запрашивал все три типа и отбирал по имени сам.
+ * Записи показаны теми же карточками, что в ленте дела задачи (`EntryCard`): «было /
+ * стало» и причина под ним.
  */
 function AttributeHistory({
   projectKey,
@@ -136,17 +129,10 @@ function AttributeHistory({
   name: string;
   id: string;
 }) {
-  const feed = useInfiniteQuery(projectCaseQueryOptions(projectKey, { types: ATTRIBUTE_TYPES }));
+  const feed = useInfiniteQuery(projectCaseQueryOptions(projectKey, { attribute: name }));
   const { t } = useTranslation('project');
 
-  const wanted = name.toLowerCase();
-  const history = (feed.data?.pages.flatMap((page) => page.items) ?? []).filter(
-    (entry) =>
-      (entry.type === 'attribute_created' ||
-        entry.type === 'attribute_changed' ||
-        entry.type === 'attribute_removed') &&
-      entry.payload.name.toLowerCase() === wanted,
-  );
+  const history = feed.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <div
