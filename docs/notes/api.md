@@ -684,3 +684,17 @@ project_archived` с `details.key` и `details.archived_at`; `DELETE
 берёт условие `in_active_project` (`app/db/repositories/projects.py`), а не пишет своё.
 **Где:** `app/api/routes/projects.py`, `list_projects`; `app/api/routes/bootstrap.py`;
 `app/db/repositories/entries.py`, `_in_project_or_active`, `count_questions`.
+
+## Карточка задачи несёт `archived_at` проекта — второй запрос не нужен
+
+**Что:** `TaskProjectRead.archived_at` (наравне с `key`, `title`, `description`) едет в
+`TaskRead.project` — `GET /tasks/{key}` и `POST /tasks`. Поле заполняется тем же
+`from_attributes`, что и остальные: правки маршрута не потребовалось, только новое поле
+схемы (TRK-167).
+**Почему важно:** до этой задачи узнать, что проект заморожен, можно было только вторым
+чтением `GET /projects/{key}`; интерфейс (UI-176) так и делал на экране задачи. Строка
+поиска (`TaskSearchRead`/`ProjectRefRead`) поля не несёт и после этой задачи — она не
+главный предмет ответа, и поле того же класса, что и `description`, там не нужно.
+**Как правильно:** признак архива читается из карточки задачи, а не отдельным вызовом;
+`GET /projects/{key}` остаётся нужен только за атрибутами и делом проекта.
+**Где:** `app/api/schemas/tasks.py`, `TaskProjectRead`.

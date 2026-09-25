@@ -446,6 +446,22 @@ async def test_rest_archive_needs_the_main_set(
     assert (response.status_code, response.json()["error"]["code"]) == (403, "permission_denied")
 
 
+async def test_the_task_card_carries_the_project_archive_time(
+    auth_client: AsyncClient, project: Project, task: Task
+) -> None:
+    """Обзорная проверка 1: карточка задачи несёт `project.archived_at` (TRK-167)."""
+    active = await auth_client.get("/api/v1/tasks/TRK-1")
+    assert active.json()["data"]["task"]["project"]["archived_at"] is None
+
+    archived = await auth_client.post(ARCHIVE.format(key="TRK"), json={"reason": "Заброшен"})
+    assert archived.status_code == 200, archived.text
+    archived_at = archived.json()["data"]["archived_at"]
+    card = await auth_client.get("/api/v1/tasks/TRK-1")
+
+    assert archived_at is not None
+    assert card.json()["data"]["task"]["project"]["archived_at"] == archived_at
+
+
 # --- MCP --------------------------------------------------------------------------------
 
 
@@ -492,6 +508,8 @@ async def test_mcp_archives_freezes_unlinks_and_restores(
     assert "project_archived" in entry
     assert "project_archived" in created
     assert card["task"]["key"] == "TRK-1"
+    # Обзорная проверка 1 (TRK-167): архив виден в карточке задачи без `get_project`.
+    assert card["task"]["project"]["archived_at"] == archived["archived_at"]
     assert project_card["archived_at"] == archived["archived_at"]
     assert (project_card["index"][-1]["type"], project_card["index"][-1]["facts"]) == (
         "archived",
