@@ -385,6 +385,7 @@ async def test_an_archive_of_v0_3_brings_its_queues_in_as_projects(
         "key": "TRK",
         "title": "Трекер",
         "description": "Бэкенд",
+        "archived_at": None,
     }
     project = await auth_client.get("/api/v1/projects/TRK", headers=bearer(target_ui))
     assert project.status_code == 200, project.text

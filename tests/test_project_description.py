@@ -115,6 +115,7 @@ async def test_the_task_card_carries_the_project_description(
         "key": "TRK",
         "title": "Трекер",
         "description": "Бэкенд трекера",
+        "archived_at": None,
     }
 
 
@@ -142,6 +143,7 @@ async def test_get_task_carries_the_project_description(
         "key": "TRK",
         "title": "Трекер",
         "description": "Бэкенд трекера",
+        "archived_at": None,
     }
     [row] = found["items"]
     assert row["project"] == {"key": "TRK", "title": "Трекер"}
