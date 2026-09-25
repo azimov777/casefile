@@ -187,7 +187,13 @@ AfterNoQuery = Annotated[
 
 TaskKeyPath = Annotated[
     str,
-    Path(description="Task key `PROJECT-number`; matching ignores case", examples=["TRK-42"]),
+    Path(
+        description=(
+            "Task key `PROJECT-number`; matching ignores case. A previous key of a moved "
+            "task addresses it as well"
+        ),
+        examples=["TRK-42"],
+    ),
 ]
 
 

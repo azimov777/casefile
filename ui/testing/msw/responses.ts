@@ -189,6 +189,7 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
   return {
     id: '33333333-3333-3333-3333-333333333333',
     key,
+    previous_keys: [],
     project: {
       key: key.split('-')[0] ?? 'DEMO',
       title: 'Демонстрация',
@@ -454,6 +455,19 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         body: '',
         type,
         payload: { name: 'repo', before: 'github.com/demo', reason: 'Репозиторий закрыт' },
+      };
+    case 'moved':
+      return {
+        ...base,
+        body: '',
+        type,
+        payload: {
+          from_project: 'UI',
+          to_project: 'DEMO',
+          from_key: 'UI-5',
+          to_key: taskKey,
+          reason: 'Репозиторий один, задачи ведутся в DEMO',
+        },
       };
     case 'archived':
     case 'restored':

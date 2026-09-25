@@ -43,6 +43,7 @@ from app.api.schemas.tasks import (
     TaskClosing,
     TaskCreate,
     TaskFeaturesRead,
+    TaskMove,
     TaskPackageRead,
     TaskRead,
     TaskTransition,
@@ -309,6 +310,40 @@ async def transition_task(
         expected_version=payload.version,
     )
     return DataResponse[TaskRead](data=TaskRead.model_validate(mutation.task))
+
+
+@router.post("/{task_key}/move", summary="Move a task to another project")
+async def move_task(
+    task_key: TaskKeyPath,
+    payload: TaskMove,
+    session: SessionDep,
+    actor: ActorDep,
+) -> DataResponse[TaskRead]:
+    """Переносит задачу в другой проект (`CONCEPT.md`, 3.3). Требует набора `main`.
+
+    Задача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —
+    этот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на
+    задачу везде, где принимается ключ. Статус не важен: закрытая задача переносится
+    тоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими
+    проектами, обоими ключами и причиной.
+
+    Отказы: набор `task` — `403 permission_denied`; пустая причина — `422
+    task_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий
+    или целевой проект в архиве — `409 project_archived`; целевой проект тот же, где
+    задача лежит, — `409 task_already_in_project`; устаревшая `version` — `409
+    version_conflict`.
+    """
+    task = await service.get_task(session, task_key)
+    project = await projects_service.get_project(session, payload.project)
+    moved = await service.move_task(
+        session,
+        task,
+        actor=actor,
+        project=project,
+        reason=payload.reason,
+        expected_version=payload.version,
+    )
+    return DataResponse[TaskRead](data=TaskRead.model_validate(moved.task))
 
 
 @router.post("/{task_key}/close", summary="Close a task")

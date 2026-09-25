@@ -174,9 +174,11 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
         </div>
       );
 
-    // Архив проекта (TRK-159): заголовок называет действие, тело — причину.
+    // Архив проекта (TRK-159) и перенос задачи (TRK-172): заголовок называет действие —
+    // у переноса и оба ключа, — тело причину.
     case 'archived':
     case 'restored':
+    case 'moved':
       return (
         <p className="wrap-anywhere">
           <TaskText>{entry.payload.reason}</TaskText>

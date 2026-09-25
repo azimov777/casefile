@@ -48,6 +48,7 @@ const FACTS = {
   assignee_changed: { type: 'assignee_changed', assignee_to: 'owner' },
   link_added: { type: 'link_added', link_kind: 'blocked_by', other_key: 'DEMO-2' },
   link_removed: { type: 'link_removed', link_kind: 'relates', other_key: 'DEMO-3' },
+  moved: { type: 'moved', from_key: 'UI-5', to_key: 'DEMO-9' },
   attribute_created: { type: 'attribute_created', name: 'repo' },
   attribute_changed: { type: 'attribute_changed', name: 'repo' },
   attribute_removed: { type: 'attribute_removed', name: 'repo' },
@@ -153,6 +154,15 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     expect(line({ type: 'link_added', link_kind: 'blocks', other_key: 'DEMO-3' })).toBe(
       `${say.ui('entry.headline.linkAdded')} blocks DEMO-3`,
     );
+  });
+
+  it('перенос называет прежний и новый ключ, и оба — ссылки на задачу (TRK-172)', () => {
+    expect(line(FACTS.moved)).toBe(`${say.ui('entry.headline.moved')} UI-5 → DEMO-9`);
+    const moved = built(FACTS.moved);
+    expect(moved.kind === 'built' && moved.parts.filter((part) => part.kind === 'task')).toEqual([
+      { kind: 'task', key: 'UI-5' },
+      { kind: 'task', key: 'DEMO-9' },
+    ]);
   });
 
   it('ответ и вердикт тоже собираются здесь: их заголовок выводит трекер', () => {

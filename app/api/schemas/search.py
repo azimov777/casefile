@@ -290,8 +290,17 @@ class TaskSearchRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    key: str = Field(examples=["TRK-42"], description="Immutable and never reused")
+    key: str = Field(
+        examples=["TRK-42"],
+        description=(
+            "Current key; a condition on a previous key of a moved task finds it under this one"
+        ),
+    )
     id: uuid.UUID | None = None
+    previous_keys: list[str] | None = Field(
+        default=None,
+        description="Keys the task had before moves to other projects, in the order left",
+    )
     project: ProjectRefRead | None = None
     title: str | None = None
     description: str | None = None
@@ -336,6 +345,7 @@ class TaskSearchRead(BaseModel):
         payload: dict[str, object] = {
             "id": task.id,
             "key": task.key,
+            "previous_keys": list(task.previous_keys),
             "project": ProjectRefRead.model_validate(task.project),
             "title": task.title,
             "description": task.description,

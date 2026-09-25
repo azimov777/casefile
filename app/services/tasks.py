@@ -55,6 +55,7 @@ from app.db.models.task import Task
 from app.db.repositories import TaskRepository
 from app.domain.case import EntryHeading
 from app.domain.errors import (
+    TaskAlreadyInProjectError,
     TaskClosedError,
     TaskFieldLockedError,
     TaskFieldsInvalidError,
@@ -80,10 +81,13 @@ from app.domain.tasks import (
     ensure_transition_allowed,
     format_task_key,
     is_closed,
+    moved_previous_keys,
     normalize_fields,
     normalize_reason,
     normalize_task_key,
     parse_status,
+    require_move_reason,
+    returning_key,
     section_values,
 )
 from app.domain.tokens import TokenScope
@@ -361,7 +365,7 @@ async def update_task(
 ) -> TaskMutation:
     """Частичное обновление: применяются только переданные поля.
 
-    Ключ и статус в изменения не входят: ключ неизменяем, статус меняется переходом.
+    Ключ и статус в изменения не входят: ключ меняется переносом (`move_task`), статус — переходом.
     """
     return await apply_task_changes(
         session,
@@ -490,6 +494,71 @@ async def close_task(
     for no in mutation.entries:
         filed.append(await case_service.read_entry(session, task, no, actor=actor))
     return TaskClosure(task=task, entries=tuple(filed))
+
+
+@dataclass(frozen=True, slots=True)
+class TaskMove:
+    """Результат переноса: задача с новым ключом и подшитая запись `moved`."""
+
+    task: Task
+    entry: Entry
+
+
+async def move_task(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    project: Project,
+    reason: str | None,
+    expected_version: int | None = None,
+) -> TaskMove:
+    """Переносит задачу в другой проект: новый ключ, прежний — в `previous_keys`, запись `moved`.
+
+    Правила — `CONCEPT.md`, 3.3, «Перенос в другой проект»: набор `main`, причина
+    обязательна, целевой проект другой, ни один из двух не в архиве; статус задачи не
+    важен — закрытая переносится тоже, и это единственное изменение закрытой задачи сверх
+    записей в дело. Меняются только проект, ключ и прежние ключи: связи, родство и дело
+    держатся не на ключах.
+
+    Ключ в целевом проекте — прежний, если он там уже был (`returning_key`), иначе
+    следующий номер счётчика. Номер берётся **последним**, после всех проверок: как у
+    создания задачи, откат уносит выданный номер навсегда (`docs/notes/db.md`).
+
+    Одновременные переносы одной задачи идут по одному: очередь изменений занимается
+    первым шагом, и под ней задача перечитывается (`lock_unfrozen`). Второй перенос
+    видит задачу уже на новом месте — и в тот же проект отвечает
+    `task_already_in_project`, а с прочитанной раньше `version` — `version_conflict`.
+    """
+    ensure_scope(actor, TokenScope.MAIN, action="task.move")
+    checked = require_move_reason(reason, key=task.key)
+    await freeze.lock_unfrozen(session, task, project=project)
+    _ensure_version(task, expected_version)
+    if task.project_id == project.id:
+        raise TaskAlreadyInProjectError(details={"key": task.key, "project": project.key})
+
+    from_key = task.key
+    from_project = task.project.key
+    to_key = returning_key(task.previous_keys, to_project=project.key)
+    if to_key is None:
+        number = await projects_service.next_task_number(session, project, actor=actor)
+        to_key = format_task_key(project.key, number)
+
+    task.previous_keys = moved_previous_keys(from_key, task.previous_keys, to_key=to_key)
+    task.key = to_key
+    task.project = project
+    await _flush_checking_version(session, task, expected_version)
+    entry = await case_service.record_moved(
+        session,
+        task,
+        actor=actor,
+        from_project=from_project,
+        to_project=project.key,
+        from_key=from_key,
+        to_key=to_key,
+        reason=checked,
+    )
+    return TaskMove(task=task, entry=entry)
 
 
 async def apply_task_changes(

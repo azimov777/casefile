@@ -4156,7 +4156,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task",
+              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task",
               "examples": [
                 [
                   "title",
@@ -4165,7 +4165,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task"
+            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task"
           },
           {
             "name": "limit",
@@ -4614,13 +4614,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "X-Actor-Label",
@@ -4736,13 +4736,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "X-Actor-Label",
@@ -4870,13 +4870,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "X-Actor-Label",
@@ -4984,6 +4984,140 @@
         }
       }
     },
+    "/api/v1/tasks/{task_key}/move": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Move a task to another project",
+        "description": "Переносит задачу в другой проект (`CONCEPT.md`, 3.3). Требует набора `main`.\n\nЗадача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —\nэтот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на\nзадачу везде, где принимается ключ. Статус не важен: закрытая задача переносится\nтоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими\nпроектами, обоими ключами и причиной.\n\nОтказы: набор `task` — `403 permission_denied`; пустая причина — `422\ntask_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий\nили целевой проект в архиве — `409 project_archived`; целевой проект тот же, где\nзадача лежит, — `409 task_already_in_project`; устаревшая `version` — `409\nversion_conflict`.",
+        "operationId": "move_task",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
+              "examples": [
+                "TRK-42"
+              ],
+              "title": "Task Key"
+            },
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskMove"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_TaskRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tasks/{task_key}/close": {
       "post": {
         "tags": [
@@ -5004,13 +5138,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "X-Actor-Label",
@@ -5159,13 +5293,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "X-Actor-Label",
@@ -5351,13 +5485,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "nos",
@@ -5582,13 +5716,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "entry_no",
@@ -5721,13 +5855,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "X-Actor-Label",
@@ -5876,13 +6010,13 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Task key `PROJECT-number`; matching ignores case",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
               "examples": [
                 "TRK-42"
               ],
               "title": "Task Key"
             },
-            "description": "Task key `PROJECT-number`; matching ignores case"
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
           },
           {
             "name": "kind",
@@ -6873,6 +7007,7 @@
                       "finding": "#/components/schemas/PlainEntryRead",
                       "link_added": "#/components/schemas/LinkEntryRead",
                       "link_removed": "#/components/schemas/LinkEntryRead",
+                      "moved": "#/components/schemas/MovedEntryRead",
                       "note": "#/components/schemas/PlainEntryRead",
                       "question": "#/components/schemas/QuestionEntryRead",
                       "remark": "#/components/schemas/RemarkEntryRead",
@@ -6921,6 +7056,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/LinkEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MovedEntryRead"
                     },
                     {
                       "$ref": "#/components/schemas/AttributeCreatedEntryRead"
@@ -9377,6 +9515,9 @@
           },
           {
             "$ref": "#/components/schemas/AttributeFactsRead"
+          },
+          {
+            "$ref": "#/components/schemas/MovedFactsRead"
           }
         ],
         "discriminator": {
@@ -9396,6 +9537,7 @@
             "finding": "#/components/schemas/NoFactsRead",
             "link_added": "#/components/schemas/LinkFactsRead",
             "link_removed": "#/components/schemas/LinkFactsRead",
+            "moved": "#/components/schemas/MovedFactsRead",
             "note": "#/components/schemas/NoFactsRead",
             "question": "#/components/schemas/QuestionFactsRead",
             "remark": "#/components/schemas/NoFactsRead",
@@ -9511,6 +9653,9 @@
             "$ref": "#/components/schemas/LinkEntryRead"
           },
           {
+            "$ref": "#/components/schemas/MovedEntryRead"
+          },
+          {
             "$ref": "#/components/schemas/AttributeCreatedEntryRead"
           },
           {
@@ -9540,6 +9685,7 @@
             "finding": "#/components/schemas/PlainEntryRead",
             "link_added": "#/components/schemas/LinkEntryRead",
             "link_removed": "#/components/schemas/LinkEntryRead",
+            "moved": "#/components/schemas/MovedEntryRead",
             "note": "#/components/schemas/PlainEntryRead",
             "question": "#/components/schemas/QuestionEntryRead",
             "remark": "#/components/schemas/RemarkEntryRead",
@@ -9573,6 +9719,7 @@
           "assignee_changed",
           "link_added",
           "link_removed",
+          "moved",
           "attribute_created",
           "attribute_changed",
           "attribute_removed",
@@ -10236,6 +10383,224 @@
         ],
         "title": "LinkTaskRead",
         "description": "Задача на другой стороне связи: ключ, название и статус."
+      },
+      "MovedEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "moved",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/MovedPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "MovedEntryRead",
+        "description": "Служебная запись о переносе задачи в другой проект."
+      },
+      "MovedFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "moved",
+            "title": "Type"
+          },
+          "from_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Key",
+            "description": "Key the task left",
+            "examples": [
+              "UI-124"
+            ]
+          },
+          "to_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Key",
+            "description": "Key the task got in the new project",
+            "examples": [
+              "TRK-300"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "MovedFactsRead",
+        "description": "Перенос в другой проект: с какого ключа на какой."
+      },
+      "MovedPayload": {
+        "properties": {
+          "from_project": {
+            "type": "string",
+            "title": "From Project",
+            "description": "Project the task left",
+            "examples": [
+              "UI"
+            ]
+          },
+          "to_project": {
+            "type": "string",
+            "title": "To Project",
+            "description": "Project the task moved to",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "from_key": {
+            "type": "string",
+            "title": "From Key",
+            "description": "Key the task left; it keeps leading to the task",
+            "examples": [
+              "UI-124"
+            ]
+          },
+          "to_key": {
+            "type": "string",
+            "title": "To Key",
+            "description": "Key the task got: the next number of the new project, or the task's own earlier key there when it returns",
+            "examples": [
+              "TRK-300"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why the task moved",
+            "examples": [
+              "Репозиторий один, задачи интерфейса ведутся в TRK"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "from_project",
+          "to_project",
+          "from_key",
+          "to_key",
+          "reason"
+        ],
+        "title": "MovedPayload",
+        "description": "Задача перенесена в другой проект: откуда, куда, ключи и причина (`CONCEPT.md`, 3.3)."
       },
       "NoFactsRead": {
         "properties": {
@@ -12936,6 +13301,52 @@
         "title": "TaskLinkRead",
         "description": "Связь со стороны одной задачи."
       },
+      "TaskMove": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project",
+            "description": "Key of the project the task moves to, case-insensitive",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Reason",
+            "description": "Why the task moves; a blank one answers `422 task_move_reason_required`. Filed in the `moved` entry",
+            "examples": [
+              "Репозиторий один, задачи интерфейса ведутся в TRK"
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Version the client last saw; omit it to skip the check",
+            "examples": [
+              3
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project",
+          "reason"
+        ],
+        "title": "TaskMove",
+        "description": "Перенос задачи в другой проект (`CONCEPT.md`, 3.3)."
+      },
       "TaskPackageRead": {
         "properties": {
           "task": {
@@ -13132,9 +13543,22 @@
           "key": {
             "type": "string",
             "title": "Key",
-            "description": "Immutable and never reused",
+            "description": "Current key; changes only when the task moves to another project, and the key it leaves keeps leading to the task (`previous_keys`). Never handed to another task",
             "examples": [
               "TRK-42"
+            ]
+          },
+          "previous_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Previous Keys",
+            "description": "Keys the task had before moves to other projects, in the order they were left; empty for a task never moved. Each one leads to this task wherever a key is accepted",
+            "examples": [
+              [
+                "UI-124"
+              ]
             ]
           },
           "project": {
@@ -13248,6 +13672,7 @@
         "required": [
           "id",
           "key",
+          "previous_keys",
           "project",
           "title",
           "description",
@@ -13272,7 +13697,7 @@
           "key": {
             "type": "string",
             "title": "Key",
-            "description": "Immutable and never reused",
+            "description": "Current key; a condition on a previous key of a moved task finds it under this one",
             "examples": [
               "TRK-42"
             ]
@@ -13288,6 +13713,21 @@
               }
             ],
             "title": "Id"
+          },
+          "previous_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Keys",
+            "description": "Keys the task had before moves to other projects, in the order left"
           },
           "project": {
             "anyOf": [
@@ -13652,7 +14092,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "TaskUpdate",
-        "description": "Частичное обновление: применяется только переданное.\n\n`assignee` объявлен как `str | None`: `null` осмыслен и снимает исполнителя. У\nостальных полей `null` смысла не имеет, и схема его не пропустит. Статуса здесь нет\n— он меняется переходом; ключа нет — он неизменяем. Лишнее поле схема отвергает, а\nне игнорирует: клиент должен узнать, что изменения не произошло, из ответа."
+        "description": "Частичное обновление: применяется только переданное.\n\n`assignee` объявлен как `str | None`: `null` осмыслен и снимает исполнителя. У\nостальных полей `null` смысла не имеет, и схема его не пропустит. Статуса здесь нет\n— он меняется переходом; ключа нет — он меняется только переносом (`move`). Лишнее\nполе схема отвергает, а не игнорирует: клиент должен узнать, что изменения не\nпроизошло, из ответа."
       },
       "TokenCreate": {
         "properties": {

@@ -459,7 +459,13 @@ async def _case_with_every_entry_type(client: AsyncClient, project: Project) -> 
             "next_step": "next",
         },
     )
-    return key
+    # `moved` — переносом в соседний проект (TRK-172): ключ задачи меняется, и дальше
+    # она читается по новому.
+    neighbour = await client.post("/api/v1/projects", json={"key": "OPS", "title": "Соседний"})
+    assert neighbour.status_code == 201, neighbour.text
+    moved = await client.post(f"/api/v1/tasks/{key}/move", json={"project": "OPS", "reason": "r"})
+    assert moved.status_code == 200, moved.text
+    return str(moved.json()["data"]["key"])
 
 
 # --- Цена пакета -----------------------------------------------------------------------

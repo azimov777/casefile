@@ -54,7 +54,17 @@ class TaskView(BaseModel):
     """Task card."""
 
     id: str
-    key: str
+    key: str = Field(
+        description=(
+            "Current key; changes only when the task moves to another project with `move_task`"
+        )
+    )
+    previous_keys: list[str] = Field(
+        description=(
+            "Keys the task had before moves, in the order they were left; empty for a task "
+            "never moved. Each one is accepted wherever a task key is"
+        )
+    )
     project: TaskProjectView
     title: str
     description: str
@@ -77,6 +87,7 @@ def task(item: Task) -> TaskView:
     return TaskView(
         id=str(item.id),
         key=item.key,
+        previous_keys=list(item.previous_keys),
         project=task_project(item.project),
         title=item.title,
         description=item.description,

@@ -45,6 +45,7 @@ from app.domain.errors import (
     TaskBlockedError,
     TaskFieldsInvalidError,
     TaskHasUnclosedChildrenError,
+    TaskMoveReasonRequiredError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
     TransitionReasonRequiredError,
@@ -110,6 +111,48 @@ def parse_task_key(key: str) -> tuple[str, int]:
 def normalize_task_key(key: str) -> str:
     """Канонический вид ключа: проект в верхнем регистре, номер без ведущих нулей."""
     return format_task_key(*parse_task_key(key))
+
+
+def project_of_key(key: str) -> str:
+    """Проект ключа задачи: `UI-5` → `UI`. Ключ канонический — из базы, а не от клиента.
+
+    Левая часть ключа называет проект, где ключ выдан, навсегда: ключ проекта
+    неизменяем (`CONCEPT.md`, 3.2).
+    """
+    return key.partition(TASK_KEY_SEPARATOR)[0]
+
+
+# --- Перенос в другой проект -----------------------------------------------------------
+
+
+def require_move_reason(reason: str | None, *, key: str) -> str:
+    """Причина переноса без пробелов по краям; пустая — `task_move_reason_required`.
+
+    Причина обязательна (`CONCEPT.md`, 3.3), как у архивирования: ключ задачи меняется, и
+    тот, кто придёт по прежнему ключу, узнаёт из записи `moved`, почему.
+    """
+    normalized = (reason or "").strip()
+    if not normalized:
+        raise TaskMoveReasonRequiredError(details={"key": key})
+    return normalized
+
+
+def returning_key(previous_keys: Sequence[str], *, to_project: str) -> str | None:
+    """Прежний ключ задачи в проекте `to_project`, если он у неё есть.
+
+    У задачи не больше одного ключа в каждом проекте: в проект, где ключ уже был, она
+    возвращается с ним, а не получает новый номер (`TRK-171#9`, п. 2).
+    """
+    return next((item for item in previous_keys if project_of_key(item) == to_project), None)
+
+
+def moved_previous_keys(key: str, previous_keys: Sequence[str], *, to_key: str) -> list[str]:
+    """Прежние ключи после переноса: уходящий ключ — в конец, вернувшийся — прочь.
+
+    Порядок прежних — порядок ухода (`CONCEPT.md`, 3.3): вернувшийся ключ снова текущий и
+    из прежних уходит, а когда уйдёт опять, встанет в конец.
+    """
+    return [*(item for item in previous_keys if item != to_key), key]
 
 
 def is_plain_number(part: str) -> bool:

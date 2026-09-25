@@ -1048,6 +1048,39 @@ async def record_link_change(
     )
 
 
+async def record_moved(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    from_project: str,
+    to_project: str,
+    from_key: str,
+    to_key: str,
+    reason: str,
+) -> Entry:
+    """Перенос в другой проект: откуда, куда, прежний и новый ключ, причина (`CONCEPT.md`, 3.3).
+
+    Только в дело самой задачи: в дела проектов запись не пишется (`TRK-171#9`, п. 7).
+    Подшивается после записи задачи, то есть уже в деле задачи с новым ключом — номер
+    записи внутри задачи от переноса не зависит.
+    """
+    return await _append(
+        session,
+        task,
+        actor=actor,
+        type=EntryType.MOVED,
+        title=f"Moved: {from_key} -> {to_key}",
+        payload={
+            "from_project": from_project,
+            "to_project": to_project,
+            "from_key": from_key,
+            "to_key": to_key,
+            "reason": reason,
+        },
+    )
+
+
 # --- Внутреннее -----------------------------------------------------------------------
 
 

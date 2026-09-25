@@ -14,6 +14,9 @@
 - записи **всех** типов, включая служебные `section_changed`, `assignee_changed`,
   `link_added` и `link_removed`: экран дела иначе показывал бы половину словаря;
 - атрибуты проекта с историей в его деле: заведение, изменение с причиной и снятие;
+- перенос туда и обратно: отменённая задача уезжает в соседний проект `LEGACY` и
+  возвращается со своим ключом, а прежний ключ `LEGACY-1` остаётся в её карточке;
+  опустевший `LEGACY` уходит в архив и в списке проектов не виден;
 - открытый блокирующий вопрос, адресованный человеку, — «входящая» и первый экран
   без него пусты;
 - связи всех трёх видов;
@@ -53,6 +56,9 @@ from app.services.tasks import TaskChanges
 
 #: Ключ демонстрационного проекта. Он же признак «демо уже наполнено».
 DEMO_PROJECT_KEY = "DEMO"
+
+#: Соседний проект демо: в него задача переезжает и возвращается, и он уходит в архив.
+DEMO_NEIGHBOUR_KEY = "LEGACY"
 
 #: Постоянный агент демо: ему адресуемы вопросы и он подписывает большую часть записей.
 DEMO_AGENT_NAME = "demo_agent"
@@ -145,6 +151,8 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     await projects_service.restore_project(
         session, project, actor=owner, reason="Выпуск вышел, работа над демо продолжается"
     )
+
+    await _moved_there_and_back(session, cancelled, home=project, owner=owner)
 
     return DemoData(
         project=project,
@@ -687,3 +695,39 @@ async def _cancelled_task(session: AsyncSession, project: Project, *, agent: Act
         reason="Лента с ожиданием закрывает ту же потребность; вебхуки отвергнуты концепцией",
     )
     return task
+
+
+async def _moved_there_and_back(
+    session: AsyncSession, task: Task, *, home: Project, owner: Actor
+) -> None:
+    """Перенос в соседний проект и возврат (`CONCEPT.md`, 3.3): две записи `moved`.
+
+    Задача возвращается со своим ключом, а не с новым номером, и прежний ключ соседнего
+    проекта остаётся в `previous_keys` — на экране видно оба правила сразу. Переносит
+    владелец: перенос — действие набора `main`. Соседний проект после возврата пуст и
+    уходит в архив с причиной — так, как опустевший проект архивирует агент, а не трекер.
+    """
+    neighbour = await projects_service.create_project(
+        session,
+        actor=owner,
+        key=DEMO_NEIGHBOUR_KEY,
+        title="Прежний проект",
+        description="Проект, откуда задачи переехали в DEMO.",
+    )
+    await tasks_service.move_task(
+        session,
+        task,
+        actor=owner,
+        project=neighbour,
+        reason="Вебхуки — тема интеграций, а она ведётся в отдельном проекте",
+    )
+    await tasks_service.move_task(
+        session,
+        task,
+        actor=owner,
+        project=home,
+        reason="Интеграции снова ведутся в DEMO: отдельный проект не прижился",
+    )
+    await projects_service.archive_project(
+        session, neighbour, actor=owner, reason="Задачи вернулись в DEMO, проект пуст"
+    )

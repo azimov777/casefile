@@ -442,6 +442,7 @@ PARENT_FIELD = "parent"
 SELECTABLE_FIELDS: tuple[str, ...] = (
     "id",
     "key",
+    "previous_keys",
     "project",
     "title",
     "description",

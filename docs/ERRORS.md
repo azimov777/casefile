@@ -86,6 +86,7 @@
 | `project_key_taken` | Project key is already taken | Ключ проекта уже занят: ключи уникальны без учёта регистра. |
 | `project_not_archived` | Project is not archived | Восстанавливать нечего: проект не в архиве. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
+| `task_already_in_project` | Task is already in this project | Перенос в проект, где задача уже лежит: переносить некуда (`CONCEPT.md`, 3.3). |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
 | `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
@@ -130,6 +131,7 @@
 | `search_operator_not_supported` | Operator is not supported for this field | Оператор к этому полю неприменим: допустимые перечислены в `details.allowed`. |
 | `search_value_invalid` | Search value is invalid | Значение условия не разрешается: нет такого проекта, статуса, не число. |
 | `task_fields_invalid` | Task fields are invalid | Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`. |
+| `task_move_reason_required` | Moving a task to another project requires a reason | Перенос задачи в другой проект требует непустой причины `reason` (`CONCEPT.md`, 3.3). |
 | `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
 | `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`. |
 | `validation_error` | Validation failed | Входные данные синтаксически корректны, но нарушают правило предметной области. |
