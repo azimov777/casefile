@@ -63,6 +63,7 @@ from app.db.repositories.entries import (
     remarks_in_work_count,
 )
 from app.db.repositories.links import open_blockers_of, parent_of
+from app.db.repositories.projects import in_active_project
 from app.db.sql import ilike_contains
 from app.domain.links import LinkKind
 from app.domain.search import (
@@ -71,6 +72,7 @@ from app.domain.search import (
     ORDER_OPERATORS,
     PARENT_FIELD,
     Junction,
+    NamedInFilter,
     Operator,
     ResolvedFilter,
     ResolvedSort,
@@ -81,6 +83,7 @@ from app.domain.search import (
     Term,
     TermGroup,
     field_requested,
+    named_in_filter,
 )
 from app.domain.tasks import (
     TASK_KEY_SEPARATOR,
@@ -160,8 +163,7 @@ class TaskSearchRepository:
             select(Task).join(Task.project).options(contains_eager(Task.project))
         )
         condition = compile_filter(resolved)
-        if condition is not None:
-            statement = statement.where(condition)
+        statement = statement.where(condition)
         # Порядок колонок в строке: задача, значения ключей сортировки, признаки,
         # родители. Курсор берёт только середину — отсюда явные границы среза ниже:
         # признаки и родители в него попасть не должны, а их наличие зависит от `fields`.
@@ -199,7 +201,7 @@ class TaskSearchRepository:
             total=total,
         )
 
-    async def _count(self, condition: ColumnElement[bool] | None) -> int:
+    async def _count(self, condition: ColumnElement[bool]) -> int:
         """Сколько задач нашлось по отбору — без страницы, порядка и признаков.
 
         Условие берётся то же самое, что и у страницы, а не пишется вторым текстом:
@@ -210,9 +212,7 @@ class TaskSearchRepository:
         Соединение с проектом остаётся: по нему отбирают (`project: TRK`), а внешний ключ
         обязателен и соединение внутреннее, поэтому число строк от него не меняется.
         """
-        statement = select(func.count()).select_from(Task).join(Task.project)
-        if condition is not None:
-            statement = statement.where(condition)
+        statement = select(func.count()).select_from(Task).join(Task.project).where(condition)
         # `COUNT(*)` отдаёт строку всегда, в том числе `0` на пустой выдаче: `None`
         # здесь недостижим и подставлен ради типа.
         return await self._session.scalar(statement) or 0
@@ -272,11 +272,33 @@ def _features_of(row: Any) -> TaskFeatures:
     )
 
 
-def compile_filter(resolved: ResolvedFilter) -> ColumnElement[bool] | None:
-    """Условие отбора или `None`, если условий нет."""
+def compile_filter(resolved: ResolvedFilter) -> ColumnElement[bool]:
+    """Условие отбора вместе с видимостью архива.
+
+    Условие есть всегда, даже у отбора без условий: задачи архивных проектов скрыты,
+    пока отбор их не назвал (`_archive_visibility`).
+    """
+    visible = _archive_visibility(named_in_filter(resolved.root))
     if resolved.root is None:
-        return None
-    return _compile(resolved.root)
+        return visible
+    return and_(_compile(resolved.root), visible)
+
+
+def _archive_visibility(named: NamedInFilter) -> ColumnElement[bool]:
+    """Задача видна, если её проект жив или отбор назвал её явно (`CONCEPT.md`, 4.4).
+
+    Явно — это проект условием `project:`, ключ самой задачи условием `key:` или ключ её
+    родителя условием `parent:`; что считается названным, решает домен
+    (`named_in_filter`). Условие ложится на отбор через `and`, поэтому названное в одной
+    ветке `or` не открывает архив остальным ветвям.
+    """
+    parts = [in_active_project(Task.project_id)]
+    if named.projects:
+        parts.append(Task.project_id.in_(named.projects))
+    if named.tasks:
+        parts.append(Task.id.in_(named.tasks))
+    parts.extend(_has_parent(parent) for parent in named.parents)
+    return or_(*parts)
 
 
 def _compile(term: Term) -> ColumnElement[bool]:

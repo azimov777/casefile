@@ -351,7 +351,10 @@ def register(tools: Toolset) -> None:
         """Searches tasks by a query language string, by separate conditions, or by both.
 
         Conditions from both sources combine with `and` and give the same result as one
-        string of the same meaning; no condition at all selects every task. Rows are
+        string of the same meaning; no condition at all selects every task of the
+        projects that are not archived. A task of an archived project is found only when
+        the search names it with `=` or `in`: its project in `project`, the task itself in
+        `key`, or its parent in `parent`. Rows are
         ordered by `sort`, by key when it is left out. A long text is cut at the
         installation limit and marked by `<field>_truncated` and `<field>_length`; one
         task in full, with its case and links, is returned by `get_task`.
