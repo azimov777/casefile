@@ -705,14 +705,22 @@ async def list_project_entries(
     actor: Actor,
     nos: Sequence[int] | None = None,
     types: Sequence[EntryType] | None = None,
+    attribute: str | None = None,
     after_no: int | None = None,
     limit: int | None = None,
     cursor: str | None = None,
 ) -> Page[Entry]:
-    """Записи дела проекта страницами в порядке `no` — те же фильтры, что у задачи."""
+    """Записи дела проекта страницами в порядке `no` — те же фильтры, что у задачи, и
+    `attribute`: история одного атрибута по имени, без учёта регистра (`CONCEPT.md`, 3.2)."""
     ensure_scope(actor, TokenScope.TASK, action="project_case.read")
     return await EntryRepository(session).list_project_page(
-        project.id, nos=nos, types=types, after_no=after_no, limit=limit, cursor=cursor
+        project.id,
+        nos=nos,
+        types=types,
+        attribute=attribute,
+        after_no=after_no,
+        limit=limit,
+        cursor=cursor,
     )
 
 

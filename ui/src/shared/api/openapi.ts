@@ -540,7 +540,9 @@ export interface paths {
          *
          *     Фильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,
          *     `after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют
-         *     оба, побеждает больший.
+         *     оба, побеждает больший. `attribute` отдаёт историю одного атрибута: только
+         *     `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта
+         *     регистра — без него история листается вперемешку с остальным делом проекта.
          */
         get: operations["list_project_entries"];
         put?: never;
@@ -7062,6 +7064,8 @@ export interface operations {
                 nos?: number[] | null;
                 /** @description Read only entries of these types */
                 types?: components["schemas"]["EntryType"][] | null;
+                /** @description Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters */
+                attribute?: string | null;
                 /** @description Read only entries after this number — what happened since */
                 after_no?: number | null;
                 /** @description Page size */

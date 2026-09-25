@@ -96,6 +96,17 @@ AfterNoArg = Annotated[
     int | None, Field(description="Only entries filed after the entry with this number")
 ]
 
+AttributeArg = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Only entries about the attribute with this name: `attribute_created`, "
+            "`attribute_changed`, `attribute_removed`; matching ignores case"
+        ),
+        examples=["repo"],
+    ),
+]
+
 SummaryDoneArg = Annotated[
     str,
     Field(

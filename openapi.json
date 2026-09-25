@@ -3553,7 +3553,7 @@
           "projects"
         ],
         "summary": "Read project case entries",
-        "description": "Записи дела проекта с телами и нагрузкой, в порядке `no`.\n\nФильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,\n`after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют\nоба, побеждает больший.",
+        "description": "Записи дела проекта с телами и нагрузкой, в порядке `no`.\n\nФильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,\n`after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют\nоба, побеждает больший. `attribute` отдаёт историю одного атрибута: только\n`attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта\nрегистра — без него история листается вперемешку с остальным делом проекта.",
         "operationId": "list_project_entries",
         "security": [
           {
@@ -3627,6 +3627,27 @@
               "title": "Types"
             },
             "description": "Read only entries of these types"
+          },
+          {
+            "name": "attribute",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters",
+              "examples": [
+                "repo"
+              ],
+              "title": "Attribute"
+            },
+            "description": "Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters"
           },
           {
             "name": "after_no",

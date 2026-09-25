@@ -1,7 +1,8 @@
-"""Инструмент `read_project_entries`: тела записей дела проекта по номерам, типам и «после»."""
+"""Инструмент `read_project_entries`: тела записей дела проекта по номерам, типам,
+имени атрибута и «после»."""
 
 from app.mcp.arguments import CursorArg, LimitArg, ProjectKeyArg
-from app.mcp.tools.case.arguments import AfterNoArg, EntryNosArg, EntryTypesArg
+from app.mcp.tools.case.arguments import AfterNoArg, AttributeArg, EntryNosArg, EntryTypesArg
 from app.mcp.tools.case.views import EntryView, entry
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import PageView, page
@@ -19,6 +20,7 @@ def register(tools: Toolset) -> None:
         key: ProjectKeyArg,
         nos: EntryNosArg = None,
         types: EntryTypesArg = None,
+        attribute: AttributeArg = None,
         after_no: AfterNoArg = None,
         limit: LimitArg = None,
         cursor: CursorArg = None,
@@ -28,8 +30,9 @@ def register(tools: Toolset) -> None:
 
         The project's case holds decisions, findings, artifacts and notes about the
         project, and the tracker's own entries about its card. Filters combine with
-        `and`, as in `read_entries`. The case index, titles only, comes with
-        `get_project`.
+        `and`, as in `read_entries`. `attribute` gives one attribute's history:
+        `attribute_created`, `attribute_changed`, `attribute_removed` entries with that
+        name. The case index, titles only, comes with `get_project`.
         """
         async with runtime.call() as (session, actor):
             project = await projects_service.get_project(session, key)
@@ -39,6 +42,7 @@ def register(tools: Toolset) -> None:
                 actor=actor,
                 nos=nos,
                 types=types,
+                attribute=attribute,
                 after_no=after_no,
                 limit=limit or settings.mcp_page_size,
                 cursor=cursor,
