@@ -80,6 +80,23 @@ async function overflow(page: Page): Promise<number> {
   );
 }
 
+/**
+ * Проект с длинным названием для UI-181: свой ключ на прогон, как у `project-actions`
+ * и `project-place` — проект нельзя удалить, только архивировать, и повторный локальный
+ * прогон заводит рядом свой, а не натыкается на прежний.
+ */
+const PROJECT_RUN = Date.now().toString(36).toUpperCase();
+const PROJECT_KEY = `L${PROJECT_RUN}`.slice(0, 16);
+const PROJECT_TITLE = `Подопытный проект сквозного теста с очень длинным названием для отбора, прогон ${PROJECT_RUN}`;
+
+async function createLongProject(request: APIRequestContext): Promise<void> {
+  const response = await request.post('/api/v1/projects', {
+    headers: auth(),
+    data: { key: PROJECT_KEY, title: PROJECT_TITLE },
+  });
+  expect([201, 409]).toContain(response.status());
+}
+
 test('длинное слово и код без пробелов не тянут страницу вбок на телефоне (UI-150)', async ({
   page,
   request,
@@ -155,5 +172,35 @@ test('блок кода остаётся при своей прокрутке, �
     expect(scrolls.overflows).toBe(true);
   } finally {
     await cancel(request, key);
+  }
+});
+
+/**
+ * Отбор проекта на `/questions` (UI-181): закрытый `<select>` без ограничения ширины
+ * растягивался по самой длинной паре «ключ — название» среди `bootstrap.data.projects`,
+ * даже когда она не выбрана, — проект достаточно завести, выбирать его не нужно.
+ * Оба блока входящей проверяются отдельно: у входящей и у истории вопросов свой `<select>`
+ * (`questions-page.tsx`).
+ */
+test('длинное название проекта в отборе не тянет /questions вбок на телефоне (UI-181)', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(60_000);
+
+  await createLongProject(request);
+
+  await silenceJournal(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  for (const address of ['/questions', '/questions?view=history']) {
+    await page.goto(address);
+    await expect(page.getByRole('main')).toBeVisible();
+    // Ждём сам проект в списке: бутстрап приходит своим запросом, и замер до его
+    // прихода ничего не значит — раздвинуть закрытый `<select>` может как раз он.
+    await expect(page.locator(`option[value="${PROJECT_KEY}"]`)).toHaveCount(1);
+    await fontsReady(page);
+
+    expect(await overflow(page), address).toBeLessThanOrEqual(0);
   }
 });
