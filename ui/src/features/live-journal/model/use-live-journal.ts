@@ -152,12 +152,14 @@ export function useLiveJournal(): LiveJournal {
       invalidate(keysToInvalidate(frame), frame.taskKey);
 
       if (frame.entry.type !== 'question') return;
-      // Вопрос интересен человеку, только если спросили его самого.
+      // Вопрос интересен человеку, только если спросили его самого. Тип записи сузил
+      // `frame.entry` до варианта задачи: у него `task_key` — всегда строка, вопросов
+      // в деле проекта не бывает (TRK-156).
       const me = queryClient.getQueryData<Bootstrap>(sessionKeys.bootstrap)?.participant?.name;
       if (me === undefined || me === null) return;
       if (!frame.entry.payload.addressees.includes(me)) return;
 
-      const id = `${frame.taskKey}#${frame.entry.no}`;
+      const id = `${frame.entry.task_key}#${frame.entry.no}`;
       if (announced.current.has(id)) return;
       announced.current.add(id);
 
@@ -166,7 +168,7 @@ export function useLiveJournal(): LiveJournal {
       // нагрузку всех пятнадцати типов записи разом.
       const question: IncomingQuestion = {
         id,
-        taskKey: frame.taskKey,
+        taskKey: frame.entry.task_key,
         no: frame.entry.no,
         title: frame.entry.title,
         blocking: frame.entry.payload.blocking,

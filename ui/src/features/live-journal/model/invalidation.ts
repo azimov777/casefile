@@ -1,5 +1,6 @@
 import type { QueryKey } from '@tanstack/react-query';
 import { questionKeys } from '@/entities/entry';
+import { projectKeys } from '@/entities/project';
 import { sessionKeys } from '@/entities/session';
 import { taskKeys } from '@/entities/task';
 import type { JournalFrame } from './frames';
@@ -19,6 +20,9 @@ import type { JournalFrame } from './frames';
  * - Таблица пересобирает порядок строк, отсортированных по активности: строка
  *   из-под курсора уезжает, и промах по ссылке ведёт не туда. Здесь обновление
  *   предлагается полосой, а не навязывается.
+ * - Экран проекта устроен как открытая задача: у него нет ни доски, ни таблицы,
+ *   поэтому запись дела проекта перечитывает его сразу и целиком, без склейки и
+ *   без полосы (UI-177).
  */
 export interface Invalidation {
   /** Перечитывается сразу: обновление ничего не сдвигает. */
@@ -39,9 +43,21 @@ export interface Invalidation {
  *
  * Ключи заданы префиксами: `['task', 'DEMO-6']` накрывает и пакет карточки, и ленту
  * дела, и прочитанные тела записей этой задачи; `taskKeys.board` — страницы всех
- * столбцов и числа над ними.
+ * столбцов и числа над ними. `projectKeys.detail(key)` — тот же префикс `['project',
+ * key]`, и он же накрывает карточку с атрибутами, страницы дела проекта и прочитанные
+ * тела его записей (`entities/entry`, `entryKeys.projectCase`, `entryKeys.projectBody`).
  */
 export function keysToInvalidate(frame: JournalFrame): Invalidation {
+  // Запись дела проекта: своего списка и доски у проекта нет, перечитывается только
+  // сам экран — карточка, атрибуты и опись (TRK-156, UI-177).
+  if (frame.projectKey !== null) {
+    return { immediate: [projectKeys.detail(frame.projectKey)], coalesced: [], deferred: [] };
+  }
+
+  // `taskKey` не назван вместе с `projectKey` быть не может: `parseFrame` такой кадр
+  // уже отбросил. Ветка остаётся только для типов, а не как настоящая проверка.
+  if (frame.taskKey === null) return { immediate: [], coalesced: [], deferred: [] };
+
   const immediate: QueryKey[] = [['task', frame.taskKey]];
 
   // Вопрос и ответ меняют «входящую» и счётчик в шапке. Это и есть «требует внимания»:
@@ -60,14 +76,14 @@ export function keysToInvalidate(frame: JournalFrame): Invalidation {
  * Что перечитать после обрыва связи.
  *
  * За время паузы могло случиться что угодно, а догонять пропущенные кадры поштучно
- * интерфейс не станет. Деление то же самое: открытая задача, входящая и счётчик —
- * сразу, доска — своим окном (одним перечитыванием, кадров-то нет), таблица — по
- * просьбе. Переподключение случается ровно тогда, когда человек ничего не делал,
+ * интерфейс не станет. Деление то же самое: открытая задача, открытый проект, входящая
+ * и счётчик — сразу, доска — своим окном (одним перечитыванием, кадров-то нет), таблица
+ * — по просьбе. Переподключение случается ровно тогда, когда человек ничего не делал,
  * и переставлять строки под ним особенно нечестно.
  */
 export function keysAfterReconnect(): Invalidation {
   return {
-    immediate: [['task'], questionKeys.all, sessionKeys.bootstrap],
+    immediate: [['task'], ['project'], questionKeys.all, sessionKeys.bootstrap],
     coalesced: [taskKeys.board],
     deferred: [taskKeys.table],
   };

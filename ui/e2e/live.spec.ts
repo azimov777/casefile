@@ -63,6 +63,26 @@ async function addEntry(
     .toBe(201);
 }
 
+/** Метка прогона: свой проект на файл, чтобы соседний прогон на той же базе не мешал. */
+const RUN = Date.now().toString(36).toUpperCase();
+
+/**
+ * Заводит проект прогона с буквой-меткой теста; ключ не длиннее 16 знаков.
+ *
+ * Название короткое нарочно: длинное растягивает `<select>` отбора проекта на
+ * `/questions` шире 390 px (находка этого прогона — поле без `max-width`, заведена
+ * отдельно, UI-181, эта задача его не трогает) и роняет соседний `long-word.spec.ts`.
+ */
+async function createProject(request: APIRequestContext, mark: string): Promise<string> {
+  const key = `${mark}${RUN}`.slice(0, 16);
+  const response = await request.post('/api/v1/projects', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { key, title: 'Живой поток' },
+  });
+  expect(response.status()).toBe(201);
+  return key;
+}
+
 /**
  * Живой поток проверяется только здесь: в jsdom он не работает вовсе
  * (`@microsoft/fetch-event-source` создаёт свой `AbortSignal`, который не принимает
@@ -296,6 +316,66 @@ test('на загрузке страницы индикатор ни разу н
   expect(seen).not.toContain('нет связи');
   // Первое открытие называется своими словами, а не молчанием.
   expect(seen).toContain('подключаемся');
+});
+
+/*
+ * Живой поток на экране проекта (UI-177, TRK-156): кадры дела проекта перечитывают
+ * показанный экран тем же немедленным путём, что у карточки задачи — без перестановки,
+ * без окна склейки, без полосы (проекту нет ни доски, ни таблицы).
+ */
+test('атрибут, поставленный через API при открытом экране проекта, появляется в атрибутах и в описи без перезагрузки', async ({
+  page,
+  request,
+}) => {
+  const key = await createProject(request, 'PA');
+
+  await page.goto(`/projects/${key}`);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(key);
+  await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+  await expect(page.getByText('Атрибутов у проекта нет.')).toBeVisible();
+
+  const response = await request.put(`/api/v1/projects/${key}/attributes/size`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { value: 'medium' },
+  });
+  expect(response.status()).toBe(200);
+
+  const attributes = page.getByRole('region', { name: 'Атрибуты' });
+  await expect(attributes.getByText('medium')).toBeVisible({ timeout: 5_000 });
+
+  // Та же запись — в описи дела проекта, ещё одним перечитыванием того же кадра.
+  // Заголовок строит интерфейс из фактов (`entryHeadline`): «Атрибут заведён» и имя.
+  await expect(
+    page.getByRole('table').getByRole('button', { name: 'Атрибут заведён size' }),
+  ).toBeVisible();
+});
+
+/*
+ * Закрывает unmeasured из UI-176: пока архивирование не разбиралось живым потоком,
+ * открытая вкладка узнавала об архиве другого участника только перечитыванием.
+ */
+test('архивирование проекта через API, пока его экран открыт, показывает плашку без перезагрузки', async ({
+  page,
+  request,
+}) => {
+  const key = await createProject(request, 'PB');
+
+  await page.goto(`/projects/${key}`);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(key);
+  const archiveButton = page.getByRole('button', { name: 'В архив', exact: true });
+  await expect(archiveButton).toBeVisible();
+
+  const response = await request.post(`/api/v1/projects/${key}/archive`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { reason: 'Архивировано другим участником, пока экран открыт (UI-177).' },
+  });
+  expect(response.status()).toBe(200);
+
+  await expect(page.getByText('Проект в архиве с', { exact: false })).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect(archiveButton).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Восстановить', exact: true })).toBeVisible();
 });
 
 test('обрыв виден в верхней полосе, а после восстановления пропущенное не теряется', async ({

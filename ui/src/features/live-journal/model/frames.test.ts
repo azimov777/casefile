@@ -12,11 +12,21 @@ describe('parseFrame', () => {
       seq: 7,
       type: 'note',
       taskKey: 'TRK-1',
+      projectKey: null,
     });
   });
 
-  it('молча отбрасывает запись дела проекта: у неё нет ключа задачи (TRK-156)', () => {
-    expect(parseFrame(frame({ task_key: null, project_key: 'TRK' }))).toBeNull();
+  it('разбирает запись дела проекта: ключ задачи `null`, назван ключ проекта (UI-177)', () => {
+    expect(parseFrame(frame({ task_key: null, project_key: 'TRK' }))).toMatchObject({
+      seq: 7,
+      type: 'note',
+      taskKey: null,
+      projectKey: 'TRK',
+    });
+  });
+
+  it('отбрасывает кадр без владельца: ни задачи, ни проекта', () => {
+    expect(parseFrame(frame({ task_key: null, project_key: null }))).toBeNull();
   });
 
   it('отбрасывает негодный кадр, не бросая', () => {
