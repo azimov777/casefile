@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
 import { errorMessage } from '@/shared/errors';
@@ -25,8 +25,40 @@ const FIELD_OF_CODE: Record<string, 'email' | 'name' | 'password'> = {
  *
  * Пароль из ответа сюда не оседает: он уходит вызывающему (`onCreated`), а тот
  * показывает его один раз и забывает при закрытии окна.
+ *
+ * Кнопка, которая открывает окно, приходит пропсом `trigger` (`shared/ui/dialog.tsx`,
+ * `UI-175`) и держится смонтированной постоянно — иначе Radix не находит, кому вернуть
+ * фокус после `Esc` (`UI-175#11`, `UI-178`).
  */
 export function CreateDialog({
+  open,
+  onOpenChange,
+  trigger,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  trigger: ReactNode;
+  onCreated: (created: AccountWithPassword) => void;
+}) {
+  const { t } = useTranslation('people');
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      trigger={trigger}
+      title={t('create.title')}
+      description={t('create.intro')}
+      closeLabel={t('close')}
+    >
+      <CreateForm onClose={() => onOpenChange(false)} onCreated={onCreated} />
+    </Dialog>
+  );
+}
+
+/** Форма заведения. Живёт в `children` окна и рождается заново на каждый заход. */
+function CreateForm({
   onClose,
   onCreated,
 }: {
@@ -80,100 +112,90 @@ export function CreateDialog({
   }
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      title={t('create.title')}
-      description={t('create.intro')}
-      closeLabel={t('close')}
-    >
-      <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} noValidate>
-        <div className="flex flex-col gap-1">
-          <label className="text-meta text-muted" htmlFor={emailId}>
-            {t('create.emailLabel')}
-          </label>
-          <Input
-            id={emailId}
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={empty === 'email' || complaint === 'email'}
-          />
-          {empty === 'email' ? (
-            <span className="text-meta text-danger" role="alert">
-              {t('create.emailEmpty')}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-meta text-muted" htmlFor={nameId}>
-            {t('create.nameLabel')}
-          </label>
-          <Input
-            id={nameId}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={empty === 'name' || badName}
-            aria-describedby={nameHintId}
-            placeholder={t('create.namePlaceholder')}
-          />
-          <span className="text-meta text-muted" id={nameHintId}>
-            {t('create.nameHint')}
-          </span>
-          {empty === 'name' ? (
-            <span className="text-meta text-danger" role="alert">
-              {t('create.nameEmpty')}
-            </span>
-          ) : null}
-        </div>
-
-        <label className="flex cursor-pointer items-baseline gap-2">
-          <input
-            type="checkbox"
-            checked={isAdmin}
-            onChange={(event) => setIsAdmin(event.target.checked)}
-          />
-          <span className="max-w-(--ui-text-max) text-meta">{t('create.admin')}</span>
+    <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} noValidate>
+      <div className="flex flex-col gap-1">
+        <label className="text-meta text-muted" htmlFor={emailId}>
+          {t('create.emailLabel')}
         </label>
-
-        <PasswordChoice
-          mode={mode}
-          onModeChange={(next) => {
-            setMode(next);
-            setEmpty(null);
-          }}
-          password={password}
-          onPasswordChange={setPassword}
-          invalid={empty === 'password' || complaint === 'password'}
+        <Input
+          id={emailId}
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={empty === 'email' || complaint === 'email'}
         />
-        {empty === 'password' ? (
+        {empty === 'email' ? (
           <span className="text-meta text-danger" role="alert">
-            {t('password.empty')}
+            {t('create.emailEmpty')}
           </span>
         ) : null}
+      </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={create.pending}>
-            {create.pending ? t('create.pending') : t('create.submit')}
-          </Button>
-          <Button tone="quiet" onClick={onClose}>
-            {t('cancel')}
-          </Button>
-        </div>
-
-        {failed ? (
-          <Callout tone="danger">
-            {errorMessage(create.error)} {badPattern ? t('create.nameRule') : null}
-          </Callout>
+      <div className="flex flex-col gap-1">
+        <label className="text-meta text-muted" htmlFor={nameId}>
+          {t('create.nameLabel')}
+        </label>
+        <Input
+          id={nameId}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={empty === 'name' || badName}
+          aria-describedby={nameHintId}
+          placeholder={t('create.namePlaceholder')}
+        />
+        <span className="text-meta text-muted" id={nameHintId}>
+          {t('create.nameHint')}
+        </span>
+        {empty === 'name' ? (
+          <span className="text-meta text-danger" role="alert">
+            {t('create.nameEmpty')}
+          </span>
         ) : null}
-      </form>
-    </Dialog>
+      </div>
+
+      <label className="flex cursor-pointer items-baseline gap-2">
+        <input
+          type="checkbox"
+          checked={isAdmin}
+          onChange={(event) => setIsAdmin(event.target.checked)}
+        />
+        <span className="max-w-(--ui-text-max) text-meta">{t('create.admin')}</span>
+      </label>
+
+      <PasswordChoice
+        mode={mode}
+        onModeChange={(next) => {
+          setMode(next);
+          setEmpty(null);
+        }}
+        password={password}
+        onPasswordChange={setPassword}
+        invalid={empty === 'password' || complaint === 'password'}
+      />
+      {empty === 'password' ? (
+        <span className="text-meta text-danger" role="alert">
+          {t('password.empty')}
+        </span>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={create.pending}>
+          {create.pending ? t('create.pending') : t('create.submit')}
+        </Button>
+        <Button tone="quiet" onClick={onClose}>
+          {t('cancel')}
+        </Button>
+      </div>
+
+      {failed ? (
+        <Callout tone="danger">
+          {errorMessage(create.error)} {badPattern ? t('create.nameRule') : null}
+        </Callout>
+      ) : null}
+    </form>
   );
 }

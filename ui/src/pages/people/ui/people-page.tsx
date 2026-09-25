@@ -1,23 +1,30 @@
 import { useId, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { AccountItem, accountsQueryOptions, isDisabled, type Account } from '@/entities/account';
+import { AccountItem, accountsQueryOptions, isDisabled } from '@/entities/account';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { CreateDialog, DisableDialog, PasswordDialog, ResetDialog } from '@/features/manage-people';
 import { Button, Callout, QueryState } from '@/shared/ui';
 
 /**
- * Что администратор делает на экране прямо сейчас. Одно окно за раз.
+ * Пароль, который трекер показывает один раз, — единственное, что осталось общим
+ * состоянием страницы: открывает его не кнопка, а ход работы (успешное заведение или
+ * сброс), и триггера у такого окна нет (`UI-175#11`, тот же случай, что у секрета
+ * токена на экране «Доступы»; фокус для таких окон — отдельное решение, вне этой
+ * задачи). Заведение — своей кнопкой на весь экран (`UI-175`); сброс и отключение —
+ * своей кнопкой на каждой карточке, с состоянием открытия внутри неё же (`UI-178`):
+ * иначе Radix закрывал бы общее на всех окно, не зная, в какую из карточек вернуть
+ * фокус (`UI-175#11`).
  *
- * Пароль из ответа живёт здесь, в состоянии экрана, и нигде больше: ни в адресе, ни в
+ * Пароль живёт здесь, в состоянии экрана, и нигде больше: ни в адресе, ни в
  * хранилищах браузера, ни в кэше запросов. Закрытие окна стирает его.
  */
-type Flow =
-  | { kind: 'none' }
-  | { kind: 'create' }
-  | { kind: 'password'; email: string; password: string; reset: boolean }
-  | { kind: 'reset'; account: Account }
-  | { kind: 'toggle'; account: Account };
+interface Once {
+  email: string;
+  password: string;
+  /** Пароль после сброса, а не при заведении: другой заголовок у окна. */
+  reset: boolean;
+}
 
 /**
  * Экран «Люди»: учётные записи установки и управление ими — завести товарища, отключить,
@@ -37,13 +44,13 @@ export function PeoplePage() {
   const me = bootstrap.data?.account ?? null;
   const admin = me?.is_admin === true;
   const accounts = useInfiniteQuery({ ...accountsQueryOptions(), enabled: admin });
-  const [flow, setFlow] = useState<Flow>({ kind: 'none' });
+  const [createOpen, setCreateOpen] = useState(false);
+  const [once, setOnce] = useState<Once | null>(null);
   const { t } = useTranslation('people');
   const { t: brick } = useTranslation('ui');
   const listId = useId();
 
   const items = accounts.data?.pages.flatMap((page) => page.items) ?? [];
-  const close = () => setFlow({ kind: 'none' });
 
   return (
     <main className="flex max-w-(--ui-page-max) flex-col gap-6">
@@ -63,7 +70,18 @@ export function PeoplePage() {
             <h2 id={listId} className="text-screen">
               {t('list.title')}
             </h2>
-            <Button onClick={() => setFlow({ kind: 'create' })}>{t('create.open')}</Button>
+            <CreateDialog
+              open={createOpen}
+              onOpenChange={setCreateOpen}
+              trigger={<Button>{t('create.open')}</Button>}
+              onCreated={(created) => {
+                setCreateOpen(false);
+                // Вписанный пароль администратор знает сам — окна «один раз» ему не нужно.
+                if (created.password !== null && created.password !== undefined) {
+                  setOnce({ email: created.email, password: created.password, reset: false });
+                }
+              }}
+            />
           </div>
           <p className="max-w-(--ui-text-max) text-meta text-muted">{t('list.intro')}</p>
 
@@ -85,21 +103,22 @@ export function PeoplePage() {
                       own ? undefined : (
                         <>
                           {isDisabled(account) ? null : (
-                            <Button
-                              tone="quiet"
-                              className="px-2 py-1 text-meta"
-                              onClick={() => setFlow({ kind: 'reset', account })}
-                            >
-                              {t('reset.action')}
-                            </Button>
+                            <ResetDialog
+                              account={account}
+                              onReset={(answer) => {
+                                // Вписанный пароль администратор знает сам — окна «один
+                                // раз» ему не нужно.
+                                if (answer.password !== null && answer.password !== undefined) {
+                                  setOnce({
+                                    email: answer.email,
+                                    password: answer.password,
+                                    reset: true,
+                                  });
+                                }
+                              }}
+                            />
                           )}
-                          <Button
-                            tone="quiet"
-                            className="px-2 py-1 text-meta"
-                            onClick={() => setFlow({ kind: 'toggle', account })}
-                          >
-                            {isDisabled(account) ? t('enable.action') : t('disable.action')}
-                          </Button>
+                          <DisableDialog account={account} />
                         </>
                       )
                     }
@@ -123,49 +142,18 @@ export function PeoplePage() {
         </section>
       ) : null}
 
-      {flow.kind === 'create' ? (
-        <CreateDialog
-          onClose={close}
-          onCreated={(created) =>
-            // Вписанный пароль администратор знает сам — окна «один раз» ему не нужно.
-            setFlow(
-              created.password === null || created.password === undefined
-                ? { kind: 'none' }
-                : {
-                    kind: 'password',
-                    email: created.email,
-                    password: created.password,
-                    reset: false,
-                  },
-            )
-          }
-        />
-      ) : null}
-
-      {flow.kind === 'reset' ? (
-        <ResetDialog
-          account={flow.account}
-          onClose={close}
-          onReset={(answer) =>
-            setFlow(
-              answer.password === null || answer.password === undefined
-                ? { kind: 'none' }
-                : { kind: 'password', email: answer.email, password: answer.password, reset: true },
-            )
-          }
-        />
-      ) : null}
-
-      {flow.kind === 'password' ? (
+      {/* Окно пароля — по-прежнему только по `once`: открывает его не кнопка, а ход
+          работы (успешное заведение или сброс), и триггера у него нет (`UI-175#11`,
+          тот же случай, что у секрета токена на экране «Доступы»; фокус для таких
+          окон — отдельное решение, вне этой задачи). */}
+      {once === null ? null : (
         <PasswordDialog
-          email={flow.email}
-          password={flow.password}
-          reset={flow.reset}
-          onClose={close}
+          email={once.email}
+          password={once.password}
+          reset={once.reset}
+          onClose={() => setOnce(null)}
         />
-      ) : null}
-
-      {flow.kind === 'toggle' ? <DisableDialog account={flow.account} onClose={close} /> : null}
+      )}
     </main>
   );
 }

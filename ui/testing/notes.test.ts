@@ -107,6 +107,8 @@ const NOT_IN_CODE: Record<string, string> = {
   resize_window: 'инструмент браузерного расширения, не код репозитория',
   FocusScope: 'внутренний узел Radix Dialog: им объяснено, куда девается фокус без триггера',
   triggerRef: 'поле контекста Radix Dialog: им объяснено, куда девается фокус без триггера',
+  composeEventHandlers:
+    'внутренний помощник Radix, которым объяснено, почему свой `onClick` на кнопке из `trigger` решает раньше открытия окна',
   COMPOSE_PROJECT_NAME: 'переменная Docker Compose, не наш код',
   ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND: 'код ошибки pnpm, не наш код',
   shouldSkip: 'помощник внутри `eslint-plugin-i18next`: им объяснено поведение правила',

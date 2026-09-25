@@ -75,7 +75,17 @@ test('ключ установки: агент заведён, токен вып�
   // Ключ, которым работает сам интерфейс, отмечен в списке — и отмечен ровно один.
   await expect(page.getByText('ключ этого сеанса')).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Завести агента' }).click();
+  const newAgentButton = page.getByRole('button', { name: 'Завести агента' });
+  await newAgentButton.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  // `Esc` закрывает окно и возвращает фокус на кнопку, которая его открыла: она
+  // стоит `Dialog.Trigger`, и без этого Radix отправлял бы фокус на `body`
+  // (`UI-175#11`, `UI-178`).
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(newAgentButton).toBeFocused();
+
+  await newAgentButton.click();
   const agentDialog = page.getByRole('dialog');
   await agentDialog.getByLabel('Имя').fill(AGENT);
   await agentDialog.getByRole('button', { name: 'Завести', exact: true }).click();
@@ -140,9 +150,18 @@ test('ключ установки: агент заведён, токен вып�
 
   // Отзыв спрашивает подтверждение и объясняет последствия.
   const row = page.getByRole('article', { name: `Доступ «${TOKEN_NAME}»` });
-  await row.getByRole('button', { name: 'Отозвать' }).click();
-  const confirm = page.getByRole('alertdialog');
+  const revokeButton = row.getByRole('button', { name: 'Отозвать' });
+  await revokeButton.click();
+  let confirm = page.getByRole('alertdialog');
   await expect(confirm).toContainText('вернуть его нельзя');
+  // Своя кнопка на каждую строку (`UI-178`): `Esc` возвращает фокус ровно на неё, а
+  // не на первую строку списка или `body`.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(revokeButton).toBeFocused();
+
+  await revokeButton.click();
+  confirm = page.getByRole('alertdialog');
   await confirm.getByRole('button', { name: 'Отозвать', exact: true }).click();
 
   // Отозванный уходит из действующих в историю, а история свёрнута (UI-131).
@@ -197,7 +216,15 @@ test.describe('тёмная тема', () => {
     await page.goto('/access');
     await expect(page.getByRole('heading', { level: 1, name: 'Доступы' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Выпустить токен' }).click();
+    const issueButton = page.getByRole('button', { name: 'Выпустить токен' });
+    await issueButton.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    // `Esc` возвращает фокус на кнопку-триггер и в тёмной теме (`UI-178`).
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(issueButton).toBeFocused();
+
+    await issueButton.click();
     const issueDialog = page.getByRole('dialog');
     // Общий агентский токен: у фрагментов появляется `X-Actor-Label`, и объяснение
     // метки — часть того, что меряется.
