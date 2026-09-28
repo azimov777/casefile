@@ -1364,7 +1364,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -1423,7 +1423,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1530,7 +1530,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1688,7 +1688,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1799,7 +1799,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1901,7 +1901,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2056,7 +2056,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2501,7 +2501,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2727,7 +2727,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2867,7 +2867,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3189,7 +3189,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -3255,7 +3255,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3329,7 +3329,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3480,7 +3480,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -3601,7 +3601,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -3666,7 +3666,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3755,7 +3755,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -3819,7 +3819,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3888,7 +3888,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -3947,7 +3947,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4068,7 +4068,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4227,7 +4227,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4310,7 +4310,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4369,7 +4369,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5301,7 +5301,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5360,7 +5360,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"

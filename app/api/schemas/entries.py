@@ -62,7 +62,8 @@ from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
 
 _REFS_DESCRIPTION = (
     "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and "
-    "addresses. Entry and task references must exist; addresses are not checked"
+    "URLs with a scheme (`https://…`). Any other string is refused; entry and task "
+    "references must exist, URLs are not checked"
 )
 _TITLE_DESCRIPTION = "One line; this is what the case index shows"
 _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the payload"
