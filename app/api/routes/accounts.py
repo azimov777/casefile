@@ -1,9 +1,10 @@
-"""Учётные записи людей: управление администратором и смена своего пароля.
+"""Учётные записи людей: управление администратором, свой пароль и своё знакомство.
 
-`docs/CONCEPT.md`, 5.4. Всё, кроме смены своего пароля, открыто только администратору
-(`403 admin_required`); права на задачи флаг не даёт. Роутер переводит HTTP в вызов
-сценария и обратно: те же сценарии зовёт команда на сервере (`python -m app.cli
-account-...`).
+`docs/CONCEPT.md`, 5.4. Всё, кроме смены своего пароля и своего состояния знакомства
+(`TRK-369`), открыто только администратору (`403 admin_required`); права на задачи флаг
+не даёт. Роутер переводит HTTP в вызов сценария и обратно: те же сценарии, кроме
+знакомства, зовёт и команда на сервере (`python -m app.cli account-...`) — у знакомства
+команды нет, оно решается только самим человеком в интерфейсе.
 """
 
 import uuid
@@ -18,6 +19,7 @@ from app.api.schemas.accounts import (
     AccountRead,
     AccountUpdate,
     AccountWithPasswordRead,
+    OnboardingUpdate,
     PasswordChange,
     PasswordReset,
 )
@@ -155,5 +157,32 @@ async def change_password(
         actor=actor,
         current_password=payload.current_password,
         new_password=payload.new_password,
+    )
+    return DataResponse[AccountRead](data=AccountRead.model_validate(account))
+
+
+@router.patch("/{account_id}/onboarding", summary="Update the onboarding state of an account")
+async def update_onboarding(
+    account_id: AccountIdPath,
+    payload: OnboardingUpdate,
+    session: SessionDep,
+    actor: ActorDep,
+) -> DataResponse[AccountRead]:
+    """Меняет состояние знакомства своей учётной записи — той, за чьим участником стоит токен.
+
+    Непереданное не трогается, ни `status`, ни поля `hints` по отдельности. Чужая
+    учётная запись — `403 permission_denied` с `details.reason: not_own_account`, как у
+    смены своего пароля: администратор чужое состояние не меняет, это сведения человека
+    о себе (`docs/CONCEPT.md`, 5.4; `TRK-360#17`).
+    """
+    changes = payload.model_dump(exclude_unset=True)
+    hints = changes.get("hints", {})
+    account = await service.update_onboarding(
+        session,
+        account_id,
+        actor=actor,
+        status=changes.get("status"),
+        hidden_all=hints.get("hidden_all"),
+        hidden=hints.get("hidden"),
     )
     return DataResponse[AccountRead](data=AccountRead.model_validate(account))

@@ -2239,6 +2239,138 @@
         }
       }
     },
+    "/api/v1/accounts/{account_id}/onboarding": {
+      "patch": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Update the onboarding state of an account",
+        "description": "Меняет состояние знакомства своей учётной записи — той, за чьим участником стоит токен.\n\nНепереданное не трогается, ни `status`, ни поля `hints` по отдельности. Чужая\nучётная запись — `403 permission_denied` с `details.reason: not_own_account`, как у\nсмены своего пароля: администратор чужое состояние не меняет, это сведения человека\nо себе (`docs/CONCEPT.md`, 5.4; `TRK-360#17`).",
+        "operationId": "update_onboarding",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the account",
+              "title": "Account Id"
+            },
+            "description": "Identifier of the account"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AccountRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "tags": [
@@ -7605,6 +7737,10 @@
             "title": "Disabled At",
             "description": "When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active"
           },
+          "onboarding": {
+            "$ref": "#/components/schemas/OnboardingRead",
+            "description": "Onboarding state (`TRK-360#17`): whether the person went through it and which explanations they hid. Only the account itself changes it"
+          },
           "created_by": {
             "$ref": "#/components/schemas/AuthorRead"
           },
@@ -7626,6 +7762,7 @@
           "participant",
           "is_admin",
           "has_password",
+          "onboarding",
           "created_by",
           "created_at",
           "updated_at"
@@ -7707,6 +7844,10 @@
             "title": "Disabled At",
             "description": "When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active"
           },
+          "onboarding": {
+            "$ref": "#/components/schemas/OnboardingRead",
+            "description": "Onboarding state (`TRK-360#17`): whether the person went through it and which explanations they hid. Only the account itself changes it"
+          },
           "created_by": {
             "$ref": "#/components/schemas/AuthorRead"
           },
@@ -7743,6 +7884,7 @@
           "participant",
           "is_admin",
           "has_password",
+          "onboarding",
           "created_by",
           "created_at",
           "updated_at"
@@ -10759,6 +10901,109 @@
         ],
         "title": "NoFactsRead",
         "description": "Фактов нет: заголовок записи пишет её автор, и он осмыслен сам по себе."
+      },
+      "OnboardingHintsRead": {
+        "properties": {
+          "hidden_all": {
+            "type": "boolean",
+            "title": "Hidden All",
+            "description": "Hides every explanation panel at once, regardless of `hidden`"
+          },
+          "hidden": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hidden",
+            "description": "Keys of explanations closed one by one. Opaque strings: the tracker does not know the screens of the interface, and a new screen needs no change here",
+            "examples": [
+              [
+                "board.filters",
+                "connect.token"
+              ]
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "hidden_all",
+          "hidden"
+        ],
+        "title": "OnboardingHintsRead",
+        "description": "Что человек скрыл: все пояснения разом или по одному, списком ключей."
+      },
+      "OnboardingHintsUpdate": {
+        "properties": {
+          "hidden_all": {
+            "type": "boolean",
+            "title": "Hidden All",
+            "description": "Hides every explanation panel at once, regardless of `hidden`"
+          },
+          "hidden": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.-]{0,63}$"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Hidden",
+            "description": "Keys of explanations closed one by one, replacing the previous list entirely. Duplicate keys collapse into one; the tracker does not know the screens of the interface and does not check that a key names a real one",
+            "examples": [
+              [
+                "board.filters",
+                "connect.token"
+              ]
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OnboardingHintsUpdate",
+        "description": "Часть тела `PATCH .../onboarding`: что скрыть. Непереданное не трогает."
+      },
+      "OnboardingRead": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OnboardingStatus",
+            "description": "Whether the person went through onboarding. `skipped` marks an account that existed before this field: it already uses the product"
+          },
+          "hints": {
+            "$ref": "#/components/schemas/OnboardingHintsRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "hints"
+        ],
+        "title": "OnboardingRead",
+        "description": "Состояние знакомства человека с Casefile (`TRK-360#17`): `AccountRead.onboarding`."
+      },
+      "OnboardingStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "completed",
+          "skipped"
+        ],
+        "title": "OnboardingStatus",
+        "description": "Прошёл ли человек знакомство.\n\n`SKIPPED` — не «отказался», а «продуктом уже пользуется»: этим значением и\n`hidden_all: true` миграция `20260928_1200_onboarding_state` пометила учётные записи,\nсуществовавшие до этого поля. Экран «Начало» им доступен из панели, но сам не\nоткрывается. Новая учётная запись начинает с `PENDING` и пустых подсказок."
+      },
+      "OnboardingUpdate": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OnboardingStatus",
+            "description": "Whether the person went through onboarding"
+          },
+          "hints": {
+            "$ref": "#/components/schemas/OnboardingHintsUpdate",
+            "description": "Which explanations to hide; fields left out inside it stay as they are"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OnboardingUpdate",
+        "description": "Тело `PATCH /accounts/{account_id}/onboarding`: непереданное не трогает.\n\nМеняет только сама учётная запись (`app/services/accounts.py`,\n`update_onboarding`); администратор чужое состояние не меняет."
       },
       "PageMeta": {
         "properties": {

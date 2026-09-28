@@ -698,3 +698,21 @@ project_archived` с `details.key` и `details.archived_at`; `DELETE
 **Как правильно:** признак архива читается из карточки задачи, а не отдельным вызовом;
 `GET /projects/{key}` остаётся нужен только за атрибутами и делом проекта.
 **Где:** `app/api/schemas/tasks.py`, `TaskProjectRead`.
+
+## `exclude_unset=True` работает рекурсивно по вложенным моделям `PATCH`
+
+**Что:** `OnboardingUpdate.hints` — вложенная модель (`OnboardingHintsUpdate`) со своими
+полями `unset_field()`. `payload.model_dump(exclude_unset=True)` не просто отдаёт вложенный
+объект целиком, если ключ `hints` пришёл в запросе, — он повторяет то же исключение
+непереданных полей и внутри неё: `{"hints": {"hidden_all": true}}` в запросе даёт
+`{"hints": {"hidden_all": True}}` в дампе, без `hidden`, хотя тот и объявлен в модели.
+**Почему важно:** до проверки это не очевидно — `unset_field()` и сентинел `UNSET` описаны
+для плоских схем (`AccountUpdate`, `TaskUpdate`), и вложенная модель здесь первая. Обратное
+предположение («вложенный объект дампится только целиком») привело бы к тому, что правка
+одного вложенного поля тихо перезаписывала бы соседнее значением по умолчанию.
+**Как правильно:** роутер читает `payload.model_dump(exclude_unset=True)` один раз и
+достаёт вложенный `hints` через `.get("hints", {})` — отсутствующий ключ и пустой вложенный
+объект неразличимы для сценария, которому оба значат «не трогать», поэтому разбирать их
+разными путями не нужно.
+**Где:** `app/api/routes/accounts.py`, `update_onboarding`; `app/api/schemas/accounts.py`,
+`OnboardingUpdate`, `OnboardingHintsUpdate`.

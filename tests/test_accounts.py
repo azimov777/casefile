@@ -394,6 +394,149 @@ async def test_the_local_administrator_sets_a_first_password_without_a_current_o
     await sign_in(auth_client, "owner@localhost", "owner password here")
 
 
+# --- Знакомство ------------------------------------------------------------------------
+
+
+async def test_a_new_account_starts_pending_with_nothing_hidden(
+    auth_client: AsyncClient,
+) -> None:
+    """Решение владельца `TRK-360#17`: новая учётная запись начинает с `pending`."""
+    response = await create(auth_client, email="eve@example.com", name="eve")
+
+    assert response.status_code == 201, response.text
+    assert response.json()["data"]["onboarding"] == {
+        "status": "pending",
+        "hints": {"hidden_all": False, "hidden": []},
+    }
+
+
+async def test_a_person_updates_their_own_onboarding_and_bootstrap_sees_it(
+    auth_client: AsyncClient, bob_token: str
+) -> None:
+    """Обзорная проверка 2: правка своей записи, и следующий `bootstrap` отдаёт новое."""
+    bob = await account_id(auth_client, "bob@example.com")
+
+    updated = await auth_client.patch(
+        f"{ACCOUNTS}/{bob}/onboarding",
+        json={"status": "completed", "hints": {"hidden": ["board.filters", "connect.token"]}},
+        headers=bearer(bob_token),
+    )
+    seen = await auth_client.get("/api/v1/bootstrap", headers=bearer(bob_token))
+
+    assert updated.status_code == 200, updated.text
+    onboarding = {
+        "status": "completed",
+        "hints": {"hidden_all": False, "hidden": ["board.filters", "connect.token"]},
+    }
+    assert updated.json()["data"]["onboarding"] == onboarding
+    assert seen.json()["data"]["account"]["onboarding"] == onboarding
+
+
+async def test_hiding_all_hints_does_not_touch_the_individual_list(
+    auth_client: AsyncClient, bob_token: str
+) -> None:
+    """Непереданное поле `hints` не трогается: `hidden_all` меняется, `hidden` остаётся."""
+    bob = await account_id(auth_client, "bob@example.com")
+    await auth_client.patch(
+        f"{ACCOUNTS}/{bob}/onboarding",
+        json={"hints": {"hidden": ["board.filters"]}},
+        headers=bearer(bob_token),
+    )
+
+    response = await auth_client.patch(
+        f"{ACCOUNTS}/{bob}/onboarding",
+        json={"hints": {"hidden_all": True}},
+        headers=bearer(bob_token),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["onboarding"]["hints"] == {
+        "hidden_all": True,
+        "hidden": ["board.filters"],
+    }
+
+
+async def test_duplicate_hint_keys_collapse_into_one(
+    auth_client: AsyncClient, bob_token: str
+) -> None:
+    bob = await account_id(auth_client, "bob@example.com")
+
+    response = await auth_client.patch(
+        f"{ACCOUNTS}/{bob}/onboarding",
+        json={"hints": {"hidden": ["board.filters", "board.filters", "connect.token"]}},
+        headers=bearer(bob_token),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["onboarding"]["hints"]["hidden"] == [
+        "board.filters",
+        "connect.token",
+    ]
+
+
+@pytest.mark.parametrize(
+    "hidden",
+    [
+        ["Board.Filters"],
+        ["1cannot-start-with-a-digit"],
+        [f"key{i}" for i in range(65)],
+    ],
+)
+async def test_a_malformed_or_too_long_hint_list_is_refused_as_validation_error(
+    auth_client: AsyncClient, bob_token: str, hidden: list[str]
+) -> None:
+    bob = await account_id(auth_client, "bob@example.com")
+
+    response = await auth_client.patch(
+        f"{ACCOUNTS}/{bob}/onboarding",
+        json={"hints": {"hidden": hidden}},
+        headers=bearer(bob_token),
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+async def test_nobody_changes_someone_elses_onboarding_this_way(
+    auth_client: AsyncClient, bob_token: str
+) -> None:
+    owner = await account_id(auth_client, "owner@localhost")
+
+    response = await auth_client.patch(
+        f"{ACCOUNTS}/{owner}/onboarding",
+        json={"status": "skipped"},
+        headers=bearer(bob_token),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["details"]["reason"] == "not_own_account"
+
+
+async def test_an_administrator_does_not_change_someone_elses_onboarding_either(
+    auth_client: AsyncClient, bob_token: str
+) -> None:
+    """Флаг администратора не даёт override: `ensure_admin` в этом сценарии не участвует."""
+    bob = await account_id(auth_client, "bob@example.com")
+
+    response = await auth_client.patch(f"{ACCOUNTS}/{bob}/onboarding", json={"status": "skipped"})
+
+    assert response.status_code == 403
+    assert response.json()["error"]["details"]["reason"] == "not_own_account"
+
+
+@pytest.mark.parametrize("body", [{"hints": None}, {"status": None}, {"progress": "done"}])
+async def test_an_onboarding_update_takes_no_null_and_no_unknown_field(
+    auth_client: AsyncClient, bob_token: str, body: dict[str, Any]
+) -> None:
+    bob = await account_id(auth_client, "bob@example.com")
+
+    response = await auth_client.patch(
+        f"{ACCOUNTS}/{bob}/onboarding", json=body, headers=bearer(bob_token)
+    )
+
+    assert response.status_code == 422
+
+
 # --- Два человека одной команды --------------------------------------------------------
 
 

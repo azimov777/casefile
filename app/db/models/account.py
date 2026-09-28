@@ -3,13 +3,15 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import BaseModel
+from app.db.base import BaseModel, string_enum
 from app.db.models.author import CreatedByMixin
 from app.db.models.participant import Participant
 from app.domain.accounts import MAX_EMAIL_LENGTH
+from app.domain.onboarding import OnboardingHints, OnboardingState, OnboardingStatus
 
 
 class Account(BaseModel, CreatedByMixin):
@@ -46,6 +48,27 @@ class Account(BaseModel, CreatedByMixin):
     )
     disabled_at: Mapped[datetime | None] = mapped_column(default=None)
 
+    # Состояние знакомства (`TRK-360#17`, `TRK-369`): первая настройка человека на
+    # сервере, а не ход работы — поэтому у неё нет записи в деле (`docs/CONCEPT.md`,
+    # 5.1 и 5.4). Три колонки, а не один объект JSONB: `status` отбирает будущий список
+    # задач («кому показать экран «Начало»»), и заводить его через путь внутри
+    # JSONB-значения было бы менее очевидно, чем колонка. Умолчания здесь — те же, что и
+    # в миграции после её `ALTER COLUMN ... SET DEFAULT`: новая учётная запись начинает
+    # с `pending` и пустыми подсказками; существовавшая до этого поля получила `skipped`
+    # и `hidden_all: true` самой миграцией (`20260928_1200_onboarding_state`).
+    onboarding_status: Mapped[OnboardingStatus] = mapped_column(
+        string_enum(OnboardingStatus, name="onboarding_status", length=16),
+        default=OnboardingStatus.PENDING,
+        server_default=text("'pending'"),
+        nullable=False,
+    )
+    onboarding_hidden_all: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    onboarding_hidden: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb"), nullable=False
+    )
+
     # Учётную запись читают почти всегда ради участника: подпись, имя, токены.
     participant: Mapped[Participant] = relationship(lazy="joined", innerjoin=True)
 
@@ -56,3 +79,14 @@ class Account(BaseModel, CreatedByMixin):
     @property
     def has_password(self) -> bool:
         return self.password_hash is not None
+
+    @property
+    def onboarding(self) -> OnboardingState:
+        """Состояние знакомства как один объект — то, что отдаёт `AccountRead.onboarding`."""
+        return OnboardingState(
+            status=self.onboarding_status,
+            hints=OnboardingHints(
+                hidden_all=self.onboarding_hidden_all,
+                hidden=tuple(self.onboarding_hidden),
+            ),
+        )
