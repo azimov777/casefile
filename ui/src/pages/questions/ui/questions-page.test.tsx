@@ -588,6 +588,141 @@ describe('входящая: мои замечания', () => {
   });
 });
 
+describe('пояснение экрана (TRK-362)', () => {
+  /** Учётная запись со своим состоянием пояснений: умолчание — как у новой записи. */
+  function accountWithHints(hints: { hidden_all?: boolean; hidden?: string[] } = {}) {
+    return {
+      id: '55555555-5555-5555-5555-555555555555',
+      email: 'owner@localhost',
+      participant: 'owner',
+      is_admin: true,
+      has_password: false,
+      disabled_at: null,
+      onboarding: {
+        status: 'completed' as const,
+        hints: { hidden_all: false, hidden: [] as string[], ...hints },
+      },
+      created_by: { kind: 'tracker' as const, signature: null },
+      created_at: '2026-09-01T10:00:00Z',
+      updated_at: '2026-09-01T10:00:00Z',
+    };
+  }
+
+  /**
+   * Установка со своим состоянием пояснений: `PATCH` меняет то же состояние, которое
+   * следом отдаёт `bootstrap`, — так инвалидация после мутации видит настоящий эффект,
+   * а не застывшую фикстуру (тем же приёмом, что `inbox()` above для вопросов и ответа).
+   */
+  function hintsInstallation(initial: { hidden_all?: boolean; hidden?: string[] } = {}) {
+    let hints = { hidden_all: false, hidden: [] as string[], ...initial };
+    const patches: unknown[] = [];
+
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () =>
+        data(bootstrap({ account: accountWithHints(hints) })),
+      ),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+      http.patch(`${API}/api/v1/accounts/:id/onboarding`, async ({ request }) => {
+        const body = (await request.json()) as { hints?: Partial<typeof hints> };
+        patches.push(body);
+        hints = { ...hints, ...body.hints };
+        return data(accountWithHints(hints));
+      }),
+    );
+
+    return patches;
+  }
+
+  it.each(['ru', 'en'] as const)(
+    'новый человек открывает Входящую и видит пояснение первым блоком, ничего не нажимая (%s)',
+    async (language) => {
+      hintsInstallation();
+      renderApp('/questions', { language });
+
+      const main = screen.getByRole('main');
+      const expected =
+        language === 'ru'
+          ? 'Сюда приходят вопросы, которые агенты задали вам. Пока блокирующий вопрос без ответа, агент по задаче стоит и ждёт. Ваш ответ подшивается в дело задачи, и агент читает его оттуда.'
+          : "Questions that agents asked you arrive here. While a blocking question has no answer, the agent on that task stands and waits. Your answer is filed in the task's case, and the agent reads it from there.";
+
+      const explanation = await within(main).findByText(expected);
+      expect(explanation).toBeInTheDocument();
+      // Первый блок области содержимого: ничего не стоит перед ним в разметке `main`.
+      expect(main.firstElementChild).toBe(explanation.closest('div'));
+
+      within(main).getByRole('button', { name: say.ui('explanation.close') });
+      within(main).getByRole('button', { name: say.ui('explanation.hideAll') });
+    },
+  );
+
+  it('закрытие пояснения шлёт PATCH с прежними ключами и «questions», и оно пропадает из содержимого', async () => {
+    const patches = hintsInstallation({ hidden: ['start'] });
+    const user = userEvent.setup();
+    renderApp('/questions');
+
+    const main = screen.getByRole('main');
+    await within(main).findByText(say.questions('explanation.body'));
+
+    await user.click(within(main).getByRole('button', { name: say.ui('explanation.close') }));
+
+    await waitFor(() =>
+      expect(patches.at(-1)).toEqual({ hints: { hidden: ['start', 'questions'] } }),
+    );
+    await waitFor(() =>
+      expect(within(main).queryByText(say.questions('explanation.body'))).not.toBeInTheDocument(),
+    );
+  });
+
+  it('«Скрыть все пояснения» шлёт hidden_all: true, и пояснение пропадает из содержимого', async () => {
+    const patches = hintsInstallation();
+    const user = userEvent.setup();
+    renderApp('/questions');
+
+    const main = screen.getByRole('main');
+    await user.click(
+      await within(main).findByRole('button', { name: say.ui('explanation.hideAll') }),
+    );
+
+    await waitFor(() => expect(patches.at(-1)).toEqual({ hints: { hidden_all: true } }));
+    await waitFor(() =>
+      expect(within(main).queryByText(say.questions('explanation.body'))).not.toBeInTheDocument(),
+    );
+  });
+
+  it.each<[string, { hidden_all: boolean; hidden: string[] }]>([
+    ['hidden_all: true', { hidden_all: true, hidden: [] }],
+    ['questions в hidden', { hidden_all: false, hidden: ['questions'] }],
+  ])('пояснения нет в содержимом: %s', async (_label, hints) => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () =>
+        data(bootstrap({ account: accountWithHints(hints) })),
+      ),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+    renderApp('/questions');
+
+    // Экран дорисовался (входящая точно есть), а пояснения в его содержимом нет.
+    const main = await screen.findByRole('main');
+    await screen.findByText(say.questions('noQuestions'));
+    expect(within(main).queryByText(say.questions('explanation.body'))).not.toBeInTheDocument();
+  });
+
+  it('человек без учётной записи не видит пояснения на Входящей', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+    renderApp('/questions');
+
+    const main = await screen.findByRole('main');
+    await screen.findByText(say.questions('noQuestions'));
+    expect(within(main).queryByText(say.questions('explanation.body'))).not.toBeInTheDocument();
+  });
+});
+
 describe('история вопросов', () => {
   /** Отвеченный вопрос с двумя ответами и открытый блокирующий — от свежих к старым. */
   function history() {

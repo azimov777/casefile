@@ -20,6 +20,7 @@ import {
   withHeld,
   type Answering,
 } from '@/features/answer-question';
+import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import {
   Badge,
   Button,
@@ -118,6 +119,10 @@ function Inbox() {
     // правая половина пустовала, а два списка шли друг под другом и выглядели
     // продолжением одного (решение Д16). Ширину страницы держит оболочка.
     <main className="flex flex-col gap-4">
+      {/* Пояснение экрана — первым блоком области содержимого (TRK-362): текст берётся
+          из собственного словаря экрана, ключ и подписи панели — из среза знакомства. */}
+      <ExplanationPanel hintKey={HINT_KEYS.questions}>{t('explanation.body')}</ExplanationPanel>
+
       <div>
         {/* Название раздела одно на панель и на заголовок экрана: разъехавшись, они
             назвали бы одно место двумя словами. */}

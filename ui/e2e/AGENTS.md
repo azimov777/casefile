@@ -14,7 +14,7 @@
 это состояние, открывает `/tasks` напрямую — так делает большинство файлов ниже, кроме
 `install-key.spec.ts` (её первый сценарий идёт через `/` нарочно) и `start-onboarding.spec.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts` и `start-onboarding.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts` и `start-onboarding.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -251,6 +251,11 @@ invalid_search_query`); ограничение снято (TRK-21).
   «Пропустить» ведёт на список задач и держится после перезагрузки; «Начало» из панели
   открывает экран снова; меняет состояние знакомства владельца контура навсегда, проект
   «запись»
+- `explanations.spec.ts` — механизм пояснений экрана (TRK-362): «Показать пояснения
+  снова» возвращает пояснение Входящей, закрытие убирает его сразу и переживает
+  перезагрузку, новый браузерный контекст той же учётной записи видит то же самое
+  (состояние на сервере, не в браузере); включает пояснения в начале и возвращает
+  `hidden_all: true` в конце, проект «запись»
 - `resilience.spec.ts` — отказ запроса объясняется по коду и чинится кнопкой «Повторить»
 - `host-guard.spec.ts` — защита от DNS rebinding (UI-107): чужой `Host` не отдаёт
   `/config.json` и не проксирует `/api/v1/bootstrap`, свои адреса петли (`localhost`,
@@ -258,8 +263,11 @@ invalid_search_query`); ограничение снято (TRK-21).
 - `global-setup.ts` — подъём контура путём человека: бэкенд, миграции, владелец, ключ
   интерфейса в файл, учебный проект `START` (до демо-данных — его условие требует
   установку без единого проекта), демо-данные, ключ набора `task` для входа на `/login`
-  в свой файл, интерфейс с ключом в переменной и второй его экземпляр в режиме пароля —
-  одноразовым контейнером той же службы на `UI_LOGIN_PORT`
+  в свой файл, интерфейс с ключом в переменной; сразу после — владельцу контура ставится
+  `hints.hidden_all: true` прямым запросом через уже поднятый `ui` (`hideOwnerHints`,
+  TRK-362), чтобы читающие и почти все пишущие сценарии видели экраны без пояснений;
+  и второй экземпляр интерфейса в режиме пароля — одноразовым контейнером той же
+  службы на `UI_LOGIN_PORT`
 - `global-teardown.ts` — гашение контура вместе с данными, ключом и одноразовым интерфейсом
 - `contour.ts` — вызов `docker compose`, ключ установки из файла контура, ключ набора `task`
   для входа (`readTaskToken`), пароль владельца контура и адрес экземпляра под паролем

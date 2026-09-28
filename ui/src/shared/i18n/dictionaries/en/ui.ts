@@ -128,6 +128,18 @@ export const ui = {
   },
 
   /**
+   * The screen explanation mechanism (`features/manage-onboarding`, `TRK-360#16`,
+   * `TRK-362`): labels of the panel itself and of bringing it back, shared by every
+   * screen. The explanation text itself lives with the screen, in its own dictionary
+   * space.
+   */
+  explanation: {
+    close: 'Close this hint',
+    hideAll: 'Hide all hints',
+    showAgain: 'Show the hints again',
+  },
+
+  /**
    * Текст для копирования (`shared/ui`, `CopyBlock`). Имя кнопки содержит её видимую
    * подпись целиком: голосовое управление находит кнопку по тому, что на ней написано.
    */

@@ -1,5 +1,9 @@
 /** Экран входящей: вопросы ко мне, мои замечания без разбора и история вопросов (`src/pages/questions`). */
 export const questions = {
+  /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-362`). */
+  explanation: {
+    body: "Questions that agents asked you arrive here. While a blocking question has no answer, the agent on that task stands and waits. Your answer is filed in the task's case, and the agent reads it from there.",
+  },
   intro: 'The questions agents are waiting on from you, and your remarks you are waiting on.',
   filterLabel: 'Inbox selection',
   project: 'Project',

@@ -37,8 +37,14 @@ function registry() {
   );
 }
 
-/** Учётная запись владельца установки со своим состоянием знакомства (`TRK-369`). */
-function account(status: 'pending' | 'completed' | 'skipped' = 'pending') {
+/**
+ * Учётная запись владельца установки со своим состоянием знакомства (`TRK-369`) и
+ * пояснений (`TRK-362`): по умолчанию ничего не скрыто, как у новой учётной записи.
+ */
+function account(
+  status: 'pending' | 'completed' | 'skipped' = 'pending',
+  hints: { hidden_all?: boolean; hidden?: string[] } = {},
+) {
   return {
     id: '55555555-5555-5555-5555-555555555555',
     email: 'owner@localhost',
@@ -46,7 +52,7 @@ function account(status: 'pending' | 'completed' | 'skipped' = 'pending') {
     is_admin: true,
     has_password: false,
     disabled_at: null,
-    onboarding: { status, hints: { hidden_all: false, hidden: [] as string[] } },
+    onboarding: { status, hints: { hidden_all: false, hidden: [] as string[], ...hints } },
     created_by: { kind: 'tracker' as const, signature: null },
     created_at: '2026-09-01T10:00:00Z',
     updated_at: '2026-09-01T10:00:00Z',
@@ -267,6 +273,63 @@ describe('экран «Начало»', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') }),
     ).toBeInTheDocument();
+  });
+
+  describe('«Показать пояснения снова» (TRK-362)', () => {
+    /** Установка с названным состоянием пояснений, без обвязки трёх шагов (TRK-378). */
+    function signedInWithHints(hints: { hidden_all?: boolean; hidden?: string[] }) {
+      setToken(SESSION);
+      server.use(
+        http.get(`${API}/api/v1/bootstrap`, () =>
+          data(bootstrap({ account: account('completed', hints) })),
+        ),
+        http.get(`${API}/api/v1/tasks`, () => collection([])),
+        http.get(`${API}/api/v1/tokens`, () => collection([])),
+        http.get(`${API}/api/v1/questions`, () => collection([])),
+        registry(),
+      );
+    }
+
+    it('видно, когда все пояснения скрыты разом, и восстанавливает пустое состояние', async () => {
+      signedInWithHints({ hidden_all: true, hidden: ['questions'] });
+      tutorialMissing();
+      let body: unknown = null;
+      server.use(
+        http.patch(`${API}/api/v1/accounts/:id/onboarding`, async ({ request }) => {
+          body = await request.json();
+          return data(account('completed', { hidden_all: false, hidden: [] }));
+        }),
+      );
+      const user = userEvent.setup();
+      renderApp('/start');
+
+      await user.click(
+        await screen.findByRole('button', { name: say.ui('explanation.showAgain') }),
+      );
+
+      await waitFor(() => expect(body).toEqual({ hints: { hidden_all: false, hidden: [] } }));
+    });
+
+    it('видно, когда хоть одно пояснение скрыто по одному', async () => {
+      signedInWithHints({ hidden_all: false, hidden: ['questions'] });
+      tutorialMissing();
+      renderApp('/start');
+
+      expect(
+        await screen.findByRole('button', { name: say.ui('explanation.showAgain') }),
+      ).toBeInTheDocument();
+    });
+
+    it('действия нет, когда скрывать нечего', async () => {
+      signedInWithHints({ hidden_all: false, hidden: [] });
+      tutorialMissing();
+      renderApp('/start');
+
+      await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
+      expect(
+        screen.queryByRole('button', { name: say.ui('explanation.showAgain') }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('три шага с отметкой по фактам установки (TRK-378)', () => {
