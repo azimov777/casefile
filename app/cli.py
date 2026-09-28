@@ -26,7 +26,8 @@
 - `tutorial` — завести учебный проект `START` с задачей для агента (`TRK-370`): без
   аргументов — шаг подъёма, срабатывает только на установке без единого проекта; с
   `--force` — команда человека на установке, где проекты уже есть, заводит `START`,
-  если его ещё нет;
+  если его ещё нет. Язык текста — настройка установки (`TRACKER_TUTORIAL_LANGUAGE`),
+  `--language` её подменяет (`TRK-372`);
 - `openapi` и `errors` — выгрузить поставляемые артефакты контракта: схему для
   генерации клиента и справочник кодов ошибок.
 
@@ -69,6 +70,7 @@ from app.db.models.account import Account
 from app.db.session import dispose_engine, session_scope
 from app.domain.passwords import PasswordHash, PasswordHashError
 from app.domain.tokens import TokenScope
+from app.domain.tutorial import TUTORIAL_LANGUAGES
 from app.services import accounts as accounts_service
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
@@ -414,6 +416,10 @@ async def _tutorial(args: argparse.Namespace) -> int:
     командой с `--force` заводит человек: она заводит `START`, если его ещё нет, и
     отвечает, что он уже заведён, если он есть, ничего не меняя.
 
+    Язык текста без `--language` берёт настройка установки (`Settings.tutorial_language`,
+    `TRACKER_TUTORIAL_LANGUAGE`, `TRK-372`); названный аргументом её подменяет для этого
+    запуска, ничего не меняя в `.env`.
+
     Нет ни одного человека с учётной записью администратора — отказ
     `tutorial_admin_missing` уходит в стандартный вывод ошибок (`_run`): текст задачи не
     заводится с выдуманным именем.
@@ -423,7 +429,7 @@ async def _tutorial(args: argparse.Namespace) -> int:
 
     seed = create_tutorial_project if args.force else seed_tutorial_on_boot
     async with session_scope() as session:
-        result = await seed(session)
+        result = await seed(session, language=args.language)
         if not result.created:
             if args.force:
                 print(f"Tutorial project {TUTORIAL_PROJECT_KEY} already exists. Nothing changed.")
@@ -614,6 +620,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Create START even when the installation already has projects; for one "
         "upgraded from a version without this step. Without it, this only runs the boot "
         "step: seed an installation with no project at all",
+    )
+    tutorial.add_argument(
+        "--language",
+        choices=TUTORIAL_LANGUAGES,
+        default=None,
+        help="Language of the seeded text; overrides the tutorial_language setting "
+        "(TRACKER_TUTORIAL_LANGUAGE) for this run only, without changing it",
     )
     tutorial.set_defaults(handler=_tutorial)
 
