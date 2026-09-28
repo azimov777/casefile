@@ -1,5 +1,9 @@
 /** Экран карточки задачи: шапка, блоки задания и опись дела (`src/pages/task`). */
 export const task = {
+  /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-363`). */
+  explanation: {
+    body: "This is the assignment for the agent and what has been done on it: the latest summary, open questions and the case index. Here you answer the agent's question and leave a remark when the result came out wrong. Only the agent edits the assignment itself.",
+  },
   missingTitle: 'There is no task {{key}}',
   missingText:
     'There is no task with this key: the key may be mistyped, or the task belongs to another installation.',

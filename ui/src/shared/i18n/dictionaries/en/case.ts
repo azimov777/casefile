@@ -1,5 +1,9 @@
 /** Экран дела: лента записей и отбор по типам (`src/pages/case`). */
 export const caseScreen = {
+  /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-363`). */
+  explanation: {
+    body: "The case is the task's log: decisions, attempts, findings, questions and answers. Entries are never edited or deleted; a mistake is corrected by the next entry. The next agent continues from the case instead of starting over.",
+  },
   missingTitle: 'There is no case {{key}}',
   missingText: 'There is no task with this key, so there is no case either.',
   backToList: 'Back to the task list',

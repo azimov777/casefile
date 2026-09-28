@@ -9,6 +9,20 @@
 export const HINT_KEYS = {
   /** Входящая (`pages/questions`): что здесь и что делает человек (TRK-362). */
   questions: 'questions',
+  /** Список задач, вид «таблица» (`pages/tasks`, TRK-363). */
+  tasks: 'tasks',
+  /** Список задач, вид «доска»: свой ключ, закрытое на списке доску не закрывает (TRK-363). */
+  board: 'board',
+  /** Карточка задачи (`pages/task`, TRK-363). */
+  task: 'task',
+  /** Дело задачи (`pages/case`, TRK-363). */
+  case: 'case',
+  /** Проект (`pages/project`, TRK-363). */
+  project: 'project',
+  /** Подключить агента (`pages/connect`, TRK-363). */
+  connect: 'connect',
+  /** Доступы (`pages/access`, TRK-363). */
+  access: 'access',
 } as const;
 
 export type HintKey = (typeof HINT_KEYS)[keyof typeof HINT_KEYS];

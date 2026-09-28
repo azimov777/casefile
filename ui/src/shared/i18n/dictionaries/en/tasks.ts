@@ -3,6 +3,12 @@
  * `src/features/task-filters`).
  */
 export const tasks = {
+  /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-363`). */
+  explanation: {
+    list: 'All tasks that agents carry are here. Agents create and move them; you watch where things stand. Marks in a row show open questions, remarks and blockers.',
+    board:
+      'The same tasks of one project in six status columns. Agents move the cards; a card cannot be dragged. The waiting column holds tasks where the next move is yours or depends on an outside event.',
+  },
   title: 'Tasks',
   loading: 'Loading the tasks…',
   // Сколько нашлось по отбору — и у таблицы, и у доски: числа по статусам стоят
