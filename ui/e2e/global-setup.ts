@@ -43,7 +43,52 @@ async function globalSetup(): Promise<void> {
 
   const token = readFileSync(TOKEN_FILE, 'utf8').trim();
   compose(['up', '-d', '--wait', '--build', 'ui'], { TRACKER_UI_TOKEN: token });
+  await hideOwnerHints(token);
   await startLockedInterface(token);
+}
+
+/**
+ * Адрес контура интерфейса, тем же умолчанием, что и `playwright.config.ts`: два места
+ * обязаны двигаться вместе, иначе прогон уйдёт мимо своего порта.
+ */
+const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.UI_PORT ?? '8081'}`;
+
+/**
+ * Владельцу контура сразу после подъёма ставится `hints.hidden_all: true` (TRK-362,
+ * constraints задачи): читающие и почти все пишущие сценарии написаны до пояснений
+ * экранов и меряют геометрию и снимки без них. Сценарий, проверяющий сам механизм
+ * пояснений (`explanations.spec.ts`), идёт проектом «запись», сам включает пояснения
+ * в начале и возвращает `hidden_all: true` в конце — так он не портит контур соседям.
+ *
+ * Бэкенд контура наружу не смотрит (`docker-compose.yml`): публикован только `ui`,
+ * и `/api` он проксирует на свой источник, — поэтому запрос идёт через уже поднятый
+ * `ui` тем же путём, что и браузер, а не напрямую к `api` в сети compose.
+ */
+async function hideOwnerHints(token: string): Promise<void> {
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const bootstrapResponse = await fetch(`${BASE_URL}/api/v1/bootstrap`, { headers });
+  if (!bootstrapResponse.ok) {
+    throw new Error(
+      `bootstrap ответил ${bootstrapResponse.status} при скрытии пояснений владельцу`,
+    );
+  }
+  const body = (await bootstrapResponse.json()) as { data: { account: { id: string } | null } };
+  const accountId = body.data.account?.id;
+  if (accountId === undefined) {
+    throw new Error('у ключа установки нет учётной записи — скрывать пояснения нечему');
+  }
+
+  const update = await fetch(`${BASE_URL}/api/v1/accounts/${accountId}/onboarding`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hints: { hidden_all: true } }),
+  });
+  if (!update.ok) {
+    throw new Error(
+      `PATCH .../onboarding ответил ${update.status} при скрытии пояснений владельцу`,
+    );
+  }
 }
 
 /**
