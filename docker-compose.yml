@@ -30,6 +30,10 @@ x-app-environment: &app-environment
   # и по той же причине: оба контура обязаны задавать сервису один и тот же набор
   # переменных (`docs/CONVENTIONS.md`, «Запуск»; `tests/test_compose.py`).
   TRACKER_UI_PUBLIC_URL: ${TRACKER_UI_PUBLIC_URL:-}
+  # Язык учебного проекта START, который заводит засев (`app/services/tutorial.py`,
+  # `TRK-372`). Объявлен так же, как адреса выше, и по той же причине; прод-контур
+  # выводит умолчание из `CASEFILE_LANGUAGE`, которого дев-контур не знает.
+  TRACKER_TUTORIAL_LANGUAGE: ${TRACKER_TUTORIAL_LANGUAGE:-en}
   # Прежний пароль установки: `local-token` переносит его в учётную запись администратора
   # (`docs/CONCEPT.md`, 5.4). Объявлен так же, как в прод-контуре, где из этой подстановки
   # выводится ещё и режим интерфейса у установок, закрытых им до учётных записей.

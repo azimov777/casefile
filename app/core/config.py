@@ -131,6 +131,25 @@ class Settings(BaseSettings):
             "whole when the board is seen otherwise: a proxy, TLS, another machine"
         ),
     )
+    # Язык учебного проекта `START`, который заводит засев на пустой установке
+    # (`app/services/tutorial.py`, `TRK-370`): установщик пишет его в `.env` по языку
+    # оболочки человека (`install.sh`/`install.ps1`, переменная `CASEFILE_LANGUAGE` в
+    # `docker-compose.prod.yml`). Тип объявлен литералом прямо здесь, а не импортом
+    # `TutorialLanguage` из `app.domain.tutorial`: `core` ни от чего выше себя не зависит
+    # (`docs/CONVENTIONS.md`, «Структура кода»), и оба места держит одинаковыми набором
+    # значений тест (`tests/test_tutorial.py`). Неизвестное значение не молчит английским —
+    # это литерал, и pydantic отказывает уже на чтении настроек, называя значение в
+    # сообщении: правило то же, что у `environment` выше. Явный аргумент `--language`
+    # команды `tutorial` (`app/cli.py`) эту настройку подменяет; уже заведённый проект
+    # смена настройки не переписывает (`app/services/tutorial.py`, `_seed`).
+    tutorial_language: Literal["en", "ru"] = Field(
+        default="en",
+        description=(
+            "Language the boot step and the `tutorial` command seed the tutorial project "
+            "START in, when no `--language` argument overrides it: `en` or `ru`. Already "
+            "seeded text is not rewritten by changing this setting"
+        ),
+    )
     mcp_page_size: int = Field(
         default=25,
         ge=1,

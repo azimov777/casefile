@@ -8,9 +8,11 @@
 """
 
 import re
+import typing
 
 import pytest
 
+from app.core.config import Settings
 from app.domain.projects import validate_project_description, validate_project_key
 from app.domain.tasks import TEXT_SECTIONS, TaskField, normalize_fields
 from app.domain.tutorial import (
@@ -176,3 +178,15 @@ def test_render_keeps_the_task_accepted_as_is(language: str) -> None:
     fields = _fields(task)
     assert normalize_fields(fields) == fields
     assert all(fields[section] for section in TEXT_SECTIONS)
+
+
+def test_the_settings_field_allows_the_same_languages_as_the_texts() -> None:
+    """`Settings.tutorial_language` и `TUTORIAL_LANGUAGES` не должны разойтись (`TRK-372`).
+
+    Тип литерала объявлен заново в `app/core/config.py`, а не импортом отсюда: `core` ни
+    от чего выше себя не зависит (`docs/CONVENTIONS.md`, «Структура кода»). Без этой
+    проверки разъезд — например, добавленный третий язык текстов без настройки — молчал
+    бы до первой попытки завести его установкой.
+    """
+    allowed = typing.get_args(Settings.model_fields["tutorial_language"].annotation)
+    assert set(allowed) == set(TUTORIAL_LANGUAGES)
