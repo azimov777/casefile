@@ -125,3 +125,37 @@
 «пусто» — не одно понятие на всю установку, а вопрос к тому, что именно проверяется.
 **Где:** `app/services/tutorial.py`, `seed_tutorial_on_boot`; `app/db/repositories/projects.py`,
 `ProjectRepository`, `any_exists`; тесты — `tests/test_tutorial_seed.py`.
+
+## Тип языка засева объявлен дважды — в `core` и в `domain` — и держится тестом, не импортом
+
+**Что:** `Settings.tutorial_language` (`app/core/config.py`, `TRK-372`) — свой
+`Literal["en", "ru"]`, а не импорт `TutorialLanguage` из `app.domain.tutorial`: `core` не
+заводит зависимостей на слои выше себя (`docs/CONVENTIONS.md`, «Структура кода»), а до
+`TRK-372` он не зависел вовсе ни от чего своего проекта.
+**Почему важно:** третий язык текстов, добавленный только в `TUTORIAL_LANGUAGES`, тихо не
+расширил бы настройку — установка отказывала бы на новом значении настройки, хотя тексты
+уже готовы, и разошедшиеся места ничем не связаны на вид.
+**Как правильно:** эти два места держит равными тест, сверяющий `typing.get_args` литерала
+настройки с `TUTORIAL_LANGUAGES`, а не чтение вслепую при добавлении языка.
+**Где:** `app/core/config.py`, `Settings.tutorial_language`; `app/domain/tutorial.py`,
+`TUTORIAL_LANGUAGES`; `tests/test_tutorial.py`,
+`test_the_settings_field_allows_the_same_languages_as_the_texts`.
+
+## Настройку языка засева сервис читает `get_settings()` напрямую — тест сам чистит кеш
+
+**Что:** `app/services/tutorial.py` (`_seed`, `TRK-372`) резолвит язык вызовом
+`get_settings().tutorial_language`, минуя параметр, — у сервиса нет шва для подмены
+настроек, как у FastAPI-зависимостей. `get_settings` — `lru_cache` на процесс, и правка
+`TRACKER_TUTORIAL_LANGUAGE` через `monkeypatch.setenv` без сброса кеша сервису не видна.
+**Почему важно:** без `get_settings.cache_clear()` тест либо тихо проверяет не то (сервис
+продолжает видеть значение, закешированное раньше него в этом же прогоне), либо, если
+именно этот тест первым создал кеш, оставляет изменённые настройки в кеше на остаток
+прогона — следующие тесты того же процесса получают чужой язык без единой строки в
+своём коде.
+**Как правильно:** `monkeypatch.setenv("TRACKER_TUTORIAL_LANGUAGE", ...)` →
+`get_settings.cache_clear()` → вызов сервиса внутри `try` → `get_settings.cache_clear()`
+в `finally`, даже когда тест проверяет только отказ (`pytest.raises`). Тесты вида
+`Settings(tutorial_language=...)` в обход `get_settings()` этой ловушки не несут —
+годятся, когда достаточно проверить сам валидатор, а не то, что читает сервис.
+**Где:** `tests/test_tutorial_seed.py`, раздел «Язык засева»; `app/core/config.py`,
+`get_settings`.
