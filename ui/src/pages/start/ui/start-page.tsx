@@ -6,6 +6,7 @@ import { questionsQueryOptions } from '@/entities/entry';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { CLOSED_STATUSES, taskPackageQueryOptions, tasksQueryOptions } from '@/entities/task';
 import { isRevoked, tokensQueryOptions } from '@/entities/token';
+import { participantsQueryOptions } from '@/features/manage-access';
 import { useUpdateOnboarding } from '@/features/manage-onboarding';
 import { Badge, Button, CopyBlock } from '@/shared/ui';
 
@@ -64,20 +65,27 @@ export function StartPage() {
    * ссылка при этом видны всегда.
    */
 
-  // Шаг 1: агента подключали, если токеном, которым уже ходили, пользуется не
-  // человек, — общий токен агента (`participant` пуст) или токен, выпущенный
-  // агентом. Отозванный и токен человека это условие не выполняют.
+  // Шаг 1: агента подключали, если токеном, которым уже ходили, пользуется агент:
+  // общий токен (`participant` пуст) или токен участника рода `agent`. Род берётся из
+  // реестра участников, а не из автора токена: токен агента этой машины выпускает сама
+  // установка, автором `tracker`, и признак «выпущен агентом» на обычной установке
+  // не выполнялся бы никогда. Пока реестр не прочитан, именной токен не засчитывается:
+  // интерфейс не утверждает того, чего не узнал. Отозванный токен и токен человека
+  // шаг не отмечают.
   const tokens = useInfiniteQuery(tokensQueryOptions());
+  const participants = useQuery(participantsQueryOptions());
   const tokenItems = tokens.data?.pages[0]?.items ?? [];
+  const agentNames = new Set(
+    (participants.data ?? []).filter((item) => item.kind === 'agent').map((item) => item.name),
+  );
   const agentConnected =
     tokens.isSuccess &&
-    tokenItems.some(
-      (item) =>
-        !isRevoked(item) &&
-        item.last_used_at !== null &&
-        item.last_used_at !== undefined &&
-        ((item.participant ?? null) === null || item.created_by.kind === 'agent'),
-    );
+    tokenItems.some((item) => {
+      if (isRevoked(item)) return false;
+      if (item.last_used_at === null || item.last_used_at === undefined) return false;
+      const owner = item.participant ?? null;
+      return owner === null || agentNames.has(owner);
+    });
 
   // Шаг 2: агент начал работу, если у него есть хоть одна задача не в `backlog`/`open`.
   const started = useQuery(

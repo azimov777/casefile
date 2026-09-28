@@ -9,6 +9,7 @@ import {
   collection,
   data,
   failure,
+  participant,
   questionEntry,
   task,
   taskDetails,
@@ -21,6 +22,20 @@ import { setToken } from '@/shared/api';
 
 /** Ключ сеанса набора `task`: экрану «Начало» больше и не нужно. */
 const SESSION = 'trk_session_secret_of_the_interface';
+
+/**
+ * Реестр участников обычной установки: человек `owner`, агент этой машины `agent` и
+ * постоянный агент `claude`. По нему экран узнаёт род владельца токена (`TRK-378`).
+ */
+function registry() {
+  return http.get(`${API}/api/v1/participants`, () =>
+    collection([
+      participant('owner', { kind: 'human' }),
+      participant('agent'),
+      participant('claude'),
+    ]),
+  );
+}
 
 /** Учётная запись владельца установки со своим состоянием знакомства (`TRK-369`). */
 function account(status: 'pending' | 'completed' | 'skipped' = 'pending') {
@@ -50,6 +65,7 @@ function signedIn(status: Parameters<typeof account>[0] = 'pending') {
     http.get(`${API}/api/v1/tasks`, () => collection([])),
     http.get(`${API}/api/v1/tokens`, () => collection([])),
     http.get(`${API}/api/v1/questions`, () => collection([])),
+    registry(),
   );
 }
 
@@ -260,6 +276,7 @@ describe('экран «Начало»', () => {
       setToken(SESSION);
       server.use(
         http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ account: account(status) }))),
+        registry(),
         http.get(`${API}/api/v1/tasks`, ({ request }) => {
           seen.add(new URL(request.url).pathname);
           return collection([]);
@@ -327,6 +344,7 @@ describe('экран «Начало»', () => {
       setToken(SESSION);
       server.use(
         http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ account: account() }))),
+        registry(),
         http.get(`${API}/api/v1/tokens`, () =>
           collection([
             // Действующий общий токен агента: `participant` пуст — тем и пользуется агент.
@@ -370,10 +388,71 @@ describe('экран «Начало»', () => {
       });
     });
 
+    it('токен агента этой машины, выпущенный самой установкой, отмечает первый шаг', async () => {
+      setToken(SESSION);
+      server.use(
+        http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ account: account() }))),
+        registry(),
+        http.get(`${API}/api/v1/tokens`, () =>
+          collection([
+            // Так токен выглядит после `install.sh`: участник `agent`, автор — `tracker`.
+            accessToken({
+              id: 'c1111111-1111-1111-1111-111111111111',
+              name: 'local-agent',
+              scope: 'main',
+              participant: 'agent',
+              created_by: { kind: 'tracker', signature: null },
+              last_used_at: '2026-09-27T10:00:00Z',
+            }),
+          ]),
+        ),
+        http.get(`${API}/api/v1/tasks`, () => collection([])),
+        http.get(`${API}/api/v1/questions`, () => collection([])),
+      );
+      tutorialMissing();
+      renderApp('/start');
+
+      await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
+
+      await waitFor(() => {
+        expect(within(stepItems()[0]!).getByText(say.start('steps.done'))).toBeInTheDocument();
+      });
+    });
+
+    it('тем же токеном ещё не ходили — первый шаг не отмечен', async () => {
+      setToken(SESSION);
+      server.use(
+        http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ account: account() }))),
+        registry(),
+        http.get(`${API}/api/v1/tokens`, () =>
+          collection([
+            accessToken({
+              id: 'c2222222-2222-2222-2222-222222222222',
+              name: 'local-agent',
+              scope: 'main',
+              participant: 'agent',
+              created_by: { kind: 'tracker', signature: null },
+              last_used_at: null,
+            }),
+          ]),
+        ),
+        http.get(`${API}/api/v1/tasks`, () => collection([])),
+        http.get(`${API}/api/v1/questions`, () => collection([])),
+      );
+      tutorialMissing();
+      renderApp('/start');
+
+      await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
+      await screen.findAllByRole('listitem');
+
+      expect(within(stepItems()[0]!).queryByText(say.start('steps.done'))).not.toBeInTheDocument();
+    });
+
     it('отозванный токен агента и токен человека сами по себе первый шаг не отмечают', async () => {
       setToken(SESSION);
       server.use(
         http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ account: account() }))),
+        registry(),
         http.get(`${API}/api/v1/tokens`, () =>
           collection([
             accessToken({
@@ -410,6 +489,7 @@ describe('экран «Начало»', () => {
       setToken(SESSION);
       server.use(
         http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ account: account() }))),
+        registry(),
         http.get(`${API}/api/v1/tokens`, () => failure('database_unavailable', 503, 'Boom')),
         http.get(`${API}/api/v1/tasks`, () => collection([])),
         http.get(`${API}/api/v1/questions`, () => collection([])),
