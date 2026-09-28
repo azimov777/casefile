@@ -12,8 +12,10 @@
 #   CASEFILE_DIR       каталог установки
 #   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
-# Обе последние записываются в `.env` новой установки; без них действует `.env`
-# существующей установки, а без него — умолчания compose-файла.
+#   CASEFILE_LANGUAGE  язык учебного проекта START: en или ru; без неё установщик решает
+#                      по культуре системы (Get-Culture)
+# Все три записываются в `.env` новой установки; без них действует `.env` существующей
+# установки, а без него — умолчания compose-файла.
 
 $ErrorActionPreference = 'Stop'
 
@@ -46,6 +48,16 @@ function Get-Setting([string] $Name, [string] $Default) {
     return $Default
 }
 
+# Язык учебного проекта START на первом подъёме пустой установки (`TRK-372`): заданный
+# человеком в окружении — как есть; иначе `ru` при русской культуре системы, иначе `en`.
+# Близнец `language()` из install.sh, только источник языка оболочки — не переменные
+# окружения POSIX (LC_ALL/LC_MESSAGES/LANG), а культура .NET, которую и видит PowerShell.
+function Get-Language {
+    if ($env:CASEFILE_LANGUAGE) { return $env:CASEFILE_LANGUAGE }
+    if ((Get-Culture).TwoLetterISOLanguageName -eq 'ru') { return 'ru' }
+    return 'en'
+}
+
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Fail 'Docker Desktop is required: https://docs.docker.com/desktop/setup/install/windows-install/'
 }
@@ -73,6 +85,7 @@ if (-not (Test-Path .env)) {
     $lines = @("COMPOSE_FILE=$Compose")
     if ($env:CASEFILE_REGISTRY) { $lines += "CASEFILE_REGISTRY=$env:CASEFILE_REGISTRY" }
     if ($env:CASEFILE_VERSION) { $lines += "CASEFILE_VERSION=$env:CASEFILE_VERSION" }
+    $lines += "CASEFILE_LANGUAGE=$(Get-Language)"
     [System.IO.File]::WriteAllLines((Join-Path $Dir '.env'), $lines)
 }
 

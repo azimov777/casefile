@@ -20,8 +20,10 @@
 #   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777; годится и свой
 #                      реестр — так установщик проверяют до публикации
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
-# Обе последние записываются в `.env` новой установки; без них действует `.env`
-# существующей установки, а без него — умолчания compose-файла.
+#   CASEFILE_LANGUAGE  язык учебного проекта START: en или ru; без неё установщик решает
+#                      по языку оболочки (LC_ALL, LC_MESSAGES, LANG — первая непустая)
+# Все три записываются в `.env` новой установки; без них действует `.env` существующей
+# установки, а без него — умолчания compose-файла.
 #
 # Всё тело — в `main`, который зовётся последней строкой. Запущенный через `| sh`
 # скрипт читается из трубы по мере исполнения, и любая команда, читающая stdin, съела бы
@@ -45,6 +47,24 @@ fail() {
 setting() {
   value=$(sed -n "s/^$1=//p" .env 2>/dev/null | tail -n 1)
   printf '%s' "${value:-$2}"
+}
+
+# Язык учебного проекта START на первом подъёме пустой установки (`TRK-372`): заданный
+# человеком в окружении — как есть; иначе `ru`, если первая непустая из `LC_ALL`,
+# `LC_MESSAGES`, `LANG` начинается с `ru`, иначе `en`. Дальше значение живёт в `.env`
+# (`CASEFILE_LANGUAGE`), и повторный запуск установщика его не трогает.
+language() {
+  if [ -n "${CASEFILE_LANGUAGE:-}" ]; then
+    printf '%s' "$CASEFILE_LANGUAGE"
+    return
+  fi
+  value=${LC_ALL:-}
+  [ -n "$value" ] || value=${LC_MESSAGES:-}
+  [ -n "$value" ] || value=${LANG:-}
+  case "$value" in
+    ru*) printf ru ;;
+    *) printf en ;;
+  esac
 }
 
 # Обновлятор установки на время установщика стоит: иначе его проверка, пришедшаяся на
@@ -102,6 +122,7 @@ main() {
       echo "COMPOSE_FILE=$COMPOSE"
       [ -z "${CASEFILE_REGISTRY:-}" ] || echo "CASEFILE_REGISTRY=$CASEFILE_REGISTRY"
       [ -z "${CASEFILE_VERSION:-}" ] || echo "CASEFILE_VERSION=$CASEFILE_VERSION"
+      echo "CASEFILE_LANGUAGE=$(language)"
     } >.env
   fi
 
