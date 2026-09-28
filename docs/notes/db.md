@@ -737,3 +737,23 @@ ASCII-шаблоном, поэтому `str.lower()` в домене и `lower()
 описывает конечное состояние, то есть второе значение.
 **Где:** `app/db/migrations/versions/20260928_1200_onboarding_state.py`;
 `app/db/models/account.py`; `tests/test_migrations.py`.
+
+## Пустота приёмника архива переноса считается по автору проекта, а не по числу строк
+
+**Что:** `ProjectRepository.count_excluding_tracker` считает проекты с
+`Project.created_by_kind != AuthorKind.TRACKER`, и `import_installation`
+(`app/services/archive.py`) сверяет пустоту приёмника по нему, а не голым
+`SELECT count(*) FROM projects` (TRK-371).
+**Почему важно:** с засевом учебного проекта `START` (TRK-370) свежая установка после
+первого же подъёма не пуста по числу строк — без поправки перенос установки перестал бы
+работать на любой новой установке, а он принимает только пустую (`docs/CONCEPT.md`, 5.5,
+`TRK-360#15`). Проект, заведённый человеком или агентом, остаётся блокером как раньше,
+даже с тем же ключом `START`: держит установку непустой автор строки, а не факт строки и
+не её ключ.
+**Как правильно:** проверке «установка ещё ничего не содержит своего», которой нельзя
+путать засев трекера с работой человека, — фильтровать по `created_by_kind`
+(`app/db/models/author.py`, `CreatedByMixin`), а не по присутствию строки. То же решение,
+что и у условия засева учебного проекта (заметка «Условие засева — число проектов, а не
+признак `setup.py`», `docs/notes/tutorial.md`), но по автору, а не по всей таблице.
+**Где:** `app/db/repositories/projects.py`, `count_excluding_tracker`;
+`app/services/archive.py`, `import_installation`; тесты — `tests/test_archive.py`.
