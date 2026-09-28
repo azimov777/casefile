@@ -59,6 +59,19 @@ function lastRequest(): URL {
 }
 
 /**
+ * Название ссылки на экран «Начало» из текста `tasks.noneYet`: подпись вырезана из
+ * словаря, а не написана в тесте заново, — как заголовок панели родителя
+ * (`entities/task/ui/task-parents.test.tsx`, `heading`). Разметка ссылки в словаре
+ * стоит тегом `<start>` (`Trans`, `NoTasksYetCallout`), и тест читает то же имя,
+ * которое получает `getByRole('link')`.
+ */
+function noneYetLinkName(): string {
+  const match = /<start>(.*?)<\/start>/.exec(say.tasks('noneYet'));
+  if (match === null) throw new Error('Ключ tasks.noneYet потерял тег <start>');
+  return match[1] ?? '';
+}
+
+/**
  * Правило показа, каким оно уходит в `query`, пока архив скрыт (UI-97). Написано здесь
  * заново, а не собрано кодом: тест, берущий строку оттуда же, откуда её берёт запрос,
  * сверял бы код с самим собой. Дата порога — любая: её точность проверяет
@@ -441,6 +454,37 @@ describe('список задач', () => {
     open('/tasks');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(say.errors('network_error'));
+  });
+});
+
+describe('пустой проект без единой задачи (TRK-365)', () => {
+  /*
+   * Пустая выдача бывает двух разных бед: «по этим условиям ничего не нашлось»
+   * (прежний `tasks.empty` — его проверяют «пустую выдачу объясняет…» выше и
+   * «пустая выдача при скрытом архиве…» в describe('архив'), обе с условием по
+   * статусу) и «задач ещё нет», когда у отбора нет условий сверх проекта и архив
+   * уже открыт: тогда причина пустоты не в отборе, и сказано, кто заводит задачи.
+   * Пока архив скрыт, второй запрос ради того, есть ли в нём что-то, эта задача
+   * не заводит — текст остаётся прежним, и показ архива это и проверяет.
+   */
+  it('без единого условия и с открытым архивом ведёт на «Начало», а не на сброс', async () => {
+    server.use(listing(() => taskPage([])));
+
+    open('/tasks?project=DEMO&archive=shown');
+
+    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    expect(link).toHaveAttribute('href', '/start');
+    expect(screen.queryByText(say.tasks('empty'))).toBeNull();
+    expect(screen.queryByRole('button', { name: say.tasks('resetFilters') })).toBeNull();
+  });
+
+  it('то же самое различение — на доске, над столбцами', async () => {
+    server.use(listing(() => taskPage([])));
+
+    open('/tasks?project=DEMO&view=board&archive=shown');
+
+    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    expect(link).toHaveAttribute('href', '/start');
   });
 });
 

@@ -11,6 +11,11 @@ export const tasks = {
   found_one: '{{count, number}} task found',
   found_other: '{{count, number}} tasks found',
   empty: 'No tasks match these conditions',
+  // Пустой проект без единого условия отбора — другая беда, чем пустая выдача по
+  // условиям: здесь сказано, откуда возьмутся задачи, а не предложен сброс, снимать
+  // который нечего (TRK-365).
+  noneYet:
+    'There are no tasks yet: an agent creates and carries them. See the <start>Start</start> screen for what to do.',
   // Пустота при скрытом архиве: сказать, что за ней может стоять архив, и дать его
   // показать — иначе «задач нет» читалось бы выводом обо всём проекте.
   archiveHidden: 'The archive is not shown.',
