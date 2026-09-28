@@ -22,7 +22,9 @@ export function StartWalkAction() {
 
   return (
     <Button asChild>
-      <Link to={walkHref(first, 1)}>{t('walk.start')}</Link>
+      <Link to={walkHref(first, 1)} className="no-underline">
+        {t('walk.start')}
+      </Link>
     </Button>
   );
 }

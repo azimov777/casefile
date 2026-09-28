@@ -32,16 +32,23 @@ export function WalkBar({ step, steps }: WalkBarProps) {
       <div className="flex flex-wrap gap-2">
         {previous === undefined ? null : (
           <Button asChild tone="quiet" size="sm">
-            <Link to={walkHref(previous, step - 1)}>{t('walk.back')}</Link>
+            <Link to={walkHref(previous, step - 1)} className="no-underline">
+              {t('walk.back')}
+            </Link>
           </Button>
         )}
         <Button asChild tone="quiet" size="sm">
-          <Link to={next === undefined ? '/start' : walkHref(next, step + 1)}>
+          <Link
+            to={next === undefined ? '/start' : walkHref(next, step + 1)}
+            className="no-underline"
+          >
             {t('walk.next')}
           </Link>
         </Button>
         <Button asChild size="sm">
-          <Link to="/start">{t('walk.finish')}</Link>
+          <Link to="/start" className="no-underline">
+            {t('walk.finish')}
+          </Link>
         </Button>
       </div>
     </div>
