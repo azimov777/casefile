@@ -93,6 +93,7 @@
 | `task_has_parent` | Task already has a parent | У задачи уже есть родитель: второй не ставится, нынешний назван в `details.parent`. |
 | `task_has_unclosed_children` | Task has children that are not closed | Закрытие задачи при детях не в `done` и не в `cancelled`. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
+| `tutorial_admin_missing` | No human has an administrator account yet | В установке нет ни одного человека с учётной записью администратора. |
 | `version_conflict` | Task version is outdated | Версия задачи разошлась: её изменили между чтением и записью. |
 
 ## 422 — не прошло проверку
