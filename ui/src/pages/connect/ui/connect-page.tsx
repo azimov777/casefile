@@ -20,11 +20,19 @@ const AGENT_TOKEN_COMMAND =
   'docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token';
 
 /**
- * Экран «Подключить агента»: два шага по порядку — взять токен, вставить фрагмент под
- * свой клиент. Третьего шага, ставившего скил дисциплины файлом, больше нет: сервер
- * отдаёт правила работы с трекером агенту сам при подключении, `instructions` MCP и
- * метадатой инструментов (решение владельца `TRK-140#8`, скил снят `TRK-146`, экран —
- * `UI-171`). Под списком шагов стоит одна фраза об этом вместо снятого раздела.
+ * Экран «Подключить агента»: три шага по порядку — взять токен, вставить фрагмент под
+ * свой клиент, сказать агенту, с чего начать. Прежнего третьего шага, ставившего скил
+ * дисциплины файлом, больше нет: сервер отдаёт правила работы с трекером агенту сам при
+ * подключении, `instructions` MCP и метадатой инструментов (решение владельца
+ * `TRK-140#8`, скил снят `TRK-146`, экран — `UI-171`). Под списком шагов стоит одна
+ * фраза об этом вместо снятого раздела.
+ *
+ * Третий шаг (`TRK-367`) — не новая копия фраз, а то же место, что и на экране «Начало»:
+ * фразы, подписи и текст о новой сессии читаются из словаря `start` теми же ключами, и
+ * здесь их нельзя завести заново — иначе две копии разойдутся молча. Человек,
+ * подключивший агента из терминала и ни разу не открывавший «Начало», узнаёт свой
+ * следующий шаг здесь же; ссылка под фразами ведёт на `/start`, где те же фразы стоят
+ * рядом с остальным путём знакомства.
  *
  * Шаги — нумерованный список, а не разделы подряд (UI-131): человек, открывший экран
  * впервые, видит, с чего начать и что после чего, а ключевое действие каждого шага —
@@ -47,6 +55,9 @@ export function ConnectPage() {
   const shared = searchParams.get('shared') === 'true';
   const { t } = useTranslation('connect');
   const { t: brick } = useTranslation('ui');
+  // Фразы третьего шага и текст о новой сессии — из словаря экрана «Начало», не отсюда
+  // (см. докстринг компонента и `TRK-367`).
+  const { t: tStart } = useTranslation('start');
 
   function setShared(value: boolean) {
     const updated = new URLSearchParams(searchParams);
@@ -128,6 +139,37 @@ export function ConnectPage() {
             <ConnectionSnippets mcpUrl={installation.data.mcp_url} labelled={shared} />
           )}
         </Step>
+
+        <Step number={3} title={t('tellAgent.title')}>
+          <div className="flex min-w-0 flex-col gap-6">
+            <Phrase
+              title={tStart('phrases.tutorial.title')}
+              lead={tStart('phrases.tutorial.lead')}
+              label={tStart('phrases.tutorial.label')}
+              caption={tStart('phrases.tutorial.caption')}
+              text={tStart('phrases.tutorial.text')}
+            />
+            <Phrase
+              title={tStart('phrases.file.title')}
+              lead={tStart('phrases.file.lead')}
+              label={tStart('phrases.file.label')}
+              caption={tStart('phrases.file.caption')}
+              text={tStart('phrases.file.text')}
+            />
+            {/* Между второй и третьей фразой (TRK-360#40, как на «Начало»): почему это
+                новая сессия — не вступление третьей фразы, а то, что разделяет их обе. */}
+            <Text>{tStart('sections.tellAgent.newSession')}</Text>
+            <Phrase
+              title={tStart('phrases.execute.title')}
+              label={tStart('phrases.execute.label')}
+              caption={tStart('phrases.execute.caption')}
+              text={tStart('phrases.execute.text')}
+            />
+          </div>
+          <Text>
+            <Trans t={t} i18nKey="tellAgent.more" components={{ start: <Link to="/start" /> }} />
+          </Text>
+        </Step>
       </ol>
 
       {/* Раздел установки скила дисциплины снят (TRK-146, UI-171): скила в проекте
@@ -186,4 +228,34 @@ function Text({ children }: { children: ReactNode }) {
 /** Второстепенное пояснение: мельче и тише основного текста. */
 function Hint({ children }: { children: ReactNode }) {
   return <p className="text-meta text-muted">{children}</p>;
+}
+
+/**
+ * Одна фраза для агента: заголовок, необязательное короткое объяснение и блок
+ * копирования — тот же приём, что и на экране «Начало» (`pages/start/ui/start-page.tsx`).
+ */
+function Phrase({
+  title,
+  lead,
+  label,
+  caption,
+  text,
+}: {
+  title: string;
+  lead?: string;
+  label: string;
+  caption: string;
+  text: string;
+}) {
+  const id = useId();
+
+  return (
+    <div aria-labelledby={id} className="flex min-w-0 flex-col gap-2">
+      <h3 id={id} className="text-meta font-semibold text-text">
+        {title}
+      </h3>
+      {lead === undefined ? null : <Text>{lead}</Text>}
+      <CopyBlock label={label} caption={caption} text={text} />
+    </div>
+  );
 }
