@@ -211,9 +211,44 @@ describe('экран «Подключить агента»', () => {
     );
     expect(
       steps.map((step) => within(step).getByRole('heading', { level: 2 }).textContent),
-    ).toEqual([say.connect('token.title'), say.connect('snippets.title')]);
+    ).toEqual([
+      say.connect('token.title'),
+      say.connect('snippets.title'),
+      say.connect('tellAgent.title'),
+    ]);
     // Место снятого шага установки скила — одна фраза под списком, а не шаг (UI-171).
     expect(screen.getByText(say.connect('discipline'))).toBeInTheDocument();
+  });
+
+  it('третий шаг показывает три фразы для агента, копирует их дословно и ссылкой ведёт на /start (TRK-367)', async () => {
+    installation();
+    const user = userEvent.setup();
+    const { container } = renderApp('/connect');
+    await snippetsShown();
+
+    await screen.findByRole('heading', { name: say.start('phrases.tutorial.title') });
+
+    const phrases: { key: 'tutorial' | 'file' | 'execute' }[] = [
+      { key: 'tutorial' },
+      { key: 'file' },
+      { key: 'execute' },
+    ];
+    for (const { key } of phrases) {
+      const label = say.start(`phrases.${key}.label`);
+      await user.click(screen.getByRole('button', { name: say.ui('copyBlock.label', { label }) }));
+      expect(await navigator.clipboard.readText()).toBe(say.start(`phrases.${key}.text`));
+    }
+
+    // Пункт «Начало» стоит и в боковой панели под тем же именем: ссылка ищется внутри
+    // области содержимого, иначе имя совпало бы с двумя элементами разом.
+    const main = screen.getByRole('main');
+    expect(within(main).getByRole('link', { name: say.ui('app.start') })).toHaveAttribute(
+      'href',
+      '/start',
+    );
+
+    // Строки токена на экране нет и на третьем шаге — как и на всём остальном экране.
+    expect(container).not.toHaveTextContent(SESSION);
   });
 
   it('вид с меткой открывается по адресу', async () => {
