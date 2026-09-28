@@ -183,6 +183,7 @@ README.md сразу после «Connect your agent», отчёт челове�
 четырёх мест фраза ищется без изменений, кроме схлопывания пробелов — Markdown переносит
 длинный абзац на несколько строк ради читаемости на GitHub, а перенос не должен ронять
 сверку с однострочной фразой источника.
+Длинное тире второй фразы `install.ps1` печатает кодом (`' + [char]0x2014 + '`), а не литералом: Windows PowerShell 5.1 читает скачанный файл без BOM в cp1252 и вывел бы `â€”`; строки кода файла — только ASCII (проверка `test_install_ps1_code_lines_are_ascii`), а `_normalize_ps1` разворачивает запись обратно в тире (TRK-380).
 **Где:** `app/domain/tutorial.py`, `AGENT_PHRASES`; `install.sh`, `install.ps1`,
 `README.md`, `docs/agent-install.md`; `ui/src/shared/i18n/dictionaries/en/start.ts`,
 `ui/src/shared/i18n/dictionaries/ru/start.ts`; `ui/src/pages/connect/ui/connect-page.tsx`;
