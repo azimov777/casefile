@@ -191,6 +191,22 @@ main() {
   echo "  URL     $mcp_url"
   echo "  Header  Authorization: Bearer $token"
   echo
+
+  # Дословный текст трёх фраз и памятки (`app/domain/tutorial.py`, `AGENT_PHRASES`):
+  # это одна из пяти копий, и сверяет их сплошная проверка множеств, а не вычитка
+  # (`docs/CONVENTIONS.md`, «Документация»; `tests/test_installers.py`, TRK-367).
+  # Адрес в последней строке — тот же порт, что и строка `Board:` выше, плюс `/start`:
+  # там те же фразы стоят на языке человека, с копированием по кнопке.
+  bold "Tell your agent what to do:"
+  echo "  New here? Say:"
+  echo "    Take the tutorial task START-1 in Casefile and walk me through it."
+  echo "  Have work to hand over? Say:"
+  echo "    File tasks in Casefile for my work: a project for it if there is none yet, and tasks with all their sections and checks, each small enough for one agent to finish in one go, each naming its environment in \`context\` — where the work lives and how to run its checks. Don't start the work itself; if I haven't described it yet, ask me."
+  echo "  Then, in a new agent session, say:"
+  echo "    Carry out the tasks for this work from the Casefile tracker. Hand them to agents, one task per agent, to save your own context, and give them cheaper models where those cope."
+  echo "  The same phrases with copy buttons, in your language: http://localhost:$ui_port/start"
+  echo
+
   echo "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $DIR"
 }
 
