@@ -18,6 +18,6 @@
 - `index.ts` — публичный интерфейс среза: `tasksQueryOptions`, `tasksColumnQueryOptions`,
   `tasksTotalQueryOptions`, `fetchTasks`, `taskKeys`, `TASK_STATUSES`, `TASK_PRIORITIES`,
   `TASK_LIST_FIELDS`, `TASK_PAGE_SIZE`, `TASK_COLUMN_PAGE_SIZE`, `TASK_COLUMNS`, `TaskRow`,
-  `ARCHIVE_AFTER_DAYS`, `StatusMark`, `PriorityMark`, `LinkKindMark`, `LINK_KIND_ORDER`, типы
+  `ARCHIVE_AFTER_DAYS`, `CLOSED_STATUSES`, `StatusMark`, `PriorityMark`, `LinkKindMark`, `LINK_KIND_ORDER`, типы
   `Task`, `TaskFeatures`, `TaskListParams`, `TaskListRequest`, `TaskStatus`, `TaskPriority`,
   `LinkKind`, `TaskLink`

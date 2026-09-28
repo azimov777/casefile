@@ -16,7 +16,7 @@ export {
   type TaskPriority,
   type TaskStatus,
 } from './api/tasks';
-export { ARCHIVE_AFTER_DAYS } from './model/archive';
+export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES } from './model/archive';
 export {
   taskPackageKeys,
   taskPackageQueryOptions,

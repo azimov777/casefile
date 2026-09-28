@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
-import { ArrowLeftRight, Inbox, Info, KeyRound, Plug, UserRound, Users } from 'lucide-react';
+import { ArrowLeftRight, Home, Inbox, Info, KeyRound, Plug, UserRound, Users } from 'lucide-react';
 import {
   bootstrapQueryOptions,
   bootstrapWithArchivedQueryOptions,
@@ -31,6 +31,11 @@ import { useShowArchived } from './show-archived';
  *
  * Флажок «Архивные проекты» (`UI-176`) данных не меняет: он добавляет в список проекты
  * в архиве, помеченные плашкой (`useShowArchived`).
+ *
+ * Первый пункт «Мне» — «Начало» (`TRK-361`): экран стоит первым адресом `/`, пока
+ * состояние знакомства учётной записи `pending` (`app/routes/home-redirect.tsx`), и
+ * пункт панели открывает его снова в любой момент — им пропущенное объяснение не
+ * теряется безвозвратно.
  */
 export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
   const bootstrap = useQuery(bootstrapQueryOptions());
@@ -194,6 +199,13 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
         <p className="mt-3 mb-0.5 ml-2 text-label font-semibold tracking-caps text-faint uppercase">
           {t('app.mine')}
         </p>
+
+        {/* Первый пункт «Мне», а не работа в проекте (TRK-361): вход и объяснение
+            способа работы открываются снова тем же пунктом, сколько бы задач ни было. */}
+        <NavLink to="/start" onClick={onNavigate} className={sectionLink}>
+          <Home className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+          {t('app.start')}
+        </NavLink>
 
         <NavLink to="/questions" onClick={onNavigate} className={sectionLink}>
           <Inbox className="size-(--ui-mark) shrink-0" aria-hidden="true" />

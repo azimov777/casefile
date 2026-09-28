@@ -9,6 +9,7 @@ import { moving } from './moving';
 import { people } from './people';
 import { project } from './project';
 import { questions } from './questions';
+import { start } from './start';
 import { task } from './task';
 import { tasks } from './tasks';
 import { ui } from './ui';
@@ -26,6 +27,7 @@ export const ru = {
   people,
   project,
   questions,
+  start,
   task,
   tasks,
   ui,
