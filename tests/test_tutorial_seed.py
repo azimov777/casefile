@@ -6,15 +6,17 @@
 """
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.models.participant import Participant
 from app.db.repositories import ProjectRepository
 from app.domain.authors import AuthorKind
 from app.domain.errors import TutorialAdminMissingError
 from app.domain.projects import normalize_project_key
 from app.domain.tasks import TaskStatus
-from app.domain.tutorial import TUTORIAL_PROJECT_KEY
+from app.domain.tutorial import TUTORIAL_PROJECT_KEY, TUTORIAL_PROJECTS
 from app.services import projects as projects_service
 from app.services.auth import Actor
 from app.services.tutorial import create_tutorial_project, seed_tutorial_on_boot
@@ -122,3 +124,82 @@ async def test_the_human_command_does_nothing_when_start_already_exists(
 
     assert not second.created
     assert second.project is None
+
+
+# --- Язык засева (`TRK-372`) --------------------------------------------------------
+#
+# `get_settings()` кеширован на процесс (`lru_cache`): изменение `TRACKER_TUTORIAL_LANGUAGE`
+# видно только после `cache_clear()`, и кеш обязан вернуться к настоящему окружению до
+# конца теста — иначе остаток набора, идущего в этом же процессе, унаследует чужой язык.
+
+
+async def test_the_boot_step_defaults_to_english_without_the_setting(
+    db_session: AsyncSession, owner: Participant
+) -> None:
+    """Обзорная проверка 2: без настройки и без аргумента — английские тексты."""
+    seed = await seed_tutorial_on_boot(db_session)
+
+    assert seed.created
+    assert seed.project is not None
+    assert seed.project.title == TUTORIAL_PROJECTS["en"].title
+
+
+async def test_the_boot_step_takes_the_language_from_the_installation_setting(
+    db_session: AsyncSession, owner: Participant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Обзорная проверка 2: `TRACKER_TUTORIAL_LANGUAGE=ru` без аргумента даёт русские тексты."""
+    monkeypatch.setenv("TRACKER_TUTORIAL_LANGUAGE", "ru")
+    get_settings.cache_clear()
+    try:
+        seed = await seed_tutorial_on_boot(db_session)
+    finally:
+        get_settings.cache_clear()
+
+    assert seed.created
+    assert seed.project is not None
+    assert seed.project.title == TUTORIAL_PROJECTS["ru"].title
+
+
+async def test_the_boot_step_seeds_english_when_the_setting_says_so(
+    db_session: AsyncSession, owner: Participant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Обзорная проверка 2: `TRACKER_TUTORIAL_LANGUAGE=en` — явно те же английские тексты."""
+    monkeypatch.setenv("TRACKER_TUTORIAL_LANGUAGE", "en")
+    get_settings.cache_clear()
+    try:
+        seed = await seed_tutorial_on_boot(db_session)
+    finally:
+        get_settings.cache_clear()
+
+    assert seed.created
+    assert seed.project is not None
+    assert seed.project.title == TUTORIAL_PROJECTS["en"].title
+
+
+async def test_the_boot_step_refuses_an_unknown_language_naming_it(
+    db_session: AsyncSession, owner: Participant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Обзорная проверка 2: неизвестное значение роняет шаг, называя его, а не молчит `en`."""
+    monkeypatch.setenv("TRACKER_TUTORIAL_LANGUAGE", "de")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ValidationError, match="de"):
+            await seed_tutorial_on_boot(db_session)
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_an_explicit_language_argument_overrides_the_setting(
+    db_session: AsyncSession, owner: Participant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Аргумент `language` (из `--language` команды `tutorial`) главнее настройки."""
+    monkeypatch.setenv("TRACKER_TUTORIAL_LANGUAGE", "ru")
+    get_settings.cache_clear()
+    try:
+        seed = await seed_tutorial_on_boot(db_session, language="en")
+    finally:
+        get_settings.cache_clear()
+
+    assert seed.created
+    assert seed.project is not None
+    assert seed.project.title == TUTORIAL_PROJECTS["en"].title
