@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { tasksQueryOptions, tasksTotalQueryOptions, type Task } from '@/entities/task';
 import {
@@ -105,6 +106,18 @@ export function TasksPage() {
    */
   const beyond = loaded?.items.length === 0 && total !== null && total > 0;
 
+  /**
+   * Пустой проект, а не пустая выдача по условиям: у отбора нет условий сверх
+   * проекта, и архив уже показан. Тогда сказать «задач по этим условиям нет» и
+   * предложить сбросить нечего сбрасывать было бы неправдой о причине (TRK-360#9) —
+   * а сказать честно «задач ещё нет» можно только когда архив открыт: правило
+   * архива (`entities/task/model/archive.ts`) прячет только закрытые задачи, и пока
+   * архив скрыт, второй запрос ради того, есть ли там что-то, эта задача не заводит
+   * (TRK-365) — вместо него человек проверяет то же самое нажатием «Показать архив»,
+   * и текст остаётся прежним, пока он не нажал.
+   */
+  const noTasksYet = !hasConditions(filters) && filters.showArchive;
+
   return (
     <main className="flex flex-col gap-3">
       {/*
@@ -177,18 +190,29 @@ export function TasksPage() {
       {problem === null ? <QueryState query={state} loading={t('loading')} /> : null}
 
       {board ? (
-        <TasksBoard
-          params={params}
-          explained={problem !== null}
-          collapsed={filters.collapsed}
-          onToggle={(status, open) =>
-            apply({
-              collapsed: open
-                ? filters.collapsed.filter((value) => value !== status)
-                : [...filters.collapsed, status],
-            })
-          }
-        />
+        <>
+          {/*
+           * Доска не читает задач сама (см. комментарий класса выше) и потому не
+           * узнаёт о пустом проекте от столбцов — каждый из них видел бы только
+           * свой статус. Число уже спрошено ради заголовка (`counted`), и второй
+           * запрос эта задача не заводит (TRK-365): то же самое различение здесь
+           * стоит над доской, а не заменяет её — свёрнутые и раскрытые столбцы
+           * остаются на месте.
+           */}
+          {noTasksYet && found === 0 ? <NoTasksYetCallout /> : null}
+          <TasksBoard
+            params={params}
+            explained={problem !== null}
+            collapsed={filters.collapsed}
+            onToggle={(status, open) =>
+              apply({
+                collapsed: open
+                  ? filters.collapsed.filter((value) => value !== status)
+                  : [...filters.collapsed, status],
+              })
+            }
+          />
+        </>
       ) : loaded === null ? null : loaded.items.length === 0 ? (
         /*
          * Пустая страница бывает двух разных бед, и путать их нельзя: по этим условиям
@@ -200,6 +224,8 @@ export function TasksPage() {
           <div className="flex flex-wrap items-center gap-3">
             {beyond ? (
               <Callout>{t('beyond', { count: total ?? 0 })}</Callout>
+            ) : noTasksYet ? (
+              <NoTasksYetCallout />
             ) : (
               <>
                 <Callout>{t('empty')}</Callout>
@@ -232,5 +258,24 @@ export function TasksPage() {
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * «Задач ещё нет»: их заводит и ведёт агент, а дорога к тому, что сказать ему, —
+ * экран «Начало» (`/start`). Ссылка ведёт туда адресом, а не подпиской на
+ * маршрут — сам экран заводит соседняя задача (TRK-361), и здесь его нет.
+ *
+ * Разметка ссылки живёт в словаре тегом `<start>` (тот же приём, что у
+ * `connect-page.tsx`, `token.ownToken`): порядок слов вокруг неё в двух языках
+ * разный, и склеивать его из кусков `t()` в разметке нельзя.
+ */
+function NoTasksYetCallout() {
+  const { t } = useTranslation('tasks');
+
+  return (
+    <Callout>
+      <Trans t={t} i18nKey="noneYet" components={{ start: <Link to="/start" /> }} />
+    </Callout>
   );
 }
