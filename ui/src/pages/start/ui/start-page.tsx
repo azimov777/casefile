@@ -7,7 +7,11 @@ import { bootstrapQueryOptions } from '@/entities/session';
 import { CLOSED_STATUSES, taskPackageQueryOptions, tasksQueryOptions } from '@/entities/task';
 import { isRevoked, tokensQueryOptions } from '@/entities/token';
 import { participantsQueryOptions } from '@/features/manage-access';
-import { RestoreHintsAction, useUpdateOnboarding } from '@/features/manage-onboarding';
+import {
+  RestoreHintsAction,
+  StartWalkAction,
+  useUpdateOnboarding,
+} from '@/features/manage-onboarding';
 import { Badge, Button, CopyBlock } from '@/shared/ui';
 
 /**
@@ -112,9 +116,13 @@ export function StartPage() {
     <main className="mx-auto flex max-w-(--ui-column-max) min-w-0 flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-title">{brick('app.start')}</h1>
-        {/* Видно, только когда есть что возвращать — скрыто целиком или по одному
-            (`RestoreHintsAction`, TRK-362). */}
-        <RestoreHintsAction />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Видно, только когда есть что возвращать — скрыто целиком или по одному
+              (`RestoreHintsAction`, TRK-362). Проход по экранам (TRK-364) — те же
+              пояснения по порядку; человеку без учётной записи кнопки нет. */}
+          <RestoreHintsAction />
+          <StartWalkAction />
+        </div>
       </div>
 
       <ol aria-label={t('steps.label')} className="m-0 flex list-none flex-col gap-3 p-0">
