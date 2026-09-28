@@ -72,6 +72,20 @@ function noneYetLinkName(): string {
 }
 
 /**
+ * Ссылка из сообщения «задач ещё нет». Ищется в области содержимого, а не по всей
+ * странице: пункт «Начало» боковой панели носит то же имя (TRK-361), и поиск по всей
+ * странице находил его там, где сообщения нет вовсе.
+ */
+async function findNoneYetLink(): Promise<HTMLElement> {
+  const main = await screen.findByRole('main');
+  return within(main).findByRole('link', { name: noneYetLinkName() });
+}
+
+function queryNoneYetLink(): HTMLElement | null {
+  return within(screen.getByRole('main')).queryByRole('link', { name: noneYetLinkName() });
+}
+
+/**
  * Правило показа, каким оно уходит в `query`, пока архив скрыт (UI-97). Написано здесь
  * заново, а не собрано кодом: тест, берущий строку оттуда же, откуда её берёт запрос,
  * сверял бы код с самим собой. Дата порога — любая: её точность проверяет
@@ -464,15 +478,16 @@ describe('пустой проект без единой задачи (TRK-365)',
    * «пустая выдача при скрытом архиве…» в describe('архив'), обе с условием по
    * статусу) и «задач ещё нет», когда у отбора нет условий сверх проекта и архив
    * уже открыт: тогда причина пустоты не в отборе, и сказано, кто заводит задачи.
-   * Пока архив скрыт, второй запрос ради того, есть ли в нём что-то, эта задача
-   * не заводит — текст остаётся прежним, и показ архива это и проверяет.
+   * Здесь архив открыт явно адресом — путь с архивом, скрытым по умолчанию, и вторым
+   * запросом, который его проверяет, — describe('архив скрыт по умолчанию…') ниже
+   * (TRK-377).
    */
   it('без единого условия и с открытым архивом ведёт на «Начало», а не на сброс', async () => {
     server.use(listing(() => taskPage([])));
 
     open('/tasks?project=DEMO&archive=shown');
 
-    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    const link = await findNoneYetLink();
     expect(link).toHaveAttribute('href', '/start');
     expect(screen.queryByText(say.tasks('empty'))).toBeNull();
     expect(screen.queryByRole('button', { name: say.tasks('resetFilters') })).toBeNull();
@@ -483,8 +498,116 @@ describe('пустой проект без единой задачи (TRK-365)',
 
     open('/tasks?project=DEMO&view=board&archive=shown');
 
-    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    const link = await findNoneYetLink();
     expect(link).toHaveAttribute('href', '/start');
+  });
+});
+
+describe('архив скрыт по умолчанию: «задач ещё нет» видно сразу (TRK-377)', () => {
+  /*
+   * Архив по умолчанию скрыт (`showArchive: false`), а `/tasks?project=X` без единого
+   * параметра сверх проекта — ровно то, как человек открывает список впервые. Прежде
+   * «скрывать нечего» читалось эвристикой по `filters.showArchive` (TRK-365#10): текст
+   * появлялся только после нажатия «Показать архив», а человек, ради которого задача
+   * заводилась, этого не нажимает (замечание координатора, TRK-365#20). Второй запрос
+   * — тот же проект, архив показан, страница в одну строку — отвечает на тот же вопрос
+   * не гадая: есть ли в архиве хоть что-то.
+   */
+  it('обе выдачи пусты: «задач ещё нет» видно без единого нажатия', async () => {
+    server.use(listing(() => taskPage([])));
+
+    open('/tasks?project=DEMO');
+
+    const link = await findNoneYetLink();
+    expect(link).toHaveAttribute('href', '/start');
+    expect(screen.queryByText(say.tasks('empty'))).toBeNull();
+    expect(screen.queryByRole('button', { name: say.tasks('showArchive') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.tasks('resetFilters') })).toBeNull();
+  });
+
+  it('второй запрос находит задачу в архиве: прежний текст и кнопка остаются, «задач ещё нет» не показано', async () => {
+    server.use(
+      // Первый запрос (правило архива в `query`) видит пустоту, второй (без правила,
+      // архив показан) — ту же задачу, что там на самом деле лежит.
+      listing((url) =>
+        url.searchParams.has('query')
+          ? taskPage([])
+          : taskPage([task('DEMO-1', { status: 'done' })]),
+      ),
+    );
+
+    open('/tasks?project=DEMO');
+
+    expect(await screen.findByText(say.tasks('archiveHidden'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: say.tasks('showArchive') })).toBeInTheDocument();
+    expect(queryNoneYetLink()).toBeNull();
+  });
+
+  it('второй запрос отвечает отказом: остаётся прежний текст с подсказкой об архиве', async () => {
+    server.use(
+      listing((url) =>
+        url.searchParams.has('query')
+          ? taskPage([])
+          : failure('internal_error', 500, 'Unexpected error'),
+      ),
+    );
+
+    open('/tasks?project=DEMO');
+
+    expect(await screen.findByText(say.tasks('archiveHidden'))).toBeInTheDocument();
+    expect(queryNoneYetLink()).toBeNull();
+  });
+
+  it('непустая первая выдача — второго запроса нет, подмена видит ровно один запрос списка', async () => {
+    server.use(listing(() => taskPage([task('DEMO-3')])));
+
+    open('/tasks?project=DEMO');
+
+    await screen.findByText('DEMO-3');
+    expect(seen).toHaveLength(1);
+  });
+
+  it('пустая выдача с условием по статусу — второго запроса тоже нет', async () => {
+    server.use(listing(() => taskPage([])));
+
+    open('/tasks?project=DEMO&status=done');
+
+    await screen.findByText(say.tasks('empty'));
+    expect(seen).toHaveLength(1);
+  });
+
+  it('то же самое — в режиме доски: обе выдачи пусты, ведёт на «Начало»', async () => {
+    server.use(listing(() => taskPage([])));
+
+    open('/tasks?project=DEMO&view=board');
+
+    const link = await findNoneYetLink();
+    expect(link).toHaveAttribute('href', '/start');
+  });
+
+  it('то же самое — в режиме доски: задача в архиве, «задач ещё нет» не показано', async () => {
+    server.use(
+      listing((url) =>
+        url.searchParams.has('query')
+          ? taskPage([])
+          : taskPage([task('DEMO-1', { status: 'done' })]),
+      ),
+    );
+
+    open('/tasks?project=DEMO&view=board');
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('0'));
+    // Второй запрос — без правила архива и с лимитом в одну строку; дождаться его,
+    // прежде чем убедиться, что подсказка не появилась запоздало.
+    await waitFor(() =>
+      expect(
+        seen.some((url) => {
+          const params = new URL(url).searchParams;
+          return params.get('limit') === '1' && !params.has('query');
+        }),
+      ).toBe(true),
+    );
+    expect(queryNoneYetLink()).toBeNull();
   });
 });
 
