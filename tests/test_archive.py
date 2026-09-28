@@ -32,11 +32,13 @@ from app.domain.errors import ArchiveInvalidError
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
 from app.domain.tokens import TokenScope
+from app.domain.tutorial import TUTORIAL_PROJECT_KEY
 from app.services import archive as archive_service
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
 from app.services.setup import ensure_agent_token, ensure_local_token
+from app.services.tutorial import seed_tutorial_on_boot
 
 ARCHIVE = "/api/v1/installation/archive"
 PASSWORD = "correct horse battery staple"
@@ -259,6 +261,56 @@ async def test_a_fresh_installation_takes_the_archive_whole(
     assert left == 0
 
 
+async def test_a_tutorial_project_worked_on_by_agent_and_human_does_not_block_the_import(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Обзорная проверка 2: пройденный учебный `START` не мешает приёму (TRK-371).
+
+    Проект учебного засева (`app/services/tutorial.py`, TRK-370) заведён автором
+    `tracker`, и в счёт пустоты приёмника не идёт — был в его задачах кто-то или нет
+    (`TRK-360#15`). После приёма установка держит только проекты архива: свой `START`
+    приём заменяет их данными, как и остальное.
+    """
+    await populate(auth_client)
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+
+    await wipe(db_session)
+    target_ui, target_agent = await fresh_installation(db_session)
+
+    seed = await seed_tutorial_on_boot(db_session)
+    assert seed.created
+    assert seed.project is not None
+    assert seed.project.key == TUTORIAL_PROJECT_KEY
+    task_key = seed.tasks[0].key
+
+    human = await auth_client.post(
+        f"/api/v1/tasks/{task_key}/entries",
+        json={"type": "note", "title": "Человек ответил агенту"},
+        headers=bearer(target_ui),
+    )
+    assert human.status_code == 201, human.text
+    agent = await auth_client.post(
+        f"/api/v1/tasks/{task_key}/entries",
+        json={"type": "note", "title": "Агент прошёл знакомство"},
+        headers=bearer(target_agent),
+    )
+    assert agent.status_code == 201, agent.text
+
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=bearer(target_ui))
+
+    assert response.status_code == 200, response.text
+    rows = {item["name"]: item["rows"] for item in response.json()["data"]["tables"]}
+    assert rows["projects"] == 1
+
+    projects = await auth_client.get("/api/v1/projects", headers=bearer(target_ui))
+    assert {row["key"] for row in projects.json()["data"]} == {"TRK"}
+    gone = await auth_client.get(
+        f"/api/v1/projects/{TUTORIAL_PROJECT_KEY}", headers=bearer(target_ui)
+    )
+    assert gone.status_code == 404, gone.text
+    assert gone.json()["error"]["code"] == "project_not_found"
+
+
 async def test_a_moved_task_comes_in_with_its_previous_keys(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -312,6 +364,29 @@ async def test_an_installation_with_projects_refuses_the_archive(
     assert response.json()["error"]["code"] == "installation_not_empty"
     assert response.json()["error"]["details"] == {"projects": 1}
     assert await count(db_session, Task) == 2
+
+
+async def test_an_installation_with_a_human_made_start_project_refuses_the_archive(
+    auth_client: AsyncClient,
+) -> None:
+    """Обзорная проверка 3: ключ `START`, заведённый человеком, блокирует как любой другой.
+
+    Пустоту приёмника считает автор строки, а не её ключ (TRK-371): тот же ключ у
+    учебного засева (`app/services/tutorial.py`, TRK-370) в счёт не идёт, а у проекта
+    человека или агента держит установку непустой — вместо совпавшего ключа мог быть
+    любой другой (`TRK-360#15`).
+    """
+    created = await auth_client.post(
+        "/api/v1/projects", json={"key": TUTORIAL_PROJECT_KEY, "title": "Свой проект START"}
+    )
+    assert created.status_code == 201, created.text
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+
+    response = await auth_client.post(ARCHIVE, json={"data": archive})
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "installation_not_empty"
+    assert response.json()["error"]["details"] == {"projects": 1}
 
 
 async def test_an_archive_from_a_newer_casefile_is_refused(

@@ -229,6 +229,29 @@ def test_the_public_mcp_address_reaches_the_api_by_the_shared_environment() -> N
         )
 
 
+def test_the_tutorial_language_reaches_the_seed_by_the_shared_environment() -> None:
+    """Язык учебного проекта объявлен окружением контура, а не оставлен одному `.env` (`TRK-372`).
+
+    Причина та же, что у адресов выше: значение, заданное установщику окружением
+    (`CASEFILE_LANGUAGE=ru ./install.sh` или та же переменная перед `docker compose up`),
+    видит только подстановка `x-app-environment`, а до процесса, который читает
+    `Settings.tutorial_language`, доезжает лишь объявленное. Прод-контур выводит умолчание
+    из `CASEFILE_LANGUAGE` — переменной, которую пишет `install.sh`/`install.ps1` при первом
+    запуске; дев-контур такого понятия не знает и читает свою же переменную напрямую — оба
+    варианта сверяет общий тест выше (`test_both_contours_name_the_same_variables_themselves`).
+    """
+    declared = {
+        contour: [
+            line.strip() for line in _block(path.read_text(encoding="utf-8"), APP_ENVIRONMENT)
+        ]
+        for contour, path in COMPOSE_FILES.items()
+    }
+    prod, dev = declared["prod"], declared["dev"]
+
+    assert "TRACKER_TUTORIAL_LANGUAGE: ${CASEFILE_LANGUAGE:-en}" in prod, prod
+    assert "TRACKER_TUTORIAL_LANGUAGE: ${TRACKER_TUTORIAL_LANGUAGE:-en}" in dev, dev
+
+
 def _output_paths(body: list[str]) -> list[PurePosixPath]:
     """Файлы, которые команда сервиса называет ключом `--output`, — путями в контейнере.
 

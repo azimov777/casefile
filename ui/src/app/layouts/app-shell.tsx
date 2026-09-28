@@ -52,8 +52,11 @@ export function AppShell() {
           aria-label={t('app.trackerSections')}
           className="col-start-1 row-start-1 row-end-[span_99] hidden border-r border-line bg-surface fold:block"
         >
-          {/* Панель прилипает: проект — то, куда переходят с любой глубины прокрутки. */}
-          <div className="sticky top-0 h-dvh">
+          {/* Панель прилипает: проект — то, куда переходят с любой глубины прокрутки.
+              Она же прокручивается сама (`overflow-y-auto`): содержимое растёт с числом
+              проектов, а рамка — высота окна; без этого переполнение входило в высоту
+              страницы и доска на низком окне переставала в неё помещаться (TRK-379). */}
+          <div className="sticky top-0 h-dvh overflow-y-auto overscroll-contain">
             <AppSide />
           </div>
         </aside>

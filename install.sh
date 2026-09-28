@@ -20,8 +20,10 @@
 #   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777; годится и свой
 #                      реестр — так установщик проверяют до публикации
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
-# Обе последние записываются в `.env` новой установки; без них действует `.env`
-# существующей установки, а без него — умолчания compose-файла.
+#   CASEFILE_LANGUAGE  язык учебного проекта START: en или ru; без неё установщик решает
+#                      по языку оболочки (LC_ALL, LC_MESSAGES, LANG — первая непустая)
+# Все три записываются в `.env` новой установки; без них действует `.env` существующей
+# установки, а без него — умолчания compose-файла.
 #
 # Всё тело — в `main`, который зовётся последней строкой. Запущенный через `| sh`
 # скрипт читается из трубы по мере исполнения, и любая команда, читающая stdin, съела бы
@@ -45,6 +47,24 @@ fail() {
 setting() {
   value=$(sed -n "s/^$1=//p" .env 2>/dev/null | tail -n 1)
   printf '%s' "${value:-$2}"
+}
+
+# Язык учебного проекта START на первом подъёме пустой установки (`TRK-372`): заданный
+# человеком в окружении — как есть; иначе `ru`, если первая непустая из `LC_ALL`,
+# `LC_MESSAGES`, `LANG` начинается с `ru`, иначе `en`. Дальше значение живёт в `.env`
+# (`CASEFILE_LANGUAGE`), и повторный запуск установщика его не трогает.
+language() {
+  if [ -n "${CASEFILE_LANGUAGE:-}" ]; then
+    printf '%s' "$CASEFILE_LANGUAGE"
+    return
+  fi
+  value=${LC_ALL:-}
+  [ -n "$value" ] || value=${LC_MESSAGES:-}
+  [ -n "$value" ] || value=${LANG:-}
+  case "$value" in
+    ru*) printf ru ;;
+    *) printf en ;;
+  esac
 }
 
 # Обновлятор установки на время установщика стоит: иначе его проверка, пришедшаяся на
@@ -73,6 +93,13 @@ hold_updater() {
 }
 
 main() {
+  # Язык, заданный человеком, сверяется до первой записи на диск: неизвестное значение
+  # доехало бы до настроек приложения, и на нём не поднялся бы ни один его процесс.
+  case "${CASEFILE_LANGUAGE:-}" in
+    "" | en | ru) ;;
+    *) fail "CASEFILE_LANGUAGE must be en or ru, got: $CASEFILE_LANGUAGE" ;;
+  esac
+
   command -v docker >/dev/null 2>&1 ||
     fail "Docker is required: https://docs.docker.com/get-docker/"
   docker compose version </dev/null >/dev/null 2>&1 ||
@@ -102,6 +129,7 @@ main() {
       echo "COMPOSE_FILE=$COMPOSE"
       [ -z "${CASEFILE_REGISTRY:-}" ] || echo "CASEFILE_REGISTRY=$CASEFILE_REGISTRY"
       [ -z "${CASEFILE_VERSION:-}" ] || echo "CASEFILE_VERSION=$CASEFILE_VERSION"
+      echo "CASEFILE_LANGUAGE=$(language)"
     } >.env
   fi
 
@@ -163,6 +191,22 @@ main() {
   echo "  URL     $mcp_url"
   echo "  Header  Authorization: Bearer $token"
   echo
+
+  # Дословный текст трёх фраз и памятки (`app/domain/tutorial.py`, `AGENT_PHRASES`):
+  # это одна из пяти копий, и сверяет их сплошная проверка множеств, а не вычитка
+  # (`docs/CONVENTIONS.md`, «Документация»; `tests/test_installers.py`, TRK-367).
+  # Адрес в последней строке — тот же порт, что и строка `Board:` выше, плюс `/start`:
+  # там те же фразы стоят на языке человека, с копированием по кнопке.
+  bold "Tell your agent what to do:"
+  echo "  New here? Say:"
+  echo "    Take the tutorial task START-1 in Casefile and walk me through it."
+  echo "  Have work to hand over? Say:"
+  echo "    File tasks in Casefile for my work: a project for it if there is none yet, and tasks with all their sections and checks, each small enough for one agent to finish in one go, each naming its environment in \`context\` — where the work lives and how to run its checks. Don't start the work itself; if I haven't described it yet, ask me."
+  echo "  Then, in a new agent session, say:"
+  echo "    Carry out the tasks for this work from the Casefile tracker. Hand them to agents, one task per agent, to save your own context, and give them cheaper models where those cope."
+  echo "  The same phrases with copy buttons, in your language: http://localhost:$ui_port/start"
+  echo
+
   echo "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $DIR"
 }
 

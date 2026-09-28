@@ -39,7 +39,8 @@ RUN useradd --create-home --uid 1000 tracker
 COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
-COPY --chown=tracker:tracker alembic.ini ./
+COPY --chown=tracker:tracker alembic.ini pyproject.toml ./
+# `pyproject.toml` — единственный источник версии: `app/__init__.py` читает её оттуда.
 COPY --chown=tracker:tracker app ./app
 # Файл установки того же выпуска, что и образ: установщик и служба `updater` берут его
 # отсюда, а не с main на GitHub, — так файл и образы установки никогда не расходятся

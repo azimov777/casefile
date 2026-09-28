@@ -6,6 +6,7 @@
 
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -423,6 +424,48 @@ async def test_a_reference_must_exist_while_an_address_is_taken_as_is(
         refs=["trk-1#1", "https://example.com/a#b"],
     )
     assert entry["refs"] == ["TRK-1#1", "https://example.com/a#b"]
+
+
+@pytest.mark.parametrize("ref", ["7", "#7", "запись 7", "docs/x.md"])
+async def test_a_string_that_is_not_a_reference_or_a_url_is_refused(
+    auth_client: AsyncClient, project: Project, ref: str
+) -> None:
+    """TRK-375: «7» вместо `TRK-1#7` не становится молча адресом."""
+    await create(auth_client)
+
+    error = await refuse(auth_client, "TRK-1", type="finding", title="Нашёл", refs=[ref])
+
+    field = error["details"]["fields"][0]
+    assert (field["field"], field["reason"], field["ref"]) == ("refs", "not_a_reference", ref)
+
+
+async def test_old_entries_with_bare_refs_are_still_read(
+    auth_client: AsyncClient, db_session: AsyncSession, project: Project
+) -> None:
+    """TRK-375: записи неизменяемы, старые `refs` вида «7» читаются без отказа."""
+    await create(auth_client)
+    task = await tasks_service.get_task(db_session, "TRK-1")
+    no = await EntryRepository(db_session).allocate_no(task.id)
+    await EntryRepository(db_session).add(
+        Entry(
+            task_id=task.id,
+            no=no,
+            type=EntryType.FINDING,
+            title="Нашёл",
+            body="",
+            payload={},
+            refs=["7", "docs/x.md"],
+            **created_by_columns(task.created_by),
+        )
+    )
+    await db_session.flush()
+
+    one = await auth_client.get(f"/api/v1/tasks/TRK-1/entries/{no}")
+    assert one.status_code == 200, one.text
+    assert one.json()["data"]["refs"] == ["7", "docs/x.md"]
+    listed = await auth_client.get("/api/v1/tasks/TRK-1/entries")
+    assert listed.status_code == 200, listed.text
+    assert (await package(auth_client, "TRK-1"))["task"]["key"] == "TRK-1"
 
 
 async def test_a_note_is_filed_into_a_closed_task(

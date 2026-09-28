@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
@@ -45,9 +45,8 @@ from app.db import archive as store
 from app.db.locks import lock_changes
 from app.db.models.account import Account
 from app.db.models.participant import Participant
-from app.db.models.project import Project
 from app.db.models.token import Token
-from app.db.repositories import ParticipantRepository
+from app.db.repositories import ParticipantRepository, ProjectRepository
 from app.domain.archive import (
     ARCHIVE_FORMAT_VERSION,
     EXCLUDED_TABLES,
@@ -152,6 +151,11 @@ async def import_installation(
     новее приёмника (`archive_revision_unknown`), у приёмника есть проекты
     (`installation_not_empty`). Любой отказ — в том числе строка, которую не принял
     Postgres, — не оставляет в приёмнике ничего: всё идёт одной транзакцией вызывающего.
+
+    Пустота приёмника считается без проекта учебного засева (`app/services/tutorial.py`,
+    `TRK-370`): его автор — `tracker`, и приём заменяет его записи архивом, как и
+    остальные данные установки. Проект, заведённый человеком или агентом, считается
+    как раньше, даже с тем же ключом `START` (`TRK-360#15`, `TRK-371`).
     """
     await ensure_admin(session, actor, action="installation.import")
     check_archive(archive)
@@ -162,7 +166,7 @@ async def import_installation(
         raise ArchiveRevisionUnknownError(
             details={"schema_revision": archive.schema_revision, "head": head}
         )
-    projects = await session.scalar(select(func.count()).select_from(Project)) or 0
+    projects = await ProjectRepository(session).count_excluding_tracker()
     if projects:
         raise InstallationNotEmptyError(details={"projects": projects})
 

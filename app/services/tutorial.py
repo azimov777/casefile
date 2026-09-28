@@ -55,7 +55,7 @@ _NOTHING = TutorialSeed(project=None, tasks=[])
 
 
 async def seed_tutorial_on_boot(
-    session: AsyncSession, *, language: TutorialLanguage = "en"
+    session: AsyncSession, *, language: TutorialLanguage | None = None
 ) -> TutorialSeed:
     """Заводит `START`, только когда в установке нет ни одного проекта.
 
@@ -64,6 +64,10 @@ async def seed_tutorial_on_boot(
     ли рукой заведённый, демонстрационный или сам `START`. Установка, у которой уже
     были проекты до этого шага (обновлённая с прежней версии), учебный проект получает
     только командой человека (`create_tutorial_project`).
+
+    Без `language` язык берёт настройка установки (`Settings.tutorial_language`,
+    `TRACKER_TUTORIAL_LANGUAGE`, `TRK-372`); явный аргумент — `--language` команды
+    `tutorial` (`app/cli.py`) — её подменяет.
     """
     if await ProjectRepository(session).any_exists():
         return _NOTHING
@@ -71,21 +75,22 @@ async def seed_tutorial_on_boot(
 
 
 async def create_tutorial_project(
-    session: AsyncSession, *, language: TutorialLanguage = "en"
+    session: AsyncSession, *, language: TutorialLanguage | None = None
 ) -> TutorialSeed:
     """Заводит `START`, если его ещё нет — команда человека на установке, где есть проекты.
 
     Признак — существование самого проекта `START`, а не общее число проектов: здесь их
     уже может быть много, и это не мешает завести учебный. Существующий `START` эта
     команда не трогает — ни задач, ни текста: тексты правит только задача об учебном
-    сценарии (`TRK-366`), не засев.
+    сценарии (`TRK-366`), не засев. Язык — та же настройка и то же старшинство явного
+    аргумента, что у `seed_tutorial_on_boot`.
     """
     if await ProjectRepository(session).get_by_key(normalize_project_key(TUTORIAL_PROJECT_KEY)):
         return _NOTHING
     return await _seed(session, language=language)
 
 
-async def _seed(session: AsyncSession, *, language: TutorialLanguage) -> TutorialSeed:
+async def _seed(session: AsyncSession, *, language: TutorialLanguage | None) -> TutorialSeed:
     """Заводит проект `START` и его задачи, в `open`, без исполнителя.
 
     Имя человека в тексте задачи — участник с действующей учётной записью администратора
@@ -94,13 +99,17 @@ async def _seed(session: AsyncSession, *, language: TutorialLanguage) -> Tutoria
     (`Settings.effective_ui_public_url`), не собранная из заголовков запроса. Транзакцию
     держит вход в приложение (`session_scope` команды): всё это — одна транзакция, и
     отказ на любом шаге не оставляет по себе ни проекта, ни задачи.
+
+    `language=None` берёт `Settings.tutorial_language`: неизвестное значение настройки
+    (`TRACKER_TUTORIAL_LANGUAGE`) не доходит сюда вовсе — `get_settings()` отказывает ещё
+    на чтении настроек, называя значение (валидатор литерала, `app/core/config.py`).
     """
     admin = await AccountRepository(session).first_admin()
     if admin is None:
         raise TutorialAdminMissingError()
 
     text = render_tutorial_project(
-        language,
+        language if language is not None else get_settings().tutorial_language,
         board_url=get_settings().effective_ui_public_url,
         human_name=admin.participant.name,
     )

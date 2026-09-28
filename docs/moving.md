@@ -18,8 +18,12 @@ still use [`backup-restore.md`](backup-restore.md); that procedure is unchanged.
   (`403 admin_required`): the archive carries every person's password hash and every
   token's hash.
 - **A fresh installation on the new machine**, made with the one-line installer from the
-  [README](../README.md). It must be **empty — no projects**: the archive replaces its data
-  whole, and two trackers are never merged (`409 installation_not_empty`).
+  [README](../README.md). It must have **no project of its own**: the archive replaces its
+  data whole, and two trackers are never merged (`409 installation_not_empty`). A fresh
+  installation's own tutorial project `START` — the one it seeds itself on first boot —
+  does not count and needs no clearing first: the import replaces it along with everything
+  else. A project a person or an agent made counts as before, even one keyed `START` too
+  (`TRK-360#15`).
 - **The same or a newer Casefile on the new machine** (see [Versions](#versions)).
 
 ## 1. Export from the old machine
@@ -111,7 +115,7 @@ installation is left exactly as it was.
 | Answer | Why | What to do |
 |---|---|---|
 | `403 admin_required` | The key is not an administrator's | Use the board's key, or sign in as an administrator |
-| `409 installation_not_empty` | The new installation already has projects | Import into a fresh installation |
+| `409 installation_not_empty` | The new installation already has a project of its own (its seeded tutorial one does not count) | Import into a fresh installation |
 | `409 archive_revision_unknown` | The archive comes from a newer Casefile | Update this installation, then import |
 | `422 archive_format_unsupported` | The file is not a Casefile archive | Post the file the export saved, unedited |
 | `422 archive_invalid` | The archive contradicts itself or its schema; `details.reason` says how | Export again; do not edit the file |

@@ -12,8 +12,10 @@
 #   CASEFILE_DIR       каталог установки
 #   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
-# Обе последние записываются в `.env` новой установки; без них действует `.env`
-# существующей установки, а без него — умолчания compose-файла.
+#   CASEFILE_LANGUAGE  язык учебного проекта START: en или ru; без неё установщик решает
+#                      по культуре системы (Get-Culture)
+# Все три записываются в `.env` новой установки; без них действует `.env` существующей
+# установки, а без него — умолчания compose-файла.
 
 $ErrorActionPreference = 'Stop'
 
@@ -46,6 +48,22 @@ function Get-Setting([string] $Name, [string] $Default) {
     return $Default
 }
 
+# Язык учебного проекта START на первом подъёме пустой установки (`TRK-372`): заданный
+# человеком в окружении — как есть; иначе `ru` при русской культуре системы, иначе `en`.
+# Близнец `language()` из install.sh, только источник языка оболочки — не переменные
+# окружения POSIX (LC_ALL/LC_MESSAGES/LANG), а культура .NET, которую и видит PowerShell.
+function Get-Language {
+    if ($env:CASEFILE_LANGUAGE) { return $env:CASEFILE_LANGUAGE }
+    if ((Get-Culture).TwoLetterISOLanguageName -eq 'ru') { return 'ru' }
+    return 'en'
+}
+
+# Язык, заданный человеком, сверяется до первой записи на диск: неизвестное значение
+# доехало бы до настроек приложения, и на нём не поднялся бы ни один его процесс.
+if ($env:CASEFILE_LANGUAGE -and $env:CASEFILE_LANGUAGE -notin @('en', 'ru')) {
+    Fail "CASEFILE_LANGUAGE must be en or ru, got: $env:CASEFILE_LANGUAGE"
+}
+
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Fail 'Docker Desktop is required: https://docs.docker.com/desktop/setup/install/windows-install/'
 }
@@ -73,6 +91,7 @@ if (-not (Test-Path .env)) {
     $lines = @("COMPOSE_FILE=$Compose")
     if ($env:CASEFILE_REGISTRY) { $lines += "CASEFILE_REGISTRY=$env:CASEFILE_REGISTRY" }
     if ($env:CASEFILE_VERSION) { $lines += "CASEFILE_VERSION=$env:CASEFILE_VERSION" }
+    $lines += "CASEFILE_LANGUAGE=$(Get-Language)"
     [System.IO.File]::WriteAllLines((Join-Path $Dir '.env'), $lines)
 }
 
@@ -164,4 +183,20 @@ Write-Host 'Any other MCP client (Codex, Cursor, ...):' -ForegroundColor White
 Write-Host "  URL     $mcpUrl"
 Write-Host "  Header  Authorization: Bearer $token"
 Write-Host ''
+
+# Текст трёх фраз и памятки повторяет `app/domain/tutorial.py` (`AGENT_PHRASES`)
+# дословно: это одна из пяти копий, и сверяет их сплошная проверка множеств, а не
+# вычитка (`docs/CONVENTIONS.md`, раздел про документацию; `tests/test_installers.py`,
+# TRK-367). Адрес в последней строке — тот же порт, что и строка `Board:` выше, плюс
+# `/start`: там те же фразы стоят на языке человека, с копированием по кнопке.
+Write-Host 'Tell your agent what to do:' -ForegroundColor White
+Write-Host '  New here? Say:'
+Write-Host '    Take the tutorial task START-1 in Casefile and walk me through it.'
+Write-Host '  Have work to hand over? Say:'
+Write-Host ('    File tasks in Casefile for my work: a project for it if there is none yet, and tasks with all their sections and checks, each small enough for one agent to finish in one go, each naming its environment in `context` ' + [char]0x2014 + ' where the work lives and how to run its checks. Don''t start the work itself; if I haven''t described it yet, ask me.')
+Write-Host '  Then, in a new agent session, say:'
+Write-Host '    Carry out the tasks for this work from the Casefile tracker. Hand them to agents, one task per agent, to save your own context, and give them cheaper models where those cope.'
+Write-Host "  The same phrases with copy buttons, in your language: http://localhost:$uiPort/start"
+Write-Host ''
+
 Write-Host "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $Dir"

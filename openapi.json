@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tracker API",
-    "version": "0.1.0"
+    "version": "0.5.1"
   },
   "paths": {
     "/health": {
@@ -7908,7 +7908,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -7994,7 +7994,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8162,7 +8162,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8424,7 +8424,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8618,7 +8618,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8777,7 +8777,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9032,7 +9032,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10124,7 +10124,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10484,7 +10484,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10721,7 +10721,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11227,7 +11227,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -11341,7 +11341,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11466,7 +11466,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11708,7 +11708,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -11890,7 +11890,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -11987,7 +11987,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12144,7 +12144,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -12237,7 +12237,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12351,7 +12351,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -12437,7 +12437,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12654,7 +12654,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12941,7 +12941,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13102,7 +13102,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -13188,7 +13188,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -14928,7 +14928,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -15014,7 +15014,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and addresses. Entry and task references must exist; addresses are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",

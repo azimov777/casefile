@@ -255,6 +255,14 @@ ENTRY_REF_SHAPE = (
 #: Голова ссылки на запись проекта: ключ проекта по его шаблону.
 _PROJECT_KEY_RE = re.compile(PROJECT_KEY_PATTERN)
 
+#: Что считается внешним адресом: схема по RFC 3986 (буква и буквы, цифры, `+ - .`) не
+#: короче двух знаков — буква диска `C:\x` не схема — и непустой остаток после «:» без
+#: пробелов. `TRK-42` двоеточия не содержит и сюда не попадает.
+_URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]+:\S+$")
+
+#: Допустимые виды ссылки в подробностях отказа `not_a_reference`.
+REF_SHAPE = "TRK-42#12, TRK#7, TRK-7 or a URL with a scheme such as https://example.com"
+
 #: Чем обрезается слишком длинный выведенный заголовок. Обрезка, а не отказ: у сводки
 #: заголовок берётся из текста автора, и отклонять справку из-за длинной первой строки
 #: `done` значило бы терять её содержимое ради описи.
@@ -578,7 +586,14 @@ type TrackerRef = TaskRef | EntryRef | ProjectEntryRef
 
 
 def parse_ref(ref: str) -> TrackerRef | None:
-    """Разбирает ссылку. `None` означает «это адрес» — его трекер не проверяет.
+    """Разбирает ссылку. `None` означает «это URL со схемой» — его трекер не проверяет.
+
+    Внешний адрес в `refs` — только URL со схемой (`https://…`, `file://…`, `mailto:…`):
+    слово владельца, TRK-375#2. Строка, которая не ссылка трекера и не URL (`7`, `#7`,
+    `запись 7`, `docs/x.md`), — `FieldProblem("not_a_reference")`: агент, написавший «7»
+    вместо `START-1#7`, узнаёт об опечатке при подшивке, а не читатель дела потом.
+    Проверка действует только на запись: записи неизменяемы, старые `refs` вида «7» лежат
+    как лежали, а читающий код `parse_ref` не вызывает.
 
     Бросает `FieldProblem`, если строка выглядит ссылкой внутрь трекера, но номер
     записи в ней испорчен (`TRK-42#0`, `TRK-42#абв`, `TRK#007`): молча превратить такую
@@ -590,12 +605,13 @@ def parse_ref(ref: str) -> TrackerRef | None:
         key = normalize_task_key(head)
     except InvalidTaskKeyError:
         # Голова не ключ задачи. Запись проекта — голова по шаблону ключа проекта и
-        # хвост из цифр; всё прочее адрес. Сюда попадает и URL с якорем
-        # (`https://example.com/a#b`), и `README#usage`: у первого голова не ключ, у
-        # второго хвост не номер.
+        # хвост из цифр; всё прочее должно быть URL со схемой. URL с якорем
+        # (`https://example.com/a#b`) проходит: голова не ключ, а вся строка — URL.
         if separator and _PROJECT_KEY_RE.match(head.strip()) and tail.isascii() and tail.isdigit():
             return ProjectEntryRef(key=normalize_project_key(head), no=_entry_ref_no(ref, tail))
-        return None
+        if _URL_RE.match(ref):
+            return None
+        raise FieldProblem("not_a_reference", ref=ref, expected=REF_SHAPE) from None
     if not separator:
         return TaskRef(key=key)
     return EntryRef(key=key, no=_entry_ref_no(ref, tail))
