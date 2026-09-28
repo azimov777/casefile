@@ -143,6 +143,15 @@ export const ui = {
    * Текст для копирования (`shared/ui`, `CopyBlock`). Имя кнопки содержит её видимую
    * подпись целиком: голосовое управление находит кнопку по тому, что на ней написано.
    */
+  /** Проход по экранам (`features/manage-onboarding`, TRK-364): полоса над пояснением и кнопка на «Начало». */
+  walk: {
+    label: 'Walk through the screens',
+    start: 'Walk through the screens',
+    counter: 'Step {{n}} of {{total}}',
+    back: 'Back',
+    next: 'Next',
+    finish: 'Finish',
+  },
   copyBlock: {
     action: 'Copy',
     copied: 'Copied',

@@ -130,6 +130,15 @@ export const ui = {
     hideAll: 'Скрыть все пояснения',
     showAgain: 'Показать пояснения снова',
   },
+  /** Проход по экранам (`features/manage-onboarding`, TRK-364): полоса над пояснением и кнопка на «Начало». */
+  walk: {
+    label: 'Проход по экранам',
+    start: 'Пройти по экранам',
+    counter: 'Шаг {{n}} из {{total}}',
+    back: 'Назад',
+    next: 'Далее',
+    finish: 'Закончить',
+  },
   copyBlock: {
     action: 'Копировать',
     copied: 'Скопировано',
