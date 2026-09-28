@@ -25,7 +25,7 @@ export const moving = {
   import: {
     title: 'Import',
     intro:
-      'Bring an archive exported from another installation up here. This only works into an installation that has no projects yet — a fresh one from the one-line installer — and it replaces every table this installation has with the archive.',
+      'Bring an archive exported from another installation up here. This only works into an installation that has no project of its own — a fresh one from the one-line installer still counts, even though it seeds its own tutorial project `START` — and it replaces every table this installation has with the archive.',
     fileLabel: 'Archive file',
     // Своя кнопка выбора файла вместо подписи браузера (UI-140): та говорит на языке
     // браузера, а не интерфейса.
