@@ -5,16 +5,34 @@
  * Тексты трёх фраз (`phrases.*.text`) скопированы символ в символ из раздела «Контекст»
  * задачи `TRK-361` (источник — `app/domain/tutorial.py`): их сверяет отдельная проверка
  * копий, и здесь их нельзя поправить «для красоты» или перефразировать.
+ *
+ * Тексты `sections.why.body` и `sections.source.body` — тем же приёмом, но из «Контекста»
+ * задачи `TRK-378` (замечание координатора в деле `TRK-361#37`: прежние тексты отвечали
+ * не на «зачем», а перечисляли, чем трекер не является): их тоже сверяет отдельная
+ * проверка, и здесь их нельзя поправить «для красоты» или перефразировать.
  */
 export const start = {
+  steps: {
+    label: 'First steps',
+    done: 'Done',
+    connect: {
+      title: 'Connect the agent',
+    },
+    tellAgent: {
+      title: 'Tell the agent where to start',
+    },
+    watch: {
+      title: 'Watch and answer here',
+    },
+  },
   sections: {
     why: {
       title: 'What this is for',
-      body: 'Casefile stores tasks and a case for each one — a record of what was done and why. Agents file and carry tasks through MCP; the tracker itself never decides or acts on its own, neither on a schedule nor in the agent’s place. This is not a task manager for a person: it is a log of what agents do.',
+      body: 'AI agents forget everything between sessions: the next one starts from scratch, re-reads the code and retries what already failed. Casefile gives every task a case file — a log of decisions, attempts, findings and questions. The next agent reads the case and picks up exactly where the last one stopped. You watch on the board what every agent is doing, and answer their questions.',
     },
     source: {
       title: 'Where tasks come from',
-      body: 'Agents file and carry out tasks by themselves — there is no “create task” button here. A person looks at where things stand, rather than writing up assignments.',
+      body: 'Agents create and carry the tasks — at your request, in their own chat. There is no “create task” button here on purpose: you tell the agent what you need, and it splits the work into tasks.',
     },
     tellAgent: {
       title: 'What to tell the agent',
