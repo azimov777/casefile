@@ -44,9 +44,13 @@ def _normalize_sh(text: str) -> str:
     return _normalize(text.replace("\\`", "`"))
 
 
+PS1_EM_DASH = "' + [char]0x2014 + '"
+
+
 def _normalize_ps1(text: str) -> str:
-    """То же плюс снятие удвоения одинарной кавычки — кодировка апострофа в PowerShell."""
-    return _normalize(text.replace("''", "'"))
+    """То же плюс снятие двух записей PowerShell: удвоение одинарной кавычки (апостроф) и
+    `' + [char]0x2014 + '` (длинное тире кодом, чтобы вывод не зависел от кодировки файла)."""
+    return _normalize(text.replace(PS1_EM_DASH, "\u2014").replace("''", "'"))
 
 
 def _phrases(language: str) -> tuple[str, str, str]:
@@ -99,3 +103,15 @@ def test_russian_phrases_match_agent_phrases_in_ru_start_dictionary() -> None:
     content = _normalize(_read(RU_START_DICTIONARY))
     for phrase in RUSSIAN_PHRASES:
         assert _normalize(phrase) in content, f"ru/start.ts: фраза не найдена дословно: {phrase!r}"
+
+
+def test_install_ps1_code_lines_are_ascii() -> None:
+    """Вне комментариев в `install.ps1` только ASCII: Windows PowerShell 5.1 читает файл
+    без BOM в cp1252, и литерал вроде `\u2014` в `Write-Host` вышел бы мусором (TRK-380)."""
+    lines = _read(PROJECT_ROOT / "install.ps1").splitlines()
+    bad = [
+        f"{number}: {line}"
+        for number, line in enumerate(lines, start=1)
+        if not line.lstrip().startswith("#") and not line.isascii()
+    ]
+    assert not bad, "не-ASCII в строках кода install.ps1: " + "; ".join(bad)
