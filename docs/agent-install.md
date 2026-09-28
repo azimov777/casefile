@@ -120,3 +120,16 @@ header names the exact variables.
 
 In one short message: the board URL, that you are connected, and that Casefile updates
 itself to each new release (it checks every hour). To remove it later: `docker compose down -v` in `~/casefile`.
+
+Then tell the user what to say to their agent next — the same three phrases the installer
+printed, and the same ones with copy buttons are on the board's `/start` page:
+
+- New here? Say: "Take the tutorial task START-1 in Casefile and walk me through it."
+- Have work to hand over? Say: "File tasks in Casefile for my work: a project for it if
+  there is none yet, and tasks with all their sections and checks, each small enough for
+  one agent to finish in one go, each naming its environment in `context` — where the work
+  lives and how to run its checks. Don't start the work itself; if I haven't described it
+  yet, ask me."
+- Then, in a new agent session, say: "Carry out the tasks for this work from the Casefile
+  tracker. Hand them to agents, one task per agent, to save your own context, and give them
+  cheaper models where those cope."
