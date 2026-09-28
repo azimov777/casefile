@@ -225,7 +225,7 @@ _EN_INTRODUCTION = TutorialTask(
         "1. `update_task` — `changes.assignee` your own name, for example `agent`.\n"
         "2. `transition` — `to: in_progress`. Refused with `assignee_mismatch`? Take the name "
         "from the refusal's `details`, redo step 1 with it, then repeat this step.\n"
-        "3. In chat, say word for word: \"Open `{board_url}/tasks/START-1` — every step will "
+        '3. In chat, say word for word: "Open `{board_url}/tasks/START-1` — every step will '
         'show up there."\n'
         "4. `ask` — `addressees: [{human_name}]`, `blocking: true`, a `title` and `body` "
         "asking which piece of their own work the human would hand to an agent first.\n"
@@ -233,7 +233,7 @@ _EN_INTRODUCTION = TutorialTask(
         "question and are waiting for the answer.\n"
         "6. `transition` — `to: waiting`, a `reason` naming the question you wait for.\n"
         "7. In chat, say word for word: \"Answer the question in the 'Inbox' section or on "
-        'the task page — I\'m waiting for it."\n'
+        "the task page — I'm waiting for it.\"\n"
         "8. `wait_journal` — `types: [answer]`, `after: 0`, `timeout: 60`; repeat the call "
         "until an entry comes back.\n"
         "9. `transition` — `to: in_progress`.\n"
@@ -245,7 +245,7 @@ _EN_INTRODUCTION = TutorialTask(
         "filed and you are waiting for a remark.\n"
         "12. `transition` — `to: waiting`, a `reason` naming that you wait for a remark.\n"
         "13. In chat, say word for word: \"Leave any remark on the task with the 'Leave a "
-        'remark\' form on its page — I\'m waiting for it."\n'
+        "remark' form on its page — I'm waiting for it.\"\n"
         "14. `wait_journal` — `types: [remark]`, `after: 0`, `timeout: 60`; repeat the call "
         "until an entry comes back.\n"
         "15. `transition` — `to: in_progress`.\n"
@@ -255,7 +255,7 @@ _EN_INTRODUCTION = TutorialTask(
         "17. `resolve` — the `remark_no` of the remark, `outcome: fixed`, naming what changed "
         "in `body`.\n"
         "18. `close_task` — a `verdicts` entry for every check and a closing `summary`.\n"
-        "19. In chat, say word for word: \"The tour is over: project START can be archived "
+        '19. In chat, say word for word: "The tour is over: project START can be archived '
         'from its page, and real work starts with the two moves from the memo."'
     ),
     checks=(
@@ -325,7 +325,7 @@ _RU_INTRODUCTION = TutorialTask(
         "подшита и ждёшь замечание.\n"
         "12. `transition` — `to: waiting`, `reason` называет, что ждёшь замечание.\n"
         '13. В чате скажи дословно: «Оставь любое замечание к задаче формой "Оставить '
-        "замечание\" на её странице — я жду.»\n"
+        'замечание" на её странице — я жду.»\n'
         "14. `wait_journal` — `types: [remark]`, `after: 0`, `timeout: 60`; повторяй вызов, "
         "пока запись не придёт.\n"
         "15. `transition` — `to: in_progress`.\n"
@@ -341,8 +341,7 @@ _RU_INTRODUCTION = TutorialTask(
         "В деле есть вопрос участнику-человеку и его `answer`.",
         "И `answer`, и `remark` поданы, пока задача стояла в `waiting` с причиной, и после "
         "каждого — возврат в `in_progress`.",
-        "У `remark` есть исход через `resolve`; до него подшит исправленный `artifact` с "
-        "памяткой.",
+        "У `remark` есть исход через `resolve`; до него подшит исправленный `artifact` с памяткой.",
         "После ответа подшит `artifact` с памяткой, и его `refs` называют запись ответа.",
     ),
 )
