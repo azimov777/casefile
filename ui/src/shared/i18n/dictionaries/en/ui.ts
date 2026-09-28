@@ -69,6 +69,8 @@ export const ui = {
     showArchived: 'Archived projects',
     archivedMark: 'archived',
     mine: 'Mine',
+    // Первый пункт «Моего»: знакомство с продуктом (TRK-361), а не работа в проекте.
+    start: 'Start',
     inbox: 'Inbox',
     // Группа панели про саму установку, а не про работу в проектах: подключение
     // агента и доступы касаются установки целиком.

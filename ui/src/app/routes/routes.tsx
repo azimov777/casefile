@@ -1,4 +1,4 @@
-import { Navigate, type RouteObject } from 'react-router';
+import type { RouteObject } from 'react-router';
 import { AccessPage } from '@/pages/access';
 import { AccountPage } from '@/pages/account';
 import { CasePage } from '@/pages/case';
@@ -8,9 +8,11 @@ import { MovingPage } from '@/pages/moving';
 import { PeoplePage } from '@/pages/people';
 import { ProjectPage } from '@/pages/project';
 import { QuestionsPage } from '@/pages/questions';
+import { StartPage } from '@/pages/start';
 import { TaskPage } from '@/pages/task';
 import { TasksPage } from '@/pages/tasks';
 import { AppShell } from '../layouts/app-shell';
+import { HomeRedirect } from './home-redirect';
 import { NotFound } from './not-found';
 import { RequireAuth } from './require-auth';
 import { RequireSignInMode } from './require-sign-in-mode';
@@ -27,7 +29,8 @@ export const routes: RouteObject[] = [
       {
         element: <AppShell />,
         children: [
-          { index: true, element: <Navigate to="/tasks" replace /> },
+          { index: true, element: <HomeRedirect /> },
+          { path: 'start', element: <StartPage /> },
           { path: 'questions', element: <QuestionsPage /> },
           { path: 'connect', element: <ConnectPage /> },
           { path: 'access', element: <AccessPage /> },

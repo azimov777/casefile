@@ -46,22 +46,23 @@ export default defineConfig({
   // Тема следует системе и переключателя не имеет, поэтому обе проверяются
   // отдельными прогонами одного и того же сценария.
   //
-  // Сценарии, которые пишут в демо-установку (ответ на вопрос и живой поток), вынесены
-  // в отдельный проект: после них вопрос закрыт, а в делах задач появились новые записи.
-  // Зависимость от читающих проектов даёт им право идти последними — иначе читающие
-  // видели бы уже изменённое демо, а прогон падал бы в зависимости от того, кто успел
-  // первым.
+  // Сценарии, которые пишут в демо-установку (ответ на вопрос и живой поток) или в
+  // состояние знакомства владельца контура (`start-onboarding`, TRK-361), вынесены
+  // в отдельный проект: после них вопрос закрыт, в делах задач появились новые записи,
+  // а знакомство больше не `pending`. Зависимость от читающих проектов даёт им право
+  // идти последними — иначе читающие видели бы уже изменённое демо или уже пройденное
+  // «Начало», а прогон падал бы в зависимости от того, кто успел первым.
   projects: [
     {
       name: 'светлая',
       testIgnore:
-        /(access|answer|board-column|case-readable|case-latest|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
       testIgnore:
-        /(access|answer|board-column|case-readable|case-latest|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
     },
     {
@@ -90,7 +91,7 @@ export default defineConfig({
     {
       name: 'запись',
       testMatch:
-        /(access|answer|board-column|case-readable|case-latest|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding)\.spec\.ts/,
       // По одному пишущему сценарию за раз: они меняют одну и ту же демо-установку,
       // и параллельно каждый видел бы следы соседа.
       fullyParallel: false,
