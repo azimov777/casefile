@@ -23,6 +23,10 @@
 - `demo` — наполнить установку демонстрационными данными: проект `DEMO`, задачи во всех
   статусах и дела со всеми типами записей. Через API это были бы десятки запросов
   в нужном порядке;
+- `tutorial` — завести учебный проект `START` с задачей для агента (`TRK-370`): без
+  аргументов — шаг подъёма, срабатывает только на установке без единого проекта; с
+  `--force` — команда человека на установке, где проекты уже есть, заводит `START`,
+  если его ещё нет;
 - `openapi` и `errors` — выгрузить поставляемые артефакты контракта: схему для
   генерации клиента и справочник кодов ошибок.
 
@@ -32,6 +36,7 @@
     docker compose run --rm local-token
     docker compose run --rm agent-token
     docker compose run --rm demo
+    docker compose run --rm tutorial
     docker compose run --rm schema
     docker compose run --rm --entrypoint python api -m app.cli issue-token --scope main
     docker compose run --rm --entrypoint python api -m app.cli account-list
@@ -399,6 +404,43 @@ async def _demo(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _tutorial(args: argparse.Namespace) -> int:
+    """Заводит учебный проект `START` с задачей для агента (`TRK-370`).
+
+    Без `--force` — шаг подъёма: идёт на каждом старте контура и заводит `START`, только
+    когда в установке нет ни одного проекта, архивного тоже
+    (`app/services/tutorial.py`, `seed_tutorial_on_boot`). Установку, обновлённую с
+    прежней версии — у неё уже есть проекты, и этот шаг для неё молчит, — этой же
+    командой с `--force` заводит человек: она заводит `START`, если его ещё нет, и
+    отвечает, что он уже заведён, если он есть, ничего не меняя.
+
+    Нет ни одного человека с учётной записью администратора — отказ
+    `tutorial_admin_missing` уходит в стандартный вывод ошибок (`_run`): текст задачи не
+    заводится с выдуманным именем.
+    """
+    from app.domain.tutorial import TUTORIAL_PROJECT_KEY
+    from app.services.tutorial import create_tutorial_project, seed_tutorial_on_boot
+
+    seed = create_tutorial_project if args.force else seed_tutorial_on_boot
+    async with session_scope() as session:
+        result = await seed(session)
+        if not result.created:
+            if args.force:
+                print(f"Tutorial project {TUTORIAL_PROJECT_KEY} already exists. Nothing changed.")
+            else:
+                print("The installation already has a project. Nothing was created.")
+                print("To add the tutorial project to it anyway, run:")
+                print("  docker compose run --rm --entrypoint python api \\")
+                print("    -m app.cli tutorial --force")
+            return 0
+
+        assert result.project is not None  # `created` — это и есть «проект заведён»
+        print(f"project: {result.project.key} ({result.project.title})")
+        for task in result.tasks:
+            print(f"  {task.key}  {task.status.value:<6} {task.title}")
+    return 0
+
+
 async def _openapi(args: argparse.Namespace) -> int:
     """Выгружает схему OpenAPI — поставляемый артефакт, из которого фронтенд берёт типы.
 
@@ -561,6 +603,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Fill the installation with demo data: project DEMO, tasks in every status",
     )
     demo.set_defaults(handler=_demo)
+
+    tutorial = commands.add_parser(
+        "tutorial",
+        help="Seed the tutorial project START with a task for an agent to take",
+    )
+    tutorial.add_argument(
+        "--force",
+        action="store_true",
+        help="Create START even when the installation already has projects; for one "
+        "upgraded from a version without this step. Without it, this only runs the boot "
+        "step: seed an installation with no project at all",
+    )
+    tutorial.set_defaults(handler=_tutorial)
 
     schema = commands.add_parser("openapi", help="Dump the OpenAPI schema")
     schema.add_argument("--output", default=None, help="File to write; stdout when omitted")

@@ -49,6 +49,22 @@ class AccountRepository:
         )
         return await self._session.scalar(statement) is not None
 
+    async def first_admin(self) -> Account | None:
+        """Самая ранняя действующая учётная запись администратора, участник загружен.
+
+        Нужна засеву учебного проекта (`app/services/tutorial.py`, `TRK-370`): имя
+        человека в тексте учебной задачи — точное имя участника с такой учётной записью,
+        а не догадка. На обычной установке администратор ровно один (`owner`), и порядок
+        по времени заведения имеет смысл только когда их несколько.
+        """
+        statement = (
+            select(Account)
+            .where(Account.is_admin.is_(True), Account.disabled_at.is_(None))
+            .order_by(Account.created_at, Account.id)
+            .limit(1)
+        )
+        return (await self._session.scalars(statement)).unique().one_or_none()
+
     async def count_active_admins(self) -> int:
         """Сколько действующих (не отключённых) администраторов на установке."""
         statement = select(func.count(Account.id)).where(

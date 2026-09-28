@@ -779,3 +779,20 @@ class InstallationNotEmptyError(ConflictError):
 
     code = "installation_not_empty"
     message = "Only an installation without projects can take an archive"
+
+
+# --- Учебный проект (TRK-370) ---------------------------------------------------------
+
+
+class TutorialAdminMissingError(ConflictError):
+    """В установке нет ни одного человека с учётной записью администратора.
+
+    Имя из текста учебной задачи — точное имя участника, а не выдуманное (`{human_name}`,
+    `app/domain/tutorial.py`), и взять его неоткуда: засев отказывается, вместо того
+    чтобы подставить угаданное имя. На обычной установке так не бывает — администратора
+    заводит первичная инициализация (`app/services/setup.py`), — и отказ означает, что
+    шаг запущен до неё или что единственного администратора кто-то отключил.
+    """
+
+    code = "tutorial_admin_missing"
+    message = "No human has an administrator account yet"

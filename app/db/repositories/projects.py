@@ -40,6 +40,16 @@ class ProjectRepository:
         statement = select(Project).where(Project.key == key)
         return (await self._session.scalars(statement)).one_or_none()
 
+    async def any_exists(self) -> bool:
+        """Есть ли в установке хоть один проект — архивный тоже.
+
+        Нужна засеву учебного проекта (`app/services/tutorial.py`, `TRK-370`): свежая
+        установка — это установка без проектов, а не установка без токенов
+        (`app/services/setup.py`) — к шагу засева токены уже выпущены. Архивный проект
+        считается тем же, что и живой: он не удалён, а лишь заморожен (`CONCEPT.md`, 3.2).
+        """
+        return await self._session.scalar(select(Project.id).limit(1)) is not None
+
     async def first_archived(
         self, project_ids: Collection[uuid.UUID]
     ) -> tuple[str, datetime] | None:

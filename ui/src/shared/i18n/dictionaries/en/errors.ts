@@ -100,6 +100,7 @@ export const errors = {
   too_many_requests: 'Too many requests. Try again later.',
   transition_not_allowed: 'The status table has no such transition.',
   transition_reason_required: 'This transition requires a reason.',
+  tutorial_admin_missing: 'No human has an administrator account yet.',
   unauthorized: 'The token is unknown or revoked.',
   validation_error: 'The value breaks a rule of the domain.',
   version_conflict: 'The task changed while you were reading. Refresh the page and try again.',

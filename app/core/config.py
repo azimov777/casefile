@@ -113,6 +113,24 @@ class Settings(BaseSettings):
             "another scheme, host, port or path: a proxy, TLS, another machine"
         ),
     )
+    # Адрес доски снаружи — тот, что человек открывает в браузере, а засев учебного
+    # проекта (`app/services/tutorial.py`, `TRK-370`) подставляет в текст учебной задачи
+    # как `{board_url}` (`app/domain/tutorial.py`). Среди настроек его раньше не было
+    # (`docs/CONCEPT.md`, 5.1): порт доски знал только `CASEFILE_PORT` продакшен-контура,
+    # переменная самого compose, которую приложение не читает. Умолчание — тот же адрес,
+    # что печатает `install.sh` при умолчании `CASEFILE_PORT` (8080); задают его целиком,
+    # когда доску видят иначе: через прокси, по TLS, с другой машины. По заголовкам
+    # запроса адрес не угадывается — та же причина, что у `mcp_public_url` выше: запрос
+    # пришёл на адрес доски, а не на MCP, и заголовки пишет клиент.
+    ui_public_url: HttpUrl | None = Field(
+        default=None,
+        description=(
+            "Address the human opens the board at, substituted into the tutorial task's "
+            "text as `{board_url}`. Unset or empty means the local default "
+            "`http://localhost:8080`, the address `install.sh` prints by default; set it "
+            "whole when the board is seen otherwise: a proxy, TLS, another machine"
+        ),
+    )
     mcp_page_size: int = Field(
         default=25,
         ge=1,
@@ -221,29 +239,31 @@ class Settings(BaseSettings):
                     ) from None
         return value
 
-    @field_validator("mcp_public_url", mode="before")
+    @field_validator("mcp_public_url", "ui_public_url", mode="before")
     @classmethod
     def _unset_public_url(cls, value: object) -> object:
         """Пустая строка значит «не задано», а не «неверный адрес».
 
-        Compose передаёт переменную всегда — подстановкой `${TRACKER_MCP_PUBLIC_URL:-}` в
-        `x-app-environment`, — и у установки, где её никто не задавал, она приезжает
-        пустой. Без этого шага такой контур не поднялся бы вовсе: пустая строка не URL.
-        Общий `env_ignore_empty=True` вместо него не годится: он поменял бы смысл пустого
-        значения у соседей — `TRACKER_CORS_ORIGINS=` значит пустой список, а не умолчание.
+        Compose передаёт обе переменные всегда — подстановками `${TRACKER_MCP_PUBLIC_URL:-}`
+        и `${TRACKER_UI_PUBLIC_URL:-}` в `x-app-environment`, — и у установки, где их никто
+        не задавал, они приезжают пустыми. Без этого шага такой контур не поднялся бы
+        вовсе: пустая строка не URL. Общий `env_ignore_empty=True` вместо него не годится:
+        он поменял бы смысл пустого значения у соседей — `TRACKER_CORS_ORIGINS=` значит
+        пустой список, а не умолчание.
         """
         if isinstance(value, str) and not value.strip():
             return None
         return value
 
-    @field_validator("mcp_public_url")
+    @field_validator("mcp_public_url", "ui_public_url")
     @classmethod
     def _public_url_without_credentials(cls, value: HttpUrl | None) -> HttpUrl | None:
         """Адрес с `user:password@` отклоняется: он уезжает каждому держателю ключа.
 
-        Интерфейс показывает адрес любым ключом, даже набора `task`, и вкладывает его в
-        каждый фрагмент конфигурации клиента. Пароль в адресе стал бы общим для всех,
-        кто видит интерфейс; авторизация MCP идёт заголовком, а не адресом.
+        Интерфейс показывает оба адреса любым ключом, даже набора `task`, и вкладывает их
+        в каждый фрагмент конфигурации клиента и в текст учебной задачи. Пароль в адресе
+        стал бы общим для всех, кто это видит; авторизация MCP и доски идёт токеном и
+        входом, а не адресом.
         """
         if value is not None and (value.username or value.password):
             raise ValueError("must not carry credentials: every token holder sees this address")
@@ -269,6 +289,23 @@ class Settings(BaseSettings):
         if self.mcp_public_url is not None:
             return str(self.mcp_public_url)
         return f"http://localhost:{self.mcp_port}{self.mcp_path}"
+
+    @property
+    def effective_ui_public_url(self) -> str:
+        """Адрес доски для человека: заданный целиком или умолчание `install.sh`.
+
+        Умолчание — тот же адрес, который печатает установщик при умолчании
+        `CASEFILE_PORT` (8080, `install.sh`): порт доски задаёт только сам compose, и
+        приложение его не читает. Сдвинувший `CASEFILE_PORT` называет адрес целиком —
+        как за прокси, по TLS или с другой машины.
+
+        Без хвостового `/`: заданный без пути адрес (`https://board.example.com`)
+        `HttpUrl` нормализует, дописав корневой `/`, а текст учебной задачи подставляет
+        сюда же `/tasks/START-1` (`app/domain/tutorial.py`) — с хвостом вышло бы `//`.
+        """
+        if self.ui_public_url is not None:
+            return str(self.ui_public_url).rstrip("/")
+        return "http://localhost:8080"
 
     @property
     def effective_test_database_url(self) -> str:
