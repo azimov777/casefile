@@ -288,14 +288,25 @@ def test_a_payload_field_of_another_type_is_refused_rather_than_dropped() -> Non
         ("trk-42", TaskRef(key="TRK-42")),
         ("TRK-42#12", EntryRef(key="TRK-42", no=12)),
         ("https://example.com/a#b", None),
-        ("docs/CONCEPT.md", None),
-        ("commit 4f2553c", None),
+        ("mailto:a@b.c", None),
+        ("file:///tmp/x.md", None),
     ],
 )
 def test_a_reference_is_either_a_tracker_address_or_an_outside_one(
     ref: str, expected: TaskRef | EntryRef | None
 ) -> None:
     assert parse_ref(ref) == expected
+
+
+@pytest.mark.parametrize(
+    "ref",
+    ["7", "#7", "запись 7", "docs/x.md", "README#usage", "commit 4f2553c", "C:", "https:", "C:\\x"],
+)
+def test_a_string_that_is_neither_tracker_reference_nor_url_is_refused(ref: str) -> None:
+    with pytest.raises(FieldProblem) as problem:
+        parse_ref(ref)
+
+    assert problem.value.details["reason"] == "not_a_reference"
 
 
 @pytest.mark.parametrize("ref", ["TRK-42#0", "TRK-42#абв", "TRK-42#007"])

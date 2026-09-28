@@ -66,8 +66,6 @@ async def other_project(db_session: AsyncSession, main_actor: Actor) -> Project:
         ("TRK#7", ProjectEntryRef(key="TRK", no=7)),
         ("trk#7", ProjectEntryRef(key="TRK", no=7)),
         ("TRK-42#3", EntryRef(key="TRK-42", no=3)),
-        # Слово с якорем было адресом до дела проекта и им остаётся: хвост не номер.
-        ("README#usage", None),
         ("https://example.com/a#1", None),
     ],
 )
@@ -274,13 +272,13 @@ async def test_a_project_entry_reference_is_accepted_from_both_cases(
         actor=task_actor,
         type=EntryType.FINDING,
         title="Смотри заведение проекта",
-        refs=["trk#1", "README#usage"],
+        refs=["trk#1", "https://example.com/README#usage"],
     )
     from_project = await _note(
         db_session, project, task_actor, "Смотри задачу", refs=["TRK#1", "TRK-1#1", "TRK-1"]
     )
 
-    assert from_task.refs == ["TRK#1", "README#usage"]
+    assert from_task.refs == ["TRK#1", "https://example.com/README#usage"]
     assert from_project.refs == ["TRK#1", "TRK-1#1", "TRK-1"]
 
 

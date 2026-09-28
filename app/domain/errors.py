@@ -328,7 +328,8 @@ class EntryFieldsInvalidError(ValidationError):
     исправляет запрос за одну попытку, читая список, а не за пять кругов «исправил
     одно — вылезло другое». Что именно не так, говорит `reason` каждого замечания:
     `required`, `not_allowed`, `service_type`, `out_of_range`, `unknown_participant`,
-    `unknown_entry`, `not_a_question`.
+    `unknown_entry`, `not_a_question`; у `refs` — `not_a_reference` (строка не ссылка
+    трекера и не URL со схемой: `7`, `#7`, `docs/x.md`) и `malformed_entry_ref`.
     """
 
     code = "entry_fields_invalid"
