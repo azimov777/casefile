@@ -9,6 +9,9 @@ import { say } from '@testing/say';
 
 const STAMPS = { created_at: '2026-09-22T10:00:00Z', updated_at: '2026-09-22T10:00:00Z' };
 
+/** Состояние знакомства по умолчанию: не пройдено, ничего не скрыто (`TRK-360#17`). */
+const ONBOARDING = { status: 'pending' as const, hints: { hidden_all: false, hidden: [] } };
+
 function account(overrides: Record<string, unknown> = {}) {
   return {
     id: 'account-owner',
@@ -17,6 +20,7 @@ function account(overrides: Record<string, unknown> = {}) {
     is_admin: false,
     has_password: false,
     disabled_at: null,
+    onboarding: ONBOARDING,
     created_by: { kind: 'tracker' as const, signature: null },
     ...STAMPS,
     ...overrides,

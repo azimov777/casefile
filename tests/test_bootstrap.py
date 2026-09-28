@@ -49,6 +49,11 @@ async def test_bootstrap_answers_with_the_participant_projects_and_question_coun
     assert data["account"]["email"] == "owner@localhost"
     assert data["account"]["participant"] == owner.name
     assert data["account"]["is_admin"] is True
+    # Свежая учётная запись начинает знакомство: решение владельца `TRK-360#17`.
+    assert data["account"]["onboarding"] == {
+        "status": "pending",
+        "hints": {"hidden_all": False, "hidden": []},
+    }
     assert [item["key"] for item in data["projects"]] == [project.key]
     assert data["open_questions"] == 0
 

@@ -14,6 +14,7 @@ const ALICE = {
   is_admin: false,
   has_password: true,
   disabled_at: null,
+  onboarding: { status: 'pending', hints: { hidden_all: false, hidden: [] as string[] } },
   created_by: { kind: 'human', signature: 'owner' },
   created_at: '2026-09-22T10:00:00Z',
   updated_at: '2026-09-22T10:00:00Z',

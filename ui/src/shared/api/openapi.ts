@@ -357,6 +357,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts/{account_id}/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the onboarding state of an account
+         * @description Меняет состояние знакомства своей учётной записи — той, за чьим участником стоит токен.
+         *
+         *     Непереданное не трогается, ни `status`, ни поля `hints` по отдельности. Чужая
+         *     учётная запись — `403 permission_denied` с `details.reason: not_own_account`, как у
+         *     смены своего пароля: администратор чужое состояние не меняет, это сведения человека
+         *     о себе (`docs/CONCEPT.md`, 5.4; `TRK-360#17`).
+         */
+        patch: operations["update_onboarding"];
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -1231,6 +1256,8 @@ export interface components {
              * @description When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active
              */
             disabled_at?: string | null;
+            /** @description Onboarding state (`TRK-360#17`): whether the person went through it and which explanations they hid. Only the account itself changes it */
+            onboarding: components["schemas"]["OnboardingRead"];
             created_by: components["schemas"]["AuthorRead"];
             /**
              * Created At
@@ -1304,6 +1331,8 @@ export interface components {
              * @description When the account was disabled: it cannot sign in and all its tokens are revoked. The participant and its signatures stay. Null means active
              */
             disabled_at?: string | null;
+            /** @description Onboarding state (`TRK-360#17`): whether the person went through it and which explanations they hid. Only the account itself changes it */
+            onboarding: components["schemas"]["OnboardingRead"];
             created_by: components["schemas"]["AuthorRead"];
             /**
              * Created At
@@ -2932,6 +2961,79 @@ export interface components {
              * @enum {string}
              */
             type: "archived" | "artifact" | "attempt" | "created" | "decision" | "finding" | "note" | "remark" | "restored" | "summary";
+        };
+        /**
+         * OnboardingHintsRead
+         * @description Что человек скрыл: все пояснения разом или по одному, списком ключей.
+         */
+        OnboardingHintsRead: {
+            /**
+             * Hidden All
+             * @description Hides every explanation panel at once, regardless of `hidden`
+             */
+            hidden_all: boolean;
+            /**
+             * Hidden
+             * @description Keys of explanations closed one by one. Opaque strings: the tracker does not know the screens of the interface, and a new screen needs no change here
+             * @example [
+             *       "board.filters",
+             *       "connect.token"
+             *     ]
+             */
+            hidden: string[];
+        };
+        /**
+         * OnboardingHintsUpdate
+         * @description Часть тела `PATCH .../onboarding`: что скрыть. Непереданное не трогает.
+         */
+        OnboardingHintsUpdate: {
+            /**
+             * Hidden All
+             * @description Hides every explanation panel at once, regardless of `hidden`
+             */
+            hidden_all?: boolean;
+            /**
+             * Hidden
+             * @description Keys of explanations closed one by one, replacing the previous list entirely. Duplicate keys collapse into one; the tracker does not know the screens of the interface and does not check that a key names a real one
+             * @example [
+             *       "board.filters",
+             *       "connect.token"
+             *     ]
+             */
+            hidden?: string[];
+        };
+        /**
+         * OnboardingRead
+         * @description Состояние знакомства человека с Casefile (`TRK-360#17`): `AccountRead.onboarding`.
+         */
+        OnboardingRead: {
+            /** @description Whether the person went through onboarding. `skipped` marks an account that existed before this field: it already uses the product */
+            status: components["schemas"]["OnboardingStatus"];
+            hints: components["schemas"]["OnboardingHintsRead"];
+        };
+        /**
+         * OnboardingStatus
+         * @description Прошёл ли человек знакомство.
+         *
+         *     `SKIPPED` — не «отказался», а «продуктом уже пользуется»: этим значением и
+         *     `hidden_all: true` миграция `20260928_1200_onboarding_state` пометила учётные записи,
+         *     существовавшие до этого поля. Экран «Начало» им доступен из панели, но сам не
+         *     открывается. Новая учётная запись начинает с `PENDING` и пустых подсказок.
+         * @enum {string}
+         */
+        OnboardingStatus: "pending" | "completed" | "skipped";
+        /**
+         * OnboardingUpdate
+         * @description Тело `PATCH /accounts/{account_id}/onboarding`: непереданное не трогает.
+         *
+         *     Меняет только сама учётная запись (`app/services/accounts.py`,
+         *     `update_onboarding`); администратор чужое состояние не меняет.
+         */
+        OnboardingUpdate: {
+            /** @description Whether the person went through onboarding */
+            status?: components["schemas"]["OnboardingStatus"];
+            /** @description Which explanations to hide; fields left out inside it stay as they are */
+            hints?: components["schemas"]["OnboardingHintsUpdate"];
         };
         /**
          * PageMeta
@@ -6684,6 +6786,90 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_AccountRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_onboarding: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Identifier of the account */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingUpdate"];
             };
         };
         responses: {

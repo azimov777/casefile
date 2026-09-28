@@ -2,14 +2,24 @@
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
 from app.domain.accounts import MAX_EMAIL_LENGTH
+from app.domain.onboarding import (
+    MAX_ONBOARDING_HIDDEN_HINTS,
+    ONBOARDING_HINT_KEY_PATTERN,
+    OnboardingStatus,
+)
 from app.domain.participants import PARTICIPANT_NAME_PATTERN
 from app.domain.passwords import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
+
+#: Ключ пояснения в теле запроса: форму проверяет схема, повторы схлопывает сценарий
+#: (`app/domain/onboarding.py`, `normalize_hidden_hints`).
+_OnboardingHintKey = Annotated[str, StringConstraints(pattern=ONBOARDING_HINT_KEY_PATTERN)]
 
 _DESCRIPTION_MAX = 1000
 
@@ -21,6 +31,37 @@ _NEW_PASSWORD_DESCRIPTION = (
     f"New password, {MIN_PASSWORD_LENGTH} to {MAX_PASSWORD_LENGTH} characters. Omit it "
     "and the tracker generates one and returns it once in `password`"
 )
+
+
+class OnboardingHintsRead(BaseModel):
+    """Что человек скрыл: все пояснения разом или по одному, списком ключей."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    hidden_all: bool = Field(
+        description="Hides every explanation panel at once, regardless of `hidden`",
+    )
+    hidden: list[str] = Field(
+        examples=[["board.filters", "connect.token"]],
+        description=(
+            "Keys of explanations closed one by one. Opaque strings: the tracker does not "
+            "know the screens of the interface, and a new screen needs no change here"
+        ),
+    )
+
+
+class OnboardingRead(BaseModel):
+    """Состояние знакомства человека с Casefile (`TRK-360#17`): `AccountRead.onboarding`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: OnboardingStatus = Field(
+        description=(
+            "Whether the person went through onboarding. `skipped` marks an account that "
+            "existed before this field: it already uses the product"
+        ),
+    )
+    hints: OnboardingHintsRead
 
 
 class AccountRead(BaseModel):
@@ -54,6 +95,12 @@ class AccountRead(BaseModel):
         description=(
             "When the account was disabled: it cannot sign in and all its tokens are "
             "revoked. The participant and its signatures stay. Null means active"
+        ),
+    )
+    onboarding: OnboardingRead = Field(
+        description=(
+            "Onboarding state (`TRK-360#17`): whether the person went through it and "
+            "which explanations they hid. Only the account itself changes it"
         ),
     )
     created_by: AuthorRead
@@ -176,4 +223,40 @@ class PasswordChange(BaseModel):
         min_length=1,
         max_length=MAX_PASSWORD_LENGTH,
         description=f"New password, {MIN_PASSWORD_LENGTH} to {MAX_PASSWORD_LENGTH} characters",
+    )
+
+
+class OnboardingHintsUpdate(BaseModel):
+    """Часть тела `PATCH .../onboarding`: что скрыть. Непереданное не трогает."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hidden_all: bool = unset_field(
+        description="Hides every explanation panel at once, regardless of `hidden`",
+    )
+    hidden: list[_OnboardingHintKey] = unset_field(
+        max_length=MAX_ONBOARDING_HIDDEN_HINTS,
+        examples=[["board.filters", "connect.token"]],
+        description=(
+            "Keys of explanations closed one by one, replacing the previous list "
+            "entirely. Duplicate keys collapse into one; the tracker does not know the "
+            "screens of the interface and does not check that a key names a real one"
+        ),
+    )
+
+
+class OnboardingUpdate(BaseModel):
+    """Тело `PATCH /accounts/{account_id}/onboarding`: непереданное не трогает.
+
+    Меняет только сама учётная запись (`app/services/accounts.py`,
+    `update_onboarding`); администратор чужое состояние не меняет.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: OnboardingStatus = unset_field(
+        description="Whether the person went through onboarding",
+    )
+    hints: OnboardingHintsUpdate = unset_field(
+        description="Which explanations to hide; fields left out inside it stay as they are",
     )

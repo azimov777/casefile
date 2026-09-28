@@ -69,6 +69,9 @@ function issued(overrides: Record<string, unknown> = {}) {
 
 const STAMPS = { created_at: '2026-09-22T10:00:00Z', updated_at: '2026-09-22T10:00:00Z' };
 
+/** Состояние знакомства по умолчанию: не пройдено, ничего не скрыто (`TRK-360#17`). */
+const ONBOARDING = { status: 'pending' as const, hints: { hidden_all: false, hidden: [] } };
+
 /** Учётная запись за сеансом: так её отдаёт `GET /api/v1/bootstrap` (TRK-113). */
 function account(name: string, isAdmin: boolean) {
   return {
@@ -78,6 +81,7 @@ function account(name: string, isAdmin: boolean) {
     is_admin: isAdmin,
     has_password: true,
     disabled_at: null,
+    onboarding: ONBOARDING,
     created_by: { kind: 'tracker' as const, signature: null },
     ...STAMPS,
   };

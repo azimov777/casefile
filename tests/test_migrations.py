@@ -720,3 +720,96 @@ async def test_the_move_migration_rolls_back_and_refuses_while_moved_entries_exi
 
     with pytest.raises(Exception, match="ck_entries_entry_type"):
         await migrate(url, MOVE_PREVIOUS, down=True)
+
+
+# --- Состояние знакомства учётной записи (TRK-369) ------------------------------------
+
+#: Ревизия, заводящая состояние знакомства, и ревизия перед ней — последняя без него.
+ONBOARDING_REVISION = "9a4d7c2f5e81"
+ONBOARDING_PREVIOUS = MOVE_REVISION
+
+_INSERT_OLD_ACCOUNT = text(
+    "WITH person AS ("
+    "  INSERT INTO participants (kind, name, description, created_by_kind, "
+    "created_by_signature) VALUES ('human', 'old_owner', '', 'agent', 'claude') "
+    "RETURNING id"
+    ") "
+    "INSERT INTO accounts (participant_id, email, is_admin, created_by_kind, "
+    "created_by_signature) SELECT id, 'old_owner@localhost', true, 'agent', 'claude' "
+    "FROM person"
+)
+_INSERT_NEW_ACCOUNT = text(
+    "WITH person AS ("
+    "  INSERT INTO participants (kind, name, description, created_by_kind, "
+    "created_by_signature) VALUES ('human', 'new_owner', '', 'agent', 'claude') "
+    "RETURNING id"
+    ") "
+    "INSERT INTO accounts (participant_id, email, is_admin, created_by_kind, "
+    "created_by_signature) SELECT id, 'new_owner@localhost', true, 'agent', 'claude' "
+    "FROM person"
+)
+_SELECT_ONBOARDING = (
+    "SELECT onboarding_status, onboarding_hidden_all, onboarding_hidden "
+    "FROM accounts WHERE email = :email"
+)
+
+
+async def test_an_existing_account_is_skipped_and_a_new_one_is_pending(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Обзорная проверка 4: учётная запись прежней ревизии получает `skipped`/`hidden_all:
+    true`, заведённая после миграции — `pending` с пустыми подсказками."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, ONBOARDING_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_OLD_ACCOUNT)
+
+    await migrate(url, ONBOARDING_REVISION)
+
+    async with migration_engine.begin() as connection:
+        old = (
+            await connection.execute(text(_SELECT_ONBOARDING), {"email": "old_owner@localhost"})
+        ).one()
+        await connection.execute(_INSERT_NEW_ACCOUNT)
+        new = (
+            await connection.execute(text(_SELECT_ONBOARDING), {"email": "new_owner@localhost"})
+        ).one()
+
+    assert tuple(old) == ("skipped", True, [])
+    assert tuple(new) == ("pending", False, [])
+
+
+async def test_the_onboarding_status_constraint_stops_accepting_an_unknown_value(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Значение снято на уровне схемы, а не только в коде."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, ONBOARDING_REVISION)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_OLD_ACCOUNT)
+
+    with pytest.raises(Exception, match="ck_accounts_onboarding_status"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE accounts SET onboarding_status = 'lost' "
+                    "WHERE email = 'old_owner@localhost'"
+                )
+            )
+
+
+async def test_the_onboarding_migration_rolls_back_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, ONBOARDING_REVISION)
+
+    await migrate(url, "-1", down=True)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == ONBOARDING_PREVIOUS
+
+    await migrate(url, ONBOARDING_REVISION)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == ONBOARDING_REVISION

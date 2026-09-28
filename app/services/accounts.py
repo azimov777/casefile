@@ -50,6 +50,7 @@ from app.domain.errors import (
     LastAdminError,
     ParticipantHasAccountError,
 )
+from app.domain.onboarding import OnboardingStatus, normalize_hidden_hints
 from app.domain.participants import ParticipantKind, normalize_participant_name
 from app.domain.passwords import PasswordHash, check_new_password, hash_password, verify_password
 from app.domain.tokens import TokenScope
@@ -288,6 +289,45 @@ async def change_own_password(
     check_new_password(new_password)
     account.password_hash = await _hash(new_password)
     await _revoke_sessions(session, account, keep=actor.token_id)
+    await session.flush()
+    return account
+
+
+async def update_onboarding(
+    session: AsyncSession,
+    account_id: uuid.UUID,
+    *,
+    actor: Actor,
+    status: OnboardingStatus | None = None,
+    hidden_all: bool | None = None,
+    hidden: list[str] | None = None,
+) -> Account:
+    """Меняет состояние знакомства своей учётной записи; непереданное не трогает.
+
+    Своей — той, за чьим участником стоит токен запроса, как и у смены своего пароля
+    (`change_own_password`): чужую не меняет даже администратор, отказ —
+    `permission_denied` с `details.reason: not_own_account`. Это сведения человека о
+    себе, а не управление учётной записью, и `ensure_admin` здесь не участвует вовсе
+    (`docs/CONCEPT.md`, 5.4; `TRK-360#17`).
+
+    Форму ключей `hidden` (шаблон, потолок списка) проверяет схема запроса — единственный
+    вызывающий; здесь список только схлопывает повторы (`normalize_hidden_hints`). В
+    журнал ничего не подшивается: как пароль и почта, это сведения учётной записи, а не
+    ход работы.
+    """
+    ensure_scope(actor, TokenScope.TASK, action="account.update_onboarding")
+    account = await account_of(session, actor.participant)
+    if account is None or account.id != account_id:
+        raise PermissionDeniedError(
+            message="Only the account behind the token can change its own onboarding state",
+            details={"action": "account.update_onboarding", "reason": "not_own_account"},
+        )
+    if status is not None:
+        account.onboarding_status = status
+    if hidden_all is not None:
+        account.onboarding_hidden_all = hidden_all
+    if hidden is not None:
+        account.onboarding_hidden = normalize_hidden_hints(hidden)
     await session.flush()
     return account
 
