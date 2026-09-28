@@ -381,6 +381,22 @@ def test_the_installer_does_not_touch_the_language_of_an_existing_installation(
     assert "CASEFILE_LANGUAGE=ru" not in env
 
 
+def test_the_installer_refuses_an_unknown_language_before_writing_anything(
+    tmp_path: Path,
+) -> None:
+    """`CASEFILE_LANGUAGE=de` — отказ с названным значением, и каталога установки нет.
+
+    Значение уезжает в `TRACKER_TUTORIAL_LANGUAGE`, а настройки читает каждый процесс
+    приложения: с неизвестным языком не поднялась бы вся установка, а не один шаг засева.
+    """
+    done, calls = _install(tmp_path, extra_env={"CASEFILE_LANGUAGE": "de"})
+
+    assert done.returncode != 0
+    assert "CASEFILE_LANGUAGE must be en or ru, got: de" in done.stderr
+    assert not (tmp_path / "casefile" / ".env").exists()
+    assert calls == []
+
+
 # --- Близнец install.ps1: сверка чтением (обзорная проверка 4) -------------------------
 
 
@@ -396,3 +412,14 @@ def test_install_ps1_resolves_the_language_the_same_three_ways() -> None:
     assert "if ((Get-Culture).TwoLetterISOLanguageName -eq 'ru') { return 'ru' }" in text
     assert "return 'en'" in text
     assert '$lines += "CASEFILE_LANGUAGE=$(Get-Language)"' in text
+
+
+def test_install_ps1_refuses_an_unknown_language_like_install_sh() -> None:
+    """Близнец отказывает тем же сообщением и до записи `.env`."""
+    text = _read(INSTALL_PS1)
+    check = "if ($env:CASEFILE_LANGUAGE -and $env:CASEFILE_LANGUAGE -notin @('en', 'ru')) {"
+
+    assert check in text
+    assert 'Fail "CASEFILE_LANGUAGE must be en or ru, got: $env:CASEFILE_LANGUAGE"' in text
+    assert text.index(check) < text.index("if (-not (Test-Path .env)) {")
+    assert "CASEFILE_LANGUAGE must be en or ru, got: $CASEFILE_LANGUAGE" in _read(INSTALL_SH)

@@ -58,6 +58,12 @@ function Get-Language {
     return 'en'
 }
 
+# Язык, заданный человеком, сверяется до первой записи на диск: неизвестное значение
+# доехало бы до настроек приложения, и на нём не поднялся бы ни один его процесс.
+if ($env:CASEFILE_LANGUAGE -and $env:CASEFILE_LANGUAGE -notin @('en', 'ru')) {
+    Fail "CASEFILE_LANGUAGE must be en or ru, got: $env:CASEFILE_LANGUAGE"
+}
+
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Fail 'Docker Desktop is required: https://docs.docker.com/desktop/setup/install/windows-install/'
 }

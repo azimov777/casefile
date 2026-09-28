@@ -93,6 +93,13 @@ hold_updater() {
 }
 
 main() {
+  # Язык, заданный человеком, сверяется до первой записи на диск: неизвестное значение
+  # доехало бы до настроек приложения, и на нём не поднялся бы ни один его процесс.
+  case "${CASEFILE_LANGUAGE:-}" in
+    "" | en | ru) ;;
+    *) fail "CASEFILE_LANGUAGE must be en or ru, got: $CASEFILE_LANGUAGE" ;;
+  esac
+
   command -v docker >/dev/null 2>&1 ||
     fail "Docker is required: https://docs.docker.com/get-docker/"
   docker compose version </dev/null >/dev/null 2>&1 ||
