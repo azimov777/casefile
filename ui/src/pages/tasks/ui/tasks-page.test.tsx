@@ -72,6 +72,20 @@ function noneYetLinkName(): string {
 }
 
 /**
+ * Ссылка из сообщения «задач ещё нет». Ищется в области содержимого, а не по всей
+ * странице: пункт «Начало» боковой панели носит то же имя (TRK-361), и поиск по всей
+ * странице находил его там, где сообщения нет вовсе.
+ */
+async function findNoneYetLink(): Promise<HTMLElement> {
+  const main = await screen.findByRole('main');
+  return within(main).findByRole('link', { name: noneYetLinkName() });
+}
+
+function queryNoneYetLink(): HTMLElement | null {
+  return within(screen.getByRole('main')).queryByRole('link', { name: noneYetLinkName() });
+}
+
+/**
  * Правило показа, каким оно уходит в `query`, пока архив скрыт (UI-97). Написано здесь
  * заново, а не собрано кодом: тест, берущий строку оттуда же, откуда её берёт запрос,
  * сверял бы код с самим собой. Дата порога — любая: её точность проверяет
@@ -473,7 +487,7 @@ describe('пустой проект без единой задачи (TRK-365)',
 
     open('/tasks?project=DEMO&archive=shown');
 
-    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    const link = await findNoneYetLink();
     expect(link).toHaveAttribute('href', '/start');
     expect(screen.queryByText(say.tasks('empty'))).toBeNull();
     expect(screen.queryByRole('button', { name: say.tasks('resetFilters') })).toBeNull();
@@ -484,7 +498,7 @@ describe('пустой проект без единой задачи (TRK-365)',
 
     open('/tasks?project=DEMO&view=board&archive=shown');
 
-    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    const link = await findNoneYetLink();
     expect(link).toHaveAttribute('href', '/start');
   });
 });
@@ -504,7 +518,7 @@ describe('архив скрыт по умолчанию: «задач ещё н�
 
     open('/tasks?project=DEMO');
 
-    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    const link = await findNoneYetLink();
     expect(link).toHaveAttribute('href', '/start');
     expect(screen.queryByText(say.tasks('empty'))).toBeNull();
     expect(screen.queryByRole('button', { name: say.tasks('showArchive') })).toBeNull();
@@ -526,7 +540,7 @@ describe('архив скрыт по умолчанию: «задач ещё н�
 
     expect(await screen.findByText(say.tasks('archiveHidden'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: say.tasks('showArchive') })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: noneYetLinkName() })).toBeNull();
+    expect(queryNoneYetLink()).toBeNull();
   });
 
   it('второй запрос отвечает отказом: остаётся прежний текст с подсказкой об архиве', async () => {
@@ -541,7 +555,7 @@ describe('архив скрыт по умолчанию: «задач ещё н�
     open('/tasks?project=DEMO');
 
     expect(await screen.findByText(say.tasks('archiveHidden'))).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: noneYetLinkName() })).toBeNull();
+    expect(queryNoneYetLink()).toBeNull();
   });
 
   it('непустая первая выдача — второго запроса нет, подмена видит ровно один запрос списка', async () => {
@@ -567,7 +581,7 @@ describe('архив скрыт по умолчанию: «задач ещё н�
 
     open('/tasks?project=DEMO&view=board');
 
-    const link = await screen.findByRole('link', { name: noneYetLinkName() });
+    const link = await findNoneYetLink();
     expect(link).toHaveAttribute('href', '/start');
   });
 
@@ -593,7 +607,7 @@ describe('архив скрыт по умолчанию: «задач ещё н�
         }),
       ).toBe(true),
     );
-    expect(screen.queryByRole('link', { name: noneYetLinkName() })).toBeNull();
+    expect(queryNoneYetLink()).toBeNull();
   });
 });
 
