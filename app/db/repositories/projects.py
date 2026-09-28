@@ -5,7 +5,7 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import exists, not_, select, update
+from sqlalchemy import exists, func, not_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import set_committed_value
@@ -13,6 +13,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.project import Project
 from app.db.pagination import Page, paginate
+from app.domain.authors import AuthorKind
 
 
 def in_active_project(project_id: Any) -> ColumnElement[bool]:
@@ -49,6 +50,22 @@ class ProjectRepository:
         считается тем же, что и живой: он не удалён, а лишь заморожен (`CONCEPT.md`, 3.2).
         """
         return await self._session.scalar(select(Project.id).limit(1)) is not None
+
+    async def count_excluding_tracker(self) -> int:
+        """Сколько проектов заведено не автором `tracker` — архивные тоже.
+
+        Проверка пустоты приёмника архива переноса (`app/services/archive.py`,
+        `import_installation`, `TRK-371`): проект учебного засева (`app/services/tutorial.py`,
+        `TRK-370`) в счёт не идёт — его записи приём заменяет архивом, как и остальные
+        данные установки (`TRK-360#15`), — а проект, заведённый человеком или агентом,
+        считается всегда, даже с тем же ключом `START` (`TRK-360#38`).
+        """
+        statement = (
+            select(func.count())
+            .select_from(Project)
+            .where(Project.created_by_kind != AuthorKind.TRACKER)
+        )
+        return await self._session.scalar(statement) or 0
 
     async def first_archived(
         self, project_ids: Collection[uuid.UUID]
