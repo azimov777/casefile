@@ -14,7 +14,7 @@
 это состояние, открывает `/tasks` напрямую — так делает большинство файлов ниже, кроме
 `install-key.spec.ts` (её первый сценарий идёт через `/` нарочно) и `start-onboarding.spec.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts` и `start-onboarding.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts` и `start-onboarding.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -84,6 +84,9 @@ invalid_search_query`); ограничение снято (TRK-21).
   у таблицы задач и у карточки хвост остался общим (`--ui-page-tail`), без признака
   `data-board` на их обёртке; снимки доски в обеих темах
 - `board.spec.ts` — доска: столбцы из контракта, одна высота и одна ширина при любой длине столбцов, своя прокрутка столбца на широком экране и прокрутка страницы на узком, липкие заголовки столбцов на глубине прокрутки (видимость всех шести, фон и контраст, кнопка мышью и клавиатурой, прокрутка ряда вбок), прижатые к окну заголовки на узком экране (глубина, кнопка, все шесть столбцов вбок колесом, страница не едет вбок на 320 и 704, шапка не просвечивает, `axe`), знак края у нижней рамки (есть у переполненного столбца и нет у поместившегося, гаснет на конце прокрутки, тема и контраст, нажатие сквозь него, остановки `Tab`), свёрнутые столбцы и развёрнутое ожидание, переход в карточку, фильтр, `axe`
+- `screen-explanations.spec.ts` — пояснения семи экранов (TRK-363) на 390 px: каждый экран
+  при включённых пояснениях показывает своё, и страница не прокручивается вбок; включает
+  пояснения в начале и возвращает `hidden_all: true` в конце, проект «запись»
 - `scrollbar.spec.ts` — своя полоса прокрутки у столбца доски и у ряда столбцов: место,
   которое она заняла (без границы рамки), равно толщине из стилей и меньше системных 15 px,
   цвет ползунка — точное значение токена темы, стандартная пара до этого движка не дошла;

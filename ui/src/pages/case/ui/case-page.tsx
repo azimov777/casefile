@@ -12,6 +12,7 @@ import {
   type EntryType,
 } from '@/entities/entry';
 import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
+import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { readEntryNo } from '@/shared/lib';
@@ -170,6 +171,12 @@ export function CasePage() {
 
   return (
     <main className={SCREEN}>
+      {/* Пояснение экрана — первым блоком (TRK-363). Проект задачи известен из пакета, и
+          пока он не пришёл, пояснения нет: иначе оно мигнуло бы на архивной задаче. */}
+      {task.data === undefined || task.data.task.project.archived_at != null ? null : (
+        <ExplanationPanel hintKey={HINT_KEYS.case}>{t('explanation.body')}</ExplanationPanel>
+      )}
+
       <TaskNav taskKey={key} view="case" />
 
       {/*

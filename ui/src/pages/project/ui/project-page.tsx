@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { projectQueryOptions } from '@/entities/project';
+import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { EditProject, ProjectArchiving, useProjectRights } from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
@@ -100,6 +101,12 @@ export function ProjectPage() {
 
   return (
     <main className={SCREEN}>
+      {/* Пояснение экрана — первым блоком (TRK-363). У архивного проекта его нет: текст
+          называет правку и заметки, а они там закрыты. */}
+      {frozen ? null : (
+        <ExplanationPanel hintKey={HINT_KEYS.project}>{t('explanation.body')}</ExplanationPanel>
+      )}
+
       <header className="flex flex-col gap-2">
         <p className="text-label font-semibold tracking-caps text-faint uppercase">{t('kicker')}</p>
         {/* Ключ — идентификатор контракта, моноширинным; название пишет агент или

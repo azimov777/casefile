@@ -11,6 +11,7 @@ import {
   useTaskFilters,
 } from '@/features/task-filters';
 import { UpdatesBar } from '@/features/live-journal';
+import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { type Page } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
 import { formatNumber } from '@/shared/lib';
@@ -152,6 +153,12 @@ export function TasksPage() {
 
   return (
     <main className="flex flex-col gap-3">
+      {/* Пояснение экрана — первым блоком содержимого (TRK-363). Список и доска — два
+          пояснения с разными ключами: закрытое на одном вида другого не закрывает. */}
+      <ExplanationPanel hintKey={board ? HINT_KEYS.board : HINT_KEYS.tasks}>
+        {t(board ? 'explanation.board' : 'explanation.list')}
+      </ExplanationPanel>
+
       {/*
        * Полоса обновлений — принадлежность таблицы, а не экрана: там перестановка строк
        * под курсором это шум, и живой поток копит изменения, предлагая их нажатием.

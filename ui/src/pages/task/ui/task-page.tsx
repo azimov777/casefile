@@ -14,6 +14,7 @@ import {
   type Answering,
 } from '@/features/answer-question';
 import { RemarkForm } from '@/features/leave-remark';
+import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, projectHref, readEntryNo } from '@/shared/lib';
@@ -359,6 +360,12 @@ export function TaskPage() {
 
   return (
     <main className={SCREEN}>
+      {/* Пояснение экрана — первым блоком (TRK-363). У задачи архивного проекта его нет:
+          текст называет ответ и замечание, а их там нет. */}
+      {frozen ? null : (
+        <ExplanationPanel hintKey={HINT_KEYS.task}>{t('explanation.body')}</ExplanationPanel>
+      )}
+
       {/*
        * Единственное, что человек начинает сам, стоит в липкой строке: до неё не надо
        * прокручивать опись в сотню записей. Второй такой кнопки в блоке замечаний нет —

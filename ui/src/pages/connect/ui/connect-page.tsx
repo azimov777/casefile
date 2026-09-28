@@ -8,6 +8,7 @@ import {
   TOKEN_PLACEHOLDER,
   installationQueryOptions,
 } from '@/features/connect-agent';
+import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { CopyBlock, QueryState } from '@/shared/ui';
 
 /**
@@ -73,6 +74,12 @@ export function ConnectPage() {
 
   return (
     <main className="mx-auto flex max-w-(--ui-column-max) min-w-0 flex-col gap-8">
+      {/* Пояснение экрана — первым блоком, над шагами (TRK-363). Ссылка на «Начало» ведёт
+          на `/start`, как `tellAgent.more` ниже. */}
+      <ExplanationPanel hintKey={HINT_KEYS.connect}>
+        <Trans t={t} i18nKey="explanation.body" components={{ start: <Link to="/start" /> }} />
+      </ExplanationPanel>
+
       <div className="flex flex-col gap-1">
         {/* Название раздела одно на панель и на заголовок экрана. */}
         <h1 className="text-title">{brick('app.connect')}</h1>

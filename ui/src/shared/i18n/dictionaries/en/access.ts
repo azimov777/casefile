@@ -6,6 +6,10 @@
  * где у экрана «Подключить агента», — `ui.snippets`.
  */
 export const access = {
+  /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-363`). */
+  explanation: {
+    body: 'All tokens of the installation are here: who holds them and when they were last used. A separate agent deserves its own token — then its entries are signed with its name. A token you no longer need is revoked here.',
+  },
   intro:
     'Every access to this installation: whose key it is, what it opens, who issued it and when it was last used. Tokens are never deleted — an access is taken away by revoking it, and the revoked one stays here as history.',
   close: 'Close',

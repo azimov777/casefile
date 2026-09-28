@@ -25,6 +25,7 @@ import {
   SecretDialog,
   type IssuedToken,
 } from '@/features/manage-access';
+import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { cn, useExitHold } from '@/shared/lib';
 import {
   Badge,
@@ -159,6 +160,9 @@ export function AccessPage() {
 
   return (
     <main className="mx-auto flex max-w-(--ui-column-max) min-w-0 flex-col gap-8">
+      {/* Пояснение экрана — первым блоком (TRK-363). */}
+      <ExplanationPanel hintKey={HINT_KEYS.access}>{t('explanation.body')}</ExplanationPanel>
+
       <div className="flex flex-col gap-1">
         {/* Название раздела одно на панель и на заголовок экрана. */}
         <h1 className="text-title">{brick('app.access')}</h1>

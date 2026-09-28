@@ -3,6 +3,10 @@
  * действия с проектом (`src/features/manage-project`).
  */
 export const project = {
+  /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-363`). */
+  explanation: {
+    body: "A project answers “what are the tasks about”. Here you edit its description, keep its attributes — where the code lives, which branch is the main one — and write notes to the project's case. The agent receives the description with every task of the project.",
+  },
   missingTitle: 'There is no project {{key}}',
   missingText:
     'There is no project with this key: the key may be mistyped, or the project belongs to another installation.',

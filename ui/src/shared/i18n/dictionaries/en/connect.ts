@@ -9,6 +9,10 @@
  * `features/connect-agent`: перевод их не повторяет.
  */
 export const connect = {
+  /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-363`). */
+  explanation: {
+    body: "An agent works with Casefile over MCP: it needs this installation's address and a token. Once connected, tell the agent where to start — the phrases are on the <start>Start</start> screen.",
+  },
   intro:
     'An agent works with Casefile over MCP: the address of this installation and a token in the <code>Authorization</code> header. Two steps, and the agent keeps its tasks in the tracker.',
   steps: 'Connection steps',
