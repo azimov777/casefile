@@ -21,6 +21,7 @@ from app.domain.tutorial import (
     TUTORIAL_PROJECT_KEY,
     TUTORIAL_PROJECTS,
     TutorialTask,
+    render_tutorial_project,
 )
 
 _TASKS = [
@@ -121,6 +122,14 @@ def test_two_move_phrases_do_not_assume_the_tutorial(language: str) -> None:
 
 
 @pytest.mark.parametrize("language", TUTORIAL_LANGUAGES)
+def test_create_tasks_phrase_names_environment_requirement(language: str) -> None:
+    """Слово владельца (`TRK-366#66`): каждая заведённая задача называет своё окружение."""
+    phrase = AGENT_PHRASES[language].create_tasks.lower()
+    keyword = {"ru": "окружен", "en": "environment"}[language]
+    assert keyword in phrase
+
+
+@pytest.mark.parametrize("language", TUTORIAL_LANGUAGES)
 def test_memo_ends_with_both_move_lines_word_for_word(language: str) -> None:
     """Памятка учебной задачи отдаёт человеку те же фразы, что экран «Начало».
 
@@ -133,3 +142,37 @@ def test_memo_ends_with_both_move_lines_word_for_word(language: str) -> None:
     assert f"«{phrases.execute_tasks}»" in execute_line
     assert create_line in first.output
     assert execute_line in first.output
+
+
+@pytest.mark.parametrize("language", TUTORIAL_LANGUAGES)
+def test_render_fills_environment_and_leaves_no_loose_braces(language: str) -> None:
+    """Проверка 6 задачи `TRK-366`: подстановки заполнены, ни `localhost:8080`, ни «обычно»
+
+    («usually»), ни незаполненная подстановка в фигурных скобках.
+    """
+    board_url = "http://example.test:9"
+    human_name = "alice"
+    project = render_tutorial_project(language, board_url=board_url, human_name=human_name)
+    task = project.tasks[0]
+    text = "\n".join(
+        [task.title, task.description, task.goal, task.context, task.constraints, task.output]
+    )
+    assert board_url in text
+    assert human_name in text
+    assert "localhost:8080" not in text
+    assert "{board_url}" not in text
+    assert "{human_name}" not in text
+    stray_word = {"ru": "обычно", "en": "usually"}[language]
+    assert stray_word not in text.lower()
+
+
+@pytest.mark.parametrize("language", TUTORIAL_LANGUAGES)
+def test_render_keeps_the_task_accepted_as_is(language: str) -> None:
+    """Подстановка не портит канонический вид: рендеренная задача тоже проходит `open`."""
+    project = render_tutorial_project(
+        language, board_url="http://example.test:9", human_name="alice"
+    )
+    task = project.tasks[0]
+    fields = _fields(task)
+    assert normalize_fields(fields) == fields
+    assert all(fields[section] for section in TEXT_SECTIONS)

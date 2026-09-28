@@ -5,7 +5,22 @@
 чистым контекстом: он получает их через `get_task` вместе с описанием проекта и больше
 ничего не знает. Дисциплину цикла (сводки, `waiting`, вердикты) ему раздаёт сервер —
 `instructions` и метадата инструментов, — поэтому задача её не пересказывает, а называет
-только то, чего сервер не знает: что показать человеку и в какой последовательности.
+только то, чего сервер не знает: что показать человеку, каким вызовом и в какой
+последовательности.
+
+Владелец потребовал от текста трёх вещей (`TRK-366#66`): максимально просто для модели,
+явные действия, сведения об окружении в самой задаче. Отсюда устройство модуля:
+
+- Раздел `context` учебной задачи несёт точные значения окружения — адрес доски и имя
+  человека — как подстановки `{board_url}` и `{human_name}`; их заполняет
+  `render_tutorial_project`, а не сам текст «обычным» приближением.
+- Раздел `output` — нумерованный список, один шаг — одно действие; действие в трекере
+  названо вызовом инструмента с именами его аргументов, действие в чате — готовой
+  строкой. Общей процедуры «ход человека», которую агент прикладывал бы сам к разным
+  шагам, здесь нет: её точки повторены на обоих местах, где ход человека нужен.
+- Памятку агент не сочиняет: её текст дан целиком, с одним местом для подстановки —
+  работой человека его же словами из ответа; это место помечено `<...>`, а не `{...}`,
+  чтобы его не спутать с подстановками окружения.
 
 Каждая формулировка здесь проверена слепым прогоном на агенте с чистым контекстом
 (дело `TRK-366`, записи `attempt`). Правка текста — это новая гипотеза, а не опечатка:
@@ -83,8 +98,9 @@ AGENT_PHRASES: dict[TutorialLanguage, AgentPhrases] = {
         create_tasks=(
             "File tasks in Casefile for my work: a project for it if there is none yet, and "
             "tasks with all their sections and checks, each small enough for one agent to "
-            "finish in one go. Don't start the work itself; if I haven't described it yet, "
-            "ask me."
+            "finish in one go, each naming its environment in `context` — where the work lives "
+            "and how to run its checks. Don't start the work itself; if I haven't described it "
+            "yet, ask me."
         ),
         execute_tasks=(
             "Carry out the tasks for this work from the Casefile tracker. Hand them to agents, "
@@ -99,7 +115,9 @@ AGENT_PHRASES: dict[TutorialLanguage, AgentPhrases] = {
         create_tasks=(
             "Заведи в Casefile задачи по моей работе: проект под неё, если его ещё нет, и "
             "задачи со всеми разделами и проверками — каждая такая, чтобы один агент выполнил "
-            "её за один заход. Саму работу не начинай; если я её ещё не описал, спроси меня."
+            "её за один заход, и в разделе `context` каждой названо её окружение: где лежит "
+            "работа и как запускать её проверки. Саму работу не начинай; если я её ещё не "
+            "описал, спроси меня."
         ),
         execute_tasks=(
             "Выполни задачи по этой работе из трекера Casefile. Раздавай их агентам, по одной "
@@ -133,89 +151,121 @@ MOVE_LINES: dict[TutorialLanguage, tuple[str, str]] = {
     language: _move_lines(language) for language in TUTORIAL_LANGUAGES
 }
 
+
+def _memo_template(language: TutorialLanguage) -> str:
+    """Шаблон памятки человеку: одно место для его работы, дальше — обе строки ходов дословно.
+
+    Место для подстановки помечено `<...>`, а не `{...}`: угловые скобки не спутать с
+    подстановками окружения `{board_url}`/`{human_name}`, которые заполняет засев, а не
+    агент (проверка 6 задачи `TRK-366`).
+    """
+    create_line, execute_line = MOVE_LINES[language]
+    if language == "ru":
+        intro = (
+            "Что вы делаете в Casefile: отвечаете на вопросы агента, оставляете замечания к "
+            "задачам, заводите и ведёте проекты, читаете их дело."
+        )
+        work = (
+            "Вашу работу — <работа из ответа, его же словами> — агенты берут через трекер: "
+            "двумя ходами, в двух разных сессиях; между ходами контекст теряется целиком, и "
+            "второй агент знает только то, что лежит в трекере."
+        )
+    else:
+        intro = (
+            "What you do in Casefile: you answer the agent's questions, leave remarks on "
+            "tasks, create and run projects, read their case."
+        )
+        work = (
+            "Your work — <the work from your answer, in your own words> — goes to agents "
+            "through the tracker: in two moves, in two separate sessions; between moves the "
+            "context is lost completely, and the second agent knows only what is in the "
+            "tracker."
+        )
+    return f"{intro}\n\n{work}\n\n{create_line}\n{execute_line}"
+
+
+#: Шаблон памятки по языкам: `output` учебной задачи цитирует его целиком.
+_MEMO_TEMPLATES: dict[TutorialLanguage, str] = {
+    language: _memo_template(language) for language in TUTORIAL_LANGUAGES
+}
+
 _EN_INTRODUCTION = TutorialTask(
     title="Walk the human through one task in Casefile, from start to finish",
     description=(
         "Tutorial task. The human has just installed Casefile and wants to see how an agent "
         "works in the tracker and what is left for them to do. You go through one real task "
-        "together with them; its result is a short memo for the human."
+        "together with them, step by step, and hand them a memo at the end."
     ),
     goal=(
         "The human watches the whole cycle of one task live and recognises their own part in "
-        "it: you take the task, keep its case, ask the human and continue on their answer, "
-        "receive their remark and resolve it, and close the task. The work product is a memo "
-        "for the human, «What you do in Casefile», written from their answer and their remark."
+        "it: you ask them a question and continue from their answer, take their remark and "
+        "resolve it, and close the task. The result is a memo for the human that ends with the "
+        "two moves that start their real work."
     ),
     context=(
-        "- The human sees the tracker in the Casefile web interface. On their own machine it "
-        f"is usually http://localhost:8080; this task's page is `/tasks/{INTRODUCTION_TASK_KEY}` "
-        "there. Everything you file shows up there at once.\n"
-        "- In the interface the human answers questions (the «Inbox» section or the task "
-        "page), leaves a remark on a task (the «Leave a remark» form on the task page) and "
-        "runs projects: creates them, edits their description, archives them. The human does "
-        "not create tasks and does not move them between statuses: agents do that.\n"
-        "- The human you ask is in the participant registry (`list_participants`, kind "
-        "`human`); on a single machine it is usually `owner`.\n"
-        "- The task has no assignee: put your own participant name there. If you are unsure "
-        "of your name, `transition` to `in_progress` refuses with `assignee_mismatch` and "
-        "names your signature in `details`.\n"
-        "- The human waits for you in the chat, where they gave you this task."
+        "Environment.\n"
+        "- Casefile board: `{board_url}`. This task's page: `{board_url}/tasks/START-1`.\n"
+        "- The human is participant `{human_name}`; address the question to them.\n"
+        '- The human answers a question in the "Inbox" section of the side panel or on the '
+        'task page; they leave a remark with the "Leave a remark" form on the task page.\n'
+        "- You talk to the human in the chat — the one where you got this phrase.\n"
+        "- Everything you file shows up for the human on the board at once."
     ),
     constraints=(
-        "- Talk to the human and write case entries, the memo included, in the language of "
-        "the human's message to you — not the language of this task, your files or your "
-        "other instructions.\n"
+        "- Write case entries and the memo in the language of the human's message to you.\n"
         "- No repository, files or network are needed: all the work happens in the tracker and "
-        "in the chat. Create no other tasks or projects.\n"
-        "- The human's steps are theirs, done in the interface: never answer your own question "
-        "and never file the remark yourself.\n"
+        "the chat. Create no other tasks or projects.\n"
+        "- The question and the remark are the human's own steps: never answer your own "
+        "question and never file the remark yourself.\n"
         "- Keep chat messages short: one step, one message."
     ),
     output=(
-        "The case of this task, built in this order.\n\n"
-        "**The human's move** — steps 3 and 5 — always goes in this order: (a) a summary; "
-        "(b) `transition` to `waiting` with the reason — what you wait for; (c) only now tell "
-        "the human in the chat exactly what to do and where; (d) `wait_journal` with `task`, "
-        "`types`, `after: 0` and `timeout: 60`, repeated until the entry arrives — with "
-        "`after: 0` an entry that came early is found too; (e) `transition` back "
-        "to `in_progress`. The task is in `waiting` before the human hears from you and stays "
-        "there during their move: that is how they see the move is theirs.\n\n"
-        "1. First of all: you are the assignee and the task is `in_progress`; every entry "
-        "below is filed after that. Tell the human where to open "
-        "the task page to watch.\n"
-        "2. A `decision`: what the memo will consist of.\n"
-        "3. A blocking question to the human (`ask`): which piece of their own work they would "
-        "hand to an agent first. Then the human's move, in the order above; at (c) tell them "
-        "that the question waits for their answer in the «Inbox» section of the side panel "
-        "or on the task page; wait for the `answer`.\n"
-        "4. An `artifact` whose body is the whole memo — not a link and not a file — with "
-        f"`refs` naming the answer entry as `{INTRODUCTION_TASK_KEY}#<its number>`. In a few "
-        "lines the memo says what the human does in "
-        "Casefile — answers questions, leaves remarks, runs projects, reads cases. Then it "
-        "names the work from their answer in their own words: it goes to agents in two "
-        "moves, in two agent sessions, and between them the context is lost — the second "
-        "agent knows only what is in the tracker. The memo ends with these two lines, word "
-        f"for word:\n    {MOVE_LINES['en'][0]}\n    {MOVE_LINES['en'][1]}\n"
-        "5. The human's move, in the order above; at (c) ask for a remark on the task with the "
-        "«Leave a remark» form on its page — any remark about the memo, for example «make it "
-        "shorter»; wait for the `remark`.\n"
-        "6. `resolve` the remark. With `fixed`, file the corrected memo as a new `artifact` "
-        "first. Whatever the remark asks, the corrected memo keeps the work from their "
-        "answer and ends with both move lines word for word.\n"
-        "7. `close_task` with a verdict on every check. Then tell the human the tour is over: "
-        f"project {TUTORIAL_PROJECT_KEY} can be archived from its page, and real work starts "
-        "with the two moves from the memo."
+        "Build the case in this order — one numbered step, one action. Below, `key` (`task` "
+        "for `wait_journal`) is always `START-1`.\n\n"
+        "1. `update_task` — `changes.assignee` your own name, for example `agent`.\n"
+        "2. `transition` — `to: in_progress`. Refused with `assignee_mismatch`? Take the name "
+        "from the refusal's `details`, redo step 1 with it, then repeat this step.\n"
+        "3. In chat, say word for word: \"Open `{board_url}/tasks/START-1` — every step will "
+        'show up there."\n'
+        "4. `ask` — `addressees: [{human_name}]`, `blocking: true`, a `title` and `body` "
+        "asking which piece of their own work the human would hand to an agent first.\n"
+        "5. `add_summary` — `done`, `remaining`, `blockers`, `next_step`: say you asked the "
+        "question and are waiting for the answer.\n"
+        "6. `transition` — `to: waiting`, a `reason` naming the question you wait for.\n"
+        "7. In chat, say word for word: \"Answer the question in the 'Inbox' section or on "
+        'the task page — I\'m waiting for it."\n'
+        "8. `wait_journal` — `types: [answer]`, `after: 0`, `timeout: 60`; repeat the call "
+        "until an entry comes back.\n"
+        "9. `transition` — `to: in_progress`.\n"
+        "10. `add_entry` — `type: artifact`, a `title`, `refs: [START-1#<the answer's "
+        "number>]`, and a `body` — the memo below, with the work from the answer, in the "
+        "human's own words, in place of the one placeholder:\n\n"
+        f"{_MEMO_TEMPLATES['en']}\n\n"
+        "11. `add_summary` — `done`, `remaining`, `blockers`, `next_step`: say the memo is "
+        "filed and you are waiting for a remark.\n"
+        "12. `transition` — `to: waiting`, a `reason` naming that you wait for a remark.\n"
+        "13. In chat, say word for word: \"Leave any remark on the task with the 'Leave a "
+        'remark\' form on its page — I\'m waiting for it."\n'
+        "14. `wait_journal` — `types: [remark]`, `after: 0`, `timeout: 60`; repeat the call "
+        "until an entry comes back.\n"
+        "15. `transition` — `to: in_progress`.\n"
+        "16. `add_entry` — `type: artifact`, a `title`, `refs: [START-1#<the memo's "
+        "number>]`, and a `body` — the same memo with only what the remark asked for "
+        "changed; both move lines stay word for word.\n"
+        "17. `resolve` — the `remark_no` of the remark, `outcome: fixed`, naming what changed "
+        "in `body`.\n"
+        "18. `close_task` — a `verdicts` entry for every check and a closing `summary`.\n"
+        "19. In chat, say word for word: \"The tour is over: project START can be archived "
+        'from its page, and real work starts with the two moves from the memo."'
     ),
     checks=(
-        "The case holds a question to a human participant and that participant's answer; "
-        "the memo `artifact` filed after it names the answer in `refs`.",
-        "The human's answer and remark were both filed while the task stood in `waiting` with "
+        "The case holds a question to the human participant and their `answer`.",
+        "The `answer` and the `remark` were both filed while the task stood in `waiting` with "
         "a reason, and after each the task came back to `in_progress`.",
-        "The human's remark has an outcome through `resolve`; with `fixed`, the corrected memo "
-        "is filed as an `artifact` before the resolution.",
-        "The whole last memo is in the body of an `artifact` entry, in the human's language; "
-        "it names what the human does in Casefile and the work from their answer, and at the "
-        "end gives both phrases word for word and says move two goes in a new session.",
+        "The `remark` has an outcome through `resolve`; the corrected memo is filed as an "
+        "`artifact` before it.",
+        "An `artifact` with the memo is filed after the answer, and its `refs` name the "
+        "answer's entry.",
     ),
 )
 
@@ -223,84 +273,77 @@ _RU_INTRODUCTION = TutorialTask(
     title="Пройти с человеком одну задачу в Casefile от начала до конца",
     description=(
         "Учебная задача. Человек только что поставил Casefile и хочет увидеть, как агент ведёт "
-        "работу в трекере и что остаётся делать ему самому. Ты проходишь вместе с ним одну "
-        "настоящую задачу; её результат — короткая памятка человеку."
+        "работу в трекере и что остаётся делать ему самому. Ты проходишь с ним одну настоящую "
+        "задачу шаг за шагом и в конце отдаёшь ему памятку."
     ),
     goal=(
-        "Человек своими глазами видит цикл одной задачи и узнаёт в нём свою часть: ты берёшь "
-        "задачу, ведёшь её дело, спрашиваешь человека и продолжаешь по его ответу, получаешь "
-        "его замечание и разбираешь его, закрываешь задачу. Итог работы — памятка человеку "
-        "«Что вы делаете в Casefile», написанная по его ответу и замечанию."
+        "Человек своими глазами видит цикл одной задачи и узнаёт в нём свою часть: ты задаёшь "
+        "ему вопрос и продолжаешь по ответу, принимаешь его замечание и разбираешь его, "
+        "закрываешь задачу. Итог — памятка человеку, которая заканчивается двумя ходами, с "
+        "которых начинается его настоящая работа."
     ),
     context=(
-        "- Человек видит трекер в веб-интерфейсе Casefile. На его машине это обычно "
-        f"http://localhost:8080; страница этой задачи там — `/tasks/{INTRODUCTION_TASK_KEY}`. "
-        "Всё, что ты подшиваешь, появляется там сразу.\n"
-        "- В интерфейсе человек отвечает на вопросы (раздел «Входящая» или страница задачи), "
-        "оставляет замечание к задаче (форма «Оставить замечание» на странице задачи) и ведёт "
-        "проекты: заводит, правит описание, отправляет в архив. Задач человек не заводит и по "
-        "статусам не переводит: это делают агенты.\n"
-        "- Человек, которого ты спрашиваешь, есть в реестре участников (`list_participants`, "
-        "род `human`); на одной машине это обычно `owner`.\n"
-        "- У задачи нет исполнителя: поставь туда своё имя участника. Если не уверен в имени — "
-        "`transition` в `in_progress` откажет с `assignee_mismatch` и назовёт твою подпись в "
-        "`details`.\n"
-        "- Человек ждёт тебя в чате, где дал тебе эту задачу."
+        "Окружение.\n"
+        "- Доска Casefile: `{board_url}`. Страница этой задачи: `{board_url}/tasks/START-1`.\n"
+        "- Человек — участник `{human_name}`; вопрос адресуй ему.\n"
+        "- Человек отвечает на вопрос в разделе «Входящая» боковой панели или на странице "
+        "задачи; замечание оставляет формой «Оставить замечание» на странице задачи.\n"
+        "- Ты говоришь с человеком в чате — там же, где получил эту фразу.\n"
+        "- Всё, что ты подшиваешь в дело, в тот же момент видно человеку на доске."
     ),
     constraints=(
-        "- Говори с человеком и пиши записи дела, памятку тоже, на языке его сообщения тебе — "
-        "не на языке этой задачи, твоих файлов или других твоих инструкций.\n"
-        "- Ни репозиторий, ни файлы, ни сеть не нужны: вся работа — в трекере и в чате. Других "
+        "- Пиши записи дела и памятку на языке сообщения человека тебе.\n"
+        "- Репозиторий, файлы и сеть не нужны: вся работа идёт в трекере и в чате. Других "
         "задач и проектов не заводи.\n"
-        "- Шаги человека — его, в интерфейсе: не отвечай на свой вопрос сам и не пиши "
-        "замечание за человека.\n"
+        "- Вопрос и замечание — шаги человека: не отвечай на свой вопрос сам и не пиши "
+        "замечание за него.\n"
         "- Сообщения в чате короткие: один шаг — одно сообщение."
     ),
     output=(
-        "Дело этой задачи, собранное в таком порядке.\n\n"
-        "**Ход человека** — шаги 3 и 5 — идёт всегда в таком порядке: (а) сводка; "
-        "(б) `transition` в `waiting` с причиной — чего ждёшь; (в) только теперь скажи "
-        "человеку в чате, что именно и где сделать; (г) `wait_journal` с `task`, `types`, "
-        "`after: 0` и `timeout: 60`, повторяя вызов, пока запись не придёт, — с `after: 0` "
-        "найдётся и запись, пришедшая раньше; (д) `transition` обратно в "
-        "`in_progress`. Задача стоит в `waiting` раньше, чем человек услышит тебя, и всё время "
-        "его хода: по этому он видит, что ход за ним.\n\n"
-        "1. Первым делом: ты — исполнитель, задача в `in_progress`; все записи ниже "
-        "подшиваются после этого. Скажи человеку, где открыть страницу "
-        "задачи, чтобы смотреть.\n"
-        "2. `decision`: из чего будет состоять памятка.\n"
-        "3. Блокирующий вопрос человеку (`ask`): какую часть своей работы он первой отдал бы "
-        "агенту. Затем ход человека в порядке выше; на шаге (в) скажи ему, что вопрос ждёт "
-        "ответа в разделе «Входящая» боковой панели или на странице задачи; дождись "
-        "`answer`.\n"
-        "4. `artifact`, в теле которого вся памятка — не ссылка и не файл, — в `refs` "
-        f"запись ответа в виде `{INTRODUCTION_TASK_KEY}#<её номер>`. "
-        "Памятка в несколько строк говорит, что человек делает в Casefile — отвечает на "
-        "вопросы, оставляет замечания, ведёт проекты, читает дела. Затем называет работу из "
-        "его ответа его же словами: она уходит агентам двумя ходами, в двух сессиях агента, "
-        "и между ними контекст теряется — второй агент знает только то, что лежит в "
-        "трекере. Памятка заканчивается этими двумя строками, дословно:\n"
-        f"    {MOVE_LINES['ru'][0]}\n    {MOVE_LINES['ru'][1]}\n"
-        "5. Ход человека в порядке выше; на шаге (в) попроси замечание к задаче формой "
-        "«Оставить замечание» на её странице — любое, о памятке, например «сделай короче»; "
-        "дождись `remark`.\n"
-        "6. Разбери замечание через `resolve`. При `fixed` сначала подшей исправленную "
-        "памятку новым `artifact`. О чём бы ни было замечание, в исправленной памятке "
-        "остаётся работа из ответа, а заканчивается она обеими строками ходов дословно.\n"
-        "7. `close_task` с вердиктом по каждой проверке. Затем скажи человеку, что знакомство "
-        f"пройдено: проект {TUTORIAL_PROJECT_KEY} можно отправить в архив с его страницы, а "
-        "настоящая работа начинается с двух ходов из памятки."
+        "Собери дело в этом порядке — один пронумерованный шаг, одно действие. Ниже `key` (у "
+        "`wait_journal` — `task`) везде равен `START-1`.\n\n"
+        "1. `update_task` — `changes.assignee` своё имя, например `agent`.\n"
+        "2. `transition` — `to: in_progress`. Отказ `assignee_mismatch`? Возьми имя из "
+        "`details` отказа, повтори шаг 1 с ним, затем повтори этот шаг.\n"
+        "3. В чате скажи дословно: «Открой `{board_url}/tasks/START-1` — там будет видно "
+        "каждый мой шаг.»\n"
+        "4. `ask` — `addressees: [{human_name}]`, `blocking: true`, `title` и `body` — какую "
+        "часть своей работы человек первой отдал бы агенту.\n"
+        "5. `add_summary` — `done`, `remaining`, `blockers`, `next_step`: что задал вопрос и "
+        "ждёшь ответ.\n"
+        "6. `transition` — `to: waiting`, `reason` называет вопрос, которого ждёшь.\n"
+        '7. В чате скажи дословно: «Ответь на вопрос в разделе "Входящая" или на странице '
+        "задачи — я жду.»\n"
+        "8. `wait_journal` — `types: [answer]`, `after: 0`, `timeout: 60`; повторяй вызов, "
+        "пока запись не придёт.\n"
+        "9. `transition` — `to: in_progress`.\n"
+        "10. `add_entry` — `type: artifact`, `title`, `refs: [START-1#<номер ответа>]`, "
+        "`body` — памятка ниже, с работой из ответа, его же словами, на месте единственной "
+        "подстановки:\n\n"
+        f"{_MEMO_TEMPLATES['ru']}\n\n"
+        "11. `add_summary` — `done`, `remaining`, `blockers`, `next_step`: что памятка "
+        "подшита и ждёшь замечание.\n"
+        "12. `transition` — `to: waiting`, `reason` называет, что ждёшь замечание.\n"
+        '13. В чате скажи дословно: «Оставь любое замечание к задаче формой "Оставить '
+        "замечание\" на её странице — я жду.»\n"
+        "14. `wait_journal` — `types: [remark]`, `after: 0`, `timeout: 60`; повторяй вызов, "
+        "пока запись не придёт.\n"
+        "15. `transition` — `to: in_progress`.\n"
+        "16. `add_entry` — `type: artifact`, `title`, `refs: [START-1#<номер памятки>]`, "
+        "`body` — та же памятка, изменено только то, о чём просило замечание; обе строки "
+        "ходов — дословно.\n"
+        "17. `resolve` — `remark_no` замечания, `outcome: fixed`, что изменилось — в `body`.\n"
+        "18. `close_task` — `verdicts` по каждой проверке и закрывающий `summary`.\n"
+        "19. В чате скажи дословно: «Знакомство пройдено: проект START можно отправить в "
+        "архив с его страницы, а настоящая работа начинается с двух ходов из памятки.»"
     ),
     checks=(
-        "В деле есть вопрос участнику-человеку и его ответ; `artifact` с памяткой, подшитый "
-        "после ответа, называет ответ в `refs`.",
-        "Ответ человека и его замечание подшиты, пока задача стояла в `waiting` с причиной, и "
-        "после каждого задача вернулась в `in_progress`.",
-        "Замечание человека получило исход через `resolve`; при `fixed` исправленная памятка "
-        "подшита `artifact` до разбора.",
-        "Последняя памятка целиком лежит в теле записи `artifact`, на языке человека; она "
-        "называет, что человек делает в Casefile, и работу из его ответа, а в конце дословно "
-        "даёт обе фразы и говорит, что второй ход идёт в новой сессии.",
+        "В деле есть вопрос участнику-человеку и его `answer`.",
+        "И `answer`, и `remark` поданы, пока задача стояла в `waiting` с причиной, и после "
+        "каждого — возврат в `in_progress`.",
+        "У `remark` есть исход через `resolve`; до него подшит исправленный `artifact` с "
+        "памяткой.",
+        "После ответа подшит `artifact` с памяткой, и его `refs` называют запись ответа.",
     ),
 )
 
@@ -326,3 +369,38 @@ TUTORIAL_PROJECTS: dict[TutorialLanguage, TutorialProject] = {
         tasks=(_RU_INTRODUCTION,),
     ),
 }
+
+
+def render_tutorial_project(
+    language: TutorialLanguage, *, board_url: str, human_name: str
+) -> TutorialProject:
+    """Собирает тексты проекта `START` для одного языка, подставив окружение.
+
+    `context` и `output` задач несут `{board_url}` и `{human_name}` буквально; эта функция
+    подставляет в них значения текущей установки строковой заменой — просто и без риска
+    столкнуться с другими фигурными скобками в тексте (именами аргументов инструментов вроде
+    `changes={{"assignee": ...}}`). Сам засев (`TRK-370`) вызывает её со своими значениями;
+    здесь других полей не заполняют — заголовок, описание, `goal`, `constraints` и `checks`
+    подстановок не несут.
+    """
+
+    def fill(text: str) -> str:
+        return text.replace("{board_url}", board_url).replace("{human_name}", human_name)
+
+    project = TUTORIAL_PROJECTS[language]
+    return TutorialProject(
+        title=project.title,
+        description=project.description,
+        tasks=tuple(
+            TutorialTask(
+                title=task.title,
+                description=task.description,
+                goal=task.goal,
+                context=fill(task.context),
+                constraints=task.constraints,
+                output=fill(task.output),
+                checks=task.checks,
+            )
+            for task in project.tasks
+        ),
+    )
