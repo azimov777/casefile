@@ -23,7 +23,9 @@ async function overflow(page: Page): Promise<number> {
 }
 
 for (const lang of ['ru', 'en'] as const) {
-  test(`на 390 px документ не расширяется вбок: ${lang}`, async ({ page }) => {
+  test(`на 390 px документ не расширяется вбок, блок трёх шагов виден: ${lang}`, async ({
+    page,
+  }) => {
     await silenceJournal(page);
     await page.addInitScript(
       ([key, value]) => window.localStorage.setItem(key, value),
@@ -32,10 +34,18 @@ for (const lang of ['ru', 'en'] as const) {
     await page.setViewportSize({ width: 390, height: 844 });
 
     await page.goto('/start');
-    await expect(page.getByRole('main')).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(main).toBeVisible();
     await fontsReady(page);
 
     expect(await overflow(page)).toBeLessThanOrEqual(0);
+
+    // Блок трёх шагов (`TRK-378`): виден сразу под заголовком, три шага по порядку,
+    // внутри содержимого экрана (а не пункт «Начало» боковой панели — тот же случай,
+    // что уронил слияние TRK-377).
+    const steps = main.getByRole('list').first();
+    await expect(steps).toBeVisible();
+    await expect(steps.getByRole('listitem')).toHaveCount(3);
   });
 }
 
