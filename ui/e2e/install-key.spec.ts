@@ -34,6 +34,13 @@ test('открыл адрес — вижу задачи, ничего не вв�
 
   await page.goto('/');
 
+  // Свежая установка отправляет на «Начало» первой (TRK-361, TRK-360#17): человек
+  // всё равно ничего не вводит — формы входа нет, а первый экран учит, а не пуст.
+  // Сам этот путь и его содержимое проверяет `start-onboarding.spec.ts`.
+  await expect(page).toHaveURL(/\/start$/);
+  await expect(page.getByLabel('Токен участника')).toHaveCount(0);
+  await page.goto('/tasks');
+
   await expect(page.getByRole('heading', { name: 'Задачи' })).toBeVisible();
   await expect(side(page).getByText('owner')).toBeVisible();
 
@@ -79,7 +86,9 @@ test('медленная конфигурация не даёт вспышки �
   await page.waitForTimeout(700);
   await expect(page.getByLabel('Токен участника')).toHaveCount(0);
 
-  await expect(page.getByRole('heading', { name: 'Задачи' })).toBeVisible({ timeout: 10_000 });
+  // Первый экран свежей установки — «Начало» (TRK-361), а не список задач: вспышки
+  // входа нет и без неё, а какой экран открывается первым, проверяет отдельный файл.
+  await expect(page.getByRole('heading', { name: 'Начало' })).toBeVisible({ timeout: 10_000 });
 });
 
 test('пустая конфигурация оставляет прежний путь: экран входа и выход на месте', async ({

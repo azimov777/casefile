@@ -7,6 +7,7 @@ export type Section =
   | 'case'
   | 'project'
   | 'questions'
+  | 'start'
   | 'connect'
   | 'access'
   | 'people'
@@ -35,6 +36,10 @@ export interface Place {
 export function readPlace(pathname: string, params: URLSearchParams): Place {
   if (pathname === '/questions') {
     return { section: 'questions', project: null, taskKey: null };
+  }
+
+  if (pathname === '/start') {
+    return { section: 'start', project: null, taskKey: null };
   }
 
   if (pathname === '/connect') {

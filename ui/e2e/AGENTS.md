@@ -8,7 +8,13 @@
 сценарий просто открывает адрес и видит задачи. Сценариям запасного пути (экран входа)
 установка без ключа выдаётся поимённо — `installWithoutKey` в `contour.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts` и `moving.spec.ts`, только читают
+Свежий контур первым делом открывает `/` «Началом» (`start-onboarding.spec.ts`, TRK-361):
+владелец контура заводится с состоянием знакомства `pending`, и адрес `/` ведёт на
+«Начало», пока это состояние не сменилось. Сценарий, которому нужны сразу задачи, а не
+это состояние, открывает `/tasks` напрямую — так делает большинство файлов ниже, кроме
+`install-key.spec.ts` (её первый сценарий идёт через `/` нарочно) и `start-onboarding.spec.ts`.
+
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts` и `start-onboarding.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -46,9 +52,11 @@ invalid_search_query`); ограничение снято (TRK-21).
   получает, форма почты и пароля вместо поля токена, отказ неверному паролю без куки,
   верный — свой токен сеанса по куке `HttpOnly`, перезагрузка без входа, выход гасит сеанс и
   токен на сервере; `axe` на экране входа
-- `install-key.spec.ts` — ключ от установки: открытый адрес сразу показывает задачи (ничего
-  не подменяется — конфигурацию положил контур) без выхода, людей и учётной записи, `/people` и `/account` — «страница не найдена», медленная конфигурация без вспышки входа,
-  пустая конфигурация с прежним путём, отсутствие конфигурации без красной плашки
+- `install-key.spec.ts` — ключ от установки: открытый адрес сразу показывает «Начало» без
+  единого поля (ничего не подменяется — конфигурацию положил контур), а с него — задачи
+  без выхода, людей и учётной записи, `/people` и `/account` — «страница не найдена»,
+  медленная конфигурация без вспышки входа, пустая конфигурация с прежним путём,
+  отсутствие конфигурации без красной плашки
 - `language.spec.ts` — порядок выбора языка четырьмя переходами: три контекста браузера
   (`en-US`, `ru-RU`, `de-DE`) на экране входа и выбор человека из `localStorage` поверх
   русского браузера на настоящих экранах; переключение без перезагрузки, чистые журнал
@@ -234,6 +242,15 @@ invalid_search_query`); ограничение снято (TRK-21).
   ведёт на неё; лента дела показывает перенос; ссылка `ПРЕЖНИЙ-N`, написанная в тексте записи другой,
   не перенесённой задачи, тоже ведёт на перенесённую и переписывает адрес; заводит проекты и задачи
   сам, проект «запись»
+- `start.spec.ts` — экран «Начало» напрямую по `/start` (TRK-361): 390 px без горизонтальной
+  прокрутки на `ru` и `en`, `axe` без единого нарушения; своей учётной записи не трогает,
+  идёт в обеих темах
+- `start-onboarding.spec.ts` — «Начало» на свежем контуре (TRK-361): `/` открывает его, четыре
+  раздела по порядку `TRK-360#14`, фразы «Завести задачи» и «Выполнить задачи» с текстом
+  о новой сессии между ними и без «Знакомство» (учебный проект не засеян, TRK-370);
+  «Пропустить» ведёт на список задач и держится после перезагрузки; «Начало» из панели
+  открывает экран снова; меняет состояние знакомства владельца контура навсегда, проект
+  «запись»
 - `resilience.spec.ts` — отказ запроса объясняется по коду и чинится кнопкой «Повторить»
 - `host-guard.spec.ts` — защита от DNS rebinding (UI-107): чужой `Host` не отдаёт
   `/config.json` и не проксирует `/api/v1/bootstrap`, свои адреса петли (`localhost`,

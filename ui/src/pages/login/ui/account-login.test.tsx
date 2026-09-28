@@ -28,7 +28,11 @@ const ACCOUNT = {
   is_admin: false,
   has_password: true,
   disabled_at: null,
-  onboarding: { status: 'pending', hints: { hidden_all: false, hidden: [] as string[] } },
+  // `skipped`, а не `pending`: alice здесь — уже заведённая учётная запись, которая
+  // входит не в первый раз, а не человек, открывший установку впервые (TRK-361).
+  // `pending` увело бы прямые заходы на `/` (живой сеанс на загрузке) на «Начало» —
+  // этот путь по состоянию знакомства проверяет `app/routes/home-redirect.test.tsx`.
+  onboarding: { status: 'skipped', hints: { hidden_all: true, hidden: [] as string[] } },
   created_by: { kind: 'human', signature: 'owner' },
   created_at: '2026-09-22T10:00:00Z',
   updated_at: '2026-09-22T10:00:00Z',
