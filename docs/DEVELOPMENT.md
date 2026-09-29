@@ -142,6 +142,24 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/installation
 проверку настроек, и процессы `api` и `mcp` не поднимутся: адрес видит всякий держатель
 любого ключа. Решение и отвергнутые варианты — `docs/CONCEPT.md`, 5.1, и дело `TRK-65`.
 
+### Сведения установки: новый выпуск
+
+`GET /api/v1/installation/release` отдаёт версию установки и последний выпуск Casefile —
+по нему интерфейс рисует внизу боковой панели плашку «Доступен выпуск vX.Y.Z» (TRK-416).
+Это единственный поход API во внешний мир: `api.github.com`, последний выпуск репозитория
+`azimov777/casefile`. В GitHub ходит API, а не браузер, и только установка
+(`TRACKER_ENVIRONMENT=production`): дев-контур отвечает `latest_version: null` и
+`update_available: false`, не спрашивая никого. Ответ GitHub процесс API помнит час, сбой —
+десять минут (`app/services/releases.py`); фонового опроса нет — в GitHub идёт первый
+запрос после старта и после истечения срока. Сбой сети ответа не портит: `200` без
+признака обновления и строка `Could not read the latest release` в логе `api`.
+Выключается `TRACKER_RELEASE_CHECK=false` в `.env`.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/installation/release
+# {"data": {"version": "0.7.0", "latest_version": null, "latest_url": null, "update_available": false}}
+```
+
 ### Первичная инициализация
 
 Первый токен взять неоткуда, кроме командной строки: выпустить его через API нельзя, потому
