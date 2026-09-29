@@ -46,8 +46,8 @@ const SCREENS: Screen[] = [
     name: 'доска',
     path: '/tasks?view=board',
     key: HINT_KEYS.board,
-    ru: 'Те же задачи одного проекта по шести столбцам статусов. Карточки двигают агенты; перетащить карточку нельзя. В столбце waiting стоят задачи, где следующий ход за вами или за внешним событием.',
-    en: 'The same tasks of one project in six status columns. Agents move the cards; a card cannot be dragged. The waiting column holds tasks where the next move is yours or depends on an outside event.',
+    ru: 'Те же задачи по шести столбцам статусов — одного проекта или всех, смотря что выбрано. Карточки двигают агенты; перетащить карточку нельзя. В столбце waiting стоят задачи, где следующий ход за вами или за внешним событием.',
+    en: 'The same tasks in six status columns — of one project or of all, depending on what is selected. Agents move the cards; a card cannot be dragged. The waiting column holds tasks where the next move is yours or depends on an outside event.',
   },
   {
     name: 'карточка задачи',
