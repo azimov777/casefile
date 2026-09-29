@@ -150,21 +150,14 @@ export function ConnectPage() {
         <Step number={3} title={t('tellAgent.title')}>
           <div className="flex min-w-0 flex-col gap-6">
             <Phrase
-              title={tStart('phrases.tutorial.title')}
-              lead={tStart('phrases.tutorial.lead')}
-              label={tStart('phrases.tutorial.label')}
-              caption={tStart('phrases.tutorial.caption')}
-              text={tStart('phrases.tutorial.text')}
-            />
-            <Phrase
               title={tStart('phrases.file.title')}
               lead={tStart('phrases.file.lead')}
               label={tStart('phrases.file.label')}
               caption={tStart('phrases.file.caption')}
               text={tStart('phrases.file.text')}
             />
-            {/* Между второй и третьей фразой (TRK-360#40, как на «Начало»): почему это
-                новая сессия — не вступление третьей фразы, а то, что разделяет их обе. */}
+            {/* Между двумя фразами (TRK-360#40, как на «Начало»): почему это новая
+                сессия — не вступление второй фразы, а то, что разделяет их обе. */}
             <Text>{tStart('sections.tellAgent.newSession')}</Text>
             <Phrase
               title={tStart('phrases.execute.title')}

@@ -71,7 +71,7 @@ test('«Начало» на свежем контуре объясняет сп�
     expect(await page.locator('main h2').allTextContents()).toEqual(SECTION_HEADINGS);
 
     // Фразы «Завести задачи» и «Выполнить задачи», а между ними — про новую сессию
-    // агента. Фразы «Знакомство» здесь нет: учебный проект `START` не засеян (TRK-370).
+    // агента. Фразы «Знакомство» нет: учебного проекта в продукте больше нет (TRK-387).
     await expect(page.getByRole('heading', { name: 'Знакомство' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Завести задачи' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Выполнить задачи' })).toBeVisible();

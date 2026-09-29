@@ -11,7 +11,7 @@ import { useCreateProject } from '../model/use-project-actions';
 import { DescriptionField } from './description-field';
 
 /** Отказы, чья причина — сам набранный ключ: их текст стоит у поля ключа. */
-const KEY_REFUSALS: readonly string[] = ['project_key_taken', 'project_key_reserved'];
+const KEY_REFUSALS: readonly string[] = ['project_key_taken'];
 
 /**
  * Кнопка «Новый проект» и её окно: ключ, название, описание (`UI-175`, решение 8
@@ -74,8 +74,8 @@ function CreateProjectForm({
   const titleId = useId();
   const { t } = useTranslation('project');
 
-  // Ключ занят или закреплён за учебным проектом (`project_key_reserved`, TRK-384):
-  // причина — про само поле, и стоит она у поля, а не в общем отказе под кнопками.
+  // Ключ занят (`project_key_taken`): причина — про само поле, и стоит она у поля, а не
+  // в общем отказе под кнопками.
   const keyRefused =
     create.error instanceof ApiError && KEY_REFUSALS.includes(create.error.code)
       ? errorMessage(create.error)

@@ -18,12 +18,8 @@ still use [`backup-restore.md`](backup-restore.md); that procedure is unchanged.
   (`403 admin_required`): the archive carries every person's password hash and every
   token's hash.
 - **A fresh installation on the new machine**, made with the one-line installer from the
-  [README](../README.md). It must have **no project of its own**: the archive replaces its
-  data whole, and two trackers are never merged (`409 installation_not_empty`). A fresh
-  installation's own tutorial project `START` — the one it seeds itself on first boot —
-  does not count and needs no clearing first: the import replaces it along with everything
-  else. A project a person or an agent made counts as before, even one keyed `START` too
-  (`TRK-360#15`).
+  [README](../README.md). It must be **empty — no projects**: the archive replaces its data
+  whole, and two trackers are never merged (`409 installation_not_empty`).
 - **The same or a newer Casefile on the new machine** (see [Versions](#versions)).
 
 ## 1. Export from the old machine
@@ -56,28 +52,6 @@ directory) or point your agents at the new one before they carry on.
 
 Keep the file private. It holds no secret in plain text, but it does hold password and
 token hashes, and your whole tracker.
-
-### The tutorial project `START` stays behind
-
-The archive leaves out the tutorial project `START`. It is recognized by its key, and
-the new installation seeds its own. Everything that points at it stays behind with it:
-
-- its tasks and their case files, and its own case file and attributes;
-- links between its tasks and tasks of your other projects. A task whose parent was in
-  `START` arrives with no parent. A task a `START` task blocked arrives unblocked;
-- a task you moved into `START`.
-
-A task you moved out of `START` into a project of your own comes across. Its previous key
-`START-N` does not: the new installation hands those numbers out again. Entries that
-name a `START` task (`START-1#3` in `refs`) come across unchanged and lead nowhere after
-the import.
-
-**A project of your own keyed `START`, made before 0.6.0, stays behind too.** Casefile
-tells it from the tutorial by its key alone. After 0.6.0 nobody can make a new project
-with that key (`409 project_key_reserved`). If you have such a project, move its tasks
-into another project before you export.
-
-An archive taken by 0.6.0 still carries `START`, and the import takes it as before.
 
 ## 2. Import on the new machine
 
@@ -120,8 +94,7 @@ installation is left exactly as it was.
   work here — a machine you no longer trust — revoke it in **Access** on the board (or
   `DELETE /api/v1/tokens/{token_id}`). Nothing is revoked for you.
 - **Case files are the same case files**: the same keys, the same entries, the same
-  authors and times — except what the tutorial project `START` held (see
-  [above](#the-tutorial-project-start-stays-behind)).
+  authors and times.
 
 ## Versions
 
@@ -138,7 +111,7 @@ installation is left exactly as it was.
 | Answer | Why | What to do |
 |---|---|---|
 | `403 admin_required` | The key is not an administrator's | Use the board's key, or sign in as an administrator |
-| `409 installation_not_empty` | The new installation already has a project of its own (its seeded tutorial one does not count) | Import into a fresh installation |
+| `409 installation_not_empty` | The new installation already has projects | Import into a fresh installation |
 | `409 archive_revision_unknown` | The archive comes from a newer Casefile | Update this installation, then import |
 | `422 archive_format_unsupported` | The file is not a Casefile archive | Post the file the export saved, unedited |
 | `422 archive_invalid` | The archive contradicts itself or its schema; `details.reason` says how | Export again; do not edit the file |
@@ -152,5 +125,4 @@ Behind a reverse proxy of your own, its own limit on request size applies too.
 - **No merging.** The new installation must be empty; there is no way to add one
   tracker's tasks to another's.
 - **No moving back to an older version** (see [Versions](#versions)).
-- **No part of an installation.** The archive is everything but the tutorial project
-  `START`; there is no per-project export.
+- **No part of an installation.** The archive is everything; there is no per-project export.

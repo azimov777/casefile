@@ -157,7 +157,7 @@ describe('проход по экранам: какие шаги есть', () =>
     expect(patches).toEqual([]);
   });
 
-  it('без START, но с другим проектом и задачей — восемь шагов с их ключами', async () => {
+  it('проект с задачей — восемь шагов с ключами первого проекта', async () => {
     installation({ projects: [{ key: 'OPS' }, { key: 'DEMO' }], tasks: { OPS: 'OPS-3' } });
     renderApp('/start');
     await userEvent.click(await screen.findByRole('link', { name: 'Walk through the screens' }));
@@ -182,7 +182,7 @@ describe('проход по экранам: какие шаги есть', () =>
     expect(patches).toEqual([]);
   });
 
-  it('START берётся раньше первого проекта, а архивный START не берётся', async () => {
+  it('проект START — обычный: проход идёт по первому активному, а не по START', async () => {
     installation({
       projects: [{ key: 'DEMO' }, { key: 'START' }],
       tasks: { START: 'START-1', DEMO: 'DEMO-1' },
@@ -190,10 +190,10 @@ describe('проход по экранам: какие шаги есть', () =>
     renderApp('/start');
     await userEvent.click(await screen.findByRole('link', { name: 'Walk through the screens' }));
     await counter(1, 8);
-    expect(address.current).toBe('/tasks?project=START&walk=1');
+    expect(address.current).toBe('/tasks?project=DEMO&walk=1');
   });
 
-  it('архивный START пропущен: проход идёт по первому активному проекту', async () => {
+  it('архивный проект пропущен: проход идёт по первому активному проекту', async () => {
     installation({
       projects: [{ key: 'START', archived: true }, { key: 'DEMO' }],
       tasks: { DEMO: 'DEMO-1' },

@@ -147,15 +147,6 @@ services:
       - ./.secrets:/app/.secrets
     profiles: ['tools']
 
-  # Учебный проект `START` с задачей для агента (`TRK-370`). Зовётся до `demo`
-  # (`e2e/global-setup.ts`): условие засева — установка без единого проекта
-  # (`app/services/tutorial.py`), а `demo` заводит свой. Так контур сквозных тестов
-  # поднимается с учебным проектом, как и продакшен-контур на первом подъёме.
-  tutorial:
-    <<: *backend
-    command: python -m app.cli tutorial
-    profiles: ['tools']
-
   # Демо-данные: очередь DEMO, задачи во всех статусах, открытый вопрос владельцу.
   demo:
     <<: *backend

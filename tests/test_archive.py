@@ -20,37 +20,25 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import archive as store
-from app.db.models.attribute import ProjectAttribute
-from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.link import Link
 from app.db.models.participant import Participant
-from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.models.token import Token
-from app.db.repositories import AccountRepository, ProjectRepository
+from app.db.repositories import AccountRepository
 from app.db.session import transaction
-from app.domain.archive import (
-    EXCLUDED_TABLES,
-    Archive,
-    ArchiveFormat,
-    ArchiveTable,
-    copy_text,
-    without_excluded_keys,
-)
-from app.domain.authors import participant_author
+from app.domain.archive import EXCLUDED_TABLES, Archive, ArchiveFormat, ArchiveTable, copy_text
 from app.domain.errors import ArchiveInvalidError
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
 from app.domain.tokens import TokenScope
-from app.domain.tutorial import TUTORIAL_PROJECT_KEY
 from app.services import archive as archive_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
 from app.services.setup import ensure_agent_token, ensure_local_token
-from app.services.tutorial import create_tutorial_project, seed_tutorial_on_boot
+from conftest import Connect, call
 
 ARCHIVE = "/api/v1/installation/archive"
 PASSWORD = "correct horse battery staple"
@@ -273,56 +261,6 @@ async def test_a_fresh_installation_takes_the_archive_whole(
     assert left == 0
 
 
-async def test_a_tutorial_project_worked_on_by_agent_and_human_does_not_block_the_import(
-    auth_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    """Обзорная проверка 2: пройденный учебный `START` не мешает приёму (TRK-371).
-
-    Проект учебного засева (`app/services/tutorial.py`, TRK-370) заведён автором
-    `tracker`, и в счёт пустоты приёмника не идёт — был в его задачах кто-то или нет
-    (`TRK-360#15`). После приёма установка держит только проекты архива: свой `START`
-    приём заменяет их данными, как и остальное.
-    """
-    await populate(auth_client)
-    archive = (await auth_client.get(ARCHIVE)).json()["data"]
-
-    await wipe(db_session)
-    target_ui, target_agent = await fresh_installation(db_session)
-
-    seed = await seed_tutorial_on_boot(db_session)
-    assert seed.created
-    assert seed.project is not None
-    assert seed.project.key == TUTORIAL_PROJECT_KEY
-    task_key = seed.tasks[0].key
-
-    human = await auth_client.post(
-        f"/api/v1/tasks/{task_key}/entries",
-        json={"type": "note", "title": "Человек ответил агенту"},
-        headers=bearer(target_ui),
-    )
-    assert human.status_code == 201, human.text
-    agent = await auth_client.post(
-        f"/api/v1/tasks/{task_key}/entries",
-        json={"type": "note", "title": "Агент прошёл знакомство"},
-        headers=bearer(target_agent),
-    )
-    assert agent.status_code == 201, agent.text
-
-    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=bearer(target_ui))
-
-    assert response.status_code == 200, response.text
-    rows = {item["name"]: item["rows"] for item in response.json()["data"]["tables"]}
-    assert rows["projects"] == 1
-
-    projects = await auth_client.get("/api/v1/projects", headers=bearer(target_ui))
-    assert {row["key"] for row in projects.json()["data"]} == {"TRK"}
-    gone = await auth_client.get(
-        f"/api/v1/projects/{TUTORIAL_PROJECT_KEY}", headers=bearer(target_ui)
-    )
-    assert gone.status_code == 404, gone.text
-    assert gone.json()["error"]["code"] == "project_not_found"
-
-
 async def test_a_moved_task_comes_in_with_its_previous_keys(
     auth_client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -378,32 +316,74 @@ async def test_an_installation_with_projects_refuses_the_archive(
     assert await count(db_session, Task) == 2
 
 
-async def test_an_installation_with_a_human_made_start_project_refuses_the_archive(
-    auth_client: AsyncClient, db_session: AsyncSession
+async def test_a_start_project_travels_like_any_other(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    mcp_session: Connect,
+    main_secret: str,
 ) -> None:
-    """Обзорная проверка 3: ключ `START`, заведённый человеком, блокирует как любой другой.
+    """Ключ `START` — обычный ключ, и проект с ним едет в архиве, как любой (TRK-387).
 
-    Пустоту приёмника считает автор строки, а не её ключ (TRK-371): тот же ключ у
-    учебного засева (`app/services/tutorial.py`, TRK-370) в счёт не идёт, а у проекта
-    человека или агента держит установку непустой — вместо совпавшего ключа мог быть
-    любой другой (`TRK-360#15`).
+    Учебного проекта в продукте больше нет: `create_project` заводит `START` на установке
+    без него, выгрузка везёт `START` вместе с `WORK`, пустая установка принимает оба.
     """
-    # Завести `START` своей рукой теперь нельзя (`project_key_reserved`, TRK-384): такой
-    # проект мог остаться только с версии до 0.6.0 — он и кладётся строкой, как тогда.
-    await ProjectRepository(db_session).add(
-        Project(
-            key=TUTORIAL_PROJECT_KEY,
-            title="Свой проект START",
-            **created_by_columns(participant_author("human", "owner")),
+    async with mcp_session(main_secret) as session:
+        made = await call(session, "create_project", key="START", title="Свой старт")
+    assert made["key"] == "START"
+    work = await auth_client.post("/api/v1/projects", json={"key": "WORK", "title": "Работа"})
+    assert work.status_code == 201, work.text
+    for key in ("START", "WORK"):
+        created = await auth_client.post(
+            "/api/v1/tasks", json={"project": key, "title": f"Задача {key}", "description": "d"}
         )
-    )
+        assert created.status_code == 201, created.text
     archive = (await auth_client.get(ARCHIVE)).json()["data"]
+    projects = table(archive, "projects")
+    key_column = projects["columns"].index("key")
+    assert sorted(row[key_column] for row in projects["rows"]) == ["START", "WORK"]
+    assert len(table(archive, "tasks")["rows"]) == 2
 
-    response = await auth_client.post(ARCHIVE, json={"data": archive})
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    ui = bearer(target_ui)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=ui)
 
-    assert response.status_code == 409
+    assert response.status_code == 200, response.text
+    listed = await auth_client.get("/api/v1/projects", headers=ui)
+    assert sorted(row["key"] for row in listed.json()["data"]) == ["START", "WORK"]
+    for key in ("START-1", "WORK-1"):
+        assert (await auth_client.get(f"/api/v1/tasks/{key}", headers=ui)).status_code == 200
+
+
+@pytest.mark.parametrize("author", ["tracker", "human"])
+async def test_any_project_on_the_target_refuses_the_archive(
+    auth_client: AsyncClient, db_session: AsyncSession, author: str
+) -> None:
+    """Приём — только на установку без единого проекта, чей бы он ни был (TRK-387).
+
+    `START`, заведённый засевом v0.6.0 (автор `tracker`), держит установку непустой так же,
+    как проект человека: исключения для него больше нет.
+    """
+    await populate(auth_client)
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    if author == "tracker":
+        await projects_service.create_project(
+            db_session, actor=TRACKER_ACTOR, key="START", title="Старт"
+        )
+    else:
+        made = await auth_client.post(
+            "/api/v1/projects", json={"key": "START", "title": "Старт"}, headers=bearer(target_ui)
+        )
+        assert made.status_code == 201, made.text
+
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=bearer(target_ui))
+
+    assert response.status_code == 409, response.text
     assert response.json()["error"]["code"] == "installation_not_empty"
     assert response.json()["error"]["details"] == {"projects": 1}
+    assert await count(db_session, Task) == 0
 
 
 async def test_an_archive_from_a_newer_casefile_is_refused(
@@ -620,234 +600,3 @@ async def test_a_value_postgres_rejects_leaves_the_installation_untouched(
 
 def test_copy_text_escapes_what_the_format_reads_as_markup() -> None:
     assert copy_text([["a\tb", None, "c\nd\\e\rf", ""]]) == b"a\\tb\t\\N\tc\\nd\\\\e\\rf\t\n"
-
-
-# --- Учебный проект START не едет (TRK-384) ------------------------------------------
-
-#: Ревизия схемы выпуска v0.6.0 — последнего, чья выгрузка везла `START`. Литерал, а не
-#: head: тест держит архивы, которые уже лежат у людей.
-V0_6_REVISION = "9a4d7c2f5e81"
-
-
-async def ok(response: Any, status: int = 201) -> Any:
-    assert response.status_code == status, response.text
-    return response.json()["data"]
-
-
-async def start_and_work(client: AsyncClient, session: AsyncSession) -> None:
-    """Установка с учебным `START` и проектом `WORK`, связанными всеми способами схемы.
-
-    `START` заводит установка (автор `tracker`), как засев; его задачи — REST, как агент.
-    Связи через границу проектов — все виды: родитель в `START` у задачи `WORK`,
-    блокировка и родство; задача, унесённая из `START` в `WORK` (прежний ключ
-    `START-1`), и задача, унесённая из `WORK` в `START`; ссылки `refs` из дела `WORK`
-    на задачу и дело `START`; атрибут и дело самого `START`.
-    """
-    await projects_service.create_project(
-        session, actor=TRACKER_ACTOR, key=TUTORIAL_PROJECT_KEY, title="Знакомство"
-    )
-    await ok(await client.post("/api/v1/projects", json={"key": "WORK", "title": "Работа"}))
-    for project, title in (
-        ("START", "Уйдёт в WORK"),
-        ("START", "Родитель"),
-        ("START", "Блокер"),
-        ("WORK", "Своя"),
-        ("WORK", "Уйдёт в START"),
-    ):
-        await ok(
-            await client.post(
-                "/api/v1/tasks", json={"project": project, "title": title, "description": "."}
-            )
-        )
-    for key, kind, other in (
-        ("START-2", "parent", "WORK-1"),
-        ("START-3", "blocks", "WORK-1"),
-        ("WORK-1", "relates", "START-2"),
-    ):
-        await ok(
-            await client.post(f"/api/v1/tasks/{key}/links", json={"kind": kind, "other": other})
-        )
-    await ok(
-        await client.post(
-            "/api/v1/tasks/START-2/entries", json={"type": "decision", "title": "Учебное"}
-        )
-    )
-    await ok(
-        await client.post(
-            f"/api/v1/projects/{TUTORIAL_PROJECT_KEY}/entries",
-            json={"type": "note", "title": "Дело учебного проекта"},
-        )
-    )
-    await ok(
-        await client.put(
-            f"/api/v1/projects/{TUTORIAL_PROJECT_KEY}/attributes/site", json={"value": "x"}
-        ),
-        200,
-    )
-    await ok(
-        await client.post(
-            "/api/v1/tasks/WORK-1/entries",
-            json={
-                "type": "finding",
-                "title": "Ссылка на учебное",
-                "refs": ["START-2", "START-2#1", "START#1"],
-            },
-        )
-    )
-    await ok(
-        await client.post(
-            "/api/v1/projects/WORK/entries", json={"type": "note", "title": "Дело WORK"}
-        )
-    )
-    await ok(
-        await client.post("/api/v1/tasks/START-1/move", json={"project": "WORK", "reason": "Моя"}),
-        200,
-    )
-    await ok(
-        await client.post("/api/v1/tasks/WORK-2/move", json={"project": "START", "reason": "Туда"}),
-        200,
-    )
-
-
-async def work_state(client: AsyncClient, headers: dict[str, str]) -> dict[str, Any]:
-    """Всё, что видно в `WORK`: задачи с прежними ключами и дела задач и проекта."""
-    tasks = await client.get("/api/v1/tasks", params={"query": "project: WORK"}, headers=headers)
-    keys = sorted(row["key"] for row in tasks.json()["data"])
-    state: dict[str, Any] = {"keys": keys}
-    for key in keys:
-        card = (await client.get(f"/api/v1/tasks/{key}", headers=headers)).json()["data"]
-        state[key] = card["task"]["previous_keys"]
-        entries = await client.get(f"/api/v1/tasks/{key}/entries", headers=headers)
-        state[f"{key}#entries"] = entries.json()["data"]
-    project_entries = await client.get("/api/v1/projects/WORK/entries", headers=headers)
-    state["WORK#entries"] = project_entries.json()["data"]
-    return state
-
-
-async def test_the_export_leaves_the_tutorial_project_behind_with_everything_it_holds(
-    auth_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    """Обзорная проверка 2: в архиве нет ни одной строки `START`, а приём проходит.
-
-    «Ни одной строки» проверяется двумя способами: по колонкам ссылок (проект, задача,
-    обе стороны связи, владелец записи и атрибута) и сплошным поиском идентификатора
-    любой строки `START` в любом значении любой таблицы архива.
-    """
-    await start_and_work(auth_client, db_session)
-    start = await ProjectRepository(db_session).get_by_key(TUTORIAL_PROJECT_KEY)
-    assert start is not None
-    start_tasks = {
-        str(task_id)
-        for task_id in await db_session.scalars(select(Task.id).where(Task.project_id == start.id))
-    }
-    assert len(start_tasks) == 3  # START-2, START-3 и пришедшая из WORK
-    start_rows = {str(start.id)} | start_tasks
-    for model in (Entry, Link, ProjectAttribute):
-        start_rows |= {
-            str(row_id)
-            for row_id in await db_session.scalars(
-                select(model.id).where(  # type: ignore[attr-defined]
-                    *(
-                        [Entry.task_id.in_(start_tasks) | (Entry.project_id == start.id)]
-                        if model is Entry
-                        else [Link.source_id.in_(start_tasks) | Link.target_id.in_(start_tasks)]
-                        if model is Link
-                        else [ProjectAttribute.project_id == start.id]
-                    )
-                )
-            )
-        }
-    before = await work_state(auth_client, {})
-    assert before["keys"] == ["WORK-1", "WORK-3"]
-    assert before["WORK-3"] == ["START-1"]
-
-    archive = (await auth_client.get(ARCHIVE)).json()["data"]
-
-    projects = table(archive, "projects")
-    assert [row[projects["columns"].index("key")] for row in projects["rows"]] == ["WORK"]
-    for item in archive["tables"]:
-        for row in item["rows"]:
-            leaked = [value for value in row if value is not None and value in start_rows]
-            assert not leaked, f"{item['name']}: строка START в архиве: {row}"
-            joined = "\t".join(value for value in row if value is not None)
-            assert not any(row_id in joined for row_id in start_rows), (
-                f"{item['name']}: ссылка на строку START в архиве: {row}"
-            )
-    tasks = table(archive, "tasks")
-    keys_at = tasks["columns"].index("key")
-    previous_at = tasks["columns"].index("previous_keys")
-    moved_out = next(row for row in tasks["rows"] if row[keys_at] == "WORK-3")
-    assert moved_out[previous_at] == "[]"
-
-    await wipe(db_session)
-    target_ui, _ = await fresh_installation(db_session)
-    ui = bearer(target_ui)
-    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=ui)
-
-    assert response.status_code == 200, response.text
-    listed = await auth_client.get(
-        "/api/v1/projects", params={"include_archived": True}, headers=ui
-    )
-    assert [row["key"] for row in listed.json()["data"]] == ["WORK"]
-    assert await count(db_session, Task) == 2
-    assert await count(db_session, Link) == 0
-    assert await count(db_session, ProjectAttribute) == 0
-    after = await work_state(auth_client, ui)
-    # Задачи и дела `WORK` — те же; у унесённой из `START` нет прежнего `START-1`.
-    assert after == {**before, "WORK-3": []}
-    card = (await auth_client.get("/api/v1/tasks/WORK-1", headers=ui)).json()["data"]
-    assert card["parent"] is None and card["links"] == []
-    assert card["features"]["blocked"] is False
-
-    # Засев на приёмнике выдаёт `START-1` учебной задаче, а не задаче `WORK`.
-    seed = await create_tutorial_project(db_session)
-    assert seed.created
-    tutorial = await auth_client.get("/api/v1/tasks/START-1", headers=ui)
-    assert tutorial.status_code == 200, tutorial.text
-    assert tutorial.json()["data"]["task"]["key"] == "START-1"
-
-
-async def test_an_archive_of_v0_6_with_the_tutorial_project_is_taken_as_before(
-    auth_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    """Обзорная проверка 3: архив v0.6.0 везёт `START` — приём его не отсекает."""
-    await start_and_work(auth_client, db_session)
-    before = {
-        "projects": await count(db_session, Project),
-        "tasks": await count(db_session, Task),
-        "links": await count(db_session, Link),
-        "entries": await count(db_session, Entry),
-    }
-    archive = await archive_at(auth_client, db_session, V0_6_REVISION)
-    assert TUTORIAL_PROJECT_KEY in {
-        row[table(archive, "projects")["columns"].index("key")]
-        for row in table(archive, "projects")["rows"]
-    }
-
-    await wipe(db_session)
-    target_ui, _ = await fresh_installation(db_session)
-    ui = bearer(target_ui)
-    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=ui)
-
-    assert response.status_code == 200, response.text
-    assert response.json()["data"]["schema_revision"] == V0_6_REVISION
-    assert {
-        "projects": await count(db_session, Project),
-        "tasks": await count(db_session, Task),
-        "links": await count(db_session, Link),
-        "entries": await count(db_session, Entry),
-    } == before
-    start = await auth_client.get("/api/v1/tasks/START-2", headers=ui)
-    assert start.status_code == 200, start.text
-    moved = await auth_client.get("/api/v1/tasks/WORK-3", headers=ui)
-    assert moved.json()["data"]["task"]["previous_keys"] == ["START-1"]
-
-
-def test_only_keys_of_excluded_projects_leave_the_previous_keys() -> None:
-    assert without_excluded_keys(None) is None
-    assert without_excluded_keys("[]") == "[]"
-    # Без ключей `START` значение возвращается как было — байт в байт.
-    assert without_excluded_keys('["TRK-1", "OPS-2"]') == '["TRK-1", "OPS-2"]'
-    assert without_excluded_keys('["TRK-1", "START-4", "OPS-2"]') == '["TRK-1", "OPS-2"]'
-    # Проект, чей ключ лишь начинается со `START`, — другой проект.
-    assert without_excluded_keys('["STARTUP-1", "START-1"]') == '["STARTUP-1"]'

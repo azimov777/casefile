@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { questionsQueryOptions } from '@/entities/entry';
 import { bootstrapQueryOptions } from '@/entities/session';
-import { CLOSED_STATUSES, taskPackageQueryOptions, tasksQueryOptions } from '@/entities/task';
+import { tasksQueryOptions } from '@/entities/task';
 import { isRevoked, tokensQueryOptions } from '@/entities/token';
 import { participantsQueryOptions } from '@/features/manage-access';
 import {
@@ -21,13 +21,6 @@ import { Badge, Button, CopyBlock } from '@/shared/ui';
 const TELL_AGENT_ANCHOR = 'tell-agent';
 
 /**
- * Ключ учебной задачи: проект у неё один, `START`, и заводит его установка при первом
- * подъёме (`TRK-370`) — отдельной задачей, которая ещё не слита. На контуре без него
- * запрос отвечает `404 task_not_found`, и это обычный случай, а не отказ (ниже).
- */
-const TUTORIAL_TASK_KEY = 'START-1';
-
-/**
  * Экран «Начало» (`TRK-361`): первый ответ новому человеку на четыре места, где он
  * застревает без единого объяснения (решение владельца `TRK-360#14`) — зачем это,
  * откуда берутся задачи, что сказать агенту, что делать самому. Экран стоит первым,
@@ -41,26 +34,12 @@ const TUTORIAL_TASK_KEY = 'START-1';
  */
 export function StartPage() {
   const bootstrap = useQuery(bootstrapQueryOptions());
-  const tutorial = useQuery(taskPackageQueryOptions(TUTORIAL_TASK_KEY));
   const update = useUpdateOnboarding();
   const navigate = useNavigate();
   const { t } = useTranslation('start');
   const { t: brick } = useTranslation('ui');
 
   const account = bootstrap.data?.account ?? null;
-
-  /*
-   * Блок «Знакомство» молчит, когда его не за что показывать: нет проекта `START`, он
-   * в архиве или задача уже закрыта — тем же приёмом, что скрывает от не-администратора
-   * пункт панели (`app-side.tsx`, `isAdmin`). Это второстепенная подсказка, а не то,
-   * ради чего открыт экран: ни спиннера на время запроса, ни отказа при `404` — только
-   * появление, когда факты того стоят (constraints задачи, `pnpm e2e` идёт без учебного
-   * проекта и ни разу его не видит).
-   */
-  const tutorialAvailable =
-    tutorial.data !== undefined &&
-    tutorial.data.task.project.archived_at === null &&
-    !(CLOSED_STATUSES as readonly string[]).includes(tutorial.data.task.status);
 
   /*
    * Три шага (`TRK-378`): отметка «сделано» — только по ответу бэкенда, в браузере
@@ -165,15 +144,6 @@ export function StartPage() {
         <Text>{t('sections.tellAgent.intro')}</Text>
 
         <div className="flex min-w-0 flex-col gap-6">
-          {tutorialAvailable ? (
-            <Phrase
-              title={t('phrases.tutorial.title')}
-              lead={t('phrases.tutorial.lead')}
-              label={t('phrases.tutorial.label')}
-              caption={t('phrases.tutorial.caption')}
-              text={t('phrases.tutorial.text')}
-            />
-          ) : null}
           <Phrase
             title={t('phrases.file.title')}
             lead={t('phrases.file.lead')}
@@ -181,9 +151,9 @@ export function StartPage() {
             caption={t('phrases.file.caption')}
             text={t('phrases.file.text')}
           />
-          {/* Между второй и третьей фразой (TRK-360#40): новая сессия теряет весь
-              контекст, и об этом здесь стоит отдельный абзац — не вступление третьей
-              фразы, а то, что разделяет их обе, дословно между «Завести задачи» и
+          {/* Между двумя фразами (TRK-360#40): новая сессия теряет весь контекст, и
+              об этом здесь стоит отдельный абзац — не вступление второй фразы, а то,
+              что разделяет их обе, дословно между «Завести задачи» и
               «Выполнить задачи». */}
           <Text>{t('sections.tellAgent.newSession')}</Text>
           <Phrase

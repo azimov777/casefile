@@ -17,14 +17,12 @@ from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.pagination import Page
 from app.db.repositories import ProjectRepository
-from app.domain.authors import AuthorKind
 from app.domain.errors import (
     ProjectKeyTakenError,
     ProjectNotArchivedError,
     ProjectNotFoundError,
 )
 from app.domain.projects import (
-    ensure_key_not_reserved,
     normalize_project_key,
     require_project_reason,
     validate_project_description,
@@ -81,10 +79,6 @@ async def create_project(
 ) -> Project:
     """Заводит проект. Ключ канонизируется и дальше неизменяем.
 
-    Ключ учебного проекта (`START`) заводит только сама установка — засев с автором
-    `tracker`; остальным он отвечает `project_key_reserved` (`ensure_key_not_reserved`,
-    `TRK-384`), даже когда проекта `START` в установке нет.
-
     Первая страница дела нового проекта — `created`, в той же транзакции.
 
     Очередь изменений (`lock_changes`) здесь берёт подшивка `created`, то есть **после**
@@ -98,7 +92,6 @@ async def create_project(
     ensure_scope(actor, TokenScope.MAIN, action="project.create")
 
     canonical = validate_project_key(key)
-    ensure_key_not_reserved(canonical, by_installation=actor.author.kind is AuthorKind.TRACKER)
     description = validate_project_description(description)
     repository = ProjectRepository(session)
     if await repository.get_by_key(canonical) is not None:

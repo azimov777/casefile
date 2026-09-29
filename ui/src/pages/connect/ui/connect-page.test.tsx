@@ -220,19 +220,17 @@ describe('экран «Подключить агента»', () => {
     expect(screen.getByText(say.connect('discipline'))).toBeInTheDocument();
   });
 
-  it('третий шаг показывает три фразы для агента, копирует их дословно и ссылкой ведёт на /start (TRK-367)', async () => {
+  it('третий шаг показывает две фразы для агента, копирует их дословно и ссылкой ведёт на /start (TRK-367)', async () => {
     installation();
     const user = userEvent.setup();
     const { container } = renderApp('/connect');
     await snippetsShown();
 
-    await screen.findByRole('heading', { name: say.start('phrases.tutorial.title') });
+    await screen.findByRole('heading', { name: say.start('phrases.file.title') });
+    // Фразы учебной задачи больше нет (TRK-387): на третьем шаге только две фразы.
+    expect(screen.queryByText(/START-1/)).not.toBeInTheDocument();
 
-    const phrases: { key: 'tutorial' | 'file' | 'execute' }[] = [
-      { key: 'tutorial' },
-      { key: 'file' },
-      { key: 'execute' },
-    ];
+    const phrases: { key: 'file' | 'execute' }[] = [{ key: 'file' }, { key: 'execute' }];
     for (const { key } of phrases) {
       const label = say.start(`phrases.${key}.label`);
       await user.click(screen.getByRole('button', { name: say.ui('copyBlock.label', { label }) }));
