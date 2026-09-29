@@ -3,9 +3,6 @@ import { HINT_KEYS, type HintKey } from './hint-keys';
 /** Имя параметра адреса, в котором держится номер шага прохода: `/questions?walk=6` (TRK-364). */
 export const WALK_PARAM = 'walk';
 
-/** Проект прохода: `START`, если он есть среди активных, иначе первый (TRK-364). */
-export const WALK_PROJECT_KEY = 'START';
-
 /** Что нужно шагу, чтобы он был: ничего, проект или задача проекта. */
 type WalkNeed = 'none' | 'project' | 'task';
 

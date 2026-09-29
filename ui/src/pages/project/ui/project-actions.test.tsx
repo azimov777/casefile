@@ -201,14 +201,11 @@ describe('создание проекта', () => {
     );
   });
 
-  it('ключ START: причина отказа стоит у поля ключа на обоих языках, поле помечено', async () => {
+  it('занятый ключ: причина отказа стоит у поля ключа на обоих языках, поле помечено', async () => {
     scope('main');
     server.use(
       http.post(`${API}/api/v1/projects`, () =>
-        failure('project_key_reserved', 409, 'Project key is reserved for the tutorial project', {
-          key: 'START',
-          reserved_for: 'tutorial',
-        }),
+        failure('project_key_taken', 409, 'Project key is already taken'),
       ),
     );
 
@@ -219,19 +216,19 @@ describe('создание проекта', () => {
       await user.click(await screen.findByRole('button', { name: say.project('create.open') }));
       const dialog = await screen.findByRole('dialog', { name: say.project('create.title') });
       const key = within(dialog).getByLabelText(say.project('create.keyLabel'));
-      await user.type(key, 'START');
+      await user.type(key, 'DEMO');
       await user.type(within(dialog).getByLabelText(say.project('create.titleLabel')), 'Свой');
       await user.click(within(dialog).getByRole('button', { name: say.project('create.submit') }));
 
       const reason = await within(dialog).findByRole('alert');
-      expect(reason).toHaveTextContent(say.errors('project_key_reserved', { lng: language }));
+      expect(reason).toHaveTextContent(say.errors('project_key_taken', { lng: language }));
       // У поля: подпись поля ссылается на причину, а поле помечено неверным.
       await waitFor(() => expect(key).toHaveAttribute('aria-invalid', 'true'));
       expect(key.getAttribute('aria-describedby')).toContain(reason.id);
       unmount();
     }
-    expect(say.errors('project_key_reserved', { lng: 'en' })).not.toBe(
-      say.errors('project_key_reserved', { lng: 'ru' }),
+    expect(say.errors('project_key_taken', { lng: 'en' })).not.toBe(
+      say.errors('project_key_taken', { lng: 'ru' }),
     );
   });
 

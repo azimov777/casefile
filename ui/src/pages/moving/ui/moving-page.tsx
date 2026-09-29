@@ -95,9 +95,6 @@ export function MovingPage() {
               {t('export.title')}
             </h2>
             <p className="text-body text-muted">{t('export.intro')}</p>
-            {/* Учебный проект узнаётся по ключу и не едет (TRK-384): человек должен знать
-                это до выгрузки, а не найти пропажу на новой машине. */}
-            <p className="text-body text-muted">{t('export.tutorialLeftOut')}</p>
 
             <div>
               <Button disabled={exportArchive.pending} onClick={() => void exportArchive.submit()}>

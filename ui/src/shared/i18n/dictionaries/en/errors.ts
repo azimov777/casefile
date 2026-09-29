@@ -75,8 +75,6 @@ export const errors = {
   permission_denied: 'This token is not allowed to do that.',
   project_archived: 'The project is archived: it and its tasks accept no changes.',
   project_description_too_long: 'The project description is longer than 320 characters.',
-  project_key_reserved:
-    'The key START belongs to the tutorial project, which the installation creates itself.',
   project_key_taken: 'The project key is taken.',
   project_not_archived: 'The project is not archived.',
   project_not_found: 'There is no project with that key.',
@@ -102,7 +100,6 @@ export const errors = {
   too_many_requests: 'Too many requests. Try again later.',
   transition_not_allowed: 'The status table has no such transition.',
   transition_reason_required: 'This transition requires a reason.',
-  tutorial_admin_missing: 'No human has an administrator account yet.',
   unauthorized: 'The token is unknown or revoked.',
   validation_error: 'The value breaks a rule of the domain.',
   version_conflict: 'The task changed while you were reading. Refresh the page and try again.',

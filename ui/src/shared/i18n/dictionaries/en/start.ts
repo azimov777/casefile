@@ -2,8 +2,8 @@
  * Экран «Начало» (`TRK-361`): что такое Casefile, откуда берутся задачи, что сказать
  * агенту и что делает человек — четыре вопроса в порядке решения `TRK-360#14`.
  *
- * Тексты трёх фраз (`phrases.*.text`) скопированы символ в символ из раздела «Контекст»
- * задачи `TRK-361` (источник — `app/domain/tutorial.py`): их сверяет отдельная проверка
+ * Тексты двух фраз (`phrases.*.text`) скопированы символ в символ из раздела «Контекст»
+ * задачи `TRK-361` (источник — `app/domain/agent_phrases.py`): их сверяет отдельная проверка
  * копий, и здесь их нельзя поправить «для красоты» или перефразировать.
  *
  * Тексты `sections.why.body` и `sections.source.body` — тем же приёмом, но из «Контекста»
@@ -38,7 +38,7 @@ export const start = {
       title: 'What to tell the agent',
       intro:
         'Copy a phrase and send it to the agent in chat — from there it works with Casefile on its own.',
-      // Между второй и третьей фразой (TRK-360#40): почему это новая сессия и как
+      // Между двумя фразами (TRK-360#40): почему это новая сессия и как
       // выбирать модели — без имён клиентов и моделей (TRK-361, «Что важно»).
       newSession:
         'Say the next one in a new agent session: it starts with a clean context and knows only what the task cases record. File tasks with a stronger model; carry them out with cheaper ones, one task per agent.',
@@ -49,13 +49,6 @@ export const start = {
     },
   },
   phrases: {
-    tutorial: {
-      title: 'Introduction',
-      lead: 'Walk through the tutorial task with the agent — it shows the way of working live.',
-      label: 'Introduction phrase',
-      caption: 'Send to the agent in chat',
-      text: 'Take the tutorial task START-1 in Casefile and walk me through it.',
-    },
     file: {
       title: 'File tasks',
       lead: 'Describe your work — the agent breaks it into tracker tasks.',

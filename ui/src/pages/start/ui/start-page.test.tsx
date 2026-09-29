@@ -12,8 +12,6 @@ import {
   participant,
   questionEntry,
   task,
-  taskDetails,
-  taskPackage,
 } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
@@ -75,44 +73,6 @@ function signedIn(status: Parameters<typeof account>[0] = 'pending') {
   );
 }
 
-/** Учебная задача открыта, проект не в архиве: блок «Знакомство» показан. */
-function tutorialOpen() {
-  server.use(http.get(`${API}/api/v1/tasks/START-1`, () => data(taskPackage('START-1'))));
-}
-
-function tutorialMissing() {
-  server.use(
-    http.get(`${API}/api/v1/tasks/START-1`, () => failure('task_not_found', 404, 'Task not found')),
-  );
-}
-
-function tutorialArchived() {
-  server.use(
-    http.get(`${API}/api/v1/tasks/START-1`, () =>
-      data(
-        taskPackage('START-1', {
-          task: taskDetails('START-1', {
-            project: {
-              key: 'START',
-              title: 'Знакомство',
-              description: '',
-              archived_at: '2026-09-20T10:00:00Z',
-            },
-          }),
-        }),
-      ),
-    ),
-  );
-}
-
-function tutorialClosed() {
-  server.use(
-    http.get(`${API}/api/v1/tasks/START-1`, () =>
-      data(taskPackage('START-1', { task: taskDetails('START-1', { status: 'done' }) })),
-    ),
-  );
-}
-
 /** Раздел по заголовку второго уровня. */
 function section(name: string) {
   return screen.getByRole('heading', { level: 2, name }).closest('section');
@@ -135,7 +95,6 @@ function stepItems() {
 describe('экран «Начало»', () => {
   it('отвечает на четыре вопроса по порядку TRK-360#14', async () => {
     signedIn();
-    tutorialMissing();
     renderApp('/start');
 
     expect(
@@ -153,15 +112,11 @@ describe('экран «Начало»', () => {
 
   it('фразы «Завести задачи» и «Выполнить задачи» стоят всегда, а между ними — про новую сессию', async () => {
     signedIn();
-    tutorialMissing();
     renderApp('/start');
 
     const tellAgent = section(say.start('sections.tellAgent.title'));
     expect(tellAgent).not.toBeNull();
     const within2 = within(tellAgent as HTMLElement);
-    expect(
-      within2.queryByRole('heading', { name: say.start('phrases.tutorial.title') }),
-    ).not.toBeInTheDocument();
 
     const items = within2.getAllByRole('heading', { level: 3 });
     expect(items.map((item) => item.textContent)).toEqual([
@@ -179,42 +134,14 @@ describe('экран «Начало»', () => {
     expect(executeAt).toBeGreaterThan(sessionAt);
   });
 
-  it.each([
-    ['открытая задача учебного проекта', tutorialOpen, true],
-    ['учебного проекта нет вовсе', tutorialMissing, false],
-    ['учебный проект в архиве', tutorialArchived, false],
-    ['учебная задача уже закрыта', tutorialClosed, false],
-  ] as const)('блок «Знакомство»: %s → показан = %s', async (_label, setUp, expected) => {
+  it('кнопка копирования каждой из двух фраз кладёт в буфер её текст дословно', async () => {
     signedIn();
-    setUp();
-    renderApp('/start');
-
-    await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
-    const heading = screen.queryByRole('heading', { name: say.start('phrases.tutorial.title') });
-    if (expected) {
-      expect(
-        await screen.findByRole('heading', { name: say.start('phrases.tutorial.title') }),
-      ).toBeInTheDocument();
-    } else {
-      // Ни спиннера, ни отказа — блок просто не появляется (constraints TRK-361).
-      await screen.findByRole('heading', { name: say.start('phrases.file.title') });
-      expect(heading).not.toBeInTheDocument();
-    }
-  });
-
-  it('кнопка копирования каждой из трёх фраз кладёт в буфер её текст дословно', async () => {
-    signedIn();
-    tutorialOpen();
     const user = userEvent.setup();
     renderApp('/start');
 
-    await screen.findByRole('heading', { name: say.start('phrases.tutorial.title') });
+    await screen.findByRole('heading', { name: say.start('phrases.file.title') });
 
-    const phrases: { key: 'tutorial' | 'file' | 'execute' }[] = [
-      { key: 'tutorial' },
-      { key: 'file' },
-      { key: 'execute' },
-    ];
+    const phrases: { key: 'file' | 'execute' }[] = [{ key: 'file' }, { key: 'execute' }];
 
     for (const { key } of phrases) {
       const label = say.start(`phrases.${key}.label`);
@@ -225,7 +152,6 @@ describe('экран «Начало»', () => {
 
   it('«Пропустить» ставит `skipped`, скрывает все пояснения и уходит на список задач', async () => {
     signedIn();
-    tutorialMissing();
     let body: unknown = null;
     server.use(
       http.patch(`${API}/api/v1/accounts/:id/onboarding`, async ({ request, params }) => {
@@ -248,7 +174,6 @@ describe('экран «Начало»', () => {
 
   it('«Я разобрался» ставит `completed` и уходит на список задач', async () => {
     signedIn();
-    tutorialMissing();
     let body: unknown = null;
     server.use(
       http.patch(`${API}/api/v1/accounts/:id/onboarding`, async ({ request, params }) => {
@@ -268,7 +193,6 @@ describe('экран «Начало»', () => {
 
   it('пункт «Начало» в панели открывает экран любым состоянием знакомства', async () => {
     signedIn('completed');
-    tutorialMissing();
     const user = userEvent.setup();
     renderApp('/tasks');
 
@@ -297,7 +221,6 @@ describe('экран «Начало»', () => {
 
     it('видно, когда все пояснения скрыты разом, и восстанавливает пустое состояние', async () => {
       signedInWithHints({ hidden_all: true, hidden: ['questions'] });
-      tutorialMissing();
       let body: unknown = null;
       server.use(
         http.patch(`${API}/api/v1/accounts/:id/onboarding`, async ({ request }) => {
@@ -317,7 +240,6 @@ describe('экран «Начало»', () => {
 
     it('видно, когда хоть одно пояснение скрыто по одному', async () => {
       signedInWithHints({ hidden_all: false, hidden: ['questions'] });
-      tutorialMissing();
       renderApp('/start');
 
       expect(
@@ -327,7 +249,6 @@ describe('экран «Начало»', () => {
 
     it('действия нет, когда скрывать нечего', async () => {
       signedInWithHints({ hidden_all: false, hidden: [] });
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -363,7 +284,6 @@ describe('экран «Начало»', () => {
 
     it('блок стоит сразу под заголовком, перед «Зачем это», и виден по порядку', async () => {
       signedIn();
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -387,7 +307,6 @@ describe('экран «Начало»', () => {
 
     it('свежая установка: ни один из трёх шагов не отмечен «сделано», первый ведёт на /connect, третий — на /questions', async () => {
       const seen = trackedSignedIn();
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -444,7 +363,6 @@ describe('экран «Начало»', () => {
         ),
         http.get(`${API}/api/v1/questions`, () => collection([questionEntry(4, 'DEMO-4')])),
       );
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -477,7 +395,6 @@ describe('экран «Начало»', () => {
         http.get(`${API}/api/v1/tasks`, () => collection([])),
         http.get(`${API}/api/v1/questions`, () => collection([])),
       );
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -507,7 +424,6 @@ describe('экран «Начало»', () => {
         http.get(`${API}/api/v1/tasks`, () => collection([])),
         http.get(`${API}/api/v1/questions`, () => collection([])),
       );
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -541,7 +457,6 @@ describe('экран «Начало»', () => {
         http.get(`${API}/api/v1/tasks`, () => collection([])),
         http.get(`${API}/api/v1/questions`, () => collection([])),
       );
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -562,7 +477,6 @@ describe('экран «Начало»', () => {
         http.get(`${API}/api/v1/tasks`, () => collection([])),
         http.get(`${API}/api/v1/questions`, () => collection([])),
       );
-      tutorialMissing();
       renderApp('/start');
 
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
@@ -584,7 +498,6 @@ describe('экран «Начало»', () => {
       'тексты «Зачем это» и «Откуда берутся задачи» совпадают дословно с «Контекстом» задачи TRK-378 (%s)',
       async (language) => {
         signedIn();
-        tutorialMissing();
         renderApp('/start', { language });
 
         const why = await screen.findByRole('heading', {

@@ -87,13 +87,6 @@ test('администратор скачивает архив и принима
   // Счётчик задач — примета списка, а не экрана переноса, поэтому снимается на /tasks.
   await page.goto('/tasks');
   const sourceTasks = await found(page);
-  // Учебный проект `START` в архив не едет (TRK-384): его задачи источник считает, а
-  // приёмник — нет. Ожидание приёмника — задачи источника без задач `START`, а не число,
-  // подогнанное под прогон.
-  await page.goto('/tasks?project=START');
-  const sourceStartTasks = await found(page);
-  expect(sourceStartTasks).toBeGreaterThan(0);
-  const expectedTasks = sourceTasks - sourceStartTasks;
 
   await page.goto('/moving');
   await expect(page.getByRole('heading', { level: 1, name: 'Перенос установки' })).toBeVisible();
@@ -137,12 +130,10 @@ test('администратор скачивает архив и принима
   await expect(result.getByText('local-ui', { exact: false })).toBeVisible();
 
   // Доска новой установки продолжает работать её собственным ключом, без перезагрузки
-  // (решение TRK-100#19/#20), и показывает тот же проект и все задачи источника, кроме
-  // задач учебного `START`: он в архив не входит (TRK-384).
+  // (решение TRK-100#19/#20), и показывает тот же проект и все задачи источника.
   await target.goto('/tasks');
   await expect(side(target).getByRole('link', { name: /^DEMO/ })).toBeVisible();
-  expect(await found(target)).toBe(expectedTasks);
-  await expect(side(target).getByRole('link', { name: /^START/ })).toHaveCount(0);
+  expect(await found(target)).toBe(sourceTasks);
 
   // Повторный приём того же архива — установка больше не пустая.
   await target.goto('/moving');

@@ -2,13 +2,18 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { fontsReady, readE2eToken, silenceJournal } from './contour';
 
 /**
- * Проход по экранам на настоящем контуре с учебным проектом `START` (TRK-364): кнопка
- * на «Начало», восемь шагов по порядку таблицы задания, на каждом — пояснение с
+ * Проход по экранам на настоящем контуре (TRK-364): кнопка на «Начало», восемь шагов
+ * по порядку таблицы задания, на каждом — пояснение с
  * ключом шага и счётчик «Шаг N из 8», «Закончить» возвращает на `/start`. Контур
  * поднимается с `hidden_all: true` (`global-setup.ts`), и проход показывает пояснения
  * всё равно. Файл идёт в проект «запись» вместе с прочими сценариями пояснений
  * (`explanations.spec.ts` в его выражении): проход сам ничего не пишет, но читает
  * состояние пояснений, которое соседи по проекту включают и возвращают.
+ *
+ * Проход идёт по первому активному проекту `bootstrap` (TRK-387: учебного проекта, за
+ * которым был закреплён проход, больше нет). Какой это проект на контуре, сценарий
+ * спрашивает у того же `bootstrap`, а не называет ключ: соседи по проекту «запись»
+ * заводят свои проекты, и первым может оказаться не `DEMO`.
  *
  * Снимки шагов 1, 3 и 6 кладутся в каталог из `WALK_SHOTS`, если он задан.
  */
@@ -19,23 +24,37 @@ function auth() {
   return { Authorization: `Bearer ${token}` };
 }
 
-/** Шаги по порядку: адрес без `walk` (для `START`) и начало текста пояснения, `ru`. */
-const STEPS: { path: string; text: string }[] = [
-  {
-    path: '/tasks?project=START',
-    text: 'Здесь все задачи, которые ведут агенты.',
-  },
-  {
-    path: '/tasks?project=START&view=board',
-    text: 'Те же задачи по шести столбцам статусов — одного проекта или всех, смотря что выбрано.',
-  },
-  { path: '/tasks/START-', text: 'Это задание агенту и то, что по нему сделано' },
-  { path: '/tasks/START-', text: 'Дело — журнал задачи' },
-  { path: '/projects/START', text: 'Проект отвечает на вопрос «про что задачи».' },
-  { path: '/questions', text: 'Сюда приходят вопросы, которые агенты задали вам.' },
-  { path: '/connect', text: 'Агент работает с Casefile через MCP' },
-  { path: '/access', text: 'Здесь все токены установки' },
-];
+/** Шаги по порядку: адрес без `walk` для проекта прохода и начало текста пояснения, `ru`. */
+function steps(project: string): { path: string; text: string }[] {
+  return [
+    {
+      path: `/tasks?project=${project}`,
+      text: 'Здесь все задачи, которые ведут агенты.',
+    },
+    {
+      path: `/tasks?project=${project}&view=board`,
+      text: 'Те же задачи по шести столбцам статусов — одного проекта или всех, смотря что выбрано.',
+    },
+    { path: `/tasks/${project}-`, text: 'Это задание агенту и то, что по нему сделано' },
+    { path: `/tasks/${project}-`, text: 'Дело — журнал задачи' },
+    { path: `/projects/${project}`, text: 'Проект отвечает на вопрос «про что задачи».' },
+    { path: '/questions', text: 'Сюда приходят вопросы, которые агенты задали вам.' },
+    { path: '/connect', text: 'Агент работает с Casefile через MCP' },
+    { path: '/access', text: 'Здесь все токены установки' },
+  ];
+}
+
+/** Проект прохода — первый активный проект `bootstrap`, по тому же правилу, что у экрана. */
+async function walkProject(request: APIRequestContext): Promise<string> {
+  const response = await request.get('/api/v1/bootstrap', { headers: auth() });
+  expect(response.ok()).toBe(true);
+  const body = (await response.json()) as {
+    data: { projects: { key: string; archived_at?: string | null }[] };
+  };
+  const first = body.data.projects.find((item) => item.archived_at == null);
+  expect(first, 'на контуре нет активного проекта').toBeDefined();
+  return first!.key;
+}
 
 /** Состояние знакомства владельца контура: то, чего проход менять не вправе. */
 async function onboarding(request: APIRequestContext): Promise<unknown> {
@@ -60,18 +79,20 @@ async function overflow(page: Page): Promise<number> {
 
 test('кнопка на /start ведёт по восьми адресам в порядке таблицы, на каждом пояснение и счётчик', async ({
   page,
+  request,
 }) => {
   await silenceJournal(page);
+  const project = await walkProject(request);
   await startWalk(page);
   const main = page.getByRole('main');
 
-  for (const [index, { path, text }] of STEPS.entries()) {
+  for (const [index, { path, text }] of steps(project).entries()) {
     const n = index + 1;
     await expect(main.getByText(`Шаг ${n} из 8`), `шаг ${n}`).toBeVisible();
     const url = new URL(page.url());
     const wanted = new URL(path, url.origin);
     if (path.endsWith('-')) {
-      // Ключ задачи проекта `START` называет сам контур: сверяется его начало.
+      // Ключ задачи проекта прохода называет сам контур: сверяется его начало.
       expect(url.pathname.startsWith(wanted.pathname), `шаг ${n}: ${url.pathname}`).toBe(true);
       if (n === 4) expect(url.pathname.endsWith('/case')).toBe(true);
       else expect(url.pathname.endsWith('/case')).toBe(false);
@@ -138,8 +159,9 @@ test('при hidden_all проход показывает пояснения, н
 });
 
 for (const width of [390, 1280]) {
-  test(`на ширине ${width} px на восьми шагах нет прокрутки вбок`, async ({ page }) => {
+  test(`на ширине ${width} px на восьми шагах нет прокрутки вбок`, async ({ page, request }) => {
     await silenceJournal(page);
+    const texts = steps(await walkProject(request)).map((step) => step.text);
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await startWalk(page);
     const main = page.getByRole('main');
@@ -147,7 +169,7 @@ for (const width of [390, 1280]) {
 
     for (let n = 1; n <= 8; n += 1) {
       await expect(main.getByText(`Шаг ${n} из 8`)).toBeVisible();
-      await expect(main.getByText(STEPS[n - 1]!.text)).toBeVisible();
+      await expect(main.getByText(texts[n - 1]!)).toBeVisible();
       await fontsReady(page);
       expect(await overflow(page), `шаг ${n} на ${width} px`).toBeLessThanOrEqual(0);
       if (shots !== undefined && [1, 3, 6].includes(n)) {

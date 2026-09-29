@@ -119,29 +119,6 @@ describe('экран «Перенос установки»', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('выгрузка называет, что учебный проект START в архив не входит, на обоих языках', async () => {
-    signedInAsOwner(ADMIN);
-
-    for (const language of ['ru', 'en'] as const) {
-      const { unmount } = renderApp('/moving', { ...LOCAL, language });
-      const section = (
-        await screen.findByRole('heading', { name: say.moving('export.title', { lng: language }) })
-      ).closest('section');
-      expect(section).not.toBeNull();
-      expect(
-        within(section as HTMLElement).getByText(
-          say.moving('export.tutorialLeftOut', { lng: language }),
-        ),
-      ).toBeInTheDocument();
-      unmount();
-    }
-    expect(say.moving('export.tutorialLeftOut', { lng: 'en' })).toContain('START');
-    expect(say.moving('export.tutorialLeftOut', { lng: 'ru' })).toContain('START');
-    expect(say.moving('export.tutorialLeftOut', { lng: 'en' })).not.toBe(
-      say.moving('export.tutorialLeftOut', { lng: 'ru' }),
-    );
-  });
-
   it('выгрузка: отказ показывается словами словаря', async () => {
     signedInAsOwner(ADMIN);
     server.use(

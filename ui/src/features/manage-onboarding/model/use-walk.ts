@@ -2,13 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { tasksQueryOptions } from '@/entities/task';
-import {
-  WALK_PARAM,
-  WALK_PROJECT_KEY,
-  buildWalkSteps,
-  parseWalk,
-  type WalkStep,
-} from './walk-steps';
+import { WALK_PARAM, buildWalkSteps, parseWalk, type WalkStep } from './walk-steps';
 
 export interface WalkPlan {
   /** Проект и первая задача прочитаны: шаги известны, счётчик не соврёт. */
@@ -17,15 +11,15 @@ export interface WalkPlan {
 }
 
 /**
- * План прохода для этой установки (TRK-364): проект — `START`, если он есть среди
- * активных проектов `bootstrap`, иначе первый из них; задача — первая задача проекта по
+ * План прохода для этой установки (TRK-364, TRK-387): проект — первый из активных
+ * проектов `bootstrap`; задача — первая задача проекта по
  * `GET /api/v1/tasks` с `project` и `limit=1`, архив показан (правила `hideArchived`
  * нет). Отказ запроса задач значит «задач нет»: шаги 3 и 4 пропускаются.
  */
 export function useWalkPlan(enabled = true): WalkPlan {
   const bootstrap = useQuery(bootstrapQueryOptions());
   const active = (bootstrap.data?.projects ?? []).filter((item) => item.archived_at == null);
-  const project = (active.find((item) => item.key === WALK_PROJECT_KEY) ?? active[0])?.key ?? null;
+  const project = active[0]?.key ?? null;
 
   const first = useQuery({
     // Без `keepPreviousData` списка: задача чужого проекта на время загрузки —
