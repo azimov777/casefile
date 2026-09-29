@@ -295,3 +295,26 @@ GET`) и тело не передавать. Проверка `Host` не зам
 ui`: после `realip` там адрес браузера, а не прокси.
 **Где:** `docker/access-mode.sh`; `docker/nginx.conf.template`; `../docker-compose.prod.yml`,
 `TRACKER_UI_TRUSTED_PROXIES`; `../app/api/client_address.py`.
+
+## nginx интерфейса находит пересозданный api без перезапуска
+
+**Что:** `proxy_pass` с именем хоста в самом значении разрешает имя один раз, при
+загрузке конфигурации. После `docker compose up -d`, пересоздавшего только `api` (правка
+`.env`, влияющая на службы бэкенда), контейнер мог получить другой адрес, и интерфейс до
+перезапуска `ui` отвечал `502 Bad Gateway` по старому (TRK-388). Если Docker выдавал
+тот же адрес, ошибки не было, и поэтому дефект выглядит плавающим: на простом
+`--force-recreate api` он не воспроизводится, пока адрес не занят кем-то ещё.
+**Почему важно:** контур здоров (`api` healthy), а доска мертва; чинит только
+`docker compose restart ui`. Обновлятор его не задевает — он пересоздаёт и `ui`.
+**Как правильно:** адрес держит переменная nginx (`set $casefile_api ${TRACKER_API_URL};
+proxy_pass $casefile_api;`) плюс `resolver ${TRACKER_DNS_RESOLVER} valid=5s ipv6=off;`
+(умолчание `127.0.0.11` — DNS Docker; вне Docker его задаёт
+переменная). Без `resolver` переменная в `proxy_pass` не работает вовсе. Поведение
+`/api/...` то же: адрес без пути, исходный URI уходит бэкенду целиком. **Обратная
+сторона:** правка отменяет предыдущую заметку — при неразрешимом `TRACKER_API_URL`
+nginx теперь стартует и отвечает `502` на запросы, а не падает при запуске.
+Проверяет сценарий `e2e/api-recreate.spec.ts`; руками — занять адрес `api` чужим
+контейнером (`docker run --network <сеть> alpine sleep 600`), поднять `api` заново и
+запросить `/api/v1/projects` через порт интерфейса.
+**Где:** `docker/nginx.conf.template`, `docker/Dockerfile` (`TRACKER_DNS_RESOLVER`);
+`e2e/api-recreate.spec.ts`.
