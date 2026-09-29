@@ -457,7 +457,11 @@ current() {
   [ "$(docker inspect -f '{{index .Config.Labels "casefile.updater.revision"}}' "$(dc ps -q updater)" 2>/dev/null)" = "$revision" ]
 }
 wait_for 600 current || fail "updater-renew did not replace the updater of $ORPHAN_REF"
-wait_for 120 on_release "$r5_api" "$r5_ui" || fail "services did not move to 0.5.0"
+wait_for 120 on_release "$r5_api" "$r5_ui" || {
+  services | tee -a "$EVIDENCE/run.log"
+  note "0.5.0: $r5_api $r5_ui; stable here: $(docker image inspect -f '{{.Id}}' "$REG/casefile:stable" "$REG/casefile-ui:stable" | tr '\n' ' ')"
+  fail "services did not move to 0.5.0"
+}
 no_legacy() { [ -z "$(legacy)" ]; }
 wait_for 60 no_legacy || fail "the container of the service legacy is left: $(legacy)"
 dc logs --no-color -t updater updater-renew >"$EVIDENCE/I-logs.txt" 2>&1
