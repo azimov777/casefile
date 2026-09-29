@@ -28,7 +28,7 @@ export const start = {
   sections: {
     why: {
       title: 'What this is for',
-      body: 'AI agents forget everything between sessions: the next one starts from scratch, re-reads the code and retries what already failed. Casefile gives every task a case file — a log of decisions, attempts, findings and questions. The next agent reads the case and picks up exactly where the last one stopped. You watch on the board what every agent is doing, and answer their questions.',
+      body: 'AI agents forget everything between sessions: the next one starts from scratch, works the job out all over again and retries what already failed, and decisions made in a conversation vanish with it. Casefile gives every task a case file — a log of decisions, attempts, findings and questions. The next agent reads the case and picks up exactly where the last one stopped. You watch on the board what every agent is doing, and answer their questions.',
     },
     source: {
       title: 'Where tasks come from',
@@ -54,7 +54,7 @@ export const start = {
       lead: 'Describe your work — the agent breaks it into tracker tasks.',
       label: 'File tasks phrase',
       caption: 'Send to the agent in chat',
-      text: "File tasks in Casefile for my work: a project for it if there is none yet, and tasks with all their sections and checks, each small enough for one agent to finish in one go, each naming its environment in `context` — where the work lives and how to run its checks. Don't start the work itself; if I haven't described it yet, ask me.",
+      text: "File tasks in Casefile for my work: a project for it if there is none yet, and tasks with all their sections and checks, each small enough for one agent to finish in one go, each naming its environment in `context` — where the work lives and how to check it is done. Don't start the work itself; if I haven't described it yet, ask me.",
     },
     execute: {
       title: 'Carry out tasks',

@@ -67,8 +67,8 @@ const SCREENS: Screen[] = [
     name: 'проект',
     path: '/projects/DEMO',
     key: HINT_KEYS.project,
-    ru: 'Проект отвечает на вопрос «про что задачи». Здесь вы правите его описание, ведёте атрибуты — где лежит код, какая ветка главная — и пишете заметки в дело проекта. Описание агент получает вместе с каждой задачей проекта.',
-    en: "A project answers “what are the tasks about”. Here you edit its description, keep its attributes — where the code lives, which branch is the main one — and write notes to the project's case. The agent receives the description with every task of the project.",
+    ru: 'Проект отвечает на вопрос «про что задачи». Здесь вы правите его описание, ведёте атрибуты — где лежит работа, что прочитать перед началом — и пишете заметки в дело проекта. Описание агент получает вместе с каждой задачей проекта.',
+    en: "A project answers “what are the tasks about”. Here you edit its description, keep its attributes — where the work lives, what to read before starting — and write notes to the project's case. The agent receives the description with every task of the project.",
   },
   {
     name: 'подключить агента',

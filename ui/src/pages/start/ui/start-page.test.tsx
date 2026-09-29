@@ -512,12 +512,12 @@ describe('экран «Начало»', () => {
         const expected =
           language === 'ru'
             ? {
-                why: 'Агент забывает всё между сессиями: следующий начинает с нуля, заново читает код и повторяет то, что уже не сработало. Casefile даёт каждой задаче дело — журнал решений, попыток, находок и вопросов. Следующий агент читает дело и продолжает с того места, где остановился предыдущий. Вы видите на доске, что делает каждый агент, и отвечаете на их вопросы.',
+                why: 'Агент забывает всё между сессиями: следующий начинает с нуля, заново разбирается в работе и повторяет то, что уже не сработало, а решения, принятые в разговоре, пропадают вместе с ним. Casefile даёт каждой задаче дело — журнал решений, попыток, находок и вопросов. Следующий агент читает дело и продолжает с того места, где остановился предыдущий. Вы видите на доске, что делает каждый агент, и отвечаете на их вопросы.',
                 source:
                   'Задачи заводят и ведут агенты — по вашей просьбе в их чате. Кнопки «создать задачу» здесь нет намеренно: вы говорите агенту, что нужно, а он раскладывает работу на задачи.',
               }
             : {
-                why: 'AI agents forget everything between sessions: the next one starts from scratch, re-reads the code and retries what already failed. Casefile gives every task a case file — a log of decisions, attempts, findings and questions. The next agent reads the case and picks up exactly where the last one stopped. You watch on the board what every agent is doing, and answer their questions.',
+                why: 'AI agents forget everything between sessions: the next one starts from scratch, works the job out all over again and retries what already failed, and decisions made in a conversation vanish with it. Casefile gives every task a case file — a log of decisions, attempts, findings and questions. The next agent reads the case and picks up exactly where the last one stopped. You watch on the board what every agent is doing, and answer their questions.',
                 source:
                   'Agents create and carry the tasks — at your request, in their own chat. There is no “create task” button here on purpose: you tell the agent what you need, and it splits the work into tasks.',
               };
