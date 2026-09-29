@@ -15,6 +15,7 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 
 ## Папки
 - `ui/` — интерфейс человека: отдельное приложение со своими соглашениями, картами и проверками
+- `.claude-plugin/` — маркетплейс `casefile` и плагин `casefile` для Claude Code и Codex: `marketplace.json`, `plugin.json`; плагин несёт только скил из `skills/`, его `version` равна версии выпуска
 - `.github/` — GitHub: конвейеры в `workflows/` (проверки на каждый PR — `ci.yml`, подпись вклада — `dco.yml`,
   образы ghcr.io после проверок — `images.yml`: `latest` на каждый коммит main, номер и канал `stable` на тег выпуска,
   запись Casefile в официальном реестре MCP на тот же тег, входом через GitHub OIDC — `mcp-registry.yml`), бот

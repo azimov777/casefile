@@ -920,6 +920,13 @@ e2e` в этот скрипт не входит — им сливают ветк
   подставляет её из тега прямо перед публикацией и не коммитит правку обратно, поэтому
   файл руками перед выпуском не правят.
 
+Версию выпуска меняет коммит `chore(release): vX.Y.Z`. В список файлов версии входят
+`pyproject.toml`, `uv.lock` (`docker compose run --rm lock`), `ui/package.json`, `openapi.json`,
+пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и оба файла плагина
+скила — `.claude-plugin/plugin.json` и `.claude-plugin/marketplace.json` (`version` в плагине и в
+записи маркетплейса, `metadata.version`): Claude Code без новой `version` не обновит скил.
+`tests/test_plugin_manifest.py` краснеет, если версии разошлись.
+
 Тег пушится раньше `main` — иначе автообновятель прежней установки успел бы забрать файл
 compose, который зовёт канал `stable` до того, как тот на него укажет (комментарий в
 `images.yml`, `TRK-119`):
