@@ -1,5 +1,33 @@
-import { expect, test } from '@playwright/test';
-import { side } from './contour';
+import { expect, test, type APIRequestContext } from '@playwright/test';
+import { readE2eToken, shellReady, side } from './contour';
+
+const token = readE2eToken();
+const auth = { Authorization: `Bearer ${token}` };
+
+/** Учётная запись владельца контура и правка её пояснений тем же ключом, что у интерфейса. */
+async function ownerAccountId(request: APIRequestContext): Promise<string> {
+  const response = await request.get('/api/v1/bootstrap', { headers: auth });
+  expect(response.ok()).toBe(true);
+  const body = (await response.json()) as { data: { account: { id: string } | null } };
+  const id = body.data.account?.id;
+  if (id === undefined) throw new Error('у владельца контура нет учётной записи');
+  return id;
+}
+
+async function setHints(
+  request: APIRequestContext,
+  accountId: string,
+  hints: { hidden_all: boolean; hidden: string[] },
+): Promise<void> {
+  const response = await request.patch(`/api/v1/accounts/${accountId}/onboarding`, {
+    headers: auth,
+    data: { hints },
+  });
+  expect(response.ok()).toBe(true);
+}
+
+const TASKS_EXPLANATION = /Здесь все задачи, которые ведут агенты/;
+const QUESTIONS_EXPLANATION = /Сюда приходят вопросы, которые агенты задали вам/;
 
 /**
  * Единственный сценарий, который меняет состояние знакомства владельца установки
@@ -24,41 +52,79 @@ const SECTION_HEADINGS = [
 
 test('«Начало» на свежем контуре объясняет способ работы и уступает место списку задач после «Пропустить»', async ({
   page,
+  browser,
+  request,
 }) => {
-  await page.goto('/');
+  // Контур поднят со скрытыми пояснениями (`global-setup.ts`); новому человеку они
+  // показаны — возвращаем это состояние, чтобы «Пропустить» было что скрывать (TRK-385).
+  const accountId = await ownerAccountId(request);
+  await setHints(request, accountId, { hidden_all: false, hidden: [] });
 
-  await expect(page).toHaveURL(/\/start$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Начало' })).toBeVisible();
+  try {
+    await page.goto('/');
 
-  // Четыре раздела по порядку решения TRK-360#14 — это главное, что человек должен
-  // понять с первого взгляда.
-  expect(await page.locator('main h2').allTextContents()).toEqual(SECTION_HEADINGS);
+    await expect(page).toHaveURL(/\/start$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Начало' })).toBeVisible();
 
-  // Фразы «Завести задачи» и «Выполнить задачи», а между ними — про новую сессию
-  // агента. Фразы «Знакомство» здесь нет: учебный проект `START` не засеян (TRK-370).
-  await expect(page.getByRole('heading', { name: 'Знакомство' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Завести задачи' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Выполнить задачи' })).toBeVisible();
+    // Четыре раздела по порядку решения TRK-360#14 — это главное, что человек должен
+    // понять с первого взгляда.
+    expect(await page.locator('main h2').allTextContents()).toEqual(SECTION_HEADINGS);
 
-  const tellAgentText = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
-  const fileAt = tellAgentText.indexOf('Завести задачи');
-  const sessionAt = tellAgentText.indexOf('новой сессии агента');
-  const executeAt = tellAgentText.indexOf('Выполнить задачи');
-  expect(fileAt).toBeGreaterThan(-1);
-  expect(sessionAt).toBeGreaterThan(fileAt);
-  expect(executeAt).toBeGreaterThan(sessionAt);
+    // Фразы «Завести задачи» и «Выполнить задачи», а между ними — про новую сессию
+    // агента. Фразы «Знакомство» здесь нет: учебный проект `START` не засеян (TRK-370).
+    await expect(page.getByRole('heading', { name: 'Знакомство' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Завести задачи' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выполнить задачи' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Пропустить' }).click();
-  await expect(page).toHaveURL(/\/tasks$/);
+    const tellAgentText = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
+    const fileAt = tellAgentText.indexOf('Завести задачи');
+    const sessionAt = tellAgentText.indexOf('новой сессии агента');
+    const executeAt = tellAgentText.indexOf('Выполнить задачи');
+    expect(fileAt).toBeGreaterThan(-1);
+    expect(sessionAt).toBeGreaterThan(fileAt);
+    expect(executeAt).toBeGreaterThan(sessionAt);
 
-  // Держится после перезагрузки: состояние живёт на сервере, не в браузере.
-  await page.reload();
-  await expect(page).toHaveURL(/\/tasks$/);
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/tasks$/);
+    await page.getByRole('button', { name: 'Пропустить' }).click();
+    await expect(page).toHaveURL(/\/tasks$/);
 
-  // «Начало» остаётся достижимым пунктом панели, сколько бы раз его ни пропустили.
-  await side(page).getByRole('link', { name: 'Начало' }).click();
-  await expect(page).toHaveURL(/\/start$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Начало' })).toBeVisible();
+    // Держится после перезагрузки: состояние живёт на сервере, не в браузере.
+    await page.reload();
+    await expect(page).toHaveURL(/\/tasks$/);
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/tasks$/);
+
+    // «Начало» остаётся достижимым пунктом панели, сколько бы раз его ни пропустили.
+    await side(page).getByRole('link', { name: 'Начало' }).click();
+    await expect(page).toHaveURL(/\/start$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Начало' })).toBeVisible();
+
+    // «Пропустить» — пропустить обучение целиком (TRK-385): на списке задач пояснения нет.
+    await expect(page.getByRole('main').getByText(TASKS_EXPLANATION)).toHaveCount(0);
+
+    // Новый браузерный контекст той же учётной записи: `/` открывает список, пояснений
+    // нет ни на нём, ни на Входящей — скрытие серверное.
+    const context = await browser.newContext();
+    try {
+      const fresh = await context.newPage();
+      await fresh.goto('/');
+      await shellReady(fresh);
+      await expect(fresh).toHaveURL(/\/tasks$/);
+      await expect(fresh.getByRole('main').getByText(TASKS_EXPLANATION)).toHaveCount(0);
+      await fresh.goto('/questions');
+      await shellReady(fresh);
+      await expect(fresh.getByRole('main').getByText(QUESTIONS_EXPLANATION)).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+
+    // Вернуть пояснения можно одним действием на «Начале».
+    await page.goto('/start');
+    await page.getByRole('button', { name: 'Показать пояснения снова' }).click();
+    await expect(page.getByRole('button', { name: 'Показать пояснения снова' })).toHaveCount(0);
+    await page.goto('/tasks');
+    await expect(page.getByRole('main').getByText(TASKS_EXPLANATION)).toBeVisible();
+  } finally {
+    // Соседним пишущим сценариям нужен контур со скрытыми пояснениями.
+    await setHints(request, accountId, { hidden_all: true, hidden: [] });
+  }
 });

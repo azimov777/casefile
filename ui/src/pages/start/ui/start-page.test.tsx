@@ -223,7 +223,7 @@ describe('экран «Начало»', () => {
     }
   });
 
-  it('«Пропустить» ставит `skipped` и уходит на список задач', async () => {
+  it('«Пропустить» ставит `skipped`, скрывает все пояснения и уходит на список задач', async () => {
     signedIn();
     tutorialMissing();
     let body: unknown = null;
@@ -239,7 +239,11 @@ describe('экран «Начало»', () => {
     await user.click(await screen.findByRole('button', { name: say.start('actions.skip') }));
 
     await waitFor(() => expect(address.current).toBe('/tasks'));
-    expect(body).toEqual({ id: account().id, status: 'skipped' });
+    expect(body).toEqual({
+      id: account().id,
+      status: 'skipped',
+      hints: { hidden_all: true },
+    });
   });
 
   it('«Я разобрался» ставит `completed` и уходит на список задач', async () => {
@@ -258,6 +262,7 @@ describe('экран «Начало»', () => {
     await user.click(await screen.findByRole('button', { name: say.start('actions.complete') }));
 
     await waitFor(() => expect(address.current).toBe('/tasks'));
+    // «Я разобрался» пояснения не трогает: в теле нет `hints`.
     expect(body).toEqual({ id: account().id, status: 'completed' });
   });
 

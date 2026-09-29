@@ -3615,3 +3615,9 @@ TRK-362 не трогала, доски не касается, а из-за `dep
 **Где:** `src/features/manage-onboarding/{model/walk-steps.ts,model/use-walk.ts,ui/walk-bar.tsx,ui/start-walk-action.tsx}`;
 `src/app/walk.test.tsx`; `e2e/walk-explanations.spec.ts` (имя оканчивается на
 `explanations.spec.ts`, и проект «запись» подхватывает его без правки `playwright.config.ts`).
+
+## «Пропустить» на «Начале» скрывает и пояснения экранов (TRK-385)
+
+**Что неочевидно:** «Пропустить» шлёт один `PATCH .../onboarding` с `status: 'skipped'` и `hints: { hidden_all: true }`; «Я разобрался» — только `status: 'completed'`. Раньше «Пропустить» пояснений не трогало (замысел TRK-360#17), и проверка v0.6.0 (TRK-360#58) нашла, что человек, нажавший его, продолжал видеть пояснения; владелец решил: пропустить обучение целиком.
+**Почему важно:** один запрос, а не два подряд — неудача второго не оставит «пропущено, но пояснения на месте». Сквозной контур поднят с `hidden_all: true` (`global-setup.ts`), поэтому `e2e/start-onboarding.spec.ts` перед «Пропустить» сам возвращает пояснения и в конце снова скрывает их.
+**Где:** `src/pages/start/ui/start-page.tsx` (`setStatus`); `e2e/start-onboarding.spec.ts`.
