@@ -49,7 +49,7 @@ const SCREENS: { name: string; path: string; text: string }[] = [
   {
     name: 'доска',
     path: '/tasks?project=DEMO&view=board',
-    text: 'Те же задачи одного проекта по шести столбцам статусов.',
+    text: 'Те же задачи по шести столбцам статусов — одного проекта или всех, смотря что выбрано.',
   },
   {
     name: 'карточка задачи',
