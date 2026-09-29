@@ -636,6 +636,19 @@ def test_a_check_in_progress_is_visible_to_the_installer(updater: Updater) -> No
     assert lines.count("check") == 2
 
 
+def test_the_updater_drops_previous_tags_left_by_an_earlier_updater(updater: Updater) -> None:
+    """На старте теги `previous` — остаток чужого обновления: их снять, `up` не звать."""
+    loop = _script("updater")[_script("updater").index("trap 'exit 0' TERM INT") :]
+
+    updater.run("updater", loop.split('if [ "$CASEFILE_AUTO_UPDATE"', 1)[0])
+
+    assert updater.called("rmi ") == [
+        "rmi casefile-updater/test-project/api:previous",
+        "rmi casefile-updater/test-project/ui:previous",
+    ]
+    assert not updater.called("compose up")
+
+
 # --- Выпуск с миграцией: снимок базы и его восстановление (TRK-134) -------------------
 
 

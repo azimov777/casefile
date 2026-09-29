@@ -783,6 +783,11 @@ TRK-91) в слое контейнера обновлятора на время 
   полчаса.
 - Окно выборок `docker top` длиннее `sleep 5` отвергнуто. Вызовы `docker` в `settled` —
   доли секунды, и выборки их пропускают.
-**Где:** `docker-compose.prod.yml`, служба `updater-renew` (`busy`). Тест с подставным
-`docker` — `tests/test_auto_update.py` (`test_the_renewal_waits_out_the_whole_check_…`).
+- Даже дождавшись, прежний обновлятор 0.6.0 не снимает `api:previous`. Его образ держит
+  остановленный контейнер сироты `tutorial`, а её убирает renew уже после него. Поэтому новый
+  обновлятор на старте снимает свои `previous`: вне `update` они всегда остаток чужого
+  обновления. К его старту renew уже убрала сирот.
+**Где:** `docker-compose.prod.yml`, служба `updater-renew` (`busy`) и старт службы `updater`.
+Тесты с подставным `docker` — `tests/test_auto_update.py`
+(`test_the_renewal_waits_out_the_whole_check_…`, `test_the_updater_drops_previous_tags_…`).
 Живьём — оснастка перехода v0.6.0 → ветка из дела TRK-391.
