@@ -57,6 +57,28 @@ directory) or point your agents at the new one before they carry on.
 Keep the file private. It holds no secret in plain text, but it does hold password and
 token hashes, and your whole tracker.
 
+### The tutorial project `START` stays behind
+
+The archive leaves out the tutorial project `START`. It is recognized by its key, and
+the new installation seeds its own. Everything that points at it stays behind with it:
+
+- its tasks and their case files, and its own case file and attributes;
+- links between its tasks and tasks of your other projects. A task whose parent was in
+  `START` arrives with no parent. A task a `START` task blocked arrives unblocked;
+- a task you moved into `START`.
+
+A task you moved out of `START` into a project of your own comes across. Its previous key
+`START-N` does not: the new installation hands those numbers out again. Entries that
+name a `START` task (`START-1#3` in `refs`) come across unchanged and lead nowhere after
+the import.
+
+**A project of your own keyed `START`, made before 0.6.0, stays behind too.** Casefile
+tells it from the tutorial by its key alone. After 0.6.0 nobody can make a new project
+with that key (`409 project_key_reserved`). If you have such a project, move its tasks
+into another project before you export.
+
+An archive taken by 0.6.0 still carries `START`, and the import takes it as before.
+
 ## 2. Import on the new machine
 
 Install Casefile there with the install line, then post the file back **as is**:
@@ -98,7 +120,8 @@ installation is left exactly as it was.
   work here — a machine you no longer trust — revoke it in **Access** on the board (or
   `DELETE /api/v1/tokens/{token_id}`). Nothing is revoked for you.
 - **Case files are the same case files**: the same keys, the same entries, the same
-  authors and times.
+  authors and times — except what the tutorial project `START` held (see
+  [above](#the-tutorial-project-start-stays-behind)).
 
 ## Versions
 
@@ -129,4 +152,5 @@ Behind a reverse proxy of your own, its own limit on request size applies too.
 - **No merging.** The new installation must be empty; there is no way to add one
   tracker's tasks to another's.
 - **No moving back to an older version** (see [Versions](#versions)).
-- **No part of an installation.** The archive is everything; there is no per-project export.
+- **No part of an installation.** The archive is everything but the tutorial project
+  `START`; there is no per-project export.
