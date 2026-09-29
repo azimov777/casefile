@@ -99,6 +99,26 @@ def test_an_address_that_is_not_a_plain_http_url_is_refused(value: str) -> None:
         Settings(mcp_public_url=value)
 
 
+def test_settings_of_the_removed_tutorial_do_not_stop_the_application(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Строки учебного проекта в `.env` установок v0.6.0 не роняют настройки (TRK-387).
+
+    Установщик v0.6.0 писал `CASEFILE_LANGUAGE`, а compose v0.6.0 передавал процессу
+    `TRACKER_TUTORIAL_LANGUAGE` и `TRACKER_UI_PUBLIC_URL`. Настроек этих больше нет, и
+    лишняя переменная — даже с тем значением, которое прежде не прошло бы проверку, —
+    молча пропускается (`extra="ignore"`).
+    """
+    monkeypatch.setenv("TRACKER_TUTORIAL_LANGUAGE", "xx")
+    monkeypatch.setenv("TRACKER_UI_PUBLIC_URL", "not a url")
+    monkeypatch.setenv("CASEFILE_LANGUAGE", "ru")
+
+    settings = Settings()
+
+    assert not hasattr(settings, "tutorial_language")
+    assert not hasattr(settings, "ui_public_url")
+
+
 # --- Ответ ------------------------------------------------------------------------
 
 

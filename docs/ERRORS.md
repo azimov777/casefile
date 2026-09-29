@@ -83,7 +83,6 @@
 | `participant_has_account` | Participant already has an account | У этого участника учётная запись уже есть: у человека она одна. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
 | `project_archived` | Project is archived: it and its tasks are frozen | Проект в архиве: он и его задачи заморожены для изменений (`CONCEPT.md`, 3.2). |
-| `project_key_reserved` | Project key is reserved for the tutorial project | Ключ закреплён за учебным проектом, который заводит сама установка (`TRK-384`). |
 | `project_key_taken` | Project key is already taken | Ключ проекта уже занят: ключи уникальны без учёта регистра. |
 | `project_not_archived` | Project is not archived | Восстанавливать нечего: проект не в архиве. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
@@ -94,7 +93,6 @@
 | `task_has_parent` | Task already has a parent | У задачи уже есть родитель: второй не ставится, нынешний назван в `details.parent`. |
 | `task_has_unclosed_children` | Task has children that are not closed | Закрытие задачи при детях не в `done` и не в `cancelled`. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
-| `tutorial_admin_missing` | No human has an administrator account yet | В установке нет ни одного человека с учётной записью администратора. |
 | `version_conflict` | Task version is outdated | Версия задачи разошлась: её изменили между чтением и записью. |
 
 ## 422 — не прошло проверку

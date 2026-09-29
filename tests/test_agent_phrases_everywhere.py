@@ -1,11 +1,11 @@
-"""Сверка копий трёх фраз для агента (`AGENT_PHRASES`) во всех местах, куда они
-переписаны дословно (TRK-367).
+"""Сверка копий двух фраз для агента (`AGENT_PHRASES`) во всех местах, куда они
+переписаны дословно (TRK-367, TRK-387).
 
-Источник — `AGENT_PHRASES` в `app/domain/tutorial.py`. Английский текст повторяется
+Источник — `AGENT_PHRASES` в `app/domain/agent_phrases.py`. Английский текст повторяется
 в выводе `install.sh` и `install.ps1`, в `README.md` и в `docs/agent-install.md`, а
 также в словаре экрана «Начало» для английского языка
 (`ui/src/shared/i18n/dictionaries/en/start.ts`); русский текст — в том же словаре для
-русского (`ru/start.ts`). Копия, лежащая в пяти местах, сводится сплошной проверкой
+русского (`ru/start.ts`). Копия, лежащая в нескольких местах, сводится сплошной проверкой
 множеств, а не вычиткой (`docs/CONVENTIONS.md`, «Документация»; образец —
 `app/api/contract.py` и `tests/test_api_contract.py`).
 
@@ -19,7 +19,9 @@ context внутри двойных кавычек обратным слэшем
 
 from pathlib import Path
 
-from app.domain.tutorial import AGENT_PHRASES
+import pytest
+
+from app.domain.agent_phrases import AGENT_PHRASES, PHRASE_LANGUAGES
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,9 +55,9 @@ def _normalize_ps1(text: str) -> str:
     return _normalize(text.replace(PS1_EM_DASH, "\u2014").replace("''", "'"))
 
 
-def _phrases(language: str) -> tuple[str, str, str]:
-    phrases = AGENT_PHRASES[language]  # type: ignore[literal-required]
-    return (phrases.introduction, phrases.create_tasks, phrases.execute_tasks)
+def _phrases(language: str) -> tuple[str, str]:
+    phrases = AGENT_PHRASES[language]  # type: ignore[index]
+    return (phrases.create_tasks, phrases.execute_tasks)
 
 
 ENGLISH_PHRASES = _phrases("en")
@@ -77,7 +79,7 @@ RU_START_DICTIONARY = (
 
 
 def test_english_phrases_match_agent_phrases_word_for_word() -> None:
-    """README, отчёт агента-установщика и словарь `en/start.ts` несут все три фразы дословно."""
+    """README, отчёт агента-установщика и словарь `en/start.ts` несут обе фразы дословно."""
     for name, path in ENGLISH_SOURCES.items():
         content = _normalize(_read(path))
         for phrase in ENGLISH_PHRASES:
@@ -92,7 +94,7 @@ def test_install_sh_matches_agent_phrases_word_for_word() -> None:
 
 
 def test_install_ps1_matches_agent_phrases_word_for_word() -> None:
-    """Близнец `install.sh`: те же три фразы, апостроф — синтаксисом PowerShell."""
+    """Близнец `install.sh`: те же две фразы, апостроф — синтаксисом PowerShell."""
     content = _normalize_ps1(_read(PROJECT_ROOT / "install.ps1"))
     for phrase in ENGLISH_PHRASES:
         assert _normalize(phrase) in content, f"install.ps1: фраза не найдена дословно: {phrase!r}"
@@ -115,3 +117,38 @@ def test_install_ps1_code_lines_are_ascii() -> None:
         if not line.lstrip().startswith("#") and not line.isascii()
     ]
     assert not bad, "не-ASCII в строках кода install.ps1: " + "; ".join(bad)
+
+
+def test_every_language_has_both_phrases() -> None:
+    assert set(AGENT_PHRASES) == set(PHRASE_LANGUAGES)
+    for language in PHRASE_LANGUAGES:
+        for phrase in _phrases(language):
+            assert phrase and phrase.strip() == phrase, language
+
+
+@pytest.mark.parametrize("language", PHRASE_LANGUAGES)
+def test_create_tasks_phrase_names_environment_requirement(language: str) -> None:
+    """Слово владельца (`TRK-366#66`): каждая заведённая задача называет своё окружение."""
+    phrase = AGENT_PHRASES[language].create_tasks.lower()
+    keyword = {"ru": "окружен", "en": "environment"}[language]
+    assert keyword in phrase
+
+
+#: Следы учебного проекта, которых не должно быть ни в одной копии (TRK-387): фраза
+#: «знакомство» называла учебную задачу `START-1`.
+TUTORIAL_TRACES = ("START-1", "tutorial task", "учебную задачу")
+
+#: Все места с копиями, включая оба установщика.
+ALL_COPIES = {
+    **ENGLISH_SOURCES,
+    "install.sh": PROJECT_ROOT / "install.sh",
+    "install.ps1": PROJECT_ROOT / "install.ps1",
+    "ui/src/shared/i18n/dictionaries/ru/start.ts": RU_START_DICTIONARY,
+}
+
+
+@pytest.mark.parametrize("name", sorted(ALL_COPIES))
+def test_no_copy_names_the_tutorial_task(name: str) -> None:
+    content = _read(ALL_COPIES[name])
+    found = [trace for trace in TUTORIAL_TRACES if trace in content]
+    assert not found, f"{name}: след учебного проекта: {found}"

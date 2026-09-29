@@ -17,9 +17,6 @@
 Едет всё, что лежит в таблицах, кроме названного в `app/domain/archive.py`:
 таблицы версии и ключей идемпотентности, и токенов сеансов браузера — кука сеанса
 принадлежит адресу источника и на приёмник не попадёт никогда (`SESSION_COLUMN`).
-Не едет и учебный проект `START` (`EXCLUDED_PROJECTS`, `TRK-384`) со всем, что на него
-ссылается, а из прежних ключей задач других проектов уходят его `START-N`. Приём
-ключей не проверяет: архив, снятый 0.6.0 вместе со `START`, принимается как раньше.
 Учётные записи едут с хешами паролей — человек входит той же почтой и тем же паролем;
 токены агентов едут с хешами — агент подключается тем же токеном (как в TRK-96).
 
@@ -40,7 +37,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
@@ -49,19 +46,16 @@ from app.db.locks import lock_changes
 from app.db.models.account import Account
 from app.db.models.participant import Participant
 from app.db.models.project import Project
-from app.db.models.task import Task
 from app.db.models.token import Token
-from app.db.repositories import ParticipantRepository, ProjectRepository
+from app.db.repositories import ParticipantRepository
 from app.domain.archive import (
     ARCHIVE_FORMAT_VERSION,
-    EXCLUDED_PROJECTS,
     EXCLUDED_TABLES,
     Archive,
     ArchiveFormat,
     ArchiveTable,
     check_archive,
     copy_text,
-    without_excluded_keys,
 )
 from app.domain.errors import (
     ArchiveInvalidError,
@@ -79,10 +73,6 @@ from app.services.setup import (
 #: Колонка токена, заполненная только у сеанса браузера (`Token.is_session`): строки,
 #: где она не пуста, не выгружаются.
 SESSION_COLUMN = "expires_at"
-
-#: Колонка прежних ключей задачи (`Task.previous_keys`): из неё выгрузка убирает ключи
-#: исключённых проектов.
-PREVIOUS_KEYS_COLUMN = "previous_keys"
 
 #: Ключи машины: токены, секреты которых установка держит в своих томах.
 MACHINE_KEY_NAMES = (DEFAULT_LOCAL_TOKEN_NAME, DEFAULT_AGENT_TOKEN_NAME)
@@ -102,22 +92,14 @@ async def export_installation(session: AsyncSession, *, actor: Actor) -> Archive
     await store.use_utc(session)
 
     revision = await store.current_revision(session)
-    skipped = await _excluded_project_rows(session)
     tables: list[ArchiveTable] = []
     for name, columns in (await store.table_columns(session, store.PUBLIC_SCHEMA)).items():
         if name in EXCLUDED_TABLES:
             continue
         only_null = SESSION_COLUMN if name == Token.__tablename__ else None
         rows = await store.read_rows(
-            session,
-            store.PUBLIC_SCHEMA,
-            name,
-            columns,
-            only_null=only_null,
-            skip_ids=skipped.get(name, ()),
+            session, store.PUBLIC_SCHEMA, name, columns, only_null=only_null
         )
-        if name == Task.__tablename__:
-            rows = _without_excluded_previous_keys(columns, rows)
         tables.append(ArchiveTable(name=name, columns=columns, rows=rows))
     return Archive(
         format=ArchiveFormat.INSTALLATION,
@@ -127,33 +109,6 @@ async def export_installation(session: AsyncSession, *, actor: Actor) -> Archive
         exported_at=datetime.now(UTC),
         tables=tuple(tables),
     )
-
-
-async def _excluded_project_rows(session: AsyncSession) -> dict[str, set[str]]:
-    """Строки, которые не едут вместе с исключёнными проектами, по таблицам.
-
-    Проект вырезается вместе со всем, что ссылается на него внешним ключом, до
-    неподвижной точки (`store.referencing_rows`): иначе архив нёс бы строку со ссылкой
-    на вырезанную, и приём отклонил бы его. Решения по каждой связи — дело `TRK-384`.
-    """
-    skipped: dict[str, set[str]] = {}
-    for key in EXCLUDED_PROJECTS:
-        reached = await store.referencing_rows(
-            session, store.PUBLIC_SCHEMA, Project.__tablename__, "key", key
-        )
-        for table, ids in reached.items():
-            skipped.setdefault(table, set()).update(ids)
-    return skipped
-
-
-def _without_excluded_previous_keys(
-    columns: Sequence[str], rows: list[list[str | None]]
-) -> list[list[str | None]]:
-    """Строки задач без прежних ключей исключённых проектов (`without_excluded_keys`)."""
-    at = columns.index(PREVIOUS_KEYS_COLUMN)
-    for row in rows:
-        row[at] = without_excluded_keys(row[at])
-    return rows
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,11 +152,6 @@ async def import_installation(
     новее приёмника (`archive_revision_unknown`), у приёмника есть проекты
     (`installation_not_empty`). Любой отказ — в том числе строка, которую не принял
     Postgres, — не оставляет в приёмнике ничего: всё идёт одной транзакцией вызывающего.
-
-    Пустота приёмника считается без проекта учебного засева (`app/services/tutorial.py`,
-    `TRK-370`): его автор — `tracker`, и приём заменяет его записи архивом, как и
-    остальные данные установки. Проект, заведённый человеком или агентом, считается
-    как раньше, даже с тем же ключом `START` (`TRK-360#15`, `TRK-371`).
     """
     await ensure_admin(session, actor, action="installation.import")
     check_archive(archive)
@@ -212,7 +162,7 @@ async def import_installation(
         raise ArchiveRevisionUnknownError(
             details={"schema_revision": archive.schema_revision, "head": head}
         )
-    projects = await ProjectRepository(session).count_excluding_tracker()
+    projects = await session.scalar(select(func.count()).select_from(Project)) or 0
     if projects:
         raise InstallationNotEmptyError(details={"projects": projects})
 
