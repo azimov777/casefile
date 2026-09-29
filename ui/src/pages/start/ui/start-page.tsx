@@ -106,8 +106,12 @@ export function StartPage() {
     // Ключ без учётной записи (агент, вошедший ключом набора `task`) экран открывает
     // только из панели (constraints задачи) — ставить знакомство здесь нечему.
     if (account === null) return;
+    // «Пропустить» — пропустить обучение целиком (TRK-385, слово владельца): помимо
+    // `skipped` скрывает и пояснения экранов, одним запросом, чтобы неудача не оставила
+    // половину. «Я разобрался» пояснения не трогает.
+    const change = status === 'skipped' ? { status, hints: { hidden_all: true } } : { status };
     update.mutate(
-      { accountId: account.id, update: { status } },
+      { accountId: account.id, update: change },
       { onSuccess: () => void navigate('/tasks', { replace: true }) },
     );
   }
