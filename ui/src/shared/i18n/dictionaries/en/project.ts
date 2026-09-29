@@ -5,7 +5,7 @@
 export const project = {
   /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-363`). */
   explanation: {
-    body: "A project answers “what are the tasks about”. Here you edit its description, keep its attributes — where the code lives, which branch is the main one — and write notes to the project's case. The agent receives the description with every task of the project.",
+    body: "A project answers “what are the tasks about”. Here you edit its description, keep its attributes — where the work lives, what to read before starting — and write notes to the project's case. The agent receives the description with every task of the project.",
   },
   missingTitle: 'There is no project {{key}}',
   missingText:
