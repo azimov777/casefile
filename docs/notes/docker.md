@@ -789,7 +789,8 @@ TRK-91) в слое контейнера обновлятора на время 
   обновления. К его старту renew уже убрала сирот.
 **Где:** `docker-compose.prod.yml`, служба `updater-renew` (`busy`) и старт службы `updater`.
 Тесты с подставным `docker` — `tests/test_auto_update.py`
-(`test_the_renewal_waits_out_the_whole_check_…`, `test_the_updater_drops_previous_tags_…`).
+(`test_the_renewal_waits_out_the_whole_check_of_an_earlier_updater`,
+`test_the_updater_drops_previous_tags_left_by_an_earlier_updater`).
 Живьём — оснастка перехода v0.6.0 → ветка из дела TRK-391.
 
 **Для живой проверки:** `scripts/check-auto-update.sh` публикует выпуск через тот же демон,
