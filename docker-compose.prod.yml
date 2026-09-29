@@ -677,7 +677,8 @@ services:
   # служба затем меняет его на обновлятор из файла.
   #
   # Обновлятор меняется, только если его метка ревизии не та, что здесь, и только если
-  # `up` зовёт он: в нём сейчас идёт `docker`. Тогда служба ждёт, пока он кончит, и
+  # `up` зовёт он: в нём идёт проверка (файл `/tmp/checking`, у v0.2.0 — процесс `docker`).
+  # Тогда служба ждёт конца всей его проверки, с ожиданием здоровья и откатом, и
   # пересоздаёт его. Если он спит, `up` зовёт установщик или человек, и обновлятор
   # пересоздаст их же `up`; два compose разом кончились бы ошибкой имени контейнера.
   # Ревизию сверяет тест с хешем определения `updater` (`tests/test_auto_update.py`): поменял
@@ -713,8 +714,14 @@ services:
         have=$$(docker inspect -f '{{index .Config.Labels "casefile.updater.revision"}}' "$$updater")
         [ "$$have" != "$$CASEFILE_UPDATER_REVISION" ] || exit 0
 
+        # Проверку обновлятора с v0.3.0 видно по файлу `/tmp/checking` в нём, всю целиком,
+        # вместе с ожиданиями `sleep 5` в `quiet` и `settled`: процесса `docker` в них нет, и
+        # по одному `docker top` его заменили бы посреди ожидания здоровья, до конца его
+        # `update` с откатом и уборкой тегов `previous` (TRK-391). У обновлятора v0.2.0 файла
+        # нет и ожиданий тоже: его проверку видно по процессу `docker`.
         busy() {
-          docker top "$$updater" -o pid,comm 2>/dev/null |
+          docker exec "$$updater" test -e /tmp/checking 2>/dev/null ||
+            docker top "$$updater" -o pid,comm 2>/dev/null |
             awk 'NR > 1 && $$2 ~ /^docker/ { found = 1 } END { exit !found }'
         }
         busy || exit 0

@@ -190,15 +190,27 @@ case "$*" in
     cat "$SCENE/failed" ;;
   "image inspect -f {{.Id}} "*) echo "$(cat "$SCENE/wanted")" ;;
   "image inspect "*) echo 0.2.0 ;;
+  "run --rm -v /var/run/docker.sock"*) [ ! -e "$CHECKING" ] || echo "(checking)" >>"$CALLS" ;;
   "run "*) [ -s "$SCENE/compose-in-image" ] || exit 1; cat "$SCENE/compose-in-image" ;;
   "compose up "*) exit "$(next up 0)" ;;
   "inspect -f {{.State.Health.Status}} "*) next health healthy ;;
   "tag "*) exit 0 ;;
   "top "*)
-    n=$(cat "$SCENE/busy" 2>/dev/null || echo 0)
     echo "PID COMMAND"
     echo "1 sh"
-    if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$SCENE/busy"; echo "7 docker"; fi ;;
+    # A scripted sequence of what runs besides the shell, one line a call; else a count.
+    if [ -e "$SCENE/top" ]; then
+      echo "7 $(next top sleep)"
+    else
+      n=$(cat "$SCENE/busy" 2>/dev/null || echo 0)
+      if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$SCENE/busy"; echo "7 docker"; fi
+    fi ;;
+  # The earlier updater's check goes on for $SCENE/checking-for more looks, then ends.
+  "exec "*)
+    n=$(cat "$SCENE/checking-for" 2>/dev/null || echo 0)
+    if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$SCENE/checking-for"; else rm -f "$CHECKING"; fi
+    shift 2
+    "$@" ;;
   "rmi "*) exit 0 ;;
 esac
 """
@@ -483,6 +495,24 @@ def test_the_renewal_replaces_a_busy_updater_of_an_earlier_release(updater: Upda
     assert replace.endswith("docker compose up -d --no-deps --remove-orphans updater")
 
 
+def test_the_renewal_waits_out_the_whole_check_of_an_earlier_updater(updater: Updater) -> None:
+    """Проверка прежнего обновлятора ждёт здоровья в `sleep 5`: `docker` в нём виден с
+    перерывами, а файл `/tmp/checking` лежит всю проверку. Замена — только после неё."""
+    (updater.root / "checking").write_text("", encoding="utf-8")
+    updater.set(
+        revision="\n",
+        checking_for="6",
+        top="docker\nsleep\nsleep\ndocker\nsleep\nsleep\nsleep\nsleep\nsleep\n",
+    )
+
+    out = updater.run("updater-renew", "", CASEFILE_UPDATER_REVISION=_revision())
+
+    assert "(checking)" not in updater.calls.read_text(), "заменён посреди проверки"
+    assert "replacing the updater" in out
+    assert len(updater.called("exec ")) >= 7
+    assert updater.called("run --rm -v /var/run/docker.sock")
+
+
 def test_the_renewal_gives_up_where_the_installation_path_is_unknown(updater: Updater) -> None:
     """Путь не того вида — не монтировать наугад, а сказать, как получить обновлятор."""
     updater.set(revision="\n", busy="1", directory="C:\\Users\\someone\\casefile\n")
@@ -494,12 +524,16 @@ def test_the_renewal_gives_up_where_the_installation_path_is_unknown(updater: Up
 
 
 def test_the_renewal_leaves_an_idle_updater_to_whoever_runs_up(updater: Updater) -> None:
-    """Обновлятор спит — `up` зовёт установщик или человек, и пересоздаст его сам."""
+    """Обновлятор спит — `up` зовёт установщик или человек, и пересоздаст его сам.
+
+    Без файла проверки и без `docker` служба кончает сразу, а не ждёт свой предел."""
     updater.set(revision="\n", busy="0")
 
     updater.run("updater-renew", "", CASEFILE_UPDATER_REVISION=_revision())
 
     assert not updater.called("run ")
+    assert len(updater.called("exec ")) == 1
+    assert len(updater.called("top ")) == 1
 
 
 def test_the_renewal_leaves_a_current_updater_alone(updater: Updater) -> None:
