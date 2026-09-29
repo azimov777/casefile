@@ -99,6 +99,13 @@ class ProjectKeyTakenError(ConflictError):
     message = "Project key is already taken"
 
 
+class ProjectKeyReservedError(ConflictError):
+    """Ключ закреплён за учебным проектом, который заводит сама установка (`TRK-384`)."""
+
+    code = "project_key_reserved"
+    message = "Project key is reserved for the tutorial project"
+
+
 class InvalidProjectKeyError(ValidationError):
     """Ключ проекта не соответствует шаблону."""
 

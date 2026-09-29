@@ -83,6 +83,7 @@
 | `participant_has_account` | Participant already has an account | У этого участника учётная запись уже есть: у человека она одна. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
 | `project_archived` | Project is archived: it and its tasks are frozen | Проект в архиве: он и его задачи заморожены для изменений (`CONCEPT.md`, 3.2). |
+| `project_key_reserved` | Project key is reserved for the tutorial project | Ключ закреплён за учебным проектом, который заводит сама установка (`TRK-384`). |
 | `project_key_taken` | Project key is already taken | Ключ проекта уже занят: ключи уникальны без учёта регистра. |
 | `project_not_archived` | Project is not archived | Восстанавливать нечего: проект не в архиве. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
