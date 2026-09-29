@@ -83,7 +83,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "f8f32bef4a8e"
+x-updater-revision: &updater-revision "08d84d6dc4fc"
 
 services:
   db:
@@ -651,6 +651,12 @@ services:
 
         trap 'exit 0' TERM INT
         rm -f /tmp/checking
+        # Теги `previous` живут только внутри `update`, и на старте они — остаток чужого
+        # обновления. Обновлятор 0.6.0 не снимает `api:previous`, пока его образ держит
+        # остановленный контейнер сироты `tutorial`: её убирает `updater-renew` уже после него
+        # (TRK-391). Остаток держал бы образ прежнего выпуска до следующего выпуска.
+        docker rmi "$$(kept api:previous)" >/dev/null 2>&1 || true
+        docker rmi "$$(kept ui:previous)" >/dev/null 2>&1 || true
         if [ "$$CASEFILE_AUTO_UPDATE" = "false" ]; then
           log "auto-update is off (CASEFILE_AUTO_UPDATE=false)"
           while :; do sleep 86400 & wait $$!; done
@@ -677,7 +683,8 @@ services:
   # служба затем меняет его на обновлятор из файла.
   #
   # Обновлятор меняется, только если его метка ревизии не та, что здесь, и только если
-  # `up` зовёт он: в нём сейчас идёт `docker`. Тогда служба ждёт, пока он кончит, и
+  # `up` зовёт он: в нём идёт проверка (файл `/tmp/checking`, у v0.2.0 — процесс `docker`).
+  # Тогда служба ждёт конца всей его проверки, с ожиданием здоровья и откатом, и
   # пересоздаёт его. Если он спит, `up` зовёт установщик или человек, и обновлятор
   # пересоздаст их же `up`; два compose разом кончились бы ошибкой имени контейнера.
   # Ревизию сверяет тест с хешем определения `updater` (`tests/test_auto_update.py`): поменял
@@ -713,8 +720,14 @@ services:
         have=$$(docker inspect -f '{{index .Config.Labels "casefile.updater.revision"}}' "$$updater")
         [ "$$have" != "$$CASEFILE_UPDATER_REVISION" ] || exit 0
 
+        # Проверку обновлятора с v0.3.0 видно по файлу `/tmp/checking` в нём, всю целиком,
+        # вместе с ожиданиями `sleep 5` в `quiet` и `settled`: процесса `docker` в них нет, и
+        # по одному `docker top` его заменили бы посреди ожидания здоровья, до конца его
+        # `update` с откатом и уборкой тегов `previous` (TRK-391). У обновлятора v0.2.0 файла
+        # нет и ожиданий тоже: его проверку видно по процессу `docker`.
         busy() {
-          docker top "$$updater" -o pid,comm 2>/dev/null |
+          docker exec "$$updater" test -e /tmp/checking 2>/dev/null ||
+            docker top "$$updater" -o pid,comm 2>/dev/null |
             awk 'NR > 1 && $$2 ~ /^docker/ { found = 1 } END { exit !found }'
         }
         busy || exit 0
