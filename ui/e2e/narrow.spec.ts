@@ -345,7 +345,9 @@ test('раскладка строки следует за шириной мес�
   await expect(row).toHaveCSS('display', 'table-row');
 });
 
-test('на карточке замечание доступно до описи и одним действием из навигации', async ({ page }) => {
+test('на карточке замечание доступно до описи и одним действием из блока «Замечания»', async ({
+  page,
+}) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/tasks/DEMO-3');
@@ -368,12 +370,18 @@ test('на карточке замечание доступно до описи 
   });
   expect(remarksBeforeCase).toBe(true);
 
-  // И то же самое — одним действием из липкой навигации, с любой глубины прокрутки.
-  await page.mouse.wheel(0, 4000);
-  const action = page
-    .getByRole('navigation', { name: /Навигация по задаче/ })
-    .getByRole('button', { name: 'Оставить замечание' });
+  // И то же самое — одним действием из блока «Замечания» (TRK-414): в липкой
+  // навигации его нет, страница не уходит вбок.
+  await expect(
+    page
+      .getByRole('navigation', { name: /Навигация по задаче/ })
+      .getByRole('button', { name: 'Оставить замечание' }),
+  ).toHaveCount(0);
+  const action = page.getByRole('button', { name: 'Оставить замечание' });
   await expect(action).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
   await action.click();
   await expect(page.getByLabel(/^Замечание$/)).toBeVisible();
 });
