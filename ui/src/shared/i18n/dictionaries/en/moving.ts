@@ -18,6 +18,8 @@ export const moving = {
     title: 'Export',
     intro:
       'One JSON file with every table of this installation: tasks, cases, projects, people and the hashes of their passwords and tokens. Keep it private — anyone holding it can bring it up as this installation, on another machine.',
+    tutorialLeftOut:
+      'The tutorial project START stays out of the archive: the other installation seeds its own.',
     action: 'Download archive',
     pending: 'Preparing the archive…',
   },

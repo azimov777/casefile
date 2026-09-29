@@ -75,6 +75,7 @@ export const errors = {
   permission_denied: 'Действие запрещено этим токеном.',
   project_archived: 'Проект в архиве: ни он, ни его задачи не меняются.',
   project_description_too_long: 'Описание проекта длиннее 320 знаков.',
+  project_key_reserved: 'Ключ START закреплён за учебным проектом, его заводит сама установка.',
   project_key_taken: 'Ключ проекта занят.',
   project_not_archived: 'Проект не в архиве.',
   project_not_found: 'Проекта с таким ключом нет.',

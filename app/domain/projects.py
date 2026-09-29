@@ -21,8 +21,10 @@ import re
 from app.domain.errors import (
     InvalidProjectKeyError,
     ProjectDescriptionTooLongError,
+    ProjectKeyReservedError,
     ProjectReasonRequiredError,
 )
+from app.domain.tutorial import TUTORIAL_PROJECT_KEY
 
 #: Ключ проекта: латиница и цифры, без разделителей — он идёт в ключ задачи перед дефисом.
 PROJECT_KEY_PATTERN = r"^[A-Za-z][A-Za-z0-9]{1,15}$"
@@ -46,6 +48,20 @@ def validate_project_key(key: str) -> str:
             details={"key": key, "reason": "pattern_mismatch", "pattern": PROJECT_KEY_PATTERN},
         )
     return normalized
+
+
+def ensure_key_not_reserved(canonical: str, *, by_installation: bool) -> None:
+    """Отказ `project_key_reserved` на ключ учебного проекта, если заводит не установка.
+
+    Ключ `START` закреплён за учебным проектом (решение владельца, `TRK-384`): по нему
+    выгрузка архива узнаёт учебный проект и не везёт его на другую машину
+    (`app/domain/archive.py`). Пометки «учебный» в схеме нет — признак один, ключ, и
+    потому второй проект с ним завести нельзя. Заводит его только сама установка —
+    засев (`app/services/tutorial.py`, автор `tracker`). Проект `START`, заведённый
+    человеком или агентом до 0.6.0, остаётся как был: запрет — на новое заведение.
+    """
+    if canonical == TUTORIAL_PROJECT_KEY and not by_installation:
+        raise ProjectKeyReservedError(details={"key": canonical, "reserved_for": "tutorial"})
 
 
 #: Предел описания проекта в знаках (`CONCEPT.md`, 3.2). Под него же заведено ограничение

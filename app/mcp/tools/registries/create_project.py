@@ -19,7 +19,9 @@ NewProjectKeyArg = Annotated[
             "Key of the new project: a Latin letter followed by 1–15 Latin letters or digits "
             "(`invalid_project_key` otherwise). It is stored upper-case, never changes and "
             "prefixes the key of every task of the project. A key already taken, in any "
-            "case, is refused with `project_key_taken`"
+            "case, is refused with `project_key_taken`; the key `START` belongs to the "
+            "tutorial project the installation seeds itself and is refused with "
+            "`project_key_reserved`"
         ),
         examples=["TRK"],
     ),

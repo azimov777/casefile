@@ -2,7 +2,7 @@
 
 Архив — это строки таблиц базы в текстовой форме Postgres, с именами колонок и ревизией
 схемы, на которой их сняли (`docs/moving.md`, TRK-100). Форма не знает ни одной таблицы
-поимённо, кроме двух исключённых ниже: таблицы и колонки приезжают из самой базы, а типы
+поимённо, кроме исключённых ниже: таблицы и колонки приезжают из самой базы, а типы
 значений разбирает Postgres при приёме. Поэтому одна и та же форма годится для архива,
 снятого на любой ревизии схемы, и выгрузка одного пространства (TRK-107) станет отбором
 строк по колонке, а не новым форматом.
@@ -13,12 +13,15 @@
 потребовал бы знать тип каждой колонки на каждой ревизии.
 """
 
+import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
 from app.domain.errors import ArchiveFormatUnsupportedError, ArchiveInvalidError
+from app.domain.tasks import TASK_KEY_SEPARATOR
+from app.domain.tutorial import TUTORIAL_PROJECT_KEY
 
 
 class ArchiveFormat(StrEnum):
@@ -43,6 +46,35 @@ EXCLUDED_TABLES: dict[str, str] = {
         "a token holds its secret (app/db/models/idempotency.py)"
     ),
 }
+
+
+#: Проекты, которых в архиве нет, по ключу, с причиной. Вместе с проектом не едут все
+#: строки, что ссылаются на него внешним ключом, прямо или через другие: его задачи,
+#: их дела и связи — в том числе связи с задачами других проектов, — дело и атрибуты
+#: проекта (`app/services/archive.py`).
+EXCLUDED_PROJECTS: dict[str, str] = {
+    TUTORIAL_PROJECT_KEY: (
+        "The tutorial project the installation seeds for itself, recognized by its key "
+        "(TRK-384); the receiving installation seeds its own. A project START made by a "
+        "person before 0.6.0 stays behind too: the owner accepted this risk"
+    ),
+}
+
+
+def without_excluded_keys(previous_keys: str | None) -> str | None:
+    """Прежние ключи задачи (текст `jsonb`) без ключей исключённых проектов.
+
+    Задача, унесённая из `START` в другой проект, помнит `START-N`. На приёмнике
+    `START` нет, и засев, заведя его заново, выдал бы `START-1` второй раз — ключ,
+    которым уже названа эта задача (`CONCEPT.md`, 3.3: ключ одной задачи другой не
+    выдаётся). Остальные прежние ключи и их порядок остаются; значение без таких ключей
+    возвращается как было, байт в байт.
+    """
+    if previous_keys is None:
+        return None
+    keys = json.loads(previous_keys)
+    kept = [key for key in keys if key.rpartition(TASK_KEY_SEPARATOR)[0] not in EXCLUDED_PROJECTS]
+    return previous_keys if len(kept) == len(keys) else json.dumps(kept, ensure_ascii=False)
 
 
 @dataclass(frozen=True, slots=True)

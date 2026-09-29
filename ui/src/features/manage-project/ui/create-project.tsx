@@ -3,11 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { Plus } from 'lucide-react';
 import { descriptionTooLong } from '@/entities/project';
+import { ApiError } from '@/shared/api';
 import { complainsAbout, errorMessage } from '@/shared/errors';
 import { projectHref } from '@/shared/lib';
 import { Button, Callout, Dialog, Input } from '@/shared/ui';
 import { useCreateProject } from '../model/use-project-actions';
 import { DescriptionField } from './description-field';
+
+/** Отказы, чья причина — сам набранный ключ: их текст стоит у поля ключа. */
+const KEY_REFUSALS: readonly string[] = ['project_key_taken', 'project_key_reserved'];
 
 /**
  * Кнопка «Новый проект» и её окно: ключ, название, описание (`UI-175`, решение 8
@@ -66,10 +70,17 @@ function CreateProjectForm({
   const create = useCreateProject();
   const keyId = useId();
   const keyHintId = useId();
+  const keyRefusedId = useId();
   const titleId = useId();
   const { t } = useTranslation('project');
 
-  const badKey = complainsAbout(create.error, 'key');
+  // Ключ занят или закреплён за учебным проектом (`project_key_reserved`, TRK-384):
+  // причина — про само поле, и стоит она у поля, а не в общем отказе под кнопками.
+  const keyRefused =
+    create.error instanceof ApiError && KEY_REFUSALS.includes(create.error.code)
+      ? errorMessage(create.error)
+      : null;
+  const badKey = complainsAbout(create.error, 'key') || keyRefused !== null;
   const badTitle = complainsAbout(create.error, 'title');
   const tooLong = descriptionTooLong(description);
 
@@ -112,7 +123,7 @@ function CreateProjectForm({
           autoCapitalize="characters"
           spellCheck={false}
           aria-invalid={problem === 'key' || badKey}
-          aria-describedby={keyHintId}
+          aria-describedby={keyRefused === null ? keyHintId : `${keyHintId} ${keyRefusedId}`}
         />
         <span className="text-meta text-muted" id={keyHintId}>
           {t('create.keyHint')}
@@ -120,6 +131,11 @@ function CreateProjectForm({
         {problem === 'key' ? (
           <span className="text-meta text-danger" role="alert">
             {t('create.keyEmpty')}
+          </span>
+        ) : null}
+        {keyRefused !== null && problem === null ? (
+          <span className="text-meta text-danger" role="alert" id={keyRefusedId}>
+            {keyRefused}
           </span>
         ) : null}
       </div>
@@ -158,7 +174,7 @@ function CreateProjectForm({
         </Button>
       </div>
 
-      {create.isError ? (
+      {create.isError && keyRefused === null ? (
         <Callout tone="danger">
           {errorMessage(create.error)} {badKey ? t('create.keyHint') : t('retrySafe')}
         </Callout>

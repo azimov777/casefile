@@ -75,6 +75,8 @@ export const errors = {
   permission_denied: 'This token is not allowed to do that.',
   project_archived: 'The project is archived: it and its tasks accept no changes.',
   project_description_too_long: 'The project description is longer than 320 characters.',
+  project_key_reserved:
+    'The key START belongs to the tutorial project, which the installation creates itself.',
   project_key_taken: 'The project key is taken.',
   project_not_archived: 'The project is not archived.',
   project_not_found: 'There is no project with that key.',
