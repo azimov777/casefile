@@ -644,7 +644,7 @@ describe('пояснение экрана (TRK-362)', () => {
       const expected =
         language === 'ru'
           ? 'Сюда приходят вопросы, которые агенты задали вам. Пока блокирующий вопрос без ответа, работа по задаче стоит; ваш ответ подшивается в её дело, и агент читает его оттуда, когда продолжает работу. Если агент уже остановился, напишите ему в его чате, что ответили.'
-          : "Questions that agents asked you arrive here. While a blocking question has no answer, work on that task stands still; your answer is filed in its case, and the agent reads it from there when it resumes work. If the agent has already stopped, tell it in its chat that you have answered.";
+          : 'Questions that agents asked you arrive here. While a blocking question has no answer, work on that task stands still; your answer is filed in its case, and the agent reads it from there when it resumes work. If the agent has already stopped, tell it in its chat that you have answered.';
 
       const explanation = await within(main).findByText(expected);
       expect(explanation).toBeInTheDocument();
