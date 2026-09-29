@@ -233,9 +233,12 @@ _EN_INTRODUCTION = TutorialTask(
         "question and are waiting for the answer.\n"
         "6. `transition` — `to: waiting`, a `reason` naming the question you wait for.\n"
         "7. In chat, say word for word: \"Answer the question in the 'Inbox' section or on "
-        "the task page — I'm waiting for it.\"\n"
+        "the task page. If after that I have stopped here and gone quiet, write me "
+        "'Answered'.\" Do not end your turn after this line: go straight to step 8.\n"
         "8. `wait_journal` — `types: [answer]`, `after: 0`, `timeout: 60`; repeat the call "
-        "until an entry comes back.\n"
+        "until an entry comes back. If your client can watch in the background, a watcher "
+        "on the answer may replace the call. The human wrote 'Answered'? Do this step "
+        "again: the entry is already there.\n"
         "9. `transition` — `to: in_progress`.\n"
         "10. `add_entry` — `type: artifact`, a `title`, `refs: [START-1#<the answer's "
         "number>]`, and a `body` — the memo below, with the work from the answer, in the "
@@ -245,9 +248,12 @@ _EN_INTRODUCTION = TutorialTask(
         "filed and you are waiting for a remark.\n"
         "12. `transition` — `to: waiting`, a `reason` naming that you wait for a remark.\n"
         "13. In chat, say word for word: \"Leave any remark on the task with the 'Leave a "
-        "remark' form on its page — I'm waiting for it.\"\n"
+        "remark' form on its page. If after that I have stopped here and gone quiet, write "
+        "me 'Remark left'.\" Do not end your turn after this line: go straight to step 14.\n"
         "14. `wait_journal` — `types: [remark]`, `after: 0`, `timeout: 60`; repeat the call "
-        "until an entry comes back.\n"
+        "until an entry comes back. If your client can watch in the background, a watcher "
+        "on the remark may replace the call. The human wrote 'Remark left'? Do this step "
+        "again: the entry is already there.\n"
         "15. `transition` — `to: in_progress`.\n"
         "16. `add_entry` — `type: artifact`, a `title`, `refs: [START-1#<the memo's "
         "number>]`, and a `body` — the same memo with only what the remark asked for "
@@ -313,9 +319,12 @@ _RU_INTRODUCTION = TutorialTask(
         "ждёшь ответ.\n"
         "6. `transition` — `to: waiting`, `reason` называет вопрос, которого ждёшь.\n"
         '7. В чате скажи дословно: «Ответь на вопрос в разделе "Входящая" или на странице '
-        "задачи — я жду.»\n"
+        'задачи. Если после этого я здесь остановился и молчу, напиши мне "Ответил".» Не '
+        "заканчивай ход после этой строки: сразу шаг 8.\n"
         "8. `wait_journal` — `types: [answer]`, `after: 0`, `timeout: 60`; повторяй вызов, "
-        "пока запись не придёт.\n"
+        "пока запись не придёт. Если твой клиент умеет следить в фоне, вызов можно заменить "
+        'сторожем на ответ. Человек написал "Ответил"? Сделай этот шаг снова: запись уже '
+        "там.\n"
         "9. `transition` — `to: in_progress`.\n"
         "10. `add_entry` — `type: artifact`, `title`, `refs: [START-1#<номер ответа>]`, "
         "`body` — памятка ниже, с работой из ответа, его же словами, на месте единственной "
@@ -325,9 +334,12 @@ _RU_INTRODUCTION = TutorialTask(
         "подшита и ждёшь замечание.\n"
         "12. `transition` — `to: waiting`, `reason` называет, что ждёшь замечание.\n"
         '13. В чате скажи дословно: «Оставь любое замечание к задаче формой "Оставить '
-        'замечание" на её странице — я жду.»\n'
+        'замечание" на её странице. Если после этого я здесь остановился и молчу, напиши мне '
+        '"Оставил замечание".» Не заканчивай ход после этой строки: сразу шаг 14.\n'
         "14. `wait_journal` — `types: [remark]`, `after: 0`, `timeout: 60`; повторяй вызов, "
-        "пока запись не придёт.\n"
+        "пока запись не придёт. Если твой клиент умеет следить в фоне, вызов можно заменить "
+        'сторожем на замечание. Человек написал "Оставил замечание"? Сделай этот шаг снова: '
+        "запись уже там.\n"
         "15. `transition` — `to: in_progress`.\n"
         "16. `add_entry` — `type: artifact`, `title`, `refs: [START-1#<номер памятки>]`, "
         "`body` — та же памятка, изменено только то, о чём просило замечание; обе строки "

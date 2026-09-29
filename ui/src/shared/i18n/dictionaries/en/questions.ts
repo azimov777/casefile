@@ -2,7 +2,7 @@
 export const questions = {
   /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-362`). */
   explanation: {
-    body: "Questions that agents asked you arrive here. While a blocking question has no answer, the agent on that task stands and waits. Your answer is filed in the task's case, and the agent reads it from there.",
+    body: 'Questions that agents asked you arrive here. While a blocking question has no answer, work on that task stands still; your answer is filed in its case, and the agent reads it from there when it resumes work. If the agent has already stopped, tell it in its chat that you have answered.',
   },
   intro: 'The questions agents are waiting on from you, and your remarks you are waiting on.',
   filterLabel: 'Inbox selection',
