@@ -148,13 +148,33 @@ PY
   for name in casefile casefile-ui; do
     docker push -q "$REG/$name:$version" >/dev/null
     for tag in "${tags[@]}"; do
-      docker tag "$REG/$name:$version" "$REG/$name:$tag"
-      docker push -q "$REG/$name:$tag" >/dev/null
+      # Локальный тег канала общий с обновлятором установки: его `hold_back` после
+      # упавшего выпуска ставит тот же тег на прежний образ. Попав между `tag` и `push`,
+      # он отправлял в реестр прежний выпуск под каналом, и фаза I падала на «services did
+      # not move to 0.5.0» (TRK-391). Поэтому тег в реестре сверяется с выпуском.
+      local try=0
+      until docker tag "$REG/$name:$version" "$REG/$name:$tag" &&
+        docker push -q "$REG/$name:$tag" >/dev/null &&
+        [ "$(registry_digest "$name" "$tag")" = "$(registry_digest "$name" "$version")" ]; do
+        try=$((try + 1))
+        [ "$try" -lt 5 ] || fail "$name:$tag in the registry is not $version"
+        note "$name:$tag in the registry is not $version; pushing it again"
+      done
       docker rmi "$REG/$name:$tag" >/dev/null
     done
     note "$(docker image inspect -f '{{.Id}}' "$REG/$name:$version") = $name:$version ${tags[*]}"
     docker rmi "$REG/$name:$version" >/dev/null
   done
+}
+
+# Дайджест тега в самом реестре, без локальных имён.
+registry_digest() {
+  curl -fsSI \
+    -H 'Accept: application/vnd.oci.image.index.v1+json' \
+    -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+    -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+    -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+    "http://$REG/v2/$1/manifests/$2" | tr -d '\r' | awk 'tolower($1) == "docker-content-digest:" { print $2 }'
 }
 
 # Id образа выпуска в реестре: скачать его под номером и сразу забыть имя.
