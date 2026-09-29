@@ -4,7 +4,7 @@
 экземпляр с сессией, привязанной к откатываемой транзакции, — ровно как это делает
 `create_app` для REST.
 
-## Две вещи, которые сервер отдаёт агенту
+## Три вещи, которые сервер отдаёт агенту
 
 1. **Инструменты** рабочего цикла (`app/mcp/tools/`). Состав `tools/list` зависит от
    набора токена; отказ на вызове недоступного инструмента приходит из той же единой
@@ -13,8 +13,11 @@
    `app/mcp/instructions.md`: что такое трекер, что видит человек, что считать
    заданием, цикл работы. Они уезжают клиенту при подключении и читаются моделью
    раньше любого вызова. Механики отдельных инструментов в них нет: она в метадате
-   (`CONCEPT.md`, 5.2). Отдельного скила или промпта сервер не заводит: решение
-   владельца `TRK-140#8`.
+   (`CONCEPT.md`, 5.2). Договор работы — только здесь и в метадате: решение владельца
+   `TRK-140#8`.
+3. **Скил** `skills/casefile/SKILL.md` — не договор, а то, что MCP не доставит (подключение,
+   401, сторож журнала, установка самого скила). Отдаётся расширением SEP-2640
+   (`app/mcp/skills.py`) и ресурсом `skill://casefile/SKILL.md` (`CONCEPT.md`, 5.3).
 
 ## Почему instructions — отдельный файл и держат длину
 
@@ -47,6 +50,7 @@ from app import __version__
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.mcp.runtime import Runtime, headers_middleware
+from app.mcp.skills import SKILLS_DIR, CasefileSkills, advertise_on_handshake
 from app.mcp.tools import register_tools
 from app.mcp.toolset import Toolset
 
@@ -80,6 +84,7 @@ def create_server(
     # Промежуточный слой ставится после регистрации: он спрашивает у набора состав
     # инструментов, и пустой набор оставил бы `tools/list` пустым навсегда.
     tools.server.middleware.append(tools.middleware())
+    tools.server.middleware.append(advertise_on_handshake)
     return tools.server
 
 
@@ -97,6 +102,7 @@ def _bare_server(settings: Settings) -> MCPServer:
         # Этот слой стоит **первым**: фильтр `tools/list` разбирает токен и без
         # заголовков не увидел бы его вовсе.
         middleware=[headers_middleware],
+        extensions=[CasefileSkills(SKILLS_DIR)],
         debug=settings.debug,
     )
 

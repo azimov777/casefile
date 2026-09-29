@@ -42,6 +42,8 @@ WORKDIR /app
 COPY --chown=tracker:tracker alembic.ini pyproject.toml ./
 # `pyproject.toml` — единственный источник версии: `app/__init__.py` читает её оттуда.
 COPY --chown=tracker:tracker app ./app
+# Скил Casefile: его читает `app/mcp/skills.py` и отдаёт по SEP-2640 (`/app/skills/…`).
+COPY --chown=tracker:tracker skills ./skills
 # Файл установки того же выпуска, что и образ: установщик и служба `updater` берут его
 # отсюда, а не с main на GitHub, — так файл и образы установки никогда не расходятся
 # (`docker-compose.prod.yml`, служба `updater`). Процессу он не нужен.

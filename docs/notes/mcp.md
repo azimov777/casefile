@@ -673,3 +673,18 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 формы; новая форма — новые необязательные поля той же модели, заданные только в ней.
 **Где:** `app/mcp/tools/tasks/move_task.py`, `MoveView`, `MoveKeyArg`, `move_result`;
 `tests/test_task_move_batch.py`, `test_mcp_moves_a_list_and_keeps_the_single_answer`.
+
+## `capabilities.extensions` на 2025-11-25 срезает SDK — сервер дописывает его сам
+
+**Что:** расширение `io.modelcontextprotocol/skills` объявляется в `capabilities.extensions`,
+но SDK (mcp 2.2) отдаёт это поле только в `server/discover` эпохи 2026-07-28: результат
+`initialize` на 2025-11-25 сериализуется по схеме своей версии, и `extensions` пропадает.
+Промежуточный слой `advertise_on_handshake` (`app/mcp/skills.py`) дописывает его в ответ
+`initialize`. `ttlMs` и `cacheScope` в `skills/list` и `skills/get` кладутся только на
+эпохе 2026-07-28.
+**Почему важно:** клиенты пока ходят рукопожатием, а Inspector (`--verify`) без объявления
+отказывает: скилов у сервера нет. Сервер при этом здоров, `resources/list` работает, и потеря
+объявления видна только по этому отказу.
+**Как правильно:** не убирать слой, пока SDK не отдаёт поле на старой эпохе (`TRK-407`);
+тест `tests/test_mcp_skills.py` проверяет объявление на обеих эпохах.
+**Где:** `app/mcp/skills.py`, `advertise_on_handshake`; `app/mcp/server.py`, `_bare_server`.

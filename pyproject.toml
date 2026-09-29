@@ -21,6 +21,8 @@ dependencies = [
     # переименован в `MCPServer`, а server-to-client нотификации идут подписками
     # (`subscriptions/listen`), а не постоянным GET-потоком.
     "mcp>=2.1",
+    # Фронтматтер скила (`app/mcp/skills.py`): `name` и `description` для `skills/list`.
+    "pyyaml>=6",
 ]
 
 [project.optional-dependencies]
