@@ -207,4 +207,5 @@ README.md сразу после «Connect your agent», отчёт челове�
 обещаний о поведении агента, которые держатся только на послушности модели, в тексте для
 человека нет. `instructions` и метадата MCP для этого не менялись.
 **Где:** `app/domain/tutorial.py`, `_RU_INTRODUCTION`, `_EN_INTRODUCTION`;
-`ui/src/shared/i18n/dictionaries/{en,ru}/questions.ts`.
+`ui/src/shared/i18n/dictionaries/en/questions.ts`,
+`ui/src/shared/i18n/dictionaries/ru/questions.ts`.
