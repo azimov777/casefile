@@ -71,7 +71,7 @@ export const project = {
     addIntro:
       'A reference fact about the project: a name and a value. It is set without a reason; changing or removing it takes one.',
     nameLabel: 'Name',
-    nameHint: 'Latin letters, digits, “_” and “-”, up to 64: repo, main-branch.',
+    nameHint: 'Latin letters, digits, “_” and “-”, up to 64: workspace, read-first.',
     nameEmpty: 'The attribute needs a name.',
     valueLabel: 'Value',
     valueHint: 'Plain text up to 1000 characters, stored as written.',
