@@ -72,6 +72,9 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
    * от `account` выше, которую здесь показывают лишь в режиме входа.
    */
   const isAdmin = bootstrap.data?.account?.is_admin === true;
+  // Нет учётной записи (ключ без входа) — нет и состояния знакомства, метки нет.
+  const introStatus = bootstrap.data?.account?.onboarding.status;
+  const introUnfinished = introStatus === 'pending' || introStatus === 'skipped';
   const place = readPlace(location.pathname, searchParams);
   const onList = location.pathname === '/tasks';
 
@@ -205,6 +208,21 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/start" onClick={onNavigate} className={sectionLink}>
           <Home className="size-(--ui-mark) shrink-0" aria-hidden="true" />
           {t('app.start')}
+          {/*
+           * Знакомство не пройдено до конца (`TRK-415`): метка горит при `pending` и
+           * `skipped` и гаснет только после «Я разобрался» (`completed`). Пропустивший
+           * как раз не видел объяснения. Только оформление: точка тоном внимания и
+           * подпись для диктора, чтобы метка не держалась на одном цвете.
+           */}
+          {introUnfinished ? (
+            <>
+              <span
+                aria-hidden="true"
+                className="ml-auto size-2 shrink-0 rounded-pill bg-attention"
+              />
+              <span className="sr-only">{t('app.startUnfinished')}</span>
+            </>
+          ) : null}
         </NavLink>
 
         <NavLink to="/questions" onClick={onNavigate} className={sectionLink}>

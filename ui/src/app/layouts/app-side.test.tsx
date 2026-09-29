@@ -221,6 +221,62 @@ describe('боковая панель', () => {
     await waitFor(() => expect(within(side).queryByRole('link', { name: /^OLD/ })).toBeNull());
   });
 
+  describe('метка «Начало» (TRK-415)', () => {
+    /** Учётная запись с состоянием знакомства; остальное — как у владельца установки. */
+    function withStatus(status: 'pending' | 'completed' | 'skipped') {
+      return {
+        id: '55555555-5555-5555-5555-555555555555',
+        email: 'owner@localhost',
+        participant: 'owner',
+        is_admin: true,
+        has_password: false,
+        disabled_at: null,
+        onboarding: { status, hints: { hidden_all: false, hidden: [] as string[] } },
+        created_by: { kind: 'tracker' as const, signature: null },
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-01T10:00:00Z',
+      };
+    }
+
+    it.each(['pending', 'skipped'] as const)(
+      'при %s пункт несёт метку с подписью для диктора',
+      async (status) => {
+        server.use(
+          http.get(`${API}/api/v1/bootstrap`, () =>
+            data(bootstrap({ account: withStatus(status) })),
+          ),
+        );
+        renderApp('/tasks');
+
+        const start = await screen.findByRole('link', {
+          name: `${say.ui('app.start')} ${say.ui('app.startUnfinished')}`,
+        });
+        expect(start).toHaveAttribute('href', '/start');
+      },
+    );
+
+    it('при completed метки нет, имя пункта — просто «Начало»', async () => {
+      server.use(
+        http.get(`${API}/api/v1/bootstrap`, () =>
+          data(bootstrap({ account: withStatus('completed') })),
+        ),
+      );
+      renderApp('/tasks');
+
+      const start = await screen.findByRole('link', { name: say.ui('app.start') });
+      expect(start).toHaveAttribute('href', '/start');
+      expect(screen.queryByText(say.ui('app.startUnfinished'))).not.toBeInTheDocument();
+    });
+
+    it('без учётной записи метки нет', async () => {
+      server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
+      renderApp('/tasks');
+
+      expect(await screen.findByRole('link', { name: say.ui('app.start') })).toBeInTheDocument();
+      expect(screen.queryByText(say.ui('app.startUnfinished'))).not.toBeInTheDocument();
+    });
+  });
+
   it('неизвестный код показывает фразу бэкенда и сам код', async () => {
     server.use(
       http.get(`${API}/api/v1/bootstrap`, () =>

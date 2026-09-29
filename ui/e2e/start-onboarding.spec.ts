@@ -26,6 +26,8 @@ async function setHints(
   expect(response.ok()).toBe(true);
 }
 
+/** Имя пункта «Начало» с подписью метки для диктора (TRK-415). */
+const UNFINISHED_START = /^Начало\s+Знакомство не пройдено$/;
 const TASKS_EXPLANATION = /Здесь все задачи, которые ведут агенты/;
 const QUESTIONS_EXPLANATION = /Сюда приходят вопросы, которые агенты задали вам/;
 
@@ -66,6 +68,9 @@ test('«Начало» на свежем контуре объясняет сп�
     await expect(page).toHaveURL(/\/start$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Начало' })).toBeVisible();
 
+    // Знакомство не пройдено — пункт «Начало» в панели отмечен (TRK-415).
+    await expect(side(page).getByRole('link', { name: UNFINISHED_START })).toBeVisible();
+
     // Четыре раздела по порядку решения TRK-360#14 — это главное, что человек должен
     // понять с первого взгляда.
     expect(await page.locator('main h2').allTextContents()).toEqual(SECTION_HEADINGS);
@@ -93,8 +98,9 @@ test('«Начало» на свежем контуре объясняет сп�
     await page.goto('/');
     await expect(page).toHaveURL(/\/tasks$/);
 
-    // «Начало» остаётся достижимым пунктом панели, сколько бы раз его ни пропустили.
-    await side(page).getByRole('link', { name: 'Начало' }).click();
+    // «Начало» остаётся достижимым пунктом панели, сколько бы раз его ни пропустили,
+    // и пропустившему метка не гаснет (TRK-415): он объяснения не видел.
+    await side(page).getByRole('link', { name: UNFINISHED_START }).click();
     await expect(page).toHaveURL(/\/start$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Начало' })).toBeVisible();
 
@@ -116,6 +122,12 @@ test('«Начало» на свежем контуре объясняет сп�
     } finally {
       await context.close();
     }
+
+    // «Я разобрался» гасит метку без перезагрузки страницы (TRK-415).
+    await page.goto('/start');
+    await page.getByRole('button', { name: 'Я разобрался' }).click();
+    await expect(page.getByRole('link', { name: 'Начало', exact: true })).toBeVisible();
+    await expect(side(page).getByRole('link', { name: UNFINISHED_START })).toHaveCount(0);
 
     // Вернуть пояснения можно одним действием на «Начале».
     await page.goto('/start');
