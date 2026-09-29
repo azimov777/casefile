@@ -192,7 +192,7 @@ export function TaskPage() {
   );
 
   const { t } = useTranslation('task');
-  // Кнопка замечания стоит в липкой навигации, а подпись у неё та же, что у формы:
+  // Кнопка замечания стоит в блоке «Замечания», а подпись у неё та же, что у формы:
   // действие одно, и называться двумя фразами оно не должно.
   const { t: brick } = useTranslation('ui');
 
@@ -303,6 +303,22 @@ export function TaskPage() {
     });
   }
 
+  /*
+   * Единственное, что человек начинает сам, стоит в блоке «Замечания», где он и
+   * читает о замечаниях (TRK-414): раньше кнопка жила справа в липкой строке рядом
+   * с «← К списку» и читалась частью шапки экрана, а не задачи. Кнопка одна — и в
+   * строке пустого блока, и в шапке блока с замечаниями. Пока форма раскрыта, кнопки
+   * нет: форма и есть действие. На телефоне подпись уходит диктору, на виду остаётся
+   * знак (UI-134, UI-144).
+   */
+  const remarkAction =
+    remarkOpen || !canAct ? null : (
+      <Button size="sm" onClick={() => setRemarkOpen(true)}>
+        <MessageSquarePlus className="size-(--ui-mark)" aria-hidden="true" />
+        <span className="max-fold:sr-only">{brick('remark.submit')}</span>
+      </Button>
+    );
+
   const remarksEmpty = remarks.length === 0 && !(remarkOpen && canAct);
   if (remarksEmpty) {
     cardBlocks.push({
@@ -311,6 +327,7 @@ export function TaskPage() {
       id: 'remarks',
       title: t('remarks'),
       text: t('noRemarks'),
+      action: remarkAction,
     });
   } else {
     cardBlocks.push({
@@ -318,9 +335,12 @@ export function TaskPage() {
       key: 'remarks',
       node: (
         <section key="remarks" className={block()} aria-labelledby="remarks">
-          <h2 className={blockTitle()} id="remarks">
-            {t('remarks')}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className={blockTitle()} id="remarks">
+              {t('remarks')}
+            </h2>
+            {remarkAction}
+          </div>
           {remarks.length === 0 ? (
             <p className={EMPTY}>{t('noRemarks')}</p>
           ) : (
@@ -366,30 +386,7 @@ export function TaskPage() {
         <ExplanationPanel hintKey={HINT_KEYS.task}>{t('explanation.body')}</ExplanationPanel>
       )}
 
-      {/*
-       * Единственное, что человек начинает сам, стоит в липкой строке: до неё не надо
-       * прокручивать опись в сотню записей. Второй такой кнопки в блоке замечаний нет —
-       * заменённый путь удалён, а не оставлен вторым вариантом.
-       */}
-      <TaskNav
-        taskKey={task.key}
-        view="card"
-        action={
-          remarkOpen || !canAct ? null : (
-            // Главное действие строки — акцентом и со знаком, но размером строки: рядом
-            // стоит переключатель вида того же `sm`, и они одной высоты (UI-128).
-            //
-            // На телефоне подпись уходит диктору, на виду остаётся знак — тот же приём,
-            // что у переключателя списка (UI-134): со словами строка «назад, вид,
-            // действие» в 390 px не помещалась, и действие уезжало второй строкой,
-            // переставая стоять вровень с переключателем (UI-144).
-            <Button size="sm" onClick={() => setRemarkOpen(true)}>
-              <MessageSquarePlus className="size-(--ui-mark)" aria-hidden="true" />
-              <span className="max-fold:sr-only">{brick('remark.submit')}</span>
-            </Button>
-          )
-        }
-      />
+      <TaskNav taskKey={task.key} view="card" />
       <TaskHeader task={task} features={features} parent={parent ?? null} />
 
       {/* Почему на карточке нет ни «Ответить», ни «Замечания», сказано словами — и
@@ -524,6 +521,8 @@ interface EmptyCardBlock {
   id: string;
   title: string;
   text: string;
+  /** Действие блока, справа в строке (кнопка «Оставить замечание», TRK-414). */
+  action?: ReactNode;
 }
 
 type CardBlock = FullCardBlock | EmptyCardBlock;
@@ -551,6 +550,7 @@ function renderCardBlocks(blocks: CardBlock[]): ReactNode[] {
               {item.title}
             </h2>
             <p className={EMPTY}>{item.text}</p>
+            {item.action != null ? <span className="ml-auto">{item.action}</span> : null}
           </div>
         ))}
       </div>,

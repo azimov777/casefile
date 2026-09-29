@@ -13,7 +13,8 @@ test('«Отмена» на пустой форме сворачивает её 
   await page.goto('/tasks/DEMO-5');
 
   const nav = page.getByRole('navigation', { name: /Навигация по задаче/ });
-  await nav.getByRole('button', { name: 'Оставить замечание' }).click();
+  await expect(nav.getByRole('button', { name: 'Оставить замечание' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Оставить замечание' }).click();
   await expect(page.getByLabel(/^Замечание$/)).toHaveValue('');
 
   await page.getByRole('button', { name: 'Отмена' }).click();
@@ -21,7 +22,7 @@ test('«Отмена» на пустой форме сворачивает её 
   // Никакого диалога — форма ушла сразу, и открывающая кнопка снова на месте.
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   await expect(page.getByLabel(/^Замечание$/)).toHaveCount(0);
-  await expect(nav.getByRole('button', { name: 'Оставить замечание' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Оставить замечание' })).toBeVisible();
 });
 
 test('«Отмена» на непустом черновике спрашивает и выбрасывает его по подтверждению', async ({

@@ -148,33 +148,6 @@ test('из входящей ссылка «Все задачи» ведёт ко
 });
 
 /*
- * Действие и переключатель вида в липкой строке задачи — одной высоты и на одной
- * оси (UI-128): до правки кнопка была 33.6 px, переключатель 28, и строка читалась
- * как «кнопки разных размеров». Обе ширины, потому что на узкой группа переносится.
- */
-for (const width of [1440, 390]) {
-  test(`действие и переключатель «Карточка — Дело» одной высоты и вровень на ${width}`, async ({
-    page,
-  }) => {
-    await silenceJournal(page);
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/tasks/DEMO-1');
-
-    const remark = page.getByRole('button', { name: 'Оставить замечание' });
-    const toggle = page.getByRole('navigation', { name: 'Вид задачи' });
-    await expect(remark).toBeVisible();
-    await fontsReady(page);
-
-    const [a, b] = await Promise.all([remark.boundingBox(), toggle.boundingBox()]);
-    expect(a).not.toBeNull();
-    expect(b).not.toBeNull();
-    if (a === null || b === null) return;
-    expect(Math.abs(a.height - b.height)).toBeLessThan(0.5);
-    expect(Math.abs(a.y + a.height / 2 - (b.y + b.height / 2))).toBeLessThan(0.5);
-  });
-}
-
-/*
  * Переключатель «Карточка / Дело» стоит на одних координатах на обеих страницах (UI-144).
  * Раньше он жался к правому краю строки, а правый край у карточки (100rem, с кнопкой
  * замечания) и у дела (64rem, без неё) разный: на 1440 он переезжал с x 1291 на 1115,

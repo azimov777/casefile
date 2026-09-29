@@ -42,10 +42,7 @@ test('замечание с карточки подшивается один р�
    */
   await expect(page.getByText('Неразобранных замечаний нет.')).toBeVisible();
 
-  await page
-    .getByRole('navigation', { name: /Навигация по задаче/ })
-    .getByRole('button', { name: 'Оставить замечание' })
-    .click();
+  await page.getByRole('button', { name: 'Оставить замечание' }).click();
   await page
     .getByLabel(/^Замечание$/)
     .fill('Из карточки не видно, чем задача отличается от соседней.');

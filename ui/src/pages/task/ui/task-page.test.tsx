@@ -733,7 +733,7 @@ describe('блок «Связи» (UI-125)', () => {
 });
 
 describe('порядок чтения карточки', () => {
-  it('замечания идут до описи дела, а действие стоит в липкой навигации', async () => {
+  it('замечания идут до описи дела, а действие стоит в блоке «Замечания» (TRK-414)', async () => {
     server.use(packageOf('DEMO-6'), entries('DEMO-6'));
     renderApp('/tasks/DEMO-6');
     await screen.findByRole('heading', { name: say.task('remarks') });
@@ -755,11 +755,14 @@ describe('порядок чтения карточки', () => {
       summaryHeading.compareDocumentPosition(remarksHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    // Кнопка одна и живёт в навигации: второго пути к форме нет.
+    // Кнопка одна и живёт в блоке «Замечания», а не в навигации: второго пути к форме нет.
     const nav = screen.getByRole('navigation', {
       name: say.ui('task.nav.label', { key: 'DEMO-6' }),
     });
-    expect(within(nav).getByRole('button', { name: say.ui('remark.submit') })).toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: say.ui('remark.submit') })).toBeNull();
+    const button = screen.getByRole('button', { name: say.ui('remark.submit') });
+    const row = remarksHeading.parentElement;
+    expect(row?.contains(button)).toBe(true);
     expect(screen.getAllByRole('button', { name: say.ui('remark.submit') })).toHaveLength(1);
   });
 });
@@ -940,10 +943,31 @@ describe('замечание к задаче', () => {
     // Никакого вопроса — форма ушла сразу, и на месте снова кнопка «Оставить замечание».
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.queryByLabelText(say.ui('remark.fieldLabel'))).toBeNull();
+    const heading = screen.getByRole('heading', { name: say.task('remarks') });
+    expect(
+      within(heading.parentElement as HTMLElement).getByRole('button', {
+        name: say.ui('remark.submit'),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('когда замечания есть, действие стоит в шапке их блока, а не в навигации (TRK-414)', async () => {
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-6`, () =>
+        data(taskPackage('DEMO-6', { remarks: [remarkEntry(8, 'DEMO-6')] })),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-6');
+
+    const heading = await screen.findByRole('heading', { name: say.task('remarks') });
     const nav = screen.getByRole('navigation', {
       name: say.ui('task.nav.label', { key: 'DEMO-6' }),
     });
-    expect(within(nav).getByRole('button', { name: say.ui('remark.submit') })).toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: say.ui('remark.submit') })).toBeNull();
+    const head = heading.parentElement as HTMLElement;
+    await user.click(within(head).getByRole('button', { name: say.ui('remark.submit') }));
+    expect(screen.getByLabelText(say.ui('remark.fieldLabel'))).toBeInTheDocument();
   });
 
   it('«Отмена» на непустом черновике спрашивает и выбрасывает его по подтверждению (UI-142)', async () => {
