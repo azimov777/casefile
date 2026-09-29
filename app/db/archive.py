@@ -24,7 +24,7 @@ INDEX ix_...`), находят и создают объекты там. `public`
 
 import graphlib
 import io
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from pathlib import Path
 
 import asyncpg
@@ -128,6 +128,78 @@ async def load_order(session: AsyncSession, schema: str, tables: Sequence[str]) 
     return list(graphlib.TopologicalSorter(graph).static_order())
 
 
+#: Колонка, по которой строка называется при отборе (`referencing_rows`): первичный ключ
+#: каждой таблицы данных (`app/db/base.py`, `BaseModel`).
+ROW_ID = "id"
+
+
+async def referencing_rows(
+    session: AsyncSession, schema: str, table: str, column: str, value: str
+) -> dict[str, set[str]]:
+    """Строки, где `table.column = value`, и все строки, что ссылаются на них внешним
+    ключом — прямо или через другие такие же; `id::text` по таблицам.
+
+    Граф ссылок берётся из каталога Postgres, а не из перечня таблиц: таблица, заведённая
+    позже и забытая в перечне, дала бы архив, который приём отклонит строкой со ссылкой
+    на вырезанную. Обход идёт до неподвижной точки — строка, дошедшая до отбора по одной
+    ссылке, тянет за собой свои. Каждая таблица на пути обязана иметь колонку `ROW_ID`;
+    составной внешний ключ здесь не разбирается, и такой ключ в схеме — отказ, а не
+    молча пропущенная ссылка.
+    """
+    edges = await session.execute(
+        text(
+            "SELECT child.relname, child_col.attname, parent.relname, parent_col.attname, "
+            "  cardinality(c.conkey) "
+            "FROM pg_constraint c "
+            "JOIN pg_class child ON child.oid = c.conrelid "
+            "JOIN pg_class parent ON parent.oid = c.confrelid "
+            "JOIN pg_namespace n ON n.oid = child.relnamespace "
+            "JOIN pg_attribute child_col "
+            "  ON child_col.attrelid = c.conrelid AND child_col.attnum = c.conkey[1] "
+            "JOIN pg_attribute parent_col "
+            "  ON parent_col.attrelid = c.confrelid AND parent_col.attnum = c.confkey[1] "
+            "WHERE c.contype = 'f' AND n.nspname = :schema"
+        ),
+        {"schema": schema},
+    )
+    references: list[tuple[str, str, str, str]] = []
+    for child, child_column, parent, parent_column, width in edges:
+        if width != 1:
+            raise RuntimeError(f"composite foreign key {child} -> {parent} is not supported")
+        references.append((child, child_column, parent, parent_column))
+
+    found = await session.execute(
+        text(
+            f"SELECT {_ident(ROW_ID)}::text FROM {_qualified(schema, table)} "
+            f"WHERE {_ident(column)} = :value"
+        ),
+        {"value": value},
+    )
+    reached: dict[str, set[str]] = {table: {row[0] for row in found}}
+    frontier = {name: set(ids) for name, ids in reached.items() if ids}
+    while frontier:
+        grown: dict[str, set[str]] = {}
+        for child, child_column, parent, parent_column in references:
+            ids = frontier.get(parent)
+            if not ids:
+                continue
+            rows = await session.execute(
+                text(
+                    f"SELECT c.{_ident(ROW_ID)}::text FROM {_qualified(schema, child)} c "
+                    f"WHERE c.{_ident(child_column)} IN ("
+                    f"  SELECT p.{_ident(parent_column)} FROM {_qualified(schema, parent)} p "
+                    f"  WHERE p.{_ident(ROW_ID)}::text = ANY(:ids))"
+                ),
+                {"ids": sorted(ids)},
+            )
+            new = {row[0] for row in rows} - reached.setdefault(child, set())
+            if new:
+                reached[child] |= new
+                grown.setdefault(child, set()).update(new)
+        frontier = grown
+    return {name: ids for name, ids in reached.items() if ids}
+
+
 async def read_rows(
     session: AsyncSession,
     schema: str,
@@ -135,18 +207,26 @@ async def read_rows(
     columns: Sequence[str],
     *,
     only_null: str | None = None,
+    skip_ids: Collection[str] = (),
 ) -> list[list[str | None]]:
     """Строки таблицы, каждое значение — `col::text`; `only_null` — колонка, которая у
-    выгружаемых строк обязана быть `NULL` (так не едут токены сеансов).
+    выгружаемых строк обязана быть `NULL` (так не едут токены сеансов); `skip_ids` —
+    строки, которые не едут, по `ROW_ID` (`referencing_rows`).
 
     Время выводится в UTC (`SET LOCAL TimeZone` в `utc_session`): текст `timestamptz`
     зависит от часового пояса сеанса, и архив одной базы не должен зависеть от того, в
     каком поясе его сняли.
     """
     selected = ", ".join(f"{_ident(column)}::text" for column in columns)
-    where = f" WHERE {_ident(only_null)} IS NULL" if only_null in columns else ""
+    conditions: list[str] = []
+    if only_null in columns:
+        conditions.append(f"{_ident(only_null)} IS NULL")
+    if skip_ids:
+        conditions.append(f"NOT ({_ident(ROW_ID)}::text = ANY(:skip_ids))")
+    where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
     result = await session.execute(
-        text(f"SELECT {selected} FROM {_qualified(schema, table)}{where}")
+        text(f"SELECT {selected} FROM {_qualified(schema, table)}{where}"),
+        {"skip_ids": sorted(skip_ids)} if skip_ids else {},
     )
     return [list(row) for row in result]
 
