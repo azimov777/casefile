@@ -64,8 +64,6 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   const querying = queryChosen || applied;
   const [menuOpen, setMenuOpen] = useState(false);
   const archiveHintId = useId();
-  // Пояснение к архиву на виду: только по нажатию на знак вопроса (UI-153).
-  const [archiveHintShown, setArchiveHintShown] = useState(false);
   /*
    * Кнопка «Фильтр» — якорь фокуса. Снятый чип исчезает вместе со своей кнопкой, и фокус
    * улетал бы на `body`: следующий Tab начинал бы обход страницы с начала.
@@ -250,25 +248,27 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
         </label>
         {/*
          * Что такое архив, человек узнаёт нажатием, а не только наведением (UI-153): на
-         * телефоне подсказки `title` у флажка нет вовсе. Кнопка раскрывает то же
-         * пояснение, что диктор слышит описанием флажка, — одним узлом: скрытое оно
-         * `sr-only`, раскрытое — строка под флажком. Кнопка — не часть подписи флажка:
-         * внутри `label` её нажатие переключало бы архив.
+         * телефоне подсказки `title` у флажка нет вовсе. Пояснение открывается панелью
+         * поверх страницы, как «Фильтр»: строкой в потоке оно сдвигало доску вниз
+         * (TRK-417). Диктору то же пояснение — `sr-only`-узел ниже, он в DOM всегда и
+         * служит описанием флажка. Кнопка — не часть подписи флажка: внутри `label` её
+         * нажатие переключало бы архив.
          */}
-        <button
-          type="button"
-          className="-ml-2 inline-flex size-6 shrink-0 items-center justify-center rounded-mark border-none border-current bg-transparent p-0 text-faint hover:text-text"
-          aria-label={t('filters.archive.explain')}
-          aria-expanded={archiveHintShown}
-          aria-controls={archiveHintId}
-          onClick={() => setArchiveHintShown((shown) => !shown)}
-        >
-          <CircleHelp className="size-(--ui-mark)" aria-hidden="true" />
-        </button>
-        <span
-          id={archiveHintId}
-          className={archiveHintShown ? 'basis-full text-right text-meta text-muted' : 'sr-only'}
-        >
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="-ml-2 inline-flex size-6 shrink-0 items-center justify-center rounded-mark border-none border-current bg-transparent p-0 text-faint hover:text-text"
+              aria-label={t('filters.archive.explain')}
+            >
+              <CircleHelp className="size-(--ui-mark)" aria-hidden="true" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 text-meta text-muted">
+            {archiveHint}
+          </PopoverContent>
+        </Popover>
+        <span id={archiveHintId} className="sr-only">
           {archiveHint}
         </span>
       </div>

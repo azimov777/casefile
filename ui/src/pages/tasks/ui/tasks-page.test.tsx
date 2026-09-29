@@ -1088,29 +1088,22 @@ describe('архив', () => {
     vi.useRealTimers();
   });
 
-  it('что такое архив, видно нажатием на знак вопроса, без наведения (UI-153)', async () => {
-    const user = userEvent.setup();
+  it('пояснение архива при закрытой панели слышит диктор: описание флажка, на экране его нет (UI-153, TRK-417)', async () => {
     server.use(listing(() => taskPage([task('DEMO-3')])));
 
     open('/tasks?project=DEMO');
     await screen.findByText('DEMO-3');
     const hint = say.tasks('filters.archive.hint', { count: 3 });
     const explain = screen.getByRole('button', { name: say.tasks('filters.archive.explain') });
-    // Свёрнутое пояснение слышит только диктор — описанием флажка.
+    // Панель открывает знак вопроса; открытие, `Esc`, щелчок мимо и возврат фокуса меряет
+    // `e2e/archive.spec.ts`: `Popover` Radix в jsdom раскрывается десятки секунд.
     expect(explain).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getAllByText(hint)).toHaveLength(1);
     expect(screen.getByText(hint)).toHaveClass('sr-only');
-
-    await user.click(explain);
-    expect(explain).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(hint)).not.toHaveClass('sr-only');
-    // Нажатие на знак вопроса архив не переключает: кнопка вне подписи флажка.
-    expect(
-      screen.getByRole('checkbox', { name: say.tasks('filters.archive.label') }),
-    ).not.toBeChecked();
+    const checkbox = screen.getByRole('checkbox', { name: say.tasks('filters.archive.label') });
+    expect(checkbox).toHaveAccessibleDescription(hint);
+    expect(checkbox).not.toBeChecked();
     expect(address.current).toBe('/tasks?project=DEMO');
-
-    await user.click(explain);
-    expect(screen.getByText(hint)).toHaveClass('sr-only');
   });
 
   it('скрыт по умолчанию и показывается одним нажатием флажка в строке отбора', async () => {
