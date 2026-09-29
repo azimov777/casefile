@@ -24,6 +24,10 @@
 #   H. выпуск с миграцией, у которого api не проходит проверку здоровья: перед ним снимок
 #      базы, после отката база из снимка — ревизия, таблицы и данные как до обновления, и
 #      ручной `docker compose up -d` проходит `migrate` (TRK-134).
+#   I. установка на обновляторе прежнего выпуска (без уборки сирот) со службой, которой в
+#      следующем выпуске нет: обновлятор сам переходит на выпуск, `updater-renew` меняет
+#      обновлятор и убирает контейнер этой службы, compose о сиротах не предупреждает, а
+#      следующая проверка без выпуска ничего не пересоздаёт (TRK-390).
 #
 # Час ожидания сокращён: `CASEFILE_UPDATE_INTERVAL` берётся из `CHECK_INTERVAL` (по
 # умолчанию `1m`), разброс — до шестой доли, как и у часа. Каждая фаза кончается
@@ -40,6 +44,7 @@
 #   CHECK_PORT      порт реестра (по умолчанию 5019); интерфейс — на 200 выше, MCP — на 300
 #   CHECK_INTERVAL  интервал проверок обновлятора (по умолчанию 1m)
 #   CHECK_OLD_REF   коммит с compose-файлом до TRK-119 (по умолчанию 428a9a1)
+#   CHECK_ORPHAN_REF  коммит с обновлятором до TRK-390 для фазы I (по умолчанию 7c72848c)
 set -euo pipefail
 
 P=${CHECK_PROJECT:?CHECK_PROJECT is required}
@@ -48,6 +53,7 @@ PORT=${CHECK_PORT:-5019}
 REG_PORT=$PORT UI_PORT=$((PORT + 200)) MCP_PORT=$((PORT + 300))
 INTERVAL=${CHECK_INTERVAL:-1m}
 OLD_REF=${CHECK_OLD_REF:-428a9a1}
+ORPHAN_REF=${CHECK_ORPHAN_REF:-7c72848c}
 ROOT=$(pwd)
 EVIDENCE=$(mkdir -p "${1:-/tmp/$P-evidence}" && cd "${1:-/tmp/$P-evidence}" && pwd)
 WORK=$(mktemp -d)
@@ -421,5 +427,54 @@ on_release "$r4_api" "$r4_ui" || fail "the manual up left 0.3.1"
 api "http://127.0.0.1:$UI_PORT/api/v1/projects/HOLD" | grep -q '"HOLD"' || fail "HOLD is gone"
 services | tee "$EVIDENCE/H-after-manual-up.txt"
 note "H passed"
+
+# --- I. Сирота после выпуска без службы ----------------------------------------------------
+
+say "I. the updater of an earlier release ($ORPHAN_REF) with a service the next release lacks"
+# Как 0.6.0 со службой `tutorial` перед выпуском без неё (TRK-389): прежний обновлятор зовёт
+# `up` без `--remove-orphans`, и контейнер службы остался бы, если его не уберёт
+# `updater-renew` нового выпуска.
+git -C "$ROOT" show "$ORPHAN_REF:docker-compose.prod.yml" |
+  awk '/^volumes:/ { print "  legacy:\n    image: busybox\n    command: [\"true\"]\n    restart: \"no\"\n" } { print }' \
+    >"$DIR/docker-compose.prod.yml"
+dc up -d >"$EVIDENCE/I-up.log" 2>&1 || { cat "$EVIDENCE/I-up.log"; fail "up of the earlier release failed"; }
+legacy() { docker ps -aq --filter "label=com.docker.compose.project=$P" --filter label=com.docker.compose.service=legacy; }
+[ -n "$(legacy)" ] || fail "no container of the service legacy"
+revision=$(sed -n 's/^x-updater-revision: &updater-revision "\(.*\)"$/\1/p' "$ROOT/docker-compose.prod.yml")
+old_revision=$(docker inspect -f '{{index .Config.Labels "casefile.updater.revision"}}' "$(dc ps -q updater)")
+[ "$old_revision" != "$revision" ] || fail "the updater of $ORPHAN_REF is the one of this tree"
+services | tee "$EVIDENCE/I-before.txt"
+docker ps -a --filter "label=com.docker.compose.project=$P" --format '{{.Names}} {{.Status}}' |
+  tee -a "$EVIDENCE/run.log"
+
+say "I. release 0.5.0 under stable, without the service legacy"
+publish 0.5.0 "" stable
+r5_api=$(release_id casefile 0.5.0) r5_ui=$(release_id casefile-ui 0.5.0)
+old_updater=$(dc ps -q updater)
+current() {
+  docker logs -t "$old_updater" >"$WORK/old-updater.log" 2>&1 &&
+    mv "$WORK/old-updater.log" "$EVIDENCE/I-old-updater.log"
+  [ "$(docker inspect -f '{{index .Config.Labels "casefile.updater.revision"}}' "$(dc ps -q updater)" 2>/dev/null)" = "$revision" ]
+}
+wait_for 600 current || fail "updater-renew did not replace the updater of $ORPHAN_REF"
+wait_for 120 on_release "$r5_api" "$r5_ui" || fail "services did not move to 0.5.0"
+no_legacy() { [ -z "$(legacy)" ]; }
+wait_for 60 no_legacy || fail "the container of the service legacy is left: $(legacy)"
+dc logs --no-color -t updater updater-renew >"$EVIDENCE/I-logs.txt" 2>&1
+tee -a "$EVIDENCE/run.log" <"$EVIDENCE/I-logs.txt"
+! grep -q "Found orphan containers" "$EVIDENCE/I-logs.txt" || fail "compose still warns about orphans"
+docker ps -a --filter "label=com.docker.compose.project=$P" --format '{{.Names}} {{.Status}}' |
+  tee "$EVIDENCE/I-after-ps.txt" | tee -a "$EVIDENCE/run.log"
+api "http://127.0.0.1:$UI_PORT/api/v1/projects/HOLD" | grep -q '"HOLD"' || fail "HOLD is gone"
+note "I: on 0.5.0 with the new updater, the container of legacy is gone"
+
+say "I. a check without a new release after that"
+wait_for 120 more_checks "casefile-updater:" 0 || fail "the new updater logged nothing"
+services >"$EVIDENCE/I-idle-before.txt"
+seen=$(checks_logged "already up to date")
+wait_for 300 more_checks "already up to date" "$seen" || fail "no idle check logged"
+services >"$EVIDENCE/I-idle-after.txt"
+diff "$EVIDENCE/I-idle-before.txt" "$EVIDENCE/I-idle-after.txt" || fail "an idle check recreated a service"
+note "I passed"
 
 say "all phases passed"

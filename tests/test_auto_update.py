@@ -131,6 +131,10 @@ def test_a_release_tag_publishes_the_version_and_the_channel() -> None:
 
 # --- Сценарий обновлятора против подставного `docker` ---------------------------------
 
+#: `up` обновления и следом, после успеха, уборка контейнеров служб, которых в файле нет.
+UP = "compose up -d db api mcp ui"
+DROP_ORPHANS = "compose up -d --no-deps --remove-orphans db api mcp ui"
+
 #: Подставной `docker`: пишет каждый вызов в `$CALLS` и отвечает по файлам сценария.
 FAKE_DOCKER = r"""#!/bin/sh
 echo "$*" >>"$CALLS"
@@ -280,9 +284,35 @@ def test_a_new_release_under_the_tag_is_brought_up(updater: Updater) -> None:
 
     out = updater.run("updater", "update\n")
 
-    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+    assert updater.called("compose up") == [UP, DROP_ORPHANS]
     assert "updated to 0.2.0" in out
     assert "rmi sha256:old" in updater.called("rmi")
+
+
+def test_a_release_that_came_up_takes_away_containers_of_services_it_no_longer_has(
+    updater: Updater,
+) -> None:
+    """Выпуск без какой-то службы: её контейнер — сирота, и после успеха его нет (TRK-390)."""
+    updater.set(wanted="sha256:new")
+
+    updater.run("updater", "update\n")
+
+    calls = updater.calls.read_text().splitlines()
+    assert calls.index(UP) < calls.index(DROP_ORPHANS)
+    assert calls.index("inspect -f {{.State.Health.Status}} container-ui") < calls.index(
+        DROP_ORPHANS
+    ), "сироты уходят, только когда новый выпуск здоров"
+
+
+def test_a_rolled_back_release_leaves_the_services_of_the_previous_file(
+    updater: Updater,
+) -> None:
+    """Откат возвращает прежний файл: его службы не сироты, и уборки нет."""
+    updater.set(compose_in_image="release: 2\n", wanted="sha256:new", up="1\n")
+
+    updater.run("updater", "update\n")
+
+    assert not [c for c in updater.called("compose up") if "--remove-orphans" in c]
 
 
 def test_the_compose_file_of_the_release_replaces_the_local_one(updater: Updater) -> None:
@@ -316,7 +346,7 @@ def test_the_previous_release_is_kept_under_its_own_tag_until_the_new_one_is_up(
     assert kept < calls.index("compose up -d db api mcp ui")
     assert f"rmi {KEPT}/api:previous" in calls
     assert f"rmi {KEPT}/api:failed" in calls, "удачный выпуск снимает метку упавшего"
-    assert not updater.called("compose up -d --no-deps")
+    assert not updater.called("compose up -d --no-deps db")
 
 
 def test_a_release_that_does_not_start_is_rolled_back(updater: Updater) -> None:
@@ -391,7 +421,7 @@ def test_the_next_release_after_a_failed_one_is_brought_up(updater: Updater) -> 
 
     out = updater.run("updater", "update\n")
 
-    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+    assert updater.called("compose up") == [UP, DROP_ORPHANS]
     assert "updated to 0.2.0" in out
     assert updater.called(f"rmi {KEPT}/api:failed")
 
@@ -450,7 +480,7 @@ def test_the_renewal_replaces_a_busy_updater_of_an_earlier_release(updater: Upda
     assert "replacing the updater" in out
     [replace] = updater.called("run --rm -v /var/run/docker.sock")
     assert "-v /home/someone/casefile:/home/someone/casefile -w /home/someone/casefile" in replace
-    assert replace.endswith("docker compose up -d --no-deps updater")
+    assert replace.endswith("docker compose up -d --no-deps --remove-orphans updater")
 
 
 def test_the_renewal_gives_up_where_the_installation_path_is_unknown(updater: Updater) -> None:
@@ -540,7 +570,7 @@ def test_its_own_services_do_not_make_the_installation_busy(updater: Updater) ->
 
     out = updater.run("updater", "update\n")
 
-    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+    assert updater.called("compose up") == [UP, DROP_ORPHANS]
     assert "updated to 0.2.0" in out
 
 
@@ -581,7 +611,7 @@ def test_a_release_without_a_migration_takes_no_snapshot(updater: Updater) -> No
     updater.run("updater", "update\n")
 
     assert not updater.called("compose exec -T db sh -c pg_dump")
-    assert updater.called("compose up") == ["compose up -d db api mcp ui"]
+    assert updater.called("compose up") == [UP, DROP_ORPHANS]
 
 
 def test_a_release_with_a_migration_is_preceded_by_a_snapshot(updater: Updater) -> None:

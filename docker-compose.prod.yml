@@ -83,7 +83,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "332195ccf849"
+x-updater-revision: &updater-revision "f8f32bef4a8e"
 
 services:
   db:
@@ -600,6 +600,12 @@ services:
           after=$$(version "$$image")
           if docker compose up -d db api mcp ui && settled; then
             log "updated to $${after:-$$image}"
+            # Службы, которых в новом файле нет, — прочь: их остановленные контейнеры иначе
+            # живут до ручного `up --remove-orphans`, и compose на каждом `up` предупреждает о
+            # сиротах (TRK-390). Только после успеха: откат возвращает прежний файл, и его
+            # службы должны быть на месте. Службы уже на этом файле, `up` их не пересоздаёт.
+            docker compose up -d --no-deps --remove-orphans db api mcp ui ||
+              log "could not remove the containers of services this release no longer has"
             rm -f "$$SNAPSHOT"
             docker rmi "$$(kept api:failed)" >/dev/null 2>&1 || true
             docker rmi "$$(kept ui:failed)" >/dev/null 2>&1 || true
@@ -677,6 +683,10 @@ services:
   # Ревизию сверяет тест с хешем определения `updater` (`tests/test_auto_update.py`): поменял
   # службу — поменяй метку.
   #
+  # Обновлятор прежнего выпуска сирот не убирает: его `up` без `--remove-orphans`, и после
+  # выпуска без какой-то службы её контейнер остался бы. Замена обновлятора — первый код
+  # нового выпуска на установке, поэтому сирот своего проекта убирает она (TRK-390).
+  #
   # Каталога установки здесь нет, только сокет: службу создаёт compose изнутри обновлятора,
   # а там `.` — это `/project`, которого демон не знает, и монтирование не состоялось бы
   # (`docs/notes/docker.md`). Путь каталога со стороны демона служба берёт у самого
@@ -727,7 +737,7 @@ services:
         docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
           -v "$$directory:$$directory" -w "$$directory" \
           -e COMPOSE_PROJECT_NAME="$$project" -e COMPOSE_FILE=docker-compose.prod.yml \
-          docker:29-cli docker compose up -d --no-deps updater
+          docker:29-cli docker compose up -d --no-deps --remove-orphans updater
 
 volumes:
   pgdata:
