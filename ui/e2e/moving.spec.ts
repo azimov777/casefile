@@ -71,11 +71,11 @@ test.afterAll(() => {
   }
 });
 
-/** Сколько задач нашлось на списке: строка счётчика целиком — общий признак «те же задачи». */
-async function found(page: Page): Promise<string> {
+/** Сколько задач нашлось на списке: число из строки счётчика («Нашлась 1 задача», «Нашлось 7 задач»). */
+async function found(page: Page): Promise<number> {
   const counter = page.getByText(/^Нашл(ась|ось) \d+ задач/);
   await expect(counter).toBeVisible();
-  return (await counter.textContent()) ?? '';
+  return Number(/\d+/.exec((await counter.textContent()) ?? '')?.[0]);
 }
 
 test('администратор скачивает архив и принимает его на свежей установке; повторный приём отказывает', async ({
@@ -86,7 +86,14 @@ test('администратор скачивает архив и принима
   // сценария: /moving открыт администратору владельца без единого действия входа.
   // Счётчик задач — примета списка, а не экрана переноса, поэтому снимается на /tasks.
   await page.goto('/tasks');
-  const sourceProjects = await found(page);
+  const sourceTasks = await found(page);
+  // Учебный проект `START` в архив не едет (TRK-384): его задачи источник считает, а
+  // приёмник — нет. Ожидание приёмника — задачи источника без задач `START`, а не число,
+  // подогнанное под прогон.
+  await page.goto('/tasks?project=START');
+  const sourceStartTasks = await found(page);
+  expect(sourceStartTasks).toBeGreaterThan(0);
+  const expectedTasks = sourceTasks - sourceStartTasks;
 
   await page.goto('/moving');
   await expect(page.getByRole('heading', { level: 1, name: 'Перенос установки' })).toBeVisible();
@@ -130,10 +137,12 @@ test('администратор скачивает архив и принима
   await expect(result.getByText('local-ui', { exact: false })).toBeVisible();
 
   // Доска новой установки продолжает работать её собственным ключом, без перезагрузки
-  // (решение TRK-100#19/#20), и показывает тот же проект и те же задачи, что источник.
+  // (решение TRK-100#19/#20), и показывает тот же проект и все задачи источника, кроме
+  // задач учебного `START`: он в архив не входит (TRK-384).
   await target.goto('/tasks');
   await expect(side(target).getByRole('link', { name: /^DEMO/ })).toBeVisible();
-  expect(await found(target)).toBe(sourceProjects);
+  expect(await found(target)).toBe(expectedTasks);
+  await expect(side(target).getByRole('link', { name: /^START/ })).toHaveCount(0);
 
   // Повторный приём того же архива — установка больше не пустая.
   await target.goto('/moving');
