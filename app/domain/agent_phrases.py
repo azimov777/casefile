@@ -35,7 +35,7 @@ AGENT_PHRASES: dict[PhraseLanguage, AgentPhrases] = {
             "File tasks in Casefile for my work: a project for it if there is none yet, and "
             "tasks with all their sections and checks, each small enough for one agent to "
             "finish in one go, each naming its environment in `context` — where the work lives "
-            "and how to run its checks. Don't start the work itself; if I haven't described it "
+            "and how to check it is done. Don't start the work itself; if I haven't described it "
             "yet, ask me."
         ),
         execute_tasks=(
@@ -49,7 +49,7 @@ AGENT_PHRASES: dict[PhraseLanguage, AgentPhrases] = {
             "Заведи в Casefile задачи по моей работе: проект под неё, если его ещё нет, и "
             "задачи со всеми разделами и проверками — каждая такая, чтобы один агент выполнил "
             "её за один заход, и в разделе `context` каждой названо её окружение: где лежит "
-            "работа и как запускать её проверки. Саму работу не начинай; если я её ещё не "
+            "работа и как проверить, что она сделана. Саму работу не начинай; если я её ещё не "
             "описал, спроси меня."
         ),
         execute_tasks=(

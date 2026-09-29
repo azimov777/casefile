@@ -172,7 +172,7 @@ Write-Host ''
 # `/start`: там те же фразы стоят на языке человека, с копированием по кнопке.
 Write-Host 'Tell your agent what to do:' -ForegroundColor White
 Write-Host '  Have work to hand over? Say:'
-Write-Host ('    File tasks in Casefile for my work: a project for it if there is none yet, and tasks with all their sections and checks, each small enough for one agent to finish in one go, each naming its environment in `context` ' + [char]0x2014 + ' where the work lives and how to run its checks. Don''t start the work itself; if I haven''t described it yet, ask me.')
+Write-Host ('    File tasks in Casefile for my work: a project for it if there is none yet, and tasks with all their sections and checks, each small enough for one agent to finish in one go, each naming its environment in `context` ' + [char]0x2014 + ' where the work lives and how to check it is done. Don''t start the work itself; if I haven''t described it yet, ask me.')
 Write-Host '  Then, in a new agent session, say:'
 Write-Host '    Carry out the tasks for this work from the Casefile tracker. Hand them to agents, one task per agent, to save your own context, and give them cheaper models where those cope.'
 Write-Host "  The same phrases with copy buttons, in your language: http://localhost:$uiPort/start"

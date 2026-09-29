@@ -127,7 +127,7 @@ printed, and the same ones with copy buttons are on the board's `/start` page:
 - Have work to hand over? Say: "File tasks in Casefile for my work: a project for it if
   there is none yet, and tasks with all their sections and checks, each small enough for
   one agent to finish in one go, each naming its environment in `context` — where the work
-  lives and how to run its checks. Don't start the work itself; if I haven't described it
+  lives and how to check it is done. Don't start the work itself; if I haven't described it
   yet, ask me."
 - Then, in a new agent session, say: "Carry out the tasks for this work from the Casefile
   tracker. Hand them to agents, one task per agent, to save your own context, and give them
