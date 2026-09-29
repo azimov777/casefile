@@ -8,6 +8,16 @@ map $http_x_forwarded_proto $casefile_forwarded_proto {
     ''      $scheme;
 }
 
+# Адрес бэкенда nginx спрашивает у DNS на каждый запрос, а не один раз при старте
+# (TRK-388). `proxy_pass` с готовым именем разрешается при загрузке конфигурации, и
+# пересозданный `api` (правка `.env`, `docker compose up -d`) получал другой адрес, а
+# интерфейс до перезапуска отвечал `502` по старому. Имя в переменной разрешается на
+# лету — но только через `resolver`: встроенный резолвер nginx пользуется им, а не
+# системным. `127.0.0.11` — DNS Docker в пользовательской сети compose; вне Docker
+# адрес меняет `TRACKER_DNS_RESOLVER`. `valid=5s` — как долго держать ответ, `ipv6=off`
+# — чтобы не ходить за AAAA, которого у контейнера нет.
+resolver ${TRACKER_DNS_RESOLVER} valid=5s ipv6=off;
+
 server {
     listen 80;
     server_name localhost 127.0.0.1 [::1];
@@ -74,7 +84,8 @@ server {
     # общего `/api/` ниже, и по тем же причинам.
     location = /api/v1/installation/archive {
         client_max_body_size 512m;
-        proxy_pass ${TRACKER_API_URL};
+        set $casefile_api ${TRACKER_API_URL};
+        proxy_pass $casefile_api;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -90,8 +101,13 @@ server {
     # образ поднимается и рядом с контуром сквозных тестов (`api`), и рядом с прод-
     # контуром бэкенда. Шаблон разворачивает штатный скрипт образа nginx, а фильтр
     # `NGINX_ENVSUBST_FILTER` не даёт ему тронуть переменные самого nginx ($uri, $host).
+    #
+    # `set` + `proxy_pass $переменная` вместо готового имени — см. `resolver` наверху.
+    # Адрес — только хост и порт, без пути: с переменной nginx отдаёт бэкенду исходный
+    # URI как есть, и `/api/v1/...` доходит целиком, как и прежде.
     location /api/ {
-        proxy_pass ${TRACKER_API_URL};
+        set $casefile_api ${TRACKER_API_URL};
+        proxy_pass $casefile_api;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         # Адрес клиента для окна попыток входа — один, и пишет его этот nginx, а не

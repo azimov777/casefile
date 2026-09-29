@@ -50,6 +50,10 @@ RUN chmod +x /docker-entrypoint.d/30-tracker-access-mode.sh
 # Куда проксировать `/api`. Умолчание — сервис `api` контура сквозных тестов.
 ENV TRACKER_API_URL=http://api:8000
 
+# Кто разрешает имя бэкенда при каждом запросе (TRK-388): встроенный DNS Docker.
+# Пересозданный `api` получает другой адрес, и интерфейс находит его без перезапуска.
+ENV TRACKER_DNS_RESOLVER=127.0.0.11
+
 # Подставляются только наши переменные: без фильтра `envsubst` съел бы `$uri`, `$host`
 # и прочие переменные самого nginx, и конфигурация развалилась бы на старте.
 ENV NGINX_ENVSUBST_FILTER=TRACKER_
