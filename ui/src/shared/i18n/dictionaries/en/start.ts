@@ -30,6 +30,18 @@ export const start = {
       title: 'What this is for',
       body: 'AI agents forget everything between sessions: the next one starts from scratch, works the job out all over again and retries what already failed, and decisions made in a conversation vanish with it. Casefile gives every task a case file — a log of decisions, attempts, findings and questions. The next agent reads the case and picks up exactly where the last one stopped. You watch on the board what every agent is doing, and answer their questions.',
     },
+    when: {
+      title: 'When you need it',
+      items: [
+        'A task was solved or a decision made in a single conversation — so it outlives the conversation.',
+        'The work does not fit one session or passes to another agent.',
+        'Several agents share the work at once.',
+        'The work needs your decision halfway through.',
+        'The result is checked against what was named up front.',
+      ],
+      outside:
+        'Only a conversation that leaves neither a result nor a decision can do without the tracker. The tracker itself does not watch deadlines, remind, launch anything or hand out work.',
+    },
     source: {
       title: 'Where tasks come from',
       body: 'Agents create and carry the tasks — at your request, in their own chat. There is no “create task” button here on purpose: you tell the agent what you need, and it splits the work into tasks.',

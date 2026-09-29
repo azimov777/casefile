@@ -104,10 +104,35 @@ describe('экран «Начало»', () => {
     const headings = await screen.findAllByRole('heading', { level: 2 });
     expect(headings.map((heading) => heading.textContent)).toEqual([
       say.start('sections.why.title'),
+      say.start('sections.when.title'),
       say.start('sections.source.title'),
       say.start('sections.tellAgent.title'),
       say.start('sections.you.title'),
     ]);
+  });
+
+  it('раздел «Когда это нужно» стоит после «Зачем это» и называет ситуации', async () => {
+    signedIn();
+    renderApp('/start', { language: 'ru' });
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Когда это нужно' }),
+    ).toBeInTheDocument();
+    const when = section('Когда это нужно') as HTMLElement;
+    expect(
+      within(when).getByText(/За один разговор решена задача или принято решение/),
+    ).toBeInTheDocument();
+    expect(within(when).getAllByRole('listitem')).toHaveLength(5);
+  });
+
+  it('раздел «When you need it» есть и по-английски', async () => {
+    signedIn();
+    renderApp('/start');
+
+    const when = section(
+      (await screen.findByRole('heading', { level: 2, name: 'When you need it' })).textContent,
+    );
+    expect(within(when as HTMLElement).getAllByRole('listitem')).toHaveLength(5);
   });
 
   it('фразы «Завести задачи» и «Выполнить задачи» стоят всегда, а между ними — про новую сессию', async () => {
@@ -482,7 +507,7 @@ describe('экран «Начало»', () => {
       await screen.findByRole('heading', { level: 1, name: say.ui('app.start') });
 
       // Экран остальное показывает как обычно: четыре раздела, три шага, свои ссылки.
-      expect(await screen.findAllByRole('heading', { level: 2 })).toHaveLength(4);
+      expect(await screen.findAllByRole('heading', { level: 2 })).toHaveLength(5);
       const items = stepItems();
       expect(items).toHaveLength(3);
       expect(
