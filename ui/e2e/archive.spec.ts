@@ -346,3 +346,50 @@ test('доступность таблицы и доски с переключа�
     expect(violations, path).toEqual([]);
   }
 });
+
+/**
+ * Пояснение «?» у флажка архива открывается панелью поверх страницы и ничего не двигает
+ * (TRK-417): строкой в потоке оно сдвигало доску вниз. Верхняя граница таблицы и доски
+ * меряется до и после нажатия.
+ */
+test('пояснение архива — панель: доска не сдвигается, Esc и щелчок мимо закрывают, флажок описан всегда', async ({
+  page,
+}) => {
+  await silenceJournal(page);
+  const hint = /Архив — закрытые задачи, в деле которых больше 3 дней нет записей/;
+  const explain = page.getByRole('button', { name: 'Что такое архив' });
+
+  for (const [path, body] of [
+    ['/tasks?project=DEMO', page.locator('table')],
+    ['/tasks?project=DEMO&view=board', page.getByRole('region').first()],
+  ] as const) {
+    await page.goto(path);
+    await expect(body.first()).toBeVisible();
+    // Описание флажка есть при закрытой панели.
+    await expect(archive(page)).toHaveAccessibleDescription(hint);
+    const before = await body.first().boundingBox();
+
+    await explain.click();
+    const panel = page.getByRole('dialog');
+    await expect(panel).toContainText(hint);
+    const after = await body.first().boundingBox();
+    report(`граница ${path}`, { до: before?.y, после: after?.y });
+    expect(after?.y).toBe(before?.y);
+
+    const box = await panel.boundingBox();
+    const width = page.viewportSize()?.width ?? 0;
+    expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(explain).toBeFocused();
+
+    await explain.click();
+    await expect(panel).toBeVisible();
+    // Щелчок мимо закрывает; фокус при этом остаётся там, куда щёлкнули (так у Radix).
+    await expect(async () => {
+      await page.mouse.click(5, 5);
+      await expect(panel).toHaveCount(0, { timeout: 1_000 });
+    }).toPass();
+  }
+});
