@@ -129,12 +129,8 @@ administrator, and sees and revokes only the tokens they issued or that speak fo
 
 ### Tell it what to do
 
-Connecting the agent is only the wiring. Once it is done, tell the agent one of these,
-word for word:
-
-New here? Say:
-
-> Take the tutorial task START-1 in Casefile and walk me through it.
+Connecting the agent is only the wiring. Once it is done, tell the agent these, word for
+word.
 
 Have work to hand over? Say:
 
@@ -144,9 +140,9 @@ Then, in a new agent session, say:
 
 > Carry out the tasks for this work from the Casefile tracker. Hand them to agents, one task per agent, to save your own context, and give them cheaper models where those cope.
 
-The second and the third phrase go to different agent sessions: the second agent starts
-with a clean context and knows only what is in the task cases. The board carries the same
-three phrases, with copy buttons, on its `/start` page.
+The two phrases go to different agent sessions: the second agent starts with a clean
+context and knows only what is in the task cases. The board carries the same phrases,
+with copy buttons, on its `/start` page.
 
 ## Tools
 
@@ -199,7 +195,6 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
 | Stay on one release | `CASEFILE_VERSION=0.6.0` in `~/casefile/.env` |
-| Tutorial project language | `CASEFILE_LANGUAGE=ru` in `~/casefile/.env`; the installer sets it by your shell's language on first run |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
