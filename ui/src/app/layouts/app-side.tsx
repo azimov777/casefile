@@ -10,6 +10,7 @@ import {
 } from '@/entities/session';
 import { useLogout } from '@/features/auth';
 import { CreateProject, useProjectRights } from '@/features/manage-project';
+import { ReleaseNotice } from '@/features/release-notice';
 import { tasksHref } from '@/features/task-filters';
 import { Button, QueryState } from '@/shared/ui';
 import { cn, projectHref } from '@/shared/lib';
@@ -293,6 +294,10 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="mt-auto flex flex-col items-start gap-1 border-t border-line px-2 pt-2 text-mark">
+        {/* Вышел выпуск новее установки (`TRK-416`) — первым в низу панели, над тем,
+            кто сидит: это про установку, а не про человека. Нет выпуска — нет и строки. */}
+        <ReleaseNotice />
+
         {/* Отказ показывается с повтором: чинить бэкенд и перезагружать вкладку —
             разные действия, и второе не должно быть единственным доступным. */}
         <QueryState query={bootstrap} loading={t('app.loadingParticipant')} compact />
