@@ -3779,7 +3779,7 @@ export interface components {
             /**
              * Version
              * @description Casefile version this installation runs, without `v`
-             * @example 0.7.0
+             * @example 1.2.3
              */
             version: string;
             /**

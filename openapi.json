@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tracker API",
-    "version": "0.7.0"
+    "version": "0.8.0"
   },
   "paths": {
     "/health": {
@@ -12257,7 +12257,7 @@
             "title": "Version",
             "description": "Casefile version this installation runs, without `v`",
             "examples": [
-              "0.7.0"
+              "1.2.3"
             ]
           },
           "latest_version": {
