@@ -136,6 +136,15 @@ export function StartPage() {
         <Text>{t('sections.why.body')}</Text>
       </Section>
 
+      <Section title={t('sections.when.title')}>
+        <ul className="m-0 flex list-disc flex-col gap-1 pl-6 text-body">
+          {(t('sections.when.items', { returnObjects: true }) as readonly string[]).map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+        <Text>{t('sections.when.outside')}</Text>
+      </Section>
+
       <Section title={t('sections.source.title')}>
         <Text>{t('sections.source.body')}</Text>
       </Section>
