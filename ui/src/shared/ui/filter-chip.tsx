@@ -17,9 +17,21 @@ const CHIP_PART =
  * Список чипов включённых условий. Список, а не абзац: программа чтения с экрана
  * называет число условий вслух, а `aria-label` роль абзаца не принимает.
  */
-export function FilterChipList({ label, children }: { label: string; children: ReactNode }) {
+export function FilterChipList({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  /** Минимальная высота строки: строка чипов и строка без условий обязаны быть одной высоты. */
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <ul className="flex min-w-0 list-none flex-wrap items-center gap-1.5 p-0" aria-label={label}>
+    <ul
+      className={cn('flex min-w-0 list-none flex-wrap items-center gap-1.5 p-0', className)}
+      aria-label={label}
+    >
       {children}
     </ul>
   );

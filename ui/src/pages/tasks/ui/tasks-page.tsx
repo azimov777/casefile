@@ -152,7 +152,7 @@ export function TasksPage() {
     noConditions && (filters.showArchive || (archiveCheck.isSuccess && archiveCheck.data === 0));
 
   return (
-    <main className="flex flex-col gap-3">
+    <main className="flex flex-col gap-3" data-tasks-screen>
       {/* Пояснение экрана — первым блоком содержимого (TRK-363). Список и доска — два
           пояснения с разными ключами: закрытое на одном вида другого не закрывает. */}
       <ExplanationPanel hintKey={board ? HINT_KEYS.board : HINT_KEYS.tasks}>
@@ -191,9 +191,15 @@ export function TasksPage() {
            * («Найдено задач: 98»), а «Задачи 98» вместо «Задачи» ломало бы навигацию
            * по заголовкам. Подпись таблицы говорит своё и другое — сколько строк
            * на этой странице.
+           *
+           * Место под число занято на четыре знака, цифры одной ширины (`tabular-nums`):
+           * «70» → «2» иначе сужало заголовок и уводило строку отбора влево (TRK-418).
            */}
           {found === null ? null : (
-            <span className="text-label font-normal text-muted" aria-hidden="true">
+            <span
+              className="inline-block min-w-[4ch] text-label font-normal text-muted tabular-nums"
+              aria-hidden="true"
+            >
               {formatNumber(found, language)}
             </span>
           )}

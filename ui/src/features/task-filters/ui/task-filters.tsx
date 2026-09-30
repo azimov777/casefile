@@ -141,7 +141,16 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
                    * Число условий на кнопке — чтобы связать её с чипами под строкой. Глазам
                    * хватает цифры, диктору чипы и так называют всё списком.
                    */}
-                  {conditions.length === 0 ? null : <FilterCountBadge count={conditions.length} />}
+                  {conditions.length === 0 ? (
+                    /*
+                     * Место под плашку занято и без условий: с ней кнопка была шире на
+                     * 22 px, и поле поиска сужалось от каждого применённого условия
+                     * (TRK-418).
+                     */
+                    <span className="min-w-4" aria-hidden="true" />
+                  ) : (
+                    <FilterCountBadge count={conditions.length} />
+                  )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-96" aria-label={t('filters.menuLabel')}>
@@ -195,7 +204,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
         {querying ? (
           <p className="text-meta text-muted">{t('filters.query.note')}</p>
         ) : (
-          <FilterChipList label={t('filters.conditions')}>
+          <FilterChipList label={t('filters.conditions')} className="min-h-6">
             {conditions.length === 0 ? (
               /*
                * Без условий выдача всё равно отобрана, пока архив скрыт: «показаны все
@@ -233,44 +242,52 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
         {/* Минимум высоты только на телефоне (`max-fold:`): подпись кликабельна и
             мишень — вся строка label, а не голый флажок 13px, но и она на 390 px
             не дотягивала до 24px (UI-154). */}
-        <label
-          className="ml-auto inline-flex items-center gap-1.5 text-meta whitespace-nowrap text-muted max-fold:min-h-(--ui-tap)"
-          title={archiveHint}
-        >
-          <input
-            type="checkbox"
-            className="size-(--ui-mark) accent-accent"
-            checked={filters.showArchive}
-            aria-describedby={archiveHintId}
-            onChange={(event) => applyWith({ showArchive: event.target.checked })}
-          />
-          {t('filters.archive.label')}
-        </label>
         {/*
-         * Что такое архив, человек узнаёт нажатием, а не только наведением (UI-153): на
-         * телефоне подсказки `title` у флажка нет вовсе. Пояснение открывается панелью
-         * поверх страницы, как «Фильтр»: строкой в потоке оно сдвигало доску вниз
-         * (TRK-417). Диктору то же пояснение — `sr-only`-узел ниже, он в DOM всегда и
-         * служит описанием флажка. Кнопка — не часть подписи флажка: внутри `label` её
-         * нажатие переключало бы архив.
+         * Флажок и «?» — одна группа: на телефоне она уходит на свою строку целиком и
+         * при чипах, и без них. Иначе то же место занимала то строка условий, то
+         * фраза «все, кроме архива», и группа то стояла рядом с ними, то падала вниз,
+         * а доска ехала на 28 px (TRK-418).
          */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="-ml-2 inline-flex size-6 shrink-0 items-center justify-center rounded-mark border-none border-current bg-transparent p-0 text-faint hover:text-text"
-              aria-label={t('filters.archive.explain')}
-            >
-              <CircleHelp className="size-(--ui-mark)" aria-hidden="true" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-72 text-meta text-muted">
+        <div className="ml-auto flex items-center max-fold:basis-full max-fold:justify-end">
+          <label
+            className="inline-flex items-center gap-1.5 text-meta whitespace-nowrap text-muted max-fold:min-h-(--ui-tap)"
+            title={archiveHint}
+          >
+            <input
+              type="checkbox"
+              className="size-(--ui-mark) accent-accent"
+              checked={filters.showArchive}
+              aria-describedby={archiveHintId}
+              onChange={(event) => applyWith({ showArchive: event.target.checked })}
+            />
+            {t('filters.archive.label')}
+          </label>
+          {/*
+           * Что такое архив, человек узнаёт нажатием, а не только наведением (UI-153): на
+           * телефоне подсказки `title` у флажка нет вовсе. Пояснение открывается панелью
+           * поверх страницы, как «Фильтр»: строкой в потоке оно сдвигало доску вниз
+           * (TRK-417). Диктору то же пояснение — `sr-only`-узел ниже, он в DOM всегда и
+           * служит описанием флажка. Кнопка — не часть подписи флажка: внутри `label` её
+           * нажатие переключало бы архив.
+           */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-mark border-none border-current bg-transparent p-0 text-faint hover:text-text"
+                aria-label={t('filters.archive.explain')}
+              >
+                <CircleHelp className="size-(--ui-mark)" aria-hidden="true" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 text-meta text-muted">
+              {archiveHint}
+            </PopoverContent>
+          </Popover>
+          <span id={archiveHintId} className="sr-only">
             {archiveHint}
-          </PopoverContent>
-        </Popover>
-        <span id={archiveHintId} className="sr-only">
-          {archiveHint}
-        </span>
+          </span>
+        </div>
       </div>
     </section>
   );
