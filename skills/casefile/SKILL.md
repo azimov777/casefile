@@ -159,6 +159,32 @@ The MCP server also serves this skill as the resource `skill://casefile/SKILL.md
 of the same version as the server. A copy installed in the harness is available before
 any MCP connection exists; the plugin below installs it.
 
+### Whether the skill is installed
+
+Reading this text from the server does not mean the skill is installed in the harness.
+An installation made before v0.8.0 never installed it, and the installation's hourly
+self-update replaces only the service's images: it installs nothing into a harness. Each
+harness shows whether the skill is there:
+
+- Claude Code: `claude plugin list` lists `casefile@casefile` with `Status: enabled`.
+- Codex: `codex plugin list` lists `casefile@casefile` as installed.
+- Hermes: `hermes skills list` lists `casefile`.
+- Other agents (`npx skills`): the file `~/.agents/skills/casefile/SKILL.md` exists.
+
+Where it is missing, the install line in skill-only mode installs it into every harness
+on the machine and leaves the running service as it is:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+```
+
+```powershell
+$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+```
+
+A session that was already running sees the new skill after a restart, or after
+`/reload-plugins` in Claude Code.
+
 Running the Casefile install line again installs the skill into every harness it finds
 on the machine, including one that appeared after the first install. Each harness also
 installs and updates it by itself:

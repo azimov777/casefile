@@ -37,6 +37,10 @@ harness: `installed <version>`, `not found` or `failed` with the command to repe
 If port 8080 or 8100 is taken, put `CASEFILE_PORT=<free port>` and/or
 `TRACKER_MCP_PORT=<free port>` into `~/casefile/.env` and run the install line again.
 
+If Casefile already runs on this machine (`~/casefile` exists), it may have been installed
+before v0.8.0 or kept current by its own hourly update: neither put the skill into your
+harness. Go on with step 3 and do the check at the start of step 4 all the same.
+
 ## 3. Connect yourself over MCP
 
 Use the MCP address from the `MCP:` line the installer printed in step 2 — never assume a
@@ -114,12 +118,43 @@ What the user should know, in one line each:
 
 Connecting gives you the tools; the skill teaches you how to use them — how to keep a
 case, what to write before you stop, how to recover from a `401` and how to watch the
-journal. Connecting is not finished until the skill is installed. The installer of step 2
-already did it for every harness it found: read its "Installing the Casefile skill" lines
-and run the commands below only for your harness if it says `not found` or `failed`, or if
-you connect to an installation someone else runs. The installer prints the same commands;
-they read the skill from the `stable` channel of the Casefile repository. Running the
-installer line again also installs the skill into a harness that appeared later:
+journal. Connecting is not finished until the skill is installed.
+
+### Check whether the skill is installed
+
+Check first, every time you connect, even to an installation that has run for a long
+time. An installation made before v0.8.0 never installed the skill, and the hourly
+self-update replaces only the service's images: it never installs the skill into a
+harness. A running, up-to-date service says nothing about the skill in your harness.
+
+- **Claude Code:** `claude plugin list` shows `casefile@casefile` with `Status: enabled`.
+- **Codex:** `codex plugin list` shows `casefile@casefile` as installed.
+- **Hermes:** `hermes skills list` shows `casefile`.
+- **Any other agent** (`npx skills`): the file `~/.agents/skills/casefile/SKILL.md` exists.
+
+If your harness has it, go on to step 5. If it is missing, one line installs it into every
+harness on the machine without touching the running service — no Docker, no installation
+directory, no token:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+```
+
+```powershell
+$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+```
+
+It prints one line per harness, as in step 2. The commands below do the same for one
+harness at a time.
+
+### Install it by hand
+
+A fresh install of step 2 already did it for every harness it found: read its
+"Installing the Casefile skill" lines and run the commands below only for your harness if
+it says `not found` or `failed`, or if the check above found no skill. The installer
+prints the same commands; they read the skill from the `stable` channel of the Casefile
+repository. Running the installer line again also installs the skill into a harness that
+appeared later:
 
 - **Claude Code:**
 

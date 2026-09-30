@@ -706,3 +706,24 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 в деле TRK-413. Переименование каталога скила меняет URI — фразу правят вместе с ним.
 **Где:** `app/mcp/instructions.md`; `app/mcp/skills.py`;
 `tests/test_mcp_instructions.py`, `test_the_instructions_point_at_the_skill_resource_the_server_lists`.
+
+## Работающий и обновлённый сервис ничего не говорит о скиле в харнессе агента
+
+**Что:** указатель в `instructions` говорит не только «ресурс описывает установку», а что
+установка скила — для харнесса, где его нет: «installing the casefile skill if the harness
+lacks it» (TRK-431). Гайд (`docs/agent-install.md`, шаг 4, «Check whether the skill is
+installed»), скил и README называют проверку по харнессам — `claude plugin list`,
+`codex plugin list`, `hermes skills list`, файл `~/.agents/skills/casefile/SKILL.md` — и
+строку только скила `CASEFILE_SKILL_ONLY=1`, которая сервис не трогает.
+**Почему важно:** 2026-09-30 у владельца на машине с Codex обновлятор поднял сервис до
+v0.8.0, а скил не появился: обновлятор меняет только образы, а фраза «covers skill
+installation» не наводила агента на мысль проверить свой харнесс. Установщик ставит скил
+сам только при запуске, установка до v0.8.0 его не получала вовсе.
+**Как правильно:** запас `instructions` после TRK-431 — 5 единиц UTF-16 из 2048 (длина 2043);
+следующая фраза потребует сжатия, перечни прошлых сжатий — в делах TRK-412, TRK-413 и
+TRK-431. Признаки проверки в гайде сверяет тест с тем, по чему установщик печатает
+`installed`; новый харнесс в установщике — новая строка проверки в шаге 4 гайда и в скиле.
+**Где:** `app/mcp/instructions.md`; `docs/agent-install.md`, шаг 4; `skills/casefile/SKILL.md`,
+«Whether the skill is installed»; `tests/test_mcp_instructions.py`,
+`test_the_pointer_says_the_resource_installs_a_missing_skill`; `tests/test_installers.py`,
+`test_the_guide_checks_the_skill_before_installing_it`.
