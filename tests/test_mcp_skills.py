@@ -39,7 +39,7 @@ def _body(response: Any) -> dict[str, Any]:
 
 
 @asynccontextmanager
-async def _era(server: MCPServer, era: str) -> AsyncIterator[Call]:
+async def _era(server: MCPServer, era: str, secret: str) -> AsyncIterator[Call]:
     """`call(method, params)` -> (HTTP-статус, тело JSON-RPC) на выбранной эпохе."""
     application = server.streamable_http_app()
     async with (
@@ -48,8 +48,8 @@ async def _era(server: MCPServer, era: str) -> AsyncIterator[Call]:
             transport=ASGITransport(app=application), base_url="http://localhost:8100"
         ) as client,
     ):
-        # Транспорт требует токен (`app/mcp/oauth.py`); какой — скилу всё равно: читает не автор.
-        headers = dict(ACCEPT) | {"authorization": "Bearer any-token"}
+        # Транспорт требует действующий токен (`app/mcp/oauth.py`); чей — скилу всё равно.
+        headers = dict(ACCEPT) | {"authorization": f"Bearer {secret}"}
         counter = 0
 
         if era == "legacy":
@@ -112,9 +112,9 @@ def _capabilities(reply: dict[str, Any]) -> dict[str, Any]:
     ],
 )
 async def test_both_eras_declare_the_extension_and_resources(
-    mcp_server: MCPServer, era: str, method: str, params: dict[str, Any]
+    mcp_server: MCPServer, main_secret: str, era: str, method: str, params: dict[str, Any]
 ) -> None:
-    async with _era(mcp_server, era) as call:
+    async with _era(mcp_server, era, main_secret) as call:
         status, reply = await call(method, params)
 
     assert status == 200, reply
@@ -124,12 +124,14 @@ async def test_both_eras_declare_the_extension_and_resources(
 
 
 @pytest.mark.parametrize("era", ["legacy", "modern"])
-async def test_skills_list_matches_the_file_on_disk(mcp_server: MCPServer, era: str) -> None:
+async def test_skills_list_matches_the_file_on_disk(
+    mcp_server: MCPServer, main_secret: str, era: str
+) -> None:
     source = SKILLS_DIR / "casefile" / "SKILL.md"
     raw = source.read_bytes()
     front = yaml.safe_load(raw.decode().split("---", 2)[1])
 
-    async with _era(mcp_server, era) as call:
+    async with _era(mcp_server, era, main_secret) as call:
         status, listed = await call("skills/list", {})
         _, read = await call("resources/read", {"uri": SKILL_URI})
 
@@ -149,9 +151,9 @@ async def test_skills_list_matches_the_file_on_disk(mcp_server: MCPServer, era: 
 
 @pytest.mark.parametrize("era", ["legacy", "modern"])
 async def test_skills_get_returns_the_skill_and_refuses_an_unknown_uri(
-    mcp_server: MCPServer, era: str
+    mcp_server: MCPServer, main_secret: str, era: str
 ) -> None:
-    async with _era(mcp_server, era) as call:
+    async with _era(mcp_server, era, main_secret) as call:
         _, found = await call("skills/get", {"uri": SKILL_URI})
         status, missing = await call("skills/get", {"uri": "skill://nope/SKILL.md"})
 
@@ -160,10 +162,12 @@ async def test_skills_get_returns_the_skill_and_refuses_an_unknown_uri(
     assert status == (400 if era == "modern" else 200)
 
 
-async def test_cache_fields_appear_only_on_the_modern_era(mcp_server: MCPServer) -> None:
-    async with _era(mcp_server, "modern") as call:
+async def test_cache_fields_appear_only_on_the_modern_era(
+    mcp_server: MCPServer, main_secret: str
+) -> None:
+    async with _era(mcp_server, "modern", main_secret) as call:
         _, modern = await call("skills/list", {})
-    async with _era(mcp_server, "legacy") as call:
+    async with _era(mcp_server, "legacy", main_secret) as call:
         _, legacy = await call("skills/list", {})
 
     assert modern["result"]["cacheScope"] == "public"
@@ -173,8 +177,10 @@ async def test_cache_fields_appear_only_on_the_modern_era(mcp_server: MCPServer)
     assert "cacheScope" not in legacy["result"]
 
 
-async def test_the_skill_is_also_an_ordinary_resource(mcp_server: MCPServer) -> None:
-    async with _era(mcp_server, "legacy") as call:
+async def test_the_skill_is_also_an_ordinary_resource(
+    mcp_server: MCPServer, main_secret: str
+) -> None:
+    async with _era(mcp_server, "legacy", main_secret) as call:
         _, listed = await call("resources/list", {})
 
     assert SKILL_URI in {item["uri"] for item in listed["result"]["resources"]}

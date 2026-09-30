@@ -146,6 +146,18 @@ class Settings(BaseSettings):
             "one. Required in that mode, ignored over HTTP"
         ),
     )
+    # Согласие входа OAuth без страницы (TRK-448). Служба mcp не знает режима входа
+    # установки, а согласие без страницы выдаёт токен любому, кто достучался до порта.
+    # Поэтому по умолчанию оно выключено, и `/authorize` отказывает; правило выбора
+    # участника и режимы — задача TRK-450 (`app/services/oauth.py`, `ConsentPolicy`).
+    oauth_local_consent: bool = Field(
+        default=False,
+        description=(
+            "Grant an OAuth sign-in at once, without a consent page, to the default agent "
+            "participant, and only for a loopback redirect_uri. Off by default: until the "
+            "sign-in page exists, anyone who reaches the MCP port would get a token"
+        ),
+    )
 
     # --- Вход по почте и паролю -----------------------------------------------------
     # Учётные записи живут в базе (`docs/CONCEPT.md`, 5.4). Здесь — только прежний пароль

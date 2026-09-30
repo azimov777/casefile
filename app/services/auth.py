@@ -80,6 +80,32 @@ async def authenticate(
     заголовок, перевыпустить токен или взять другой.
     """
     moment = now or datetime.now(UTC)
+    token = await verify_token(session, raw_token, now=moment)
+    actor = Actor(
+        author=_author(token, label),
+        scope=token.scope,
+        participant=token.participant,
+        token_id=token.id,
+    )
+    _touch(token, moment)
+    return actor
+
+
+async def verify_token(
+    session: AsyncSession,
+    raw_token: str,
+    *,
+    now: datetime | None = None,
+) -> Token:
+    """Действующий ли токен: находит его строку или отказывает `unauthorized` с причиной.
+
+    Половина `authenticate` без подписи и без отметки использования. Её зовёт ещё и
+    проверяющий службы mcp (`app/mcp/oauth.py`) на каждом HTTP-запросе, до протокола:
+    клиенту OAuth отказ нужен ответом `401` транспорта, иначе он не пойдёт обновлять
+    токен. Метку временного агента здесь не требуют — это вопрос подписи вызова, а не
+    годности токена, и его решает `authenticate`. Ничего не пишет.
+    """
+    moment = now or datetime.now(UTC)
     secret = raw_token.strip()
     if not secret:
         raise UnauthorizedError(details={"reason": "missing_token"})
@@ -113,15 +139,7 @@ async def authenticate(
             message="The account behind this token is disabled",
             details={"reason": "account_disabled"},
         )
-
-    actor = Actor(
-        author=_author(token, label),
-        scope=token.scope,
-        participant=token.participant,
-        token_id=token.id,
-    )
-    _touch(token, moment)
-    return actor
+    return token
 
 
 async def _person_disabled(session: AsyncSession, token: Token) -> bool:

@@ -5,6 +5,7 @@ from app.db.repositories.attributes import AttributeRepository
 from app.db.repositories.entries import EntryRepository
 from app.db.repositories.idempotency import IdempotencyRepository
 from app.db.repositories.links import LinkRepository
+from app.db.repositories.oauth import OAuthRepository
 from app.db.repositories.participants import ParticipantRepository
 from app.db.repositories.projects import ProjectRepository
 from app.db.repositories.search import TaskSearchRepository
@@ -17,6 +18,7 @@ __all__ = [
     "EntryRepository",
     "IdempotencyRepository",
     "LinkRepository",
+    "OAuthRepository",
     "ParticipantRepository",
     "ProjectRepository",
     "TaskRepository",

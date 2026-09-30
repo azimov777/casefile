@@ -172,13 +172,22 @@ def mcp_sessions(db_session: AsyncSession) -> SessionFactory:
     заново: она переводит нарушение целостности в доменный конфликт, и фикстура с
     собственной копией отдавала бы инструменту сырой `IntegrityError` — то есть была бы
     зелёной ровно там, где боевой код сломан.
+
+    Сессия одна, а запросы HTTP к службе идут параллельно: проверяющий токен
+    (`app/mcp/oauth.py`) ходит в базу на каждом запросе, в том числе на потоке `GET`,
+    который клиент держит рядом с вызовами. Поэтому вход в сессию — по очереди, под
+    замком: в бою у каждого запроса своя сессия, а одна сессия теста параллельной работы
+    не допускает (`concurrent operations are not permitted`).
     """
+
+    lock = asyncio.Lock()
 
     @asynccontextmanager
     async def _scope() -> AsyncIterator[AsyncSession]:
-        await db_session.commit()
-        async with transaction(db_session):
-            yield db_session
+        async with lock:
+            await db_session.commit()
+            async with transaction(db_session):
+                yield db_session
 
     return _scope
 

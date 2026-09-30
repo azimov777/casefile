@@ -12,6 +12,7 @@ from app.db.models.author import CreatedByMixin, created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.idempotency import IdempotencyKey
 from app.db.models.link import Link
+from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
 from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
@@ -25,6 +26,9 @@ __all__ = [
     "Entry",
     "IdempotencyKey",
     "Link",
+    "OAuthClient",
+    "OAuthCode",
+    "OAuthRefreshToken",
     "Participant",
     "Project",
     "ProjectAttribute",
