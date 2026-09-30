@@ -11,6 +11,7 @@
 досталась бы следующему запросу теста.
 """
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import archive as store
 from app.db.models.entry import Entry
 from app.db.models.link import Link
+from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
 from app.db.models.participant import Participant
 from app.db.models.task import Task
 from app.db.models.token import Token
@@ -31,8 +33,9 @@ from app.domain.archive import EXCLUDED_TABLES, Archive, ArchiveFormat, ArchiveT
 from app.domain.errors import ArchiveInvalidError
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
-from app.domain.tokens import TokenScope
+from app.domain.tokens import TokenKind, TokenScope
 from app.services import archive as archive_service
+from app.services import oauth as oauth_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tokens as tokens_service
@@ -42,6 +45,7 @@ from conftest import Connect, call
 
 ARCHIVE = "/api/v1/installation/archive"
 PASSWORD = "correct horse battery staple"
+OAUTH_REDIRECT = "http://127.0.0.1:43117/callback"
 
 
 def bearer(secret: str) -> dict[str, str]:
@@ -163,6 +167,48 @@ async def test_browser_sessions_stay_behind(
     expires = tokens["columns"].index("expires_at")
     assert tokens["rows"]
     assert all(row[expires] is None for row in tokens["rows"])
+    assert len(tokens["rows"]) == await count(db_session, Token) - 1
+
+
+async def test_oauth_connections_stay_behind(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Обзорная проверка 5: ни строк `tokens` вида `oauth`, ни таблиц входа OAuth.
+
+    Подключение живёт в харнессе агента на машине источника, как сеанс в браузере.
+    """
+    client_id = "archive-test-client"
+    await oauth_service.register_client(
+        db_session, client_id=client_id, metadata={"redirect_uris": [OAUTH_REDIRECT]}
+    )
+    code = await oauth_service.authorize(
+        db_session,
+        client_id=client_id,
+        redirect_uri=OAUTH_REDIRECT,
+        redirect_uri_provided_explicitly=True,
+        code_challenge="challenge",
+        scopes=None,
+        resource=None,
+        policy=oauth_service.DefaultAgentConsent(enabled=True),
+    )
+    view = await oauth_service.find_code(db_session, client_id=client_id, code=code)
+    assert view is not None
+    await oauth_service.redeem_code(db_session, code_id=view.id, access_ttl=timedelta(days=30))
+    connections = await db_session.scalar(
+        select(func.count()).select_from(Token).where(Token.kind == TokenKind.OAUTH)
+    )
+    assert connections == 1
+    for model in (OAuthClient, OAuthCode, OAuthRefreshToken):
+        assert await count(db_session, model) == 1, model
+
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+
+    names = {item["name"] for item in archive["tables"]}
+    assert names.isdisjoint({"oauth_clients", "oauth_codes", "oauth_refresh_tokens"})
+    tokens = table(archive, "tokens")
+    kind = tokens["columns"].index("kind")
+    assert tokens["rows"]
+    assert all(row[kind] != "oauth" for row in tokens["rows"])
     assert len(tokens["rows"]) == await count(db_session, Token) - 1
 
 

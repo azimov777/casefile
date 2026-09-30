@@ -42,6 +42,14 @@ EXCLUDED_TABLES: dict[str, str] = {
         "Kept for a day with whole responses of creating calls, and the response to issuing "
         "a token holds its secret (app/db/models/idempotency.py)"
     ),
+    "oauth_clients": (
+        "OAuth sign-in belongs to the agent harness on the source machine, like a browser "
+        "session: its connections stay behind, and the client signs in anew on the receiver"
+    ),
+    "oauth_codes": "Single-use and short-lived; they lead to connections that stay behind",
+    "oauth_refresh_tokens": (
+        "Each refreshes a connection (tokens of kind oauth), and connections stay behind"
+    ),
 }
 
 
