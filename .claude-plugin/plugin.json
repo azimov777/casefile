@@ -1,7 +1,7 @@
 {
   "name": "casefile",
   "description": "Casefile skill for agents: connect to an installation, recover from 401, keep the case and watch the journal.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "author": {
     "name": "azimov777"
   },
