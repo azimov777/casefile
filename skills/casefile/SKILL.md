@@ -1,6 +1,6 @@
 ---
 name: casefile
-description: Connecting an agent harness (Claude Code, Codex, Hermes or another MCP client) to a Casefile task tracker installation over MCP, recovering when the casefile MCP server refuses a call with 401, watching the tracker journal for news between agent sessions, and installing or updating this skill as a plugin. Applies when Casefile is being installed or connected, when the casefile server is missing from the harness or answers 401 unauthorized, when answers and remarks in the tracker have to reach an agent with no open session, and when this skill was read from the server and is not yet installed in the harness. The working rules of the tracker itself arrive with the MCP server, in its instructions and tool descriptions, and are not part of this skill.
+description: Connecting an agent harness (Claude Code, Codex, Hermes or another MCP client) to a Casefile task tracker installation over MCP, either one installed on the same machine or a shared one running on a server, recovering when the casefile MCP server refuses a call with 401, watching the tracker journal for news between agent sessions, and installing or updating this skill as a plugin. Applies when Casefile is being installed or connected, when an agent joins an installation that runs on a server, when the casefile server is missing from the harness or answers 401 unauthorized, when answers and remarks in the tracker have to reach an agent with no open session, and when this skill was read from the server and is not yet installed in the harness. The working rules of the tracker itself arrive with the MCP server, in its instructions and tool descriptions, and are not part of this skill.
 ---
 
 # Casefile outside MCP
@@ -13,7 +13,7 @@ this skill gets into a harness and stays current.
 
 ## Connecting to an installation
 
-### Address and token
+### Address and token from the installer on this machine
 
 The installer (`install.sh` on macOS and Linux, `install.ps1` on Windows) prints the board
 URL, an `MCP:` line with the MCP address, and a connect command with a token. The MCP
@@ -75,7 +75,7 @@ reconnects the servers; in the other harnesses the server appears in the next se
 Until then the tracker's tools are absent from the session, which is a matter of the
 session and not of the installation.
 
-### An installation run by someone else
+### An installation on a server, run by someone else
 
 On a shared installation, where people sign in with an email and a password, there is no
 installer output and no `agent-token` to read. The token is issued by the user in their
@@ -83,6 +83,36 @@ own signed-in session: in the board's access screen or with `POST /api/v1/tokens
 person with an account issues tokens without the administrator. A token named after the
 machine or harness stands apart in the user's token list. The MCP address
 is the one the installation publishes; the board's connect screen shows it.
+
+The installer of the service runs on the server, not on the machine where the agent
+works: the agent's machine needs neither Docker nor an installation directory. The
+access screen is the one named `Access` in the board's side panel; a token issued there
+belongs to the user who issued it, who sees it with its last use and revokes it. The MCP
+address is the installation's public address, reachable from the agent's machine: the
+`localhost` address printed by the installer on the server points at the agent's own
+machine instead. With that address and token the harness is configured as in the
+sections above.
+
+This skill reaches the agent's machine by the Casefile install line in skill-only mode.
+It installs the skill into every harness it finds on the machine and prints where it
+stands, without Docker, an installation directory or a token:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+```
+
+```powershell
+$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+```
+
+The per-harness commands under "Installing and updating this skill" do the same one
+harness at a time.
+
+A token revoked by the user or by the administrator, and every token of an account the
+administrator disabled, is refused with `401 unauthorized` and
+`details.reason: token_revoked`, as described in the next section. Access comes back
+only with a new token from the same access screen; enabling a disabled account again
+does not revive its old tokens.
 
 ## 401 from the casefile server
 
