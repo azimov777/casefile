@@ -24,7 +24,7 @@ from app.services import tokens as tokens_service
 from app.services.auth import Actor
 
 
-async def test_a_client_can_initialize_a_session(mcp_server: MCPServer) -> None:
+async def test_a_client_can_initialize_a_session(mcp_server: MCPServer, main_secret: str) -> None:
     """`initialize` отвечает и отдаёт возможности сервера.
 
     Через настоящий HTTP-транспорт, а не вызовом метода: `initialize` — это рукопожатие
@@ -53,7 +53,7 @@ async def test_a_client_can_initialize_a_session(mcp_server: MCPServer) -> None:
             "/mcp",
             headers={
                 "accept": "application/json, text/event-stream",
-                "authorization": "Bearer any-token",
+                "authorization": f"Bearer {main_secret}",
             },
             json={
                 "jsonrpc": "2.0",
@@ -219,13 +219,18 @@ async def test_a_bearer_client_lists_tools_as_before(
     assert {tool.name for tool in listed.tools} >= {"get_task", "create_task"}
 
 
-async def test_a_revoked_token_still_fails_with_token_revoked(
+async def test_a_revoked_token_gets_401_with_token_revoked_on_the_transport(
     mcp_server: MCPServer,
     db_session: AsyncSession,
     owner: Participant,
     main_actor: Actor,
 ) -> None:
-    """Причина отказа отозванному токену сохраняется: проверяет её `authenticate`, а не SDK."""
+    """Отозванный токен получает `401` транспорта с причиной и ссылкой на вход (TRK-448).
+
+    Проверяет токен проверяющий службы (`app/mcp/oauth.py`), а не вызов инструмента:
+    клиенту OAuth нужен именно `401`, чтобы пойти обновлять токен. Причина — та же, что
+    отдаёт `authenticate`: `details.reason: token_revoked`.
+    """
     issued = await tokens_service.issue_token(
         db_session,
         actor=main_actor,
@@ -234,11 +239,31 @@ async def test_a_revoked_token_still_fails_with_token_revoked(
         name="to-revoke",
     )
     await tokens_service.revoke_token(db_session, issued.token.id, actor=main_actor)
+    await db_session.commit()
 
-    with pytest.raises(Exception) as failure:
-        async with connect_mcp(mcp_server, issued.secret) as session:
-            await session.list_tools()
+    transport = ASGITransport(app=mcp_server.streamable_http_app())
+    async with AsyncClient(transport=transport, base_url="http://localhost:8100") as client:
+        response = await client.post(
+            "/mcp",
+            headers=_ACCEPT | {"authorization": f"Bearer {issued.secret}"},
+            json=_INITIALIZE,
+        )
 
-    # Отказ приезжает в группе исключений транспорта: причина — в `repr`, а не в `str`.
-    assert "unauthorized" in repr(failure.value)
-    assert "token_revoked" in repr(failure.value)
+    assert response.status_code == 401
+    assert response.json()["details"] == {"reason": "token_revoked"}
+    assert response.json()["code"] == "unauthorized"
+    challenge = response.headers["www-authenticate"]
+    assert "token_revoked" in challenge
+    assert "resource_metadata=" in challenge
+
+
+async def test_an_unknown_token_gets_401_with_unknown_token(mcp_server: MCPServer) -> None:
+    """Выдуманный bearer больше не доходит до протокола: `401` с `unknown_token`."""
+    transport = ASGITransport(app=mcp_server.streamable_http_app())
+    async with AsyncClient(transport=transport, base_url="http://localhost:8100") as client:
+        response = await client.post(
+            "/mcp", headers=_ACCEPT | {"authorization": "Bearer trk_made_up"}, json=_INITIALIZE
+        )
+
+    assert response.status_code == 401
+    assert response.json()["details"] == {"reason": "unknown_token"}

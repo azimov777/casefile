@@ -175,11 +175,13 @@ async def test_an_unknown_token_is_refused_before_the_list_is_built(
 
     Пустой список неотличим от сервера без инструментов, и агент искал бы поломку не там.
     """
-    async with mcp_session("trk_unknown") as session:
-        with pytest.raises(Exception) as failure:
+    # С TRK-448 отказ приходит `401` транспорта уже на рукопожатии (`app/mcp/oauth.py`,
+    # причина проверена в `tests/test_mcp_server.py`); клиент SDK поднимает его ошибкой.
+    with pytest.raises(Exception) as failure:
+        async with mcp_session("trk_unknown") as session:
             await session.list_tools()
 
-    assert "unauthorized" in str(failure.value)
+    assert "error response" in repr(failure.value)
 
 
 # --- Аннотации протокола (TRK-128) -----------------------------------------------------

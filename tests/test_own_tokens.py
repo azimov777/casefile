@@ -9,9 +9,10 @@
 from typing import Any
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from mcp.server.mcpserver import MCPServer
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest import Connect, call, refuse
+from tests.conftest import MCP_BASE_URL, Connect, call
 
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
@@ -171,7 +172,12 @@ async def test_an_agent_with_a_main_token_issues_no_tokens(
 
 
 async def test_an_agent_works_over_mcp_with_the_issued_token_until_it_is_revoked(
-    auth_client: AsyncClient, alice: str, agent: Participant, project: Project, mcp_session: Connect
+    auth_client: AsyncClient,
+    alice: str,
+    agent: Participant,
+    project: Project,
+    mcp_session: Connect,
+    mcp_server: MCPServer,
 ) -> None:
     """Обзорная проверка 2: следующий же вызов после отзыва отклоняется."""
     issued = await issue(auth_client, alice, name="alice agent", participant=agent.name)
@@ -185,10 +191,13 @@ async def test_an_agent_works_over_mcp_with_the_issued_token_until_it_is_revoked
         revoked = await auth_client.delete(f"{TOKENS}/{issued['id']}", headers=bearer(alice))
         assert revoked.status_code == 204
 
-        failure = await refuse(session, "list_projects")
+        # С TRK-448 отказ — `401` транспорта (`details.reason: token_revoked`, проверено в
+        # `tests/test_mcp_server.py`): клиент SDK поднимает его исключением, а не результатом.
+        with pytest.raises(Exception) as failure:
+            await session.list_tools()
 
-    assert "unauthorized" in failure
-    assert "token_revoked" in failure
+    assert "error response" in repr(failure.value)
+    assert await transport_refusal(mcp_server, issued["secret"]) == "token_revoked"
 
 
 # --- Проверка 3: администратор видит и отзывает все ------------------------------------
@@ -223,6 +232,32 @@ async def account_id(client: AsyncClient, email: str) -> str:
     raise AssertionError(f"no account {email}")
 
 
+async def transport_refusal(server: MCPServer, secret: str) -> str:
+    """Причина `401` службы mcp на рукопожатии с этим токеном."""
+    transport = ASGITransport(app=server.streamable_http_app())
+    async with AsyncClient(transport=transport, base_url=MCP_BASE_URL) as client:
+        response = await client.post(
+            "/mcp",
+            headers={
+                "accept": "application/json, text/event-stream",
+                "authorization": f"Bearer {secret}",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "tests", "version": "0"},
+                },
+            },
+        )
+    assert response.status_code == 401, response.text
+    reason: str = response.json()["details"]["reason"]
+    return reason
+
+
 async def test_disabling_a_person_stops_the_agents_and_enabling_does_not_revive_them(
     auth_client: AsyncClient,
     alice: str,
@@ -230,6 +265,7 @@ async def test_disabling_a_person_stops_the_agents_and_enabling_does_not_revive_
     agent: Participant,
     project: Project,
     mcp_session: Connect,
+    mcp_server: MCPServer,
 ) -> None:
     """Обзорная проверка 4, как записано в `TRK-114#13`, п. 1."""
     alices = await issue(auth_client, alice, name="alice agent", participant=agent.name)
@@ -240,12 +276,9 @@ async def test_disabling_a_person_stops_the_agents_and_enabling_does_not_revive_
     disabled = await auth_client.patch(f"{ACCOUNTS}/{alice_id}", json={"disabled": True})
     assert disabled.status_code == 200, disabled.text
 
-    async with mcp_session(alices["secret"]) as session:
-        failure = await refuse(session, "list_projects")
-    assert "token_revoked" in failure
-    async with mcp_session(shared["secret"], label="nightly") as session:
-        failure = await refuse(session, "list_projects")
-    assert "token_revoked" in failure
+    # Отказ — `401` транспорта с причиной (TRK-448): до инструмента запрос не доходит.
+    assert await transport_refusal(mcp_server, alices["secret"]) == "token_revoked"
+    assert await transport_refusal(mcp_server, shared["secret"]) == "token_revoked"
     async with mcp_session(bobs["secret"]) as session:
         await call(session, "list_projects")
 
