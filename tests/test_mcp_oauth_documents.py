@@ -431,6 +431,21 @@ async def test_a_bad_answer_is_refused(response: DocumentResponse) -> None:
     assert refused.value.error == "invalid_client"
 
 
+async def test_a_path_http_client_refuses_is_a_refusal_not_a_crash() -> None:
+    """Пробел в пути: `http.client` бросает `InvalidURL` (это `ValueError`)."""
+
+    async def resolve(host: str, port: int) -> list[str]:
+        return [PUBLIC_ADDRESS]
+
+    async def request(request: DocumentRequest) -> DocumentResponse:
+        raise documents_module.http.client.InvalidURL("URL can't contain control characters")
+
+    with pytest.raises(OAuthRefusal):
+        await ClientDocuments(resolve=resolve, request=request).fetch(
+            "https://claude.ai/a b/client.json"
+        )
+
+
 async def test_a_slow_server_is_cut_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(documents_module, "DOCUMENT_TIMEOUT_SECONDS", 0.05)
 

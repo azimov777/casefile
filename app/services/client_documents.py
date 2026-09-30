@@ -162,7 +162,9 @@ class ClientDocuments:
             raise
         except TimeoutError:
             raise self._refuse(url, "client metadata document fetch timed out") from None
-        except (OSError, ssl.SSLError, http.client.HTTPException) as failure:
+        except (OSError, ssl.SSLError, http.client.HTTPException, ValueError) as failure:
+            # `ValueError` — `http.client` отказывает пути с пробелом или не-ASCII
+            # (`InvalidURL`, `UnicodeEncodeError`): это адрес клиента, а не сбой службы.
             raise self._refuse(url, f"client metadata document fetch failed: {failure}") from None
 
         if response.status != 200:
