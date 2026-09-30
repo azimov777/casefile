@@ -11239,6 +11239,21 @@
               "Релизный бот, ведёт задачи выкладки"
             ]
           },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner",
+            "description": "Name of the human this agent belongs to; null for humans, shared agents and local agents without an owner",
+            "examples": [
+              "alice"
+            ]
+          },
           "created_by": {
             "$ref": "#/components/schemas/AuthorRead"
           },

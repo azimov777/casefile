@@ -3146,6 +3146,12 @@ export interface components {
              * @example Релизный бот, ведёт задачи выкладки
              */
             description: string;
+            /**
+             * Owner
+             * @description Name of the human this agent belongs to; null for humans, shared agents and local agents without an owner
+             * @example alice
+             */
+            owner?: string | null;
             created_by: components["schemas"]["AuthorRead"];
             /**
              * Created At

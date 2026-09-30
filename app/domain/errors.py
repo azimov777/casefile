@@ -691,6 +691,17 @@ class AdminRequiredError(PermissionDeniedError):
     message = "Only an administrator can manage accounts"
 
 
+class ForeignAgentError(PermissionDeniedError):
+    """Ключ агента с чужим хозяином выпускает только администратор (TRK-475#14).
+
+    Отдельный код, а не общий `permission_denied`: клиенту это другое решение — выпустить
+    ключ своему агенту или попросить администратора. `details` называет агента и хозяина.
+    """
+
+    code = "agent_owned_by_another"
+    message = "Only an administrator can issue a token to an agent owned by another person"
+
+
 class LastAdminError(ConflictError):
     """Действие оставило бы установку без действующего администратора.
 

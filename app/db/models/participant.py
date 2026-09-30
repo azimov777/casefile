@@ -1,7 +1,9 @@
 """Участник: человек или постоянный агент. Тот, кого можно назвать по имени."""
 
-from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+import uuid
+
+from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseModel, string_enum
 from app.db.models.author import CreatedByMixin
@@ -32,6 +34,22 @@ class Participant(BaseModel, CreatedByMixin):
     # Канонизацию делает домен (`validate_participant_name`) — до всякой записи.
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+
+    # Хозяин агента: человек, чей это агент (`CONCEPT.md`, 3.1; TRK-475#14). У людей, у
+    # общих агентов и у локальных `claude`/`codex` — NULL. Связь объектом подгружается
+    # сразу: имя хозяина отдают и список участников, и bootstrap, а ленивая загрузка в
+    # асинхронной сессии падает `MissingGreenlet`.
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("participants.id"), nullable=True, default=None
+    )
+    owner: Mapped[Participant | None] = relationship(
+        remote_side="Participant.id", lazy="joined", foreign_keys=[owner_id]
+    )
+
+    @property
+    def owner_name(self) -> str | None:
+        """Имя хозяина или `None`: так его отдаёт REST."""
+        return self.owner.name if self.owner is not None else None
 
     @property
     def author(self) -> Author:

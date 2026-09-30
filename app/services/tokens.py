@@ -24,7 +24,7 @@ from app.db.models.participant import Participant
 from app.db.models.token import Token
 from app.db.pagination import Page
 from app.db.repositories import TokenRepository
-from app.domain.errors import TokenNotFoundError
+from app.domain.errors import ForeignAgentError, TokenNotFoundError
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenKind, generate_token, hash_token
 from app.services.accounts import active_account_of, is_admin
@@ -132,12 +132,13 @@ async def _ensure_may_issue(
 ) -> None:
     """Выпускает человек с действующей учётной записью или сам трекер.
 
-    Чужим именем — только администратор.
+    Чужим именем и ключом чужого агента (с другим хозяином) — только администратор.
 
     Отказы — `permission_denied` с `details.action: token.issue` и причиной:
     `account_required` — за токеном запроса нет действующей учётной записи (так
     отвечает агент); `foreign_human` — ключ говорил бы от имени другого человека, а
     выпускающий не администратор: иначе любой вошедший подписывался бы чужим именем.
+    Чужой агент — отдельный код `agent_owned_by_another`. Агент без хозяина открыт всем.
     """
     if actor == TRACKER_ACTOR:
         return
@@ -156,4 +157,18 @@ async def _ensure_may_issue(
         raise PermissionDeniedError(
             message="Only an administrator can issue a token that speaks for another person",
             details={"action": "token.issue", "reason": "foreign_human"},
+        )
+    foreign_agent = (
+        participant is not None
+        and participant.kind is ParticipantKind.AGENT
+        and participant.owner_id is not None
+        and participant.owner_id != account.participant_id
+    )
+    if foreign_agent and not account.is_admin:
+        raise ForeignAgentError(
+            details={
+                "action": "token.issue",
+                "agent": participant.name,
+                "owner": participant.owner_name,
+            }
         )
