@@ -784,3 +784,21 @@ TRK-431. Признаки проверки в гайде сверяет тест
 именно здесь. Тесту на `initialize` нужен заголовок `Authorization` (любой).
 **Где:** `app/mcp/oauth.py`, `app/mcp/server.py` (`_bare_server`),
 `tests/test_mcp_server.py`.
+
+## Манифест Codex лежит рядом с `.claude-plugin/` и обязан совпадать с ним
+
+**Что:** `.codex-plugin/plugin.json` (формат Codex: поля листинга в корневом `interface`,
+иконка `icon.svg`, `skills: ./skills/`, без MCP-блока) лежит в корне рядом с `.claude-plugin/`.
+Codex ищет манифест по порядку `.codex-plugin`, `.claude-plugin`, `.cursor-plugin`, поэтому при
+установке из нашего маркетплейса (`marketplace.json` остаётся в `.claude-plugin/`) читает уже его.
+Формат Agent Plugin (корневой `plugin.json` с `$schema`) не взят: Codex читает такой файл раньше
+любого другого, а `interface` в нём уезжает под `extensions.com.openai`. ZIP для каталога OpenAI
+собирает `scripts/build-openai-plugin.sh`.
+**Почему важно:** в манифесте Codex свои `version` и `name`; разойдись они с плагином Claude Code,
+Codex ставил бы скил под другой версией. Установочные строки со `--sparse .claude-plugin --sparse
+skills` этот каталог не забирают, и Codex продолжает читать `.claude-plugin/plugin.json` — обе
+установки при этом работают.
+**Как правильно:** версию выпуска править во всех трёх файлах (`docs/DEVELOPMENT.md`), тест
+`tests/test_plugin_manifest.py` краснеет при расхождении. Адреса политики, условий и поддержки не
+выдумывать: skills-only плагину они не нужны, для MCP-ревью их даёт TRK-462.
+**Где:** `.codex-plugin/`, `scripts/build-openai-plugin.sh`, `tests/test_plugin_manifest.py`.
