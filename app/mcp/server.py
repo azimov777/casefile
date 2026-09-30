@@ -50,11 +50,13 @@ from starlette.responses import JSONResponse
 from app import __version__
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.mcp.consent import ConsentPage, consent_page_url
 from app.mcp.oauth import (
     CasefileAuthorization,
     PresentedToken,
     RefusalReasons,
     advertise_client_documents,
+    allowed_hosts,
     auth_settings,
     authorization_enabled,
 )
@@ -62,7 +64,8 @@ from app.mcp.runtime import Runtime, headers_middleware
 from app.mcp.skills import SKILLS_DIR, CasefileSkills, advertise_on_handshake
 from app.mcp.tools import register_tools
 from app.mcp.toolset import Toolset
-from app.services.oauth import DefaultAgentConsent
+from app.services.login import PasswordLogin
+from app.services.oauth import LocalConsent
 
 logger = get_logger("mcp")
 
@@ -109,6 +112,10 @@ class CasefileServer(MCPServer):
         self._casefile_settings = casefile_settings
 
     def streamable_http_app(self, **kwargs: Any) -> Starlette:
+        if kwargs.get("transport_security") is None:
+            guard = allowed_hosts(self._casefile_settings)
+            if guard is not None:
+                kwargs["transport_security"] = guard
         application = super().streamable_http_app(**kwargs)
         if authorization_enabled(self._casefile_settings):
             advertise_client_documents(application, self._casefile_settings)
@@ -120,18 +127,37 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
     """Сервер без инструментов: имя, версия, инструкция, разбор заголовков и вход OAuth."""
     # Защищённый ресурс OAuth и сервер авторизации при нём (`app/mcp/oauth.py`). SDK не
     # принимает провайдера и проверяющего вместе: с провайдером токен проверяет он сам.
-    if authorization_enabled(settings):
-        auth: dict[str, Any] = {
+    page: ConsentPage | None = None
+    if not authorization_enabled(settings):
+        auth: dict[str, Any] = {"token_verifier": PresentedToken(runtime.sessions)}
+    elif settings.login == "password":
+        # В сети — страница входа почтой и паролем (`app/mcp/consent.py`), локально —
+        # согласие сразу, только при портах на петле (`LocalConsent`, TRK-450).
+        issuer = str(auth_settings(settings).issuer_url)
+        provider = CasefileAuthorization(
+            runtime.sessions,
+            None,
+            runtime.documents,
+            access_ttl=settings.oauth_access_ttl,
+            consent_page=consent_page_url(issuer),
+        )
+        page = ConsentPage(
+            runtime.sessions,
+            clients=provider,
+            login=PasswordLogin.from_settings(settings),
+            issuer_url=issuer,
+        )
+        auth = {"auth_server_provider": provider}
+    else:
+        auth = {
             "auth_server_provider": CasefileAuthorization(
                 runtime.sessions,
-                DefaultAgentConsent(enabled=settings.oauth_local_consent),
+                LocalConsent(bind_loopback=settings.bind_is_loopback),
                 runtime.documents,
                 access_ttl=settings.oauth_access_ttl,
             )
         }
-    else:
-        auth = {"token_verifier": PresentedToken(runtime.sessions)}
-    return CasefileServer(
+    server = CasefileServer(
         name="tracker",
         title="Tracker",
         version=__version__,
@@ -149,6 +175,9 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
         casefile_settings=settings,
         **auth,
     )
+    if page is not None:
+        page.register(server)
+    return server
 
 
 def _register_health(server: MCPServer, runtime: Runtime) -> None:

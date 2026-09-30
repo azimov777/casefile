@@ -9,11 +9,12 @@ INSERT в базу, не фиксируя транзакцию, чтобы сц�
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
 from app.db.pagination import Page, paginate
+from app.domain.participants import ParticipantKind
 
 
 class ParticipantRepository:
@@ -50,6 +51,22 @@ class ParticipantRepository:
         return await paginate(
             self._session, select(Participant), Participant, limit=limit, cursor=cursor
         )
+
+    async def list_agents_open_to(self, person: Participant) -> list[Participant]:
+        """Агенты, которых человек вправе взять: свои (он хозяин) и без хозяина, по имени.
+
+        Агенты других людей сюда не входят: ключ и подключение им выдаёт только их
+        хозяин или администратор (`TRK-475#14`).
+        """
+        statement = (
+            select(Participant)
+            .where(
+                Participant.kind == ParticipantKind.AGENT,
+                or_(Participant.owner_id == person.id, Participant.owner_id.is_(None)),
+            )
+            .order_by(Participant.name)
+        )
+        return list(await self._session.scalars(statement))
 
     async def add(self, participant: Participant) -> Participant:
         """Кладёт участника в сессию и отправляет INSERT, не закрывая транзакцию."""

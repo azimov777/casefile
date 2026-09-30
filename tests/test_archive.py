@@ -202,7 +202,7 @@ async def test_oauth_connections_stay_behind(
         code_challenge="challenge",
         scopes=None,
         resource=None,
-        policy=oauth_service.DefaultAgentConsent(enabled=True),
+        policy=oauth_service.LocalConsent(bind_loopback=True),
     )
     view = await oauth_service.find_code(db_session, client_id=client_id, code=code)
     assert view is not None

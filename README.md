@@ -297,7 +297,8 @@ the **administrator** flag, and all it opens is managing people.
    address confirmation and no reset link.
 
 The board at `http://<server>:8080` now opens with a sign-in screen. Agents keep
-connecting to MCP with their tokens — sign-in is for people in the browser. Issue each
+connecting to MCP with their tokens — sign-in is for people in the browser; behind TLS
+they can sign in with OAuth instead (below). Issue each
 agent its own token on the **Access** screen; **Connect an agent** shows the address from
 `TRACKER_MCP_PUBLIC_URL`.
 Each agent's machine also needs the skill: its install commands are in
@@ -327,6 +328,27 @@ mcp.casefile.example.com {
 
 with `TRACKER_MCP_PUBLIC_URL=https://mcp.casefile.example.com/mcp`. A proxy that sends
 `X-Forwarded-Proto: https` gets the session cookie marked `Secure`.
+
+**Agents sign in with OAuth.** With sign-in on and `TRACKER_MCP_PUBLIC_URL` on `https`, a
+client that speaks MCP OAuth (Claude Code, Codex) needs only the address, no token. It
+opens a page on the MCP host: the person signs in with email and password and picks which
+agent the client acts as — by default their own `claude_<name>` or `codex_<name>`
+(`agent_<name>` for other clients), created on the first sign-in; the list holds their
+own agents and agents without an owner, never someone else's. The connection counts as
+issued by that person: they see and disconnect it on **Access**, an administrator sees
+all, and disabling the account cuts it off. What the proxy must do:
+
+- send the **whole** MCP host to port 8100, not only `/mcp`: sign-in also uses
+  `/.well-known/…`, `/register`, `/authorize`, `/token` and `/oauth/…` at the root of the
+  host named in `TRACKER_MCP_PUBLIC_URL`;
+- keep the client's `Host` header. Caddy does; nginx needs `proxy_set_header Host $host;`.
+  With sign-in on, MCP answers only on the host of `TRACKER_MCP_PUBLIC_URL`, and a request
+  under another name gets `421`.
+
+Over plain `http` beyond localhost there is no OAuth at all — agents connect with a token
+from **Access**. On a machine of your own (sign-in off, ports on localhost) an agent is
+signed in at once, without a page: Claude Code as `claude`, Codex as `codex`, any other
+client as `agent`, each created when first needed.
 
 **Name your proxy.** Sign-in tells guessers apart by address (see **Guessing** below). Behind
 a proxy every request arrives from the proxy, so the board must be told which address is

@@ -129,7 +129,7 @@ def network() -> FakeNetwork:
 
 
 def _server(sessions: SessionFactory, network: FakeNetwork) -> MCPServer:
-    settings = get_settings().model_copy(update={"oauth_local_consent": True})
+    settings = get_settings().model_copy(update={"login": "local", "bind": "127.0.0.1"})
     runtime = Runtime(sessions=sessions, documents=network.documents())
     return create_server(runtime=runtime, settings=settings)
 
