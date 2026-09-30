@@ -17,7 +17,7 @@ import yaml
 from httpx import ASGITransport, AsyncClient
 from mcp.server.mcpserver import MCPServer
 
-from app.mcp.skills import SKILLS_DIR, SKILLS_EXTENSION
+from app.mcp.skills import MAX_SKILL_FILES, SKILLS_DIR, SKILLS_EXTENSION, CasefileSkills
 
 SKILL_URI = "skill://casefile/SKILL.md"
 ACCEPT = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
@@ -166,6 +166,7 @@ async def test_cache_fields_appear_only_on_the_modern_era(mcp_server: MCPServer)
         _, legacy = await call("skills/list", {})
 
     assert modern["result"]["cacheScope"] == "public"
+    assert modern["result"]["resultType"] == "complete"
     assert modern["result"]["ttlMs"] > 0
     assert "ttlMs" not in legacy["result"]
     assert "cacheScope" not in legacy["result"]
@@ -185,3 +186,15 @@ def test_there_is_one_skills_directory_for_the_plugin_and_the_server() -> None:
     found = SKILLS_DIR.glob("*/SKILL.md")
     manifests = sorted(path.relative_to(repository).as_posix() for path in found)
     assert manifests == ["skills/casefile/SKILL.md"]
+
+
+def test_a_skill_over_the_sep_limits_is_refused_at_load(tmp_path: Path) -> None:
+    """SEP-2640, «Limits»: больше 512 записей или 16 МиБ сервер не отдаёт."""
+    skill = tmp_path / "big"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text("---\nname: big\ndescription: d\n---\n")
+    for number in range(MAX_SKILL_FILES):
+        (skill / f"{number}.md").write_text("x")
+
+    with pytest.raises(ValueError, match="exceed the SEP-2640 limits"):
+        CasefileSkills(tmp_path)

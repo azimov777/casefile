@@ -29,6 +29,8 @@ from mcp_types import INVALID_PARAMS, PaginatedRequestParams, RequestParams
 from mcp_types.version import MODERN_PROTOCOL_VERSIONS
 
 __all__ = [
+    "MAX_SKILL_BYTES",
+    "MAX_SKILL_FILES",
     "SKILLS_DIR",
     "SKILLS_EXTENSION",
     "CasefileSkills",
@@ -45,6 +47,11 @@ SKILLS_EXTENSION = "io.modelcontextprotocol/skills"
 #: Срок, на который клиент может запомнить ответ, миллисекунды. Только на эпохе
 #: 2026-07-28: на старой этих полей в результате нет.
 _TTL_MS = 300_000
+
+#: Лимиты одного скила из SEP-2640 (Final, «Limits»): записей в `resources` и сумма `size`.
+#: Сервер не должен отдавать скил больше, поэтому такой каталог не поднимается.
+MAX_SKILL_FILES = 512
+MAX_SKILL_BYTES = 16 * 1024 * 1024
 
 
 class GetSkillParams(RequestParams):
@@ -104,6 +111,12 @@ def _load(root: Path) -> dict[str, _Skill]:
                     digest="sha256:" + hashlib.sha256(raw).hexdigest(),
                     size=len(raw),
                 )
+            )
+        total = sum(item.size for item in files)
+        if len(files) > MAX_SKILL_FILES or total > MAX_SKILL_BYTES:
+            raise ValueError(
+                f"{directory}: {len(files)} files, {total} bytes exceed the SEP-2640 limits "
+                f"({MAX_SKILL_FILES} files, {MAX_SKILL_BYTES} bytes)"
             )
         skill = _Skill(
             uri=f"skill://{directory.name}/SKILL.md", frontmatter=front, files=tuple(files)
