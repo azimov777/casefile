@@ -940,13 +940,18 @@ e2e` в этот скрипт не входит — им сливают ветк
 
 Версию выпуска меняет коммит `chore(release): vX.Y.Z`. В список файлов версии входят
 `pyproject.toml`, `uv.lock` (`docker compose run --rm lock`), `ui/package.json`, `openapi.json`,
-пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и оба файла плагина
-скила — `.claude-plugin/plugin.json` и `.claude-plugin/marketplace.json` (`version` в плагине и в
-записи маркетплейса, `metadata.version`): Claude Code без новой `version` не обновит скил.
+пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и три файла плагина
+скила — `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (`version` в плагине и в
+записи маркетплейса, `metadata.version`) и `.codex-plugin/plugin.json` (манифест для Codex и каталога OpenAI):
+Claude Code без новой `version` не обновит скил.
 `tests/test_plugin_manifest.py` краснеет, если версии разошлись.
 Оба файла плагина проверяет и джоб `plugin` в `ci.yml` — `claude plugin validate --strict .` на закреплённой
 версии Claude Code (`CLAUDE_CODE_VERSION` в джобе); `images.yml` зовёт `ci.yml` как `checks`, поэтому нарушение
 краснит и проверки PR, и выпуск до публикации образов (TRK-441). Локально: `CLAUDE_CONFIG_DIR=$(mktemp -d) claude plugin validate --strict . </dev/null`.
+
+ZIP плагина для каталога OpenAI собирает `scripts/build-openai-plugin.sh [каталог]` (по умолчанию `dist/`,
+вне git): `.codex-plugin/`, `skills/` и `LICENSE`, падает при расхождении версии. Загрузка на
+platform.openai.com/plugins — отдельный шаг по слову владельца (TRK-459).
 
 Тег пушится раньше `main` — иначе автообновятель прежней установки успел бы забрать файл
 compose, который зовёт канал `stable` до того, как тот на него укажет (комментарий в

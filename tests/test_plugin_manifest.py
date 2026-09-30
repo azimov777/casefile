@@ -2,8 +2,9 @@
 
 Claude Code без новой `version` отвечает «already at latest» и держит старый `SKILL.md`,
 поэтому равенство с `pyproject.toml` держит тест. Плагин несёт только скил: `.mcp.json`
-и ключа `mcpServers` нет (TRK-398#9), каталога `.codex-plugin` тоже — Codex читает формат
-Claude Code.
+и ключа `mcpServers` нет (TRK-398#9). Каталог `.codex-plugin/` (TRK-461) — манифест для
+универсального каталога OpenAI: Codex предпочитает его `.claude-plugin/plugin.json`, поэтому
+версия, имя и скил в нём обязаны совпадать с плагином Claude Code.
 """
 
 import json
@@ -60,4 +61,26 @@ def test_plugin_carries_only_the_skill() -> None:
     assert "mcpServers" not in _load("plugin.json")
     assert "mcpServers" not in _marketplace_plugin()
     assert not (ROOT / ".mcp.json").exists()
-    assert not (ROOT / ".codex-plugin").exists()
+    codex = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert "mcpServers" not in codex and "apps" not in codex
+
+
+def test_codex_manifest_matches_the_claude_plugin_and_has_listing_fields() -> None:
+    """Манифест Codex (решение TRK-461): версия выпуска, то же имя, скил, поля листинга."""
+    codex = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    claude = _load("plugin.json")
+
+    assert codex["version"] == _release_version() == claude["version"]
+    assert codex["name"] == claude["name"]
+    assert codex["author"]["name"]
+    assert (ROOT / codex["skills"]).resolve() == (ROOT / claude["skills"]).resolve()
+    interface = codex["interface"]
+    required = ("displayName", "shortDescription", "longDescription", "developerName", "category")
+    for field in required:
+        assert interface[field], field
+    assert len(interface["displayName"]) <= 30
+    assert len(interface["shortDescription"]) <= 30
+    assert len(interface["longDescription"]) <= 4000
+    for field in ("logo", "composerIcon"):
+        icon = ROOT / interface[field]
+        assert icon.is_file() and icon.stat().st_size <= 5 * 1024 * 1024
