@@ -36,9 +36,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app import cli
 from app.db import session as session_module
-from app.db.repositories import ParticipantRepository, ProjectRepository, TokenRepository
+from app.db.repositories import AccountRepository, ParticipantRepository, ProjectRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
+from app.domain.tokens import TokenKind
 from app.mcp.runtime import Runtime
 from app.mcp.server import create_server
 from app.services import participants as participants_service
@@ -82,6 +83,7 @@ async def committed_secret(
             actor=TRACKER_ACTOR,
             participant=participant,
             name="integrity race",
+            kind=TokenKind.SESSION,
         )
         await session.commit()
         secret = issued.secret
@@ -226,13 +228,13 @@ async def test_two_parallel_init_commands_end_with_a_message_not_a_traceback(
         async_sessionmaker(bind=committing_sessions.kw["bind"], expire_on_commit=False),
     )
 
-    async def empty_installation(self: TokenRepository) -> bool:
+    async def empty_installation(self: AccountRepository) -> bool:
         return False
 
-    monkeypatch.setattr(TokenRepository, "any_exists", empty_installation)
+    monkeypatch.setattr(AccountRepository, "any_human_account", empty_installation)
     meet_after_the_check(monkeypatch, asyncio.Barrier(2), ParticipantRepository, "get_by_name")
     args = cli._build_parser().parse_args(
-        ["init", "--name", OWNER_NAME, "--description", "Владелец", "--token-name", "race"]
+        ["init", "--name", OWNER_NAME, "--description", "Владелец"]
     )
 
     try:
@@ -241,7 +243,7 @@ async def test_two_parallel_init_commands_end_with_a_message_not_a_traceback(
         async with committing_sessions() as session:
             await session.execute(
                 text(
-                    "DELETE FROM tokens WHERE participant_id IN "
+                    "DELETE FROM accounts WHERE participant_id IN "
                     "(SELECT id FROM participants WHERE name = :name)"
                 ),
                 {"name": OWNER_NAME},

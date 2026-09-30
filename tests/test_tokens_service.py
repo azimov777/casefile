@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
 from app.domain.errors import TokenNotFoundError
-from app.domain.tokens import TOKEN_PREFIX, hash_token
+from app.domain.tokens import TOKEN_PREFIX, TokenKind, hash_token
 from app.services import tokens as service
 from app.services.auth import Actor, authenticate
 
@@ -17,7 +17,9 @@ async def test_issuing_returns_the_secret_and_stores_only_its_hash(
     main_actor: Actor,
     owner: Participant,
 ) -> None:
-    issued = await service.issue_token(db_session, actor=main_actor, participant=owner, name="ci")
+    issued = await service.issue_token(
+        db_session, actor=main_actor, participant=owner, name="ci", kind=TokenKind.SESSION
+    )
 
     assert issued.secret.startswith(TOKEN_PREFIX)
     assert issued.token.token_hash == hash_token(issued.secret)
@@ -57,7 +59,9 @@ async def test_revoking_is_idempotent(
     owner: Participant,
 ) -> None:
     """Клиент, не получивший ответ, повторяет запрос — и не должен получить ошибку."""
-    issued = await service.issue_token(db_session, actor=main_actor, participant=owner, name="ci")
+    issued = await service.issue_token(
+        db_session, actor=main_actor, participant=owner, name="ci", kind=TokenKind.SESSION
+    )
 
     first = await service.revoke_token(db_session, issued.token.id, actor=main_actor)
     second = await service.revoke_token(db_session, issued.token.id, actor=main_actor)
@@ -82,7 +86,9 @@ async def test_a_freshly_issued_token_authenticates(
     owner: Participant,
 ) -> None:
     """Сквозная проверка выпуска: секрет из ответа действительно открывает вход."""
-    issued = await service.issue_token(db_session, actor=main_actor, participant=owner, name="ci")
+    issued = await service.issue_token(
+        db_session, actor=main_actor, participant=owner, name="ci", kind=TokenKind.SESSION
+    )
 
     actor = await authenticate(db_session, issued.secret)
     assert actor.author.signature == owner.name

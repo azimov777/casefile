@@ -19,6 +19,7 @@ from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
+from app.domain.tokens import TokenKind
 from app.services import accounts as accounts_module
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
@@ -116,22 +117,22 @@ async def test_two_people_see_only_their_own_tokens_and_cannot_revoke_each_other
     assert still.status_code == 200, "a refused revoke must leave the token working"
 
 
-async def test_own_tokens_include_the_ones_that_speak_for_the_person(
-    auth_client: AsyncClient, alice: str, main_secret: str
+async def test_a_key_given_to_an_agent_by_the_administrator_is_not_in_a_persons_list(
+    auth_client: AsyncClient, alice: str, main_secret: str, agent: Participant
 ) -> None:
-    """Ключ, выданный администратором от имени человека, — тоже его: он его видит и отзывает."""
-    given = await issue(auth_client, main_secret, name="given", participant="alice")
+    """Чужой ключ агента в списке человека не появляется: он его ни выпустил, ни не говорит им."""
+    given = await issue(auth_client, main_secret, name="given", participant=agent.name)
 
     seen = await listed_ids(auth_client, alice)
 
-    assert given["id"] in seen
-    revoked = await auth_client.delete(f"{TOKENS}/{given['id']}", headers=bearer(alice))
-    assert revoked.status_code == 204
+    assert given["id"] not in seen
 
 
-async def test_a_person_cannot_issue_a_token_that_speaks_for_someone_else(
+async def test_a_person_cannot_issue_a_key_to_any_person(
     auth_client: AsyncClient, alice: str, bob: str
 ) -> None:
+    """Ключ человеку не выпускается ни чужому, ни себе (`human_token_not_allowed`);
+    общий — можно."""
     refused = await auth_client.post(
         TOKENS, json={"name": "fake", "participant": "bob"}, headers=bearer(alice)
     )
@@ -140,12 +141,10 @@ async def test_a_person_cannot_issue_a_token_that_speaks_for_someone_else(
     )
     shared = await auth_client.post(TOKENS, json={"name": "shared"}, headers=bearer(alice))
 
-    assert refused.status_code == 403
-    assert refused.json()["error"]["details"] == {
-        "action": "token.issue",
-        "reason": "foreign_human",
-    }
-    assert (for_self.status_code, shared.status_code) == (201, 201)
+    assert (refused.status_code, for_self.status_code) == (403, 403)
+    assert refused.json()["error"]["code"] == "human_token_not_allowed"
+    assert for_self.json()["error"]["code"] == "human_token_not_allowed"
+    assert shared.status_code == 201
 
 
 async def test_an_agent_with_a_main_token_issues_no_tokens(
@@ -299,7 +298,11 @@ async def test_a_token_issued_to_a_disabled_person_does_not_let_in_until_enabled
     await auth_client.patch(f"{ACCOUNTS}/{alice_id}", json={"disabled": True})
     participant = await participants_service.get_participant(db_session, "alice")
     issued = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=participant, name="cli"
+        db_session,
+        actor=TRACKER_ACTOR,
+        participant=participant,
+        name="cli",
+        kind=TokenKind.SESSION,
     )
 
     with pytest.raises(UnauthorizedError) as refusal:

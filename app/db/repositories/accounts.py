@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.account import Account
 from app.db.models.participant import Participant
 from app.db.pagination import Page, paginate
+from app.domain.participants import ParticipantKind
 
 
 class AccountRepository:
@@ -45,6 +46,16 @@ class AccountRepository:
                 Account.disabled_at.is_not(None),
                 or_(Participant.id.in_(participant_ids), Participant.name.in_(names)),
             )
+            .limit(1)
+        )
+        return await self._session.scalar(statement) is not None
+
+    async def any_human_account(self) -> bool:
+        """Есть ли на установке учётная запись участника-человека (признак `init`)."""
+        statement = (
+            select(Account.id)
+            .join(Participant, Account.participant_id == Participant.id)
+            .where(Participant.kind == ParticipantKind.HUMAN)
             .limit(1)
         )
         return await self._session.scalar(statement) is not None

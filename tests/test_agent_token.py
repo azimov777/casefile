@@ -19,7 +19,7 @@ from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TOKEN_PREFIX
+from app.domain.tokens import TOKEN_PREFIX, TokenKind
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, authenticate
 from app.services.setup import (
@@ -159,6 +159,7 @@ async def test_the_ui_key_is_left_alone_when_the_agent_token_is_reissued(
         actor=TRACKER_ACTOR,
         participant=owner,
         name=DEFAULT_LOCAL_TOKEN_NAME,
+        kind=TokenKind.SESSION,
     )
     first = await ensure_agent_token(db_session, known_secret=None)
 

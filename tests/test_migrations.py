@@ -25,6 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.core.errors import UnauthorizedError
 from app.domain.tokens import hash_token
 from app.services.auth import authenticate
 from conftest import _to_asyncpg_dsn, alembic_config
@@ -1015,3 +1016,83 @@ async def test_the_owner_migration_rolls_back_and_reapplies(
     async with migration_engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == OWNER_REVISION
+
+
+# --- Ключи людей отзываются (TRK-472) --------------------------------------------------
+
+REVOKE_HUMAN_KEYS_REVISION = "9e2c6b4f1a83"
+REVOKE_HUMAN_KEYS_PREVIOUS = "7d3a5e1b9c42"
+
+
+async def test_only_the_live_keys_of_people_are_revoked(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Обзорная проверка 4: из сеанса человека, `local-ui`, `bootstrap`, ключа агента и
+    общего ключа отозван только `bootstrap`; остальные проходят `authenticate`."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, REVOKE_HUMAN_KEYS_PREVIOUS)
+    # имя, вид, срок, участник (None — общий)
+    rows = [
+        ("browser-session", "session", datetime(2031, 1, 1, tzinfo=UTC), "owner"),
+        ("local-ui", "session", None, "owner"),
+        ("bootstrap", "key", None, "owner"),
+        ("agent-key", "key", None, "worker"),
+        ("shared-key", "key", None, None),
+    ]
+    secrets = {name: f"trk_{number:060d}" for number, (name, *_rest) in enumerate(rows)}
+    async with migration_engine.begin() as connection:
+        for participant_kind, name in (("human", "owner"), ("agent", "worker")):
+            await connection.execute(
+                text(
+                    "INSERT INTO participants (kind, name, description, created_by_kind, "
+                    "created_by_signature) VALUES (:kind, :name, '', 'tracker', 'tracker')"
+                ),
+                {"kind": participant_kind, "name": name},
+            )
+        for name, token_kind, expires_at, participant in rows:
+            await connection.execute(
+                text(
+                    "INSERT INTO tokens (name, token_hash, kind, expires_at, participant_id, "
+                    "created_by_kind) VALUES (:name, :hash, :kind, :expires_at, "
+                    "(SELECT id FROM participants WHERE name = :participant), 'tracker')"
+                ),
+                {
+                    "name": name,
+                    "hash": hash_token(secrets[name]),
+                    "kind": token_kind,
+                    "expires_at": expires_at,
+                    "participant": participant,
+                },
+            )
+
+    await migrate(url, REVOKE_HUMAN_KEYS_REVISION)
+
+    async with migration_engine.connect() as connection:
+        result = await connection.execute(text("SELECT name, revoked_at IS NOT NULL FROM tokens"))
+        revoked = dict(result.all())
+    assert revoked == {
+        "browser-session": False,
+        "local-ui": False,
+        "bootstrap": True,
+        "agent-key": False,
+        "shared-key": False,
+    }
+    async with AsyncSession(migration_engine) as session:
+        for name in ("browser-session", "local-ui", "agent-key", "shared-key"):
+            await authenticate(session, secrets[name], label="checker")
+        with pytest.raises(UnauthorizedError, match="unknown or revoked"):
+            await authenticate(session, secrets["bootstrap"])
+
+
+async def test_the_revoke_human_keys_migration_rolls_back_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, REVOKE_HUMAN_KEYS_REVISION)
+
+    await migrate(url, REVOKE_HUMAN_KEYS_PREVIOUS, down=True)
+    await migrate(url, REVOKE_HUMAN_KEYS_REVISION)
+
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == REVOKE_HUMAN_KEYS_REVISION

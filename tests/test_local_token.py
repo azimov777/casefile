@@ -29,7 +29,7 @@ from app.db.models.participant import Participant
 from app.db.session import transaction
 from app.domain.errors import ParticipantNotFoundError
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TOKEN_PREFIX
+from app.domain.tokens import TOKEN_PREFIX, TokenKind
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, authenticate
 from app.services.setup import (
@@ -187,6 +187,8 @@ async def test_an_unknown_participant_on_a_live_installation_is_refused(
     код: проверяется судьба отказа целиком, а не только то, что исключение вылетело.
     """
     assert await initialize_installation(db_session) is not None
+    # Живая установка: у неё уже есть ключ интерфейса (после `init` токенов нет).
+    await ensure_local_token(db_session, known_secret=None)
     args = cli._build_parser().parse_args(
         ["local-token", "--output", str(token_file), "--participant", "ownre"]
     )
@@ -251,6 +253,7 @@ async def test_a_valid_main_secret_keeps_the_installation_untouched(
         actor=TRACKER_ACTOR,
         participant=owner,
         name="spare",
+        kind=TokenKind.SESSION,
     )
 
     result = await ensure_local_token(db_session, known_secret=issued.secret)
@@ -271,6 +274,7 @@ async def test_a_revoked_secret_counts_as_no_secret_at_all(
         actor=TRACKER_ACTOR,
         participant=owner,
         name=DEFAULT_LOCAL_TOKEN_NAME,
+        kind=TokenKind.SESSION,
     )
     await tokens_service.revoke_token(db_session, issued.token.id, actor=TRACKER_ACTOR)
 
@@ -290,14 +294,15 @@ async def test_only_the_token_with_the_same_name_is_revoked(
 ) -> None:
     """Замена отзывает свою предшественницу, а не всё, чем владелец ходит в трекер.
 
-    Токен `init` — секрет владельца в руках, для `curl` и терминала, того же набора
-    `main`, что и ключ интерфейса, — и подъём контура не должен его гасить.
+    Токен человека, выпущенный не ключом интерфейса (сеанс, `spare`), — не то же, что ключ
+    интерфейса: он остаётся, подъём контура не должен его гасить.
     """
     human = await tokens_service.issue_token(
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        name="bootstrap",
+        name="spare",
+        kind=TokenKind.SESSION,
     )
     first = await ensure_local_token(db_session, known_secret=None)
 

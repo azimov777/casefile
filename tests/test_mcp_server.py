@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
+from app.domain.tokens import TokenKind
 from app.mcp.runtime import Runtime, SessionFactory, bearer_token, use_headers
 from app.services import tokens as tokens_service
 from app.services.auth import Actor
@@ -234,6 +235,7 @@ async def test_a_revoked_token_gets_401_with_token_revoked_on_the_transport(
         actor=main_actor,
         participant=owner,
         name="to-revoke",
+        kind=TokenKind.SESSION,
     )
     await tokens_service.revoke_token(db_session, issued.token.id, actor=main_actor)
     await db_session.commit()

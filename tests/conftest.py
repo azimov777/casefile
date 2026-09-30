@@ -36,6 +36,7 @@ from app.db.models.task import Task
 from app.db.session import get_session, transaction
 from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.participants import ParticipantKind
+from app.domain.tokens import TokenKind
 from app.main import create_app
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
@@ -318,6 +319,8 @@ async def main_secret(db_session: AsyncSession, owner: Participant) -> str:
         actor=TRACKER_ACTOR,
         participant=owner,
         name="tests",
+        # Человеку ключ не выпускается (TRK-472): его токен в тестах — вход в интерфейс.
+        kind=TokenKind.SESSION,
     )
     return issued.secret
 
@@ -330,6 +333,7 @@ async def task_secret(db_session: AsyncSession, owner: Participant) -> str:
         actor=TRACKER_ACTOR,
         participant=owner,
         name="tests task scope",
+        kind=TokenKind.SESSION,
     )
     return issued.secret
 
