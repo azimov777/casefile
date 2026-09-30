@@ -29,9 +29,9 @@ from mcp_types import INVALID_PARAMS, PaginatedRequestParams, RequestParams
 from mcp_types.version import MODERN_PROTOCOL_VERSIONS
 
 __all__ = [
-    "SKILLS_DIR",
     "MAX_SKILL_BYTES",
     "MAX_SKILL_FILES",
+    "SKILLS_DIR",
     "SKILLS_EXTENSION",
     "CasefileSkills",
     "GetSkillParams",
