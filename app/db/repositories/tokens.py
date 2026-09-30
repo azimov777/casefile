@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.participant import Participant
 from app.db.models.token import Token
 from app.db.pagination import Page, paginate
+from app.domain.tokens import TokenKind
 
 
 def owned_by(owner: Participant) -> ColumnElement[bool]:
@@ -106,6 +107,9 @@ class TokenRepository:
         statement = select(Token).where(
             Token.participant_id == participant_id,
             Token.revoked_at.is_(None),
+            Token.kind == TokenKind.SESSION,
+            # Ключ машины `local-ui` — тоже вид `session`, но без срока: смена пароля его
+            # не отзывает, сеанс браузера — строка со сроком (`Token.is_browser_session`).
             Token.expires_at.is_not(None),
         )
         if keep is not None:

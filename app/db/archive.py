@@ -134,19 +134,21 @@ async def read_rows(
     table: str,
     columns: Sequence[str],
     *,
-    only_null: str | None = None,
+    where: str | None = None,
 ) -> list[list[str | None]]:
-    """Строки таблицы, каждое значение — `col::text`; `only_null` — колонка, которая у
-    выгружаемых строк обязана быть `NULL` (так не едут токены сеансов).
+    """Строки таблицы, каждое значение — `col::text`; `where` — условие SQL, которому
+    отвечают выгружаемые строки (так не едут сеансы браузера и подключения OAuth).
+
+    Условие — текст вызывающего кода, а не архива: сюда не попадает ничего снаружи.
 
     Время выводится в UTC (`SET LOCAL TimeZone` в `utc_session`): текст `timestamptz`
     зависит от часового пояса сеанса, и архив одной базы не должен зависеть от того, в
     каком поясе его сняли.
     """
     selected = ", ".join(f"{_ident(column)}::text" for column in columns)
-    where = f" WHERE {_ident(only_null)} IS NULL" if only_null in columns else ""
+    condition = f" WHERE {where}" if where else ""
     result = await session.execute(
-        text(f"SELECT {selected} FROM {_qualified(schema, table)}{where}")
+        text(f"SELECT {selected} FROM {_qualified(schema, table)}{condition}")
     )
     return [list(row) for row in result]
 

@@ -26,7 +26,7 @@ from app.db.pagination import Page
 from app.db.repositories import TokenRepository
 from app.domain.errors import TokenNotFoundError
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import generate_token, hash_token
+from app.domain.tokens import TokenKind, generate_token, hash_token
 from app.services.accounts import active_account_of, is_admin
 from app.services.auth import TRACKER_ACTOR, Actor
 
@@ -72,12 +72,18 @@ async def issue_token(
     actor: Actor,
     name: str,
     participant: Participant | None = None,
+    kind: TokenKind = TokenKind.KEY,
+    expires_at: datetime | None = None,
 ) -> IssuedToken:
     """Выпускает токен и возвращает его секрет — единственный раз за всю жизнь токена.
 
     Без участника получается **общий агентский** токен: им ходят временные агенты,
     подписываясь заголовком `X-Actor-Label`. Это не недосмотр вызывающего, а отдельный
     вид доступа, поэтому участник — необязательный параметр, а не проверяемое условие.
+
+    `kind` по умолчанию — ключ агента: так выпускают «Доступы» и CLI. Ключ интерфейса
+    машины (`app/services/setup.py`) называет `session`, подключение OAuth
+    (`app/services/oauth.py`) — `oauth` со сроком `expires_at`.
     """
     await _ensure_may_issue(session, actor, participant)
 
@@ -90,6 +96,8 @@ async def issue_token(
             participant=participant,
             name=name.strip(),
             token_hash=hash_token(secret),
+            kind=kind,
+            expires_at=expires_at,
             **created_by_columns(actor.author),
         )
     )

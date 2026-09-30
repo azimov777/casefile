@@ -85,6 +85,9 @@ installation is left exactly as it was.
 - **Browser sessions** do not come across: a session belongs to the old address. On a
   server, sign in again. The session you imported with ends too — sign in with an account
   from the archive.
+- **OAuth connections** do not come across either: a connection lives in the agent's
+  client on the old machine. An agent that signed in through OAuth signs in again at the
+  new MCP address.
 - **The new board keeps working** without a restart. Its own key, and the key of this
   machine's agent that the installer printed, survive the import; they now speak for the
   archive's `owner` and `agent`. The old machine's keys of the same names are revoked

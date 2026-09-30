@@ -858,3 +858,28 @@ HOME обмен кода не проходит (TRK-432#6).
 `app/services/client_documents.py`, `app/services/oauth.py` (`find_client`),
 `app/mcp/oauth.py` (`LoopbackClient`, `advertise_client_documents`), `app/mcp/server.py`,
 `tests/test_mcp_oauth_documents.py`.
+
+## Вход OAuth выдаёт подключение: вид `oauth`, срок и `expires_in`, а вид строки — колонка `kind`
+
+**Что:** `/token` службы mcp выпускает не ключ, а подключение — строку `tokens` вида
+`oauth` (`TokenKind.OAUTH`) со сроком `TRACKER_OAUTH_ACCESS_TTL` (по умолчанию 30 дней,
+длительность ISO 8601: `P30D`, `PT1H`; число секунд строкой pydantic не принимает).
+Ответ `/token` несёт `expires_in`, `AccessToken.expires_at` у SDK заполнен из базы.
+Просроченный токен получает `401` с `details.reason: token_expired`, refresh выдаёт
+новую пару и отзывает прежний токен; у refresh срока нет. Вид строки задаёт колонка
+`tokens.kind` (`session` | `key` | `oauth`), а не наличие срока: срок теперь есть и у
+сеанса браузера, и у подключения, а у ключа интерфейса `local-ui` (вид `session`) его
+нет. Сеанс браузера — `Token.is_browser_session`: вид `session` со сроком. Архив
+установки не везёт строк вида `oauth` и таблиц `oauth_*` (`EXCLUDED_TABLES`).
+**Почему важно:** без `expires_in` Codex считает токен вечным и не обновляет его заранее
+(решение `TRK-469#24`); час по умолчанию сегодня рвёт долгие сессии Codex. Прежний
+признак «есть срок — значит сеанс» записал бы подключение в сеансы: оно не уехало бы в
+архив по другой причине и прошло бы проверку куки входа.
+**Как правильно:** новую дверь выпуска называть видом явно — `issue_token(kind=…)`,
+умолчания у колонки нет. Сеанс браузера отличать `is_browser_session`, а не `is_session`:
+смена пароля и выход не трогают `local-ui`. Тест просрочки ставит `expires_at` строке в
+прошлое через `db_session` — та же сессия, что у `mcp_sessions`.
+**Где:** `app/domain/tokens.py` (`TokenKind`), `app/db/models/token.py`,
+`app/services/oauth.py`, `app/mcp/oauth.py`, `app/core/config.py`,
+`app/services/archive.py` (`TOKEN_ROWS`), `app/domain/archive.py`,
+`app/db/migrations/versions/20261001_1200_token_kind.py`, `tests/test_mcp_oauth.py`.

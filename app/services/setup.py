@@ -48,7 +48,7 @@ from app.domain.accounts import local_admin_email
 from app.domain.errors import AccountEmailTakenError, ParticipantNotFoundError
 from app.domain.participants import ParticipantKind, normalize_participant_name
 from app.domain.passwords import PasswordHash
-from app.domain.tokens import hash_token
+from app.domain.tokens import TokenKind, hash_token
 from app.services.auth import TRACKER_ACTOR
 from app.services.participants import register_participant
 from app.services.tokens import IssuedToken, issue_token, revoke_token
@@ -222,6 +222,9 @@ async def ensure_local_token(
     replaced = await _replace_token(
         session,
         participant,
+        # Ключ интерфейса — вход человека в интерфейс этой машины, как сеанс браузера,
+        # а не ключ агента (`TRK-469#25`).
+        kind=TokenKind.SESSION,
         token_name=token_name,
         empty=empty,
     )
@@ -340,6 +343,7 @@ async def _replace_token(
     session: AsyncSession,
     participant: Participant,
     *,
+    kind: TokenKind = TokenKind.KEY,
     token_name: str,
     empty: bool,
 ) -> LocalToken:
@@ -354,6 +358,7 @@ async def _replace_token(
         actor=TRACKER_ACTOR,
         participant=participant,
         name=name,
+        kind=kind,
     )
     outcome = LocalTokenOutcome.INITIALIZED if empty else LocalTokenOutcome.REISSUED
     return LocalToken(

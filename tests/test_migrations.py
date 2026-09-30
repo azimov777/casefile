@@ -16,12 +16,13 @@
 
 import asyncio
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import asyncpg
 import pytest
 from alembic import command
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.domain.tokens import hash_token
@@ -866,6 +867,9 @@ async def test_a_token_issued_with_the_task_scope_works_after_the_scope_is_dropp
             text("SELECT conname FROM pg_constraint WHERE conname = 'ck_tokens_token_scope'")
         )
         assert list(constraints) == []
+    # Аутентификация читает строку нынешней моделью: у неё есть `kind` (TRK-470), и схему
+    # доводят до head — ключи обоих наборов становятся ключами вида `key`.
+    await migrate(url, "head")
     async with AsyncSession(migration_engine) as session:
         for scope in ("task", "main"):
             actor = await authenticate(session, f"trk_{scope}")
@@ -888,3 +892,73 @@ async def test_the_scope_migration_rolls_back_and_reapplies(
     async with migration_engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == SCOPE_REVISION
+
+
+# --- Вид строки доступа (TRK-470) ------------------------------------------------------
+
+#: Ревизия, заводящая `tokens.kind`, и ревизия перед ней — снятие наборов (TRK-471).
+TOKEN_KIND_REVISION = "bb05bcd1d657"
+TOKEN_KIND_PREVIOUS = "5c81e3a7d92b"
+
+
+async def _insert_old_token(
+    connection: AsyncConnection, name: str, token_hash: str, expires_at: datetime | None
+) -> None:
+    """Строка `tokens` ревизии перед видом: без вида, наборов к ней уже нет."""
+    await connection.execute(
+        text(
+            "INSERT INTO tokens (name, token_hash, expires_at, created_by_kind) "
+            "VALUES (:name, :hash, :expires_at, 'tracker')"
+        ),
+        {"name": name, "hash": token_hash, "expires_at": expires_at},
+    )
+
+
+async def test_token_kinds_are_filled_from_the_deadline_and_the_name(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Обзорная проверка 4: сеанс, `local-ui`, `oauth: x` и ключ — `session`, `session`,
+    `oauth`, `key`; откат на ревизию раньше проходит."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, TOKEN_KIND_PREVIOUS)
+    rows = {
+        "browser-session": datetime(2030, 1, 1, tzinfo=UTC),
+        "local-ui": None,
+        "oauth: x": None,
+        "ci": None,
+    }
+    async with migration_engine.begin() as connection:
+        for number, (name, expires_at) in enumerate(rows.items()):
+            await _insert_old_token(connection, name, f"{number:064d}", expires_at)
+
+    await migrate(url, TOKEN_KIND_REVISION)
+
+    async with migration_engine.connect() as connection:
+        kinds = dict((await connection.execute(text("SELECT name, kind FROM tokens"))).all())
+    assert [kinds[name] for name in rows] == ["session", "session", "oauth", "key"]
+
+    await migrate(url, TOKEN_KIND_PREVIOUS, down=True)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+        columns = await connection.scalar(
+            text(
+                "SELECT count(*) FROM information_schema.columns "
+                "WHERE table_name = 'tokens' AND column_name = 'kind'"
+            )
+        )
+    assert revision == TOKEN_KIND_PREVIOUS
+    assert columns == 0
+
+
+async def test_the_token_kind_constraint_refuses_an_unknown_kind(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, TOKEN_KIND_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await _insert_old_token(connection, "ci", "f" * 64, None)
+    await migrate(url, TOKEN_KIND_REVISION)
+
+    with pytest.raises(Exception, match="ck_tokens_token_kind"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(text("UPDATE tokens SET kind = 'cookie'"))

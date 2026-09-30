@@ -1,9 +1,18 @@
-"""Сценарии входа через OAuth 2.1: клиент, код, обмен на токен участника, refresh.
+"""Сценарии входа через OAuth 2.1: клиент, код, обмен на подключение, refresh.
 
 Слой mcp (`app/mcp/oauth.py`) переводит сюда вызовы провайдера SDK и обратно, а
-правила живут здесь. Выдаётся обычный токен участника — тот же, что
-выпускают «Доступы» (`app/services/tokens.py`), и отзывается он там же. Решения —
-`TRK-448#8` и `TRK-448#9`.
+правила живут здесь. Вход выдаёт **подключение** — строку `tokens` вида `oauth`
+(`TokenKind.OAUTH`), а не ключ: у неё конечный срок `TRACKER_OAUTH_ACCESS_TTL`, ответ
+`/token` несёт его в `expires_in`, и клиент заранее меняет токен по refresh без
+повторного входа. Выпуск идёт той же `issue_token`, что у «Доступов», отзыв — там же.
+Решения — `TRK-448#8`, `TRK-448#9`, `TRK-469#24`.
+
+## Срок у токена, не у refresh
+
+Срок подключения — у токена участника: после него `verify_token` отказывает
+`token_expired`, и клиент идёт в `/token` с refresh. У refresh срока нет: он живёт, пока
+живо подключение, и гаснет отзывом или повтором (ниже). Истёкший, но не отозванный
+токен refresh не мешает — ротация отзывает его вместе с погашением refresh.
 
 ## Кому выдать — отдельная точка
 
@@ -66,7 +75,7 @@ from app.domain.oauth import (
     refuse_unsafe_redirect,
 )
 from app.domain.participants import ParticipantKind, normalize_participant_name
-from app.domain.tokens import hash_token
+from app.domain.tokens import TokenKind, hash_token
 from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.client_documents import ClientDocuments
 from app.services.participants import register_participant
@@ -330,17 +339,26 @@ async def find_code(
 
 @dataclass(frozen=True, slots=True)
 class IssuedPair:
-    """Выданный токен участника и refresh к нему — секреты существуют только здесь."""
+    """Выданный токен подключения и refresh к нему — секреты существуют только здесь.
+
+    `expires_in` — сколько секунд живёт токен с момента выпуска: ответ `/token` отдаёт
+    его клиенту как есть.
+    """
 
     access_token: str
     refresh_token: str
     scopes: list[str]
+    expires_in: int
 
 
 async def redeem_code(
-    session: AsyncSession, *, code_id: uuid.UUID, now: datetime | None = None
+    session: AsyncSession,
+    *,
+    code_id: uuid.UUID,
+    access_ttl: timedelta,
+    now: datetime | None = None,
 ) -> IssuedPair:
-    """Гасит код и выпускает по нему токен участника и refresh-токен.
+    """Гасит код и выпускает по нему подключение со сроком `access_ttl` и refresh-токен.
 
     PKCE, адрес возврата и срок сверил SDK до вызова. Погашение атомарное: второй обмен
     того же кода, пришедший одновременно, получает `invalid_grant`.
@@ -354,7 +372,11 @@ async def redeem_code(
         raise OAuthRefusal("invalid_grant", "authorization code has expired")
 
     token, secret = await _issue(
-        session, participant=code.participant, issuer=code.created_by, client=code.client
+        session,
+        participant=code.participant,
+        issuer=code.created_by,
+        client=code.client,
+        expires_at=moment + access_ttl,
     )
     code.token_id = token.id
     refresh = await _add_refresh(
@@ -365,7 +387,12 @@ async def redeem_code(
         scopes=code.scopes,
         resource=code.resource,
     )
-    return IssuedPair(access_token=secret, refresh_token=refresh, scopes=list(code.scopes))
+    return IssuedPair(
+        access_token=secret,
+        refresh_token=refresh,
+        scopes=list(code.scopes),
+        expires_in=_seconds(access_ttl),
+    )
 
 
 # --- Refresh -----------------------------------------------------------------------
@@ -412,13 +439,16 @@ async def rotate_refresh(
     session: AsyncSession,
     *,
     refresh_id: uuid.UUID,
+    access_ttl: timedelta,
     scopes: Sequence[str] | None = None,
     now: datetime | None = None,
 ) -> IssuedPair:
-    """Меняет refresh-токен на новую пару: новый токен участника, новый refresh.
+    """Меняет refresh-токен на новую пару: новое подключение со сроком `access_ttl`, новый
+    refresh.
 
     Прежний refresh гасится, прежний токен отзывается — у клиента остаётся один живой
-    доступ. Погашение атомарное, как у кода.
+    доступ. Истёкший срок прежнего токена обмену не мешает: для того refresh и нужен.
+    Погашение атомарное, как у кода.
     """
     moment = now or datetime.now(UTC)
     if not await OAuthRepository(session).claim_refresh(refresh_id, moment):
@@ -432,6 +462,7 @@ async def rotate_refresh(
         participant=previous.token.participant,
         issuer=previous.token.created_by,
         client=previous.client,
+        expires_at=moment + access_ttl,
     )
     previous.token.revoked_at = moment
     granted = list(scopes or previous.scopes)
@@ -443,7 +474,12 @@ async def rotate_refresh(
         scopes=granted,
         resource=previous.resource,
     )
-    return IssuedPair(access_token=secret, refresh_token=refresh, scopes=granted)
+    return IssuedPair(
+        access_token=secret,
+        refresh_token=refresh,
+        scopes=granted,
+        expires_in=_seconds(access_ttl),
+    )
 
 
 # --- Внутреннее --------------------------------------------------------------------
@@ -472,15 +508,27 @@ async def _issuer_actor(session: AsyncSession, issuer: Author) -> Actor:
 
 
 async def _issue(
-    session: AsyncSession, *, participant: Participant, issuer: Author, client: OAuthClient
+    session: AsyncSession,
+    *,
+    participant: Participant,
+    issuer: Author,
+    client: OAuthClient,
+    expires_at: datetime,
 ) -> tuple[Token, str]:
     issued = await issue_token(
         session,
         actor=await _issuer_actor(session, issuer),
         name=oauth_token_name(_view(client).client_name, client.client_id),
         participant=participant,
+        kind=TokenKind.OAUTH,
+        expires_at=expires_at,
     )
     return issued.token, issued.secret
+
+
+def _seconds(ttl: timedelta) -> int:
+    """Срок в целых секундах для `expires_in`: RFC 6749 §5.1 называет его числом секунд."""
+    return int(ttl.total_seconds())
 
 
 async def _add_refresh(

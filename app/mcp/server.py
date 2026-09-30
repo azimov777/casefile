@@ -126,6 +126,7 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
                 runtime.sessions,
                 DefaultAgentConsent(enabled=settings.oauth_local_consent),
                 runtime.documents,
+                access_ttl=settings.oauth_access_ttl,
             )
         }
     else:

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.schemas.authors import AuthorRead
 from app.domain.participants import PARTICIPANT_NAME_PATTERN
+from app.domain.tokens import TokenKind
 
 
 class TokenRead(BaseModel):
@@ -37,9 +38,19 @@ class TokenRead(BaseModel):
     expires_at: datetime | None = Field(
         default=None,
         description=(
-            "Set only on a browser session token, issued by `POST /api/v1/session`: after "
-            "this moment it answers `401 unauthorized` with `details.reason: token_expired`. "
-            "Null means the token lives until it is revoked"
+            "Set on a browser session, issued by `POST /api/v1/session`, and on an OAuth "
+            "connection, issued by the MCP service's `/token`: after this moment it answers "
+            "`401 unauthorized` with `details.reason: token_expired`. Null means the token "
+            "lives until it is revoked"
+        ),
+    )
+    kind: TokenKind = Field(
+        examples=[TokenKind.KEY],
+        description=(
+            "What this access is: `session` — a person signed in to the interface (a browser "
+            "session or this machine's `local-ui` key); `key` — an agent key issued by a "
+            "person or the installation; `oauth` — a connection made by an agent client "
+            "through OAuth sign-in, renewed by its refresh token"
         ),
     )
 

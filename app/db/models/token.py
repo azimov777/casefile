@@ -6,10 +6,10 @@ from datetime import datetime
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import BaseModel
+from app.db.base import BaseModel, string_enum
 from app.db.models.author import CreatedByMixin
 from app.db.models.participant import Participant
-from app.domain.tokens import TOKEN_HASH_LENGTH
+from app.domain.tokens import TOKEN_HASH_LENGTH, TokenKind
 
 
 class Token(BaseModel, CreatedByMixin):
@@ -40,10 +40,16 @@ class Token(BaseModel, CreatedByMixin):
     )
     last_used_at: Mapped[datetime | None] = mapped_column(default=None)
     revoked_at: Mapped[datetime | None] = mapped_column(default=None)
-    # Срок есть только у токена сеанса браузера (`app/services/login.py`): вход по почте
-    # и паролю выпускает его, и после срока он не пускает (`token_expired`). У остальных
-    # токенов срока нет — их отзывают руками.
+    # Срок есть у сеанса браузера (`app/services/login.py`) и у подключения OAuth
+    # (`app/services/oauth.py`): после него токен не пускает (`token_expired`). У ключей
+    # и у `local-ui` срока нет — их отзывают руками. Вид строки задаёт `kind`, а не срок.
     expires_at: Mapped[datetime | None] = mapped_column(default=None)
+    # Вид строки доступа (`TokenKind`): сеанс, ключ или подключение. Задаётся при выпуске
+    # и больше не меняется; умолчания нет намеренно — каждая дверь выпуска называет свой.
+    kind: Mapped[TokenKind] = mapped_column(
+        string_enum(TokenKind, name="token_kind", length=16),
+        nullable=False,
+    )
 
     # Аутентификация всегда идёт от токена к участнику, поэтому связь грузится сразу
     # одним запросом: иначе на каждый запрос к API приходилось бы два обращения к БД.
@@ -57,8 +63,20 @@ class Token(BaseModel, CreatedByMixin):
 
     @property
     def is_session(self) -> bool:
-        """Токен сеанса браузера: выпущен входом по почте и паролю и живёт до срока."""
-        return self.expires_at is not None
+        """Вход человека в интерфейс: сеанс браузера или ключ машины `local-ui`.
+
+        Сеанс браузера среди них — тот, у кого есть срок (`app/services/login.py`).
+        """
+        return self.kind is TokenKind.SESSION
+
+    @property
+    def is_browser_session(self) -> bool:
+        """Сеанс браузера: вход по почте и паролю, вид `session` со сроком.
+
+        Второй вход того же вида — ключ машины `local-ui` — срока не имеет, и кукой входа
+        он не бывает (`app/services/login.py`).
+        """
+        return self.is_session and self.expires_at is not None
 
     def expired_at(self, moment: datetime) -> bool:
         """Истёк ли срок к этому моменту. Токен без срока не истекает никогда."""

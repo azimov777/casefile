@@ -15,8 +15,10 @@
 ## Что едет и что нет
 
 Едет всё, что лежит в таблицах, кроме названного в `app/domain/archive.py`:
-таблицы версии и ключей идемпотентности, и токенов сеансов браузера — кука сеанса
-принадлежит адресу источника и на приёмник не попадёт никогда (`SESSION_COLUMN`).
+таблиц версии, ключей идемпотентности и входа OAuth, — и кроме строк `tokens`, привязанных
+к месту (`TOKEN_ROWS`): сеанса браузера — кука принадлежит адресу источника и на приёмник
+не попадёт никогда — и подключения OAuth — оно живёт в харнессе агента на машине
+источника, как сеанс в браузере (`TRK-470`).
 Учётные записи едут с хешами паролей — человек входит той же почтой и тем же паролем;
 токены агентов едут с хешами — агент подключается тем же токеном (как в TRK-96).
 
@@ -62,6 +64,7 @@ from app.domain.errors import (
     ArchiveRevisionUnknownError,
     InstallationNotEmptyError,
 )
+from app.domain.tokens import TokenKind
 from app.services.accounts import ensure_admin
 from app.services.auth import Actor
 from app.services.setup import (
@@ -70,12 +73,14 @@ from app.services.setup import (
     ensure_admin_account,
 )
 
-#: Колонка токена, заполненная только у сеанса браузера (`Token.is_session`): строки,
-#: где она не пуста, не выгружаются.
-SESSION_COLUMN = "expires_at"
-
 #: Ключи машины: токены, секреты которых установка держит в своих томах.
 MACHINE_KEY_NAMES = (DEFAULT_LOCAL_TOKEN_NAME, DEFAULT_AGENT_TOKEN_NAME)
+
+#: Какие строки `tokens` едут: ключи агентов (вид `key`) и ключи машины. Ключ интерфейса
+#: `local-ui` — вида `session`, но едет, как ехал: приём отзывает его как одноимённый ключ
+#: источника (`_restore_machine_keys`). Сеансы браузера и подключения (`oauth`) не едут.
+_MACHINE_KEYS_SQL = ", ".join(f"'{name}'" for name in MACHINE_KEY_NAMES)
+TOKEN_ROWS = f"kind = '{TokenKind.KEY}' OR name IN ({_MACHINE_KEYS_SQL})"
 
 
 async def export_installation(session: AsyncSession, *, actor: Actor) -> Archive:
@@ -96,10 +101,8 @@ async def export_installation(session: AsyncSession, *, actor: Actor) -> Archive
     for name, columns in (await store.table_columns(session, store.PUBLIC_SCHEMA)).items():
         if name in EXCLUDED_TABLES:
             continue
-        only_null = SESSION_COLUMN if name == Token.__tablename__ else None
-        rows = await store.read_rows(
-            session, store.PUBLIC_SCHEMA, name, columns, only_null=only_null
-        )
+        where = TOKEN_ROWS if name == Token.__tablename__ else None
+        rows = await store.read_rows(session, store.PUBLIC_SCHEMA, name, columns, where=where)
         tables.append(ArchiveTable(name=name, columns=columns, rows=rows))
     return Archive(
         format=ArchiveFormat.INSTALLATION,
