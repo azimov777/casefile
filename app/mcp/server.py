@@ -49,6 +49,7 @@ from starlette.responses import JSONResponse
 from app import __version__
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.mcp.oauth import PresentedToken, auth_settings
 from app.mcp.runtime import Runtime, headers_middleware
 from app.mcp.skills import SKILLS_DIR, CasefileSkills, advertise_on_handshake
 from app.mcp.tools import register_tools
@@ -103,6 +104,9 @@ def _bare_server(settings: Settings) -> MCPServer:
         # заголовков не увидел бы его вовсе.
         middleware=[headers_middleware],
         extensions=[CasefileSkills(SKILLS_DIR)],
+        # Защищённый ресурс OAuth: 401 с `resource_metadata` без токена (`app/mcp/oauth.py`).
+        auth=auth_settings(settings),
+        token_verifier=PresentedToken(),
         debug=settings.debug,
     )
 

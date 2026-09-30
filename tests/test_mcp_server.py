@@ -6,16 +6,22 @@
 одного инструмента.
 """
 
+from urllib.parse import urlsplit
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy.ext.asyncio import AsyncSession
+from tests.conftest import connect_mcp
 
+from app.core.config import get_settings
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
 from app.domain.tokens import TokenScope
 from app.mcp.runtime import Runtime, SessionFactory, bearer_token, use_headers
+from app.services import tokens as tokens_service
+from app.services.auth import Actor
 
 
 async def test_a_client_can_initialize_a_session(mcp_server: MCPServer) -> None:
@@ -45,7 +51,10 @@ async def test_a_client_can_initialize_a_session(mcp_server: MCPServer) -> None:
     ):
         response = await client.post(
             "/mcp",
-            headers={"accept": "application/json, text/event-stream"},
+            headers={
+                "accept": "application/json, text/event-stream",
+                "authorization": "Bearer any-token",
+            },
             json={
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -144,3 +153,92 @@ async def test_a_call_without_a_token_refuses_with_the_reason(
             pass
 
     assert "unauthorized" in str(failure.value)
+
+
+_INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "tests", "version": "0"},
+    },
+}
+
+
+def _origin() -> str:
+    """Хост публичного адреса MCP: порт зависит от окружения контура, а не от теста."""
+    parts = urlsplit(get_settings().effective_mcp_public_url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+_ACCEPT = {"accept": "application/json, text/event-stream"}
+
+
+async def test_a_request_without_a_token_gets_401_with_the_resource_metadata(
+    mcp_server: MCPServer,
+) -> None:
+    """Служба объявляет себя защищённым ресурсом: клиент узнаёт, куда идти за токеном.
+
+    Без токена — `401` и `WWW-Authenticate: Bearer … resource_metadata="…"` (RFC 9728).
+    """
+    transport = ASGITransport(app=mcp_server.streamable_http_app())
+    async with AsyncClient(transport=transport, base_url="http://localhost:8100") as client:
+        response = await client.post("/mcp", headers=_ACCEPT, json=_INITIALIZE)
+
+    assert response.status_code == 401
+    challenge = response.headers["www-authenticate"]
+    assert challenge.startswith("Bearer ")
+    origin = _origin()
+    assert f'resource_metadata="{origin}/.well-known/oauth-protected-resource/mcp"' in challenge
+
+
+async def test_the_protected_resource_metadata_names_the_authorization_server(
+    mcp_server: MCPServer,
+) -> None:
+    """Метаданные открыты без токена: по ним клиент и узнаёт, что нужен вход."""
+    transport = ASGITransport(app=mcp_server.streamable_http_app())
+    async with AsyncClient(transport=transport, base_url="http://localhost:8100") as client:
+        response = await client.get("/.well-known/oauth-protected-resource/mcp")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resource"] == get_settings().effective_mcp_public_url
+    assert [url.rstrip("/") for url in body["authorization_servers"]] == [_origin()]
+
+
+async def test_a_bearer_client_lists_tools_as_before(
+    mcp_server: MCPServer,
+    main_secret: str,
+) -> None:
+    """Существующий токен работает без изменений: `tools/list` как раньше."""
+    async with connect_mcp(mcp_server, main_secret) as session:
+        listed = await session.list_tools()
+
+    assert {tool.name for tool in listed.tools} >= {"get_task", "create_task"}
+
+
+async def test_a_revoked_token_still_fails_with_token_revoked(
+    mcp_server: MCPServer,
+    db_session: AsyncSession,
+    owner: Participant,
+    main_actor: Actor,
+) -> None:
+    """Причина отказа отозванному токену сохраняется: проверяет её `authenticate`, а не SDK."""
+    issued = await tokens_service.issue_token(
+        db_session,
+        actor=main_actor,
+        participant=owner,
+        scope=TokenScope.MAIN,
+        name="to-revoke",
+    )
+    await tokens_service.revoke_token(db_session, issued.token.id, actor=main_actor)
+
+    with pytest.raises(Exception) as failure:
+        async with connect_mcp(mcp_server, issued.secret) as session:
+            await session.list_tools()
+
+    # Отказ приезжает в группе исключений транспорта: причина — в `repr`, а не в `str`.
+    assert "unauthorized" in repr(failure.value)
+    assert "token_revoked" in repr(failure.value)
