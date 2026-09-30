@@ -3,7 +3,9 @@
 Один и тот же файл отдают плагин маркетплейса (`.claude-plugin/`, TRK-404) и сам сервер
 по SEP-2640 (`skill://casefile/SKILL.md`, TRK-403). Формат — agentskills.io: фронтматтер
 из двух ключей, `name` равен имени каталога скила, `description` не длиннее 1024
-символов. `allowed-tools` и прочие ключи не допускаются: харнессы понимают их по-разному,
+символов по стандарту, а у Casefile — не длиннее 500 (TRK-442): Claude Code режет
+описание в листинге скилов до 1536 символов, Codex отводит всему списку 2% контекста.
+`allowed-tools` и прочие ключи не допускаются: харнессы понимают их по-разному,
 а скил не расширяет права агента.
 
 YAML-библиотеки в зависимостях нет, поэтому фронтматтер разбирается здесь строго и узко:
@@ -22,6 +24,8 @@ SKILL_DIR = PROJECT_ROOT / "skills" / "casefile"
 SKILL_FILE = SKILL_DIR / "SKILL.md"
 
 DESCRIPTION_LIMIT = 1024
+#: Свой потолок Casefile под листинги Claude Code и Codex (TRK-435#10, TRK-436#11).
+CASEFILE_DESCRIPTION_LIMIT = 500
 LINE = re.compile(r"^(?P<key>[a-z][a-z0-9-]*): (?P<value>\S.*)$")
 #: Символы, с которых простой скаляр YAML начинаться не может.
 YAML_INDICATORS = set("-?:,[]{}#&*!|>'\"%@`")
@@ -64,6 +68,10 @@ def test_name_is_casefile_and_matches_directory(frontmatter: dict[str, str]) -> 
 
 def test_description_fits_limit(frontmatter: dict[str, str]) -> None:
     assert 0 < len(frontmatter["description"]) <= DESCRIPTION_LIMIT
+
+
+def test_description_fits_harness_listings(frontmatter: dict[str, str]) -> None:
+    assert len(frontmatter["description"]) <= CASEFILE_DESCRIPTION_LIMIT
 
 
 @pytest.mark.parametrize(

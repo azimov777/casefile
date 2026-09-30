@@ -1,6 +1,6 @@
 ---
 name: casefile
-description: Connecting an agent harness (Claude Code, Codex, Hermes or another MCP client) to a Casefile task tracker installation over MCP, either one installed on the same machine or a shared one running on a server, recovering when the casefile MCP server refuses a call with 401, watching the tracker journal for news between agent sessions, and installing or updating this skill as a plugin. Applies when Casefile is being installed or connected, when an agent joins an installation that runs on a server, when the casefile server is missing from the harness or answers 401 unauthorized, when answers and remarks in the tracker have to reach an agent with no open session, and when this skill was read from the server and is not yet installed in the harness. The working rules of the tracker itself arrive with the MCP server, in its instructions and tool descriptions, and are not part of this skill.
+description: Applies when a Casefile task tracker is being installed, or an agent harness (Claude Code, Codex, Hermes or another MCP client) is connected to an installation on the same machine or on a server; when the casefile MCP server is missing or answers 401; when answers and remarks have to reach an agent between sessions through a journal watcher; and when this skill, read from the server, is not yet installed as a plugin or needs an update. Rules for tasks arrive with the MCP server.
 ---
 
 # Casefile outside MCP
