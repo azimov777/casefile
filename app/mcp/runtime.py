@@ -35,7 +35,7 @@ supported`). Поэтому заголовки входящего сообщен
 import contextvars
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from mcp.server.context import ServerRequestContext
@@ -46,6 +46,7 @@ from app.db.session import session_scope
 from app.domain.authors import ACTOR_LABEL_HEADER
 from app.mcp.errors import resource_error, tool_error
 from app.services.auth import Actor, authenticate
+from app.services.client_documents import ClientDocuments
 
 #: Как открыть сессию с транзакцией. По умолчанию — `session_scope`; тесты дают свою.
 type SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
@@ -94,6 +95,8 @@ class Runtime:
     #: только когда у сообщения нет HTTP-запроса вовсе; запрос без `Authorization` ими не
     #: дополняется — это по-прежнему `missing_token`. В HTTP поле пустое.
     headers: Mapping[str, str] | None = None
+    #: Загрузчик документов клиентов CIMD для сервера авторизации; тесты подменяют сеть.
+    documents: ClientDocuments = field(default_factory=ClientDocuments)
 
     @asynccontextmanager
     async def call(self) -> AsyncIterator[tuple[AsyncSession, Actor]]:

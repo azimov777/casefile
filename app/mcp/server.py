@@ -55,6 +55,7 @@ from app.mcp.oauth import (
     CasefileAuthorization,
     PresentedToken,
     RefusalReasons,
+    advertise_client_documents,
     auth_settings,
     authorization_enabled,
 )
@@ -99,15 +100,21 @@ def create_server(
 
 
 class CasefileServer(MCPServer):
-    """Сервер SDK, у приложения которого снаружи стоит слой причин отказа `401`.
+    """Сервер SDK: слой причин отказа `401` снаружи и метаданные сервера авторизации с CIMD.
 
     Слой внешний, а не промежуточный слой сообщений: `401` отвечает транспорт до
     протокола, и дописать в него причину можно только поверх всего приложения
     (`app/mcp/oauth.py`, `RefusalReasons`).
     """
 
+    def __init__(self, *args: Any, casefile_settings: Settings, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._casefile_settings = casefile_settings
+
     def streamable_http_app(self, **kwargs: Any) -> Starlette:
         application = super().streamable_http_app(**kwargs)
+        if authorization_enabled(self._casefile_settings):
+            advertise_client_documents(application, self._casefile_settings)
         application.add_middleware(RefusalReasons)
         return application
 
@@ -119,7 +126,9 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
     if authorization_enabled(settings):
         auth: dict[str, Any] = {
             "auth_server_provider": CasefileAuthorization(
-                runtime.sessions, DefaultAgentConsent(enabled=settings.oauth_local_consent)
+                runtime.sessions,
+                DefaultAgentConsent(enabled=settings.oauth_local_consent),
+                runtime.documents,
             )
         }
     else:
@@ -139,6 +148,7 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
         extensions=[CasefileSkills(SKILLS_DIR)],
         auth=auth_settings(settings),
         debug=settings.debug,
+        casefile_settings=settings,
         **auth,
     )
 

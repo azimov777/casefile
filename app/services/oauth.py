@@ -22,6 +22,16 @@ S256, который SDK требует и сверяет сам. Поэтому
 не выдаёт секрета вовсе (RFC 7591 §3.2.1 разрешает серверу вернуть не то, что просили):
 в базе секретов клиентов нет.
 
+## Клиент по документу метаданных (CIMD)
+
+Клиент, чей `client_id` — `https`-адрес, не регистрируется: `find_client` скачивает его
+документ (`app/services/client_documents.py`), проверяет (`app/domain/client_documents.py`)
+и запоминает строкой `oauth_clients` со сроком `document_expires_at`. Пока срок не
+вышел, документ берётся из строки; вышел — скачивается заново. Не скачался или не прошёл
+проверку — клиента нет, даже если в строке лежит прежний документ: клиент мог убрать
+из него адрес возврата, и старая копия выдала бы код туда, куда он больше не велит.
+`client_id` на `http` — тоже «клиента нет», без похода в сеть.
+
 ## Отзыв отрезает клиента целиком
 
 Refresh годен, только пока жив его токен. Отзыв в «Доступах» делает refresh
@@ -38,12 +48,14 @@ from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.db.models.author import created_by_columns
 from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
 from app.db.models.participant import Participant
 from app.db.models.token import Token
 from app.db.repositories import OAuthRepository, ParticipantRepository
 from app.domain.authors import Author, AuthorKind
+from app.domain.client_documents import client_from_document, is_document_client_id
 from app.domain.oauth import (
     CODE_TTL,
     OAUTH_SCOPE,
@@ -56,6 +68,7 @@ from app.domain.oauth import (
 from app.domain.participants import ParticipantKind, normalize_participant_name
 from app.domain.tokens import TokenScope, hash_token
 from app.services.auth import TRACKER_ACTOR, Actor
+from app.services.client_documents import ClientDocuments
 from app.services.participants import register_participant
 from app.services.setup import DEFAULT_AGENT_DESCRIPTION, DEFAULT_AGENT_NAME
 from app.services.tokens import issue_token
@@ -78,6 +91,8 @@ __all__ = [
     "register_client",
     "rotate_refresh",
 ]
+
+logger = get_logger("oauth")
 
 #: Префиксы секретов: в логе и в переменной окружения видно, что это, а не токен `trk_`.
 CODE_PREFIX = "trc_"
@@ -180,13 +195,48 @@ async def register_client(
         "token_endpoint_auth_method": "none",
     }
     await OAuthRepository(session).add(OAuthClient(client_id=client_id, client_metadata=public))
+    logger.info("OAuth client registered by DCR: %s (%s)", client_id, metadata.get("client_name"))
     return public
 
 
-async def find_client(session: AsyncSession, client_id: str) -> dict[str, Any] | None:
-    """Метаданные клиента или `None`, если такого нет."""
-    client = await OAuthRepository(session).get_client(client_id)
-    return None if client is None else dict(client.client_metadata)
+async def find_client(
+    session: AsyncSession,
+    client_id: str,
+    *,
+    documents: ClientDocuments,
+    now: datetime | None = None,
+) -> dict[str, Any] | None:
+    """Метаданные клиента или `None`, если такого нет.
+
+    `client_id`-адрес — клиент по документу: из строки, пока документ свеж, иначе
+    скачанный заново (`documents`). Любой отказ загрузки или проверки — `None`.
+    """
+    repository = OAuthRepository(session)
+    if not is_document_client_id(client_id):
+        client = await repository.get_client(client_id)
+        if client is None or client.document_expires_at is not None:
+            return None
+        return dict(client.client_metadata)
+
+    moment = now or datetime.now(UTC)
+    client = await repository.get_client(client_id)
+    expires = None if client is None else client.document_expires_at
+    if client is not None and expires is not None and expires > moment:
+        return dict(client.client_metadata)
+    try:
+        fetched = await documents.fetch(client_id)
+        metadata = client_from_document(client_id, fetched.document)
+    except OAuthRefusal as refusal:
+        logger.warning("OAuth client by CIMD refused: %s: %s", client_id, refusal.description)
+        return None
+    saved = await repository.save_document_client(client_id, metadata, moment + fetched.lifetime)
+    logger.info(
+        "OAuth client by CIMD: %s (%s), cached until %s",
+        client_id,
+        metadata.get("client_name"),
+        saved.document_expires_at,
+    )
+    return dict(saved.client_metadata)
 
 
 # --- Код авторизации ---------------------------------------------------------------

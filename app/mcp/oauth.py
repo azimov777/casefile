@@ -20,6 +20,16 @@ SDK не даёт одновременно провайдера и провер�
 перевыпускать ли токен. Проверяющий кладёт её в запрос, а `RefusalReasons` — внешний слой
 приложения — дописывает её в `error_description` заголовка и в тело `details.reason`.
 
+## Клиент по документу и порт на петле
+
+SDK не знает CIMD и сверяет `redirect_uri` точным совпадением. Оба пробела закрыты
+здесь, не трогая SDK: `get_client` отдаёт `LoopbackClient` — клиента, который сравнивает
+адрес на петле без порта (`redirect_matches`, RFC 8252 §7.3), — и находит клиента по
+документу через сценарий (`find_client`). Метаданные сервера авторизации SDK строит сам и
+объявляет только `client_secret_*`; `advertise_client_documents` подменяет их маршрут
+метаданными с `client_id_metadata_document_supported` и методом `none`: без него Codex
+отказывается от CIMD (TRK-432#6), а все клиенты Casefile публичные (TRK-448#9).
+
 ## Сервер авторизации — только там, где SDK его допускает
 
 SDK отказывается подниматься с issuer по `http` не на петле (RFC 8414). Установка в сети
@@ -34,6 +44,7 @@ import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
+from mcp.server.auth.handlers.metadata import MetadataHandler
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
@@ -44,26 +55,35 @@ from mcp.server.auth.provider import (
     TokenError,
     construct_redirect_uri,
 )
-from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
-from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from pydantic import AnyUrl
+from mcp.server.auth.routes import build_metadata, cors_middleware
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+from mcp.shared.auth import InvalidRedirectUriError, OAuthClientInformationFull, OAuthToken
+from pydantic import AnyUrl, ValidationError
+from starlette.applications import Starlette
+from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings
 from app.core.errors import UnauthorizedError
-from app.domain.oauth import OAUTH_SCOPE, OAuthRefusal
+from app.core.logging import get_logger
+from app.domain.oauth import OAUTH_SCOPE, OAuthRefusal, redirect_matches
 from app.mcp.runtime import SessionFactory
 from app.services import oauth as oauth_service
 from app.services.auth import verify_token
+from app.services.client_documents import ClientDocuments
 
 __all__ = [
     "SCOPE",
     "CasefileAuthorization",
+    "LoopbackClient",
     "PresentedToken",
     "RefusalReasons",
+    "advertise_client_documents",
     "auth_settings",
     "authorization_enabled",
 ]
+
+logger = get_logger("oauth")
 
 #: Единственная область токена служб Casefile: права задаёт набор токена, а не область.
 SCOPE = OAUTH_SCOPE
@@ -105,6 +125,24 @@ class PresentedToken:
         )
 
 
+class LoopbackClient(OAuthClientInformationFull):
+    """Клиент SDK, который принимает адрес возврата на петле с любым портом.
+
+    Остальное — как у SDK: без `redirect_uri` в запросе берётся единственный
+    зарегистрированный, неподходящий адрес — `InvalidRedirectUriError`.
+    """
+
+    def validate_redirect_uri(self, redirect_uri: AnyUrl | None) -> AnyUrl:
+        if redirect_uri is not None:
+            requested = str(redirect_uri)
+            if any(redirect_matches(str(uri), requested) for uri in self.redirect_uris or []):
+                return redirect_uri
+            raise InvalidRedirectUriError(
+                f"Redirect URI '{redirect_uri}' not registered for client"
+            )
+        return super().validate_redirect_uri(redirect_uri)
+
+
 class _Code(AuthorizationCode):
     """Код для SDK плюс идентификатор строки: по нему сценарий гасит код."""
 
@@ -125,16 +163,32 @@ class CasefileAuthorization(PresentedToken):
     того шага, где он случился.
     """
 
-    def __init__(self, sessions: SessionFactory, consent: oauth_service.ConsentPolicy) -> None:
+    def __init__(
+        self,
+        sessions: SessionFactory,
+        consent: oauth_service.ConsentPolicy,
+        documents: ClientDocuments | None = None,
+    ) -> None:
         super().__init__(sessions)
         self._consent = consent
+        self._documents = documents or ClientDocuments()
 
     # --- Клиенты -------------------------------------------------------------------
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         async with self._sessions() as session:
-            metadata = await oauth_service.find_client(session, client_id)
-        return None if metadata is None else OAuthClientInformationFull.model_validate(metadata)
+            metadata = await oauth_service.find_client(
+                session, client_id, documents=self._documents
+            )
+        if metadata is None:
+            return None
+        try:
+            return LoopbackClient.model_validate(metadata)
+        except ValidationError as error:
+            # Документ CIMD прошёл правила Casefile, но не схему SDK (например, `logo_uri`
+            # не адрес): такого клиента для SDK нет, а не сбой `/authorize`.
+            logger.warning("OAuth client %s has metadata SDK rejects: %s", client_id, error)
+            return None
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         """Сохраняет клиента публичным: ответ регистрации отдаёт `none` и без секрета.
@@ -335,6 +389,39 @@ async def _send_refusal(send: Send, start: Message, holder: dict[str, str]) -> N
     headers.append((b"content-length", str(len(body)).encode()))
     await send({**start, "headers": headers})
     await send({"type": "http.response.body", "body": body})
+
+
+def advertise_client_documents(application: Starlette, settings: Settings) -> None:
+    """Подменяет метаданные сервера авторизации SDK на объявляющие CIMD и метод `none`.
+
+    SDK строит их сам (`build_metadata`) и отдаёт маршрутом
+    `/.well-known/oauth-authorization-server`; здесь маршрут получает тот же документ
+    плюс `client_id_metadata_document_supported: true` и `none` среди методов `/token`.
+    Сервер авторизации не поднят (`authorization_enabled` ложно) — маршрута нет, и
+    подменять нечего.
+    """
+    auth = auth_settings(settings)
+    metadata = build_metadata(
+        auth.issuer_url,
+        auth.service_documentation_url,
+        auth.client_registration_options or ClientRegistrationOptions(),
+        auth.revocation_options or RevocationOptions(),
+        supports_identity_assertion=auth.identity_assertion_enabled,
+    )
+    methods = ["none", *(metadata.token_endpoint_auth_methods_supported or [])]
+    metadata = metadata.model_copy(
+        update={
+            "client_id_metadata_document_supported": True,
+            "token_endpoint_auth_methods_supported": list(dict.fromkeys(methods)),
+        }
+    )
+    endpoint = cors_middleware(MetadataHandler(metadata).handle, ["GET", "OPTIONS"])
+    for route in application.router.routes:
+        if isinstance(route, Route) and route.path == _AS_METADATA_PATH:
+            route.app = endpoint
+
+
+_AS_METADATA_PATH = "/.well-known/oauth-authorization-server"
 
 
 def authorization_enabled(settings: Settings) -> bool:
