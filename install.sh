@@ -22,6 +22,12 @@
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
 # Обе последние записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
+#   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
+#   CASEFILE_SKILL_ONLY  1 — только скил: без Docker, без каталога установки и без токена;
+#                      для машины агента, которая подключается к Casefile на сервере:
+#                      curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+#   CASEFILE_SKILL_SOURCE  откуда брать маркетплейс скила, по умолчанию azimov777/casefile;
+#                      так шаг проверяют до публикации, как CASEFILE_REGISTRY для образов
 #
 # Всё тело — в `main`, который зовётся последней строкой. Запущенный через `| sh`
 # скрипт читается из трубы по мере исполнения, и любая команда, читающая stdin, съела бы
@@ -33,6 +39,9 @@ set -eu
 
 DIR=${CASEFILE_DIR:-"$HOME/casefile"}
 COMPOSE=docker-compose.prod.yml
+SKILL=${CASEFILE_SKILL:-1}
+SKILL_ONLY=${CASEFILE_SKILL_ONLY:-0}
+SKILL_SOURCE=${CASEFILE_SKILL_SOURCE:-azimov777/casefile}
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 fail() {
@@ -72,7 +81,148 @@ hold_updater() {
   trap 'docker start "$updater" </dev/null >/dev/null 2>&1 || true' EXIT
 }
 
+# --- Скил во все найденные харнессы (TRK-408, решения TRK-401#11, #18) -------------------
+# Напечатанную команду агент может не выполнить, поэтому скил ставит сам установщик: для
+# каждого найденного `claude`, `codex`, `hermes` — маркетплейс и плагин, для прочих
+# агентов — `npx skills`. Всё идемпотентно: уже стоящее обновляется, а не падает, и
+# повторный запуск ставит скил в харнесс, появившийся позже. Ставится только скил: токен
+# в файлы харнессов не пишется, подключение MCP остаётся напечатанной командой. Самих
+# харнессов установщик не ставит. Команды читают `/dev/null` (TRK-58); их вывод — в
+# журнале шага, а видна строка итога с командой для ручного повтора. Ошибка скила
+# установку сервиса не валит.
+
+skill_line() { printf '  %-13s %s\n' "$1" "$2"; }
+
+# Одна команда харнесса: тихо, stdin из /dev/null, вывод — в журнал шага.
+skill_run() { "$@" </dev/null >>"$skill_log" 2>&1; }
+
+# Итог неудачи: строка, команда повтора и хвост журнала, чтобы причину не искать.
+skill_failed() {
+  skill_line "$1" "failed - repeat by hand:"
+  printf '                %s\n' "$2"
+  tail -n 3 "$skill_log" | sed 's/^/                > /'
+}
+
+# `"autoUpdate": true` рядом с `source` в extraKnownMarketplaces.casefile: у сторонних
+# маркетплейсов Claude Code обновляет плагин сам только с ним, а флага в CLI нет (TRK-406).
+# Правится JSON тем, что есть на машине; файл переписывается, только если ключа не было.
+claude_auto_update() {
+  settings="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+  [ -f "$settings" ] || return 1
+  patched="$skill_tmp/settings.json"
+  if command -v jq >/dev/null 2>&1; then
+    jq '.extraKnownMarketplaces.casefile.autoUpdate = true' "$settings" >"$patched" || return 1
+  elif command -v node >/dev/null 2>&1; then
+    node -e 'const fs=require("fs");const o=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+      o.extraKnownMarketplaces.casefile.autoUpdate=true;
+      process.stdout.write(JSON.stringify(o,null,2)+"\n")' "$settings" >"$patched" || return 1
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import json,sys
+o=json.load(open(sys.argv[1],encoding="utf-8"))
+o["extraKnownMarketplaces"]["casefile"]["autoUpdate"]=True
+sys.stdout.write(json.dumps(o,indent=2,ensure_ascii=False)+"\n")' "$settings" >"$patched" || return 1
+  else
+    return 1
+  fi
+  cmp -s "$patched" "$settings" || cat "$patched" >"$settings"
+}
+
+skill_claude() {
+  src="$SKILL_SOURCE#stable"
+  retry="claude plugin marketplace add $src --sparse .claude-plugin skills && claude plugin install casefile@casefile --scope user"
+  if skill_run claude plugin marketplace add "$src" --sparse .claude-plugin skills &&
+    skill_run claude plugin marketplace update casefile &&
+    skill_run claude plugin install casefile@casefile --scope user &&
+    skill_run claude plugin update casefile@casefile; then
+    found=$(claude plugin list </dev/null 2>/dev/null |
+      awk '/casefile@casefile/ {f=1; next} f && /Version:/ {v=$2} f && /Status:/ {print v, ($0 ~ /enabled/ ? "enabled" : "off"); exit}')
+    case "$found" in
+      *" enabled")
+        if claude_auto_update; then
+          skill_line "Claude Code" "installed ${found% *} (updates itself)"
+        else
+          skill_line "Claude Code" "installed ${found% *} (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
+        fi ;;
+      *) skill_failed "Claude Code" "$retry" ;;
+    esac
+  else
+    skill_failed "Claude Code" "$retry"
+  fi
+}
+
+skill_codex() {
+  retry="codex plugin marketplace add $SKILL_SOURCE --ref stable --sparse .claude-plugin --sparse skills && codex plugin add casefile@casefile"
+  if skill_run codex plugin marketplace add "$SKILL_SOURCE" --ref stable --sparse .claude-plugin --sparse skills &&
+    skill_run codex plugin marketplace upgrade casefile &&
+    skill_run codex plugin add casefile@casefile; then
+    found=$(codex plugin list </dev/null 2>/dev/null | awk '$1 == "casefile@casefile" && /installed/ {
+      for (i = 2; i <= NF; i++) if ($i ~ /^[0-9]+[.][0-9]+/) { print $i; exit } }')
+    if [ -n "$found" ]; then
+      skill_line "Codex" "installed $found"
+    else
+      skill_failed "Codex" "$retry"
+    fi
+  else
+    skill_failed "Codex" "$retry"
+  fi
+}
+
+skill_hermes() {
+  retry="hermes skills install $SKILL_SOURCE/skills/casefile"
+  if skill_run hermes skills install "$SKILL_SOURCE/skills/casefile" &&
+    { find "${HERMES_HOME:-$HOME/.hermes}" -path '*casefile/SKILL.md' 2>/dev/null | grep -q . ||
+      hermes skills list </dev/null 2>/dev/null | grep -qi casefile; }; then
+    skill_line "Hermes" "installed"
+  else
+    skill_failed "Hermes" "$retry"
+  fi
+}
+
+# Прочие агенты (Cursor, Cline, ...) читают общий `~/.agents/skills`: `--agent cursor` кладёт
+# скил именно туда и не трогает каталог Claude Code, где он уже стоит плагином.
+skill_others() {
+  retry="npx skills add $SKILL_SOURCE#stable -g -y --agent cursor"
+  if skill_run npx -y skills add "$SKILL_SOURCE#stable" -g -y --agent cursor &&
+    [ -f "$HOME/.agents/skills/casefile/SKILL.md" ]; then
+    skill_line "Other agents" "installed (~/.agents/skills/casefile)"
+  else
+    skill_failed "Other agents" "$retry"
+  fi
+}
+
+install_skills() {
+  skill_tmp=$(mktemp -d)
+  skill_log="$skill_tmp/log"
+  : >"$skill_log"
+  bold "Installing the Casefile skill for the agents on this machine:"
+  for harness in claude codex hermes; do
+    if command -v "$harness" >/dev/null 2>&1; then
+      "skill_$harness"
+    else
+      case "$harness" in claude) name="Claude Code" ;; codex) name=Codex ;; *) name=Hermes ;; esac
+      skill_line "$name" "not found (run this installer again after installing it)"
+    fi
+  done
+  if command -v npx >/dev/null 2>&1; then
+    skill_others
+  else
+    skill_line "Other agents" "npx not found (with Node.js: npx skills add $SKILL_SOURCE#stable)"
+  fi
+  rm -rf "$skill_tmp"
+  echo "  A running session picks up the skill after a restart (in Claude Code: /reload-plugins)."
+  echo
+}
+
 main() {
+  if [ "$SKILL_ONLY" = 1 ]; then
+    # Машина агента, которая только подключается к Casefile на сервере: ни Docker, ни
+    # каталога установки, ни токена (TRK-401#18).
+    install_skills || true
+    echo "Now connect the agent to your Casefile over MCP: docs/agent-install.md,"
+    echo "\"Joining an installation someone else runs\" (https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md)."
+    return 0
+  fi
+
   command -v docker >/dev/null 2>&1 ||
     fail "Docker is required: https://docs.docker.com/get-docker/"
   docker compose version </dev/null >/dev/null 2>&1 ||
@@ -155,6 +305,9 @@ main() {
   echo "  Board:  http://localhost:$ui_port"
   echo "  MCP:    $mcp_url"
   echo
+  if [ "$SKILL" != 0 ]; then
+    install_skills || echo "casefile: the skill step failed; the installation itself is done."
+  fi
   # Подключение и скил — по блоку на харнесс (TRK-406, решения TRK-398#7, #9, TRK-401#18).
   # Токен только печатается, в файлы харнессов установщик его не пишет. Имена маркетплейса,
   # плагина и ветки `stable` — из `.claude-plugin/marketplace.json` и `images.yml`; те же
@@ -207,6 +360,11 @@ main() {
   echo "  Then, in a new agent session, say:"
   echo "    Carry out the tasks for this work from the Casefile tracker. Hand them to agents, one task per agent, to save your own context, and give them cheaper models where those cope."
   echo "  The same phrases with copy buttons, in your language: http://localhost:$ui_port/start"
+  echo
+
+  echo "Another machine whose agents will connect to this installation gets the skill with:"
+  echo "  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh"
+  echo "  (Windows PowerShell: \$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)"
   echo
 
   echo "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $DIR"

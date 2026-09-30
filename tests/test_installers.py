@@ -399,3 +399,138 @@ def test_the_guide_skill_step_reaches_the_shared_installation_and_verify() -> No
 
     verify = _guide_step("## 5. Verify")
     assert "claude plugin list" in verify and "codex plugin list" in verify
+
+
+# --- Шаг «скил» установщиков (TRK-408) ---------------------------------------------------
+
+#: Заглушки харнессов для `install.sh`: пишут вызовы в `$CALLS`; `claude` заводит
+#: `settings.json`, как это делает настоящий `marketplace add`, и отвечает на `plugin list`.
+FAKE_CLAUDE = r"""#!/bin/sh
+echo "claude $*" >>"$CALLS"
+case "$*" in
+  "plugin marketplace add"*)
+    mkdir -p "$CLAUDE_CONFIG_DIR"
+    echo '{"extraKnownMarketplaces":{"casefile":{"source":{"source":"git","url":"u"}}}}' \
+      >"$CLAUDE_CONFIG_DIR/settings.json" ;;
+  "plugin install"*) [ -z "${FAIL_INSTALL:-}" ] || { echo "install refused" >&2; exit 1; } ;;
+  "plugin list")
+    printf 'Installed plugins:\n\n  > casefile@casefile\n    Version: 0.7.1\n'
+    printf '    Scope: user\n    Status: enabled\n' ;;
+esac
+"""
+FAKE_CODEX = r"""#!/bin/sh
+echo "codex $*" >>"$CALLS"
+[ "$*" != "plugin list" ] ||
+  printf 'PLUGIN  STATUS  VERSION  PATH\ncasefile@casefile  installed, enabled  0.7.1  /x\n'
+"""
+FAKE_NPX = r"""#!/bin/sh
+echo "npx $*" >>"$CALLS"
+mkdir -p "$HOME/.agents/skills/casefile" && touch "$HOME/.agents/skills/casefile/SKILL.md"
+"""
+
+
+def _with_harnesses(tmp_path: Path, **bodies: str) -> dict[str, str]:
+    """Кладёт заглушки в `bin/` (его создаёт `_install`, поэтому заранее — свой каталог)."""
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for name, body in bodies.items():
+        (stubs / name).write_text(body, encoding="utf-8")
+        (stubs / name).chmod(0o755)
+    python_dir = Path(shutil.which("python3") or "/usr/bin/python3").parent
+    return {
+        "PATH": f"{tmp_path / 'bin'}:{stubs}:/usr/bin:/bin:{python_dir}",
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
+        "CASEFILE_SKILL_SOURCE": "example/casefile",
+    }
+
+
+def test_the_installers_carry_the_skill_step_and_its_variables() -> None:
+    for text in (_read(INSTALL_SH), _read(INSTALL_PS1)):
+        for name in ("CASEFILE_SKILL", "CASEFILE_SKILL_ONLY", "CASEFILE_SKILL_SOURCE"):
+            assert name in text
+        for command in (
+            "plugin marketplace update casefile",
+            "plugin update casefile@casefile",
+            "plugin marketplace upgrade casefile",
+            "--agent cursor",
+        ):
+            assert command in text, f"нет {command!r}"
+        assert "CASEFILE_SKILL_ONLY=1" in text
+
+
+def test_the_skill_only_mode_comes_before_any_docker_check() -> None:
+    sh_text, ps1_text = _read(INSTALL_SH), _read(INSTALL_PS1)
+
+    assert sh_text.index('"$SKILL_ONLY" = 1') < sh_text.index("command -v docker")
+    assert ps1_text.index("if ($SkillOnly)") < ps1_text.index("Get-Command docker")
+
+
+def test_skill_only_needs_no_docker_makes_no_directory_and_prints_no_token(
+    tmp_path: Path,
+) -> None:
+    done, calls = _install(tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1"})
+
+    assert done.returncode == 0, done.stderr
+    assert calls == [], "режим только скила не должен звать docker"
+    assert not (tmp_path / "casefile").exists()
+    assert "agent-token-secret" not in done.stdout and "Bearer" not in done.stdout
+    for line in ("Claude Code", "Codex", "Hermes", "Other agents"):
+        assert re.search(rf"{line} +.*not found", done.stdout), f"нет строки not found: {line}"
+    assert "Casefile is running" not in done.stdout
+
+
+def test_skill_zero_skips_the_step_and_the_full_install_still_runs(tmp_path: Path) -> None:
+    done, _ = _install(tmp_path, extra_env={"CASEFILE_SKILL": "0"})
+
+    assert done.returncode == 0, done.stderr
+    assert "Casefile is running." in done.stdout
+    assert "Installing the Casefile skill" not in done.stdout
+
+
+def test_the_full_install_runs_the_skill_step_after_the_contour_and_names_the_only_line(
+    tmp_path: Path,
+) -> None:
+    done, _ = _install(tmp_path)
+
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    assert out.index("Casefile is running.") < out.index("Installing the Casefile skill")
+    assert out.index("Installing the Casefile skill") < out.index("Connect Claude Code:")
+    assert "CASEFILE_SKILL_ONLY=1 sh" in out
+
+
+def test_the_skill_step_installs_updates_and_reports_each_harness_found(tmp_path: Path) -> None:
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX, npx=FAKE_NPX)
+    done, calls = _install(tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1", **env})
+
+    assert done.returncode == 0, done.stderr
+    claude = [c for c in calls if c.startswith("claude ")]
+    assert claude == [
+        "claude plugin marketplace add example/casefile#stable --sparse .claude-plugin skills",
+        "claude plugin marketplace update casefile",
+        "claude plugin install casefile@casefile --scope user",
+        "claude plugin update casefile@casefile",
+        "claude plugin list",
+    ]
+    assert "codex plugin marketplace add example/casefile --ref stable" in " ".join(calls)
+    assert "npx -y skills add example/casefile#stable -g -y --agent cursor" in calls
+    assert re.search(r"Claude Code +installed 0\.7\.1 \(updates itself\)", done.stdout)
+    assert re.search(r"Codex +installed 0\.7\.1", done.stdout)
+    assert re.search(r"Hermes +not found", done.stdout)
+    assert re.search(r"Other agents +installed", done.stdout)
+    settings = (tmp_path / "claude" / "settings.json").read_text()
+    assert '"autoUpdate": true' in settings
+
+
+def test_a_failed_skill_command_is_reported_with_a_retry_and_does_not_stop_the_install(
+    tmp_path: Path,
+) -> None:
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE)
+    done, _ = _install(tmp_path, extra_env={"FAIL_INSTALL": "1", **env})
+
+    assert done.returncode == 0, done.stderr
+    assert "Casefile is running." in done.stdout
+    assert re.search(r"Claude Code +failed - repeat by hand:", done.stdout)
+    assert "claude plugin install casefile@casefile --scope user" in done.stdout
+    assert "install refused" in done.stdout
+    assert "Updates arrive by themselves" in done.stdout

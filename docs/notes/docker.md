@@ -817,3 +817,26 @@ up to date» (TRK-390#14, TRK-391). Теперь `publish` сверяет тег
 - Ветка сдвигается перемоткой вперёд. Первую ветку создаст первый выпуск по «да» владельца.
 **Где:** `.github/workflows/images.yml`, джоб `channel` и шапка файла. Команда сдвига
 проверена на локальном bare-репозитории: создание, перемотка, отказ на не-перемотке.
+
+## Шаг «скил» установщика: обновление Claude Code идёт только по смене version, `npx skills` без `--agent` дублирует скил (TRK-408)
+
+**Что:** `claude plugin marketplace add` и `claude plugin install` у стоящего плагина ничего не
+обновляют: первая печатает «already on disk», вторая — «already installed» и подсказывает
+`claude plugin update`. Новая копия у Claude Code появляется только при смене `version` в
+`plugin.json`. Голый `npx skills add … -g -y` кладёт скил в общий `~/.agents/skills` и
+ещё делает ссылку в каталог скилов Claude Code — рядом с плагином получается второй
+скил `casefile`. Настоящего Windows и рабочего pwsh на машине нет: образ PowerShell там
+собран под 32-битный ARM, идёт под qemu и падает с segmentation fault.
+**Почему важно:** «Повторный запуск обновляет» без `marketplace update` и `plugin update`
+не выполняется: харнесс молча остаётся на старой версии, а строка итога рапортовала бы
+успех. Второй скил в Claude Code — путаница, какой из них читает агент. Разбор
+`install.ps1` парсером не доказывает работу шага: его логика по сути не запускалась.
+**Как правильно:** порядок команд в `skill_claude`: `marketplace add`, `marketplace update`,
+`install`, `update`, затем чтение версии из `claude plugin list` — итог строится по ней, а
+не по коду выхода. У Codex `marketplace upgrade` и повторный `plugin add`. Для прочих
+агентов `npx skills add … -g -y --agent cursor`: это общий `~/.agents/skills`, каталог
+Claude Code не трогается. `autoUpdate` ставит правка `settings.json` (jq, node или
+python3 по наличию), файл переписывается только при отсутствии ключа. Шаг проверяет хост
+`scripts/check-skill-install.sh`; `install.ps1` — только разбор парсером и чтение.
+**Где:** `install.sh`, функции `skill_claude`, `skill_codex`, `skill_others`,
+`claude_auto_update`; `install.ps1`, `Install-ClaudeSkill`; `scripts/check-skill-install.sh`.
