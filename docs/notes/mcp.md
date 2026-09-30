@@ -838,3 +838,36 @@ skills` этот каталог не забирают, и Codex продолжа
 `tests/test_plugin_manifest.py` краснеет при расхождении. Адреса политики, условий и поддержки не
 выдумывать: skills-only плагину они не нужны, для MCP-ревью их даёт TRK-462.
 **Где:** `.codex-plugin/`, `scripts/build-openai-plugin.sh`, `tests/test_plugin_manifest.py`.
+
+## Клиент по документу метаданных (CIMD): служба сама ходит в интернет по адресу из `/authorize`
+
+**Что:** клиент с `https`-`client_id` (Claude Code — `https://claude.ai/oauth/claude-code-client-metadata`,
+Codex — `https://chatgpt.com/oauth/codex/<id>/client.json`, id у Codex меняется) не
+регистрируется: `find_client` скачивает его документ и запоминает строкой `oauth_clients`
+до `document_expires_at` (`max-age` сервера клиента в пределах 5 минут…суток; оба отдают
+`max-age=300`). Метаданные сервера авторизации SDK объявляет без CIMD и только с
+`client_secret_*` — маршрут `/.well-known/oauth-authorization-server` подменён
+(`advertise_client_documents`): `client_id_metadata_document_supported: true` и `none`.
+Адрес возврата на петле сверяется без порта (`redirect_matches`, RFC 8252 §7.3) для CIMD и
+DCR: документы пишут `http://127.0.0.1/callback`, а клиент приходит с
+`http://127.0.0.1:54822/callback`. Живой замер 2026-10-01 (Codex CLI 0.159.2 на macOS,
+Claude Code 2.1.286 в Linux-контейнере): оба выбрали CIMD сами, документы скачаны из
+интернета из контейнера службы, вход и сессия с Bearer прошли.
+**Почему важно:** `client_id` пишет кто угодно, кто достучался до `/authorize`, — это
+SSRF-вход. Правила загрузки держат его закрытым: только `https:443`, своё разрешение имени
+с отказом, если хоть один адрес не `is_global` (петля, частные сети, 169.254.169.254,
+CGNAT, `::ffff:`-обёртки), соединение на проверенный адрес с SNI по имени (DNS rebinding не
+проходит), без перенаправлений, 5 КиБ и 5 с на всё. Без `none` в методах Codex отказывается
+от CIMD, а без сравнения без порта ни один CIMD-клиент не пройдёт `/authorize`.
+**Как правильно:** не доверять старой копии документа, если свежая не скачалась: клиент
+мог убрать адрес возврата. Новую проверку адреса класть в `app/domain/client_documents.py`,
+а не в загрузчик. Тесты подменяют сеть `Runtime(documents=ClientDocuments(resolve=…,
+request=…))`, настоящий DNS и TLS в наборе не ходят. Лог службы называет путь клиента:
+`tracker.oauth: OAuth client by CIMD: …` или `… registered by DCR: …`. Живой вход Claude
+Code — только в Linux-контейнере (`--network container:<mcp>`, `BROWSER`-скрипт с curl,
+`script -qec "claude mcp login …"`): на macOS он хранит вход в Keychain, и во временном
+HOME обмен кода не проходит (TRK-432#6).
+**Где:** `app/domain/client_documents.py`, `app/domain/oauth.py` (`redirect_matches`),
+`app/services/client_documents.py`, `app/services/oauth.py` (`find_client`),
+`app/mcp/oauth.py` (`LoopbackClient`, `advertise_client_documents`), `app/mcp/server.py`,
+`tests/test_mcp_oauth_documents.py`.

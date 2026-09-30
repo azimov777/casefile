@@ -19,6 +19,15 @@ refresh. Секрета клиента нет вовсе: все клиенты 
 не увидит. `http` на любом другом адресе отдал бы код всем на пути (OAuth 2.1, §2.3.1),
 поэтому регистрация такой адрес не принимает. `https` и прочие схемы проходят регистрацию,
 но согласие без страницы выдаётся только на петлю (`is_loopback_redirect`).
+
+## Порт адреса на петле не сравнивается
+
+Нативный клиент слушает callback на порту, который ему дала система в момент входа, и
+знать его при регистрации не может. Документы CIMD Claude Code и Codex поэтому пишут
+`http://127.0.0.1/callback` без порта, а приходят на `/authorize` с
+`http://127.0.0.1:54822/callback` (TRK-432#6). RFC 8252 §7.3 велит серверу принимать
+на петле любой порт: `redirect_matches` сравнивает такой адрес без порта, а всё прочее —
+точно, строкой, как SDK. Касается это и CIMD, и DCR.
 """
 
 import secrets
@@ -34,6 +43,7 @@ __all__ = [
     "generate_oauth_secret",
     "is_loopback_redirect",
     "oauth_token_name",
+    "redirect_matches",
     "refuse_unsafe_redirect",
 ]
 
@@ -88,6 +98,29 @@ def is_loopback_redirect(uri: str) -> bool:
     """`http(s)` на адрес петли: код не покидает машину, на которой открыт браузер."""
     parts = urlsplit(uri)
     return parts.scheme in {"http", "https"} and _is_loopback_host(parts.hostname)
+
+
+def redirect_matches(registered: str, requested: str) -> bool:
+    """Годится ли запрошенный адрес возврата под зарегистрированный.
+
+    Точное совпадение строк — всегда. Кроме него — `http` на петле (RFC 8252 §7.3):
+    схема, узел, путь и запрос совпадают, порт любой. Узел сравнивается как есть:
+    `localhost` не подменяет `127.0.0.1`, потому что клиент слушает конкретный адрес.
+    """
+    if registered == requested:
+        return True
+    try:
+        want, got = urlsplit(registered), urlsplit(requested)
+        want.port, got.port  # noqa: B018 — разбор порта бросает на мусоре
+    except ValueError:
+        return False
+    if want.scheme != "http" or got.scheme != "http":
+        return False
+    if not _is_loopback_host(want.hostname) or want.hostname != got.hostname:
+        return False
+    if want.username or want.password or got.username or got.password:
+        return False
+    return (want.path or "/") == (got.path or "/") and want.query == got.query and not got.fragment
 
 
 def refuse_unsafe_redirect(uris: list[str]) -> None:

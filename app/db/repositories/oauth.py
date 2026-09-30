@@ -3,8 +3,10 @@
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
@@ -19,6 +21,31 @@ class OAuthRepository:
     async def get_client(self, client_id: str) -> OAuthClient | None:
         statement = select(OAuthClient).where(OAuthClient.client_id == client_id)
         return (await self._session.scalars(statement)).one_or_none()
+
+    async def save_document_client(
+        self, client_id: str, metadata: dict[str, Any], expires_at: datetime
+    ) -> OAuthClient:
+        """Заводит клиента по документу или обновляет его документ и срок.
+
+        Одним `INSERT … ON CONFLICT`: первый вход клиента нередко приходит двумя
+        запросами сразу, и второй не должен падать на уникальности `client_id`.
+        """
+        statement = (
+            insert(OAuthClient)
+            .values(client_id=client_id, client_metadata=metadata, document_expires_at=expires_at)
+            .on_conflict_do_update(
+                index_elements=[OAuthClient.client_id],
+                set_={
+                    "client_metadata": metadata,
+                    "document_expires_at": expires_at,
+                    "updated_at": func.now(),
+                },
+            )
+            .returning(OAuthClient)
+            # Строка могла быть уже загружена в сессию: вернуть её свежей, а не из карты.
+            .execution_options(populate_existing=True)
+        )
+        return (await self._session.scalars(statement)).one()
 
     async def get_code(self, code_hash: str) -> OAuthCode | None:
         statement = select(OAuthCode).where(OAuthCode.code_hash == code_hash)

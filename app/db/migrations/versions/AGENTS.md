@@ -34,3 +34,4 @@
 - `20260925_1400_task_move.py` — перенос задачи: колонка `tasks.previous_keys` (у всех задач пуста — до ревизии переносов не было), GIN-индекс под `@>`, тип записи `moved`; откат отказывает, пока такие записи есть
 - `20260928_1200_onboarding_state.py` — состояние знакомства учётной записи: `onboarding_status`, `onboarding_hidden_all`, `onboarding_hidden`; существующие строки получают `skipped`/`hidden_all: true` умолчанием `ADD COLUMN`, затем умолчание меняется на `pending`/`false` для новых строк
 - `20260930_2200_oauth_sign_in.py` — вход через OAuth: таблицы `oauth_clients`, `oauth_codes`, `oauth_refresh_tokens` (коды и refresh хешем, цепочка ротаций); строк не заводит, откат сносит три таблицы
+- `20261001_0100_oauth_client_documents.py` — клиент по документу метаданных (CIMD): колонка `oauth_clients.document_expires_at` (у клиентов DCR пуста); откат удаляет клиентов CIMD каскадом с их кодами и refresh и снимает колонку
