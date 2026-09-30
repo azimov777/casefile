@@ -5,7 +5,6 @@ export {
   type IssueInput,
   type IssuedToken,
   type Participant,
-  type TokenScope,
 } from './api/access';
 export { AgentDialog } from './ui/agent-dialog';
 export { IssueDialog } from './ui/issue-dialog';

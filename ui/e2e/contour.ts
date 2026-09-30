@@ -40,15 +40,79 @@ export function readE2eToken(): string {
 }
 
 /**
- * Файл с ключом набора `task` для запасного пути — входа на `/login`. Выпускается
- * отдельно от ключа установки (`e2e/global-setup.ts`): набор ключа установки задаёт
- * установка, и с TRK-69 он станет `main`, а сценарию, проверяющему экран ключом `task`,
- * нужен именно `task` — названный явно, а не доставшийся от соседа.
+ * Выдача доступа агенту от имени человека — теми же службами, что у бэкенда
+ * (`issue_token`, `agent_of`), а не записью в базу: подключение OAuth на экране «Доступы»
+ * — строка вида `oauth`, и выдать её из браузера нечем, вход по OAuth идёт через клиента
+ * агента и страницу согласия (TRK-450). Контур интерфейса MCP-сервера не поднимает, и
+ * сквозной сценарий собирает строку так, как её собрал бы вход, — службой выпуска.
+ *
+ * Агент берётся по клиенту и хозяину: `claude` и `alice` дают `claude_alice` (TRK-475#14,
+ * `agent_of`), тот же путь, которым его заведёт первый вход в сети. Пустой `client` —
+ * агент назван явно и уже есть в реестре (`demo_agent`).
  */
-export const TASK_TOKEN_FILE = resolve(SECRETS_DIR, 'task-token');
+const ISSUE_ACCESS = `
+import asyncio, sys
+from datetime import UTC, datetime, timedelta
+from app.db.repositories import ParticipantRepository
+from app.db.session import dispose_engine, session_scope
+from app.domain.tokens import TokenKind
+from app.services import participants
+from app.services.auth import Actor
+from app.services.tokens import issue_token
 
-export function readTaskToken(): string {
-  return readFileSync(TASK_TOKEN_FILE, 'utf8').trim();
+async def main(human, kind, client, agent, name):
+    async with session_scope() as session:
+        issuer = await ParticipantRepository(session).get_by_name(human)
+        if client:
+            target = await participants.agent_of(session, client=client, owner=issuer)
+        else:
+            target = await ParticipantRepository(session).get_by_name(agent)
+        oauth = kind == 'oauth'
+        issued = await issue_token(
+            session,
+            actor=Actor(author=issuer.author, participant=issuer),
+            participant=target,
+            name=name,
+            kind=TokenKind.OAUTH if oauth else TokenKind.KEY,
+            expires_at=datetime.now(UTC) + timedelta(days=30) if oauth else None,
+        )
+        issued.token.last_used_at = datetime.now(UTC) - timedelta(minutes=5)
+    await dispose_engine()
+
+asyncio.run(main(*sys.argv[1:6]))
+`;
+
+export interface AccessGrant {
+  /** Человек, который выдаёт доступ: он станет «кто выдал» и хозяином агента по клиенту. */
+  human: string;
+  /** `oauth` — подключение со сроком, `key` — ключ агента. */
+  kind: 'oauth' | 'key';
+  /** Клиент, по которому берётся агент хозяина (`claude` → `claude_alice`); иначе пусто. */
+  client?: string;
+  /** Уже заведённый агент, если клиент не назван. */
+  agent?: string;
+  /** Имя доступа: у подключения — клиент, у ключа — свободная строка. */
+  name: string;
+}
+
+/** Выдаёт доступ от имени человека. Секрет не печатается и никому не нужен. */
+export function grantAccess({ human, kind, client = '', agent = '', name }: AccessGrant): void {
+  compose([
+    ...['run', '--rm', '--no-deps', 'api'],
+    ...['python', '-c', ISSUE_ACCESS, human, kind, client, agent, name],
+  ]);
+}
+
+/**
+ * Файл с ключом агента для запасного пути — входа на `/login`. Выпускается отдельно от
+ * ключа установки (`e2e/global-setup.ts`): наборов у ключей больше нет (TRK-471), а
+ * сценарию, проверяющему экран глазами агента, нужен именно ключ агента без учётной
+ * записи — «человеческого» ключа, кроме `local-ui`, не существует (TRK-472).
+ */
+export const AGENT_KEY_FILE = resolve(SECRETS_DIR, 'agent-key');
+
+export function readAgentKey(): string {
+  return readFileSync(AGENT_KEY_FILE, 'utf8').trim();
 }
 
 /**

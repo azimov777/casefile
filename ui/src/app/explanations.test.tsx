@@ -74,15 +74,15 @@ const SCREENS: Screen[] = [
     name: 'подключить агента',
     path: '/connect',
     key: HINT_KEYS.connect,
-    ru: 'Агент работает с Casefile через MCP: ему нужны адрес этой установки и токен. После подключения скажите агенту, с чего начать, — фразы есть на экране «Начало».',
-    en: "An agent works with Casefile over MCP: it needs this installation's address and a token. Once connected, tell the agent where to start — the phrases are on the Start screen.",
+    ru: 'Агент работает с Casefile через MCP: Claude Code и Codex входят сами, им нужен только адрес этой установки, а ключ — харнессам без OAuth и сторожу журнала. После подключения скажите агенту, с чего начать, — фразы есть на экране «Начало».',
+    en: 'An agent works with Casefile over MCP: Claude Code and Codex sign in by themselves and need only the address of this installation, while a key is for harnesses without OAuth and for the journal watcher. Once connected, tell the agent where to start — the phrases are on the Start screen.',
   },
   {
     name: 'доступы',
     path: '/access',
     key: HINT_KEYS.access,
-    ru: 'Здесь все токены установки: кому выданы и когда ими ходили в последний раз. Отдельному агенту стоит выпустить свой токен — тогда его записи подписаны его именем. Лишний токен отзывается здесь же.',
-    en: 'All tokens of the installation are here: who holds them and when they were last used. A separate agent deserves its own token — then its entries are signed with its name. A token you no longer need is revoked here.',
+    ru: 'Здесь всё, чем ходят в установку: агенты, которые вошли сами (Claude Code и Codex), ключи агентов и сеансы входа людей. Лишнее отключается или отзывается здесь же.',
+    en: 'Everything that gets into the installation is here: agents that signed in by themselves (Claude Code and Codex), agent keys and the sign-in sessions of people. What is no longer needed is disconnected or revoked right here.',
   },
 ];
 

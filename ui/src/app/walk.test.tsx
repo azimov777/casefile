@@ -232,7 +232,9 @@ describe('проход по экранам: ход', () => {
     installation({ projects: [], hints: { hidden_all: true, hidden: [] } });
     renderApp('/access?walk=3');
     await counter(3, 3);
-    expect(main().getByText(/All tokens of the installation are here/)).toBeInTheDocument();
+    expect(
+      main().getByText(/Everything that gets into the installation is here/),
+    ).toBeInTheDocument();
     expect(main().queryByRole('button', { name: 'Hide all hints' })).not.toBeInTheDocument();
     expect(main().queryByRole('button', { name: 'Close this hint' })).not.toBeInTheDocument();
     expect(patches).toEqual([]);
@@ -243,7 +245,9 @@ describe('проход по экранам: ход', () => {
     renderApp('/access');
     await screen.findByRole('heading', { level: 1, name: 'Access' });
     expect(main().queryByText(/Step \d+ of/)).not.toBeInTheDocument();
-    expect(main().queryByText(/All tokens of the installation are here/)).not.toBeInTheDocument();
+    expect(
+      main().queryByText(/Everything that gets into the installation is here/),
+    ).not.toBeInTheDocument();
   });
 
   it('неверный номер шага полосу не рисует', async () => {

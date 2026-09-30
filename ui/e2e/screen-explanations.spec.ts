@@ -59,7 +59,7 @@ const SCREENS: { name: string; path: string; text: string }[] = [
   { name: 'дело', path: '/tasks/DEMO-1/case', text: 'Дело — журнал задачи' },
   { name: 'проект', path: '/projects/DEMO', text: 'Проект отвечает на вопрос «про что задачи».' },
   { name: 'подключить агента', path: '/connect', text: 'Агент работает с Casefile через MCP' },
-  { name: 'доступы', path: '/access', text: 'Здесь все токены установки' },
+  { name: 'доступы', path: '/access', text: 'Здесь всё, чем ходят в установку' },
 ];
 
 test('на каждом из семи экранов при 390 px видно своё пояснение и нет прокрутки вбок', async ({

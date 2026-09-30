@@ -410,7 +410,6 @@ describe('экран «Начало»', () => {
             accessToken({
               id: 'c1111111-1111-1111-1111-111111111111',
               name: 'local-agent',
-              scope: 'main',
               participant: 'agent',
               created_by: { kind: 'tracker', signature: null },
               last_used_at: '2026-09-27T10:00:00Z',
@@ -439,7 +438,6 @@ describe('экран «Начало»', () => {
             accessToken({
               id: 'c2222222-2222-2222-2222-222222222222',
               name: 'local-agent',
-              scope: 'main',
               participant: 'agent',
               created_by: { kind: 'tracker', signature: null },
               last_used_at: null,

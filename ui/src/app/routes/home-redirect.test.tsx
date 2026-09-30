@@ -7,7 +7,7 @@ import { renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
 
-/** Ключ сеанса набора `task`: маршруту `/` больше и не нужно. */
+/** Ключ сеанса: маршруту `/` больше ничего не нужно. */
 const SESSION = 'trk_session_secret_of_the_interface';
 
 const STAMPS = { created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' };

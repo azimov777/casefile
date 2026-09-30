@@ -1,12 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import {
-  compose,
-  LOGIN_PORT,
-  LOGIN_URL,
-  SECRETS_DIR,
-  TASK_TOKEN_FILE,
-  TOKEN_FILE,
-} from './contour';
+import { compose, LOGIN_PORT, LOGIN_URL, SECRETS_DIR, AGENT_KEY_FILE, TOKEN_FILE } from './contour';
 
 /**
  * Поднимает установку в том же порядке, что и продакшен-контур (`../docker-compose.prod.yml`):
@@ -36,7 +29,7 @@ async function globalSetup(): Promise<void> {
   compose(['run', '--rm', 'init']);
   compose(['run', '--rm', 'local-token']);
   compose(['run', '--rm', 'demo']);
-  issueTaskToken();
+  issueAgentKey();
 
   const token = readFileSync(TOKEN_FILE, 'utf8').trim();
   compose(['up', '-d', '--wait', '--build', 'ui'], { TRACKER_UI_TOKEN: token });
@@ -130,28 +123,27 @@ async function startLockedInterface(token: string): Promise<void> {
 }
 
 /**
- * Ключ набора `task` владельцу — для сценариев входа на `/login` (`readTaskToken`).
+ * Ключ агента `demo_agent` — для сценариев входа на `/login` (`readAgentKey`): человеку
+ * ключи не выпускаются (TRK-472), и запасной путь входа проверяется ключом агента.
  *
- * Набор назван в команде, а не взят у ключа установки: тот задаёт установка, и с TRK-69
- * он станет `main` (`UI-105`). Файлом ключ, в отличие от ключа установки, установка
- * не выдаёт — у `local-token` набор свой, — поэтому здесь единственное место, где
- * секрет берётся из вывода команды: `issue-token` для того и печатает его. Вывод
- * уходит в трубу этого процесса, а не в журнал прогона, и ложится в файл `0600`
- * в `.secrets/`, который уносит `global-teardown.ts`.
+ * Файлом ключ, в отличие от ключа установки, установка не выдаёт, поэтому здесь
+ * единственное место, где секрет берётся из вывода команды: `issue-token` для того и
+ * печатает его. Вывод уходит в трубу этого процесса, а не в журнал прогона, и ложится в
+ * файл `0600` в `.secrets/`, который уносит `global-teardown.ts`.
  */
-function issueTaskToken(): void {
+function issueAgentKey(): void {
   const printed = compose([
     'run',
     '--rm',
     '--no-deps',
     'api',
     ...['python', '-m', 'app.cli', 'issue-token'],
-    ...['--participant', 'owner', '--scope', 'task', '--name', 'e2e-login'],
+    ...['--participant', 'demo_agent', '--name', 'e2e-login'],
   ]);
   const secret = /^token:\s+(\S+)\s*$/m.exec(printed)?.[1];
   // Сообщение без вывода команды: в нём секрет.
   if (secret === undefined) throw new Error('issue-token printed no token line');
-  writeFileSync(TASK_TOKEN_FILE, secret, { mode: 0o600 });
+  writeFileSync(AGENT_KEY_FILE, secret, { mode: 0o600 });
 }
 
 export default globalSetup;

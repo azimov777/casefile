@@ -7,10 +7,9 @@ import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { setToken, type components } from '@/shared/api';
-import { exactTime } from '@/shared/lib';
 
 /*
- * Действия человека с проектом (UI-175): что видно какому набору ключа, что уходит
+ * Действия человека с проектом (UI-175): что видно вошедшему, что уходит
  * на бэкенд и чего не уходит, как читаются отказы на обоих языках.
  */
 
@@ -42,10 +41,11 @@ function projectEntry(no: number, type: Entry['type']): Entry {
 /** Запросы записи прогона: метод, путь и тело — по ним видно, что ушло и чего не ушло. */
 let writes: { method: string; path: string; body: unknown }[] = [];
 
-function scope(value: 'task' | 'main') {
+/** Первый кадр сеанса: наборов токена нет (TRK-471), и `scope` в кадре устаревший `main`. */
+function signedIn() {
   server.use(
     http.get(`${API}/api/v1/bootstrap`, () =>
-      data(bootstrap({ token: { id: TOKEN_ID, scope: value } })),
+      data(bootstrap({ token: { id: TOKEN_ID, scope: 'main' } })),
     ),
   );
 }
@@ -93,9 +93,9 @@ beforeEach(() => {
   );
 });
 
-describe('видимость действий по набору ключа', () => {
-  it('набор `task`: создания и правки карточки нет, атрибуты и заметки есть', async () => {
-    scope('task');
+describe('видимость действий: запись открыта всем, наборов токена нет', () => {
+  it('у вошедшего есть и атрибуты с заметками, и правка карточки, и «Новый проект» в панели', async () => {
+    signedIn();
     renderApp('/projects/DEMO', { language: 'ru' });
 
     const attributes = await screen.findByRole('region', { name: say.project('attributes') });
@@ -114,14 +114,6 @@ describe('видимость действий по набору ключа', () 
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: say.project('note.open') })).toBeInTheDocument();
 
-    expect(screen.queryByRole('button', { name: say.project('edit.open') })).toBeNull();
-    expect(screen.queryByRole('button', { name: say.project('create.open') })).toBeNull();
-  });
-
-  it('набор `main`: сверх того правка карточки и «Новый проект» в панели', async () => {
-    scope('main');
-    renderApp('/projects/DEMO', { language: 'ru' });
-
     expect(
       await screen.findByRole('button', { name: say.project('edit.open') }),
     ).toBeInTheDocument();
@@ -129,13 +121,12 @@ describe('видимость действий по набору ключа', () 
     expect(
       within(side).getByRole('button', { name: say.project('create.open') }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: say.project('attribute.add') })).toBeInTheDocument();
   });
 });
 
 describe('создание проекта', () => {
   it('описание сверх 320 знаков не отправляется, лишнее названо; заведённый проект открывается', async () => {
-    scope('main');
+    signedIn();
     const user = userEvent.setup();
     renderApp('/tasks', { language: 'ru' });
 
@@ -174,7 +165,7 @@ describe('создание проекта', () => {
   });
 
   it('занятый ключ объяснён словами на обоих языках, окно остаётся открытым', async () => {
-    scope('main');
+    signedIn();
     server.use(
       http.post(`${API}/api/v1/projects`, () =>
         failure('project_key_taken', 409, 'Project key is already taken'),
@@ -202,7 +193,7 @@ describe('создание проекта', () => {
   });
 
   it('занятый ключ: причина отказа стоит у поля ключа на обоих языках, поле помечено', async () => {
-    scope('main');
+    signedIn();
     server.use(
       http.post(`${API}/api/v1/projects`, () =>
         failure('project_key_taken', 409, 'Project key is already taken'),
@@ -233,7 +224,7 @@ describe('создание проекта', () => {
   });
 
   it('ключ, не прошедший схему, помечает поле ключа и повторяет образец', async () => {
-    scope('main');
+    signedIn();
     server.use(
       http.post(`${API}/api/v1/projects`, () =>
         failure('validation_error', 422, 'Validation failed', {
@@ -260,7 +251,7 @@ describe('создание проекта', () => {
 
 describe('правка карточки', () => {
   it('уходит название и описание; отказ по длине читается словами', async () => {
-    scope('main');
+    signedIn();
     server.use(
       http.patch(`${API}/api/v1/projects/DEMO`, async ({ request }) => {
         await remember(request);
@@ -295,7 +286,7 @@ describe('правка карточки', () => {
 
 describe('атрибуты', () => {
   it('заведение уходит без причины', async () => {
-    scope('task');
+    signedIn();
     const user = userEvent.setup();
     renderApp('/projects/DEMO', { language: 'ru' });
 
@@ -315,7 +306,7 @@ describe('атрибуты', () => {
   });
 
   it('изменение без причины не отправляется, с причиной — уходит вместе с ней', async () => {
-    scope('task');
+    signedIn();
     const user = userEvent.setup();
     renderApp('/projects/DEMO', { language: 'ru' });
 
@@ -357,7 +348,7 @@ describe('атрибуты', () => {
   });
 
   it('отказ «нужна причина» от бэкенда читается словами на обоих языках', async () => {
-    scope('task');
+    signedIn();
     server.use(
       http.put(`${API}/api/v1/projects/DEMO/attributes/:name`, () =>
         failure(
@@ -388,7 +379,7 @@ describe('атрибуты', () => {
   });
 
   it('снятие — окно-вопрос с обязательной причиной', async () => {
-    scope('task');
+    signedIn();
     const user = userEvent.setup();
     renderApp('/projects/DEMO', { language: 'ru' });
 
@@ -427,7 +418,7 @@ describe('атрибуты', () => {
 
 describe('заметка в дело проекта', () => {
   it('уходит записью `note` с заголовком из первой строки и подтверждается ссылкой `DEMO#N`', async () => {
-    scope('task');
+    signedIn();
     const user = userEvent.setup();
     renderApp('/projects/DEMO', { language: 'ru' });
 
@@ -459,7 +450,7 @@ describe('заметка в дело проекта', () => {
   });
 
   it('пустую форму отмена сворачивает и возвращает фокус на кнопку', async () => {
-    scope('task');
+    signedIn();
     const user = userEvent.setup();
     renderApp('/projects/DEMO', { language: 'ru' });
 
@@ -493,29 +484,26 @@ describe('архив и восстановление (UI-176)', () => {
     );
   }
 
-  it('набор `task`: ни «В архив» у активного, ни «Восстановить» у архивного', async () => {
-    scope('task');
+  it('у активного проекта есть «В архив», у архивного — «Восстановить», а не «В архив»', async () => {
+    signedIn();
+    archiving();
     const { unmount } = renderApp('/projects/DEMO', { language: 'ru' });
-    // Кнопки атрибутов пришли — значит, набор ключа уже известен.
     expect(
-      await screen.findByRole('button', { name: say.project('attribute.add') }),
+      await screen.findByRole('button', { name: say.project('archive.open') }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.project('restore.open') })).toBeNull();
     unmount();
 
     archived();
     renderApp('/projects/DEMO', { language: 'ru' });
     expect(
-      await screen.findByText(
-        say.project('archived.noticeReadOnly', { when: exactTime(ARCHIVED_AT, 'ru') }),
-      ),
+      await screen.findByRole('button', { name: say.project('restore.open') }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: say.project('restore.open') })).toBeNull();
     expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
   });
 
   it('архив без причины не отправляется и говорит почему; с причиной уходит `reason`', async () => {
-    scope('main');
+    signedIn();
     archiving();
     const user = userEvent.setup();
     renderApp('/projects/DEMO', { language: 'ru' });
@@ -547,7 +535,7 @@ describe('архив и восстановление (UI-176)', () => {
   });
 
   it('архивный проект только читается: правки нет, «Восстановить» с причиной уходит на `/restore`', async () => {
-    scope('main');
+    signedIn();
     archived();
     archiving();
     const user = userEvent.setup();
@@ -591,7 +579,7 @@ describe('архив и восстановление (UI-176)', () => {
   });
 
   it('отказ бэкенда читается словами словаря, окно остаётся открытым', async () => {
-    scope('main');
+    signedIn();
     server.use(
       http.post(`${API}/api/v1/projects/DEMO/archive`, () =>
         failure('project_archived', 409, 'Project is archived'),

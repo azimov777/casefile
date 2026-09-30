@@ -7,6 +7,8 @@ import { bootstrapQueryOptions } from '@/entities/session';
 import {
   TokenItem,
   belongsTo,
+  isConnection,
+  isKey,
   isLive,
   isRevoked,
   isSession,
@@ -58,28 +60,29 @@ const MINE = 'mine';
  */
 
 /**
- * Экран «Доступы»: ключи агентов и сеансы входа, заведение агента, выпуск и отзыв.
+ * Экран «Доступы»: подключения агентов, ключи агентов и сеансы входа, заведение агента,
+ * выпуск ключа и отзыв (TRK-473, решение `TRK-469#25`).
  *
- * Чьи токены на экране, решает бэкенд (TRK-114#12): человеку без флага администратора —
- * свои (говорящие от его имени и выпущенные им), администратору — все токены установки,
+ * Чьи доступы на экране, решает бэкенд (TRK-114#12): человеку без флага администратора —
+ * свои (говорящие от его имени и выданные им), администратору — все доступы установки,
  * а дорожка «Все / Мои» сужает до своих и его (`mine=true`). Экран этого не вычисляет —
  * он только называет, что показано.
  *
- * Три части. Действующие ключи — сверху и на виду; сеансы входа по почте (`expires_at`
- * заполнен) — своим разделом, только живые: это не доступ агента, а след каждого входа,
- * и среди ключей агентов они заслоняли бы то, ради чего экран открывают; отозванные
- * ключи — свёрнутой историей (UI-131). Закончившиеся сеансы не показываются вовсе.
- * Колонка та же, что у «Подключить агента»: `--ui-column-max` по центру области содержимого.
+ * Список делится по `kind` строки: «Подключения» (`oauth`: агент вошёл сам, секрета
+ * человек не видел), «Ключи агентов» (`key`: статический секрет, его выдал человек) и
+ * «Сеансы входа» (`session`: вход самого человека; ключ `local-ui` — «этот компьютер»).
+ * Снятые подключения и ключи — свёрнутой историей (UI-131). Закрытые и закончившиеся
+ * сеансы не показываются вовсе. Колонка та же, что у «Подключить агента»: `--ui-column-max` по
+ * центру области содержимого.
  *
- * Чтобы «действующие» были полными, список дочитывается до конца сам: действующий ключ,
- * выпущенный давно, мог стоять на второй странице выдачи, и кнопка «Показать ещё» под
- * историей его бы прятала. Доступов на установке — десятки, а не тысячи.
+ * Чтобы разделы были полными, список дочитывается до конца сам: доступ, выданный давно,
+ * мог стоять на второй странице выдачи, и кнопка «Показать ещё» под историей его бы
+ * прятала. Доступов на установке — десятки, а не тысячи.
  *
- * Право решает первый кадр (`GET /api/v1/bootstrap`), а не отказ: действия, которые
- * ответили бы `403`, не показываются доступными, и запросов записи впустую экран не
- * делает. Выпуск и заведение агента — ключу набора `main` за человеком с учётной
- * записью (`account_required`); отзыв — своей строки всегда, чужой — только
- * администратору (`not_own_token`). Ввода ключа здесь нет и не будет — решение `UI-104#7`.
+ * Право решает первый кадр (`GET /api/v1/bootstrap`), а не отказ: выпуск и заведение
+ * агента — человеку с учётной записью (`account_required`); отзыв — своей строки всегда,
+ * чужой — только администратору (`not_own_token`). Наборов токена больше нет (TRK-471),
+ * и экран их не читает. Ввода ключа здесь нет и не будет — решение `UI-104#7`.
  */
 export function AccessPage() {
   const bootstrap = useQuery(bootstrapQueryOptions());
@@ -104,14 +107,15 @@ export function AccessPage() {
   const admin = account?.is_admin === true;
   /** Видит ли экран все токены установки, а не только свои. */
   const everyone = admin && !mine;
-  const canRevoke = session?.scope === 'main';
-  const canWrite = canRevoke && account !== null;
+  const canWrite = account !== null;
 
   const items = tokens.data?.pages.flatMap((page) => page.items) ?? [];
-  const keys = items.filter((token) => !isSession(token));
-  const active = keys.filter((token) => !isRevoked(token));
-  const revoked = keys.filter(isRevoked);
+  const connections = items.filter((token) => isConnection(token) && isLive(token));
+  const keys = items.filter((token) => isKey(token) && isLive(token));
   const sessions = items.filter((token) => isSession(token) && isLive(token));
+  // Снятые подключения и ключи — историей. Сеансы входа в неё не идут: выход и истёкший
+  // срок — обычная жизнь входа, а не снятый доступ агента, и каждый выход засорял бы её.
+  const revoked = items.filter((token) => isRevoked(token) && !isSession(token));
   const complete = tokens.isSuccess && !tokens.hasNextPage;
 
   const { hasNextPage, isFetchingNextPage, isError, fetchNextPage } = tokens;
@@ -139,7 +143,8 @@ export function AccessPage() {
   }
 
   const closedId = useId();
-  const activeId = useId();
+  const connectionsId = useId();
+  const keysId = useId();
   const sessionsId = useId();
   const historyId = useId();
 
@@ -153,7 +158,7 @@ export function AccessPage() {
   }
 
   function revokeAction(token: Token) {
-    return canRevoke && !isRevoked(token) && (admin || belongsTo(token, me)) ? (
+    return !isRevoked(token) && (admin || belongsTo(token, me)) ? (
       <RevokeDialog token={token} current={session !== null && token.id === session.id} />
     ) : undefined;
   }
@@ -192,18 +197,29 @@ export function AccessPage() {
         </SegmentedNav>
       ) : null}
 
-      <section aria-labelledby={activeId} className="flex min-w-0 flex-col gap-3">
+      <QueryState query={tokens} loading={t('loading')} />
+
+      <section aria-labelledby={connectionsId} className="flex min-w-0 flex-col gap-3">
+        <SectionHead id={connectionsId} title={t('connections.title')} shown={complete}>
+          <span className="sr-only">{t('connections.count', { count: connections.length })}</span>
+          <span aria-hidden="true">{connections.length}</span>
+        </SectionHead>
+        <p className="text-meta text-muted">{t('connections.intro')}</p>
+
+        {complete && connections.length === 0 ? (
+          <p className="text-body text-muted">
+            {everyone ? t('connections.empty') : t('connections.emptyMine')}
+          </p>
+        ) : null}
+        <TokenList tokens={connections} session={session?.id ?? null} action={revokeAction} />
+      </section>
+
+      <section aria-labelledby={keysId} className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id={activeId} className="flex items-center gap-2 text-screen">
-            {t('tokens.active')}
-            {/* Счётчик склоняется для диктора, а глазу — одно число, как у входящей. */}
-            {complete ? (
-              <Badge>
-                <span className="sr-only">{t('tokens.count', { count: active.length })}</span>
-                <span aria-hidden="true">{active.length}</span>
-              </Badge>
-            ) : null}
-          </h2>
+          <SectionHead id={keysId} title={t('keys.title')} shown={complete}>
+            <span className="sr-only">{t('keys.count', { count: keys.length })}</span>
+            <span aria-hidden="true">{keys.length}</span>
+          </SectionHead>
 
           <div className="flex flex-wrap gap-2">
             <AgentDialog
@@ -231,7 +247,7 @@ export function AccessPage() {
                   disabled={!canWrite}
                   aria-describedby={canWrite ? undefined : closedId}
                   // Своя кнопка открывает выбором из формы: участник из «Выпустить ему
-                  // токен» не должен пережить закрытие и подставиться сюда молча.
+                  // ключ» не должен пережить закрытие и подставиться сюда молча.
                   onClick={() => setIssueParticipant(null)}
                 >
                   {t('actions.issue')}
@@ -245,51 +261,34 @@ export function AccessPage() {
           </div>
         </div>
 
+        <p className="text-meta text-muted">{t('keys.intro')}</p>
         <p className="text-meta text-muted">{t('actions.intro')}</p>
 
         {/*
-         * Почему запись закрыта — сказано там же, где стоят запрещённые кнопки, и они
+         * Почему выпуск закрыт — сказано там же, где стоят запрещённые кнопки, и они
          * же на это объяснение ссылаются: запрет без причины читается как поломка.
-         * Пока набор ключа неизвестен (первый кадр ещё не пришёл), не говорится
-         * ничего: «запись закрыта» о неизвестном — это выдумка, а не состояние.
+         * Пока первый кадр не пришёл, не говорится ничего: «выпуск закрыт» о неизвестном
+         * — это выдумка, а не состояние.
          */}
         {session === null || canWrite ? null : (
-          <Callout id={closedId}>
-            {canRevoke ? t('closed.noAccount') : t('closed.text', { scope: session.scope })}
-          </Callout>
+          <Callout id={closedId}>{t('closed.noAccount')}</Callout>
         )}
         <QueryState query={bootstrap} loading={t('closed.loading')} compact />
 
-        <QueryState
-          query={tokens}
-          loading={t('tokens.loading')}
-          empty={
-            complete && keys.length === 0
-              ? everyone
-                ? t('tokens.empty')
-                : t('tokens.emptyMine')
-              : undefined
-          }
-        />
-
-        {complete && keys.length > 0 && active.length === 0 ? (
-          <p className="text-body text-muted">{t('tokens.noActive')}</p>
+        {complete && keys.length === 0 ? (
+          <p className="text-body text-muted">{everyone ? t('keys.empty') : t('keys.emptyMine')}</p>
         ) : null}
+        <TokenList tokens={keys} session={session?.id ?? null} action={revokeAction} />
 
-        <TokenList tokens={active} session={session?.id ?? null} action={revokeAction} />
-
-        {hasNextPage ? <p className="text-meta text-muted">{t('tokens.loadingMore')}</p> : null}
+        {hasNextPage ? <p className="text-meta text-muted">{t('loadingMore')}</p> : null}
       </section>
 
       {sessions.length === 0 ? null : (
         <section aria-labelledby={sessionsId} className="flex min-w-0 flex-col gap-3">
-          <h2 id={sessionsId} className="flex items-center gap-2 text-screen">
-            {t('sessions.title')}
-            <Badge>
-              <span className="sr-only">{t('sessions.count', { count: sessions.length })}</span>
-              <span aria-hidden="true">{sessions.length}</span>
-            </Badge>
-          </h2>
+          <SectionHead id={sessionsId} title={t('sessions.title')} shown>
+            <span className="sr-only">{t('sessions.count', { count: sessions.length })}</span>
+            <span aria-hidden="true">{sessions.length}</span>
+          </SectionHead>
           <p className="text-meta text-muted">{t('sessions.intro')}</p>
           <TokenList tokens={sessions} session={session?.id ?? null} action={revokeAction} />
         </section>
@@ -313,14 +312,14 @@ export function AccessPage() {
                   historyOpen ? 'rotate-90' : '',
                 )}
               />
-              {t('tokens.history', { count: revoked.length })}
+              {t('history.count', { count: revoked.length })}
             </Button>
           </h2>
 
           {history.held ? (
             <Reveal hold={history}>
               <div id={`${historyId}-list`} className="flex flex-col gap-3 pt-3">
-                <p className="text-meta text-muted">{t('tokens.historyIntro')}</p>
+                <p className="text-meta text-muted">{t('history.intro')}</p>
                 <TokenList tokens={revoked} session={session?.id ?? null} />
               </div>
             </Reveal>
@@ -347,6 +346,27 @@ export function AccessPage() {
         </SecretDialog>
       )}
     </main>
+  );
+}
+
+/** Заголовок раздела: название и счётчик (глазу — число, диктору — фраза, как у входящей). */
+function SectionHead({
+  id,
+  title,
+  shown,
+  children,
+}: {
+  id: string;
+  title: string;
+  /** Показывать ли счётчик: пока список не дочитан, число было бы неполным. */
+  shown: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <h2 id={id} className="flex items-center gap-2 text-screen">
+      {title}
+      {shown ? <Badge>{children}</Badge> : null}
+    </h2>
   );
 }
 
