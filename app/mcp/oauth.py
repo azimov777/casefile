@@ -3,9 +3,10 @@
 Клиент без токена получает `401` с `WWW-Authenticate: Bearer resource_metadata="…"`,
 по метаданным protected resource (RFC 9728) находит сервер авторизации — эту же службу,
 регистрируется (DCR, RFC 7591), проходит `/authorize` с PKCE S256 и получает в `/token`
-обычный токен участника `trk_…` набора `task` и refresh-токен. Маршруты, разбор запросов,
-PKCE и точное сравнение `redirect_uri` — SDK; здесь только перевод его вызовов в
-сценарии `app/services/oauth.py` и обратно. Решения — `TRK-448#8`, `TRK-448#9`.
+подключение — токен участника `trk_…` вида `oauth` со сроком и `expires_in` — и
+refresh-токен. Маршруты, разбор запросов, PKCE и точное сравнение `redirect_uri` — SDK;
+здесь только перевод его вызовов в сценарии `app/services/oauth.py` и обратно. Решения —
+`TRK-448#8`, `TRK-448#9`, `TRK-469#24`.
 
 ## Проверка токена — на транспорте, с причиной
 
@@ -41,6 +42,7 @@ SDK отказывается подниматься с issuer по `http` не �
 import contextvars
 import json
 import uuid
+from datetime import timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -114,14 +116,21 @@ class PresentedToken:
             async with self._sessions() as session:
                 row = await verify_token(session, token)
                 subject = None if row.participant is None else row.participant.name
+                expires = row.expires_at
         except UnauthorizedError as refusal:
             holder = _refusal.get()
             if holder is not None:
                 holder["reason"] = str(refusal.details.get("reason", "unauthorized"))
                 holder["message"] = refusal.message
             return None
+        # Срок — тот же, что в базе: SDK сверяет его и сам, но отказ с причиной
+        # (`token_expired`) даёт `verify_token` раньше него.
         return AccessToken(
-            token=token, client_id=_TOKEN_CLIENT, scopes=[SCOPE], expires_at=None, subject=subject
+            token=token,
+            client_id=_TOKEN_CLIENT,
+            scopes=[SCOPE],
+            expires_at=None if expires is None else int(expires.timestamp()),
+            subject=subject,
         )
 
 
@@ -168,10 +177,13 @@ class CasefileAuthorization(PresentedToken):
         sessions: SessionFactory,
         consent: oauth_service.ConsentPolicy,
         documents: ClientDocuments | None = None,
+        *,
+        access_ttl: timedelta,
     ) -> None:
         super().__init__(sessions)
         self._consent = consent
         self._documents = documents or ClientDocuments()
+        self._access_ttl = access_ttl
 
     # --- Клиенты -------------------------------------------------------------------
 
@@ -261,7 +273,9 @@ class CasefileAuthorization(PresentedToken):
         del client
         try:
             async with self._sessions() as session:
-                pair = await oauth_service.redeem_code(session, code_id=authorization_code.row_id)
+                pair = await oauth_service.redeem_code(
+                    session, code_id=authorization_code.row_id, access_ttl=self._access_ttl
+                )
         except OAuthRefusal as refusal:
             raise TokenError(
                 error="invalid_grant", error_description=refusal.description
@@ -295,7 +309,10 @@ class CasefileAuthorization(PresentedToken):
         try:
             async with self._sessions() as session:
                 pair = await oauth_service.rotate_refresh(
-                    session, refresh_id=refresh_token.row_id, scopes=scopes
+                    session,
+                    refresh_id=refresh_token.row_id,
+                    access_ttl=self._access_ttl,
+                    scopes=scopes,
                 )
         except OAuthRefusal as refusal:
             raise TokenError(
@@ -320,10 +337,11 @@ def _present(metadata: dict[str, Any]) -> dict[str, Any]:
 
 
 def _token_response(pair: oauth_service.IssuedPair) -> OAuthToken:
-    """Ответ `/token`. Без `expires_in`: токен участника живёт до отзыва (`TRK-448#9`)."""
+    """Ответ `/token` с `expires_in`: без него Codex не обновляет токен заранее (`TRK-469#24`)."""
     return OAuthToken(
         access_token=pair.access_token,
         token_type="Bearer",
+        expires_in=pair.expires_in,
         refresh_token=pair.refresh_token,
         scope=" ".join(pair.scopes),
     )

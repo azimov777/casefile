@@ -2,6 +2,7 @@
 
 import ipaddress
 import re
+from datetime import timedelta
 from functools import lru_cache
 from typing import Annotated, Literal
 
@@ -156,6 +157,19 @@ class Settings(BaseSettings):
             "Grant an OAuth sign-in at once, without a consent page, to the default agent "
             "participant, and only for a loopback redirect_uri. Off by default: until the "
             "sign-in page exists, anyone who reaches the MCP port would get a token"
+        ),
+    )
+    # Срок токена подключения OAuth (решение `TRK-469#24`). Конечный, чтобы `/token` отдал
+    # `expires_in`: без него Codex считает токен вечным и не обновляет заранее. 30 дней, а
+    # не час: час сегодня рвёт долгие сессии Codex (#32590). Отзыв в «Доступах» действует
+    # сразу — токен непрозрачный, и долгий срок не открывает окна после отзыва.
+    oauth_access_ttl: timedelta = Field(
+        default=timedelta(days=30),
+        gt=timedelta(0),
+        description=(
+            "Lifetime of an access token issued by OAuth sign-in, answered as `expires_in`: "
+            "an ISO 8601 duration such as `P30D` or `PT1H`. The client renews it with its "
+            "refresh token, which lives until the connection is revoked"
         ),
     )
 

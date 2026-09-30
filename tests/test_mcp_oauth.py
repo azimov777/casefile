@@ -12,6 +12,7 @@ import hashlib
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -25,7 +26,7 @@ from starlette.applications import Starlette
 from app.core.config import Settings, get_settings
 from app.db.models.oauth import OAuthCode, OAuthRefreshToken
 from app.db.models.token import Token
-from app.domain.tokens import TokenScope, hash_token
+from app.domain.tokens import TokenKind, TokenScope, hash_token
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
 from conftest import MCP_BASE_URL, connect_mcp
@@ -44,10 +45,14 @@ INITIALIZE = {
 }
 
 
-def _settings(*, consent: bool = True, public_url: str | None = None) -> Settings:
+def _settings(
+    *, consent: bool = True, public_url: str | None = None, ttl: timedelta | None = None
+) -> Settings:
     update: dict[str, Any] = {"oauth_local_consent": consent}
     if public_url is not None:
         update["mcp_public_url"] = public_url
+    if ttl is not None:
+        update["oauth_access_ttl"] = ttl
     return get_settings().model_copy(update=update)
 
 
@@ -174,17 +179,21 @@ async def test_full_cycle_gives_a_participant_token_that_lists_tools(
     assert issued["access_token"].startswith("trk_")
     assert issued["refresh_token"].startswith("trr_")
     assert issued["token_type"].lower() == "bearer"
-    assert "expires_in" not in issued
+    ttl = _settings().oauth_access_ttl
+    assert issued["expires_in"] == int(ttl.total_seconds())
 
-    # Обычный токен участника: набор `task`, участник `agent`, виден в «Доступах».
+    # Подключение, а не ключ: вид `oauth`, срок, участник `agent`; набор пока `task`.
     token = await db_session.scalar(
         select(Token).where(Token.token_hash == hash_token(issued["access_token"]))
     )
     assert token is not None
+    assert token.kind is TokenKind.OAUTH
+    assert token.expires_at is not None
+    # `created_at` — время начала транзакции теста, срок — время выпуска: разница мала.
+    assert abs(token.expires_at - token.created_at - ttl) < timedelta(minutes=1)
     assert token.scope is TokenScope.TASK
     assert token.participant is not None and token.participant.name == "agent"
     assert token.name == "oauth: Codex"
-    assert token.expires_at is None
 
     # Код и refresh — только хешем.
     assert (
@@ -205,6 +214,27 @@ async def test_full_cycle_gives_a_participant_token_that_lists_tools(
     names = {tool.name for tool in listed.tools}
     assert {"get_task", "create_task"} <= names
     assert "register_participant" not in names  # набор `task`, а не `main`
+
+
+async def test_the_access_ttl_setting_sets_expires_in_and_the_deadline(
+    mcp_sessions: SessionFactory, db_session: AsyncSession
+) -> None:
+    """`TRACKER_OAUTH_ACCESS_TTL` владельца установки — час: `expires_in` 3600 и срок в базе."""
+    async with _http(_server(mcp_sessions, ttl=timedelta(hours=1))) as client:
+        _, issued = await _sign_in(client)
+
+    assert issued["expires_in"] == 3600
+    token = await db_session.scalar(
+        select(Token).where(Token.token_hash == hash_token(issued["access_token"]))
+    )
+    assert token is not None and token.expires_at is not None
+    assert abs(token.expires_at - token.created_at - timedelta(hours=1)) < timedelta(minutes=1)
+
+
+def test_the_access_ttl_defaults_to_thirty_days_and_reads_iso_durations() -> None:
+    assert Settings.model_fields["oauth_access_ttl"].default == timedelta(days=30)
+    for value, ttl in (("PT1H", timedelta(hours=1)), ("P7D", timedelta(days=7))):
+        assert Settings(**{"oauth_access_ttl": value}).oauth_access_ttl == ttl
 
 
 async def test_a_wrong_code_verifier_is_refused(mcp_sessions: SessionFactory) -> None:
@@ -374,6 +404,41 @@ async def test_refresh_rotates_the_pair_and_retires_the_previous_token(
     assert new.status_code == 200, new.text
 
 
+async def test_an_expired_connection_is_refused_and_its_refresh_gives_a_new_pair(
+    mcp_sessions: SessionFactory, db_session: AsyncSession
+) -> None:
+    """Срок вышел: `401 token_expired` на `/mcp`; refresh даёт рабочую пару и отзывает старую."""
+    async with _http(_server(mcp_sessions)) as client:
+        client_id, first = await _sign_in(client)
+        token = await db_session.scalar(
+            select(Token).where(Token.token_hash == hash_token(first["access_token"]))
+        )
+        assert token is not None
+        token.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        await db_session.flush()
+
+        expired = await _initialize(client, first["access_token"])
+        refreshed = await _refresh(client, client_id, first["refresh_token"])
+        assert refreshed.status_code == 200, refreshed.text
+        second = refreshed.json()
+        works = await _initialize(client, second["access_token"])
+
+    assert expired.status_code == 401
+    assert expired.json()["details"] == {"reason": "token_expired"}
+    assert "token_expired" in expired.headers["www-authenticate"]
+    assert second["access_token"] != first["access_token"]
+    assert second["expires_in"] == first["expires_in"]
+    assert works.status_code == 200, works.text
+    await db_session.refresh(token)
+    assert token.revoked_at is not None
+    renewed = await db_session.scalar(
+        select(Token).where(Token.token_hash == hash_token(second["access_token"]))
+    )
+    assert renewed is not None
+    assert renewed.kind is TokenKind.OAUTH
+    assert renewed.expires_at is not None and renewed.expires_at > datetime.now(UTC)
+
+
 async def test_a_replayed_refresh_token_revokes_the_whole_chain(
     mcp_sessions: SessionFactory,
 ) -> None:
@@ -422,6 +487,8 @@ async def test_revoking_through_the_tokens_registry_cuts_the_client_off(
         listed = (await auth_client.get("/api/v1/tokens", params={"limit": 100})).json()["data"]
         mine = [row for row in listed if row["name"] == "oauth: Codex" and not row["revoked_at"]]
         assert len(mine) == 1, listed
+        assert mine[0]["kind"] == "oauth"
+        assert mine[0]["expires_at"] is not None
         revoked = await auth_client.delete(f"/api/v1/tokens/{mine[0]['id']}")
         assert revoked.status_code == 204, revoked.text
 

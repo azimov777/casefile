@@ -124,8 +124,9 @@ async def verify_token(
             details={"reason": "token_revoked"},
         )
     if token.expired_at(moment):
-        # Срок бывает только у токена сеанса браузера (`app/services/login.py`): вышел
-        # срок — вышел и сеанс, и вкладке пора войти заново, а не перевыпускать ключ.
+        # Срок бывает у сеанса браузера (`app/services/login.py`) — вкладке пора войти
+        # заново — и у подключения OAuth (`app/services/oauth.py`) — клиенту пора обменять
+        # refresh. Ключ не истекает: его отзывают.
         raise UnauthorizedError(
             message="Token has expired",
             details={"reason": "token_expired"},
