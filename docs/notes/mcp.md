@@ -765,3 +765,22 @@ TRK-431. Признаки проверки в гайде сверяет тест
 `directoryRead`, реализовать метод для каждого каталога скила и объявить `{"directoryRead": true}`.
 **Где:** `app/mcp/skills.py`, `MAX_SKILL_FILES`, `MAX_SKILL_BYTES`, `_load`;
 `tests/test_mcp_skills.py`, `test_a_skill_over_the_sep_limits_is_refused_at_load`.
+
+## Служба mcp — защищённый ресурс OAuth, но проверка токена осталась за `authenticate`
+
+**Что:** `create_server` даёт SDK `AuthSettings` (адрес ресурса — `effective_mcp_public_url`,
+сервер авторизации — тот же хост) и проверяющего `PresentedToken` (`app/mcp/oauth.py`).
+Запрос к `/mcp` без `Authorization: Bearer` получает `401` с
+`WWW-Authenticate: Bearer … resource_metadata="<хост>/.well-known/oauth-protected-resource/mcp"`;
+метаданные отдаются без токена. Проверяющий пропускает любой непустой bearer и ничего не
+решает: отозванный, неизвестный и просроченный токен по-прежнему разбирает `authenticate` на
+вызове, с прежним `details.reason` (`token_revoked` и др.). Маршрут `/health` открыт.
+**Почему важно:** проверка в SDK вернула бы агентам безликий `invalid_token` вместо причины,
+по которой они чинят настройку; а запрос без токена раньше доходил до `initialize`, теперь
+обрывается на транспорте, и клиент без заголовка получает ссылку на вход вместо ошибки
+инструмента.
+**Как правильно:** не переносить разбор токена в `PresentedToken`, пока `/token` не выдаёт
+токены OAuth (TRK-448): тогда отказ отозванному токену станет `401` с `resource_metadata`
+именно здесь. Тесту на `initialize` нужен заголовок `Authorization` (любой).
+**Где:** `app/mcp/oauth.py`, `app/mcp/server.py` (`_bare_server`),
+`tests/test_mcp_server.py`.

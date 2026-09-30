@@ -48,7 +48,8 @@ async def _era(server: MCPServer, era: str) -> AsyncIterator[Call]:
             transport=ASGITransport(app=application), base_url="http://localhost:8100"
         ) as client,
     ):
-        headers = dict(ACCEPT)
+        # Транспорт требует токен (`app/mcp/oauth.py`); какой — скилу всё равно: читает не автор.
+        headers = dict(ACCEPT) | {"authorization": "Bearer any-token"}
         counter = 0
 
         if era == "legacy":
