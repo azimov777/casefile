@@ -22,6 +22,9 @@ import {
  * это и есть путь человека на локальной установке (`UI-104#7`).
  */
 
+// Буфер читается из самой страницы (`navigator.clipboard.readText`): контексту нужны оба права.
+test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
 const AGENT = 'e2e_agent';
 const TOKEN_NAME = 'e2e_agent на прогоне';
 /** Общий агентский токен: им меряется тёмная тема и вид фрагментов с меткой. */
@@ -113,6 +116,46 @@ test('ключ установки: агент заведён, токен вып�
 
   const claude = secretDialog.getByRole('region', { name: 'Claude Code' }).locator('pre code');
   await expect(claude).toContainText(`Authorization: Bearer ${secret}`);
+
+  // Второй шаг — установка скила: рядом с подключением, для Claude Code и для Codex, и
+  // копируется тем же нажатием; в скопированном секрета нет — скил общий (TRK-420).
+  const skill = secretDialog.getByRole('region', { name: 'Установите скил' });
+  await expect(skill).toBeVisible();
+  const claudeSkill =
+    'claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills\n' +
+    'claude plugin install casefile@casefile --scope user';
+  await skill.getByRole('button', { name: 'Копировать: Установка скила в Claude Code' }).click();
+  await expect(
+    skill.getByRole('button', { name: 'Скопировано: Установка скила в Claude Code' }),
+  ).toBeVisible();
+  const copiedClaudeSkill = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiedClaudeSkill).toBe(claudeSkill);
+  expect(copiedClaudeSkill).not.toContain(secret);
+
+  await secretDialog
+    .getByRole('navigation', { name: 'Клиент' })
+    .getByRole('link', { name: 'Codex', exact: true })
+    .click();
+  await expect(
+    secretDialog
+      .getByRole('region', { name: 'Codex', exact: true })
+      .locator('figure pre code')
+      .first(),
+  ).toContainText('bearer_token_env_var');
+  await skill.getByRole('button', { name: 'Копировать: Установка скила в Codex' }).click();
+  await expect(
+    skill.getByRole('button', { name: 'Скопировано: Установка скила в Codex' }),
+  ).toBeVisible();
+  const copiedCodexSkill = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiedCodexSkill).toBe(
+    'codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills\n' +
+      'codex plugin add casefile@casefile',
+  );
+  expect(copiedCodexSkill).not.toContain(secret);
+  await secretDialog
+    .getByRole('navigation', { name: 'Клиент' })
+    .getByRole('link', { name: 'Claude Code', exact: true })
+    .click();
 
   // Доступность окна секрета: сверяется полный список нарушений, а не порог тяжести.
   // Тема здесь одна — та, что у проекта; вторую меряет сценарий ниже своим контекстом,

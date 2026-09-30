@@ -457,5 +457,29 @@ export const ui = {
       'Форма файла <code>.mcp.json</code> Claude Code. У Cursor те же <code>url</code> и <code>headers</code>; Windsurf, Gemini CLI и VS Code называют поля иначе — сверьтесь с документацией своего клиента.',
     jsonLabel: 'Конфигурация mcpServers',
     jsonCaption: 'JSON',
+    skill: {
+      title: 'Установите скил',
+      intro:
+        'Подключение даёт инструменты, скил учит ими пользоваться: как вести дело, что записать перед остановкой, что делать при 401. Токен для скила не нужен — он один для всех установок, в том числе для общей установки на сервере. Команды выполняются на машине, где работает агент.',
+      claudeLabel: 'Установка скила в Claude Code',
+      claudeHint:
+        'Работающая сессия нового плагина не увидит: перезапустите её или выполните <code>/reload-plugins</code>.',
+      codexLabel: 'Установка скила в Codex',
+      codexHint:
+        'Обновить: <code>codex plugin marketplace upgrade casefile</code>. Приложение Codex после установки перезапустите.',
+      codexAppHint: 'Или пунктом «Добавить маркетплейс» в приложении Codex:',
+      codexAppField: {
+        source: 'Источник',
+        ref: 'Git ref',
+        sparse: 'Выборочные пути',
+      },
+      otherLabel: 'Установка скила в другого агента',
+      machineHint:
+        'Или одна строка на машине агента: она ставит скил во все найденные там клиенты и печатает, где он встал. Docker и каталог установки для неё не нужны — переменная <code>CASEFILE_SKILL_ONLY=1</code> оставляет только скил.',
+      machineBashLabel: 'Скил во все клиенты машины (bash/zsh)',
+      machineBashCaption: 'Терминал, на машине агента',
+      machinePowerShellLabel: 'Скил во все клиенты машины (PowerShell)',
+      machinePowerShellCaption: 'PowerShell, на машине агента',
+    },
   },
 } as const;

@@ -63,7 +63,8 @@ describe('словари языков', () => {
     // `snake_case` на любом языке интерфейса, и переведённый пример показывал бы то,
     // чего бэкенд не примет. И подпись родителя (UI-119): ключ, разделитель, название
     // и число остальных — подстановки и знаки, слов в них нет. И номера крайних записей
-    // группы правок (UI-133): два числа через тире.
+    // группы правок (UI-133): два числа через тире. И подпись «Git ref» пункта «Добавить
+    // маркетплейс» приложения Codex (TRK-420): так поле названо в приложении на любом языке.
     const sameOnPurpose = new Set([
       'access.agent.namePlaceholder',
       'people.create.namePlaceholder',
@@ -81,6 +82,7 @@ describe('словари языков', () => {
       'ui.snippets.clients.json',
       'ui.snippets.addressCaption',
       'ui.snippets.codexField.url',
+      'ui.snippets.skill.codexAppField.ref',
       'ui.snippets.jsonCaption',
       'ui.task.parents.caption',
       'ui.task.parents.item',

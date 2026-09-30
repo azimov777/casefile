@@ -472,5 +472,29 @@ export const ui = {
       'The shape of the Claude Code <code>.mcp.json</code> file. Cursor reads <code>url</code> and <code>headers</code> under the same names; Windsurf, Gemini CLI and VS Code name the fields differently — check the documentation of your client.',
     jsonLabel: 'mcpServers configuration',
     jsonCaption: 'JSON',
+    skill: {
+      title: 'Install the skill',
+      intro:
+        'Connecting gives the agent the tools; the skill teaches it to use them: how to keep a case, what to write before stopping, what to do on a 401. The skill needs no token — it is the same for every installation, a shared server installation included. Run the commands on the machine where the agent works.',
+      claudeLabel: 'Skill install for Claude Code',
+      claudeHint:
+        'A running session does not see the new plugin: restart it or run <code>/reload-plugins</code>.',
+      codexLabel: 'Skill install for Codex',
+      codexHint:
+        'To update: <code>codex plugin marketplace upgrade casefile</code>. Restart the Codex app after installing.',
+      codexAppHint: 'Or with the "Add marketplace" item in the Codex app:',
+      codexAppField: {
+        source: 'Source',
+        ref: 'Git ref',
+        sparse: 'Sparse paths',
+      },
+      otherLabel: 'Skill install for another agent',
+      machineHint:
+        'Or one line on the agent machine: it installs the skill into every client found there and prints where it stands. It needs no Docker and no installation directory — <code>CASEFILE_SKILL_ONLY=1</code> keeps the skill only.',
+      machineBashLabel: 'Skill for every client on the machine (bash/zsh)',
+      machineBashCaption: 'Terminal, on the agent machine',
+      machinePowerShellLabel: 'Skill for every client on the machine (PowerShell)',
+      machinePowerShellCaption: 'PowerShell, on the agent machine',
+    },
   },
 } as const;

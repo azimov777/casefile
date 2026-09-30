@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   LABEL_HEADER,
@@ -196,5 +198,62 @@ describe('кавычки PowerShell', () => {
     expect(codexEnv.powerShell).toBe(
       `$env:${TOKEN_ENV} = "\`$(rm -rf ~)\`\`whoami\`\`\`"quoted\`""`,
     );
+  });
+});
+
+/** Гайд агента, из которого команды скила берёт и установщик (`docs/agent-install.md`). */
+const GUIDE = resolve(__dirname, '../../../../../docs/agent-install.md');
+
+/** Гайд без ограждений кода и отступов: многострочная команда лежит в нём строками подряд. */
+function guideLines(): string {
+  return readFileSync(GUIDE, 'utf8')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('```'))
+    .map((line) => line.trim())
+    .join('\n');
+}
+
+describe('установка скила во фрагментах', () => {
+  const skill = connectionSnippets({ mcpUrl: ADDRESS, labelled: false }).skill;
+
+  it('команды скила совпадают с гайдом `docs/agent-install.md` байт в байт', () => {
+    const guide = guideLines();
+    const commands = [
+      skill.claudeCode,
+      skill.codex,
+      skill.other,
+      skill.machine.bashZsh,
+      skill.machine.powerShell,
+    ];
+    for (const command of commands) {
+      expect(guide, command).toContain(command);
+    }
+  });
+
+  it('поля пункта «Добавить маркетплейс» Codex согласны с флагами команды', () => {
+    const value = (key: string) => skill.codexMarketplace.find((field) => field.key === key)?.value;
+    expect(skill.codex).toContain(`marketplace add ${value('source')} --ref ${value('ref')}`);
+    for (const path of (value('sparse') ?? '').split(', ')) {
+      expect(skill.codex).toContain(`--sparse ${path}`);
+    }
+  });
+
+  it('скил один для всех установок: ни адреса, ни токена, ни метки в нём нет', () => {
+    const issued = connectionSnippets({
+      mcpUrl: OTHER,
+      token: TOKEN,
+      labelled: true,
+    }).skill;
+    // Тот же текст при другом адресе, токене и метке: скил от входа не зависит.
+    expect(issued).toEqual(skill);
+    const all = JSON.stringify(issued);
+    for (const foreign of [OTHER, 'mcp.example.test', TOKEN, TOKEN_PLACEHOLDER, LABEL_HEADER]) {
+      expect(all).not.toContain(foreign);
+    }
+  });
+
+  it('строка на машину агента оставляет только скил в обеих оболочках', () => {
+    expect(skill.machine.bashZsh).toContain('CASEFILE_SKILL_ONLY=1 sh');
+    expect(skill.machine.powerShell).toContain('$env:CASEFILE_SKILL_ONLY=1;');
   });
 });

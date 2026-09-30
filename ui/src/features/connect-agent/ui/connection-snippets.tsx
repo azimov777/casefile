@@ -11,6 +11,8 @@ import {
   TOKEN_ENV,
   connectionSnippets,
   type CodexFormField,
+  type CodexMarketplaceField,
+  type SkillTexts,
   type SnippetInput,
   type SnippetTexts,
 } from '../model/snippets';
@@ -101,6 +103,10 @@ export function ConnectionSnippets({ mcpUrl, token, labelled }: SnippetInput) {
       <Client key={client} title={t(CLIENT_TITLE[client])}>
         <ClientFragments client={client} snippets={snippets} mcpUrl={mcpUrl} />
       </Client>
+
+      {/* Второй шаг подключения (TRK-420): вне раздела клиента, чтобы тексты и роли его
+          фрагментов не мешались с фрагментами подключения. */}
+      <SkillStep client={client} skill={snippets.skill} />
     </div>
   );
 }
@@ -191,6 +197,93 @@ function ClientFragments({
         </>
       );
   }
+}
+
+/**
+ * Установка скила выбранного клиента: без токена и адреса — скил общий для всех
+ * установок. Под клиентом стоит его команда, под ней — строка на всю машину в обеих
+ * оболочках (человек на сервере запускает её там, где живёт агент, без Docker).
+ */
+function SkillStep({ client, skill }: { client: Client; skill: SkillTexts }) {
+  const { t } = useTranslation('ui');
+  const id = useId();
+  const code = { code: <code /> };
+
+  return (
+    <section
+      aria-labelledby={id}
+      className="mt-3 flex min-w-0 flex-col gap-3 border-t border-line pt-4"
+    >
+      <h3 id={id} className="text-body font-medium text-text">
+        {t('snippets.skill.title')}
+      </h3>
+      <Hint>{t('snippets.skill.intro')}</Hint>
+      {client === 'claude-code' ? (
+        <>
+          <CopyBlock
+            label={t('snippets.skill.claudeLabel')}
+            caption={t('snippets.terminalCaption')}
+            text={skill.claudeCode}
+          />
+          <Hint>
+            <Trans t={t} i18nKey="snippets.skill.claudeHint" components={code} />
+          </Hint>
+        </>
+      ) : null}
+      {client === 'codex' ? (
+        <>
+          <CopyBlock
+            label={t('snippets.skill.codexLabel')}
+            caption={t('snippets.terminalCaption')}
+            text={skill.codex}
+          />
+          <Hint>
+            <Trans t={t} i18nKey="snippets.skill.codexHint" components={code} />
+          </Hint>
+          <CodexMarketplace fields={skill.codexMarketplace} />
+        </>
+      ) : null}
+      {client === 'json' || client === 'any' ? (
+        <CopyBlock
+          label={t('snippets.skill.otherLabel')}
+          caption={t('snippets.terminalCaption')}
+          text={skill.other}
+        />
+      ) : null}
+      <Hint>
+        <Trans t={t} i18nKey="snippets.skill.machineHint" components={code} />
+      </Hint>
+      <CopyBlock
+        label={t('snippets.skill.machineBashLabel')}
+        caption={t('snippets.skill.machineBashCaption')}
+        text={skill.machine.bashZsh}
+      />
+      <CopyBlock
+        label={t('snippets.skill.machinePowerShellLabel')}
+        caption={t('snippets.skill.machinePowerShellCaption')}
+        text={skill.machine.powerShell}
+      />
+    </section>
+  );
+}
+
+/** Значения пункта «Добавить маркетплейс» приложения Codex, по одному на строку. */
+function CodexMarketplace({ fields }: { fields: CodexMarketplaceField[] }) {
+  const { t } = useTranslation('ui');
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <p className="text-meta text-muted">{t('snippets.skill.codexAppHint')}</p>
+      <dl className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-1 rounded-control fold:grid-cols-[minmax(0,auto)_minmax(0,1fr)] border border-line bg-surface px-3 py-2 text-meta">
+        {fields.map((field) => (
+          <div key={field.key} className="contents">
+            <dt className="text-muted">{t(`snippets.skill.codexAppField.${field.key}`)}</dt>
+            <dd className="font-mono wrap-anywhere text-text">{field.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 }
 
 /** Раздел одного клиента: заголовок, объяснение и его фрагменты. */
