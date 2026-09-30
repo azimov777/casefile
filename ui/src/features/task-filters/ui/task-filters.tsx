@@ -71,10 +71,23 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
   const menuRef = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation('tasks');
 
-  // Отбор меняется и мимо формы: «сбросить», кнопка «назад», открытая ссылка.
+  /*
+   * Отбор меняется и мимо формы: «сбросить», кнопка «назад», открытая ссылка. Поле
+   * перечитывается из адреса только тогда, когда изменилось его собственное значение:
+   * адрес фиксируется позже нажатия (`setSearchParams` идёт переходом), и новый объект
+   * `filters` от соседнего условия приходил уже после того, как человек начал печатать
+   * в поле исполнителя, — и стирал набранное (TRK-423). Каждое поле — свой эффект, чтобы
+   * смена одного не затирала черновик другого.
+   */
   useEffect(() => {
-    setDraft(toDraft(filters));
-  }, [filters]);
+    setDraft((current) => ({ ...current, assignee: filters.assignee }));
+  }, [filters.assignee]);
+  useEffect(() => {
+    setDraft((current) => ({ ...current, text: filters.text }));
+  }, [filters.text]);
+  useEffect(() => {
+    setDraft((current) => ({ ...current, query: filters.query }));
+  }, [filters.query]);
 
   const conditions = describeFilters(filters, t);
   const archiveHint = t('filters.archive.hint', { count: ARCHIVE_AFTER_DAYS });

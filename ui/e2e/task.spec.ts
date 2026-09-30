@@ -233,6 +233,10 @@ test('доступность карточки задачи', async ({ page }) =>
 
   await page.getByRole('button', { name: /Обзорная проверка 2/ }).click();
   await expect(page.getByText('Неприменимый оператор').first()).toBeVisible();
+  // Раскрытие записи приезжает с прозрачностью (`shared/ui/reveal.tsx`): на середине
+  // движения `text-faint` смешан с фоном `bg-sunken` и даёт 3.37 вместо покоя. Замер —
+  // дело покоя, а не кадра движения; под нагрузкой кадр поспевал раньше замера (TRK-423).
+  await motionSettled(page.locator('[data-reveal="place"]'));
 
   const opened = await new AxeBuilder({ page }).analyze();
   expect(opened.violations).toEqual([]);
