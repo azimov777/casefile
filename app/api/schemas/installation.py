@@ -26,7 +26,7 @@ class ReleaseRead(BaseModel):
     """Версия установки и последний выпуск Casefile: отстаёт ли установка (TRK-416)."""
 
     version: str = Field(
-        examples=["0.7.0"], description="Casefile version this installation runs, without `v`"
+        examples=["1.2.3"], description="Casefile version this installation runs, without `v`"
     )
     latest_version: str | None = Field(
         examples=["0.8.0"],
