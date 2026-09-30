@@ -92,7 +92,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `create_task` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Create task", annotations=FILING, creating=True)
     async def create_task(
         project: ProjectKeyArg,
         title: TaskTitleArg,

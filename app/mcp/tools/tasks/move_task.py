@@ -159,7 +159,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `move_task` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, scope=TokenScope.MAIN)
+    @tools.tool(title="Move task to project", annotations=FILING, scope=TokenScope.MAIN)
     async def move_task(key: MoveKeyArg, project: ProjectArg, reason: MoveReasonArg) -> MoveView:
         """Moves a task to another project, recording the move, both keys and the reason
         as a `moved` entry of the task. Available to a `main` token alone.

@@ -329,7 +329,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="Search tasks", annotations=READ_ONLY)
     async def search_tasks(
         query: QueryArg = None,
         key: KeysArg = None,

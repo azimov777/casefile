@@ -79,7 +79,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `get_project` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="Get project", annotations=READ_ONLY)
     async def get_project(key: ProjectKeyArg) -> ProjectView:
         """Returns one project by its key: key, title, description, current attribute
         values and the index of the project's case.

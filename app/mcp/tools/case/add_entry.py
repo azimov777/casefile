@@ -15,7 +15,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `add_entry` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Add case entry", annotations=FILING, creating=True)
     async def add_entry(
         key: TaskKeyArg,
         type: EntryTypeArg,

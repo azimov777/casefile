@@ -34,7 +34,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `update_project` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=IDEMPOTENT_TASK_UPDATE, scope=TokenScope.MAIN)
+    @tools.tool(title="Update project", annotations=IDEMPOTENT_TASK_UPDATE, scope=TokenScope.MAIN)
     async def update_project(
         key: ProjectKeyArg,
         title: ProjectTitleChangeArg = None,

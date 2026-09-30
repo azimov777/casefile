@@ -25,7 +25,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `update_participant` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=OVERWRITING_UPDATE, scope=TokenScope.MAIN)
+    @tools.tool(title="Update participant", annotations=OVERWRITING_UPDATE, scope=TokenScope.MAIN)
     async def update_participant(
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg,

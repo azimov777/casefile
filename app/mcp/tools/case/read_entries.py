@@ -14,7 +14,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="Read case entries", annotations=READ_ONLY)
     async def read_entries(
         key: TaskKeyArg,
         nos: EntryNosArg = None,

@@ -53,7 +53,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `resolve` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Resolve remark", annotations=FILING, creating=True)
     async def resolve(
         key: TaskKeyArg,
         remark_no: RemarkNoArg,

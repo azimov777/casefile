@@ -95,7 +95,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `update_task` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=IDEMPOTENT_TASK_UPDATE)
+    @tools.tool(title="Update task", annotations=IDEMPOTENT_TASK_UPDATE)
     async def update_task(
         key: TaskKeyArg,
         changes: TaskChanges,

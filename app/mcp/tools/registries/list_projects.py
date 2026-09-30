@@ -43,7 +43,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="List projects", annotations=READ_ONLY)
     async def list_projects(
         include_archived: IncludeArchivedArg = False,
         limit: LimitArg = None,

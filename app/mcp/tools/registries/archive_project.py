@@ -12,7 +12,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `archive_project` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, scope=TokenScope.MAIN)
+    @tools.tool(title="Archive project", annotations=FILING, scope=TokenScope.MAIN)
     async def archive_project(key: ProjectKeyArg, reason: ProjectReasonArg) -> ProjectArchiveView:
         """Archives a project with a reason and files an `archived` entry in its case. Only
         a `main` token archives.

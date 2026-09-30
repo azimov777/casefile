@@ -61,7 +61,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="Wait for journal entries", annotations=READ_ONLY)
     async def wait_journal(
         after: AfterArg = JOURNAL_START,
         task: JournalTaskArg = None,

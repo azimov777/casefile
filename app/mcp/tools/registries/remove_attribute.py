@@ -43,7 +43,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `remove_attribute` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Remove attribute", annotations=FILING, creating=True)
     async def remove_attribute(
         key: ProjectKeyArg,
         name: AttributeNameArg,
