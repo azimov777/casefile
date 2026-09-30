@@ -278,4 +278,4 @@ async def test_the_instructions_point_at_the_skill_resource_the_server_lists(
     named = set(re.findall(r"`(skill://[^`]+)`", result.instructions or ""))
 
     assert named == {"skill://casefile/SKILL.md"}, f"указатель на скил в `instructions`: {named}"
-    assert named <= listed, f"`instructions` называют ресурс, которого нет в списке: {named}"
+    assert named <= listed, f"адреса нет в `resources/list`: {named}"
