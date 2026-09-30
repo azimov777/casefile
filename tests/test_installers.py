@@ -327,7 +327,12 @@ SKILL_COMMANDS = (
 
 #: Строки подключения MCP, которыми блоки Codex и Hermes отличаются от Claude Code
 #: (TRK-398#9): у Codex `http_headers` работает и в приложении, у Hermes — `headers`.
-CONNECT_LINES = ("[mcp_servers.casefile]", "http_headers = { Authorization =", "mcp_servers:")
+CONNECT_LINES = (
+    "[mcp_servers.casefile]",
+    "http_headers = { Authorization =",
+    "tool_timeout_sec = 90",
+    "mcp_servers:",
+)
 
 
 def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:

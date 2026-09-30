@@ -46,6 +46,7 @@ Codex reads the server from `~/.codex/config.toml`:
 [mcp_servers.casefile]
 url = "<MCP address>"
 http_headers = { Authorization = "Bearer <token>" }
+tool_timeout_sec = 90
 ```
 
 The key is `http_headers`: a `headers` key in the Claude Code format is not applied by

@@ -100,6 +100,7 @@ describe('фрагменты подключения', () => {
         `url = "${ADDRESS}"`,
         `bearer_token_env_var = "${TOKEN_ENV}"`,
         `http_headers = { "${LABEL_HEADER}" = "${LABEL_PLACEHOLDER}" }`,
+        'tool_timeout_sec = 90',
       ].join('\n'),
     );
     expect(issued.codexForm.map((field) => field.value)).not.toContain(TOKEN);

@@ -61,6 +61,7 @@ cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/a
   [mcp_servers.casefile]
   url = "<MCP address from the installer output>"
   http_headers = { Authorization = "Bearer <token>" }
+  tool_timeout_sec = 90
   ```
 
   From a terminal only, the token can stay out of the file: `export CASEFILE_TOKEN=<token>`
