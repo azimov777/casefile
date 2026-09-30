@@ -92,7 +92,7 @@ class TaskChanges(BaseModel):
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `update_task` в наборе `task`."""
+    """Объявляет `update_task`."""
     runtime = tools.runtime
 
     @tools.tool(title="Update task", annotations=IDEMPOTENT_TASK_UPDATE)

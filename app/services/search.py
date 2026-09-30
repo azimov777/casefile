@@ -88,11 +88,9 @@ from app.domain.search import (
     split_names,
 )
 from app.domain.tasks import AskedParent, TaskFeatures, TaskPriority, TaskStatus
-from app.domain.tokens import TokenScope
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,7 +218,6 @@ async def resolve_task_filter(
     как поиск. Разрешение имён и значений при этом остаётся одним — иначе расхождение
     было бы молчаливым.
     """
-    ensure_scope(actor, TokenScope.TASK, action="task.search")
 
     parts: list[SearchFilter] = []
     if query:

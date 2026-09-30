@@ -89,7 +89,7 @@ SectionsArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `create_task` в наборе `task`."""
+    """Объявляет `create_task`."""
     runtime = tools.runtime
 
     @tools.tool(title="Create task", annotations=FILING, creating=True)

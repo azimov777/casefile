@@ -18,7 +18,6 @@ from app.core.config import get_settings
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
-from app.domain.tokens import TokenScope
 from app.mcp.runtime import Runtime, SessionFactory, bearer_token, use_headers
 from app.services import tokens as tokens_service
 from app.services.auth import Actor
@@ -110,7 +109,6 @@ async def test_a_call_resolves_the_author_behind_the_token(
     ):
         assert isinstance(session, AsyncSession)
         assert actor.author.signature == owner.name
-        assert actor.scope is TokenScope.MAIN
 
 
 async def test_a_shared_token_takes_its_signature_from_the_message_header(
@@ -235,7 +233,6 @@ async def test_a_revoked_token_gets_401_with_token_revoked_on_the_transport(
         db_session,
         actor=main_actor,
         participant=owner,
-        scope=TokenScope.MAIN,
         name="to-revoke",
     )
     await tokens_service.revoke_token(db_session, issued.token.id, actor=main_actor)

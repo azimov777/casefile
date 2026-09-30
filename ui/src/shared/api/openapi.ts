@@ -229,7 +229,7 @@ export interface paths {
          * Issue a token
          * @description Единственный ответ, содержащий секрет токена: второго способа узнать его нет.
          *
-         *     Требует набора `main` и учётной записи у выпускающего: выпускает человек, а не агент
+         *     Требует учётной записи у выпускающего: выпускает человек, а не агент
          *     (`403 permission_denied`, `details.reason: account_required`). Ключ от имени другого
          *     человека выпускает только администратор (`details.reason: foreign_human`); себе,
          *     агенту-участнику и общий — любой вошедший. Выпущенный токен — свой у выпустившего: он
@@ -2317,7 +2317,7 @@ export interface components {
         };
         /**
          * CurrentTokenRead
-         * @description Токен, которым сделан запрос: чем узнать его в списке и что он открывает.
+         * @description Токен, которым сделан запрос: чем узнать его в списке.
          *
          *     Не `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,
          *     а список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там.
@@ -2330,10 +2330,13 @@ export interface components {
              */
             id: string;
             /**
-             * @description Scope of that token, the only right in the tracker: `task` opens the working cycle, `main` adds writes to projects, participants and tokens. A write beyond it answers `403 permission_denied`
-             * @example task
+             * Scope
+             * @deprecated
+             * @description Deprecated: token scopes are gone and every token opens everything, so this is always `main`. Kept only until the interface stops reading it
+             * @default main
+             * @example main
              */
-            scope: components["schemas"]["TokenScope"];
+            scope: string;
         };
         /** DataResponse[AccountRead] */
         DataResponse_AccountRead_: {
@@ -5222,12 +5225,6 @@ export interface components {
              */
             name: string;
             /**
-             * @description `task` opens the working cycle, `main` adds writes to registries
-             * @default task
-             * @example task
-             */
-            scope: components["schemas"]["TokenScope"];
-            /**
              * Participant
              * @description Participant this token speaks for; omit it to issue a shared agent token
              * @example release_bot
@@ -5249,8 +5246,6 @@ export interface components {
              * @example release-bot on ci
              */
             name: string;
-            /** @example task */
-            scope: components["schemas"]["TokenScope"];
             /**
              * Participant
              * @description Name of the participant this token belongs to; null makes it a shared agent token, which must carry the X-Actor-Label header on every request
@@ -5300,8 +5295,6 @@ export interface components {
              * @example release-bot on ci
              */
             name: string;
-            /** @example task */
-            scope: components["schemas"]["TokenScope"];
             /**
              * Participant
              * @description Name of the participant this token belongs to; null makes it a shared agent token, which must carry the X-Actor-Label header on every request
@@ -5330,22 +5323,6 @@ export interface components {
              */
             expires_at?: string | null;
         };
-        /**
-         * TokenScope
-         * @description Набор токена — единственное право в трекере.
-         *
-         *     Ролей, владельцев и разрешений по роду участника нет и не будет (`CONCEPT.md`, 6):
-         *     любую запись и любой переход может сделать кто угодно, а набор отделяет рабочий цикл
-         *     агента от управления установкой. Вход в `in_progress` только исполнителю — проверка
-         *     перехода в домене (`check_taken_by_assignee`), а не право.
-         *
-         *     | Набор | Открывает |
-         *     |---|---|
-         *     | `task` | Рабочий цикл: задачи, дело, связи, поиск, лента, чтение реестров. |
-         *     | `main` | То же плюс запись проектов, участников и токенов. |
-         * @enum {string}
-         */
-        TokenScope: "task" | "main";
         /**
          * VerdictEntryCreate
          * @description Вердикт. Заголовок не принимается; тело записи — доказательство исхода.

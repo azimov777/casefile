@@ -144,7 +144,7 @@ def closed_task(closure: TaskClosure) -> ClosedTaskView:
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `close_task` в наборе `task`."""
+    """Объявляет `close_task`."""
     runtime = tools.runtime
 
     @tools.tool(title="Close task", annotations=FILING, creating=True)

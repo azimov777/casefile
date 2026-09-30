@@ -31,7 +31,6 @@ from app.domain.archive import EXCLUDED_TABLES, Archive, ArchiveFormat, ArchiveT
 from app.domain.errors import ArchiveInvalidError
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
-from app.domain.tokens import TokenScope
 from app.services import archive as archive_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
@@ -166,24 +165,22 @@ async def test_browser_sessions_stay_behind(
     assert len(tokens["rows"]) == await count(db_session, Token) - 1
 
 
-@pytest.mark.parametrize("scope", [TokenScope.TASK, TokenScope.MAIN])
 async def test_only_an_administrator_exports_and_imports(
-    client: AsyncClient, db_session: AsyncSession, scope: TokenScope
+    client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """Агент с любым набором — нет: в архиве хеши паролей и токенов всех людей."""
+    """Агент — нет: в архиве хеши паролей и токенов всех людей."""
     agent = await participants_service.register_participant(
         db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="helper"
     )
     issued = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=agent, scope=scope, name="helper"
+        db_session, actor=TRACKER_ACTOR, participant=agent, name="helper"
     )
-    expected = "permission_denied" if scope is TokenScope.TASK else "admin_required"
 
     exported = await client.get(ARCHIVE, headers=bearer(issued.secret))
     imported = await client.post(ARCHIVE, json={"data": {}}, headers=bearer(issued.secret))
 
     assert exported.status_code == 403
-    assert exported.json()["error"]["code"] == expected
+    assert exported.json()["error"]["code"] == "admin_required"
     # Тело проверяется раньше прав — пустой архив отклонён формой, до сценария.
     assert imported.status_code == 422
 
@@ -204,7 +201,7 @@ async def test_a_fresh_installation_takes_the_archive_whole(
         db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="helper"
     )
     personal = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=helper, scope=TokenScope.TASK, name="own"
+        db_session, actor=TRACKER_ACTOR, participant=helper, name="own"
     )
     source_ui, source_agent = await fresh_installation(db_session)
     signed = await sign_in(auth_client, "owner@localhost", PASSWORD)
@@ -411,6 +408,9 @@ V0_3_REVISION = "7f4089f291b8"
 #: Старое имя — как оно лежит в архиве, новое — как его читать из нынешней базы.
 RENAMED_TABLES = {"queues": "projects"}
 RENAMED_COLUMNS = {("tasks", "queue_id"): "project_id"}
+#: Колонки, снятые после той ревизии: в нынешней базе их нет, в архив они уходят значением
+#: из старой схемы (набор токена до TRK-471).
+DROPPED_COLUMNS = {("tokens", "scope"): "task"}
 
 
 async def archive_at(client: AsyncClient, session: AsyncSession, revision: str) -> dict[str, Any]:
@@ -428,10 +428,20 @@ async def archive_at(client: AsyncClient, session: AsyncSession, revision: str) 
     for name, columns in old_tables.items():
         if name in EXCLUDED_TABLES:
             continue
-        current = [RENAMED_COLUMNS.get((name, column), column) for column in columns]
+        current = [
+            RENAMED_COLUMNS.get((name, column), column)
+            for column in columns
+            if (name, column) not in DROPPED_COLUMNS
+        ]
         rows = await store.read_rows(
             session, store.PUBLIC_SCHEMA, RENAMED_TABLES.get(name, name), current
         )
+        for position, column in enumerate(columns):
+            if (name, column) in DROPPED_COLUMNS:
+                rows = [
+                    [*row[:position], DROPPED_COLUMNS[(name, column)], *row[position:]]
+                    for row in rows
+                ]
         if name == "entries" and "project_id" not in columns:
             # Записей дела проекта (TRK-156) до их ревизии не было: архив той версии их
             # не содержит, а в схеме той ревизии у записи без задачи нет владельца.

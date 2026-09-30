@@ -36,7 +36,7 @@ BlockingArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `ask` в наборе `task`."""
+    """Объявляет `ask`."""
     runtime = tools.runtime
 
     @tools.tool(title="Ask question", annotations=FILING, creating=True)

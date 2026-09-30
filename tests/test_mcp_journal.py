@@ -41,7 +41,6 @@ from app.domain.authors import TRACKER
 from app.domain.journal import MAX_TASK_KEYS
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskField
-from app.domain.tokens import TokenScope
 from app.mcp.__main__ import journal_listener
 from app.mcp.runtime import Runtime
 from app.mcp.server import create_server
@@ -190,7 +189,6 @@ async def committed_world(
             session,
             actor=TRACKER_ACTOR,
             participant=participant,
-            scope=TokenScope.TASK,
             name="wake test",
         )
         project = Project(key=f"WAKE{suffix}", title="Пробуждение", **created_by_columns(TRACKER))

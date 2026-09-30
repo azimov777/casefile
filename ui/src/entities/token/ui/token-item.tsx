@@ -38,7 +38,8 @@ export function TokenItem({
   const revoked = isRevoked(token);
   const author = token.created_by.signature ?? null;
   const shared = token.participant === null || token.participant === undefined;
-  const scopeHint = t(token.scope === 'main' ? 'token.scopeMain' : 'token.scopeTask');
+  const scope = token.scope;
+  const scopeHint = t(scope === 'main' ? 'token.scopeMain' : 'token.scopeTask');
   const scopeHintId = useId();
   // Что открывает набор, человек узнаёт нажатием на плашку, а не только наведением
   // (UI-163): на телефоне подсказки `title` нет вовсе.
@@ -69,23 +70,26 @@ export function TokenItem({
            * (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`
            * браузера»), на телефоне мишень не ниже `--ui-tap` (UI-154).
            */}
-          <button
-            type="button"
-            className="inline-flex min-w-0 cursor-pointer items-center border-none border-current bg-transparent p-0 max-fold:min-h-(--ui-tap) max-fold:min-w-(--ui-tap)"
-            aria-label={t('token.scopeExplain', { scope: token.scope })}
-            aria-expanded={scopeShown}
-            aria-controls={scopeHintId}
-            onClick={() => setScopeShown((shown) => !shown)}
-          >
-            <Badge
-              mono
-              kind={t('token.scopeKind')}
-              tone={token.scope === 'main' ? 'attention' : 'neutral'}
-              title={scopeHint}
+          {/* Набора в контракте больше нет (TRK-471): плашка — до задачи TRK-473. */}
+          {scope === undefined ? null : (
+            <button
+              type="button"
+              className="inline-flex min-w-0 cursor-pointer items-center border-none border-current bg-transparent p-0 max-fold:min-h-(--ui-tap) max-fold:min-w-(--ui-tap)"
+              aria-label={t('token.scopeExplain', { scope })}
+              aria-expanded={scopeShown}
+              aria-controls={scopeHintId}
+              onClick={() => setScopeShown((shown) => !shown)}
             >
-              {token.scope}
-            </Badge>
-          </button>
+              <Badge
+                mono
+                kind={t('token.scopeKind')}
+                tone={scope === 'main' ? 'attention' : 'neutral'}
+                title={scopeHint}
+              >
+                {scope}
+              </Badge>
+            </button>
+          )}
 
           {current ? <Badge tone="progress">{t('token.thisSession')}</Badge> : null}
           {revoked ? <Badge tone="dropped">{t('token.revoked')}</Badge> : null}

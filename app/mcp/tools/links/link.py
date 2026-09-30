@@ -11,7 +11,7 @@ from app.services import tasks as tasks_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `link` в наборе `task`."""
+    """Объявляет `link`."""
     runtime = tools.runtime
 
     @tools.tool(title="Link tasks", annotations=FILING, creating=True)

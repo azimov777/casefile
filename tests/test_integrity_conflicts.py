@@ -39,7 +39,6 @@ from app.db import session as session_module
 from app.db.repositories import ParticipantRepository, ProjectRepository, TokenRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TokenScope
 from app.mcp.runtime import Runtime
 from app.mcp.server import create_server
 from app.services import participants as participants_service
@@ -82,7 +81,6 @@ async def committed_secret(
             session,
             actor=TRACKER_ACTOR,
             participant=participant,
-            scope=TokenScope.MAIN,
             name="integrity race",
         )
         await session.commit()

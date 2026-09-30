@@ -46,7 +46,6 @@ from app.domain.authors import TRACKER, label_author
 from app.domain.case import EntryType
 from app.domain.links import LinkKind
 from app.domain.tasks import TaskStatus
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
@@ -61,7 +60,7 @@ PROJECT_KEY = "MUTRACE"
 #: Кто переводит в гонке. Не сам трекер: в `in_progress` задачу берёт только её
 #: исполнитель (`CONCEPT.md`, 3.3), а у трекера подписи нет. Метка — чтобы не заводить
 #: участника ради гонки, которая проверяет очередь изменений, а не реестр.
-RACER = Actor(author=label_author("racer"), scope=TokenScope.TASK)
+RACER = Actor(author=label_author("racer"))
 
 
 @dataclass(frozen=True, slots=True)

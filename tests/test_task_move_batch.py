@@ -11,7 +11,6 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import PermissionDeniedError
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
@@ -168,15 +167,11 @@ async def test_an_archived_target_refuses_the_whole_call(
     assert await _moved_entries(db_session, task) == []
 
 
-async def test_scope_reason_and_unknown_project_refuse_the_whole_call(
-    db_session: AsyncSession, main_actor: Actor, task_actor: Actor, project: Project, task: Task
+async def test_reason_and_unknown_project_refuse_the_whole_call(
+    db_session: AsyncSession, main_actor: Actor, project: Project, task: Task
 ) -> None:
     await _ui_with_tasks(db_session, main_actor, 0)
 
-    with pytest.raises(PermissionDeniedError):
-        await tasks_service.move_tasks(
-            db_session, ["TRK-1"], actor=task_actor, project_key="UI", reason="r"
-        )
     with pytest.raises(TaskMoveReasonRequiredError) as blank:
         await tasks_service.move_tasks(
             db_session, ["TRK-1"], actor=main_actor, project_key="UI", reason=" "

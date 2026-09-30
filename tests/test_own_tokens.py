@@ -19,7 +19,6 @@ from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
-from app.domain.tokens import TokenScope
 from app.services import accounts as accounts_module
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
@@ -154,7 +153,7 @@ async def test_an_agent_with_a_main_token_issues_no_tokens(
 ) -> None:
     """Выдача доступов остаётся за человеком: у агента нет учётной записи."""
     issued = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=agent, scope=TokenScope.MAIN, name="main"
+        db_session, actor=TRACKER_ACTOR, participant=agent, name="main"
     )
 
     refused = await client.post(TOKENS, json={"name": "child"}, headers=bearer(issued.secret))
@@ -300,7 +299,7 @@ async def test_a_token_issued_to_a_disabled_person_does_not_let_in_until_enabled
     await auth_client.patch(f"{ACCOUNTS}/{alice_id}", json={"disabled": True})
     participant = await participants_service.get_participant(db_session, "alice")
     issued = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=participant, scope=TokenScope.MAIN, name="cli"
+        db_session, actor=TRACKER_ACTOR, participant=participant, name="cli"
     )
 
     with pytest.raises(UnauthorizedError) as refusal:

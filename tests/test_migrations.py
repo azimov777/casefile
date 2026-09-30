@@ -21,9 +21,11 @@ import asyncpg
 import pytest
 from alembic import command
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.domain.tokens import hash_token
+from app.services.auth import authenticate
 from conftest import _to_asyncpg_dsn, alembic_config
 
 #: Ревизия, снимающая статус, и ревизия перед ней. Идентификаторы записаны литералами:
@@ -813,3 +815,76 @@ async def test_the_onboarding_migration_rolls_back_and_reapplies(
     async with migration_engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == ONBOARDING_REVISION
+
+
+# --- Наборы токена сняты (TRK-471) ----------------------------------------------------
+
+#: Ревизия, снимающая `tokens.scope`, и ревизия перед ней.
+SCOPE_REVISION = "5c81e3a7d92b"
+SCOPE_PREVIOUS = "ebf3dbbcc4e0"
+
+_INSERT_SCOPED_TOKEN = text(
+    "INSERT INTO tokens (participant_id, scope, name, token_hash, created_by_kind, "
+    "created_by_signature) SELECT id, :scope, :name, :hash, 'agent', 'claude' "
+    "FROM participants WHERE name = 'worker'"
+)
+
+
+async def test_a_token_issued_with_the_task_scope_works_after_the_scope_is_dropped(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Живые токены обоих наборов переживают миграцию: колонки нет, доступ остался.
+
+    Токен `task` до миграции не звал `create_project`; после неё его держатель
+    аутентифицируется тем же секретом и получает полного агента. Состав `tools/list` и
+    вызов `create_project` таким токеном проверены в `tests/test_mcp_tools.py` на схеме
+    этой же ревизии.
+    """
+    url = f"{test_database_url}_migrations"
+    await migrate(url, SCOPE_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO participants (kind, name, description, created_by_kind, "
+                "created_by_signature) VALUES ('agent', 'worker', '', 'agent', 'claude')"
+            )
+        )
+        for scope in ("task", "main"):
+            await connection.execute(
+                _INSERT_SCOPED_TOKEN,
+                {"scope": scope, "name": scope, "hash": hash_token(f"trk_{scope}")},
+            )
+
+    await migrate(url, SCOPE_REVISION)
+
+    async with migration_engine.connect() as connection:
+        columns = await connection.scalars(
+            text("SELECT column_name FROM information_schema.columns WHERE table_name = 'tokens'")
+        )
+        assert "scope" not in set(columns)
+        constraints = await connection.scalars(
+            text("SELECT conname FROM pg_constraint WHERE conname = 'ck_tokens_token_scope'")
+        )
+        assert list(constraints) == []
+    async with AsyncSession(migration_engine) as session:
+        for scope in ("task", "main"):
+            actor = await authenticate(session, f"trk_{scope}")
+            assert actor.participant is not None
+            assert actor.participant.name == "worker"
+
+
+async def test_the_scope_migration_rolls_back_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, SCOPE_REVISION)
+
+    await migrate(url, SCOPE_PREVIOUS, down=True)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == SCOPE_PREVIOUS
+
+    await migrate(url, SCOPE_REVISION)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == SCOPE_REVISION

@@ -1,11 +1,10 @@
-"""Инструмент `update_project`: название и описание проекта, только набором `main`."""
+"""Инструмент `update_project`: название и описание проекта."""
 
 from typing import Annotated
 
 from pydantic import Field
 
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
-from app.domain.tokens import TokenScope
 from app.mcp.arguments import ProjectKeyArg
 from app.mcp.tools.registries.views import ProjectKeyView, project_key
 from app.mcp.toolset import IDEMPOTENT_TASK_UPDATE, Toolset
@@ -31,18 +30,18 @@ ProjectDescriptionChangeArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `update_project` в наборе `main`."""
+    """Объявляет `update_project`."""
     runtime = tools.runtime
 
-    @tools.tool(title="Update project", annotations=IDEMPOTENT_TASK_UPDATE, scope=TokenScope.MAIN)
+    @tools.tool(title="Update project", annotations=IDEMPOTENT_TASK_UPDATE)
     async def update_project(
         key: ProjectKeyArg,
         title: ProjectTitleChangeArg = None,
         description: ProjectDescriptionChangeArg = None,
     ) -> ProjectKeyView:
-        """Changes a project's title and description; a field left out stays. Only a `main`
-        token edits projects. The key never changes. Each changed field files a
-        `field_changed` entry with the previous and the new value in the project's case;
+        """Changes a project's title and description; a field left out stays. The key never
+        changes. Each changed field files a `field_changed`
+        entry with the previous and the new value in the project's case;
         a value equal to the current one files nothing.
         """
         async with runtime.call() as (session, actor):

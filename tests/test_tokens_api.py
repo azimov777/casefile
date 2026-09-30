@@ -1,12 +1,17 @@
-"""Эндпоинты токенов: секрет виден один раз, отзыв идемпотентен, запись только с `main`.
+"""Эндпоинты токенов: секрет виден один раз, отзыв идемпотентен, выпуск — человеком.
 
 Здесь же проверяется работа общего агентского токена через HTTP — заголовок
 `X-Actor-Label` и подпись, которая из него получается.
 """
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
+from app.domain.participants import ParticipantKind
+from app.services import participants as participants_service
+from app.services import tokens as tokens_service
+from app.services.auth import TRACKER_ACTOR
 
 
 async def test_the_secret_is_shown_once_and_never_in_the_list(
@@ -16,14 +21,14 @@ async def test_the_secret_is_shown_once_and_never_in_the_list(
     """Обзорная проверка 7."""
     issued = await auth_client.post(
         "/api/v1/tokens",
-        json={"name": "ci", "scope": "task", "participant": "owner"},
+        json={"name": "ci", "participant": "owner"},
     )
 
     assert issued.status_code == 201, issued.text
     body = issued.json()["data"]
     assert body["secret"].startswith("trk_")
     assert body["participant"] == "owner"
-    assert body["scope"] == "task"
+    assert "scope" not in body
 
     listed = await auth_client.get("/api/v1/tokens")
 
@@ -65,14 +70,40 @@ async def test_revoking_is_idempotent_and_keeps_the_record(
     assert revoked[0]["revoked_at"] is not None
 
 
-async def test_writing_requires_the_main_scope(client: AsyncClient, task_secret: str) -> None:
-    client.headers["Authorization"] = f"Bearer {task_secret}"
+async def test_an_agent_token_cannot_issue_tokens_and_a_scope_field_is_refused(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    auth_client: AsyncClient,
+) -> None:
+    """Обзорная проверка 4: агент получает прежний отказ «нужна учётная запись».
 
-    forbidden = await client.post("/api/v1/tokens", json={"name": "ci"})
-    readable = await client.get("/api/v1/tokens")
+    Выпуск остаётся за человеком с учётной записью (`account_required`), а не за набором,
+    которого больше нет. Лишнее поле `scope` — отказ проверки (`422`), как у любого
+    неизвестного поля тела.
+    """
+    agent = await participants_service.register_participant(
+        db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="worker"
+    )
+    issued = await tokens_service.issue_token(
+        db_session, actor=TRACKER_ACTOR, participant=agent, name="worker"
+    )
+
+    forbidden = await client.post(
+        "/api/v1/tokens", json={"name": "ci"}, headers={"Authorization": f"Bearer {issued.secret}"}
+    )
+    readable = await client.get(
+        "/api/v1/tokens", headers={"Authorization": f"Bearer {issued.secret}"}
+    )
+    with_scope = await auth_client.post("/api/v1/tokens", json={"name": "ci", "scope": "task"})
 
     assert forbidden.status_code == 403
+    assert forbidden.json()["error"]["code"] == "permission_denied"
+    assert forbidden.json()["error"]["details"] == {
+        "action": "token.issue",
+        "reason": "account_required",
+    }
     assert readable.status_code == 200
+    assert with_scope.status_code == 422
 
 
 # --- Общий агентский токен через HTTP ----------------------------------------------
@@ -97,12 +128,12 @@ async def test_a_shared_token_with_the_header_signs_with_the_label(
 ) -> None:
     """Обзорная проверка 3, вторая половина: автор создающего вызова — метка и род `agent`.
 
-    Заводить проект общим токеном нельзя (нужен `main`), поэтому создающий вызов здесь
+    Заводить проект общим токеном нельзя (нужна учётная запись), поэтому создающий вызов здесь
     — регистрация участника: она тоже пишет автора, и общий токен для неё выпускается
     с набором `main`.
     """
     client.headers["Authorization"] = f"Bearer {main_secret}"
-    issued = await client.post("/api/v1/tokens", json={"name": "agents", "scope": "main"})
+    issued = await client.post("/api/v1/tokens", json={"name": "agents"})
     shared_main = issued.json()["data"]["secret"]
 
     client.headers["Authorization"] = f"Bearer {shared_main}"

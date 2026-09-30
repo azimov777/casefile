@@ -29,7 +29,6 @@ from app.domain.errors import (
 )
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskStatus
-from app.domain.tokens import TokenScope
 from app.services import case as service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
@@ -56,7 +55,7 @@ async def entries(session: AsyncSession, task: Task, **filters: Any) -> list[Ent
 
 
 def _reader(task: Task) -> Actor:
-    return Actor(author=task.created_by, scope=TokenScope.TASK)
+    return Actor(author=task.created_by)
 
 
 async def take(session: AsyncSession, task: Task, actor: Actor) -> None:
@@ -635,7 +634,7 @@ async def test_the_inbox_of_a_temporary_agent_is_a_refusal_rather_than_an_empty_
     db_session: AsyncSession, task: Task
 ) -> None:
     """Адресовать временного агента нельзя, и пустой список соврал бы об этом."""
-    temporary = Actor(author=label_author("nightly_agent"), scope=TokenScope.TASK)
+    temporary = Actor(author=label_author("nightly_agent"))
 
     with pytest.raises(ActorNotAddressableError) as error:
         await service.list_questions(db_session, actor=temporary)

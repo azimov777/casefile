@@ -24,7 +24,6 @@ from app.domain.authors import label_author
 from app.domain.case import EntryType, RemarkOutcome
 from app.domain.errors import EntryFieldsInvalidError, SearchFieldUnknownError
 from app.domain.tasks import TaskStatus
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import search as search_service
 from app.services import tasks as tasks_service
@@ -616,7 +615,7 @@ async def test_the_inbox_filters_by_author_and_by_project(
     """
     key = await create(auth_client, "чужие и свои")
     task = await tasks_service.get_task(db_session, key)
-    agent = Actor(author=label_author("nightly_bot"), scope=TokenScope.TASK)
+    agent = Actor(author=label_author("nightly_bot"))
     await file_entry(auth_client, key, type="remark", title="от человека")
     await case_service.add_entry(
         db_session, task, actor=agent, type=EntryType.REMARK, title="от временного агента"

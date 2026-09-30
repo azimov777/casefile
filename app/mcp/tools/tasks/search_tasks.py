@@ -325,7 +325,7 @@ def _clip_into(payload: dict[str, Any], name: str, limit: int) -> None:
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `search_tasks` в наборе `task`."""
+    """Объявляет `search_tasks`."""
     runtime = tools.runtime
     settings = tools.settings
 

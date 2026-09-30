@@ -92,13 +92,11 @@ from app.domain.tasks import (
     returning_key,
     section_values,
 )
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import freeze
 from app.services import links as links_service
 from app.services import projects as projects_service
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,7 +248,6 @@ async def get_task(session: AsyncSession, key: str) -> Task:
 
 
 async def read_task(session: AsyncSession, key: str, *, actor: Actor) -> Task:
-    ensure_scope(actor, TokenScope.TASK, action="task.read")
     return await get_task(session, key)
 
 
@@ -315,7 +312,6 @@ async def create_task(
     Очередь изменений занимается раньше строки проекта: единый порядок захвата
     (`app/db/locks.py`) — то, чем два одновременных создания не встают друг о друга.
     """
-    ensure_scope(actor, TokenScope.TASK, action="task.create")
     # Заморозка архива — до номера, как и всякая проверка создания.
     await freeze.lock_unfrozen(session, project=project)
 
@@ -433,7 +429,6 @@ async def close_task(
     первой подшивки, и переданный явно в каждую — как в `apply_task_changes`, так и в
     записи выше него.
     """
-    ensure_scope(actor, TokenScope.TASK, action="task.close")
     await freeze.lock_unfrozen(session, task)
     _ensure_version(task, expected_version)
     action_id = uuid.uuid4()
@@ -532,7 +527,6 @@ async def move_task(
     видит задачу уже на новом месте — и в тот же проект отвечает
     `task_already_in_project`, а с прочитанной раньше `version` — `version_conflict`.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="task.move")
     checked = require_move_reason(reason, key=task.key)
     await freeze.lock_unfrozen(session, task, project=project)
     _ensure_version(task, expected_version)
@@ -624,7 +618,6 @@ async def move_tasks(
     сценария; пакет, таким образом, — одна транзакция, и потолок размера списка стоит
     ради неё (`MAX_MOVE_KEYS`).
     """
-    ensure_scope(actor, TokenScope.MAIN, action="task.move")
     checked = require_move_reason(reason, key=None)
     listed = require_move_keys(keys)
     project = await projects_service.get_project(session, project_key)
@@ -688,7 +681,6 @@ async def apply_task_changes(
     финального `status_changed` тот же `action_id`, что у записей, вердиктов и сводки,
     поданных им до перехода.
     """
-    ensure_scope(actor, TokenScope.TASK, action=action)
     await freeze.lock_unfrozen(session, task)
     _ensure_version(task, expected_version)
 

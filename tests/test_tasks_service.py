@@ -36,9 +36,8 @@ async def entries(session: AsyncSession, task: Task) -> list[Entry]:
 
 
 def _reader(task: Task) -> Actor:
-    from app.domain.tokens import TokenScope
 
-    return Actor(author=task.created_by, scope=TokenScope.TASK)
+    return Actor(author=task.created_by)
 
 
 async def summary(session: AsyncSession, task: Task, actor: Actor) -> None:

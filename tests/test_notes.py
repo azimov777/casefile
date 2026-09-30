@@ -204,7 +204,6 @@ OUTSIDE_NAMES = frozenset(
         "response_model_exclude_none",  # параметр маршрута FastAPI, которым не пользуемся
         "_get_flat_fields_from_params",  # внутренность разбора параметров FastAPI
         "ServerMiddleware",  # SDK MCP, промежуточный слой сервера
-        "_handle_list_tools",  # SDK MCP, обработчик tools/list
         "pg_stat_activity",  # представление PostgreSQL
         "pg_available_extensions",  # представление PostgreSQL
         "clock_timestamp",  # функция PostgreSQL
@@ -215,8 +214,6 @@ OUTSIDE_NAMES = frozenset(
         "greenlet_spawn",  # SQLAlchemy, имя из текста ошибки `MissingGreenlet`
         "exclude_none",  # pydantic, аргумент `model_dump`
         "SettingsError",  # pydantic-settings, класс ошибки из вывода
-        "HandlerResult",  # SDK MCP, объявленный тип результата обработчика
-        "inputSchema",  # поле протокола MCP в ответе `tools/list`
         "__anext__",  # протокол асинхронного итератора, сам язык
         "anyio_backend",  # anyio, фикстура его плагина pytest (TRK-59)
         "ScopeMismatch",  # pytest, имя из текста ошибки о масштабе фикстуры (TRK-59)

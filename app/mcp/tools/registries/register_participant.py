@@ -1,12 +1,9 @@
-"""Инструмент `register_participant`: человек или постоянный агент в реестре, только набором
-`main`.
-"""
+"""Инструмент `register_participant`: человек или постоянный агент в реестре."""
 
 from typing import Annotated
 
 from pydantic import Field
 
-from app.domain.tokens import TokenScope
 from app.mcp.arguments import IdempotencyKeyArg
 from app.mcp.enums import ParticipantKindSchema
 from app.mcp.idempotency import Once
@@ -31,21 +28,18 @@ ParticipantKindArg = Annotated[ParticipantKindSchema, Field(description="Human o
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `register_participant` в наборе `main`."""
+    """Объявляет `register_participant`."""
     runtime = tools.runtime
 
-    @tools.tool(
-        title="Register participant", annotations=FILING, scope=TokenScope.MAIN, creating=True
-    )
+    @tools.tool(title="Register participant", annotations=FILING, creating=True)
     async def register_participant(
         kind: ParticipantKindArg,
         name: NewParticipantNameArg,
         description: ParticipantDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> ParticipantNameView:
-        """Registers a human or a permanent agent. Only a `main` token registers
-        participants; the new participant's token is issued through the REST API. An
-        existing participant's description is changed by `update_participant`.
+        """Registers a human or a permanent agent. The new participant's token is issued through
+        the REST API. An existing participant's description is changed by `update_participant`.
         """
         async with runtime.call() as (session, actor):
 

@@ -18,25 +18,6 @@ async def test_creation_answers_with_the_created_project(auth_client: AsyncClien
     assert data["created_by"] == {"kind": "human", "signature": "owner"}
 
 
-async def test_creation_is_forbidden_for_the_task_scope(
-    client: AsyncClient,
-    task_secret: str,
-    main_secret: str,
-) -> None:
-    """Обзорная проверка 2: тот же запрос отклоняется с `task` и проходит с `main`."""
-    client.headers["Authorization"] = f"Bearer {task_secret}"
-    forbidden = await client.post("/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация"})
-
-    assert forbidden.status_code == 403
-    assert forbidden.json()["error"]["code"] == "permission_denied"
-    assert forbidden.json()["error"]["details"]["required_scope"] == "main"
-
-    client.headers["Authorization"] = f"Bearer {main_secret}"
-    created = await client.post("/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация"})
-
-    assert created.status_code == 201, created.text
-
-
 async def test_reading_ignores_case_in_the_key(auth_client: AsyncClient, project: Project) -> None:
     response = await auth_client.get("/api/v1/projects/trk")
 
@@ -81,15 +62,3 @@ async def test_patch_refuses_the_key_and_accepts_the_description(
     assert data["description"] == "Новый общий контекст"
     assert data["key"] == "TRK"
     assert data["title"] == "Трекер", "an omitted field must stay as it was"
-
-
-async def test_patch_requires_the_main_scope(
-    client: AsyncClient,
-    task_secret: str,
-    project: Project,
-) -> None:
-    client.headers["Authorization"] = f"Bearer {task_secret}"
-
-    response = await client.patch("/api/v1/projects/TRK", json={"title": "Нельзя"})
-
-    assert response.status_code == 403

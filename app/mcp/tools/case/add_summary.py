@@ -15,7 +15,7 @@ from app.services import tasks as tasks_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `add_summary` в наборе `task`."""
+    """Объявляет `add_summary`."""
     runtime = tools.runtime
 
     @tools.tool(title="Add summary", annotations=FILING, creating=True)

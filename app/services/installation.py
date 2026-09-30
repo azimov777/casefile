@@ -12,9 +12,7 @@
 from dataclasses import dataclass
 
 from app.core.config import Settings
-from app.domain.tokens import TokenScope
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,5 +32,4 @@ def read_installation(*, actor: Actor, settings: Settings) -> Installation:
     то приложение, которое обслуживает запрос, — с теми же настройками, с которыми оно
     собрано (`app/main.py`, `create_app`).
     """
-    ensure_scope(actor, TokenScope.TASK, action="installation.read")
     return Installation(mcp_url=settings.effective_mcp_public_url)

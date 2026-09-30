@@ -1,10 +1,9 @@
-"""Инструмент `update_participant`: описание участника, только набором `main`."""
+"""Инструмент `update_participant`: описание участника."""
 
 from typing import Annotated
 
 from pydantic import Field
 
-from app.domain.tokens import TokenScope
 from app.mcp.tools.registries.arguments import ParticipantDescriptionArg
 from app.mcp.tools.registries.views import ParticipantNameView, participant_name
 from app.mcp.toolset import OVERWRITING_UPDATE, Toolset
@@ -22,15 +21,15 @@ ParticipantNameArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `update_participant` в наборе `main`."""
+    """Объявляет `update_participant`."""
     runtime = tools.runtime
 
-    @tools.tool(title="Update participant", annotations=OVERWRITING_UPDATE, scope=TokenScope.MAIN)
+    @tools.tool(title="Update participant", annotations=OVERWRITING_UPDATE)
     async def update_participant(
         name: ParticipantNameArg,
         description: ParticipantDescriptionArg,
     ) -> ParticipantNameView:
-        """Changes a participant's description. Only a `main` token edits participants.
+        """Changes a participant's description.
         Name and kind never change: the name signs entries already filed. The previous
         description is not kept.
         """

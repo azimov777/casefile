@@ -17,7 +17,6 @@ from app.domain.case import EntryType, is_blocking_question
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import AskedParent, TaskParent, TaskStatus
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import demo as demo_service
 from app.services import links as links_service
@@ -39,7 +38,7 @@ async def seeded(db_session: AsyncSession) -> demo_service.DemoData:
 def reader(seeded: demo_service.DemoData, db_session: AsyncSession) -> Actor:
     """Автор для чтения: набор `main`, потому что читается всё подряд."""
     assert seeded.project is not None
-    return Actor(author=seeded.project.created_by, scope=TokenScope.MAIN)
+    return Actor(author=seeded.project.created_by)
 
 
 async def _entry_types(

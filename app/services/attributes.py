@@ -34,11 +34,9 @@ from app.domain.attributes import (
     validate_attribute_value,
 )
 from app.domain.errors import AttributeNotFoundError
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import freeze
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +55,6 @@ async def list_attributes(
     session: AsyncSession, project: Project, *, actor: Actor
 ) -> list[ProjectAttribute]:
     """Нынешние значения всех атрибутов проекта, по имени без учёта регистра."""
-    ensure_scope(actor, TokenScope.TASK, action="project_attribute.read")
     return await AttributeRepository(session).list_for_project(project.id)
 
 
@@ -77,7 +74,6 @@ async def set_attribute(
     бы оказаться чужим устаревшим снимком, а два параллельных заведения одного имени
     разошлись бы на уникальном индексе вместо честного «изменено».
     """
-    ensure_scope(actor, TokenScope.TASK, action="project_attribute.set")
     name = validate_attribute_name(name)
     value = validate_attribute_value(value)
     await freeze.lock_unfrozen(session, project=project)
@@ -134,7 +130,6 @@ async def remove_attribute(
     проверяется после поиска, чтобы снятие несуществующего отвечало «нет такого», а не
     «назови причину».
     """
-    ensure_scope(actor, TokenScope.TASK, action="project_attribute.remove")
     name = validate_attribute_name(name)
     await freeze.lock_unfrozen(session, project=project)
 

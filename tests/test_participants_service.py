@@ -3,7 +3,6 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import PermissionDeniedError
 from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
 from app.domain.errors import (
@@ -65,25 +64,6 @@ async def test_a_malformed_name_does_not_reach_the_database(
         )
 
 
-async def test_registration_requires_the_main_scope(
-    db_session: AsyncSession,
-    task_actor: Actor,
-) -> None:
-    with pytest.raises(PermissionDeniedError) as error:
-        await service.register_participant(
-            db_session,
-            actor=task_actor,
-            kind=ParticipantKind.AGENT,
-            name="release_bot",
-        )
-
-    assert error.value.details == {
-        "action": "participant.register",
-        "scope": "task",
-        "required_scope": "main",
-    }
-
-
 async def test_reading_and_listing_are_open_to_the_task_scope(
     db_session: AsyncSession,
     task_actor: Actor,
@@ -117,15 +97,6 @@ async def test_update_changes_the_description_only(
     assert updated.description == "Читает вопросы по вечерам"
     assert updated.name == "owner"
     assert updated.kind is ParticipantKind.HUMAN
-
-
-async def test_update_requires_the_main_scope(
-    db_session: AsyncSession,
-    task_actor: Actor,
-    owner: Participant,
-) -> None:
-    with pytest.raises(PermissionDeniedError):
-        await service.update_participant(db_session, owner, actor=task_actor, description="нет")
 
 
 async def test_the_tracker_can_register_the_first_participant(db_session: AsyncSession) -> None:

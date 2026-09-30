@@ -12,7 +12,7 @@ from app.services import tasks as tasks_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `add_entry` в наборе `task`."""
+    """Объявляет `add_entry`."""
     runtime = tools.runtime
 
     @tools.tool(title="Add case entry", annotations=FILING, creating=True)

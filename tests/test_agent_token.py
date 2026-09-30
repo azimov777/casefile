@@ -19,7 +19,7 @@ from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TOKEN_PREFIX, TokenScope
+from app.domain.tokens import TOKEN_PREFIX
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, authenticate
 from app.services.setup import (
@@ -82,7 +82,6 @@ async def test_the_agent_gets_a_main_token_in_a_file_and_the_secret_is_never_pri
     assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
 
     actor = await authenticate(db_session, secret)
-    assert actor.scope is TokenScope.MAIN
     assert actor.participant is not None
     assert actor.participant.name == "agent"
     assert actor.participant.kind is ParticipantKind.AGENT
@@ -110,7 +109,6 @@ async def test_on_an_empty_installation_the_owner_comes_first_and_the_ui_key_sti
     assert ui.participant is not None
     assert ui.participant.name == DEFAULT_OWNER_NAME
     assert ui.participant.kind is ParticipantKind.HUMAN
-    assert ui.scope is TokenScope.MAIN
 
 
 async def test_a_second_run_keeps_the_same_token_and_issues_nothing(
@@ -146,7 +144,6 @@ async def test_a_lost_file_gives_a_new_token_and_the_old_one_stops_working(
 
     fresh = token_file.read_text(encoding="utf-8")
     assert fresh != lost
-    assert (await authenticate(db_session, fresh)).scope is TokenScope.MAIN
     with pytest.raises(UnauthorizedError) as refusal:
         await authenticate(db_session, lost)
     assert refusal.value.details["reason"] == "token_revoked"
@@ -161,7 +158,6 @@ async def test_the_ui_key_is_left_alone_when_the_agent_token_is_reissued(
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.MAIN,
         name=DEFAULT_LOCAL_TOKEN_NAME,
     )
     first = await ensure_agent_token(db_session, known_secret=None)
@@ -172,4 +168,3 @@ async def test_the_ui_key_is_left_alone_when_the_agent_token_is_reissued(
     assert second.revoked == 1
     assert first.token.is_revoked
     assert not ui.token.is_revoked
-    assert (await authenticate(db_session, ui.secret)).scope is TokenScope.MAIN

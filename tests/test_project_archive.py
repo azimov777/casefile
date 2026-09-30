@@ -16,7 +16,6 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import PermissionDeniedError
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository
@@ -110,16 +109,6 @@ async def test_restoring_files_a_restored_entry_and_clears_the_time(
     assert entry.type is EntryType.RESTORED
     assert entry.payload == {"reason": "Вернулись к работе"}
     assert project.archived_at is None
-
-
-async def test_archive_and_restore_need_the_main_set(
-    db_session: AsyncSession, project: Project, main_actor: Actor, task_actor: Actor
-) -> None:
-    with pytest.raises(PermissionDeniedError):
-        await projects_service.archive_project(db_session, project, actor=task_actor, reason="x")
-    await _archive(db_session, project, main_actor)
-    with pytest.raises(PermissionDeniedError):
-        await projects_service.restore_project(db_session, project, actor=task_actor, reason="x")
 
 
 async def test_archiving_twice_and_restoring_an_active_project_are_refused(
@@ -438,14 +427,6 @@ async def test_rest_archives_freezes_and_restores(
     assert note.status_code == 201, note.text
 
 
-async def test_rest_archive_needs_the_main_set(
-    client: AsyncClient, task_secret: str, project: Project
-) -> None:
-    client.headers["Authorization"] = f"Bearer {task_secret}"
-    response = await client.post(ARCHIVE.format(key="TRK"), json={"reason": "x"})
-    assert (response.status_code, response.json()["error"]["code"]) == (403, "permission_denied")
-
-
 async def test_the_task_card_carries_the_project_archive_time(
     auth_client: AsyncClient, project: Project, task: Task
 ) -> None:
@@ -463,20 +444,6 @@ async def test_the_task_card_carries_the_project_archive_time(
 
 
 # --- MCP --------------------------------------------------------------------------------
-
-
-async def test_mcp_archive_tools_are_only_in_the_main_set(
-    mcp_session: Connect, main_secret: str, task_secret: str
-) -> None:
-    """Обзорная проверка 4: `tools/list` токеном `main` показывает оба инструмента,
-    токеном `task` — ни одного."""
-    async with mcp_session(main_secret) as session:
-        main_tools = {tool.name for tool in (await session.list_tools()).tools}
-    async with mcp_session(task_secret) as session:
-        task_tools = {tool.name for tool in (await session.list_tools()).tools}
-
-    assert {"archive_project", "restore_project"} <= main_tools
-    assert not {"archive_project", "restore_project"} & task_tools
 
 
 async def test_mcp_archives_freezes_unlinks_and_restores(
@@ -520,11 +487,3 @@ async def test_mcp_archives_freezes_unlinks_and_restores(
     assert restored["archived_at"] is None and restored["no"] == archived["no"] + 1
     assert "project_not_archived" in not_archived
     assert note["no"] > 0
-
-
-async def test_mcp_archive_is_refused_to_a_task_token(
-    mcp_session: Connect, task_secret: str, main_secret: str, project: Project
-) -> None:
-    async with mcp_session(task_secret) as session:
-        refused = await session.call_tool("archive_project", {"key": "TRK", "reason": "x"})
-    assert refused.is_error

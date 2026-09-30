@@ -44,7 +44,7 @@ ProjectEntryTitleArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `add_project_entry` в наборе `task`."""
+    """Объявляет `add_project_entry`."""
     runtime = tools.runtime
 
     @tools.tool(title="Add project entry", annotations=FILING, creating=True)

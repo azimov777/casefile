@@ -54,7 +54,7 @@ from app.domain.oauth import (
     refuse_unsafe_redirect,
 )
 from app.domain.participants import ParticipantKind, normalize_participant_name
-from app.domain.tokens import TokenScope, hash_token
+from app.domain.tokens import hash_token
 from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.participants import register_participant
 from app.services.setup import DEFAULT_AGENT_DESCRIPTION, DEFAULT_AGENT_NAME
@@ -418,7 +418,7 @@ async def _issuer_actor(session: AsyncSession, issuer: Author) -> Actor:
     if issuer.kind is AuthorKind.TRACKER:
         return TRACKER_ACTOR
     participant = await ParticipantRepository(session).get_by_name(issuer.signature or "")
-    return Actor(author=issuer, scope=TokenScope.MAIN, participant=participant)
+    return Actor(author=issuer, participant=participant)
 
 
 async def _issue(
@@ -427,7 +427,6 @@ async def _issue(
     issued = await issue_token(
         session,
         actor=await _issuer_actor(session, issuer),
-        scope=TokenScope.TASK,
         name=oauth_token_name(_view(client).client_name, client.client_id),
         participant=participant,
     )

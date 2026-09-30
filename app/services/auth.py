@@ -27,7 +27,7 @@ from app.db.models.token import Token
 from app.db.repositories import AccountRepository, TokenRepository
 from app.domain.authors import TRACKER, Author, AuthorKind, label_author
 from app.domain.errors import ActorLabelRequiredError
-from app.domain.tokens import TokenScope, hash_token
+from app.domain.tokens import hash_token
 
 #: Как часто обновляется отметка последнего использования токена.
 #: Писать её на каждый запрос значило бы превратить любое чтение в запись строки:
@@ -37,10 +37,10 @@ LAST_USED_THROTTLE = timedelta(minutes=1)
 
 @dataclass(frozen=True, slots=True)
 class Actor:
-    """Кто делает запрос: автор действия, набор его токена и участник, если он есть.
+    """Кто делает запрос: автор действия и участник, если он есть.
 
     Ровно эта структура уезжает в сценарии, и другого способа узнать «кто зовёт» у них
-    нет. Неизменяемая: подменить автора или набор посреди сценария нельзя даже случайно.
+    нет. Неизменяемая: подменить автора посреди сценария нельзя даже случайно.
 
     `participant` пуст у временного агента и у самого трекера. Спрашивать его стоит
     только там, где нужна именно строка реестра (адресовать вопрос можно лишь
@@ -55,15 +55,14 @@ class Actor:
     """
 
     author: Author
-    scope: TokenScope
     participant: Participant | None = None
     token_id: uuid.UUID | None = None
 
 
 #: Автор служебных действий: команда первичной инициализации и служебные записи дела.
-#: Набор `main`, потому что трекеру доступно всё, что доступно установке; токена за ним
+#: Токена за ним
 #: нет и быть не может — иначе им можно было бы выдать себя за сам трекер.
-TRACKER_ACTOR = Actor(author=TRACKER, scope=TokenScope.MAIN)
+TRACKER_ACTOR = Actor(author=TRACKER)
 
 
 async def authenticate(
@@ -83,7 +82,6 @@ async def authenticate(
     token = await verify_token(session, raw_token, now=moment)
     actor = Actor(
         author=_author(token, label),
-        scope=token.scope,
         participant=token.participant,
         token_id=token.id,
     )
