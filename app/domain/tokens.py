@@ -59,3 +59,22 @@ def hash_token(raw_token: str) -> str:
     строки, и без нормализации такой токен молча перестаёт работать.
     """
     return hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
+
+
+class TokenKind(StrEnum):
+    """Вид строки доступа: откуда она взялась и как живёт (решения `TRK-469#24`, `#25`).
+
+    Вид задаёт колонка, а не наличие срока: срок есть и у сеанса браузера, и у
+    подключения, а у ключа интерфейса `local-ui` — вида `session` — его нет.
+
+    - `session` — вход человека в интерфейс: сеанс браузера (срок
+      `TRACKER_SESSION_HOURS`) и ключ машины `local-ui` (без срока).
+    - `key` — ключ агента: статический секрет, выпущенный человеком или установкой;
+      живёт до отзыва.
+    - `oauth` — подключение: вход клиента агента по OAuth (`app/services/oauth.py`),
+      срок `TRACKER_OAUTH_ACCESS_TTL`, обновляется refresh-токеном.
+    """
+
+    SESSION = "session"
+    KEY = "key"
+    OAUTH = "oauth"

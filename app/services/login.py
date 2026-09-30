@@ -8,8 +8,8 @@
 
 ## Сеансы живут в базе, окна попыток — в памяти процесса
 
-Сеанс — строка `tokens` со сроком (`expires_at`): перезапуск API его не гасит, выход
-отзывает сам токен, и вкладка теряет доступ сразу, а не на перезагрузке. Отдельной
+Сеанс — строка `tokens` вида `session` со сроком (`expires_at`): перезапуск API его не
+гасит, выход отзывает сам токен, и вкладка теряет доступ сразу, а не на перезагрузке. Отдельной
 таблицы сеансов нет намеренно: хеш секрета, отзыв и участник у токена уже есть
 (решение TRK-113#9).
 
@@ -56,7 +56,7 @@ from app.db.repositories import AccountRepository, TokenRepository
 from app.domain.accounts import normalize_email
 from app.domain.errors import PasswordAttemptsExceededError
 from app.domain.passwords import PasswordHash, hash_password, verify_password
-from app.domain.tokens import TokenScope, generate_token, hash_token
+from app.domain.tokens import TokenKind, TokenScope, generate_token, hash_token
 
 #: Имя токена сеанса в списке токенов: по нему человек отличает вкладки от ключей агентов.
 SESSION_TOKEN_NAME = "browser-session"
@@ -239,6 +239,7 @@ class PasswordLogin:
                 scope=TokenScope.MAIN,
                 name=SESSION_TOKEN_NAME,
                 token_hash=hash_token(secret),
+                kind=TokenKind.SESSION,
                 expires_at=self._clock() + self._ttl,
                 # Сеанс выпускает себе сам человек, вошедший паролем: в списке токенов
                 # видно, что вкладку открыл он, а не администратор и не трекер.
@@ -266,7 +267,7 @@ class PasswordLogin:
         )
         if (
             token is None
-            or not token.is_session
+            or not token.is_browser_session
             or token.is_revoked
             or account is None
             or account.is_disabled
@@ -289,7 +290,7 @@ class PasswordLogin:
         if not secret:
             return
         token = await TokenRepository(session).get_by_hash(hash_token(secret))
-        if token is not None and token.is_session and not token.is_revoked:
+        if token is not None and token.is_browser_session and not token.is_revoked:
             token.revoked_at = self._clock()
             await session.flush()
 

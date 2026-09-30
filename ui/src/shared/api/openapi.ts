@@ -5275,9 +5275,14 @@ export interface components {
             revoked_at?: string | null;
             /**
              * Expires At
-             * @description Set only on a browser session token, issued by `POST /api/v1/session`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked
+             * @description Set on a browser session, issued by `POST /api/v1/session`, and on an OAuth connection, issued by the MCP service's `/token`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked
              */
             expires_at?: string | null;
+            /**
+             * @description What this access is: `session` — a person signed in to the interface (a browser session or this machine's `local-ui` key); `key` — an agent key issued by a person or the installation; `oauth` — a connection made by an agent client through OAuth sign-in, renewed by its refresh token
+             * @example key
+             */
+            kind: components["schemas"]["TokenKind"];
             /**
              * Secret
              * @description Full token value, shown once and never stored in plain text
@@ -5285,6 +5290,22 @@ export interface components {
              */
             secret: string;
         };
+        /**
+         * TokenKind
+         * @description Вид строки доступа: откуда она взялась и как живёт (решения `TRK-469#24`, `#25`).
+         *
+         *     Вид задаёт колонка, а не наличие срока: срок есть и у сеанса браузера, и у
+         *     подключения, а у ключа интерфейса `local-ui` — вида `session` — его нет.
+         *
+         *     - `session` — вход человека в интерфейс: сеанс браузера (срок
+         *       `TRACKER_SESSION_HOURS`) и ключ машины `local-ui` (без срока).
+         *     - `key` — ключ агента: статический секрет, выпущенный человеком или установкой;
+         *       живёт до отзыва.
+         *     - `oauth` — подключение: вход клиента агента по OAuth (`app/services/oauth.py`),
+         *       срок `TRACKER_OAUTH_ACCESS_TTL`, обновляется refresh-токеном.
+         * @enum {string}
+         */
+        TokenKind: "session" | "key" | "oauth";
         /**
          * TokenRead
          * @description Токен без секрета: секрет показывается один раз при выпуске и больше нигде.
@@ -5326,9 +5347,14 @@ export interface components {
             revoked_at?: string | null;
             /**
              * Expires At
-             * @description Set only on a browser session token, issued by `POST /api/v1/session`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked
+             * @description Set on a browser session, issued by `POST /api/v1/session`, and on an OAuth connection, issued by the MCP service's `/token`: after this moment it answers `401 unauthorized` with `details.reason: token_expired`. Null means the token lives until it is revoked
              */
             expires_at?: string | null;
+            /**
+             * @description What this access is: `session` — a person signed in to the interface (a browser session or this machine's `local-ui` key); `key` — an agent key issued by a person or the installation; `oauth` — a connection made by an agent client through OAuth sign-in, renewed by its refresh token
+             * @example key
+             */
+            kind: components["schemas"]["TokenKind"];
         };
         /**
          * TokenScope
