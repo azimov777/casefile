@@ -944,6 +944,9 @@ e2e` в этот скрипт не входит — им сливают ветк
 скила — `.claude-plugin/plugin.json` и `.claude-plugin/marketplace.json` (`version` в плагине и в
 записи маркетплейса, `metadata.version`): Claude Code без новой `version` не обновит скил.
 `tests/test_plugin_manifest.py` краснеет, если версии разошлись.
+Оба файла плагина проверяет и джоб `plugin` в `ci.yml` — `claude plugin validate --strict .` на закреплённой
+версии Claude Code (`CLAUDE_CODE_VERSION` в джобе); `images.yml` зовёт `ci.yml` как `checks`, поэтому нарушение
+краснит и проверки PR, и выпуск до публикации образов (TRK-441). Локально: `CLAUDE_CONFIG_DIR=$(mktemp -d) claude plugin validate --strict . </dev/null`.
 
 Тег пушится раньше `main` — иначе автообновятель прежней установки успел бы забрать файл
 compose, который зовёт канал `stable` до того, как тот на него укажет (комментарий в

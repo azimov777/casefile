@@ -44,6 +44,30 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  plugin:
+    name: Plugin — claude plugin validate --strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Версия Claude Code закреплена: `validate --strict` со временем получает новые
+      # правила, и незакреплённая версия краснила бы чужие PR без правки в репозитории.
+      # Меняется отдельным коммитом вместе с проверкой, что плагин проходит новой версией.
+      CLAUDE_CODE_VERSION: "2.1.286"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Вход не нужен: команда читает только манифесты плагина и его MCP-записи
+      # (необъявленный `${user_config.KEY}`, http не на loopback, токен литералом).
+      - name: Install Claude Code
+        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+      - name: Validate the plugin
+        run: claude plugin validate --strict .
+
   ui:
     name: UI — format, lint, types, FSD boundaries, tests
     runs-on: ubuntu-latest
