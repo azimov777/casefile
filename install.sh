@@ -155,13 +155,45 @@ main() {
   echo "  Board:  http://localhost:$ui_port"
   echo "  MCP:    $mcp_url"
   echo
+  # Подключение и скил — по блоку на харнесс (TRK-406, решения TRK-398#7, #9, TRK-401#18).
+  # Токен только печатается, в файлы харнессов установщик его не пишет. Имена маркетплейса,
+  # плагина и ветки `stable` — из `.claude-plugin/marketplace.json` и `images.yml`; те же
+  # команды дословно стоят в `docs/agent-install.md`, и `tests/test_installers.py` сверяет их.
   bold "Connect Claude Code:"
   echo "  claude mcp add --transport http --scope user casefile $mcp_url \\"
   echo "    --header \"Authorization: Bearer $token\""
+  echo "  claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills"
+  echo "  claude plugin install casefile@casefile --scope user"
+  echo "  Then let Claude Code keep the skill current: in ~/.claude/settings.json add"
+  echo "  \"autoUpdate\": true next to \"source\" inside extraKnownMarketplaces.casefile."
   echo
-  bold "Any other MCP client (Codex, Cursor, ...):"
+  bold "Connect Codex:"
+  echo "  Add to ~/.codex/config.toml (works in the terminal and in the Codex app):"
+  echo "    [mcp_servers.casefile]"
+  echo "    url = \"$mcp_url\""
+  echo "    http_headers = { Authorization = \"Bearer $token\" }"
+  echo "  Terminal only, token kept out of the file: export CASEFILE_TOKEN=<token> and write"
+  echo "  bearer_token_env_var = \"CASEFILE_TOKEN\" instead of the http_headers line."
+  echo "  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills"
+  echo "  codex plugin add casefile@casefile"
+  echo
+  bold "Connect Hermes:"
+  echo "  Add to ~/.hermes/config.yaml:"
+  echo "    mcp_servers:"
+  echo "      casefile:"
+  echo "        url: \"$mcp_url\""
+  echo "        headers:"
+  echo "          Authorization: \"Bearer $token\""
+  echo "  hermes skills install azimov777/casefile/skills/casefile"
+  echo
+  bold "Any other MCP client (Cursor, ...):"
   echo "  URL     $mcp_url"
   echo "  Header  Authorization: Bearer $token"
+  echo "  npx skills add azimov777/casefile#stable"
+  echo
+  echo "The skill teaches an agent how to work in Casefile. A running session picks up a new"
+  echo "plugin after a restart or /reload-plugins. Steps and updates: docs/agent-install.md"
+  echo "(https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md)."
   echo
 
   # Дословный текст двух фраз (`app/domain/agent_phrases.py`, `AGENT_PHRASES`): это одна

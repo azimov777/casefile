@@ -9,7 +9,7 @@
 **Что:** обе фразы `AGENT_PHRASES` (`create_tasks`, `execute_tasks`) переписаны дословно в
 нескольких местах продукта (`TRK-367`): вывод `install.sh` и `install.ps1` (только
 английский текст — установщики не печатают кириллицу), подраздел README.md сразу после
-«Connect your agent», отчёт человеку в шаге 6 `docs/agent-install.md`, экран «Подключить
+«Connect your agent», отчёт человеку в шаге 7 `docs/agent-install.md`, экран «Подключить
 агента» (третий шаг читает фразы из словаря `start`, своей копии не заводит) и сам экран
 «Начало» (`ui/.../dictionaries/{en,ru}/start.ts`). Все места сводит одна сплошная проверка
 (`tests/test_agent_phrases_everywhere.py`), сверяющая каждое место с `AGENT_PHRASES`

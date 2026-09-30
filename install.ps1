@@ -157,12 +157,43 @@ Write-Host ''
 Write-Host "  Board:  http://localhost:$uiPort"
 Write-Host "  MCP:    $mcpUrl"
 Write-Host ''
+# Подключение и скил — по блоку на харнесс, как в `install.sh` (TRK-406). Токен только
+# печатается, в файлы харнессов не пишется. Команды скила дословно те же, что в
+# `install.sh` и `docs/agent-install.md`; `tests/test_installers.py` сверяет их.
 Write-Host 'Connect Claude Code:' -ForegroundColor White
 Write-Host "  claude mcp add --transport http --scope user casefile $mcpUrl --header `"Authorization: Bearer $token`""
+Write-Host '  claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills'
+Write-Host '  claude plugin install casefile@casefile --scope user'
+Write-Host '  Then let Claude Code keep the skill current: in ~/.claude/settings.json add'
+Write-Host '  "autoUpdate": true next to "source" inside extraKnownMarketplaces.casefile.'
 Write-Host ''
-Write-Host 'Any other MCP client (Codex, Cursor, ...):' -ForegroundColor White
+Write-Host 'Connect Codex:' -ForegroundColor White
+Write-Host '  Add to ~/.codex/config.toml (works in the terminal and in the Codex app):'
+Write-Host '    [mcp_servers.casefile]'
+Write-Host "    url = `"$mcpUrl`""
+Write-Host "    http_headers = { Authorization = `"Bearer $token`" }"
+Write-Host '  Terminal only, token kept out of the file: set $env:CASEFILE_TOKEN and write'
+Write-Host '  bearer_token_env_var = "CASEFILE_TOKEN" instead of the http_headers line.'
+Write-Host '  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills'
+Write-Host '  codex plugin add casefile@casefile'
+Write-Host ''
+Write-Host 'Connect Hermes:' -ForegroundColor White
+Write-Host '  Add to ~/.hermes/config.yaml:'
+Write-Host '    mcp_servers:'
+Write-Host '      casefile:'
+Write-Host "        url: `"$mcpUrl`""
+Write-Host '        headers:'
+Write-Host "          Authorization: `"Bearer $token`""
+Write-Host '  hermes skills install azimov777/casefile/skills/casefile'
+Write-Host ''
+Write-Host 'Any other MCP client (Cursor, ...):' -ForegroundColor White
 Write-Host "  URL     $mcpUrl"
 Write-Host "  Header  Authorization: Bearer $token"
+Write-Host '  npx skills add azimov777/casefile#stable'
+Write-Host ''
+Write-Host 'The skill teaches an agent how to work in Casefile. A running session picks up a new'
+Write-Host 'plugin after a restart or /reload-plugins. Steps and updates: docs/agent-install.md'
+Write-Host '(https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md).'
 Write-Host ''
 
 # Текст двух фраз повторяет `app/domain/agent_phrases.py` (`AGENT_PHRASES`) дословно:
