@@ -1302,7 +1302,7 @@
           "tokens"
         ],
         "summary": "Issue a token",
-        "description": "Единственный ответ, содержащий секрет токена: второго способа узнать его нет.\n\nТребует набора `main` и учётной записи у выпускающего: выпускает человек, а не агент\n(`403 permission_denied`, `details.reason: account_required`). Ключ от имени другого\nчеловека выпускает только администратор (`details.reason: foreign_human`); себе,\nагенту-участнику и общий — любой вошедший. Выпущенный токен — свой у выпустившего: он\nвидит его в списке и отзывает. Без `participant` выпускается общий агентский токен:\nзапрос с ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.\n\nЕдинственное исключение — повтор с тем же `Idempotency-Key`: он отвечает **тем же**\nсекретом, потому что ответ первого выпуска сохранён целиком. Иначе повтор запроса,\nоборвавшегося по сети, оставлял бы действующий токен, которого никто не видел.\nСутки спустя ключ забыт вместе с ответом, и секрета не остаётся нигде.",
+        "description": "Единственный ответ, содержащий секрет токена: второго способа узнать его нет.\n\nТребует учётной записи у выпускающего: выпускает человек, а не агент\n(`403 permission_denied`, `details.reason: account_required`). Ключ от имени другого\nчеловека выпускает только администратор (`details.reason: foreign_human`); себе,\nагенту-участнику и общий — любой вошедший. Выпущенный токен — свой у выпустившего: он\nвидит его в списке и отзывает. Без `participant` выпускается общий агентский токен:\nзапрос с ним обязан нести заголовок `X-Actor-Label`, иначе действие некому приписать.\n\nЕдинственное исключение — повтор с тем же `Idempotency-Key`: он отвечает **тем же**\nсекретом, потому что ответ первого выпуска сохранён целиком. Иначе повтор запроса,\nоборвавшегося по сети, оставлял бы действующий токен, которого никто не видел.\nСутки спустя ключ забыт вместе с ответом, и секрета не остаётся нигде.",
         "operationId": "issue_token",
         "security": [
           {
@@ -9639,20 +9639,22 @@
             "description": "Identifier of the token this request was made with, the same `id` that `GET /api/v1/tokens` lists: this is how a client finds its own key there"
           },
           "scope": {
-            "$ref": "#/components/schemas/TokenScope",
-            "description": "Scope of that token, the only right in the tracker: `task` opens the working cycle, `main` adds writes to projects, participants and tokens. A write beyond it answers `403 permission_denied`",
+            "type": "string",
+            "title": "Scope",
+            "description": "Deprecated: token scopes are gone and every token opens everything, so this is always `main`. Kept only until the interface stops reading it",
+            "default": "main",
+            "deprecated": true,
             "examples": [
-              "task"
+              "main"
             ]
           }
         },
         "type": "object",
         "required": [
-          "id",
-          "scope"
+          "id"
         ],
         "title": "CurrentTokenRead",
-        "description": "Токен, которым сделан запрос: чем узнать его в списке и что он открывает.\n\nНе `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,\nа список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там."
+        "description": "Токен, которым сделан запрос: чем узнать его в списке.\n\nНе `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,\nа список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там."
       },
       "DataResponse_AccountRead_": {
         "properties": {
@@ -14851,14 +14853,6 @@
               "release-bot on ci"
             ]
           },
-          "scope": {
-            "$ref": "#/components/schemas/TokenScope",
-            "description": "`task` opens the working cycle, `main` adds writes to registries",
-            "default": "task",
-            "examples": [
-              "task"
-            ]
-          },
           "participant": {
             "anyOf": [
               {
@@ -14896,12 +14890,6 @@
             "title": "Name",
             "examples": [
               "release-bot on ci"
-            ]
-          },
-          "scope": {
-            "$ref": "#/components/schemas/TokenScope",
-            "examples": [
-              "task"
             ]
           },
           "participant": {
@@ -14979,7 +14967,6 @@
         "required": [
           "id",
           "name",
-          "scope",
           "created_by",
           "created_at",
           "secret"
@@ -14999,12 +14986,6 @@
             "title": "Name",
             "examples": [
               "release-bot on ci"
-            ]
-          },
-          "scope": {
-            "$ref": "#/components/schemas/TokenScope",
-            "examples": [
-              "task"
             ]
           },
           "participant": {
@@ -15074,21 +15055,11 @@
         "required": [
           "id",
           "name",
-          "scope",
           "created_by",
           "created_at"
         ],
         "title": "TokenRead",
         "description": "Токен без секрета: секрет показывается один раз при выпуске и больше нигде."
-      },
-      "TokenScope": {
-        "type": "string",
-        "enum": [
-          "task",
-          "main"
-        ],
-        "title": "TokenScope",
-        "description": "Набор токена — единственное право в трекере.\n\nРолей, владельцев и разрешений по роду участника нет и не будет (`CONCEPT.md`, 6):\nлюбую запись и любой переход может сделать кто угодно, а набор отделяет рабочий цикл\nагента от управления установкой. Вход в `in_progress` только исполнителю — проверка\nперехода в домене (`check_taken_by_assignee`), а не право.\n\n| Набор | Открывает |\n|---|---|\n| `task` | Рабочий цикл: задачи, дело, связи, поиск, лента, чтение реестров. |\n| `main` | То же плюс запись проектов, участников и токенов. |"
       },
       "VerdictEntryCreate": {
         "properties": {

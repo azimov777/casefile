@@ -21,7 +21,7 @@ from app.domain.errors import (
 )
 from app.domain.participants import ParticipantKind, validate_participant_name
 from app.domain.projects import validate_project_key
-from app.domain.tokens import TOKEN_PREFIX, TokenScope, generate_token, hash_token
+from app.domain.tokens import TOKEN_PREFIX, generate_token, hash_token
 
 # --- Имена участников --------------------------------------------------------------
 
@@ -114,17 +114,6 @@ def test_an_author_without_a_valid_signature_cannot_be_built(kwargs: dict) -> No
     """
     with pytest.raises(ValueError, match="signature"):
         Author(**kwargs)
-
-
-# --- Наборы токена -----------------------------------------------------------------
-
-
-def test_main_opens_everything_task_opens_and_task_does_not_open_main() -> None:
-    """Вложенность наборов живёт в перечислении: единая точка прав ею только пользуется."""
-    assert TokenScope.MAIN.allows(TokenScope.TASK)
-    assert TokenScope.MAIN.allows(TokenScope.MAIN)
-    assert TokenScope.TASK.allows(TokenScope.TASK)
-    assert not TokenScope.TASK.allows(TokenScope.MAIN)
 
 
 # --- Секрет токена -----------------------------------------------------------------

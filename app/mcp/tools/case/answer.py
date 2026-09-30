@@ -24,7 +24,7 @@ QuestionNoArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `answer` в наборе `task`."""
+    """Объявляет `answer`."""
     runtime = tools.runtime
 
     @tools.tool(title="Answer question", annotations=FILING, creating=True)

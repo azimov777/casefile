@@ -10,7 +10,7 @@ from app.services import tasks as tasks_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `add_verdict` в наборе `task`."""
+    """Объявляет `add_verdict`."""
     runtime = tools.runtime
 
     @tools.tool(title="Add verdict", annotations=FILING, creating=True)

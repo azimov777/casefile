@@ -1,11 +1,10 @@
-"""Инструмент `create_project`: новый проект, только набором `main`."""
+"""Инструмент `create_project`: новый проект."""
 
 from typing import Annotated
 
 from pydantic import Field
 
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
-from app.domain.tokens import TokenScope
 from app.mcp.arguments import IdempotencyKeyArg
 from app.mcp.idempotency import Once
 from app.mcp.tools.registries.views import ProjectKeyView, project_key
@@ -41,19 +40,17 @@ ProjectDescriptionArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `create_project` в наборе `main`."""
+    """Объявляет `create_project`."""
     runtime = tools.runtime
 
-    @tools.tool(title="Create project", annotations=FILING, scope=TokenScope.MAIN, creating=True)
+    @tools.tool(title="Create project", annotations=FILING, creating=True)
     async def create_project(
         key: NewProjectKeyArg,
         title: ProjectTitleArg,
         description: ProjectDescriptionArg = "",
         idempotency_key: IdempotencyKeyArg = None,
     ) -> ProjectKeyView:
-        """Creates a project with a key, a title and a description. Only a `main` token
-        creates projects.
-        """
+        """Creates a project with a key, a title and a description."""
         async with runtime.call() as (session, actor):
 
             async def create() -> ProjectKeyView:

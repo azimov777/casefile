@@ -24,7 +24,7 @@ def participant(item: Participant) -> ParticipantView:
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `list_participants` в наборе `task`."""
+    """Объявляет `list_participants`."""
     runtime = tools.runtime
     settings = tools.settings
 

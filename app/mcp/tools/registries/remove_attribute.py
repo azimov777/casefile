@@ -40,7 +40,7 @@ def attribute_removed(entry: Entry, *, project_key: str) -> AttributeRemovedView
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `remove_attribute` в наборе `task`."""
+    """Объявляет `remove_attribute`."""
     runtime = tools.runtime
 
     @tools.tool(title="Remove attribute", annotations=FILING, creating=True)

@@ -61,11 +61,9 @@ from app.domain.journal import (
     resolve_types,
     resolve_wait,
 )
-from app.domain.tokens import TokenScope
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 logger = get_logger("journal")
 
@@ -161,7 +159,6 @@ async def read_journal(
     номер, что уезжает в `id:` кадра потока), второй продолжает страницу и приезжает из
     `meta.next_cursor`. Действуют оба сразу, побеждает больший.
     """
-    ensure_scope(actor, TokenScope.TASK, action="journal.read")
     cursor_seq = None
     if cursor is not None:
         (value,), _ = decode_sort_cursor(cursor, arity=1)
@@ -213,7 +210,6 @@ async def wait_journal(
     ответом, а не исключением: отдавать его уже некому, а исключение в этом месте
     означало бы ошибку в логах на каждый закрытый браузер.
     """
-    ensure_scope(actor, TokenScope.TASK, action="journal.read")
     seconds = resolve_wait(wait)
     if seconds <= 0:
         return await read_journal(
@@ -354,7 +350,6 @@ async def stream_start(
     отставание потока ничем не ограничено. Окна переподключения, которое было у потока
     событий, здесь нет и заводить его незачем.
     """
-    ensure_scope(actor, TokenScope.TASK, action="journal.stream")
     if last_event_id is not None:
         return last_event_id
     return await EntryRepository(session).latest_seq()

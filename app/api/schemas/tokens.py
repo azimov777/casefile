@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.schemas.authors import AuthorRead
 from app.domain.participants import PARTICIPANT_NAME_PATTERN
-from app.domain.tokens import TokenScope
 
 
 class TokenRead(BaseModel):
@@ -17,7 +16,6 @@ class TokenRead(BaseModel):
 
     id: uuid.UUID
     name: str = Field(examples=["release-bot on ci"])
-    scope: TokenScope = Field(examples=[TokenScope.TASK])
     participant: str | None = Field(
         default=None,
         examples=["release_bot"],
@@ -74,11 +72,6 @@ class TokenCreate(BaseModel):
         examples=["release-bot on ci"],
         description="Free-form note to tell tokens apart when revoking one",
     )
-    scope: TokenScope = Field(
-        default=TokenScope.TASK,
-        examples=[TokenScope.TASK],
-        description="`task` opens the working cycle, `main` adds writes to registries",
-    )
     participant: str | None = Field(
         default=None,
         pattern=PARTICIPANT_NAME_PATTERN,
@@ -97,7 +90,7 @@ class TokenIssued(TokenRead):
 
 
 class CurrentTokenRead(BaseModel):
-    """Токен, которым сделан запрос: чем узнать его в списке и что он открывает.
+    """Токен, которым сделан запрос: чем узнать его в списке.
 
     Не `TokenRead`: имя, автор выпуска и последнее использование первому кадру не нужны,
     а список токенов отдаёт их по тому же `id`. Секрета и хеша здесь нет, как и там.
@@ -109,11 +102,12 @@ class CurrentTokenRead(BaseModel):
             "`GET /api/v1/tokens` lists: this is how a client finds its own key there"
         ),
     )
-    scope: TokenScope = Field(
-        examples=[TokenScope.TASK],
+    scope: str = Field(
+        default="main",
+        deprecated=True,
+        examples=["main"],
         description=(
-            "Scope of that token, the only right in the tracker: `task` opens the working "
-            "cycle, `main` adds writes to projects, participants and tokens. A write beyond "
-            "it answers `403 permission_denied`"
+            "Deprecated: token scopes are gone and every token opens everything, so this "
+            "is always `main`. Kept only until the interface stops reading it"
         ),
     )

@@ -3,7 +3,6 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import PermissionDeniedError
 from app.db.models.project import Project
 from app.domain.errors import InvalidProjectKeyError, ProjectKeyTakenError, ProjectNotFoundError
 from app.services import projects as service
@@ -40,18 +39,6 @@ async def test_a_malformed_key_is_rejected(db_session: AsyncSession, main_actor:
         await service.create_project(db_session, actor=main_actor, key="TRK-1", title="Дефис")
 
 
-async def test_creation_requires_the_main_scope(
-    db_session: AsyncSession,
-    task_actor: Actor,
-) -> None:
-    """Обзорная проверка 2 на уровне сценария."""
-    with pytest.raises(PermissionDeniedError) as error:
-        await service.create_project(db_session, actor=task_actor, key="OPS", title="Эксплуатация")
-
-    assert error.value.details["action"] == "project.create"
-    assert error.value.status_code == 403
-
-
 async def test_reading_is_open_to_the_task_scope(
     db_session: AsyncSession,
     task_actor: Actor,
@@ -84,15 +71,6 @@ async def test_update_changes_title_and_description_but_never_the_key(
     assert updated.description == "Новый контекст"
     assert updated.title == "Трекер"
     assert updated.key == "TRK"
-
-
-async def test_update_requires_the_main_scope(
-    db_session: AsyncSession,
-    task_actor: Actor,
-    project: Project,
-) -> None:
-    with pytest.raises(PermissionDeniedError):
-        await service.update_project(db_session, project, actor=task_actor, title="Нельзя")
 
 
 # --- Номера задач ------------------------------------------------------------------

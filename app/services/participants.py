@@ -18,9 +18,7 @@ from app.domain.participants import (
     normalize_participant_name,
     validate_participant_name,
 )
-from app.domain.tokens import TokenScope
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 
 async def get_participant(session: AsyncSession, name: str) -> Participant:
@@ -37,7 +35,6 @@ async def get_participant(session: AsyncSession, name: str) -> Participant:
 
 async def read_participant(session: AsyncSession, name: str, *, actor: Actor) -> Participant:
     """Карточка участника: точка входа интерфейса, поэтому проверяет права."""
-    ensure_scope(actor, TokenScope.TASK, action="participant.read")
     return await get_participant(session, name)
 
 
@@ -49,7 +46,6 @@ async def list_participants(
     cursor: str | None = None,
 ) -> Page[Participant]:
     """Реестр участников: кого можно адресовать вопросом и чьё имя может стоять подписью."""
-    ensure_scope(actor, TokenScope.TASK, action="participant.list")
     return await ParticipantRepository(session).list_page(limit=limit, cursor=cursor)
 
 
@@ -68,7 +64,6 @@ async def register_participant(
     именем ограничения. Ограничение при этом остаётся — оно страхует от гонки двух
     параллельных регистраций.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="participant.register")
 
     canonical = validate_participant_name(name)
     repository = ParticipantRepository(session)
@@ -101,7 +96,6 @@ async def update_participant(
     `None` означает «поле не передано»: у описания нет осмысленного значения `null`,
     поэтому схема `ParticipantUpdate` отвергает явный `null` сама.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="participant.update")
 
     if description is not None:
         participant.description = description.strip()

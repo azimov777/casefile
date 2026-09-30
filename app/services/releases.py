@@ -41,9 +41,7 @@ from app import __version__
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.domain.releases import RELEASES_REPOSITORY, Release, is_newer, parse_version
-from app.domain.tokens import TokenScope
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 logger = get_logger("releases")
 
@@ -150,5 +148,4 @@ class ReleaseWatch:
 
 async def read_release(*, actor: Actor, watch: ReleaseWatch) -> ReleaseState:
     """Отстаёт ли установка от последнего выпуска. Открыто любому набору: секрета нет."""
-    ensure_scope(actor, TokenScope.TASK, action="installation.read")
     return await watch.read()

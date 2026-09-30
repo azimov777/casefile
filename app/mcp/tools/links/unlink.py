@@ -10,7 +10,7 @@ from app.services import tasks as tasks_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `unlink` в наборе `task`."""
+    """Объявляет `unlink`."""
     runtime = tools.runtime
 
     @tools.tool(title="Unlink tasks", annotations=FILING)

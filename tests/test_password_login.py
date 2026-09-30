@@ -35,7 +35,7 @@ from app.db.repositories import TokenRepository
 from app.db.session import get_session
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import PasswordHash, hash_password, verify_password
-from app.domain.tokens import TokenScope, hash_token
+from app.domain.tokens import hash_token
 from app.main import create_app
 from app.services import accounts as accounts_service
 from app.services import login as login_module
@@ -212,7 +212,6 @@ async def test_the_right_password_opens_a_session_token_in_an_httponly_cookie(
     token = await TokenRepository(db_session).get_by_hash(hash_token(data["token"]))
     assert token is not None
     assert token.participant_id == alice.participant_id
-    assert token.scope is TokenScope.MAIN
     assert token.name == SESSION_TOKEN_NAME
     assert token.expires_at == clock.now + timedelta(hours=24)
     assert token.created_by.signature == "alice"

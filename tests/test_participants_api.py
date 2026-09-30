@@ -92,14 +92,3 @@ async def test_patch_refuses_an_explicit_null(auth_client: AsyncClient, owner: P
     response = await auth_client.patch("/api/v1/participants/owner", json={"description": None})
 
     assert response.status_code == 422
-
-
-async def test_writing_requires_the_main_scope(client: AsyncClient, task_secret: str) -> None:
-    client.headers["Authorization"] = f"Bearer {task_secret}"
-
-    forbidden = await client.post("/api/v1/participants", json={"kind": "human", "name": "new_one"})
-    readable = await client.get("/api/v1/participants")
-
-    assert forbidden.status_code == 403
-    assert forbidden.json()["error"]["code"] == "permission_denied"
-    assert readable.status_code == 200

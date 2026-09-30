@@ -2,16 +2,16 @@
 
 Нужна для того, чего нельзя сделать через API:
 
-- `init` — первичная инициализация: завести владельца и выпустить ему первый токен
-  набора `main`. Все эндпоинты `/api/v1` требуют токена, поэтому без такой команды
+- `init` — первичная инициализация: завести владельца и выпустить ему первый токен.
+  Все эндпоинты `/api/v1` требуют токена, поэтому без такой команды
   свежая установка оставалась бы запертой снаружи;
 - `issue-token` — выпустить токен напрямую. Это способ вернуть себе доступ, потеряв
   секрет: `init` на уже работающей установке ничего не создаёт;
-- `local-token` — положить действующий ключ набора `main` в файл, откуда его берёт
+- `local-token` — положить действующий ключ в файл, откуда его берёт
   интерфейс локальной установки: человек там и есть её владелец. Ключ добывает сама
   установка, а не человек, поэтому секрет не печатается никогда: команда стоит в
-  журнале подъёма контура. Годный ключ другого набора в файле она заменяет;
-- `agent-token` — то же для агента этой машины: токен набора `main` в файле, откуда его
+  журнале подъёма контура;
+- `agent-token` — то же для агента этой машины: токен в файле, откуда его
   берёт тот, кто подключает агента к MCP (установщик `install.sh`);
 - `account-create`, `account-list`, `account-update`, `account-password` — управление
   людьми на сервере (`docs/CONCEPT.md`, 5.4): завести учётную запись, увидеть всех,
@@ -33,7 +33,7 @@
     docker compose run --rm agent-token
     docker compose run --rm demo
     docker compose run --rm schema
-    docker compose run --rm --entrypoint python api -m app.cli issue-token --scope main
+    docker compose run --rm --entrypoint python api -m app.cli issue-token --participant <name>
     docker compose run --rm --entrypoint python api -m app.cli account-list
 
 Команды идут через `session_scope`: транзакцию фиксирует та же граница, что и у
@@ -63,7 +63,6 @@ from app.core.logging import configure_logging
 from app.db.models.account import Account
 from app.db.session import dispose_engine, session_scope
 from app.domain.passwords import PasswordHash, PasswordHashError
-from app.domain.tokens import TokenScope
 from app.services import accounts as accounts_service
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
@@ -93,7 +92,7 @@ type EnsureToken = Callable[..., Awaitable[LocalToken]]
 
 
 async def _init(args: argparse.Namespace) -> int:
-    """Готовит свежую установку к работе: владелец и его первый токен набора `main`.
+    """Готовит свежую установку к работе: владелец и его первый токен.
 
     Идемпотентна и молчалива на повторе: если в базе уже есть хоть один токен, команда
     ничего не создаёт и говорит об этом. Так её можно держать в Compose рядом с
@@ -109,14 +108,13 @@ async def _init(args: argparse.Namespace) -> int:
         if issued is None:
             print("Installation is already initialized: at least one token exists.")
             print("Nothing was created. To get a new token, run:")
-            print("  python -m app.cli issue-token --participant <name> --scope main")
+            print("  python -m app.cli issue-token --participant <name>")
             return 0
 
         participant = issued.token.participant
         assert participant is not None  # выпущен именной токен, участник у него есть
         print(f"participant: {participant.name} ({participant.kind.value})")
         print(f"token name:  {issued.token.name}")
-        print(f"token scope: {issued.token.scope.value}")
         print()
         print("This token is shown once, store it now:")
         print(f"  {issued.secret}")
@@ -130,7 +128,7 @@ async def _init(args: argparse.Namespace) -> int:
 async def _issue_token(args: argparse.Namespace) -> int:
     """Выпускает токен: участнику или общий агентский, если участник не назван.
 
-    Единственный путь к доступу, когда все секреты набора `main` потеряны, — `init` на
+    Единственный путь к доступу, когда все секреты потеряны, — `init` на
     работающей установке уже ничего не выпускает.
     """
     async with session_scope() as session:
@@ -143,12 +141,10 @@ async def _issue_token(args: argparse.Namespace) -> int:
             session,
             actor=TRACKER_ACTOR,
             participant=participant,
-            scope=TokenScope(args.scope),
             name=args.name,
         )
         owner = "shared agent token" if participant is None else participant.name
         print(f"participant: {owner}")
-        print(f"scope:       {issued.token.scope.value}")
         print(f"token:       {issued.secret}")
         if participant is None:
             print()
@@ -168,8 +164,6 @@ async def _local_token(args: argparse.Namespace) -> int:
     записи оставил бы в базе действующий секрет, которого никто не знает; при этом —
     мёртвый секрет в файле, который следующий запуск просто заменит.
 
-    Годный ключ другого набора в файле — не повод молчать: сценарий заменяет его ключом
-    набора `main` и отзывает прежний (`ensure_local_token`), и файл переписывается.
     """
     try:
         legacy = _legacy_password_hash()
@@ -251,10 +245,6 @@ def _report_local_token(result: LocalToken, path: Path) -> None:
                 "The installation was empty: the owner is in place and the first token is issued."
             ),
             LocalTokenOutcome.REISSUED: "No working local token was found, a new one is issued.",
-            LocalTokenOutcome.RESCOPED: (
-                "The local token worked but had another scope: "
-                f"a {result.token.scope.value} one replaces it."
-            ),
         }[result.outcome]
     )
     if result.revoked:
@@ -267,7 +257,6 @@ def _report_local_token(result: LocalToken, path: Path) -> None:
         admin = "administrator" if result.account.is_admin else "not an administrator"
         print(f"account:     {result.account.email} ({admin}, password: {password})")
     print(f"token name:  {result.token.name}")
-    print(f"token scope: {result.token.scope.value}")
     print(f"file:        {path} (mode 0600, the secret and nothing else)")
     print()
     print("Check it without printing the secret:")
@@ -455,18 +444,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Participant name; omit to issue a shared agent token",
     )
-    issue.add_argument(
-        "--scope",
-        default=TokenScope.TASK.value,
-        choices=[scope.value for scope in TokenScope],
-        help="Token scope",
-    )
     issue.add_argument("--name", default="cli", help="Name for the issued token")
     issue.set_defaults(handler=_issue_token)
 
     local = commands.add_parser(
         "local-token",
-        help="Keep a working main-scope token in a file for the local UI; never prints it",
+        help="Keep a working token in a file for the local UI; never prints it",
     )
     # Путь обязателен: умолчание пути к файлу с рабочим секретом — ровно то неявное
     # поведение, из-за которого секрет однажды оказывается там, где его не искали.
@@ -485,7 +468,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     agent = commands.add_parser(
         "agent-token",
-        help="Keep a working main-scope token for this machine's agent in a file; never prints it",
+        help="Keep a working token for this machine's agent in a file; never prints it",
     )
     agent.add_argument("--output", required=True, help="File to keep the secret in, mode 0600")
     agent.add_argument(

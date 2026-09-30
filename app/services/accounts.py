@@ -53,10 +53,8 @@ from app.domain.errors import (
 from app.domain.onboarding import OnboardingStatus, normalize_hidden_hints
 from app.domain.participants import ParticipantKind, normalize_participant_name
 from app.domain.passwords import PasswordHash, check_new_password, hash_password, verify_password
-from app.domain.tokens import TokenScope
 from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.participants import register_participant
-from app.services.permissions import ensure_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +75,6 @@ async def ensure_admin(session: AsyncSession, actor: Actor, *, action: str) -> N
     Набор `main` проверяется первым: токен набора `task` не открывает управления
     установкой никому, и отказ про набор честнее, чем про флаг.
     """
-    ensure_scope(actor, TokenScope.MAIN, action=action)
     if not await is_admin(session, actor):
         raise AdminRequiredError(details={"action": action})
 
@@ -272,7 +269,6 @@ async def change_own_password(
     Прежний не нужен только учётной записи без пароля — той, что завела себе установка:
     сверять не с чем, а её владелец уже вошёл токеном этой учётной записи.
     """
-    ensure_scope(actor, TokenScope.TASK, action="account.change_password")
     account = await account_of(session, actor.participant)
     if account is None or account.id != account_id:
         raise PermissionDeniedError(
@@ -315,7 +311,6 @@ async def update_onboarding(
     журнал ничего не подшивается: как пароль и почта, это сведения учётной записи, а не
     ход работы.
     """
-    ensure_scope(actor, TokenScope.TASK, action="account.update_onboarding")
     account = await account_of(session, actor.participant)
     if account is None or account.id != account_id:
         raise PermissionDeniedError(

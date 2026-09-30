@@ -1,6 +1,5 @@
-"""Инструмент `archive_project`: заморозить проект с причиной, только набором `main`."""
+"""Инструмент `archive_project`: заморозить проект с причиной."""
 
-from app.domain.tokens import TokenScope
 from app.mcp.arguments import ProjectKeyArg
 from app.mcp.tools.registries.arguments import ProjectReasonArg
 from app.mcp.tools.registries.views import ProjectArchiveView, project_archive
@@ -9,13 +8,12 @@ from app.services import projects as projects_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `archive_project` в наборе `main`."""
+    """Объявляет `archive_project`."""
     runtime = tools.runtime
 
-    @tools.tool(title="Archive project", annotations=FILING, scope=TokenScope.MAIN)
+    @tools.tool(title="Archive project", annotations=FILING)
     async def archive_project(key: ProjectKeyArg, reason: ProjectReasonArg) -> ProjectArchiveView:
-        """Archives a project with a reason and files an `archived` entry in its case. Only
-        a `main` token archives.
+        """Archives a project with a reason and files an `archived` entry in its case.
 
         The project and its tasks freeze as they are: statuses stay, open tasks need no
         closing. From then on any change in the project or its tasks — a new task, an

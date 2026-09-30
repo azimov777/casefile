@@ -29,7 +29,7 @@ from app.db.models.participant import Participant
 from app.db.session import transaction
 from app.domain.errors import ParticipantNotFoundError
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TOKEN_PREFIX, TokenScope
+from app.domain.tokens import TOKEN_PREFIX
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, authenticate
 from app.services.setup import (
@@ -108,7 +108,6 @@ async def test_an_empty_installation_gets_an_owner_and_a_main_token_in_a_file(
     assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
 
     actor = await authenticate(db_session, secret)
-    assert actor.scope is TokenScope.MAIN
     assert actor.participant is not None
     assert actor.participant.name == "owner"
     assert actor.participant.kind is ParticipantKind.HUMAN
@@ -143,64 +142,6 @@ async def test_a_second_run_keeps_the_main_key_and_issues_or_revokes_nothing(
     assert TOKEN_PREFIX not in printed.out + printed.err, printed
 
 
-async def test_a_working_task_key_is_replaced_by_a_main_key_and_revoked(
-    db_session: AsyncSession,
-    owner: Participant,
-    token_file: Path,
-    run: RunCommand,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Файл с годным ключом `task`, каким его выпускала команда до смены набора.
-
-    Одним запуском: выпущен ключ `main`, прежний отозван, и больше не тронуто ничего —
-    доступ `init` владельца остаётся действующим. Действующих секретов, которых никто не
-    знает, после замены нет: единственный отозванный — ровно тот, что лежал в файле.
-    """
-    human = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=owner, scope=TokenScope.MAIN, name="bootstrap"
-    )
-    previous = await tokens_service.issue_token(
-        db_session,
-        actor=TRACKER_ACTOR,
-        participant=owner,
-        scope=TokenScope.TASK,
-        name=DEFAULT_LOCAL_TOKEN_NAME,
-    )
-    write_secret(token_file, previous.secret)
-    before = await snapshot(db_session)
-
-    code = await run(token_file)
-
-    assert code == 0
-    fresh = token_file.read_text(encoding="utf-8")
-    assert fresh != previous.secret
-    assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
-    actor = await authenticate(db_session, fresh)
-    assert actor.scope is TokenScope.MAIN
-    assert actor.participant is not None
-    assert actor.participant.id == owner.id
-
-    with pytest.raises(UnauthorizedError) as refusal:
-        await authenticate(db_session, previous.secret)
-    assert refusal.value.details["reason"] == "token_revoked"
-    assert (await authenticate(db_session, human.secret)).scope is TokenScope.MAIN
-
-    after = await snapshot(db_session)
-    assert len(after) == len(before) + 1
-    newly_revoked = {
-        token_id
-        for token_id, revoked_at in after.items()
-        if revoked_at is not None and before.get(token_id) is None
-    }
-    assert newly_revoked == {previous.token.id}
-
-    printed = capsys.readouterr()
-    assert "had another scope" in printed.out, printed.out
-    assert "revoked:     1 previous token(s)" in printed.out, printed.out
-    assert "token scope: main" in printed.out, printed.out
-    assert TOKEN_PREFIX not in printed.out + printed.err, printed
-
-
 async def test_a_lost_file_gives_a_new_key_and_revokes_the_old_one(
     db_session: AsyncSession,
     token_file: Path,
@@ -223,8 +164,7 @@ async def test_a_lost_file_gives_a_new_key_and_revokes_the_old_one(
     fresh = token_file.read_text(encoding="utf-8")
     assert fresh != lost
 
-    actor = await authenticate(db_session, fresh)
-    assert actor.scope is TokenScope.MAIN
+    await authenticate(db_session, fresh)
 
     with pytest.raises(UnauthorizedError) as refusal:
         await authenticate(db_session, lost)
@@ -310,7 +250,6 @@ async def test_a_valid_main_secret_keeps_the_installation_untouched(
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.MAIN,
         name="spare",
     )
 
@@ -322,59 +261,6 @@ async def test_a_valid_main_secret_keeps_the_installation_untouched(
     assert result.token.id == issued.token.id
 
 
-async def test_a_working_task_key_under_another_name_is_revoked_too(
-    db_session: AsyncSession,
-    owner: Participant,
-) -> None:
-    """Ключ `task` в файле отзывается, как бы он ни назывался.
-
-    Одноимённых под отзыв здесь нет вовсе: без отзыва самого ключа из файла его секрет
-    остался бы действующим, а файл, где он лежал, уже переписан новым.
-    """
-    spare = await tokens_service.issue_token(
-        db_session,
-        actor=TRACKER_ACTOR,
-        participant=owner,
-        scope=TokenScope.TASK,
-        name="spare",
-    )
-
-    result = await ensure_local_token(db_session, known_secret=spare.secret)
-
-    assert result.outcome is LocalTokenOutcome.RESCOPED
-    assert result.secret is not None
-    assert result.revoked == 1
-    assert spare.token.is_revoked
-    assert result.token.scope is TokenScope.MAIN
-    assert result.token.name == DEFAULT_LOCAL_TOKEN_NAME
-    assert result.token.participant is not None
-    assert result.token.participant.id == owner.id
-
-
-async def test_a_task_key_among_its_namesakes_is_revoked_once(
-    db_session: AsyncSession,
-    owner: Participant,
-) -> None:
-    """Ключ из файла стоит и среди одноимённых: отзывается один раз, счёт честный."""
-    in_file, namesake = [
-        await tokens_service.issue_token(
-            db_session,
-            actor=TRACKER_ACTOR,
-            participant=owner,
-            scope=TokenScope.TASK,
-            name=DEFAULT_LOCAL_TOKEN_NAME,
-        )
-        for _ in range(2)
-    ]
-
-    result = await ensure_local_token(db_session, known_secret=in_file.secret)
-
-    assert result.outcome is LocalTokenOutcome.RESCOPED
-    assert result.revoked == 2
-    assert in_file.token.is_revoked
-    assert namesake.token.is_revoked
-
-
 async def test_a_revoked_secret_counts_as_no_secret_at_all(
     db_session: AsyncSession,
     owner: Participant,
@@ -384,7 +270,6 @@ async def test_a_revoked_secret_counts_as_no_secret_at_all(
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.TASK,
         name=DEFAULT_LOCAL_TOKEN_NAME,
     )
     await tokens_service.revoke_token(db_session, issued.token.id, actor=TRACKER_ACTOR)
@@ -395,7 +280,6 @@ async def test_a_revoked_secret_counts_as_no_secret_at_all(
     # при чём, и заменять нечего.
     assert result.outcome is LocalTokenOutcome.REISSUED
     assert result.secret is not None
-    assert result.token.scope is TokenScope.MAIN
     # Отзывать нечего: прежний токен с этим именем уже отозван.
     assert result.revoked == 0
 
@@ -413,7 +297,6 @@ async def test_only_the_token_with_the_same_name_is_revoked(
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.MAIN,
         name="bootstrap",
     )
     first = await ensure_local_token(db_session, known_secret=None)
@@ -423,8 +306,7 @@ async def test_only_the_token_with_the_same_name_is_revoked(
     assert second.revoked == 1
     assert first.token.is_revoked
     assert not human.token.is_revoked
-    actor = await authenticate(db_session, human.secret)
-    assert actor.scope is TokenScope.MAIN
+    await authenticate(db_session, human.secret)
 
 
 async def test_the_scenario_names_the_participant_it_could_not_find(

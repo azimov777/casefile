@@ -31,6 +31,7 @@ from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
 from app.domain.links import LinkKind
+from app.domain.participants import ParticipantKind
 from app.domain.query_language import QUERY_EXAMPLES, QUERY_WRONG_SHAPE, parse_query
 from app.domain.search import (
     Condition,
@@ -41,17 +42,18 @@ from app.domain.search import (
     selectable_names,
 )
 from app.domain.tasks import feature_names
-from app.domain.tokens import TokenScope
 from app.mcp.tools.tasks.search_tasks import DEFAULT_SEARCH_FIELDS, FieldsArg, QueryArg
 from app.mcp.tools.tasks.views import FeaturesView
 from app.services import case as case_service
 from app.services import links as links_service
+from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
-from app.services.auth import Actor
+from app.services import tokens as tokens_service
+from app.services.auth import TRACKER_ACTOR, Actor
 from conftest import Connect, call, refuse, tool_text
 
-#: Инструменты набора `task` — ровно те, что перечислены в `CONCEPT.md`, 5.2.
+#: Инструменты рабочего цикла — ровно те, что перечислены в `CONCEPT.md`, 5.2.
 TASK_TOOLS = {
     "get_task",
     "read_entries",
@@ -78,7 +80,8 @@ TASK_TOOLS = {
     "wait_journal",
 }
 
-#: Что набор `main` добавляет сверху. Выпуска токенов среди них нет намеренно.
+#: Что прежде открывал набор `main` (наборов больше нет, TRK-471).
+#: Выпуска токенов среди них нет намеренно.
 MAIN_TOOLS = {
     "create_project",
     "update_project",
@@ -107,14 +110,13 @@ CLOSING_SUMMARY = {
     "unmeasured": "Живая проверка на проде не гонялась, риск считаю теоретическим",
 }
 
-#: Аргументы, с которыми инструмент набора `main` доходит до проверки прав. Значения
-#: намеренно осмысленные: отказ должен приходить из прав, а не из разбора аргументов.
+#: Аргументы, с которыми зовётся каждый инструмент, прежде открытый набором `main`.
 MAIN_TOOL_CALLS: dict[str, dict[str, Any]] = {
     "create_project": {"key": "OPS", "title": "Эксплуатация"},
     "update_project": {"key": "TRK", "title": "Другое название"},
     "archive_project": {"key": "TRK", "reason": "Заброшен"},
     "restore_project": {"key": "TRK", "reason": "Снова нужен"},
-    "move_task": {"key": "TRK-1", "project": "TRK", "reason": "Проекты объединены"},
+    "move_task": {"key": "TRK-1", "project": "OPS", "reason": "Проекты объединены"},
     "register_participant": {"kind": "agent", "name": "nightly_bot"},
     "update_participant": {"name": "owner", "description": "Другое описание"},
 }
@@ -130,42 +132,36 @@ async def open_task(db_session: AsyncSession, task_actor: Actor, task: Task) -> 
 # --- Состав набора --------------------------------------------------------------------
 
 
-async def test_a_task_token_sees_exactly_the_working_cycle(
-    mcp_session: Connect, task_secret: str
-) -> None:
-    """Обзорная проверка 1: инструменты рабочего цикла и ни одного лишнего."""
+async def test_any_token_sees_every_tool(mcp_session: Connect, task_secret: str) -> None:
+    """Обзорная проверка 1: наборов нет, токен видит рабочий цикл и реестры вместе."""
     async with mcp_session(task_secret) as session:
-        listed = {tool.name for tool in (await session.list_tools()).tools}
-
-    assert listed == TASK_TOOLS
-
-
-async def test_a_main_token_sees_the_registries_too(mcp_session: Connect, main_secret: str) -> None:
-    """Обзорная проверка 1: набор `main` добавляет инструменты реестров и архива."""
-    async with mcp_session(main_secret) as session:
         listed = {tool.name for tool in (await session.list_tools()).tools}
 
     assert listed == TASK_TOOLS | MAIN_TOOLS
 
 
-async def test_every_main_tool_refuses_a_task_token_with_the_rest_code(
+async def test_an_agent_token_calls_every_tool_that_main_once_opened(
     mcp_session: Connect,
-    task_secret: str,
+    db_session: AsyncSession,
     project: Project,
     task: Task,
 ) -> None:
-    """Обзорная проверка 2: недоступный инструмент отвечает `permission_denied`.
+    """Токен участника-агента зовёт все семь инструментов, которые открывал `main`.
 
-    Проверяются все четыре, а не только `create_project`: объявленный набор инструмента —
-    это описание списка, и разойтись с настоящими правами ему не даёт именно этот тест.
-    Задача `TRK-1` нужна переносу: без неё отказ пришёл бы из разбора ключа, а не из прав.
+    Задача `TRK-1` нужна переносу. Вызовы идут по порядку `MAIN_TOOL_CALLS`: проект правится,
+    архивируется и восстанавливается, и лишь затем в него переносят задачу.
     """
     del project, task
-    async with mcp_session(task_secret) as session:
+    agent = await participants_service.register_participant(
+        db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="worker"
+    )
+    issued = await tokens_service.issue_token(
+        db_session, actor=TRACKER_ACTOR, participant=agent, name="worker"
+    )
+    async with mcp_session(issued.secret) as session:
+        assert {tool.name for tool in (await session.list_tools()).tools} >= MAIN_TOOLS
         for name, arguments in MAIN_TOOL_CALLS.items():
-            failure = await refuse(session, name, **arguments)
-            assert "permission_denied" in failure, f"{name}: {failure}"
-            assert "required_scope" in failure
+            await call(session, name, **arguments)
 
 
 async def test_an_unknown_token_is_refused_before_the_list_is_built(
@@ -879,7 +875,7 @@ async def test_the_short_answer_is_an_order_of_magnitude_smaller(
     Дело набивается двадцатью записями, как требует проверка. На размер ответа они не
     влияют и не влияли: он от длины дела не зависел никогда (`TRK-12#5`).
     """
-    actor = Actor(author=task.created_by, scope=TokenScope.TASK)
+    actor = Actor(author=task.created_by)
     big = await tasks_service.create_task(
         db_session,
         actor=actor,

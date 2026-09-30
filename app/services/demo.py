@@ -43,7 +43,6 @@ from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.projects import normalize_project_key
 from app.domain.tasks import TaskPriority, TaskStatus
-from app.domain.tokens import TokenScope
 from app.services import attributes as attributes_service
 from app.services import case as case_service
 from app.services import links as links_service
@@ -101,12 +100,12 @@ async def seed_demo(session: AsyncSession) -> DemoData:
         return DemoData(project=None, tasks=[])
 
     human = await _human(session)
-    owner = Actor(author=human.author, scope=TokenScope.MAIN, participant=human)
+    owner = Actor(author=human.author, participant=human)
     robot = await _agent(session, owner)
-    agent = Actor(author=robot.author, scope=TokenScope.TASK, participant=robot)
+    agent = Actor(author=robot.author, participant=robot)
     # Временный агент: участника за ним нет, подпись — метка. Набор `task`, как у
     # общего агентского токена, которым такой агент и ходит.
-    temporary = Actor(author=label_author(DEMO_LABEL), scope=TokenScope.TASK)
+    temporary = Actor(author=label_author(DEMO_LABEL))
 
     project = await projects_service.create_project(
         session,
@@ -358,7 +357,7 @@ async def _done_task(
     await case_service.add_verdict(
         session,
         task,
-        actor=Actor(author=human.author, scope=TokenScope.TASK, participant=human),
+        actor=Actor(author=human.author, participant=human),
         check_no=2,
         outcome=VerdictOutcome.PASSED,
         evidence="`docker compose run --rm test` — 214 passed",
@@ -407,7 +406,7 @@ async def _remarks_on_done(
     признак `open_remarks` был бы нулём у всех задач демо, и проверить его на экране
     было бы не на чем.
     """
-    reader = Actor(author=human.author, scope=TokenScope.TASK, participant=human)
+    reader = Actor(author=human.author, participant=human)
     accepted = await case_service.add_entry(
         session,
         done,

@@ -9,7 +9,8 @@ import {
 } from '@/shared/api';
 
 export type Participant = components['schemas']['ParticipantRead'];
-export type TokenScope = components['schemas']['TokenScope'];
+/** Набор токена снят в контракте (TRK-471); тип живёт до TRK-473, который уберёт выбор набора. */
+export type TokenScope = 'task' | 'main';
 
 /**
  * Выпущенный токен: единственный ответ контракта, в котором есть секрет
@@ -105,11 +106,10 @@ export interface IssueInput {
  */
 export function issueToken({
   participant,
-  scope,
   name,
   idempotencyKey,
 }: IssueInput): Promise<IssuedToken> {
-  const body: IssueBody = { name, scope, ...(participant === null ? {} : { participant }) };
+  const body: IssueBody = { name, ...(participant === null ? {} : { participant }) };
 
   return unwrap(
     apiClient.POST('/api/v1/tokens', {

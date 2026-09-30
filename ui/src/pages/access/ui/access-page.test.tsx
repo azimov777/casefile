@@ -327,8 +327,8 @@ describe('экран «Доступы»', () => {
     await user.type(screen.getByLabelText(say.access('issue.nameLabel')), 'ноутбук');
     await user.click(screen.getByRole('button', { name: say.access('issue.submit') }));
 
-    // Умолчание набора — `task`, и оно уехало на бэкенд как есть.
-    expect(body).toEqual({ name: 'ноутбук', scope: 'task', participant: 'nightly_agent' });
+    // Набор на бэкенд не уезжает: контракт его снял (TRK-471).
+    expect(body).toEqual({ name: 'ноутбук', participant: 'nightly_agent' });
 
     // Секрет показан — и сам по себе, и внутри фрагментов подключения.
     const dialog = await screen.findByRole('dialog');

@@ -6,14 +6,14 @@ from datetime import datetime
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import BaseModel, string_enum
+from app.db.base import BaseModel
 from app.db.models.author import CreatedByMixin
 from app.db.models.participant import Participant
-from app.domain.tokens import TOKEN_HASH_LENGTH, TokenScope
+from app.domain.tokens import TOKEN_HASH_LENGTH
 
 
 class Token(BaseModel, CreatedByMixin):
-    """Секрет, по которому запрос находит своего автора и свой набор прав.
+    """Секрет, по которому запрос находит своего автора .
 
     Полное значение токена в базе не хранится: есть только хеш, по нему же идёт поиск.
     Отзыв — это проставленная дата в `revoked_at`, а не удаление строки: запись
@@ -31,10 +31,6 @@ class Token(BaseModel, CreatedByMixin):
         ForeignKey("participants.id", ondelete="CASCADE"),
         index=True,
         nullable=True,
-    )
-    scope: Mapped[TokenScope] = mapped_column(
-        string_enum(TokenScope, name="token_scope", length=16),
-        nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     token_hash: Mapped[str] = mapped_column(

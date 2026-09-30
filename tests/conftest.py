@@ -36,7 +36,6 @@ from app.db.models.task import Task
 from app.db.session import get_session, transaction
 from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TokenScope
 from app.main import create_app
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
@@ -318,7 +317,6 @@ async def main_secret(db_session: AsyncSession, owner: Participant) -> str:
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.MAIN,
         name="tests",
     )
     return issued.secret
@@ -331,7 +329,6 @@ async def task_secret(db_session: AsyncSession, owner: Participant) -> str:
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.TASK,
         name="tests task scope",
     )
     return issued.secret
@@ -343,7 +340,6 @@ async def shared_secret(db_session: AsyncSession) -> str:
     issued = await tokens_service.issue_token(
         db_session,
         actor=TRACKER_ACTOR,
-        scope=TokenScope.TASK,
         name="tests shared",
     )
     return issued.secret
@@ -354,7 +350,6 @@ def main_actor(owner: Participant) -> Actor:
     """Структура автора для прямых вызовов сценариев: владелец с набором `main`."""
     return Actor(
         author=owner.author,
-        scope=TokenScope.MAIN,
         participant=owner,
     )
 
@@ -364,7 +359,6 @@ def task_actor(owner: Participant) -> Actor:
     """То же, но с набором `task`: им проверяются отказы единой точки прав."""
     return Actor(
         author=owner.author,
-        scope=TokenScope.TASK,
         participant=owner,
     )
 

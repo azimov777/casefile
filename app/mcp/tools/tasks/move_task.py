@@ -1,4 +1,4 @@
-"""Инструмент `move_task`: перенос задачи или списка задач в другой проект, только набором `main`.
+"""Инструмент `move_task`: перенос задачи или списка задач в другой проект.
 
 Список ключей — TRK-309 (решение владельца TRK-309#2): каждая задача переносится сама по
 себе, ответ — итог по каждому элементу списка. Форма ответа выбирается формой аргумента
@@ -13,7 +13,6 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 
 from app.domain.tasks import MAX_MOVE_KEYS
-from app.domain.tokens import TokenScope
 from app.mcp.toolset import FILING, Toolset
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
@@ -156,13 +155,13 @@ def move_result(value: TaskMoveOutcome) -> MovedView | AlreadyView | RefusedView
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `move_task` в наборе `main`."""
+    """Объявляет `move_task`."""
     runtime = tools.runtime
 
-    @tools.tool(title="Move task to project", annotations=FILING, scope=TokenScope.MAIN)
+    @tools.tool(title="Move task to project", annotations=FILING)
     async def move_task(key: MoveKeyArg, project: ProjectArg, reason: MoveReasonArg) -> MoveView:
         """Moves a task to another project, recording the move, both keys and the reason
-        as a `moved` entry of the task. Available to a `main` token alone.
+        as a `moved` entry of the task.
 
         The task gets the next number of the new project, or its own earlier key there
         when it returns to a project it has been in: a task holds at most one key per
@@ -178,9 +177,9 @@ def register(tools: Toolset) -> None:
         answer is `results`, one per listed key, repeats included: `moved`, `already`
         (the task is in that project already) or `error` with the code a single move
         would give, such as `task_not_found` or `project_archived` of the task's own
-        project. A refusal of one task leaves the others moved. A missing `main` scope,
-        a blank reason, an unknown or archived target project and a list size out of
-        range refuse the whole call before any move.
+        project. A refusal of one task leaves the others moved. A blank reason, an unknown or
+        archived target project and a list size out of range refuse the whole call before
+        any move.
         """
         async with runtime.call() as (session, actor):
             if not isinstance(key, str):

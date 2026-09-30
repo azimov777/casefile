@@ -63,7 +63,7 @@ async def issue_token(
 ) -> DataResponse[TokenIssued]:
     """Единственный ответ, содержащий секрет токена: второго способа узнать его нет.
 
-    Требует набора `main` и учётной записи у выпускающего: выпускает человек, а не агент
+    Требует учётной записи у выпускающего: выпускает человек, а не агент
     (`403 permission_denied`, `details.reason: account_required`). Ключ от имени другого
     человека выпускает только администратор (`details.reason: foreign_human`); себе,
     агенту-участнику и общий — любой вошедший. Выпущенный токен — свой у выпустившего: он
@@ -86,7 +86,6 @@ async def issue_token(
             session,
             actor=actor,
             participant=participant,
-            scope=payload.scope,
             name=payload.name,
         )
         body = TokenIssued(
@@ -99,7 +98,6 @@ async def issue_token(
         DataResponse[TokenIssued],
         request={
             "participant": None if participant is None else participant.name,
-            "scope": payload.scope,
             "name": payload.name,
         },
         build=issue,

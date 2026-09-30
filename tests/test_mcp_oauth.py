@@ -25,7 +25,7 @@ from starlette.applications import Starlette
 from app.core.config import Settings, get_settings
 from app.db.models.oauth import OAuthCode, OAuthRefreshToken
 from app.db.models.token import Token
-from app.domain.tokens import TokenScope, hash_token
+from app.domain.tokens import hash_token
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
 from conftest import MCP_BASE_URL, connect_mcp
@@ -181,7 +181,6 @@ async def test_full_cycle_gives_a_participant_token_that_lists_tools(
         select(Token).where(Token.token_hash == hash_token(issued["access_token"]))
     )
     assert token is not None
-    assert token.scope is TokenScope.TASK
     assert token.participant is not None and token.participant.name == "agent"
     assert token.name == "oauth: Codex"
     assert token.expires_at is None
@@ -204,7 +203,6 @@ async def test_full_cycle_gives_a_participant_token_that_lists_tools(
         listed = await session.list_tools()
     names = {tool.name for tool in listed.tools}
     assert {"get_task", "create_task"} <= names
-    assert "register_participant" not in names  # набор `task`, а не `main`
 
 
 async def test_a_wrong_code_verifier_is_refused(mcp_sessions: SessionFactory) -> None:

@@ -56,7 +56,7 @@ from app.db.repositories import AccountRepository, TokenRepository
 from app.domain.accounts import normalize_email
 from app.domain.errors import PasswordAttemptsExceededError
 from app.domain.passwords import PasswordHash, hash_password, verify_password
-from app.domain.tokens import TokenScope, generate_token, hash_token
+from app.domain.tokens import generate_token, hash_token
 
 #: Имя токена сеанса в списке токенов: по нему человек отличает вкладки от ключей агентов.
 SESSION_TOKEN_NAME = "browser-session"
@@ -236,7 +236,6 @@ class PasswordLogin:
         token = await TokenRepository(session).add(
             Token(
                 participant=participant,
-                scope=TokenScope.MAIN,
                 name=SESSION_TOKEN_NAME,
                 token_hash=hash_token(secret),
                 expires_at=self._clock() + self._ttl,

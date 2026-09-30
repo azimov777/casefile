@@ -234,7 +234,7 @@ async def test_issuing_a_token_twice_returns_the_same_secret(
     db_session: AsyncSession,
 ) -> None:
     """Обзорная проверка 5: секрет нельзя собрать заново, поэтому хранится ответ целиком."""
-    body = {"name": "release-bot on ci", "scope": "task"}
+    body = {"name": "release-bot on ci"}
 
     first = await auth_client.post("/api/v1/tokens", json=body, headers=with_key(KEY))
     second = await auth_client.post("/api/v1/tokens", json=body, headers=with_key(KEY))

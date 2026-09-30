@@ -33,7 +33,7 @@ def _declared(module: ModuleType) -> list[str]:
     """Имена инструментов, которые объявляет модуль, — на отдельном пустом сервере."""
     probe = Toolset(server=MCPServer(name="probe"), runtime=Runtime(), settings=get_settings())
     module.register(probe)
-    return list(probe.scopes)
+    return list(probe.names)
 
 
 def test_every_tool_module_declares_exactly_the_tool_it_is_named_after() -> None:

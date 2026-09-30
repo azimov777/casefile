@@ -1,6 +1,5 @@
-"""Инструмент `restore_project`: вернуть проект из архива с причиной, только набором `main`."""
+"""Инструмент `restore_project`: вернуть проект из архива с причиной."""
 
-from app.domain.tokens import TokenScope
 from app.mcp.arguments import ProjectKeyArg
 from app.mcp.tools.registries.arguments import ProjectReasonArg
 from app.mcp.tools.registries.views import ProjectArchiveView, project_archive
@@ -9,14 +8,13 @@ from app.services import projects as projects_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `restore_project` в наборе `main`."""
+    """Объявляет `restore_project`."""
     runtime = tools.runtime
 
-    @tools.tool(title="Restore project", annotations=FILING, scope=TokenScope.MAIN)
+    @tools.tool(title="Restore project", annotations=FILING)
     async def restore_project(key: ProjectKeyArg, reason: ProjectReasonArg) -> ProjectArchiveView:
         """Brings an archived project back: files a `restored` entry carrying the reason in
-        its case, and its tasks resume where the archive left them. Only a `main` token
-        restores.
+        its case, and its tasks resume where the archive left them.
 
         A project that is not archived is refused with `project_not_archived`.
         """

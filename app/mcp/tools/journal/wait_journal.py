@@ -57,7 +57,7 @@ TimeoutArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `wait_journal` в наборе `task`."""
+    """Объявляет `wait_journal`."""
     runtime = tools.runtime
     settings = tools.settings
 

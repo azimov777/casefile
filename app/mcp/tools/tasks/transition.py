@@ -27,7 +27,7 @@ TaskStatusArg = Annotated[TaskStatusSchema, Field(description="Target status")]
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `transition` в наборе `task`."""
+    """Объявляет `transition`."""
     runtime = tools.runtime
 
     @tools.tool(title="Change task status", annotations=FILING)

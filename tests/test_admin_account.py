@@ -23,7 +23,6 @@ from app.db.repositories import AccountRepository, ParticipantRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
-from app.domain.tokens import TokenScope
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
@@ -129,7 +128,6 @@ async def test_an_owner_from_before_accounts_gets_one_on_the_next_start(
         db_session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.MAIN,
         name="bootstrap",
     )
     assert await owner_account(db_session) is None

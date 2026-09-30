@@ -101,7 +101,7 @@ def task_package(package: TaskPackage) -> TaskPackageView:
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `get_task` в наборе `task`."""
+    """Объявляет `get_task`."""
     runtime = tools.runtime
 
     @tools.tool(title="Get task", annotations=READ_ONLY)

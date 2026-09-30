@@ -47,7 +47,7 @@ async def read_bootstrap(
                 else ParticipantRead.model_validate(state.participant)
             ),
             account=(None if state.account is None else AccountRead.model_validate(state.account)),
-            token=CurrentTokenRead(id=state.token_id, scope=state.scope),
+            token=CurrentTokenRead(id=state.token_id),
             projects=[ProjectRead.model_validate(project) for project in state.projects],
             open_questions=state.open_questions,
         )

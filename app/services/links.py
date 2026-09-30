@@ -70,11 +70,9 @@ from app.domain.links import (
     visible_kind,
 )
 from app.domain.tasks import is_closed
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import freeze
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +95,6 @@ class TaskLink:
 
 async def list_links(session: AsyncSession, task: Task, *, actor: Actor) -> list[TaskLink]:
     """Все связи задачи с обеих сторон, каждая — под именем со стороны этой задачи."""
-    ensure_scope(actor, TokenScope.TASK, action="link.read")
     links = await LinkRepository(session).list_for_task(task.id)
     return [_seen_from(link, task) for link in links]
 
@@ -175,7 +172,6 @@ async def add_link(
     Очередь изменений занимается после проверок формы и до первой проверки состояния:
     форма не зависит от того, что делают соседи, а всё остальное — зависит.
     """
-    ensure_scope(actor, TokenScope.TASK, action="link.add")
     requested = parse_link_kind(kind)
     ensure_not_self(task.key, other.key)
     await freeze.lock_unfrozen(session, task, other)
@@ -233,7 +229,6 @@ async def remove_link(
     ложится в оба дела, включая замороженное (`CONCEPT.md`, 3.2; `TRK-164#9`). Поэтому
     здесь очередь без проверки заморозки — в отличие от `add_link`.
     """
-    ensure_scope(actor, TokenScope.TASK, action="link.remove")
     requested = parse_link_kind(kind)
     ensure_not_self(task.key, other.key)
     await lock_changes(session, task, other)

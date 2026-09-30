@@ -13,7 +13,6 @@ from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
 from app.domain.errors import ActorLabelRequiredError, InvalidActorLabelError
-from app.domain.tokens import TokenScope
 from app.services import tokens as service
 from app.services.auth import LAST_USED_THROTTLE, Actor, authenticate
 
@@ -27,7 +26,6 @@ async def test_a_participant_token_signs_with_the_participant_name(
 
     assert actor.author.kind is AuthorKind.HUMAN
     assert actor.author.signature == owner.name
-    assert actor.scope is TokenScope.MAIN
     assert actor.participant is not None and actor.participant.id == owner.id
 
 
@@ -58,7 +56,7 @@ async def test_revoked_token_stops_working(
     main_actor: Actor,
 ) -> None:
     issued = await service.issue_token(
-        db_session, actor=main_actor, participant=owner, scope=TokenScope.TASK, name="second"
+        db_session, actor=main_actor, participant=owner, name="second"
     )
     await service.revoke_token(db_session, issued.token.id, actor=main_actor)
 
@@ -159,9 +157,8 @@ async def test_an_expired_session_token_stops_working(
     """Срок бывает только у токена сеанса: после него — `token_expired`, до — обычный вход."""
     issued = await service.issue_token(
         db_session,
-        actor=Actor(author=owner.author, scope=TokenScope.MAIN, participant=owner),
+        actor=Actor(author=owner.author, participant=owner),
         participant=owner,
-        scope=TokenScope.MAIN,
         name="browser-session",
     )
     deadline = datetime.now(UTC) + timedelta(hours=1)

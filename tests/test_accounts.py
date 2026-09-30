@@ -22,7 +22,6 @@ from app.db.repositories import AccountRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import MIN_PASSWORD_LENGTH, hash_password
-from app.domain.tokens import TokenScope
 from app.services import accounts as accounts_module
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
@@ -205,15 +204,6 @@ async def test_the_flag_gives_no_rights_on_tasks_and_its_absence_takes_none(
     assert created.json()["data"]["key"] in [item["key"] for item in listed.json()["data"]]
 
 
-async def test_a_task_scope_token_of_an_admin_is_refused_by_scope(
-    client: AsyncClient, task_secret: str
-) -> None:
-    response = await client.get(ACCOUNTS, headers=bearer(task_secret))
-
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "permission_denied"
-
-
 async def test_an_agent_token_is_no_administrator(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -221,7 +211,7 @@ async def test_an_agent_token_is_no_administrator(
         db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="helper"
     )
     issued = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=agent, scope=TokenScope.MAIN, name="t"
+        db_session, actor=TRACKER_ACTOR, participant=agent, name="t"
     )
 
     response = await client.get(ACCOUNTS, headers=bearer(issued.secret))

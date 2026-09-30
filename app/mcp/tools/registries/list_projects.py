@@ -39,7 +39,7 @@ def project_row(item: Project) -> ProjectRowView:
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `list_projects` в наборе `task`."""
+    """Объявляет `list_projects`."""
     runtime = tools.runtime
     settings = tools.settings
 

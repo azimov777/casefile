@@ -5,11 +5,10 @@
 Свой токен участника — тот, что говорит от его имени, или тот, что он выпустил
 (`Token.belongs_to`, `docs/CONCEPT.md`, 3.1; решение `TRK-114#12`). Человек выпускает
 токены своим агентам сам, видит и отзывает свои; администратор и сам трекер — все токены
-установки. Нового набора под это нет: набор отвечает за право на задачи, а «чей токен» —
-вопрос строки, и решается он здесь, после `ensure_scope`.
+установки. Наборов доступа нет (TRK-471): «чей токен» — вопрос строки, и решается он здесь.
 
-Выпуск сверх набора `main` требует действующей учётной записи у выпускающего: выдача
-доступов остаётся за человеком. Иначе агент с токеном `main`, полученным от человека,
+Выпуск требует действующей учётной записи у выпускающего: выдача
+доступов остаётся за человеком. Иначе агент, получивший доступ от человека,
 выпускал бы ключи, которые не принадлежат этому человеку и переживают его отключение.
 """
 
@@ -27,10 +26,9 @@ from app.db.pagination import Page
 from app.db.repositories import TokenRepository
 from app.domain.errors import TokenNotFoundError
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TokenScope, generate_token, hash_token
+from app.domain.tokens import generate_token, hash_token
 from app.services.accounts import active_account_of, is_admin
 from app.services.auth import TRACKER_ACTOR, Actor
-from app.services.permissions import ensure_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,10 +55,9 @@ async def list_tokens(
 
     Администратор и трекер видят все токены установки, остальные — свои; `mine` сужает
     до своих и администратора. У того, за кем нет участника (временный агент с общим
-    токеном), своих токенов нет — список пуст. Чтение открыто обоим наборам. Секрета в
+    токеном), своих токенов нет — список пуст. Секрета в
     списке нет и быть не может — в базе лежит только хеш.
     """
-    ensure_scope(actor, TokenScope.TASK, action="token.list")
     tokens = TokenRepository(session)
     if not mine and await is_admin(session, actor):
         return await tokens.list_page(limit=limit, cursor=cursor)
@@ -73,7 +70,6 @@ async def issue_token(
     session: AsyncSession,
     *,
     actor: Actor,
-    scope: TokenScope,
     name: str,
     participant: Participant | None = None,
 ) -> IssuedToken:
@@ -83,7 +79,6 @@ async def issue_token(
     подписываясь заголовком `X-Actor-Label`. Это не недосмотр вызывающего, а отдельный
     вид доступа, поэтому участник — необязательный параметр, а не проверяемое условие.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="token.issue")
     await _ensure_may_issue(session, actor, participant)
 
     secret = generate_token()
@@ -93,7 +88,6 @@ async def issue_token(
     token = await TokenRepository(session).add(
         Token(
             participant=participant,
-            scope=scope,
             name=name.strip(),
             token_hash=hash_token(secret),
             **created_by_columns(actor.author),
@@ -108,7 +102,6 @@ async def revoke_token(session: AsyncSession, token_id: uuid.UUID, *, actor: Act
     Отзыв идемпотентен намеренно: клиент, не получивший ответ и повторивший запрос,
     не должен получать ошибку на действие, которое уже выполнено.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="token.revoke")
 
     token = await TokenRepository(session).get_by_id(token_id)
     if token is None:
@@ -134,8 +127,8 @@ async def _ensure_may_issue(
     Чужим именем — только администратор.
 
     Отказы — `permission_denied` с `details.action: token.issue` и причиной:
-    `account_required` — за токеном запроса нет действующей учётной записи (агент с
-    токеном `main`); `foreign_human` — ключ говорил бы от имени другого человека, а
+    `account_required` — за токеном запроса нет действующей учётной записи (так
+    отвечает агент); `foreign_human` — ключ говорил бы от имени другого человека, а
     выпускающий не администратор: иначе любой вошедший подписывался бы чужим именем.
     """
     if actor == TRACKER_ACTOR:

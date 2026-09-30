@@ -1,7 +1,7 @@
 """Сценарии входа через OAuth 2.1: клиент, код, обмен на токен участника, refresh.
 
 Слой mcp (`app/mcp/oauth.py`) переводит сюда вызовы провайдера SDK и обратно, а
-правила живут здесь. Выдаётся обычный токен участника набора `task` — тот же, что
+правила живут здесь. Выдаётся обычный токен участника — тот же, что
 выпускают «Доступы» (`app/services/tokens.py`), и отзывается он там же. Решения —
 `TRK-448#8` и `TRK-448#9`.
 
@@ -66,7 +66,7 @@ from app.domain.oauth import (
     refuse_unsafe_redirect,
 )
 from app.domain.participants import ParticipantKind, normalize_participant_name
-from app.domain.tokens import TokenScope, hash_token
+from app.domain.tokens import hash_token
 from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.client_documents import ClientDocuments
 from app.services.participants import register_participant
@@ -468,7 +468,7 @@ async def _issuer_actor(session: AsyncSession, issuer: Author) -> Actor:
     if issuer.kind is AuthorKind.TRACKER:
         return TRACKER_ACTOR
     participant = await ParticipantRepository(session).get_by_name(issuer.signature or "")
-    return Actor(author=issuer, scope=TokenScope.MAIN, participant=participant)
+    return Actor(author=issuer, participant=participant)
 
 
 async def _issue(
@@ -477,7 +477,6 @@ async def _issue(
     issued = await issue_token(
         session,
         actor=await _issuer_actor(session, issuer),
-        scope=TokenScope.TASK,
         name=oauth_token_name(_view(client).client_name, client.client_id),
         participant=participant,
     )

@@ -28,7 +28,6 @@ from app.db.models.account import Account
 from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.pagination import MAX_PAGE_SIZE
-from app.domain.tokens import TokenScope
 from app.services import accounts as accounts_service
 from app.services import case as case_service
 from app.services import projects as projects_service
@@ -49,8 +48,6 @@ class Bootstrap:
     #: Токен, которым сделан запрос: тот же идентификатор, что в списке токенов. Есть у
     #: любого запроса снаружи, в том числе с общим агентским токеном.
     token_id: uuid.UUID
-    #: Набор этого токена. У общего агентского токена участника нет, а набор есть.
-    scope: TokenScope
     projects: list[Project]
     #: Открытые вопросы, адресованные `participant`. Ноль при пустом участнике — это
     #: факт, а не умолчание: адресовать временного агента нельзя (`CONCEPT.md`, 3.6),
@@ -95,7 +92,6 @@ async def read_bootstrap(
         participant=actor.participant,
         account=await accounts_service.account_of(session, actor.participant),
         token_id=actor.token_id,
-        scope=actor.scope,
         projects=page.items,
         open_questions=open_questions,
     )

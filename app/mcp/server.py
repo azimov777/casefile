@@ -6,9 +6,8 @@
 
 ## Три вещи, которые сервер отдаёт агенту
 
-1. **Инструменты** рабочего цикла (`app/mcp/tools/`). Состав `tools/list` зависит от
-   набора токена; отказ на вызове недоступного инструмента приходит из той же единой
-   точки прав, что и в REST (`app/mcp/toolset.py`).
+1. **Инструменты** рабочего цикла (`app/mcp/tools/`). Любой действующий доступ видит
+   весь `tools/list` (`app/mcp/toolset.py`).
 2. **`instructions`** — как пользоваться сервером, своим текстом в
    `app/mcp/instructions.md`: что такое трекер, что видит человек, что считать
    заданием, цикл работы. Они уезжают клиенту при подключении и читаются моделью
@@ -92,8 +91,6 @@ def create_server(
 
     register_tools(tools)
     _register_health(tools.server, runtime)
-    # Промежуточный слой ставится после регистрации: он спрашивает у набора состав
-    # инструментов, и пустой набор оставил бы `tools/list` пустым навсегда.
     tools.server.middleware.append(tools.middleware())
     tools.server.middleware.append(advertise_on_handshake)
     return tools.server

@@ -17,7 +17,7 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.core.errors import AppError, PermissionDeniedError
+from app.core.errors import AppError
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
@@ -31,7 +31,6 @@ from app.domain.errors import (
 )
 from app.domain.links import LinkKind
 from app.domain.tasks import TaskStatus
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import projects as projects_service
@@ -172,14 +171,6 @@ async def test_a_move_into_its_own_project_is_refused(
         )
     assert error.value.details == {"key": "TRK-1", "project": "TRK"}
     assert project.last_task_number == 1
-
-
-async def test_a_task_token_does_not_move(
-    db_session: AsyncSession, main_actor: Actor, task_actor: Actor, task: Task
-) -> None:
-    ui = await _ui(db_session, main_actor)
-    with pytest.raises(PermissionDeniedError):
-        await tasks_service.move_task(db_session, task, actor=task_actor, project=ui, reason="r")
 
 
 @pytest.mark.parametrize("archived", ["source", "target"])
@@ -385,7 +376,7 @@ async def test_a_continuation_named_by_a_previous_key_stays_in_work(
 
 
 async def test_rest_move_refusals(
-    auth_client: AsyncClient, client: AsyncClient, task_secret: str, main_secret: str
+    auth_client: AsyncClient,
 ) -> None:
     await _moved_ui_task(auth_client)
 
@@ -401,9 +392,6 @@ async def test_rest_move_refusals(
     )
     # Прежний ключ архивного проекта ведёт на задачу и из архива (`TRK-171#9`, п. 11).
     read = await auth_client.get("/api/v1/tasks/UI-1")
-    client.headers["Authorization"] = f"Bearer {task_secret}"
-    forbidden = await client.post(MOVE.format(key="UI-1"), json={"project": "UI", "reason": "r"})
-    client.headers["Authorization"] = f"Bearer {main_secret}"
 
     assert (same.status_code, same.json()["error"]["code"]) == (409, "task_already_in_project")
     assert same.json()["error"]["details"] == {"key": "TRK-2", "project": "TRK"}
@@ -414,19 +402,15 @@ async def test_rest_move_refusals(
         "project_archived",
     )
     assert read.status_code == 200 and read.json()["data"]["task"]["key"] == "TRK-2"
-    assert (forbidden.status_code, forbidden.json()["error"]["code"]) == (403, "permission_denied")
 
 
 # --- MCP ----------------------------------------------------------------------------------
 
 
-async def test_mcp_moves_only_with_the_main_set_and_answers_by_the_previous_key(
-    mcp_session: Connect, main_secret: str, task_secret: str, project: Project, task: Task
+async def test_mcp_moves_and_answers_by_the_previous_key(
+    mcp_session: Connect, task_secret: str, project: Project, task: Task
 ) -> None:
     async with mcp_session(task_secret) as session:
-        task_tools = {tool.name for tool in (await session.list_tools()).tools}
-        forbidden = await refuse(session, "move_task", key="TRK-1", project="TRK", reason="r")
-    async with mcp_session(main_secret) as session:
         await call(session, "create_project", key="UI", title="Интерфейс")
         no_reason = await refuse(session, "move_task", key="TRK-1", project="UI", reason=" ")
         same = await refuse(session, "move_task", key="TRK-1", project="TRK", reason="r")
@@ -440,8 +424,6 @@ async def test_mcp_moves_only_with_the_main_set_and_answers_by_the_previous_key(
         entries = await call(session, "read_entries", key="TRK-1", types=["moved"])
         back = await call(session, "move_task", key="UI-1", project="TRK", reason="Вернулась")
 
-    assert "move_task" not in task_tools
-    assert "permission_denied" in forbidden
     assert "task_move_reason_required" in no_reason
     assert "task_already_in_project" in same
     assert moved == {"key": "UI-1", "previous_keys": ["TRK-1"], "version": 2, "no": 2}
@@ -457,7 +439,7 @@ async def test_mcp_moves_only_with_the_main_set_and_answers_by_the_previous_key(
 
 # --- Одновременные переносы -----------------------------------------------------------------
 
-MOVER = Actor(author=label_author("mover"), scope=TokenScope.MAIN)
+MOVER = Actor(author=label_author("mover"))
 
 
 @pytest.fixture

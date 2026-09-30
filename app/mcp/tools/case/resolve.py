@@ -50,7 +50,7 @@ ContinuationKeyArg = Annotated[
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `resolve` в наборе `task`."""
+    """Объявляет `resolve`."""
     runtime = tools.runtime
 
     @tools.tool(title="Resolve remark", annotations=FILING, creating=True)

@@ -10,7 +10,7 @@ from app.services import tasks as tasks_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `read_entries` в наборе `task`."""
+    """Объявляет `read_entries`."""
     runtime = tools.runtime
     settings = tools.settings
 

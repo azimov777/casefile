@@ -19,7 +19,6 @@ from tests.conftest import Connect, call, refuse
 
 from app.db.models.project import Project
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TokenScope
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
@@ -45,7 +44,7 @@ async def alice_secret(db_session: AsyncSession) -> str:
         db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="alice"
     )
     issued = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=alice, scope=TokenScope.TASK, name="alice"
+        db_session, actor=TRACKER_ACTOR, participant=alice, name="alice"
     )
     return issued.secret
 

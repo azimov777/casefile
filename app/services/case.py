@@ -109,11 +109,9 @@ from app.domain.tasks import (
     TaskStatus,
     checks_without_verdict,
 )
-from app.domain.tokens import TokenScope
 from app.services import freeze
 from app.services import participants as participants_service
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 # --- Чтение ---------------------------------------------------------------------------
 
@@ -161,7 +159,6 @@ async def list_entries(
     Фильтры сужают выборку вместе: `types` без `after_no` даёт все сводки дела,
     `after_no` без `types` — всё, что случилось после названной записи.
     """
-    ensure_scope(actor, TokenScope.TASK, action="case.read")
     return await EntryRepository(session).list_page(
         task.id, nos=nos, types=types, after_no=after_no, limit=limit, cursor=cursor
     )
@@ -169,7 +166,6 @@ async def list_entries(
 
 async def read_entry(session: AsyncSession, task: Task, no: int, *, actor: Actor) -> Entry:
     """Одна запись по номеру внутри задачи — адрес из ссылки `TRK-42#12`."""
-    ensure_scope(actor, TokenScope.TASK, action="case.read")
     entry = await EntryRepository(session).get_by_no(task.id, no)
     if entry is None:
         raise EntryNotFoundError(details={"key": task.key, "no": no})
@@ -184,7 +180,6 @@ async def case_index(session: AsyncSession, task: Task, *, actor: Actor) -> list
     домена, а не выборка из базы (`app/domain/case.py`, `mark_outdated_verdicts`).
     Опись и так приходит целиком и упорядоченной, второго запроса пометка не стоит.
     """
-    ensure_scope(actor, TokenScope.TASK, action="case.read")
     return mark_outdated_verdicts(await EntryRepository(session).headings(task.id))
 
 
@@ -198,7 +193,6 @@ async def latest_entry_no(session: AsyncSession, task: Task, *, actor: Actor) ->
     задачи, не читая его целиком и не протаскивая номер через сигнатуру `links_service`
     (`docs/notes/mcp.md`).
     """
-    ensure_scope(actor, TokenScope.TASK, action="case.read")
     no = await EntryRepository(session).latest_no(task.id)
     assert no is not None  # у любой задачи есть хотя бы `created`
     return no
@@ -206,13 +200,11 @@ async def latest_entry_no(session: AsyncSession, task: Task, *, actor: Actor) ->
 
 async def last_summary(session: AsyncSession, task: Task, *, actor: Actor) -> Entry | None:
     """Последняя сводка задачи целиком: точка входа преемника (`CONCEPT.md`, 4.2)."""
-    ensure_scope(actor, TokenScope.TASK, action="case.read")
     return await EntryRepository(session).last_summary(task.id)
 
 
 async def open_questions(session: AsyncSession, task: Task, *, actor: Actor) -> list[Entry]:
     """Вопросы задачи без ответа целиком. Из них же считаются оба счётчика признаков."""
-    ensure_scope(actor, TokenScope.TASK, action="case.read")
     return await EntryRepository(session).open_questions(task.id)
 
 
@@ -223,7 +215,6 @@ async def open_remarks(session: AsyncSession, task: Task, *, actor: Actor) -> li
     с чистым контекстом обязан увидеть «вышло не то» одним вызовом, а не найти его в
     описи среди двух десятков строк.
     """
-    ensure_scope(actor, TokenScope.TASK, action="case.read")
     return await EntryRepository(session).open_remarks(task.id)
 
 
@@ -307,7 +298,6 @@ async def list_questions(
     Вопросы в задачах архивных проектов сюда не попадают, пока проект не назван
     `project` (`CONCEPT.md`, 3.6): так же, как задачи в поиске (4.4).
     """
-    ensure_scope(actor, TokenScope.TASK, action="question.list")
     name: str | None
     if any_addressee:
         if addressee is not None:
@@ -367,7 +357,6 @@ async def list_remarks(
 
     Замечания в задачах архивных проектов — только с названным `project`, как вопросы.
     """
-    ensure_scope(actor, TokenScope.TASK, action="remark.list")
     page = await EntryRepository(session).remarks_page(
         author=None if author is None else author.strip().lower(),
         project_id=project.id if project is not None else None,
@@ -463,7 +452,6 @@ async def append_entry(
 
     `action_id` доезжает до `_append` как есть: не передан — тот сгенерирует его сам.
     """
-    ensure_scope(actor, TokenScope.TASK, action="case.append")
     draft = build_entry(
         EntryContext(task_key=task.key, checks=task.checks, closing=closing),
         type=type,
@@ -682,7 +670,6 @@ async def append_project_entry(
     `_check_refs`, что у задачи: ссылка `TRK#7` из дела задачи и `TRK-42#3` из дела
     проекта проверяются одним кодом.
     """
-    ensure_scope(actor, TokenScope.TASK, action="project_case.append")
     draft = build_project_entry(project.key, type=type, title=title, body=body, refs=refs)
     problems = FieldProblems()
     await _check_refs(session, project, draft, problems)
@@ -712,7 +699,6 @@ async def list_project_entries(
 ) -> Page[Entry]:
     """Записи дела проекта страницами в порядке `no` — те же фильтры, что у задачи, и
     `attribute`: история одного атрибута по имени, без учёта регистра (`CONCEPT.md`, 3.2)."""
-    ensure_scope(actor, TokenScope.TASK, action="project_case.read")
     return await EntryRepository(session).list_project_page(
         project.id,
         nos=nos,
@@ -728,7 +714,6 @@ async def read_project_entry(
     session: AsyncSession, project: Project, no: int, *, actor: Actor
 ) -> Entry:
     """Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`."""
-    ensure_scope(actor, TokenScope.TASK, action="project_case.read")
     entry = await EntryRepository(session).get_by_project_no(project.id, no)
     if entry is None:
         raise EntryNotFoundError(details={"key": project.key, "no": no})
@@ -740,7 +725,6 @@ async def project_case_index(
 ) -> list[EntryHeading]:
     """Опись дела проекта: заголовки без тел. Вердиктов в деле проекта нет, и помечать
     устаревшие незачем — опись отдаётся как есть."""
-    ensure_scope(actor, TokenScope.TASK, action="project_case.read")
     return await EntryRepository(session).project_headings(project.id)
 
 

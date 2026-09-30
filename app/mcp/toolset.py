@@ -1,27 +1,9 @@
-"""Регистрация инструментов и фильтр `tools/list` по набору токена.
+"""Регистрация инструментов MCP.
 
-Право в трекере одно — набор токена (`CONCEPT.md`, 3.1). Здесь оно превращается в два
-разных, но согласованных поведения:
-
-1. **Состав `tools/list`.** Клиент видит только те инструменты, которые открывает его
-   токен. Не ради безопасности — отказ всё равно случится при вызове, — а ради контекста
-   модели: четыре недоступных инструмента в списке это четыре описания, прочитанных зря,
-   и четыре повода попробовать то, что не получится.
-2. **Отказ на вызове.** Он приходит **не отсюда**, а из той же единой точки прав, что и в
-   REST (`app/services/permissions.py`): сценарий, которому нужен `main`, отвечает
-   `permission_denied` независимо от того, каким интерфейсом его позвали. Второй проверки
-   набора в слое MCP нет намеренно — она была бы вторым местом, где живёт правда о правах.
-
-Отсюда и роль объявленного здесь набора: он описывает **список**, а не решает, можно ли.
-Разойтись с настоящими правами ему не даёт тест, который зовёт каждый инструмент набора
-`main` токеном `task` и ждёт `permission_denied`.
-
-## Почему фильтр — промежуточный слой, а не свой обработчик
-
-`MCPServer.list_tools()` — метод без контекста запроса: токена в нём нет и взяться ему
-неоткуда. Промежуточный слой видит и метод сообщения (`ctx.method`), и его заголовки,
-поэтому фильтр стоит именно там: он пропускает всё, кроме `tools/list`, а у него правит
-результат.
+Набора токена нет (TRK-471): любой действующий доступ агента видит в `tools/list` все
+инструменты и зовёт любой. По HTTP токен проверяет проверяющий SDK (`verify_token`), по
+stdio — промежуточный слой ниже; доступ сценария решает сам сценарий (запись доступов —
+человеку с учётной записью).
 
 ## Почему запрет лишнего аргумента стоит на модели, а не в промежуточном слое
 
@@ -42,7 +24,7 @@ JSON-RPC, а не результатом `is_error` с текстом. Все п
 """
 
 import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,16 +32,15 @@ from mcp.server.context import ServerRequestContext
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase
 from mcp.shared.exceptions import MCPError
-from mcp_types import INTERNAL_ERROR, INVALID_REQUEST, ListToolsResult, ToolAnnotations
+from mcp_types import INVALID_REQUEST, ToolAnnotations
 
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.domain.idempotency import IDEMPOTENCY_KEY_ARGUMENT
-from app.domain.tokens import TokenScope
 from app.mcp.errors import describe
 from app.mcp.runtime import Runtime
 
-#: Метод, состав ответа которого зависит от набора токена.
+#: Метод, которому нужен разобранный токен до ответа.
 LIST_TOOLS = "tools/list"
 
 # Лишний аргумент инструмента — отказ, а не тихо отброшенное значение.
@@ -132,23 +113,22 @@ OVERWRITING_UPDATE = ToolAnnotations(
 
 @dataclass(slots=True)
 class Toolset:
-    """Сервер, контекст вызова и то, какой набор открывает каждый инструмент.
+    """Сервер, контекст вызова и имена зарегистрированных инструментов.
 
-    Передаётся модулям инструментов вместо самого сервера: регистрация без объявленного
-    набора невозможна, потому что декоратор здесь только один.
+    Передаётся модулям инструментов вместо самого сервера: декоратор здесь только один,
+    и через него проходят ключ идемпотентности и аннотации.
     """
 
     server: MCPServer
     runtime: Runtime
     settings: Settings
-    scopes: dict[str, TokenScope] = field(default_factory=dict)
+    names: list[str] = field(default_factory=list)
 
     def tool(
         self,
         *,
         title: str,
         annotations: ToolAnnotations,
-        scope: TokenScope = TokenScope.TASK,
         creating: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Объявляет инструмент: имя берётся из функции, описание — из её докстроки.
@@ -178,72 +158,36 @@ class Toolset:
                     "argument: a repeated call has to answer with the first result "
                     "instead of creating a second object"
                 )
-            self.scopes[name] = scope
+            self.names.append(name)
             titled = annotations.model_copy(update={"title": title})
             self.server.tool(name=name, title=title, annotations=titled)(function)
             return function
 
         return register
 
-    def allowed(self, scope: TokenScope) -> set[str]:
-        """Имена инструментов, которые открывает этот набор."""
-        return {name for name, required in self.scopes.items() if scope.allows(required)}
-
     def middleware(self) -> Callable[..., Any]:
-        """Промежуточный слой, оставляющий в `tools/list` инструменты набора токена."""
+        """Промежуточный слой: `tools/list` с неизвестным токеном получает отказ."""
 
-        async def filter_tools(
+        async def check_token(
             ctx: ServerRequestContext[Any, Any],
             call_next: Callable[[ServerRequestContext[Any, Any]], Any],
         ) -> Any:
-            if ctx.method != LIST_TOOLS:
-                return await call_next(ctx)
-            # Токен разбирается **до** сборки списка: неизвестный токен обязан получить
-            # отказ, а не пустой список, неотличимый от сервера без инструментов.
-            scope = await self._scope()
-            return _keep(await call_next(ctx), self.allowed(scope))
+            if ctx.method == LIST_TOOLS:
+                await self._authenticate()
+            return await call_next(ctx)
 
-        return filter_tools
+        return check_token
 
-    async def _scope(self) -> TokenScope:
-        """Набор токена текущего сообщения.
+    async def _authenticate(self) -> None:
+        """Разбирает токен текущего сообщения **до** сборки списка инструментов.
 
-        Отказ переводится в ошибку **протокола**, а не в ошибку инструмента: `tools/list`
-        не инструмент, и `ToolError` отсюда клиент прочитал бы как сбой обработчика без
-        причины. Причина при этом та же, что у любого отказа трекера, — код и подробности.
+        Неизвестный токен обязан получить отказ, а не полный список (по stdio нет
+        проверяющего транспорта, `app/mcp/__main__.py`). Отказ переводится в ошибку
+        **протокола**, а не в ошибку инструмента: `tools/list` не инструмент, и `ToolError`
+        отсюда клиент прочитал бы как сбой обработчика без причины.
         """
         try:
-            async with self.runtime.session() as (_, actor):
-                return actor.scope
+            async with self.runtime.session():
+                return
         except AppError as exc:
             raise MCPError(code=INVALID_REQUEST, message=describe(exc)) from exc
-
-
-def _keep(result: Any, allowed: set[str]) -> Any:
-    """Оставляет в ответе `tools/list` только разрешённые инструменты.
-
-    Форм ответа две, и это не перестраховка. Объявленный тип обработчика —
-    `ListToolsResult`, но до промежуточного слоя ответ доезжает уже свёрнутым в словарь
-    (`{"tools": [{"name": ..., ...}]}`) — так его отдаёт диспетчер SDK 2.1. Обе формы
-    обрабатываются явно, потому что версия SDK может вернуть любую из них.
-
-    Незнакомая форма — отказ, а не ответ как есть. Пропустить её значило бы отдать
-    полный список инструментов токену, который их не открывает, и заметить это по одному
-    молчаливо лишнему полю в ответе никто бы не смог.
-    """
-    if isinstance(result, ListToolsResult):
-        return result.model_copy(
-            update={"tools": [tool for tool in result.tools if tool.name in allowed]}
-        )
-    if isinstance(result, Mapping) and "tools" in result:
-        return {
-            **result,
-            "tools": [tool for tool in result["tools"] if tool.get("name") in allowed],
-        }
-    raise MCPError(
-        code=INTERNAL_ERROR,
-        message=(
-            f"Cannot filter {LIST_TOOLS} by token scope: the handler answered with "
-            f"{type(result).__name__}, which is neither ListToolsResult nor a mapping"
-        ),
-    )

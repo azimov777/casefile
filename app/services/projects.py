@@ -29,11 +29,9 @@ from app.domain.projects import (
     validate_project_key,
 )
 from app.domain.tasks import TaskField
-from app.domain.tokens import TokenScope
 from app.services import case as case_service
 from app.services import freeze
 from app.services.auth import Actor
-from app.services.permissions import ensure_scope
 
 
 async def get_project(session: AsyncSession, key: str) -> Project:
@@ -46,7 +44,6 @@ async def get_project(session: AsyncSession, key: str) -> Project:
 
 async def read_project(session: AsyncSession, key: str, *, actor: Actor) -> Project:
     """Карточка проекта с описанием — общим контекстом всех его задач."""
-    ensure_scope(actor, TokenScope.TASK, action="project.read")
     return await get_project(session, key)
 
 
@@ -63,7 +60,6 @@ async def list_projects(
     Скрытие — только в списке: по ключу архивный проект читается как обычно
     (`read_project`), и «нет такого» на него не отвечается (`CONCEPT.md`, 3.2).
     """
-    ensure_scope(actor, TokenScope.TASK, action="project.list")
     return await ProjectRepository(session).list_page(
         include_archived=include_archived, limit=limit, cursor=cursor
     )
@@ -89,7 +85,6 @@ async def create_project(
     `project_key_taken`; гонку, которую разводит индекс и переводит в `conflict` граница
     транзакции, стережёт `tests/test_integrity_conflicts.py`, и её поведение не меняется.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="project.create")
 
     canonical = validate_project_key(key)
     description = validate_project_description(description)
@@ -130,7 +125,6 @@ async def update_project(
     записи одного вызова делят `action_id`. Присланное значение, равное нынешнему, записи
     не оставляет: правки не было.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="project.update")
     await freeze.lock_unfrozen(session, project=project)
     # Под очередью изменений перечитать: проект разрешён из ключа до неё, и «было» в
     # записи иначе могло бы оказаться чужим устаревшим снимком.
@@ -173,7 +167,6 @@ async def archive_project(
 
     `archived_at` — время записи `archived`: одно и то же мгновение в карточке и в деле.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="project.archive")
     checked = require_project_reason(reason, key=project.key, action="archive")
     await freeze.lock_unfrozen(session, project=project)
     entry = await case_service.record_archived(session, project, actor=actor, reason=checked)
@@ -191,7 +184,6 @@ async def restore_project(
     восстановление не трогает. Живой проект восстанавливать нечего —
     `project_not_archived`.
     """
-    ensure_scope(actor, TokenScope.MAIN, action="project.restore")
     checked = require_project_reason(reason, key=project.key, action="restore")
     await lock_changes(session)
     # Под очередью перечитать: проект разрешён из ключа до неё, а соседняя транзакция
@@ -216,5 +208,4 @@ async def next_task_number(session: AsyncSession, project: Project, *, actor: Ac
     Набор `task`, а не `main`: номер берут при создании задачи, то есть в рабочем цикле
     агента.
     """
-    ensure_scope(actor, TokenScope.TASK, action="project.allocate_task_number")
     return await ProjectRepository(session).allocate_task_number(project)

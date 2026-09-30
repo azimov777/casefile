@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.authors import AuthorKind
 from app.domain.participants import ParticipantKind
-from app.domain.tokens import TokenScope
 from app.services import participants as participants_service
 from app.services.auth import authenticate
 from app.services.setup import initialize_installation
@@ -21,14 +20,12 @@ async def test_an_empty_installation_gets_an_owner_and_a_working_main_token(
     issued = await initialize_installation(db_session)
 
     assert issued is not None
-    assert issued.token.scope is TokenScope.MAIN
     assert issued.token.participant is not None
     assert issued.token.participant.kind is ParticipantKind.HUMAN
     # Заводит трекер: другого автора на пустой установке не существует.
     assert issued.token.created_by.kind is AuthorKind.TRACKER
 
     actor = await authenticate(db_session, issued.secret)
-    assert actor.scope is TokenScope.MAIN
     assert actor.author.signature == issued.token.participant.name
 
 

@@ -8,16 +8,14 @@
 
 Сценариев три, и разница между ними — в том, кто хранит секрет.
 
-| Сценарий | Кому доступ | Набор | Где живёт секрет |
-|---|---|---|---|
-| `initialize_installation` | человеку, руками | `main` | у человека, показан один раз |
-| `ensure_local_token` | интерфейсу установки | `main` | в файле, который держит установка |
-| `ensure_agent_token` | агенту машины, через MCP | `main` | в файле, который держит установка |
+| Сценарий | Кому доступ | Где живёт секрет |
+|---|---|---|
+| `initialize_installation` | человеку, руками | у человека, показан один раз |
+| `ensure_local_token` | интерфейсу установки | в файле, который держит установка |
+| `ensure_agent_token` | агенту машины, через MCP | в файле, который держит установка |
 
 Повтор не выпускает ничего ни у одного, но признаки «уже сделано» разные: у первого это
-наличие любого токена в базе, у двух других — годный секрет в своём файле, а у ключа
-интерфейса ещё и его набор: до решения владельца 2026-09-11 (`UI-104`) ключ выпускался
-набором `task`, и такой ключ заменяется (`ensure_local_token`).
+наличие любого токена в базе, у двух других — годный секрет в своём файле.
 
 Автор всего заведённого — сам трекер (`TRACKER_ACTOR`): участника, который завёл бы
 первого участника, в этот момент ещё не существует.
@@ -50,7 +48,7 @@ from app.domain.accounts import local_admin_email
 from app.domain.errors import AccountEmailTakenError, ParticipantNotFoundError
 from app.domain.participants import ParticipantKind, normalize_participant_name
 from app.domain.passwords import PasswordHash
-from app.domain.tokens import TokenScope, hash_token
+from app.domain.tokens import hash_token
 from app.services.auth import TRACKER_ACTOR
 from app.services.participants import register_participant
 from app.services.tokens import IssuedToken, issue_token, revoke_token
@@ -63,13 +61,6 @@ DEFAULT_TOKEN_NAME = "bootstrap"
 #: прежний токен, чтобы отозвать его при выпуске замены, — поэтому имя постоянное, а не
 #: собранное из времени или случайного хвоста.
 DEFAULT_LOCAL_TOKEN_NAME = "local-ui"
-
-#: Набор ключа интерфейса локальной установки. `main`, потому что человек здесь и есть
-#: владелец установки и выпускает доступы агентов в интерфейсе (решение владельца
-#: 2026-09-11, `UI-104`). Ключ уезжает в браузер, и чужой странице его не отдаёт nginx
-#: интерфейса: он отвечает только адресам петли (`UI-107`). Довод целиком —
-#: `docs/DEVELOPMENT.md`, «Ключ для локального интерфейса».
-LOCAL_TOKEN_SCOPE = TokenScope.MAIN
 
 #: Участник, которому установка выпускает токен для MCP, и имя этого токена. Имя
 #: постоянное по той же причине, что у ключа интерфейса: по нему отзывается прежний.
@@ -85,7 +76,7 @@ async def initialize_installation(
     description: str = DEFAULT_OWNER_DESCRIPTION,
     token_name: str = DEFAULT_TOKEN_NAME,
 ) -> IssuedToken | None:
-    """Заводит участника-человека и выпускает ему токен набора `main`.
+    """Заводит участника-человека и выпускает ему токен.
 
     `None` означает «установка уже инициализирована»: в базе есть хотя бы один токен, и
     сценарий не делает ничего. Признак — именно токен, а не участник: участник без
@@ -111,7 +102,6 @@ async def initialize_installation(
         session,
         actor=TRACKER_ACTOR,
         participant=owner,
-        scope=TokenScope.MAIN,
         name=token_name,
     )
 
@@ -119,12 +109,10 @@ async def initialize_installation(
 class LocalTokenOutcome(StrEnum):
     """Что случилось с ключом локальной установки за один вызов `ensure_local_token`.
 
-    Значения покрывают все состояния пары «файл — база»: годный секрет, годный секрет
-    другого набора, пустая установка, всё остальное. Исхода «участника нет» здесь нет
-    намеренно: это не исход, а отказ, и уходит он исключением.
+    Значения покрывают все состояния пары «файл — база»: годный секрет, пустая установка, всё
+    остальное. Исхода «участника нет» здесь нет намеренно: это не исход, а отказ,
+    и уходит он исключением.
 
-    `RESCOPED` даёт только ключ интерфейса: набор сверяет лишь он, потому что только его
-    набор и менялся. Токен агента (`ensure_agent_token`) выпускается `main` всегда.
     """
 
     #: Секрет из файла действует: не выпущено ничего.
@@ -133,8 +121,6 @@ class LocalTokenOutcome(StrEnum):
     INITIALIZED = "initialized"
     #: Установка работает, а годного секрета не было: выпущена замена прежнему.
     REISSUED = "reissued"
-    #: Секрет из файла действует, но набор у него не тот: выпущена замена, а он отозван.
-    RESCOPED = "rescoped"
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,7 +137,7 @@ class LocalToken:
     token: Token
     secret: str | None
     #: Сколько прежних токенов отозвано этим же действием: одноимённые у того же
-    #: участника и, при `RESCOPED`, заменённый токен из файла, как бы он ни назывался.
+    #: участника.
     revoked: int
     #: Учётная запись человека, которому выдан ключ интерфейса. Пуста у токена агента
     #: (`ensure_agent_token`): агенту учётная запись не нужна.
@@ -168,7 +154,7 @@ async def ensure_local_token(
     token_name: str = DEFAULT_LOCAL_TOKEN_NAME,
     legacy_password_hash: PasswordHash | None = None,
 ) -> LocalToken:
-    """Приводит установку к состоянию «у интерфейса есть действующий ключ набора `main`».
+    """Приводит установку к состоянию «у интерфейса есть действующий ключ».
 
     И к состоянию «у этого человека есть учётная запись администратора»: её сценарий
     заводит, если её нет, а `legacy_password_hash` — прежний `TRACKER_PASSWORD_HASH` —
@@ -185,17 +171,13 @@ async def ensure_local_token(
     отвечает, годен ли его секрет.
 
     Годным секрет считается ровно тогда, когда он найден по хешу, не отозван, за ним
-    стоит участник и набор у него `LOCAL_TOKEN_SCOPE`. Набор сверяется потому, что он
-    менялся: до решения владельца 2026-09-11 ключ выпускался `task`, и без сверки файл с
-    таким ключом держал бы установку на `task` вечно. Имя участника и имя токена не
+    стоит участник. Имя участника и имя токена не
     сверяются намеренно: файл — собственная копия установки, и лишние условия
     превращали бы «повторный подъём ничего не перевыпускает» в перевыпуск на ровном месте.
 
     Выпуская замену, сценарий тем же действием отзывает прежние неотозванные токены с
     тем же именем. Без этого потерянный файл оставлял бы на установке действующий
     секрет, которого не знает никто, — и с каждым подъёмом их становилось бы больше.
-    Годный ключ другого набора отзывается тоже, как бы он ни назывался и чей бы ни был:
-    файл перезаписывается, и его секрет иначе остался бы действующим и никому не известным.
 
     Отказ один: названного участника нет, а установка не пуста (`participant_not_found`).
     Заводить второго участника на работающей установке команда не станет — опечатка в
@@ -204,7 +186,7 @@ async def ensure_local_token(
     tokens = TokenRepository(session)
 
     known = await _kept_token(tokens, known_secret)
-    if known is not None and known.scope is LOCAL_TOKEN_SCOPE:
+    if known is not None:
         assert known.participant is not None  # годный ключ из файла всегда именной
         account, imported = await ensure_admin_account(
             session, known.participant, legacy_password_hash
@@ -237,14 +219,11 @@ async def ensure_local_token(
             description=DEFAULT_OWNER_DESCRIPTION,
         )
 
-    # `known` здесь — либо `None`, либо годный ключ другого набора: его и заменяем.
     replaced = await _replace_token(
         session,
         participant,
         token_name=token_name,
-        scope=LOCAL_TOKEN_SCOPE,
         empty=empty,
-        predecessor=known,
     )
     account, imported = await ensure_admin_account(session, participant, legacy_password_hash)
     return LocalToken(
@@ -264,16 +243,13 @@ async def ensure_agent_token(
     participant_name: str = DEFAULT_AGENT_NAME,
     token_name: str = DEFAULT_AGENT_TOKEN_NAME,
 ) -> LocalToken:
-    """Приводит установку к состоянию «у агента этой машины есть действующий токен набора `main`».
+    """Приводит установку к состоянию «у агента этой машины есть действующий токен».
 
     Нужен установке одной командой: агенту, которого человек подключает к MCP, токен
     выдаёт сама установка, как ключ интерфейсу, — а не `init`, печатающий секрет в
     журнал контейнера. Устроен как `ensure_local_token`: идемпотентен по файлу, замена
-    отзывает прежний одноимённый токен, набор тот же — `main`, без которого агент не
-    заведёт даже первый проект. Отличий три.
+    отзывает прежний одноимённый токен, Отличий два.
 
-    - Набор не сверяется: признак годности — `_kept_token` как есть. Этот токен
-      выпускался `main` всегда, и расхождения, которое пришлось бы чинить, у него нет.
     - Участник-агент заводится, если его нет, на любой установке. Опечатки в имени
       человека, от которой стережёт `ensure_local_token`, здесь нет: имя называет
       контур, а завести агента этой машины и есть смысл первого запуска.
@@ -312,9 +288,7 @@ async def ensure_agent_token(
             description=DEFAULT_AGENT_DESCRIPTION,
         )
 
-    return await _replace_token(
-        session, agent, token_name=token_name, scope=TokenScope.MAIN, empty=empty
-    )
+    return await _replace_token(session, agent, token_name=token_name, empty=empty)
 
 
 async def ensure_admin_account(
@@ -353,11 +327,7 @@ async def ensure_admin_account(
 
 
 async def _kept_token(tokens: TokenRepository, known_secret: str | None) -> Token | None:
-    """Токен постоянной копии, если он годен: найден по хешу, не отозван, за ним участник.
-
-    Набор здесь не сверяется: его сверяет тот сценарий, у которого набор менялся
-    (`ensure_local_token`), а не все, кто держит секрет в файле.
-    """
+    """Токен постоянной копии, если он годен: найден по хешу, не отозван, за ним участник."""
     if not known_secret:
         return None
     known = await tokens.get_by_hash(hash_token(known_secret))
@@ -371,21 +341,11 @@ async def _replace_token(
     participant: Participant,
     *,
     token_name: str,
-    scope: TokenScope,
     empty: bool,
-    predecessor: Token | None = None,
 ) -> LocalToken:
-    """Отзывает прежние неотозванные токены участника с этим именем и выпускает новый.
-
-    `predecessor` — годный токен из файла, который заменяется из-за набора. Он
-    отзывается тем же действием, даже если имя или участник у него другие: иначе на
-    установке остался бы действующий секрет, которого после перезаписи файла не знает
-    никто. Среди одноимённых он тоже может оказаться — тогда отзывается один раз.
-    """
+    """Отзывает прежние неотозванные токены участника с этим именем и выпускает новый."""
     name = token_name.strip()
     stale = list(await TokenRepository(session).list_live_named(participant.id, name))
-    if predecessor is not None and all(token.id != predecessor.id for token in stale):
-        stale.append(predecessor)
     for token in stale:
         await revoke_token(session, token.id, actor=TRACKER_ACTOR)
 
@@ -393,15 +353,9 @@ async def _replace_token(
         session,
         actor=TRACKER_ACTOR,
         participant=participant,
-        scope=scope,
         name=name,
     )
-    if predecessor is not None:
-        outcome = LocalTokenOutcome.RESCOPED
-    elif empty:
-        outcome = LocalTokenOutcome.INITIALIZED
-    else:
-        outcome = LocalTokenOutcome.REISSUED
+    outcome = LocalTokenOutcome.INITIALIZED if empty else LocalTokenOutcome.REISSUED
     return LocalToken(
         outcome=outcome,
         token=issued.token,

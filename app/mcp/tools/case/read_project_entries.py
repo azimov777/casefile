@@ -11,7 +11,7 @@ from app.services import projects as projects_service
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `read_project_entries` в наборе `task`."""
+    """Объявляет `read_project_entries`."""
     runtime = tools.runtime
     settings = tools.settings
 

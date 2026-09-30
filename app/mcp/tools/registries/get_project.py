@@ -76,7 +76,7 @@ def project(
 
 
 def register(tools: Toolset) -> None:
-    """Объявляет `get_project` в наборе `task`."""
+    """Объявляет `get_project`."""
     runtime = tools.runtime
 
     @tools.tool(title="Get project", annotations=READ_ONLY)

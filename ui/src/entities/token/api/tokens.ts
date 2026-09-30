@@ -2,8 +2,12 @@ import { infiniteQueryOptions } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components } from '@/shared/api';
 
 /** Токен доступа без секрета: секрет живёт только в ответе на выпуск. */
-export type Token = components['schemas']['TokenRead'];
-export type TokenScope = components['schemas']['TokenScope'];
+/**
+ * Набор токена: контракт его снял (TRK-471), тип остаётся только до задачи интерфейса TRK-473,
+ * которая уберёт наборы из экрана «Доступы».
+ */
+export type TokenScope = 'task' | 'main';
+export type Token = components['schemas']['TokenRead'] & { scope?: TokenScope };
 
 /**
  * Отозван ли доступ. Признака «отозван» в контракте нет — есть время отзыва, и
