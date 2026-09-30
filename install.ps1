@@ -14,11 +14,20 @@
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
 # Обе последние записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
+#   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
+#   CASEFILE_SKILL_ONLY  1 — только скил: без Docker, без каталога установки и без токена;
+#                      для машины агента, которая подключается к Casefile на сервере:
+#                      $env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+#   CASEFILE_SKILL_SOURCE  откуда брать маркетплейс скила, по умолчанию azimov777/casefile;
+#                      так шаг проверяют до публикации, как CASEFILE_REGISTRY для образов
 
 $ErrorActionPreference = 'Stop'
 
 $Dir = if ($env:CASEFILE_DIR) { $env:CASEFILE_DIR } else { Join-Path $HOME 'casefile' }
 $Compose = 'docker-compose.prod.yml'
+$SkillOn = $env:CASEFILE_SKILL -ne '0'
+$SkillOnly = $env:CASEFILE_SKILL_ONLY -eq '1'
+$SkillSource = if ($env:CASEFILE_SKILL_SOURCE) { $env:CASEFILE_SKILL_SOURCE } else { 'azimov777/casefile' }
 
 function Fail([string] $Message) {
     Write-Host "casefile: $Message" -ForegroundColor Red
@@ -44,6 +53,149 @@ function Get-Setting([string] $Name, [string] $Default) {
         }
     }
     return $Default
+}
+
+# --- Скил во все найденные харнессы (TRK-408, решения TRK-401#11, #18) -------------------
+# Близнец шага из `install.sh`: для каждого найденного `claude`, `codex`, `hermes` —
+# маркетплейс и плагин, для прочих агентов — `npx skills`; всё идемпотентно, токен в файлы
+# харнессов не пишется, самих харнессов установщик не ставит. Ошибка скила установку
+# сервиса не валит: итог по каждому харнессу — строка с командой для ручного повтора.
+
+$script:SkillLog = ''
+
+function Write-SkillLine([string] $Name, [string] $Text) {
+    Write-Host ('  {0,-13} {1}' -f $Name, $Text)
+}
+
+# Одна команда харнесса: тихо, stdin пустой, вывод — в журнал шага. `Continue` внутри
+# функции: stderr внешней команды при `Stop` в PowerShell 5.1 — исключение.
+function Invoke-SkillCmd {
+    $ErrorActionPreference = 'Continue'
+    $exe = $args[0]
+    $rest = @($args | Select-Object -Skip 1)
+    $out = & $exe @rest 2>&1 | Out-String
+    $ok = $LASTEXITCODE -eq 0
+    $script:SkillLog += $out
+    return $ok
+}
+
+function Write-SkillFailed([string] $Name, [string] $Retry) {
+    Write-SkillLine $Name 'failed - repeat by hand:'
+    Write-Host "                $Retry"
+    ($script:SkillLog -split "`r?`n" | Where-Object { $_ } | Select-Object -Last 3) |
+        ForEach-Object { Write-Host "                > $_" }
+}
+
+# `"autoUpdate": true` рядом с `source` в extraKnownMarketplaces.casefile: у сторонних
+# маркетплейсов Claude Code обновляет плагин сам только с ним, а флага в CLI нет (TRK-406).
+# Файл переписывается, только если ключа не было; без BOM.
+function Set-ClaudeAutoUpdate {
+    $dir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
+    $file = Join-Path $dir 'settings.json'
+    if (-not (Test-Path $file)) { return $false }
+    try {
+        $settings = [System.IO.File]::ReadAllText($file) | ConvertFrom-Json
+        $entry = $settings.extraKnownMarketplaces.casefile
+        if (-not $entry) { return $false }
+        if ($entry.autoUpdate -eq $true) { return $true }
+        $entry | Add-Member -NotePropertyName autoUpdate -NotePropertyValue $true -Force
+        $json = $settings | ConvertTo-Json -Depth 20
+        [System.IO.File]::WriteAllText($file, $json + "`n", (New-Object System.Text.UTF8Encoding($false)))
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Install-ClaudeSkill {
+    $src = "${SkillSource}#stable"
+    $retry = "claude plugin marketplace add $src --sparse .claude-plugin skills; claude plugin install casefile@casefile --scope user"
+    $ok = (Invoke-SkillCmd claude plugin marketplace add $src --sparse .claude-plugin skills) -and
+        (Invoke-SkillCmd claude plugin marketplace update casefile) -and
+        (Invoke-SkillCmd claude plugin install casefile@casefile --scope user) -and
+        (Invoke-SkillCmd claude plugin update casefile@casefile)
+    if (-not $ok) { Write-SkillFailed 'Claude Code' $retry; return }
+    $ErrorActionPreference = 'Continue'
+    $text = & claude plugin list 2>$null | Out-String
+    $m = [regex]::Match($text, 'casefile@casefile[^\r\n]*[\r\n]+\s*Version:\s*(\S+)[\s\S]*?Status:\s*([^\r\n]*)')
+    if (-not ($m.Success -and $m.Groups[2].Value -match 'enabled')) { Write-SkillFailed 'Claude Code' $retry; return }
+    $version = $m.Groups[1].Value
+    if (Set-ClaudeAutoUpdate) {
+        Write-SkillLine 'Claude Code' "installed $version (updates itself)"
+    } else {
+        Write-SkillLine 'Claude Code' "installed $version (automatic updates not switched on: add `"autoUpdate`": true inside extraKnownMarketplaces.casefile in settings.json)"
+    }
+}
+
+function Install-CodexSkill {
+    $retry = "codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse skills; codex plugin add casefile@casefile"
+    $ok = (Invoke-SkillCmd codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse skills) -and
+        (Invoke-SkillCmd codex plugin marketplace upgrade casefile) -and
+        (Invoke-SkillCmd codex plugin add casefile@casefile)
+    if (-not $ok) { Write-SkillFailed 'Codex' $retry; return }
+    $ErrorActionPreference = 'Continue'
+    $row = & codex plugin list 2>$null | Where-Object { $_ -match '^casefile@casefile\s.*installed' } | Select-Object -First 1
+    $m = [regex]::Match([string] $row, '\s(\d+\.\d+\S*)')
+    if ($m.Success) { Write-SkillLine 'Codex' "installed $($m.Groups[1].Value)" } else { Write-SkillFailed 'Codex' $retry }
+}
+
+function Install-HermesSkill {
+    $retry = "hermes skills install $SkillSource/skills/casefile"
+    $home_ = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $HOME '.hermes' }
+    $found = $false
+    if (Invoke-SkillCmd hermes skills install "$SkillSource/skills/casefile") {
+        $found = [bool] (Get-ChildItem -Path $home_ -Recurse -Filter SKILL.md -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'casefile' } | Select-Object -First 1)
+        if (-not $found) {
+            $ErrorActionPreference = 'Continue'
+            $found = (& hermes skills list 2>$null | Out-String) -match '(?i)casefile'
+        }
+    }
+    if ($found) { Write-SkillLine 'Hermes' 'installed' } else { Write-SkillFailed 'Hermes' $retry }
+}
+
+# Прочие агенты (Cursor, Cline, ...) читают общий `~/.agents/skills`: `--agent cursor` кладёт
+# скил именно туда и не трогает каталог Claude Code, где он уже стоит плагином.
+function Install-OtherAgentsSkill {
+    $retry = "npx skills add ${SkillSource}#stable -g -y --agent cursor"
+    $target = Join-Path $HOME '.agents/skills/casefile/SKILL.md'
+    if ((Invoke-SkillCmd npx -y skills add "${SkillSource}#stable" -g -y --agent cursor) -and (Test-Path $target)) {
+        Write-SkillLine 'Other agents' 'installed (~/.agents/skills/casefile)'
+    } else {
+        Write-SkillFailed 'Other agents' $retry
+    }
+}
+
+function Install-Skills {
+    $script:SkillLog = ''
+    Write-Host 'Installing the Casefile skill for the agents on this machine:' -ForegroundColor White
+    foreach ($h in @(
+            @{ Exe = 'claude'; Name = 'Claude Code'; Run = { Install-ClaudeSkill } },
+            @{ Exe = 'codex'; Name = 'Codex'; Run = { Install-CodexSkill } },
+            @{ Exe = 'hermes'; Name = 'Hermes'; Run = { Install-HermesSkill } })) {
+        if (Get-Command $h.Exe -ErrorAction SilentlyContinue) {
+            & $h.Run
+        } else {
+            Write-SkillLine $h.Name 'not found (run this installer again after installing it)'
+        }
+    }
+    if (Get-Command npx -ErrorAction SilentlyContinue) {
+        Install-OtherAgentsSkill
+    } else {
+        Write-SkillLine 'Other agents' "npx not found (with Node.js: npx skills add ${SkillSource}#stable)"
+    }
+    Write-Host '  A running session picks up the skill after a restart (in Claude Code: /reload-plugins).'
+    Write-Host ''
+}
+
+# Машина агента, которая только подключается к Casefile на сервере: ни Docker, ни каталога
+# установки, ни токена (TRK-401#18). `return`, а не `exit`: `exit` закрыл бы окно, из
+# которого скрипт запущен через `iex`.
+if ($SkillOnly) {
+    try { Install-Skills } catch { Write-Host "casefile: the skill step failed: $_" -ForegroundColor Red }
+    Write-Host 'Now connect the agent to your Casefile over MCP: docs/agent-install.md,'
+    Write-Host '"Joining an installation someone else runs" (https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md).'
+    return
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -157,6 +309,9 @@ Write-Host ''
 Write-Host "  Board:  http://localhost:$uiPort"
 Write-Host "  MCP:    $mcpUrl"
 Write-Host ''
+if ($SkillOn) {
+    try { Install-Skills } catch { Write-Host "casefile: the skill step failed; the installation itself is done. $_" -ForegroundColor Red }
+}
 # Подключение и скил — по блоку на харнесс, как в `install.sh` (TRK-406). Токен только
 # печатается, в файлы харнессов не пишется. Команды скила дословно те же, что в
 # `install.sh` и `docs/agent-install.md`; `tests/test_installers.py` сверяет их.
@@ -207,6 +362,11 @@ Write-Host ('    File tasks in Casefile for my work: a project for it if there i
 Write-Host '  Then, in a new agent session, say:'
 Write-Host '    Carry out the tasks for this work from the Casefile tracker. Hand them to agents, one task per agent, to save your own context, and give them cheaper models where those cope.'
 Write-Host "  The same phrases with copy buttons, in your language: http://localhost:$uiPort/start"
+Write-Host ''
+
+Write-Host 'Another machine whose agents will connect to this installation gets the skill with:'
+Write-Host '  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh'
+Write-Host '  (Windows PowerShell: $env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)'
 Write-Host ''
 
 Write-Host "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $Dir"

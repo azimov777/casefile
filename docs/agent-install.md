@@ -28,7 +28,11 @@ irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
 It installs into `~/casefile` (`%USERPROFILE%\casefile` on Windows), starts the services
-and prints the board URL, the MCP URL and a ready-made connect command with the token.
+and prints the board URL, the MCP URL and a ready-made connect command with the token. It
+also installs the Casefile skill by itself into every agent it finds on the machine
+(Claude Code, Codex, Hermes, other agents through `npx skills`) and prints one line per
+harness: `installed <version>`, `not found` or `failed` with the command to repeat by hand.
+`CASEFILE_SKILL=0` in front of the install line skips that step.
 
 If port 8080 or 8100 is taken, put `CASEFILE_PORT=<free port>` and/or
 `TRACKER_MCP_PORT=<free port>` into `~/casefile/.env` and run the install line again.
@@ -83,7 +87,19 @@ and to name it after this machine or harness so they can tell it apart later. An
 with an account can do this without the administrator. Then connect with that token as
 above, using the MCP address the installation publishes. Then do step 4,
 **Install the Casefile skill**, on your own machine, as it stands: no installer of the
-service is needed for it, the commands work anywhere your harness runs.
+service and no Docker are needed for it. One line on the machine where the agent runs
+installs the skill into every agent it finds there and prints where it stands:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+```
+
+```powershell
+$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+```
+
+It creates no installation directory and prints no token. The per-harness commands below
+do the same one harness at a time.
 
 What the user should know, in one line each:
 
@@ -98,9 +114,12 @@ What the user should know, in one line each:
 
 Connecting gives you the tools; the skill teaches you how to use them — how to keep a
 case, what to write before you stop, how to recover from a `401` and how to watch the
-journal. Connecting is not finished until the skill is installed. Run the commands of
-your harness (the installer printed the same ones); they read the skill from the
-`stable` channel of the Casefile repository:
+journal. Connecting is not finished until the skill is installed. The installer of step 2
+already did it for every harness it found: read its "Installing the Casefile skill" lines
+and run the commands below only for your harness if it says `not found` or `failed`, or if
+you connect to an installation someone else runs. The installer prints the same commands;
+they read the skill from the `stable` channel of the Casefile repository. Running the
+installer line again also installs the skill into a harness that appeared later:
 
 - **Claude Code:**
 
@@ -134,7 +153,8 @@ Claude Code.
   look for `list_projects`).
 - The skill is installed: `claude plugin list` shows `casefile@casefile` enabled
   (Codex: `codex plugin list`; Hermes and others: look for the `casefile` skill in
-  your harness's list of skills). If it is missing, do step 4.
+  your harness's list of skills). If it is missing, do step 4. A session that was already
+  running does not see it: restart the session, or run `/reload-plugins` in Claude Code.
 
 ## 6. Learn about news in your tasks
 
