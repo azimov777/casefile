@@ -34,6 +34,59 @@ export const LABEL_HEADER = 'X-Actor-Label';
 export const TOKEN_PLACEHOLDER = '<token>';
 export const LABEL_PLACEHOLDER = '<label>';
 
+/**
+ * Установка скила — второй шаг подключения (TRK-420, `TRK-401#18`). Команды те же, что
+ * печатают `install.sh` и `docs/agent-install.md` (шаг «Install the Casefile skill»);
+ * `snippets.test.ts` сверяет их с гайдом. Скил общий для всех установок, поэтому ни
+ * адреса, ни токена в этих текстах нет и `connectionSnippets` их из входа не собирает.
+ */
+const SKILL_REPO = 'azimov777/casefile';
+const SKILL_CHANNEL = 'stable';
+const SKILL_INSTALLER = `https://raw.githubusercontent.com/${SKILL_REPO}/main`;
+
+/** Поле пункта «Добавить маркетплейс» приложения Codex (`TRK-397#22`). */
+export interface CodexMarketplaceField {
+  key: 'source' | 'ref' | 'sparse';
+  value: string;
+}
+
+export interface SkillTexts {
+  /** Claude Code: маркетплейс и плагин, две команды, по строке на команду. */
+  claudeCode: string;
+  /** Codex: маркетплейс и плагин, две команды. */
+  codex: string;
+  /** Те же значения полями пункта «Добавить маркетплейс» приложения Codex. */
+  codexMarketplace: CodexMarketplaceField[];
+  /** Любой другой агент. */
+  other: string;
+  /**
+   * Одна строка на машине агента, без Docker: ставит скил во все найденные там харнессы.
+   * Оболочек две, как у переменной Codex, и по той же причине (`UI-114#5`).
+   */
+  machine: { bashZsh: string; powerShell: string };
+}
+
+const SKILL: SkillTexts = {
+  claudeCode: [
+    `claude plugin marketplace add ${SKILL_REPO}#${SKILL_CHANNEL} --sparse .claude-plugin skills`,
+    'claude plugin install casefile@casefile --scope user',
+  ].join('\n'),
+  codex: [
+    `codex plugin marketplace add ${SKILL_REPO} --ref ${SKILL_CHANNEL} --sparse .claude-plugin --sparse skills`,
+    'codex plugin add casefile@casefile',
+  ].join('\n'),
+  codexMarketplace: [
+    { key: 'source', value: SKILL_REPO },
+    { key: 'ref', value: SKILL_CHANNEL },
+    { key: 'sparse', value: '.claude-plugin, skills' },
+  ],
+  other: `npx skills add ${SKILL_REPO}#${SKILL_CHANNEL}`,
+  machine: {
+    bashZsh: `curl -fsSL ${SKILL_INSTALLER}/install.sh | CASEFILE_SKILL_ONLY=1 sh`,
+    powerShell: `$env:CASEFILE_SKILL_ONLY=1; irm ${SKILL_INSTALLER}/install.ps1 | iex`,
+  },
+};
+
 export interface SnippetInput {
   /** Адрес MCP из `GET /api/v1/installation` → `mcp_url`, целиком и как есть. */
   mcpUrl: string;
@@ -73,6 +126,8 @@ export interface SnippetTexts {
   codexForm: CodexFormField[];
   /** Конфигурация `mcpServers` в форме `.mcp.json` Claude Code. */
   json: string;
+  /** Установка скила для того же клиента; от адреса, токена и метки не зависит. */
+  skill: SkillTexts;
 }
 
 export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): SnippetTexts {
@@ -108,6 +163,7 @@ export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): S
       null,
       2,
     ),
+    skill: SKILL,
   };
 }
 

@@ -8,6 +8,8 @@ export {
   TOKEN_PLACEHOLDER,
   connectionSnippets,
   type CodexFormField,
+  type CodexMarketplaceField,
+  type SkillTexts,
   type SnippetTexts,
   type SnippetInput,
 } from './model/snippets';
