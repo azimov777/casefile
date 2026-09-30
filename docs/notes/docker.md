@@ -840,3 +840,26 @@ python3 по наличию), файл переписывается только
 `scripts/check-skill-install.sh`; `install.ps1` — только разбор парсером и чтение.
 **Где:** `install.sh`, функции `skill_claude`, `skill_codex`, `skill_others`,
 `claude_auto_update`; `install.ps1`, `Install-ClaudeSkill`; `scripts/check-skill-install.sh`.
+
+## Ветку `stable` двигает запуск на push main, а не запуск тега; checkout полный (TRK-445)
+
+**Что:** На v0.8.1 джоб `channel` упал дважды. Из запуска тега GitHub отказал: «refusing to
+allow a GitHub App to create or update workflow … without workflows permission» — коммит
+выпуска менял `.github/workflows`, а `main` его ещё не содержал (тег пушится раньше `main`).
+После push `main` перезапуск упал на `! [rejected] … -> stable (fetch first)`: неглубокий
+checkout не видит прежней вершины `stable`.
+**Почему важно:** Порядок «тег раньше `main`» не меняется (TRK-119), поэтому из запуска тега
+коммит выпуска, трогающий конвейеры, не запушить токеном без права `workflows`. На v0.8.0
+ветки ещё не было, и второй отказ не проявился. Без движения `stable` скил не доходит до
+агентов, а ручной шаг координатора забывается.
+**Как правильно:** Джоб `channel` идёт в запуске на push `main` (`github.ref == refs/heads/main`),
+без `needs`. Шаги:
+- на `github.sha` ищется тег `v*` без `-`; нет тега — выход без ошибки;
+- `gh run list --workflow images.yml --branch <тег> --commit <sha> --status success` даёт
+  хотя бы один запуск, иначе джоб падает: «после образов» держит сверка, а не `needs`;
+- checkout `fetch-depth: 0`, `origin/stable` должна быть предком коммита, иначе отказ;
+- `git push origin "$SHA:refs/heads/stable"` без `--force`; повтор на том же коммите —
+  «Everything up-to-date».
+**Где:** `.github/workflows/images.yml`, джоб `channel` и шапка файла; `docs/DEVELOPMENT.md`,
+раздел «Выпуск». Команды проверены на локальном bare-репозитории: перемотка, повтор, отказ на
+не-перемотке, выход без тега, отказ неглубокого клона. Сам GitHub Actions не запускался.

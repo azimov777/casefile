@@ -959,6 +959,13 @@ git push origin vX.Y.Z
 git push origin main
 ```
 
+Ветку `stable` (канал скила) двигает джоб `channel` в запуске `images.yml` на этот push `main`:
+на коммите стоит тег выпуска без `-`, а запуск тега зелёный, значит `stable` перематывается
+вперёд на этот коммит. Из запуска тега пуш не выходит: коммит выпуска, менявший
+`.github/workflows`, ещё не в `main`, а у GITHUB_TOKEN нет права `workflows` (TRK-445). Если
+джоб упал, `stable` двигают руками перемоткой вперёд
+(`git merge-base --is-ancestor origin/stable <коммит>`, затем `git push origin <коммит>:refs/heads/stable`).
+
 Живая проверка публикации в реестр — после самого выпуска, не раньше:
 
 ```bash
