@@ -20,6 +20,7 @@ from app.core.shutdown import shutdown
 from app.db.session import dispose_engine
 from app.db.wakeup import journal_wakeup
 from app.services.login import PasswordLogin
+from app.services.releases import ReleaseWatch
 
 logger = get_logger("main")
 
@@ -73,6 +74,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Кому верить адрес клиента для окна попыток (`TRACKER_REAL_IP_FROM`); имена хостов в
     # нём разрешаются при попытке входа, а не здесь — `ui` поднимается позже API.
     app.state.client_addresses = ClientAddresses.from_settings(settings)
+    # Последний выпуск Casefile с кэшем на час (`app/services/releases.py`): в GitHub
+    # ходит только `production` с включённой проверкой.
+    app.state.release_watch = ReleaseWatch.from_settings(settings)
 
     app.add_middleware(
         CORSMiddleware,

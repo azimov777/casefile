@@ -86,6 +86,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/installation/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the latest release
+         * @description Версия установки и последний выпуск Casefile: вышел ли новый (TRK-416).
+         *
+         *     Открыт любому набору. В GitHub ходит API, а не браузер, и не чаще раза в час:
+         *     остальные запросы берут запомненный ответ (`app/services/releases.py`). Сбой сети,
+         *     выключенная проверка и не `production`-установка отвечают `200` с пустым последним
+         *     выпуском и без признака обновления: плашке нечего сказать, а ошибки нет.
+         */
+        get: operations["read_release"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/installation/archive": {
         parameters: {
             query?: never;
@@ -2354,6 +2379,10 @@ export interface components {
         DataResponse_ProjectRead_: {
             data: components["schemas"]["ProjectRead"];
         };
+        /** DataResponse[ReleaseRead] */
+        DataResponse_ReleaseRead_: {
+            data: components["schemas"]["ReleaseRead"];
+        };
         /** DataResponse[SessionRead] */
         DataResponse_SessionRead_: {
             data: components["schemas"]["SessionRead"];
@@ -3741,6 +3770,35 @@ export interface components {
              * @example true
              */
             blocking: boolean;
+        };
+        /**
+         * ReleaseRead
+         * @description Версия установки и последний выпуск Casefile: отстаёт ли установка (TRK-416).
+         */
+        ReleaseRead: {
+            /**
+             * Version
+             * @description Casefile version this installation runs, without `v`
+             * @example 0.7.0
+             */
+            version: string;
+            /**
+             * Latest Version
+             * @description Latest Casefile release, without `v`. Null when it is not known: the check is off (`TRACKER_RELEASE_CHECK=false`), the installation is not `production`, or GitHub could not be read. The API asks GitHub at most once an hour
+             * @example 0.8.0
+             */
+            latest_version: string | null;
+            /**
+             * Latest Url
+             * @description Page of the latest release with its notes; null together with `latest_version`
+             * @example https://github.com/azimov777/casefile/releases/tag/v0.8.0
+             */
+            latest_url: string | null;
+            /**
+             * Update Available
+             * @description Whether `latest_version` is newer than `version`. False whenever the latest release is not known. Nothing here updates the installation: its updater does
+             */
+            update_available: boolean;
         };
         /**
          * RemarkEntryCreate
@@ -5567,6 +5625,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_InstallationRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_release: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_ReleaseRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

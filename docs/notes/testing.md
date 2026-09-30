@@ -464,3 +464,17 @@ logger="tracker.wakeup")`, зеленеет то по одной причине,
 других тестах нельзя — это не часть контракта, а побочный эффект их фикстур.
 **Где:** `app/db/migrations/env.py`, вызов `fileConfig` на уровне модуля;
 `app/core/logging.py`, `configure_logging`; `tests/test_wakeup.py`.
+
+## Чтение выпуска подменяется на модуле до `create_app`
+
+**Что:** `ReleaseWatch` берёт `app.services.releases.read_latest_release` в момент сборки
+приложения (`create_app` → `ReleaseWatch.from_settings`), а не при каждом запросе; поход в
+GitHub идёт только при `TRACKER_ENVIRONMENT=production`.
+**Почему важно:** подмена после `create_app` не действует, и тест с настройками
+`production` сходил бы в настоящий GitHub — медленно, с сетью и с ответом, который меняется
+с каждым выпуском. А тест на общих настройках (`test`) в GitHub не ходит вовсе и проверяет
+пустоту, а не чтение.
+**Как правильно:** `monkeypatch.setattr(releases, "read_latest_release", fake)` до
+`create_app(Settings(environment="production", release_check=True))`; разбор ответа GitHub
+и сбой сети — подменой `releases.urllib.request.urlopen`.
+**Где:** `app/services/releases.py`, `ReleaseWatch`; `tests/test_releases.py`.

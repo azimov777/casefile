@@ -5,7 +5,9 @@
 и приём, только администратору. Роутер переводит HTTP в вызов сценария и обратно.
 """
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
 
 from app.api.deps import ActorDep, SessionDep, SettingsDep
 from app.api.schemas.common import DataResponse
@@ -16,13 +18,25 @@ from app.api.schemas.installation import (
     InstallationArchive,
     InstallationArchiveUpload,
     InstallationRead,
+    ReleaseRead,
     ReplacedRowsRead,
 )
 from app.domain.archive import Archive, ArchiveTable
 from app.services import archive as archive_service
 from app.services import installation as service
+from app.services import releases as releases_service
+from app.services.releases import ReleaseWatch
 
 router = APIRouter(prefix="/installation", tags=["installation"])
+
+
+def get_release_watch(request: Request) -> ReleaseWatch:
+    """Кэш последнего выпуска приложения, обслуживающего запрос (`create_app`)."""
+    watch: ReleaseWatch = request.app.state.release_watch
+    return watch
+
+
+ReleaseWatchDep = Annotated[ReleaseWatch, Depends(get_release_watch)]
 
 
 @router.get("", summary="Read the installation")
@@ -41,6 +55,27 @@ async def read_installation(
     """
     state = service.read_installation(actor=actor, settings=settings)
     return DataResponse[InstallationRead](data=InstallationRead(mcp_url=state.mcp_url))
+
+
+@router.get("/release", summary="Read the latest release")
+async def read_release(actor: ActorDep, watch: ReleaseWatchDep) -> DataResponse[ReleaseRead]:
+    """Версия установки и последний выпуск Casefile: вышел ли новый (TRK-416).
+
+    Открыт любому набору. В GitHub ходит API, а не браузер, и не чаще раза в час:
+    остальные запросы берут запомненный ответ (`app/services/releases.py`). Сбой сети,
+    выключенная проверка и не `production`-установка отвечают `200` с пустым последним
+    выпуском и без признака обновления: плашке нечего сказать, а ошибки нет.
+    """
+    state = await releases_service.read_release(actor=actor, watch=watch)
+    latest = state.latest
+    return DataResponse[ReleaseRead](
+        data=ReleaseRead(
+            version=state.version,
+            latest_version=None if latest is None else latest.version,
+            latest_url=None if latest is None else latest.url,
+            update_available=state.update_available,
+        )
+    )
 
 
 @router.get("/archive", summary="Export the installation")

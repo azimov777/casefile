@@ -185,6 +185,20 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Проверка нового выпуска ------------------------------------------------------
+    # Единственный поход API во внешний мир: последний выпуск Casefile на GitHub, чтобы
+    # интерфейс сказал человеку, что установка отстаёт (`app/services/releases.py`,
+    # TRK-416). Идёт только в `production` — у дев-контура версия не из тега выпуска.
+    release_check: bool = Field(
+        default=True,
+        description=(
+            "Whether the API asks GitHub for the latest Casefile release, at most once an "
+            "hour, so the interface can tell that a newer one is out "
+            "(`GET /api/v1/installation/release`). Only a `production` installation asks; "
+            "`false` means it never does"
+        ),
+    )
+
     # NoDecode отключает разбор значения как JSON: без него pydantic-settings падает
     # на строке «a,b» ещё до валидатора, потому что ждёт от списка JSON-массив.
     cors_origins: Annotated[list[str], NoDecode] = Field(

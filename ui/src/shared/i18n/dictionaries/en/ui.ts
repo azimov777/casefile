@@ -473,4 +473,10 @@ export const ui = {
     jsonLabel: 'mcpServers configuration',
     jsonCaption: 'JSON',
   },
+  // Плашка внизу боковой панели: вышел выпуск новее установки (TRK-416).
+  release: {
+    available: 'Casefile v{{version}} is available',
+    current: 'You have v{{version}}',
+    newTab: '(release notes open in a new tab)',
+  },
 } as const;

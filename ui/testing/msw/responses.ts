@@ -24,6 +24,7 @@ type Remark = components['schemas']['RemarkEntryRead'];
 type AccessToken = components['schemas']['TokenRead'];
 type Participant = components['schemas']['ParticipantRead'];
 type ProjectDetail = components['schemas']['ProjectDetailRead'];
+type Release = components['schemas']['ReleaseRead'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -38,6 +39,20 @@ export function failure(
   details: Record<string, unknown> = {},
 ) {
   return HttpResponse.json({ error: { code, message, details } }, { status });
+}
+
+/**
+ * Версия установки и последний выпуск (`TRK-416`). По умолчанию обновления нет:
+ * бэкенд теста не `production` и в GitHub не ходит — ровно так отвечает и он.
+ */
+export function release(overrides: Partial<Release> = {}): Release {
+  return {
+    version: '0.7.0',
+    latest_version: null,
+    latest_url: null,
+    update_available: false,
+    ...overrides,
+  };
 }
 
 const AUTHOR = { kind: 'tracker', signature: null } as const;

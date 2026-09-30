@@ -2,7 +2,7 @@ import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, collection, data, failure } from '@testing/msw/responses';
+import { API, bootstrap, collection, data, failure, release } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
 import { say } from '@testing/say';
@@ -274,6 +274,58 @@ describe('боковая панель', () => {
 
       expect(await screen.findByRole('link', { name: say.ui('app.start') })).toBeInTheDocument();
       expect(screen.queryByText(say.ui('app.startUnfinished'))).not.toBeInTheDocument();
+    });
+  });
+
+  describe('плашка нового выпуска (TRK-416)', () => {
+    const URL_080 = 'https://github.com/azimov777/casefile/releases/tag/v0.8.0';
+
+    it('вышел выпуск новее — внизу панели ссылка на его страницу с обеими версиями', async () => {
+      server.use(
+        http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+        http.get(`${API}/api/v1/installation/release`, () =>
+          data(release({ latest_version: '0.8.0', latest_url: URL_080, update_available: true })),
+        ),
+      );
+      renderApp('/tasks');
+
+      const notice = await screen.findByRole('link', {
+        name: new RegExp(say.ui('release.available', { version: '0.8.0' })),
+      });
+      expect(notice).toHaveAttribute('href', URL_080);
+      expect(notice).toHaveAttribute('target', '_blank');
+      expect(notice).toHaveTextContent(say.ui('release.current', { version: '0.7.0' }));
+      // Внизу панели — в одном блоке с участником, под навигацией, а не в ней.
+      expect(screen.getByRole('navigation', { name: say.ui('app.sections') })).not.toContainElement(
+        notice,
+      );
+    });
+
+    it('обновления нет — плашки нет', async () => {
+      server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())));
+      renderApp('/tasks');
+
+      expect(await screen.findByText('owner')).toBeInTheDocument();
+      expect(
+        screen.queryByText(say.ui('release.available', { version: '0.8.0' })),
+      ).not.toBeInTheDocument();
+    });
+
+    it('отказ запроса — ни плашки, ни ошибки', async () => {
+      let asked = false;
+      server.use(
+        http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+        http.get(`${API}/api/v1/installation/release`, () => {
+          asked = true;
+          return failure('internal_error', 500, 'Unexpected error');
+        }),
+      );
+      renderApp('/tasks');
+
+      expect(await screen.findByText('owner')).toBeInTheDocument();
+      await waitFor(() => expect(asked).toBe(true));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /v0\.8\.0/ })).not.toBeInTheDocument();
     });
   });
 

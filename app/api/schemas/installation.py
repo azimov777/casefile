@@ -22,6 +22,34 @@ class InstallationRead(BaseModel):
     )
 
 
+class ReleaseRead(BaseModel):
+    """Версия установки и последний выпуск Casefile: отстаёт ли установка (TRK-416)."""
+
+    version: str = Field(
+        examples=["0.7.0"], description="Casefile version this installation runs, without `v`"
+    )
+    latest_version: str | None = Field(
+        examples=["0.8.0"],
+        description=(
+            "Latest Casefile release, without `v`. Null when it is not known: the check is "
+            "off (`TRACKER_RELEASE_CHECK=false`), the installation is not `production`, or "
+            "GitHub could not be read. The API asks GitHub at most once an hour"
+        ),
+    )
+    latest_url: str | None = Field(
+        examples=["https://github.com/azimov777/casefile/releases/tag/v0.8.0"],
+        description=(
+            "Page of the latest release with its notes; null together with `latest_version`"
+        ),
+    )
+    update_available: bool = Field(
+        description=(
+            "Whether `latest_version` is newer than `version`. False whenever the latest "
+            "release is not known. Nothing here updates the installation: its updater does"
+        ),
+    )
+
+
 class ArchiveTableRead(BaseModel):
     """Строки одной таблицы установки: значения в порядке `columns`, каждое — текстом."""
 

@@ -269,6 +269,116 @@
         }
       }
     },
+    "/api/v1/installation/release": {
+      "get": {
+        "tags": [
+          "installation"
+        ],
+        "summary": "Read the latest release",
+        "description": "Версия установки и последний выпуск Casefile: вышел ли новый (TRK-416).\n\nОткрыт любому набору. В GitHub ходит API, а не браузер, и не чаще раза в час:\nостальные запросы берут запомненный ответ (`app/services/releases.py`). Сбой сети,\nвыключенная проверка и не `production`-установка отвечают `200` с пустым последним\nвыпуском и без признака обновления: плашке нечего сказать, а ошибки нет.",
+        "operationId": "read_release",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_ReleaseRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/installation/archive": {
       "get": {
         "tags": [
@@ -9676,6 +9786,18 @@
         ],
         "title": "DataResponse[ProjectRead]"
       },
+      "DataResponse_ReleaseRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReleaseRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[ReleaseRead]"
+      },
       "DataResponse_SessionRead_": {
         "properties": {
           "data": {
@@ -12127,6 +12249,62 @@
         ],
         "title": "QuestionPayload",
         "description": "Вопрос участникам реестра."
+      },
+      "ReleaseRead": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Casefile version this installation runs, without `v`",
+            "examples": [
+              "0.7.0"
+            ]
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version",
+            "description": "Latest Casefile release, without `v`. Null when it is not known: the check is off (`TRACKER_RELEASE_CHECK=false`), the installation is not `production`, or GitHub could not be read. The API asks GitHub at most once an hour",
+            "examples": [
+              "0.8.0"
+            ]
+          },
+          "latest_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Url",
+            "description": "Page of the latest release with its notes; null together with `latest_version`",
+            "examples": [
+              "https://github.com/azimov777/casefile/releases/tag/v0.8.0"
+            ]
+          },
+          "update_available": {
+            "type": "boolean",
+            "title": "Update Available",
+            "description": "Whether `latest_version` is newer than `version`. False whenever the latest release is not known. Nothing here updates the installation: its updater does"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "latest_version",
+          "latest_url",
+          "update_available"
+        ],
+        "title": "ReleaseRead",
+        "description": "Версия установки и последний выпуск Casefile: отстаёт ли установка (TRK-416)."
       },
       "RemarkEntryCreate": {
         "properties": {
