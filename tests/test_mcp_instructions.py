@@ -259,3 +259,23 @@ def test_the_command_check_catches_commands(command: str) -> None:
 def test_the_command_check_passes_descriptions(description: str) -> None:
     """Глагол описания в середине фразы и имя инструмента в начале приказом не считаются."""
     assert not any(word in IMPERATIVE_VERBS for word in clause_openers(description))
+
+
+async def test_the_instructions_point_at_the_skill_resource_the_server_lists(
+    mcp_session: Connect, task_secret: str
+) -> None:
+    """TRK-413: `instructions` называют ресурс скила, и этот адрес есть в `resources/list`.
+
+    Установка, обновлённая обновлятором, плагина скила не получает: обновлятор меняет
+    образы и до харнессов хоста не дотягивается (`TRK-401#13`). До её агента доходит только
+    ответ сервера, поэтому указатель стоит в `instructions`, а сверка идёт с тем, что сервер
+    действительно отдаёт обычным `resources/list`, — иначе опечатка в адресе прошла бы.
+    """
+    async with mcp_session(task_secret) as session:
+        result = await session.initialize()
+        listed = {str(item.uri) for item in (await session.list_resources()).resources}
+
+    named = set(re.findall(r"`(skill://[^`]+)`", result.instructions or ""))
+
+    assert named == {"skill://casefile/SKILL.md"}, f"указатель на скил в `instructions`: {named}"
+    assert named <= listed, f"адреса нет в `resources/list`: {named}"
