@@ -14,7 +14,7 @@
 это состояние, открывает `/tasks` напрямую — так делает большинство файлов ниже, кроме
 `install-key.spec.ts` (её первый сценарий идёт через `/` нарочно) и `start-onboarding.spec.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts` и `start-onboarding.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `filter-stability.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts` и `start-onboarding.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -138,6 +138,8 @@ invalid_search_query`); ограничение снято (TRK-21).
   пропущенное сама, ключи доски не будят её запросов на таблице; заводит задачи сам
   и возвращает двинутую обратно, проект «запись»
 - `filters.spec.ts` — свёрнутый отбор: высота строки, снятие чипа клавиатурой, список сортировки на Radix
+- `filter-stability.spec.ts` — применение и сброс фильтра не двигают строку отбора и верх выдачи (TRK-418):
+  boundingBox до/после на 1440 и 390 px в обеих темах, таблица и доска; пишущий — доводит демо до 30 задач
 - `marks.spec.ts` — статусы различаются формой без цвета; колонка «Приоритет» не выросла
 - `foundation.spec.ts` — основа: нижняя граница кегля на пяти экранах, табличные цифры, ночные токены
 - `fonts.spec.ts` — Fira с сетью и без неё, запасная гарнитура, тёмная тема без класса на `html`
