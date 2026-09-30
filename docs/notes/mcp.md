@@ -727,3 +727,17 @@ TRK-431. Признаки проверки в гайде сверяет тест
 «Whether the skill is installed»; `tests/test_mcp_instructions.py`,
 `test_the_pointer_says_the_resource_installs_a_missing_skill`; `tests/test_installers.py`,
 `test_the_guide_checks_the_skill_before_installing_it`.
+
+## Каталог скилов, выходящий за лимиты SEP-2640, сервер не поднимает
+
+**Что:** по Final-тексту SEP-2640 («Limits») скил — не больше 512 записей в `resources` и
+16 МиБ суммарного `size`; сервер не должен отдавать больший. `_load` (`app/mcp/skills.py`)
+при импорте сборки отказывает каталогу, который превышает любой из лимитов. Объявление
+`directoryRead` не делается: метод `resources/directory/read` не реализован, а без
+объявления клиент его не зовёт, и сервер отвечает на него «метод не найден».
+**Почему важно:** хост вправе не загружать скил сверх лимитов и сказать об этом только
+пользователю; молчаливый отказ клиента на чужом скиле сервер сам не заметит.
+**Как правильно:** добавляя файлы в `skills/casefile/`, держаться лимитов; включая
+`directoryRead`, реализовать метод для каждого каталога скила и объявить `{"directoryRead": true}`.
+**Где:** `app/mcp/skills.py`, `MAX_SKILL_FILES`, `MAX_SKILL_BYTES`, `_load`;
+`tests/test_mcp_skills.py`, `test_a_skill_over_the_sep_limits_is_refused_at_load`.
