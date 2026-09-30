@@ -28,6 +28,15 @@ refresh. Секрета клиента нет вовсе: все клиенты 
 `http://127.0.0.1:54822/callback` (TRK-432#6). RFC 8252 §7.3 велит серверу принимать
 на петле любой порт: `redirect_matches` сравнивает такой адрес без порта, а всё прочее —
 точно, строкой, как SDK. Касается это и CIMD, и DCR.
+
+## Клиент узнаётся по адресу документа, а без него — по имени
+
+Правило владельца `TRK-446#14` выбирает участника по клиенту: Claude Code → `claude`,
+Codex → `codex`, прочие → агент по умолчанию. Клиент по документу (CIMD) узнаётся по
+`client_id` — адресу, который выдать за чужой нельзя: документ скачан с этого адреса.
+Клиент DCR — по `client_name`, который он пишет сам. Подделка имени ничего не открывает:
+в локальном режиме выбор участника делает сам владелец машины, а в сети имя выбирает
+только агента по умолчанию среди своих агентов вошедшего человека (`TRK-475#14`).
 """
 
 import secrets
@@ -39,7 +48,9 @@ __all__ = [
     "CODE_TTL",
     "OAUTH_SCOPE",
     "OAUTH_SECRET_ENTROPY_BYTES",
+    "OTHER_CLIENT",
     "OAuthRefusal",
+    "client_family",
     "generate_oauth_secret",
     "is_loopback_redirect",
     "oauth_token_name",
@@ -140,6 +151,28 @@ def refuse_unsafe_redirect(uris: list[str]) -> None:
                 "invalid_redirect_uri",
                 f"redirect_uri {uri} uses http outside the loopback interface; use https",
             )
+
+
+#: Семьи клиентов по правилу `TRK-446#14`: префикс адреса документа CIMD и начало имени DCR.
+_CLIENT_FAMILIES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    ("claude", ("https://claude.ai/oauth/claude-code",), ("claude code",)),
+    ("codex", ("https://chatgpt.com/oauth/codex/",), ("codex",)),
+)
+#: Семья прочих клиентов: их участник — агент по умолчанию.
+OTHER_CLIENT = "agent"
+
+
+def client_family(client_id: str, client_name: str | None) -> str:
+    """Семья клиента: `claude` (Claude Code), `codex` (Codex) или `agent` для прочих.
+
+    Клиент по документу узнаётся по адресу `client_id`, клиент DCR — по началу
+    `client_name` без учёта регистра.
+    """
+    name = (client_name or "").strip().lower()
+    for family, documents, names in _CLIENT_FAMILIES:
+        if client_id.startswith(documents) or name.startswith(names):
+            return family
+    return OTHER_CLIENT
 
 
 def oauth_token_name(client_name: str | None, client_id: str) -> str:

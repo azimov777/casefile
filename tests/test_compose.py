@@ -582,3 +582,23 @@ def test_the_api_believes_the_client_address_only_from_the_nginx_that_writes_it(
     assert "include /etc/nginx/casefile/real-ip.conf;" in [
         line.strip() for line in template.splitlines()
     ]
+
+
+def test_the_mcp_service_learns_the_mode_and_the_bind_like_the_ui() -> None:
+    """Режим входа и адрес публикации доходят до службы mcp теми же подстановками, что до `ui`.
+
+    По ним служба mcp согласует вход агента по OAuth (TRK-450): локально — сразу и только
+    при портах на петле, в сети — страницей входа. Разойдись подстановки, установка в сети
+    без пароля у интерфейса не поднялась бы, а служба mcp выдавала бы подключения без входа.
+    Дев-контур публикует порты на всех адресах и называет это честно.
+    """
+    prod = [
+        line.strip() for line in _block(COMPOSE_FILES["prod"].read_text("utf-8"), APP_ENVIRONMENT)
+    ]
+    dev = [
+        line.strip() for line in _block(COMPOSE_FILES["dev"].read_text("utf-8"), APP_ENVIRONMENT)
+    ]
+
+    assert UI_LOGIN.replace("TRACKER_UI_LOGIN", "TRACKER_LOGIN") in prod, prod
+    assert UI_BIND.replace("TRACKER_UI_BIND", "TRACKER_BIND") in prod, prod
+    assert 'TRACKER_BIND: "0.0.0.0"' in dev, dev

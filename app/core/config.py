@@ -147,16 +147,27 @@ class Settings(BaseSettings):
             "one. Required in that mode, ignored over HTTP"
         ),
     )
-    # Согласие входа OAuth без страницы (TRK-448). Служба mcp не знает режима входа
-    # установки, а согласие без страницы выдаёт токен любому, кто достучался до порта.
-    # Поэтому по умолчанию оно выключено, и `/authorize` отказывает; правило выбора
-    # участника и режимы — задача TRK-450 (`app/services/oauth.py`, `ConsentPolicy`).
-    oauth_local_consent: bool = Field(
-        default=False,
+    # Режим входа установки и адрес публикации портов (TRK-450). Оба пишет контур
+    # (`docker-compose.prod.yml` — из `CASEFILE_LOGIN` и `CASEFILE_BIND`, той же
+    # подстановкой, что у службы `ui`): процесс в контейнере не видит, куда опубликован
+    # его порт, и без них служба mcp не знала бы, своя ли это машина. От них зависит,
+    # кому `/authorize` выдаёт подключение: локально — сразу и только на петле, в сети —
+    # после страницы входа (`app/services/oauth.py`, `app/mcp/consent.py`).
+    login: Literal["local", "password"] = Field(
+        default="local",
         description=(
-            "Grant an OAuth sign-in at once, without a consent page, to the default agent "
-            "participant, and only for a loopback redirect_uri. Off by default: until the "
-            "sign-in page exists, anyone who reaches the MCP port would get a token"
+            "Sign-in mode of the installation: `local` (empty value too) means this machine "
+            "only, where the person is the owner and types nothing; `password` means people "
+            "sign in with email and password. It decides how OAuth sign-in of an agent is "
+            "consented: at once in `local`, on a sign-in page in `password`"
+        ),
+    )
+    bind: str = Field(
+        default="127.0.0.1",
+        description=(
+            "Address the installation publishes its ports on, as compose sets it "
+            "(`CASEFILE_BIND`): the container cannot see it. OAuth sign-in without a page "
+            "is granted only while it is a loopback address"
         ),
     )
     # Срок токена подключения OAuth (решение `TRK-469#24`). Конечный, чтобы `/token` отдал
@@ -260,6 +271,25 @@ class Settings(BaseSettings):
                         f"{entry!r} is not an IP address, a network or a host name"
                     ) from None
         return value
+
+    @field_validator("login", mode="before")
+    @classmethod
+    def _empty_login_is_local(cls, value: object) -> object:
+        """Пустое значение — своя машина: compose передаёт `${CASEFILE_LOGIN:-}` всегда."""
+        if isinstance(value, str) and not value.strip():
+            return "local"
+        return value
+
+    @property
+    def bind_is_loopback(self) -> bool:
+        """Опубликованы ли порты только на петле: `127.0.0.1`, `::1`, `localhost`."""
+        host = self.bind.strip().strip("[]")
+        if host.lower() == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return False
 
     @field_validator("mcp_public_url", mode="before")
     @classmethod

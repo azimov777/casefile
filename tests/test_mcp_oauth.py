@@ -2,9 +2,9 @@
 
 Цикл проходится настоящими HTTP-запросами к приложению службы через ASGI, как его
 прошёл бы Claude Code или Codex: регистрация, `/authorize`, `/token`, `tools/list`
-выданным токеном. Сервер собирается с включённым временным правилом согласия
-(`TRACKER_OAUTH_LOCAL_CONSENT`): без него `/authorize` отказывает, и это проверено
-отдельно.
+выданным токеном. Сервер собирается в локальном режиме с портами на петле: там согласие даётся сразу
+(`LocalConsent`, TRK-450); установка с портами в сети без входа отказывает, и это
+проверено отдельно.
 """
 
 import base64
@@ -48,7 +48,7 @@ INITIALIZE = {
 def _settings(
     *, consent: bool = True, public_url: str | None = None, ttl: timedelta | None = None
 ) -> Settings:
-    update: dict[str, Any] = {"oauth_local_consent": consent}
+    update: dict[str, Any] = {"login": "local", "bind": "127.0.0.1" if consent else "0.0.0.0"}
     if public_url is not None:
         update["mcp_public_url"] = public_url
     if ttl is not None:
@@ -182,7 +182,7 @@ async def test_full_cycle_gives_a_participant_token_that_lists_tools(
     ttl = _settings().oauth_access_ttl
     assert issued["expires_in"] == int(ttl.total_seconds())
 
-    # Подключение, а не ключ: вид `oauth`, срок, участник `agent`.
+    # Подключение, а не ключ: вид `oauth`, срок, участник по клиенту — Codex → `codex`.
     token = await db_session.scalar(
         select(Token).where(Token.token_hash == hash_token(issued["access_token"]))
     )
@@ -191,7 +191,7 @@ async def test_full_cycle_gives_a_participant_token_that_lists_tools(
     assert token.expires_at is not None
     # `created_at` — время начала транзакции теста, срок — время выпуска: разница мала.
     assert abs(token.expires_at - token.created_at - ttl) < timedelta(minutes=1)
-    assert token.participant is not None and token.participant.name == "agent"
+    assert token.participant is not None and token.participant.name == "codex"
     assert token.name == "oauth: Codex"
 
     # Код и refresh — только хешем.
@@ -345,7 +345,7 @@ async def test_a_client_asking_for_a_secret_is_registered_public(
 
 
 async def test_without_local_consent_authorize_is_denied(mcp_sessions: SessionFactory) -> None:
-    """По умолчанию согласия без страницы нет: `access_denied` на адрес возврата."""
+    """Порты в сети без режима входа: согласия без страницы нет, `access_denied`."""
     async with _http(_server(mcp_sessions, consent=False)) as client:
         registered = await _register(client)
         _, challenge = _pkce()

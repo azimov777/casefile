@@ -16,12 +16,16 @@
 
 ## Кому выдать — отдельная точка
 
-`/authorize` спрашивает `ConsentPolicy`: по клиенту и адресу возврата она называет
-участника, от чьего имени будет говорить токен, и того, кто выдачу согласовал, — или
-отказывает. Правило владельца (Claude Code → `claude`, Codex → `codex`, прочие → агент по
-умолчанию, недостающий участник заводится сам; `TRK-446#14`) и страница входа в сети
-встанут сюда задачей TRK-450. Пока стоит `DefaultAgentConsent`: участник `agent`, только
-при `TRACKER_OAUTH_LOCAL_CONSENT` и только на адрес возврата на петле.
+Код выпускает `authorize` по решению `ConsentPolicy`: по клиенту и адресу возврата она
+называет участника, от чьего имени будет говорить токен, и того, кто выдачу согласовал, —
+или отказывает. Политик две, по режиму входа установки (`TRACKER_LOGIN`, TRK-450):
+
+- локально — `LocalConsent`: сразу, без страницы, участник по клиенту (Claude Code →
+  `claude`, Codex → `codex`, прочие → `agent`, недостающий заводится сам; `TRK-446#14`),
+  выпускает трекер; только при портах на петле и адресе возврата на петле;
+- в сети — `SignedInConsent`: после входа почтой и паролем на странице службы mcp
+  (`app/mcp/consent.py`) человек выбирает участника из `consent_choices` — по умолчанию
+  своего агента `<клиент>_<человек>` (`TRK-475#14`), — а выпускает сам человек.
 
 ## Все клиенты публичные
 
@@ -68,7 +72,9 @@ from app.domain.client_documents import client_from_document, is_document_client
 from app.domain.oauth import (
     CODE_TTL,
     OAUTH_SCOPE,
+    OTHER_CLIENT,
     OAuthRefusal,
+    client_family,
     generate_oauth_secret,
     is_loopback_redirect,
     oauth_token_name,
@@ -78,7 +84,7 @@ from app.domain.participants import ParticipantKind, normalize_participant_name
 from app.domain.tokens import TokenKind, hash_token
 from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.client_documents import ClientDocuments
-from app.services.participants import register_participant
+from app.services.participants import agent_of, register_participant
 from app.services.setup import DEFAULT_AGENT_DESCRIPTION, DEFAULT_AGENT_NAME
 from app.services.tokens import issue_token
 
@@ -87,12 +93,15 @@ __all__ = [
     "REFRESH_PREFIX",
     "ClientView",
     "CodeView",
+    "ConsentChoices",
     "ConsentPolicy",
-    "DefaultAgentConsent",
     "Grant",
     "IssuedPair",
+    "LocalConsent",
     "RefreshView",
+    "SignedInConsent",
     "authorize",
+    "consent_choices",
     "find_client",
     "find_code",
     "find_refresh",
@@ -144,44 +153,119 @@ class ConsentPolicy(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class DefaultAgentConsent:
-    """Временное правило TRK-448: участник `agent`, согласие сразу — только на петлю.
+class LocalConsent:
+    """Локальный режим: согласие сразу, без страницы, участник — по клиенту (`TRK-446#14`).
 
-    `enabled` — `TRACKER_OAUTH_LOCAL_CONSENT`. Выключено — отказ всем: служба mcp не знает,
-    своя ли это машина, а согласие без страницы выдало бы токен любому в сети.
+    Claude Code получает участника `claude`, Codex — `codex`, прочие — агента по умолчанию
+    `agent`; недостающий заводится сам, без хозяина. Выпускает трекер: человек своей
+    машины ничего не вводит.
+
+    Только на петле, и дважды. `bind_loopback` — порты установки опубликованы только на
+    петле (`TRACKER_BIND`): иначе до `/authorize` дотянулся бы любой в сети и получил
+    бы подключение без входа. Адрес возврата — тоже на петле: код не покидает машину,
+    где открыт браузер.
     """
 
-    enabled: bool
+    bind_loopback: bool
 
     async def __call__(
         self, session: AsyncSession, *, client: ClientView, redirect_uri: str
     ) -> Grant:
-        del client
-        if not self.enabled:
+        if not self.bind_loopback:
             raise OAuthRefusal(
                 "access_denied",
-                "OAuth sign-in is not enabled on this installation; connect with a bearer token",
+                "this installation is published beyond loopback without sign-in; "
+                "set CASEFILE_LOGIN=password to sign agents in through the sign-in page",
             )
         if not is_loopback_redirect(redirect_uri):
             raise OAuthRefusal(
                 "access_denied",
                 "sign-in without a consent page is granted to a loopback redirect_uri only",
             )
-        return Grant(participant=await _default_agent(session), issuer=TRACKER_ACTOR.author)
+        family = client_family(client.client_id, client.client_name)
+        return Grant(participant=await _local_agent(session, family), issuer=TRACKER_ACTOR.author)
 
 
-async def _default_agent(session: AsyncSession) -> Participant:
-    """Агент этой машины — тот же участник, кому установка выдаёт токен `agent-token`."""
-    participants = ParticipantRepository(session)
-    agent = await participants.get_by_name(normalize_participant_name(DEFAULT_AGENT_NAME))
-    if agent is not None:
-        return agent
+@dataclass(frozen=True, slots=True)
+class ConsentChoices:
+    """Кого вошедший человек может выбрать на странице входа и кто выбран по умолчанию."""
+
+    default: Participant
+    options: list[Participant]
+
+
+async def consent_choices(
+    session: AsyncSession, *, person: Participant, client: ClientView
+) -> ConsentChoices:
+    """Выбор участника на странице входа в сети (`TRK-475#14`).
+
+    По умолчанию — агент этого человека для этого клиента, `<клиент>_<человек>`
+    (`agent_of`, заводится, если его нет). Кроме него — другие агенты этого человека и
+    агенты без хозяина. Агентов других людей в выборе нет.
+    """
+    family = client_family(client.client_id, client.client_name)
+    default = await agent_of(session, client=family, owner=person)
+    options = await ParticipantRepository(session).list_agents_open_to(person)
+    return ConsentChoices(default=default, options=options)
+
+
+@dataclass(frozen=True, slots=True)
+class SignedInConsent:
+    """Сетевой режим: согласие дал человек, вошедший на странице почтой и паролем.
+
+    `person` — участник вошедшей учётной записи, `choice` — имя участника, выбранного на
+    странице (`None` — по умолчанию). Выбрать можно только из `consent_choices`, иначе
+    `access_denied`. Выпускающим записывается сам человек (`Grant.issuer`): на этом
+    держатся «своё видит и отзывает» (`Token.belongs_to`) и отзыв его подключений при
+    отключении учётной записи.
+    """
+
+    person: Participant
+    choice: str | None = None
+
+    async def __call__(
+        self, session: AsyncSession, *, client: ClientView, redirect_uri: str
+    ) -> Grant:
+        del redirect_uri
+        choices = await consent_choices(session, person=self.person, client=client)
+        if self.choice is None:
+            chosen = choices.default
+        else:
+            wanted = normalize_participant_name(self.choice)
+            found = [option for option in choices.options if option.name == wanted]
+            if not found:
+                raise OAuthRefusal(
+                    "access_denied", f"participant {self.choice} is not one you can connect"
+                )
+            chosen = found[0]
+        return Grant(participant=chosen, issuer=self.person.author)
+
+
+#: Описание участника, которого локальный вход заводит сам, — по семье клиента.
+_LOCAL_AGENT_DESCRIPTIONS = {
+    "claude": "Claude Code этой машины: вошёл через OAuth",
+    "codex": "Codex этой машины: вошёл через OAuth",
+}
+
+
+async def _local_agent(session: AsyncSession, family: str) -> Participant:
+    """Участник локального входа по семье клиента; недостающий заводится без хозяина.
+
+    Имя, занятое человеком, агенту не отдаётся: подключение говорило бы от имени
+    человека. Такой вход получает отказ, а не чужое имя.
+    """
+    name = DEFAULT_AGENT_NAME if family == OTHER_CLIENT else family
+    participant = await ParticipantRepository(session).get_by_name(normalize_participant_name(name))
+    if participant is not None:
+        if participant.kind is not ParticipantKind.AGENT:
+            raise OAuthRefusal("access_denied", f"participant {name} is a person, not an agent")
+        return participant
     return await register_participant(
         session,
         actor=TRACKER_ACTOR,
         kind=ParticipantKind.AGENT,
-        name=DEFAULT_AGENT_NAME,
-        description=DEFAULT_AGENT_DESCRIPTION,
+        name=name,
+        description=_LOCAL_AGENT_DESCRIPTIONS.get(family, DEFAULT_AGENT_DESCRIPTION),
     )
 
 

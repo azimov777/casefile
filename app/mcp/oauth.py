@@ -44,7 +44,7 @@ import json
 import uuid
 from datetime import timedelta
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from mcp.server.auth.handlers.metadata import MetadataHandler
 from mcp.server.auth.provider import (
@@ -59,6 +59,7 @@ from mcp.server.auth.provider import (
 )
 from mcp.server.auth.routes import build_metadata, cors_middleware
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.auth import InvalidRedirectUriError, OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl, ValidationError
 from starlette.applications import Starlette
@@ -81,6 +82,7 @@ __all__ = [
     "PresentedToken",
     "RefusalReasons",
     "advertise_client_documents",
+    "allowed_hosts",
     "auth_settings",
     "authorization_enabled",
 ]
@@ -175,13 +177,20 @@ class CasefileAuthorization(PresentedToken):
     def __init__(
         self,
         sessions: SessionFactory,
-        consent: oauth_service.ConsentPolicy,
+        consent: oauth_service.ConsentPolicy | None,
         documents: ClientDocuments | None = None,
         *,
         access_ttl: timedelta,
+        consent_page: str | None = None,
     ) -> None:
+        """`consent` — согласие сразу (локальный режим); `consent_page` — адрес страницы
+        входа (сетевой режим, `app/mcp/consent.py`), куда `/authorize` отправляет браузер.
+        Задаётся одно из двух."""
+        if (consent is None) == (consent_page is None):
+            raise ValueError("Exactly one of consent and consent_page is required")
         super().__init__(sessions)
         self._consent = consent
+        self._consent_page = consent_page
         self._documents = documents or ClientDocuments()
         self._access_ttl = access_ttl
 
@@ -227,6 +236,9 @@ class CasefileAuthorization(PresentedToken):
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
+        if self._consent_page is not None:
+            return _consent_page_url(self._consent_page, client, params)
+        assert self._consent is not None  # одно из двух, проверено в конструкторе
         try:
             async with self._sessions() as session:
                 code = await oauth_service.authorize(
@@ -329,6 +341,29 @@ class CasefileAuthorization(PresentedToken):
         """Точка отзыва RFC 7009 не объявлена: токен отзывают «Доступы» (`/tokens`)."""
         del token
         raise NotImplementedError("token revocation goes through the tokens registry")
+
+
+def _consent_page_url(
+    page: str, client: OAuthClientInformationFull, params: AuthorizationParams
+) -> str:
+    """Адрес страницы входа с запросом `/authorize`, уже проверенным SDK.
+
+    Адрес возврата передаётся, только если клиент назвал его сам: иначе страница, как и
+    SDK, возьмёт единственный зарегистрированный, и код сверится с тем же флагом.
+    """
+    query = {
+        "response_type": "code",
+        "client_id": client.client_id or "",
+        "code_challenge": params.code_challenge,
+        "code_challenge_method": "S256",
+        "redirect_uri": str(params.redirect_uri)
+        if params.redirect_uri_provided_explicitly
+        else None,
+        "state": params.state,
+        "scope": " ".join(params.scopes) if params.scopes else None,
+        "resource": params.resource,
+    }
+    return f"{page}?{urlencode({key: value for key, value in query.items() if value})}"
 
 
 def _present(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -440,6 +475,25 @@ def advertise_client_documents(application: Starlette, settings: Settings) -> No
 
 
 _AS_METADATA_PATH = "/.well-known/oauth-authorization-server"
+
+
+def allowed_hosts(settings: Settings) -> TransportSecuritySettings | None:
+    """Сетевой режим входа: эндпоинт MCP отвечает только на узле публичного адреса.
+
+    SDK сам включает проверку `Host` и `Origin` (защита от DNS rebinding) лишь при
+    привязке к петле; в контейнере служба слушает `0.0.0.0`, и проверки нет. В сети со
+    входом по учётным записям (`TRACKER_LOGIN=password`) узел один — публичный адрес за
+    прокси (`TRACKER_MCP_PUBLIC_URL`), и запрос на любой другой получает `421`: прокси
+    обязан передавать `Host` клиента (README, «Network mode»). Локально — как у SDK.
+    """
+    if settings.login != "password" or not authorization_enabled(settings):
+        return None
+    parts = urlsplit(settings.effective_mcp_public_url)
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[parts.netloc],
+        allowed_origins=[f"{parts.scheme}://{parts.netloc}"],
+    )
 
 
 def authorization_enabled(settings: Settings) -> bool:
