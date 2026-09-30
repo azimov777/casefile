@@ -20,9 +20,12 @@
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from typing import Any
 
+import httpx2
 import pytest
+from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -47,7 +50,8 @@ from app.services import participants as participants_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
-from conftest import Connect, call, connect_mcp, refuse
+from conftest import MCP_BASE_URL, Connect, call, connect_mcp, refuse
+from mcp import Client
 
 #: Сколько ждёт тест, которому ждать нечего. Меньше контрольного опроса — иначе он
 #: проверял бы опрос, а не истёкший таймаут.
@@ -308,3 +312,155 @@ async def test_the_wait_wakes_up_before_the_fallback_poll(
 
     assert [item["seq"] for item in page["items"]] == [expected]
     assert elapsed < poll, f"ожидание длилось {elapsed:.1f}: разбудил опрос, не оповещение"
+
+
+# --- Эпохи протокола: 2025-11-25 с рукопожатием и 2026-07-28 без сессий ----------------
+
+#: Обе эпохи, которыми ходят клиенты. На второй нет `initialize`, `Mcp-Session-Id` и
+#: возобновления потока: один запрос — один ответ, а оборванный запрос клиент повторяет
+#: заново (TRK-440, TRK-435#6).
+EPOCHS = ["legacy", "2026-07-28"]
+
+
+@asynccontextmanager
+async def connect_epoch(server: MCPServer, secret: str, mode: str) -> AsyncIterator[Any]:
+    """Клиент SDK, закреплённый на эпохе: `legacy` — рукопожатие, иначе — версия без него.
+
+    Возвращает объект с `call_tool`, одинаковый на обеих эпохах: у старой это
+    `ClientSession`, у новой — `Client`. Результат обоих читается одной функцией
+    `epoch_call`.
+    """
+    if mode == "legacy":
+        async with connect_mcp(server, secret) as session:
+            yield session
+        return
+    application = server.streamable_http_app()
+    async with application.router.lifespan_context(application):
+        http_client = httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(application),
+            base_url=MCP_BASE_URL,
+            headers={"Authorization": f"Bearer {secret}"},
+            timeout=60,
+        )
+        async with (
+            http_client,
+            Client(
+                streamable_http_client(f"{MCP_BASE_URL}/mcp", http_client=http_client),
+                mode=mode,
+            ) as client,
+        ):
+            # Закрепление не молчит: клиент обязан говорить на выбранной эпохе.
+            assert client.protocol_version == mode
+            yield client
+
+
+async def epoch_call(client: Any, tool: str, /, **arguments: Any) -> dict[str, Any]:
+    result = await client.call_tool(tool, arguments)
+    assert not result.is_error, result.content
+    assert result.structured_content is not None
+    return result.structured_content
+
+
+async def _append(
+    sessions: async_sessionmaker[AsyncSession], task: Task, after: str, *, pause: float = 0.0
+) -> int:
+    """Подшивает запись другим соединением, с настоящим коммитом. Возвращает её `seq`."""
+    await asyncio.sleep(pause)
+    async with sessions() as writing:
+        written = await writing.get(Task, task.id)
+        assert written is not None
+        entry = await case_service.record_section_changed(
+            writing,
+            written,
+            actor=TRACKER_ACTOR,
+            field=TaskField.GOAL,
+            before="",
+            after=after,
+        )
+        await writing.commit()
+        return entry.seq
+
+
+@pytest.mark.parametrize("mode", EPOCHS)
+async def test_the_wait_returns_an_entry_filed_by_another_client_on_either_epoch(
+    mode: str,
+    committing_server: MCPServer,
+    committing_sessions: async_sessionmaker[AsyncSession],
+    committed_world: tuple[str, Task],
+    test_database_url: str,
+) -> None:
+    """Проверка 1 TRK-440: ждущий получает запись другого клиента и на эпохе без сессий.
+
+    Запись подшивается другим соединением посреди ожидания, а слушатель поднят тем же
+    менеджером, что у процесса: ответ обязан прийти раньше контрольного опроса, то есть
+    разбудить его должно оповещение, а не опрос.
+    """
+    secret, task = committed_world
+    poll = get_settings().journal_wait_poll_interval
+    async with committing_sessions() as reading:
+        start = await EntryRepository(reading).latest_seq()
+
+    loop = asyncio.get_running_loop()
+    async with journal_listener(asyncpg_dsn(test_database_url)):
+        writer = asyncio.create_task(_append(committing_sessions, task, "разбудили", pause=0.5))
+        began = loop.time()
+        async with connect_epoch(committing_server, secret, mode) as client:
+            page = await epoch_call(client, "wait_journal", after=start, timeout=30)
+        elapsed = loop.time() - began
+        expected = await writer
+
+    assert [item["seq"] for item in page["items"]] == [expected]
+    assert elapsed < poll, f"{mode}: ожидание длилось {elapsed:.1f}: разбудил опрос, не оповещение"
+
+
+@pytest.mark.parametrize("mode", EPOCHS)
+async def test_an_interrupted_wait_repeated_with_the_same_after_loses_and_doubles_nothing(
+    mode: str,
+    committing_server: MCPServer,
+    committing_sessions: async_sessionmaker[AsyncSession],
+    committed_world: tuple[str, Task],
+    test_database_url: str,
+) -> None:
+    """Проверка 1 TRK-440: оборванный и повторённый с тем же `after` вызов честен.
+
+    На эпохе 2026-07-28 возобновления потока нет: оборвавшийся запрос клиент шлёт
+    заново. Вызов ничего не хранит между запросами — позицию задаёт `after`, — поэтому
+    повтор обязан отдать каждую запись ровно один раз, а оборванный ждущий — уйти и
+    освободить свою регистрацию, не оставив живого ожидания на сервере.
+    """
+    secret, task = committed_world
+    async with committing_sessions() as reading:
+        start = await EntryRepository(reading).latest_seq()
+
+    async with journal_listener(asyncpg_dsn(test_database_url)):
+        # Первый вызов обрывается: клиент уходит, пока записей ещё нет.
+        async with connect_epoch(committing_server, secret, mode) as client:
+            waiting = asyncio.create_task(
+                epoch_call(client, "wait_journal", after=start, timeout=30)
+            )
+            await asyncio.sleep(0.5)
+            assert len(journal_wakeup._waiters) == 1, "ждущий не зарегистрировался"
+            waiting.cancel()
+            with suppress(asyncio.CancelledError):
+                await waiting
+
+        # Ушедший ждущий снимается со слушателя: иначе обрывы копили бы ожидания.
+        for _ in range(50):
+            if not journal_wakeup._waiters:
+                break
+            await asyncio.sleep(0.1)
+        assert not journal_wakeup._waiters, f"{mode}: оборванное ожидание осталось на сервере"
+
+        # Записи приходят, пока клиент повторяет вызов с прежним `after`.
+        first = await _append(committing_sessions, task, "первая")
+        second = await _append(committing_sessions, task, "вторая")
+        async with connect_epoch(committing_server, secret, mode) as client:
+            again = await epoch_call(client, "wait_journal", after=start, timeout=5)
+            rest = await epoch_call(
+                client, "wait_journal", after=again["items"][-1]["seq"], timeout=0
+            )
+            nothing = await epoch_call(client, "wait_journal", after=second, timeout=0)
+
+    assert [item["seq"] for item in again["items"]] == [first, second]
+    assert rest["items"] == []
+    assert nothing["items"] == []
