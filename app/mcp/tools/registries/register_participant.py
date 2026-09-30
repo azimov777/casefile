@@ -34,7 +34,9 @@ def register(tools: Toolset) -> None:
     """Объявляет `register_participant` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, scope=TokenScope.MAIN, creating=True)
+    @tools.tool(
+        title="Register participant", annotations=FILING, scope=TokenScope.MAIN, creating=True
+    )
     async def register_participant(
         kind: ParticipantKindArg,
         name: NewParticipantNameArg,

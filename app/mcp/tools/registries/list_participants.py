@@ -28,7 +28,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="List participants", annotations=READ_ONLY)
     async def list_participants(
         limit: LimitArg = None,
         cursor: CursorArg = None,

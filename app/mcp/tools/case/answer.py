@@ -27,7 +27,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `answer` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Answer question", annotations=FILING, creating=True)
     async def answer(
         key: TaskKeyArg,
         question_no: QuestionNoArg,

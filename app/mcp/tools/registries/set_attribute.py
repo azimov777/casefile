@@ -68,7 +68,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `set_attribute` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=IDEMPOTENT_TASK_UPDATE, creating=True)
+    @tools.tool(title="Set attribute", annotations=IDEMPOTENT_TASK_UPDATE, creating=True)
     async def set_attribute(
         key: ProjectKeyArg,
         name: AttributeNameArg,

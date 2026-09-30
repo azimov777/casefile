@@ -13,7 +13,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `unlink` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING)
+    @tools.tool(title="Unlink tasks", annotations=FILING)
     async def unlink(key: TaskKeyArg, kind: LinkKindArg, other: OtherTaskKeyArg) -> LinkFilingView:
         """Removes a link and files `link_removed` in both cases.
 

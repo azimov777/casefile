@@ -15,7 +15,7 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
     settings = tools.settings
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="Read project entries", annotations=READ_ONLY)
     async def read_project_entries(
         key: ProjectKeyArg,
         nos: EntryNosArg = None,

@@ -104,7 +104,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `get_task` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=READ_ONLY)
+    @tools.tool(title="Get task", annotations=READ_ONLY)
     async def get_task(key: TaskKeyArg) -> TaskPackageView:
         """Returns everything about one task in a single call: card, parent and children,
         links from both sides, computed features, latest summary, open questions,

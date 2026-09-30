@@ -18,7 +18,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `add_summary` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Add summary", annotations=FILING, creating=True)
     async def add_summary(
         key: TaskKeyArg,
         done: SummaryDoneArg,

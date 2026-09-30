@@ -30,7 +30,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `transition` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING)
+    @tools.tool(title="Change task status", annotations=FILING)
     async def transition(
         key: TaskKeyArg,
         to: TaskStatusArg,

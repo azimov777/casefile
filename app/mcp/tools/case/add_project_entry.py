@@ -47,7 +47,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `add_project_entry` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Add project entry", annotations=FILING, creating=True)
     async def add_project_entry(
         key: ProjectKeyArg,
         type: ProjectEntryTypeArg,

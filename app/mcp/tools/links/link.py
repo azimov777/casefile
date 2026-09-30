@@ -14,7 +14,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `link` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Link tasks", annotations=FILING, creating=True)
     async def link(
         key: TaskKeyArg,
         kind: LinkKindArg,

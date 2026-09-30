@@ -12,7 +12,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `restore_project` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, scope=TokenScope.MAIN)
+    @tools.tool(title="Restore project", annotations=FILING, scope=TokenScope.MAIN)
     async def restore_project(key: ProjectKeyArg, reason: ProjectReasonArg) -> ProjectArchiveView:
         """Brings an archived project back: files a `restored` entry carrying the reason in
         its case, and its tasks resume where the archive left them. Only a `main` token

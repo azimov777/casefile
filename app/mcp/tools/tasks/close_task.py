@@ -147,7 +147,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `close_task` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Close task", annotations=FILING, creating=True)
     async def close_task(
         key: TaskKeyArg,
         summary: ClosingSummaryArg,

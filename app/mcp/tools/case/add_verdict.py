@@ -13,7 +13,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `add_verdict` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Add verdict", annotations=FILING, creating=True)
     async def add_verdict(
         key: TaskKeyArg,
         check_no: CheckNoArg,

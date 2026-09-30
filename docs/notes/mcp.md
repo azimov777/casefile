@@ -416,6 +416,10 @@ TRK-35) безопасно само по себе: сутки сосуществ
 **Где:** `app/mcp/toolset.py`, `READ_ONLY`, `FILING`, `IDEMPOTENT_TASK_UPDATE`,
 `OVERWRITING_UPDATE`, `Toolset`, `tool`; `tests/test_mcp_tools.py`, `TOOL_ANNOTATIONS`,
 `test_every_tool_carries_honest_protocol_annotations`.
+**Добавлено TRK-443:** каждый инструмент объявляет ещё и `title` — обязательным аргументом
+`Toolset.tool(title=...)`, короткое английское имя; оно уходит и в `Tool.title`, и в
+`annotations.title`. Полноту (`title` и все четыре подсказки заданы явно)
+держит `test_every_tool_declares_title_and_all_four_hints`. Описания и аргументы не менялись.
 **Добавлено TRK-145:** разбор TDQS Glama v0.3.0 писал «no annotations are present», хотя
 `tools/list` через `python -m app.mcp --stdio` отдаёт их у всех инструментов. Причина — снимок
 схемы на стороне Glama («First observed Sep 23, 2026», старые русские описания), снятый до

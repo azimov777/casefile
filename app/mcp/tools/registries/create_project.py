@@ -44,7 +44,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `create_project` в наборе `main`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, scope=TokenScope.MAIN, creating=True)
+    @tools.tool(title="Create project", annotations=FILING, scope=TokenScope.MAIN, creating=True)
     async def create_project(
         key: NewProjectKeyArg,
         title: ProjectTitleArg,

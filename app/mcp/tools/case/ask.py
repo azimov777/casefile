@@ -39,7 +39,7 @@ def register(tools: Toolset) -> None:
     """Объявляет `ask` в наборе `task`."""
     runtime = tools.runtime
 
-    @tools.tool(annotations=FILING, creating=True)
+    @tools.tool(title="Ask question", annotations=FILING, creating=True)
     async def ask(
         key: TaskKeyArg,
         addressees: AddresseesArg,

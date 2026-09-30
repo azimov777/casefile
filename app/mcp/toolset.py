@@ -146,6 +146,7 @@ class Toolset:
     def tool(
         self,
         *,
+        title: str,
         annotations: ToolAnnotations,
         scope: TokenScope = TokenScope.TASK,
         creating: bool = False,
@@ -161,6 +162,9 @@ class Toolset:
         инструмента без объявленного поведения (`readOnlyHint`/`destructiveHint`/
         `idempotentHint`/`openWorldHint`, `docs/notes/mcp.md`) сборка сервера упадёт
         здесь, а не когда клиент решит по умолчанию протокола, что вызов деструктивен.
+        `title` — короткое человеческое имя инструмента по-английски; обязателен тем же
+        способом (TRK-443). Оно кладётся и в `Tool.title`, и в `annotations.title`: каталоги
+        и клиенты читают то или другое.
         Готовые формы — `READ_ONLY`, `FILING`, `IDEMPOTENT_TASK_UPDATE`,
         `OVERWRITING_UPDATE` в шапке модуля; собственная форма нужна инструменту, чьё
         поведение не совпадает ни с одной из них.
@@ -175,7 +179,8 @@ class Toolset:
                     "instead of creating a second object"
                 )
             self.scopes[name] = scope
-            self.server.tool(name=name, annotations=annotations)(function)
+            titled = annotations.model_copy(update={"title": title})
+            self.server.tool(name=name, title=title, annotations=titled)(function)
             return function
 
         return register

@@ -265,6 +265,28 @@ async def test_every_tool_carries_honest_protocol_annotations(
         assert annotations.open_world_hint is False, f"{name}: openWorldHint"
 
 
+async def test_every_tool_declares_title_and_all_four_hints(
+    mcp_session: Connect, main_secret: str
+) -> None:
+    """TRK-443: у каждого инструмента `tools/list` есть `title` и все четыре подсказки.
+
+    Полнота, а не значения: значения держит `TOOL_ANNOTATIONS`. Подсказка, оставшаяся
+    `None`, для клиента означает умолчание протокола (деструктивный, открытый мир), то есть
+    молчаливо худшее допущение.
+    """
+    async with mcp_session(main_secret) as session:
+        listed = (await session.list_tools()).tools
+
+    assert listed
+    for tool in listed:
+        annotations = tool.annotations
+        assert annotations is not None, f"{tool.name}: аннотации не объявлены"
+        assert tool.title and tool.title.strip(), f"{tool.name}: нет title"
+        assert annotations.title == tool.title, f"{tool.name}: annotations.title"
+        for hint in ("read_only_hint", "destructive_hint", "idempotent_hint", "open_world_hint"):
+            assert isinstance(getattr(annotations, hint), bool), f"{tool.name}: {hint} не задан"
+
+
 # --- Лишний аргумент ------------------------------------------------------------------
 
 #: Имя, которого нет и не будет ни у одного инструмента.
