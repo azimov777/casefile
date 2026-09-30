@@ -325,6 +325,7 @@ main() {
   echo "    [mcp_servers.casefile]"
   echo "    url = \"$mcp_url\""
   echo "    http_headers = { Authorization = \"Bearer $token\" }"
+  echo "    tool_timeout_sec = 90"
   echo "  Terminal only, token kept out of the file: export CASEFILE_TOKEN=<token> and write"
   echo "  bearer_token_env_var = \"CASEFILE_TOKEN\" instead of the http_headers line."
   echo "  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills"

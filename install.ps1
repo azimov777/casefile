@@ -327,6 +327,7 @@ Write-Host '  Add to ~/.codex/config.toml (works in the terminal and in the Code
 Write-Host '    [mcp_servers.casefile]'
 Write-Host "    url = `"$mcpUrl`""
 Write-Host "    http_headers = { Authorization = `"Bearer $token`" }"
+Write-Host '    tool_timeout_sec = 90'
 Write-Host '  Terminal only, token kept out of the file: set $env:CASEFILE_TOKEN and write'
 Write-Host '  bearer_token_env_var = "CASEFILE_TOKEN" instead of the http_headers line.'
 Write-Host '  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills'

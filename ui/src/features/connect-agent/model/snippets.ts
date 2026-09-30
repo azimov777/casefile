@@ -23,6 +23,12 @@ export const TOKEN_ENV = 'CASEFILE_TOKEN';
 /** Файл конфигурации Codex, в который ложится секция `[mcp_servers.<имя>]`. */
 export const CODEX_CONFIG_PATH = '~/.codex/config.toml';
 
+/**
+ * Предел ответа инструмента у Codex, секунд. По умолчанию он 60 с, а `wait_journal` ждёт
+ * до 60 с: с накладными расходами клиент обрывал бы вызов раньше ответа сервера (TRK-438).
+ */
+export const CODEX_TOOL_TIMEOUT_SEC = 90;
+
 /** Заголовок, которым общий агентский токен называет временного агента. */
 export const LABEL_HEADER = 'X-Actor-Label';
 
@@ -197,6 +203,7 @@ function codexFile(mcpUrl: string, labelled: boolean): string {
   if (labelled) {
     lines.push(`http_headers = { ${tomlString(LABEL_HEADER)} = ${tomlString(LABEL_PLACEHOLDER)} }`);
   }
+  lines.push(`tool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SEC}`);
   return lines.join('\n');
 }
 
