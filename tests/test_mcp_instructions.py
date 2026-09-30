@@ -279,3 +279,15 @@ async def test_the_instructions_point_at_the_skill_resource_the_server_lists(
 
     assert named == {"skill://casefile/SKILL.md"}, f"указатель на скил в `instructions`: {named}"
     assert named <= listed, f"адреса нет в `resources/list`: {named}"
+
+
+async def test_the_pointer_says_the_resource_installs_a_missing_skill(served: str) -> None:
+    """TRK-431: фраза-указатель говорит, что без скила в харнессе его установка — в ресурсе.
+
+    Установка, обновлённая обновлятором, скила не получает (TRK-413): агент такой установки
+    узнаёт о пропаже только из `instructions`. Фраза «covers skill installation» этого не
+    говорила — у владельца скил в Codex так и не появился.
+    """
+    pointer = next(s for s in served.split(". ") if "`skill://casefile/SKILL.md`" in s)
+
+    assert "installing the casefile skill if the harness lacks it" in pointer, pointer
