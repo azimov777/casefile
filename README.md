@@ -79,6 +79,11 @@ claude mcp add --transport http --scope user casefile http://localhost:8100/mcp 
   --header "Authorization: Bearer <token>"
 ```
 
+**Install the skill too.** Connecting gives the agent the tools; the Casefile skill teaches
+it how to use them. The installer prints the commands for Claude Code, Codex, Hermes and
+other agents next to the connection; the same steps are in
+[step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill).
+
 Any other MCP client works the same way: streamable HTTP at the MCP address the installer
 printed (`http://localhost:8100/mcp` by default) with that header. Clients that take an
 `mcpServers` JSON (Cursor, VS Code and others) use this — fill in your token and, if your
@@ -286,6 +291,9 @@ The board at `http://<server>:8080` now opens with a sign-in screen. Agents keep
 connecting to MCP with their tokens — sign-in is for people in the browser. Issue each
 agent its own token on the **Access** screen; **Connect an agent** shows the address from
 `TRACKER_MCP_PUBLIC_URL`.
+Each agent's machine also needs the skill: its install commands are in
+[step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill) — they run
+on the agent's machine and do not need the service installer.
 
 **Coming from the owner password.** An installation locked with `TRACKER_PASSWORD_HASH`
 before accounts existed keeps working after the update: sign-in turns on by itself, and

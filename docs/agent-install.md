@@ -46,6 +46,27 @@ cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/a
 
 - **Claude Code:**
   `claude mcp add --transport http --scope user casefile <MCP address from the installer output> --header "Authorization: Bearer <token>"`
+- **Codex:** add this block to `~/.codex/config.toml`; it works in the terminal and in the
+  Codex app (the app does not see shell variables, so the token goes in the header here):
+
+  ```toml
+  [mcp_servers.casefile]
+  url = "<MCP address from the installer output>"
+  http_headers = { Authorization = "Bearer <token>" }
+  ```
+
+  From a terminal only, the token can stay out of the file: `export CASEFILE_TOKEN=<token>`
+  and write `bearer_token_env_var = "CASEFILE_TOKEN"` instead of the `http_headers` line.
+- **Hermes:** add this block to `~/.hermes/config.yaml`:
+
+  ```yaml
+  mcp_servers:
+    casefile:
+      url: "<MCP address from the installer output>"
+      headers:
+        Authorization: "Bearer <token>"
+  ```
+
 - **Any other MCP client:** add a streamable HTTP server at `<MCP address from the
   installer output>` with the header `Authorization: Bearer <token>`.
 
@@ -60,7 +81,9 @@ output and no `agent-token` to read. Ask the user to issue a token for you thems
 the board's access screen or with `POST /api/v1/tokens` from their own signed-in session,
 and to name it after this machine or harness so they can tell it apart later. Any person
 with an account can do this without the administrator. Then connect with that token as
-above, using the MCP address the installation publishes.
+above, using the MCP address the installation publishes. Then do step 4,
+**Install the Casefile skill**, on your own machine, as it stands: no installer of the
+service is needed for it, the commands work anywhere your harness runs.
 
 What the user should know, in one line each:
 
@@ -71,13 +94,49 @@ What the user should know, in one line each:
 - If their account is disabled, every token they issued stops working at once, yours
   included, and enabling the account again does not bring those tokens back.
 
-## 4. Verify
+## 4. Install the Casefile skill
+
+Connecting gives you the tools; the skill teaches you how to use them — how to keep a
+case, what to write before you stop, how to recover from a `401` and how to watch the
+journal. Connecting is not finished until the skill is installed. Run the commands of
+your harness (the installer printed the same ones); they read the skill from the
+`stable` channel of the Casefile repository:
+
+- **Claude Code:**
+
+  ```bash
+  claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills
+  claude plugin install casefile@casefile --scope user
+  ```
+
+  The CLI has no flag for automatic updates. Add `"autoUpdate": true` next to `"source"`
+  inside `extraKnownMarketplaces.casefile` in `~/.claude/settings.json`: from the next
+  session on Claude Code updates the plugin by itself.
+- **Codex:**
+
+  ```bash
+  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills
+  codex plugin add casefile@casefile
+  ```
+
+  To update: `codex plugin marketplace upgrade casefile`.
+- **Hermes:** `hermes skills install azimov777/casefile/skills/casefile`; to update, run
+  the same command again.
+- **Any other agent:** `npx skills add azimov777/casefile#stable`; to update, run it again.
+
+A running session does not see a new plugin: restart it, or run `/reload-plugins` in
+Claude Code.
+
+## 5. Verify
 
 - `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/` prints `200`: the board is up.
 - `claude mcp list` shows `casefile` as connected (other clients: list the MCP tools and
   look for `list_projects`).
+- The skill is installed: `claude plugin list` shows `casefile@casefile` enabled
+  (Codex: `codex plugin list`; Hermes and others: look for the `casefile` skill in
+  your harness's list of skills). If it is missing, do step 4.
 
-## 5. Learn about news in your tasks
+## 6. Learn about news in your tasks
 
 Casefile never pushes anything to you. If the owner answers a question or leaves a
 remark while you are not reading the case, that answer just sits in the journal until
@@ -116,9 +175,9 @@ Either way, the recipe is the same three things: which tasks to watch, which `se
 resume from, and how long a poll may wait before it comes back empty. The script's
 header names the exact variables.
 
-## 6. Report to the user
+## 7. Report to the user
 
-In one short message: the board URL, that you are connected, and that Casefile updates
+In one short message: the board URL, that you are connected, that the Casefile skill is installed, and that Casefile updates
 itself to each new release (it checks every hour). To remove it later: `docker compose down -v` in `~/casefile`.
 
 Then tell the user what to say to their agent next — the same two phrases the installer

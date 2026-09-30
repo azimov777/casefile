@@ -306,3 +306,96 @@ def test_install_ps1_reads_the_port_the_same_order_as_install_sh() -> None:
         "else { Get-Setting 'CASEFILE_PORT' '8080' }"
     )
     assert expected in text
+
+
+# --- Подключение и скил по харнессам (TRK-406) ------------------------------------------
+
+AGENT_GUIDE = PROJECT_ROOT / "docs" / "agent-install.md"
+SKILL_STEP = "Install the Casefile skill"
+
+#: Команды скила дословно: их печатают оба установщика, и они же стоят в шаге гайда
+#: (TRK-398#7). Разошлись хоть в одном флаге — агент по гайду и по выводу ставит разное.
+SKILL_COMMANDS = (
+    "claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills",
+    "claude plugin install casefile@casefile --scope user",
+    "codex plugin marketplace add azimov777/casefile --ref stable "
+    "--sparse .claude-plugin --sparse skills",
+    "codex plugin add casefile@casefile",
+    "hermes skills install azimov777/casefile/skills/casefile",
+    "npx skills add azimov777/casefile#stable",
+)
+
+#: Строки подключения MCP, которыми блоки Codex и Hermes отличаются от Claude Code
+#: (TRK-398#9): у Codex `http_headers` работает и в приложении, у Hermes — `headers`.
+CONNECT_LINES = ("[mcp_servers.casefile]", "http_headers = { Authorization =", "mcp_servers:")
+
+
+def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
+    sh_text, ps1_text, guide = _read(INSTALL_SH), _read(INSTALL_PS1), _read(AGENT_GUIDE)
+
+    for command in SKILL_COMMANDS:
+        assert command in sh_text, f"install.sh не печатает {command!r}"
+        assert command in ps1_text, f"install.ps1 не печатает {command!r}"
+        assert command in guide, f"docs/agent-install.md не содержит {command!r}"
+    for line in CONNECT_LINES:
+        assert line in sh_text, f"install.sh не печатает {line!r}"
+        assert line in ps1_text, f"install.ps1 не печатает {line!r}"
+        assert line in guide, f"docs/agent-install.md не содержит {line!r}"
+    for text in (sh_text, ps1_text, guide):
+        assert "autoUpdate" in text and "extraKnownMarketplaces.casefile" in text
+
+
+def test_the_installers_print_the_harness_blocks_in_the_same_order() -> None:
+    for text in (_read(INSTALL_SH), _read(INSTALL_PS1)):
+        blocks = [
+            text.index(title)
+            for title in (
+                "Connect Claude Code:",
+                "Connect Codex:",
+                "Connect Hermes:",
+                "Any other MCP client",
+            )
+        ]
+        assert blocks == sorted(blocks)
+
+
+def test_the_installer_prints_the_token_and_address_in_every_harness_block(
+    tmp_path: Path,
+) -> None:
+    done, _ = _install(tmp_path)
+
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    for command in SKILL_COMMANDS:
+        assert command in out, f"вывод установщика не содержит {command!r}"
+    assert 'url = "http://localhost:8100/mcp"' in out
+    assert 'http_headers = { Authorization = "Bearer agent-token-secret" }' in out
+    assert 'url: "http://localhost:8100/mcp"' in out
+    assert 'Authorization: "Bearer agent-token-secret"' in out
+    # Токен печатается, но не пишется ни в один файл харнесса.
+    assert not list(tmp_path.glob(".codex")) and not list(tmp_path.glob(".hermes"))
+
+
+def _guide_step(title_start: str) -> str:
+    text = _read(AGENT_GUIDE)
+    start = text.index(title_start)
+    nxt = re.search(r"^## ", text[start + 3 :], re.M)
+    return text[start : start + 3 + nxt.start()] if nxt else text[start:]
+
+
+def test_the_guide_has_the_skill_step_between_connect_and_verify() -> None:
+    text = _read(AGENT_GUIDE)
+    headings = re.findall(r"^## (\d+)\. (.+)$", text, re.M)
+    titles = [title for _, title in headings]
+
+    assert titles.index(SKILL_STEP) == titles.index("Connect yourself over MCP") + 1
+    assert titles.index("Verify") == titles.index(SKILL_STEP) + 1
+    assert [int(n) for n, _ in headings] == list(range(1, len(headings) + 1))
+
+
+def test_the_guide_skill_step_reaches_the_shared_installation_and_verify() -> None:
+    joining = _guide_step("### Joining an installation someone else runs")
+    assert SKILL_STEP in joining, "подраздел «Joining…» не отсылает к шагу скила"
+
+    verify = _guide_step("## 5. Verify")
+    assert "claude plugin list" in verify and "codex plugin list" in verify
