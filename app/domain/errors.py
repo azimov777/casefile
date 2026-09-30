@@ -702,6 +702,18 @@ class ForeignAgentError(PermissionDeniedError):
     message = "Only an administrator can issue a token to an agent owned by another person"
 
 
+class HumanTokenNotAllowedError(PermissionDeniedError):
+    """Ключ человеку не выпускается: человек входит в интерфейс, а не ходит с токеном (TRK-469#25).
+
+    Отказ для всех выпускающих, администратора и сам трекер включены: ключ говорил бы от
+    имени человека, а человеку токены не нужны, его доступ — вход в интерфейс. Ключ
+    нужен агенту: выпустить его надо участнику-агенту или без участника (общий).
+    """
+
+    code = "human_token_not_allowed"
+    message = "A key cannot be issued to a person: people sign in, keys are for agents"
+
+
 class LastAdminError(ConflictError):
     """Действие оставило бы установку без действующего администратора.
 

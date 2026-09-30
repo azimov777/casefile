@@ -96,6 +96,14 @@ async def fresh_installation(session: AsyncSession) -> tuple[str, str]:
     return ui.secret, agent.secret
 
 
+async def issue_agent_key(session: AsyncSession) -> None:
+    """Ключ агента: единственный вид строки `tokens`, который уезжает в архив."""
+    agent = await participants_service.register_participant(
+        session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="keyholder"
+    )
+    await tokens_service.issue_token(session, actor=TRACKER_ACTOR, participant=agent, name="key")
+
+
 async def sign_in(client: AsyncClient, email: str, password: str) -> Any:
     return await client.post(
         "/api/v1/session",
@@ -156,6 +164,7 @@ async def test_browser_sessions_stay_behind(
     await db_session.flush()
     signed = await sign_in(auth_client, "owner@localhost", PASSWORD)
     assert signed.status_code == 200, signed.text
+    await issue_agent_key(db_session)
     sessions = await db_session.scalar(
         select(func.count()).select_from(Token).where(Token.expires_at.is_not(None))
     )
@@ -167,7 +176,10 @@ async def test_browser_sessions_stay_behind(
     expires = tokens["columns"].index("expires_at")
     assert tokens["rows"]
     assert all(row[expires] is None for row in tokens["rows"])
-    assert len(tokens["rows"]) == await count(db_session, Token) - 1
+    keys = await db_session.scalar(
+        select(func.count()).select_from(Token).where(Token.kind == TokenKind.KEY)
+    )
+    assert len(tokens["rows"]) == keys
 
 
 async def test_oauth_connections_stay_behind(
@@ -177,6 +189,7 @@ async def test_oauth_connections_stay_behind(
 
     Подключение живёт в харнессе агента на машине источника, как сеанс в браузере.
     """
+    await issue_agent_key(db_session)
     client_id = "archive-test-client"
     await oauth_service.register_client(
         db_session, client_id=client_id, metadata={"redirect_uris": [OAUTH_REDIRECT]}
@@ -209,7 +222,10 @@ async def test_oauth_connections_stay_behind(
     kind = tokens["columns"].index("kind")
     assert tokens["rows"]
     assert all(row[kind] != "oauth" for row in tokens["rows"])
-    assert len(tokens["rows"]) == await count(db_session, Token) - 1
+    keys = await db_session.scalar(
+        select(func.count()).select_from(Token).where(Token.kind == TokenKind.KEY)
+    )
+    assert len(tokens["rows"]) == keys
 
 
 async def test_only_an_administrator_exports_and_imports(

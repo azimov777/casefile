@@ -24,7 +24,7 @@ from app.db.models.participant import Participant
 from app.db.models.token import Token
 from app.db.pagination import Page
 from app.db.repositories import TokenRepository
-from app.domain.errors import ForeignAgentError, TokenNotFoundError
+from app.domain.errors import ForeignAgentError, HumanTokenNotAllowedError, TokenNotFoundError
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenKind, generate_token, hash_token
 from app.services.accounts import active_account_of, is_admin
@@ -81,10 +81,22 @@ async def issue_token(
     подписываясь заголовком `X-Actor-Label`. Это не недосмотр вызывающего, а отдельный
     вид доступа, поэтому участник — необязательный параметр, а не проверяемое условие.
 
+    Ключ (`kind=key`) участнику-человеку не выпускается никому, администратору и
+    трекеру тоже (`HumanTokenNotAllowedError`, TRK-469#25): человек входит в интерфейс.
+    Сеанс и ключ интерфейса машины (`session`) человеку выпускаются.
+
     `kind` по умолчанию — ключ агента: так выпускают «Доступы» и CLI. Ключ интерфейса
     машины (`app/services/setup.py`) называет `session`, подключение OAuth
     (`app/services/oauth.py`) — `oauth` со сроком `expires_at`.
     """
+    if (
+        kind is TokenKind.KEY
+        and participant is not None
+        and participant.kind is ParticipantKind.HUMAN
+    ):
+        raise HumanTokenNotAllowedError(
+            details={"action": "token.issue", "participant": participant.name}
+        )
     await _ensure_may_issue(session, actor, participant)
 
     secret = generate_token()

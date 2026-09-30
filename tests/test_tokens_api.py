@@ -14,20 +14,27 @@ from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
 
 
+async def _register_worker(db_session: AsyncSession) -> None:
+    await participants_service.register_participant(
+        db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="worker"
+    )
+
+
 async def test_the_secret_is_shown_once_and_never_in_the_list(
     auth_client: AsyncClient,
-    owner: Participant,
+    db_session: AsyncSession,
 ) -> None:
     """Обзорная проверка 7."""
+    await _register_worker(db_session)
     issued = await auth_client.post(
         "/api/v1/tokens",
-        json={"name": "ci", "participant": "owner"},
+        json={"name": "ci", "participant": "worker"},
     )
 
     assert issued.status_code == 201, issued.text
     body = issued.json()["data"]
     assert body["secret"].startswith("trk_")
-    assert body["participant"] == "owner"
+    assert body["participant"] == "worker"
     assert "scope" not in body
 
     listed = await auth_client.get("/api/v1/tokens")
@@ -55,9 +62,10 @@ async def test_issuing_for_an_unknown_participant_is_not_found(auth_client: Asyn
 
 async def test_revoking_is_idempotent_and_keeps_the_record(
     auth_client: AsyncClient,
-    owner: Participant,
+    db_session: AsyncSession,
 ) -> None:
-    issued = await auth_client.post("/api/v1/tokens", json={"name": "ci", "participant": "owner"})
+    await _register_worker(db_session)
+    issued = await auth_client.post("/api/v1/tokens", json={"name": "ci", "participant": "worker"})
     token_id = issued.json()["data"]["id"]
 
     first = await auth_client.delete(f"/api/v1/tokens/{token_id}")
@@ -68,6 +76,30 @@ async def test_revoking_is_idempotent_and_keeps_the_record(
     revoked = [item for item in listed.json()["data"] if item["id"] == token_id]
     assert len(revoked) == 1, "revoking marks the row, it does not delete it"
     assert revoked[0]["revoked_at"] is not None
+
+
+async def test_a_key_is_never_issued_to_a_person_but_to_an_agent_or_shared(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: Participant,
+) -> None:
+    """Обзорная проверка 2: человеку — отказ `human_token_not_allowed`, и себе тоже;
+    участнику-агенту и без участника — 201."""
+    await _register_worker(db_session)
+
+    to_self = await auth_client.post("/api/v1/tokens", json={"name": "ci", "participant": "owner"})
+    to_agent = await auth_client.post(
+        "/api/v1/tokens", json={"name": "ci", "participant": "worker"}
+    )
+    shared = await auth_client.post("/api/v1/tokens", json={"name": "ci"})
+
+    assert to_self.status_code == 403, to_self.text
+    error = to_self.json()["error"]
+    assert error["code"] == "human_token_not_allowed"
+    assert error["details"] == {"action": "token.issue", "participant": "owner"}
+    assert to_agent.status_code == 201, to_agent.text
+    assert shared.status_code == 201, shared.text
+    assert to_agent.json()["data"]["kind"] == "key"
 
 
 async def test_an_agent_token_cannot_issue_tokens_and_a_scope_field_is_refused(

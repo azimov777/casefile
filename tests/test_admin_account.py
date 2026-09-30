@@ -19,10 +19,11 @@ from app import cli
 from app.core.config import Settings
 from app.core.errors import UnauthorizedError
 from app.db.models.account import Account
-from app.db.repositories import AccountRepository, ParticipantRepository
+from app.db.repositories import AccountRepository, ParticipantRepository, TokenRepository
 from app.db.session import transaction
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
+from app.domain.tokens import TokenKind
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR
@@ -108,6 +109,25 @@ async def test_init_makes_the_owner_an_administrator_too(db_session: AsyncSessio
     assert account is not None and account.is_admin
 
 
+async def test_the_init_command_prints_no_token_and_creates_no_token_rows(
+    db_session: AsyncSession,
+    run: RunCommand,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Обзорная проверка 3: `init` на пустой базе — владелец и учётная запись, токена нет."""
+    capsys.readouterr()
+    args = cli._build_parser().parse_args(["init"])
+
+    code = await cli._run(cli._init, args)
+
+    printed = capsys.readouterr()
+    assert code == 0, printed
+    assert "trk_" not in printed.out + printed.err, printed
+    account = await owner_account(db_session)
+    assert account is not None and account.is_admin
+    assert not await TokenRepository(db_session).any_exists()
+
+
 async def test_the_agent_step_on_an_empty_installation_starts_with_the_administrator(
     db_session: AsyncSession,
 ) -> None:
@@ -129,6 +149,7 @@ async def test_an_owner_from_before_accounts_gets_one_on_the_next_start(
         actor=TRACKER_ACTOR,
         participant=owner,
         name="bootstrap",
+        kind=TokenKind.SESSION,
     )
     assert await owner_account(db_session) is None
 

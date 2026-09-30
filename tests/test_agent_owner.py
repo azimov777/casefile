@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
 from app.domain.participants import ParticipantKind
+from app.domain.tokens import TokenKind
 from app.services import accounts as accounts_service
 from app.services import participants as participants_service
 from app.services import tokens as tokens_service
@@ -30,7 +31,11 @@ async def _person(db_session: AsyncSession, name: str) -> Participant:
 
 async def _secret(db_session: AsyncSession, person: Participant) -> dict[str, str]:
     issued = await tokens_service.issue_token(
-        db_session, actor=TRACKER_ACTOR, participant=person, name="session"
+        db_session,
+        actor=TRACKER_ACTOR,
+        participant=person,
+        name="session",
+        kind=TokenKind.SESSION,
     )
     return {"Authorization": f"Bearer {issued.secret}"}
 

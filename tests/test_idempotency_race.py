@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.db import session as session_module
 from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
 from app.domain.participants import ParticipantKind
+from app.domain.tokens import TokenKind
 from app.main import create_app
 from app.services import participants as participants_service
 from app.services import projects as projects_service
@@ -85,6 +86,7 @@ async def committed_installation(
             actor=TRACKER_ACTOR,
             participant=owner,
             name="race",
+            kind=TokenKind.SESSION,
         )
         await projects_service.create_project(
             session,

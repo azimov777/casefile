@@ -43,6 +43,7 @@
 |---|---|---|
 | `admin_required` | Only an administrator can manage accounts | Управление людьми открыто только администратору (`docs/CONCEPT.md`, 5.4). |
 | `agent_owned_by_another` | Only an administrator can issue a token to an agent owned by another person | Ключ агента с чужим хозяином выпускает только администратор (TRK-475#14). |
+| `human_token_not_allowed` | A key cannot be issued to a person: people sign in, keys are for agents | Ключ человеку не выпускается: человек входит в интерфейс, а не ходит с токеном (TRK-469#25). |
 | `permission_denied` | Action is not allowed | Действие запрещено. В v1 ролей нет, но точка отказа существует с самого начала. |
 
 ## 404 — не найдено

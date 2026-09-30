@@ -14,7 +14,7 @@ from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.authors import ACTOR_LABEL_HEADER
-from app.domain.tokens import hash_token
+from app.domain.tokens import TokenKind, hash_token
 from app.services import bootstrap as bootstrap_service
 from app.services import case as case_service
 from app.services import tokens as tokens_service
@@ -139,7 +139,11 @@ async def test_bootstrap_names_the_token_of_the_request_not_of_the_participant(
     """
     issued = {
         name: await tokens_service.issue_token(
-            db_session, actor=TRACKER_ACTOR, participant=owner, name=name
+            db_session,
+            actor=TRACKER_ACTOR,
+            participant=owner,
+            name=name,
+            kind=TokenKind.SESSION,
         )
         for name in ("first", "second")
     }

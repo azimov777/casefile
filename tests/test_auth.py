@@ -13,6 +13,7 @@ from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
 from app.domain.errors import ActorLabelRequiredError, InvalidActorLabelError
+from app.domain.tokens import TokenKind
 from app.services import tokens as service
 from app.services.auth import LAST_USED_THROTTLE, Actor, authenticate
 
@@ -56,7 +57,11 @@ async def test_revoked_token_stops_working(
     main_actor: Actor,
 ) -> None:
     issued = await service.issue_token(
-        db_session, actor=main_actor, participant=owner, name="second"
+        db_session,
+        actor=main_actor,
+        participant=owner,
+        name="second",
+        kind=TokenKind.SESSION,
     )
     await service.revoke_token(db_session, issued.token.id, actor=main_actor)
 
@@ -160,6 +165,7 @@ async def test_an_expired_session_token_stops_working(
         actor=Actor(author=owner.author, participant=owner),
         participant=owner,
         name="browser-session",
+        kind=TokenKind.SESSION,
     )
     deadline = datetime.now(UTC) + timedelta(hours=1)
     issued.token.expires_at = deadline

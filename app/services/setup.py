@@ -1,4 +1,4 @@
-"""Первичная настройка установки: первый доступ человеку, ключ интерфейсу, токен агенту.
+"""Первичная настройка установки: владелец с учётной записью, ключ интерфейсу, токен агенту.
 
 Свежая база заперта снаружи: каждый маршрут `/api/v1` требует токена, а выпустить
 первый токен через API нельзя — для этого уже нужен токен. Разомкнуть круг может только
@@ -10,12 +10,12 @@
 
 | Сценарий | Кому доступ | Где живёт секрет |
 |---|---|---|
-| `initialize_installation` | человеку, руками | у человека, показан один раз |
+| `initialize_installation` | никому: владелец и учётная запись | нигде: токена нет |
 | `ensure_local_token` | интерфейсу установки | в файле, который держит установка |
 | `ensure_agent_token` | агенту машины, через MCP | в файле, который держит установка |
 
 Повтор не выпускает ничего ни у одного, но признаки «уже сделано» разные: у первого это
-наличие любого токена в базе, у двух других — годный секрет в своём файле.
+человек с учётной записью, у двух других — годный секрет в своём файле.
 
 Автор всего заведённого — сам трекер (`TRACKER_ACTOR`): участника, который завёл бы
 первого участника, в этот момент ещё не существует.
@@ -51,11 +51,10 @@ from app.domain.passwords import PasswordHash
 from app.domain.tokens import TokenKind, hash_token
 from app.services.auth import TRACKER_ACTOR
 from app.services.participants import register_participant
-from app.services.tokens import IssuedToken, issue_token, revoke_token
+from app.services.tokens import issue_token, revoke_token
 
 DEFAULT_OWNER_NAME = "owner"
 DEFAULT_OWNER_DESCRIPTION = "Владелец установки"
-DEFAULT_TOKEN_NAME = "bootstrap"
 
 #: Имя токена, который установка выпускает своему интерфейсу. По нему же находится
 #: прежний токен, чтобы отозвать его при выпуске замены, — поэтому имя постоянное, а не
@@ -74,36 +73,35 @@ async def initialize_installation(
     *,
     name: str = DEFAULT_OWNER_NAME,
     description: str = DEFAULT_OWNER_DESCRIPTION,
-    token_name: str = DEFAULT_TOKEN_NAME,
-) -> IssuedToken | None:
-    """Заводит участника-человека и выпускает ему токен.
+) -> Account | None:
+    """Заводит участника-человека и учётную запись администратора. Токена не выпускает.
 
-    `None` означает «установка уже инициализирована»: в базе есть хотя бы один токен, и
-    сценарий не делает ничего. Признак — именно токен, а не участник: участник без
-    токена доступа не даёт, и на такой базе установка осталась бы запертой.
+    Человек не получает токенов (`TRK-469#25`): он входит в интерфейс — локально без
+    ввода ключом `local-ui`, в сети почтой и паролем. `init` поэтому заводит владельца и
+    его учётную запись, а секрета не печатает.
 
-    Почему повтор не выпускает новый токен, хотя это было бы удобно: команда идёт в
-    Compose рядом с миграциями, и её случайный повторный запуск на работающей установке
-    не должен плодить действующие доступы. Способ вернуть себе доступ, потеряв секрет,
-    есть отдельный и явный — `python -m app.cli issue-token`.
+    `None` означает «установка уже инициализирована»: в базе есть участник-человек с
+    учётной записью, и сценарий не делает ничего. Признак — учётная запись человека, а
+    не токен: токена у людей теперь нет, а без человека с учётной записью установку
+    не завести в интерфейс. Участник без учётной записи инициализированной установкой не
+    считается: ему учётную запись заводит `ensure_admin_account`.
     """
-    if await TokenRepository(session).any_exists():
+    if await AccountRepository(session).any_human_account():
         return None
 
-    owner = await register_participant(
-        session,
-        actor=TRACKER_ACTOR,
-        kind=ParticipantKind.HUMAN,
-        name=name,
-        description=description,
-    )
-    await ensure_admin_account(session, owner)
-    return await issue_token(
-        session,
-        actor=TRACKER_ACTOR,
-        participant=owner,
-        name=token_name,
-    )
+    participants = ParticipantRepository(session)
+    owner = await participants.get_by_name(normalize_participant_name(name))
+    if owner is None:
+        owner = await register_participant(
+            session,
+            actor=TRACKER_ACTOR,
+            kind=ParticipantKind.HUMAN,
+            name=name,
+            description=description,
+        )
+    account, _ = await ensure_admin_account(session, owner)
+    assert account is not None  # участник выше — человек, учётная запись у него есть
+    return account
 
 
 class LocalTokenOutcome(StrEnum):

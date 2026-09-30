@@ -2,11 +2,10 @@
 
 Нужна для того, чего нельзя сделать через API:
 
-- `init` — первичная инициализация: завести владельца и выпустить ему первый токен.
-  Все эндпоинты `/api/v1` требуют токена, поэтому без такой команды
-  свежая установка оставалась бы запертой снаружи;
-- `issue-token` — выпустить токен напрямую. Это способ вернуть себе доступ, потеряв
-  секрет: `init` на уже работающей установке ничего не создаёт;
+- `init` — первичная инициализация: завести владельца и его учётную запись
+  администратора. Токена она не выпускает и не печатает: человек входит в интерфейс;
+- `issue-token` — выпустить ключ агенту напрямую (участнику-агенту или общий). Человеку
+  ключ не выпускается: отказ `human_token_not_allowed`;
 - `local-token` — положить действующий ключ в файл, откуда его берёт
   интерфейс локальной установки: человек там и есть её владелец. Ключ добывает сама
   установка, а не человек, поэтому секрет не печатается никогда: команда стоит в
@@ -41,7 +40,7 @@ HTTP-запроса, отдельной логики коммита здесь �
 
 ## Кто печатает секрет, а кто нет
 
-`init`, `issue-token` и сгенерированный пароль `account-create` и `account-password`
+`issue-token` и сгенерированный пароль `account-create` и `account-password`
 печатают: секрет читает человек, и другого способа его получить нет. `local-token` и
 `agent-token` не печатают никогда — их вывод уезжает в журнал подъёма контура, а секрет
 в журнале это тот же секрет на виду, от которого весь этот путь и уходит. Секрет
@@ -73,7 +72,6 @@ from app.services.setup import (
     DEFAULT_LOCAL_TOKEN_NAME,
     DEFAULT_OWNER_DESCRIPTION,
     DEFAULT_OWNER_NAME,
-    DEFAULT_TOKEN_NAME,
     LocalToken,
     LocalTokenOutcome,
     ensure_agent_token,
@@ -92,44 +90,36 @@ type EnsureToken = Callable[..., Awaitable[LocalToken]]
 
 
 async def _init(args: argparse.Namespace) -> int:
-    """Готовит свежую установку к работе: владелец и его первый токен.
+    """Готовит свежую установку к работе: владелец и его учётная запись администратора.
 
-    Идемпотентна и молчалива на повторе: если в базе уже есть хоть один токен, команда
-    ничего не создаёт и говорит об этом. Так её можно держать в Compose рядом с
-    миграциями, не боясь, что случайный повторный запуск наплодит действующие доступы.
+    Токена не выпускает и не печатает: человек входит в интерфейс, а не ходит с ключом
+    (TRK-469#25). Идемпотентна и молчалива на повторе: если на установке уже есть
+    человек с учётной записью, команда ничего не создаёт и говорит об этом. Так её
+    можно держать в Compose рядом с миграциями.
     """
     async with session_scope() as session:
-        issued = await initialize_installation(
+        account = await initialize_installation(
             session,
             name=args.name,
             description=args.description,
-            token_name=args.token_name,
         )
-        if issued is None:
-            print("Installation is already initialized: at least one token exists.")
-            print("Nothing was created. To get a new token, run:")
-            print("  python -m app.cli issue-token --participant <name>")
+        if account is None:
+            print("Installation is already initialized: a person with an account exists.")
+            print("Nothing was created.")
             return 0
 
-        participant = issued.token.participant
-        assert participant is not None  # выпущен именной токен, участник у него есть
-        print(f"participant: {participant.name} ({participant.kind.value})")
-        print(f"token name:  {issued.token.name}")
+        print(f"participant: {account.participant.name} (human)")
+        print(f"account:     {account.email} (administrator, password: none)")
         print()
-        print("This token is shown once, store it now:")
-        print(f"  {issued.secret}")
-        print()
-        print("Check it:")
-        print(f'  curl -H "Authorization: Bearer {issued.secret}" \\')
-        print("       http://localhost:8000/api/v1/participants")
+        print("No token is issued: people sign in to the interface.")
+        print("Agents get keys from the interface (Access) or from `agent-token`.")
     return 0
 
 
 async def _issue_token(args: argparse.Namespace) -> int:
-    """Выпускает токен: участнику или общий агентский, если участник не назван.
+    """Выпускает ключ: участнику-агенту или общий, если участник не назван.
 
-    Единственный путь к доступу, когда все секреты потеряны, — `init` на
-    работающей установке уже ничего не выпускает.
+    Участнику-человеку ключ не выпускается (`human_token_not_allowed`).
     """
     async with session_scope() as session:
         participant = (
@@ -431,11 +421,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     init = commands.add_parser(
         "init",
-        help="Register the owner and issue the first main token on an empty installation",
+        help="Register the owner and the administrator account on an empty installation",
     )
     init.add_argument("--name", default=DEFAULT_OWNER_NAME, help="Owner participant name")
     init.add_argument("--description", default=DEFAULT_OWNER_DESCRIPTION, help="Owner description")
-    init.add_argument("--token-name", default=DEFAULT_TOKEN_NAME, help="Name for the issued token")
     init.set_defaults(handler=_init)
 
     issue = commands.add_parser("issue-token", help="Issue an API token")
