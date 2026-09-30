@@ -38,6 +38,8 @@ export const errors = {
   database_unavailable: 'The database is unavailable.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
+  human_token_not_allowed:
+    'A key cannot be issued to a person: people sign in, keys are for agents.',
   http_error: 'The request failed.',
   idempotency_key_reused: 'This idempotency key has already been used by another request.',
   installation_not_empty:

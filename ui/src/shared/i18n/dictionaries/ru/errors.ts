@@ -37,6 +37,8 @@ export const errors = {
   database_unavailable: 'База данных недоступна.',
   entry_fields_invalid: 'Запись не прошла проверку.',
   entry_not_found: 'Записи с таким номером в этой задаче нет.',
+  human_token_not_allowed:
+    'Ключ человеку не выпускается: люди входят в интерфейс, ключи нужны агентам.',
   http_error: 'Запрос завершился ошибкой.',
   idempotency_key_reused: 'Ключ повтора уже использован другим запросом.',
   installation_not_empty:
