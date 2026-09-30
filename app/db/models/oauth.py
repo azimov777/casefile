@@ -21,19 +21,24 @@ from app.domain.tokens import TOKEN_HASH_LENGTH
 
 
 class OAuthClient(BaseModel):
-    """Клиент, зарегистрированный динамически (RFC 7591): его метаданные как прислал.
+    """Клиент OAuth: зарегистрированный динамически (RFC 7591) или по документу (CIMD).
 
     `client_id` — текст, а не UUID: SDK выдаёт UUID строкой, а клиент по документу
     метаданных (CIMD, TRK-449) называет себя URL. Метаданные лежат JSONB целиком — это
     ответ регистрации, который клиенту обещано вернуть без потерь (RFC 7591 §3.2.1), и
     разбирает их SDK, а не база. Секрета у клиента нет: все клиенты публичные
     (`app/services/oauth.py`).
+
+    `document_expires_at` есть только у клиента по документу: до этого момента документ
+    берётся из строки, после — скачивается заново. Строка — и кэш документа, и опора
+    внешних ключей кодов и refresh-токенов этого клиента.
     """
 
     __tablename__ = "oauth_clients"
 
     client_id: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     client_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    document_expires_at: Mapped[datetime | None] = mapped_column(default=None)
 
 
 class OAuthCode(BaseModel, CreatedByMixin):
