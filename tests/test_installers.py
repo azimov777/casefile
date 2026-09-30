@@ -345,6 +345,28 @@ def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
         assert "autoUpdate" in text and "extraKnownMarketplaces.casefile" in text
 
 
+#: Проверка «стоит ли скил» по харнессам (TRK-431): те же признаки, по которым установщик
+#: печатает `installed`, и строка только скила для установки, которую обновлятор уже
+#: обновил, — ей скил не достаётся никогда.
+SKILL_CHECKS = (
+    "claude plugin list",
+    "codex plugin list",
+    "hermes skills list",
+    "~/.agents/skills/casefile/SKILL.md",
+    "install.sh | CASEFILE_SKILL_ONLY=1 sh",
+    "$env:CASEFILE_SKILL_ONLY=1; irm",
+)
+
+
+def test_the_guide_checks_the_skill_before_installing_it() -> None:
+    guide = _read(AGENT_GUIDE)
+    step = guide[guide.index(f"## 4. {SKILL_STEP}") : guide.index("## 5. Verify")]
+    check = step[step.index("### Check whether the skill is installed") :]
+
+    for line in SKILL_CHECKS:
+        assert line in check, f"шаг 4 гайда не проверяет скил строкой {line!r}"
+
+
 def test_the_installers_print_the_harness_blocks_in_the_same_order() -> None:
     for text in (_read(INSTALL_SH), _read(INSTALL_PS1)):
         blocks = [

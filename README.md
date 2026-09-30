@@ -80,8 +80,17 @@ claude mcp add --transport http --scope user casefile http://localhost:8100/mcp 
 ```
 
 **Install the skill too.** Connecting gives the agent the tools; the Casefile skill teaches
-it how to use them. The installer prints the commands for Claude Code, Codex, Hermes and
-other agents next to the connection; the same steps are in
+it how to use them. The installer installs it by itself into Claude Code, Codex, Hermes
+and other agents it finds on the machine, and prints one line per harness. An installation
+made before v0.8.0 has no skill, and the hourly self-update does not add one: it updates
+only the service. Run the install line again, or install just the skill without touching
+the service:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+```
+
+How to check whether an agent has the skill, and the commands for each harness, are in
 [step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill).
 
 Any other MCP client works the same way: streamable HTTP at the MCP address the installer
