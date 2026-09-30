@@ -25,6 +25,15 @@ class ParticipantRead(BaseModel):
     kind: ParticipantKind
     name: str = Field(examples=["release_bot"])
     description: str = Field(examples=["Релизный бот, ведёт задачи выкладки"])
+    owner: str | None = Field(
+        default=None,
+        validation_alias="owner_name",
+        description=(
+            "Name of the human this agent belongs to; null for humans, shared agents "
+            "and local agents without an owner"
+        ),
+        examples=["alice"],
+    )
     created_by: AuthorRead
     created_at: datetime
     updated_at: datetime

@@ -18,6 +18,7 @@ export const errors = {
   addressee_with_any_addressee:
     'Вопросы отбираются либо по адресату, либо без условия адресата, но не так и так сразу.',
   admin_required: 'Это может сделать только администратор установки.',
+  agent_owned_by_another: 'Ключ чужого агента может выпустить только администратор установки.',
   archive_format_unsupported: 'Это не архив установки, который понимает этот Casefile.',
   archive_invalid: 'Архив установки повреждён или правлен руками — выгрузите его заново.',
   archive_revision_unknown:

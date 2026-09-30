@@ -866,6 +866,9 @@ async def test_a_token_issued_with_the_task_scope_works_after_the_scope_is_dropp
             text("SELECT conname FROM pg_constraint WHERE conname = 'ck_tokens_token_scope'")
         )
         assert list(constraints) == []
+    # Аутентификация идёт ORM текущей схемы: база доводится до головы (у участника уже
+    # есть `owner_id`, которого на ревизии снятия набора нет).
+    await migrate(url, "head")
     async with AsyncSession(migration_engine) as session:
         for scope in ("task", "main"):
             actor = await authenticate(session, f"trk_{scope}")
@@ -888,3 +891,55 @@ async def test_the_scope_migration_rolls_back_and_reapplies(
     async with migration_engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == SCOPE_REVISION
+
+
+# --- Хозяин участника-агента (TRK-476) -------------------------------------------------
+
+OWNER_REVISION = "7d3a5e1b9c42"
+OWNER_PREVIOUS = "5c81e3a7d92b"
+
+
+async def test_existing_participants_have_no_owner_after_the_owner_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, OWNER_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO participants (kind, name, description, created_by_kind, "
+                "created_by_signature) VALUES ('agent', 'claude', '', 'agent', 'claude')"
+            )
+        )
+
+    await migrate(url, OWNER_REVISION)
+
+    async with migration_engine.connect() as connection:
+        owners = list(await connection.scalars(text("SELECT owner_id FROM participants")))
+    assert owners == [None]
+
+
+async def test_the_owner_migration_rolls_back_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    url = f"{test_database_url}_migrations"
+    await migrate(url, OWNER_REVISION)
+
+    await migrate(url, OWNER_PREVIOUS, down=True)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+        columns = set(
+            await connection.scalars(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'participants'"
+                )
+            )
+        )
+    assert revision == OWNER_PREVIOUS
+    assert "owner_id" not in columns
+
+    await migrate(url, OWNER_REVISION)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert revision == OWNER_REVISION

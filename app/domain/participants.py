@@ -20,6 +20,8 @@ from app.domain.errors import InvalidParticipantNameError
 #: Имя участника: латиница, `snake_case`. Верхний регистр допускается на входе и
 #: приводится к нижнему — см. раздел «Имя канонизируется» выше.
 PARTICIPANT_NAME_PATTERN = r"^[A-Za-z][A-Za-z0-9_]{1,63}$"
+#: Предел длины имени из шаблона.
+PARTICIPANT_NAME_MAX = 64
 _PARTICIPANT_NAME_RE = re.compile(PARTICIPANT_NAME_PATTERN)
 
 

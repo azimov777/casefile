@@ -18,6 +18,8 @@ export const errors = {
   addressee_with_any_addressee:
     'Questions are selected either by addressee or for any addressee, not both at once.',
   admin_required: 'Only an administrator of this installation can do this.',
+  agent_owned_by_another:
+    'Only an administrator can issue a key to an agent owned by another person.',
   archive_format_unsupported: 'This file is not an installation archive this Casefile can read.',
   archive_invalid: 'The installation archive is damaged or was edited; export it again.',
   archive_revision_unknown:

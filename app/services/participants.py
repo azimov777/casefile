@@ -14,6 +14,7 @@ from app.db.pagination import Page
 from app.db.repositories import ParticipantRepository
 from app.domain.errors import ParticipantNameTakenError, ParticipantNotFoundError
 from app.domain.participants import (
+    PARTICIPANT_NAME_MAX,
     ParticipantKind,
     normalize_participant_name,
     validate_participant_name,
@@ -78,6 +79,51 @@ async def register_participant(
             **created_by_columns(actor.author),
         )
     )
+
+
+#: Префикс имени агента по клиенту (TRK-475#14); прочие клиенты получают `agent`.
+_CLIENT_PREFIXES = {"claude": "claude", "codex": "codex"}
+_DEFAULT_PREFIX = "agent"
+
+
+def agent_name_prefix(client: str) -> str:
+    """Префикс имени агента: `claude`, `codex` или `agent` для прочих клиентов."""
+    return _CLIENT_PREFIXES.get(client.strip().lower(), _DEFAULT_PREFIX)
+
+
+async def agent_of(session: AsyncSession, *, client: str, owner: Participant) -> Participant:
+    """Находит агента человека для клиента или заводит его: `<клиент>_<человек>`.
+
+    Имя агента — префикс клиента, `_` и имя человека (дефис шаблон имени не пропускает).
+    Длиннее предела или занято чужим (нет хозяина или хозяин другой) — суффикс `_2`,
+    `_3`…; имя, уже принадлежащее этому человеку, возвращается как есть. Повторный вызов
+    отдаёт того же участника.
+    """
+    if owner.kind is not ParticipantKind.HUMAN:
+        raise ValueError("The owner of an agent must be a human participant")
+    repository = ParticipantRepository(session)
+    base = f"{agent_name_prefix(client)}_{owner.name}"[:PARTICIPANT_NAME_MAX]
+    attempt = 1
+    while True:
+        name = base if attempt == 1 else _suffixed(base, attempt)
+        existing = await repository.get_by_name(name)
+        if existing is None:
+            return await repository.add(
+                Participant(
+                    kind=ParticipantKind.AGENT,
+                    name=name,
+                    owner=owner,
+                    **created_by_columns(owner.author),
+                )
+            )
+        if existing.kind is ParticipantKind.AGENT and existing.owner_id == owner.id:
+            return existing
+        attempt += 1
+
+
+def _suffixed(base: str, attempt: int) -> str:
+    suffix = f"_{attempt}"
+    return base[: PARTICIPANT_NAME_MAX - len(suffix)] + suffix
 
 
 async def update_participant(
