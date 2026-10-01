@@ -9,6 +9,7 @@
   },
   "homepage": "https://github.com/azimov777/casefile",
   "license": "MIT",
+  "privacyPolicyUrl": "https://azimov777.github.io/casefile/privacy/",
   "repository": "https://github.com/azimov777/casefile",
   "skills": "./skills/",
   "mcpServers": "./.claude-plugin/mcp.json",
