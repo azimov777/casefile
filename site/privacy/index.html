@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Casefile privacy policy</title>
+<meta name="description" content="What data Casefile stores, where it goes and what leaves your installation.">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header>
+<strong><a href="../" style="text-decoration:none;color:inherit">Casefile</a></strong>
+<a href="../support/">Support</a> <a href="../privacy/">Privacy</a> <a href="../terms/">Terms</a>
+<a href="https://github.com/azimov777/casefile">GitHub</a>
+</header>
+<main>
+<h1>Privacy policy</h1>
+<p class="muted">Last updated: 2026-10-01</p>
+<p>Casefile is software that you run yourself. The project does not operate a hosted Casefile service, does not receive your data, and has no telemetry. This page says what the software stores on your installation and what network connections it makes, so that you can judge it. Where it says &ldquo;you&rdquo;, it means whoever runs the installation.</p>
+<h2>Who holds your data</h2>
+<p>You do. Everything Casefile stores lives in the PostgreSQL database of your own installation (a Docker volume by default). The authors of Casefile have no access to it and never receive a copy.</p>
+<h2>What your installation stores</h2>
+<table>
+<tr><th>Data</th><th>Why</th></tr>
+<tr><td>Projects, tasks, cases (entries, summaries, questions, answers, verdicts), links, attributes &mdash; whatever agents and people write into them</td><td>That is the tracker itself.</td></tr>
+<tr><td>Participants: a name, a kind (agent or person) and the signature that marks who wrote each entry</td><td>Every entry is signed by its author.</td></tr>
+<tr><td>Access tokens, stored as hashes only, with their kind and expiry; browser sessions are tokens with an expiry</td><td>Authentication of agents and of the web interface.</td></tr>
+<tr><td>Accounts, in network mode: an email address and a password hash (scrypt), an administrator flag</td><td>Signing people in by email and password. In local mode there are no accounts.</td></tr>
+<tr><td>OAuth records: registered clients (their public metadata), authorization codes and refresh tokens</td><td>Letting an MCP client such as Claude Code or Codex sign in.</td></tr>
+<tr><td>Idempotency keys of retried writes</td><td>So that a repeated call does not write twice.</td></tr>
+<tr><td>Process logs written to the container output</td><td>Operation and diagnostics; they stay where your Docker puts them.</td></tr>
+</table>
+<p>The web interface keeps a session cookie (and the OAuth sign-in page its own short-lived cookie), both set by your own installation. Casefile sets no advertising or tracking cookies.</p>
+<h2>What leaves your installation</h2>
+<p>By default nothing about your tasks or people leaves it. The software makes only the following connections, and none of them carries the content of your tracker:</p>
+<ul>
+<li><strong>Release check.</strong> A production installation asks the GitHub API (<code>api.github.com</code>, the <code>azimov777/casefile</code> repository) for the latest release, at most once an hour, so the interface can show that a newer version exists. The request carries no data from your installation beyond what any HTTPS request carries (your server's IP address and a <code>User-Agent</code> of the form <code>casefile/&lt;version&gt;</code>). Turn it off with <code>TRACKER_RELEASE_CHECK=false</code>.</li>
+<li><strong>Automatic updates.</strong> The production setup includes an <code>updater</code> service that pulls Casefile images from the GitHub Container Registry (<code>ghcr.io</code>) about once an hour. Turn it off with <code>CASEFILE_AUTO_UPDATE=false</code>. Installation also downloads files from GitHub and ghcr.io, and the PostgreSQL image from Docker Hub.</li>
+<li><strong>OAuth client metadata documents.</strong> When an MCP client identifies itself by a URL (the CIMD mechanism), your installation downloads that one JSON document from that address, with protections against reaching private network addresses. Only the address the client supplies is contacted.</li>
+<li><strong>Fonts in the web interface.</strong> The web interface page loads the Fira Sans and Fira Code typefaces from Google Fonts (<code>fonts.googleapis.com</code>, <code>fonts.gstatic.com</code>). This request is made by the browser of whoever opens the interface, and Google receives that browser&rsquo;s IP address and request headers. If you do not want it, block those hosts: the interface falls back to system fonts.</li>
+</ul>
+<p>Casefile does not send email, does not use third-party analytics, error reporting or advertising services, and does not share data with anyone. Agents you connect (and the AI services behind them) are separate from Casefile: what an agent reads from your tracker and sends to its own provider is governed by that provider&rsquo;s terms, not by this page.</p>
+<h2>Your control</h2>
+<p>Because the data is in your database, you can read, export, move and delete it yourself (see the backup and moving guides in the repository). Deleting the installation&rsquo;s volumes deletes the data.</p>
+<h2>This website</h2>
+<p>This site is static pages hosted by GitHub Pages. It has no forms, no scripts and no analytics of its own. GitHub, as the host, may log visits under its own <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">privacy statement</a>. Messages you post as GitHub issues are public and handled by GitHub.</p>
+<h2>Changes and contact</h2>
+<p>Changes to this policy are published in the <a href="https://github.com/azimov777/casefile/commits/main/site/privacy/index.html">repository history</a> with the date above. Questions: <a href="https://github.com/azimov777/casefile/issues">GitHub Issues</a>.</p>
+</main>
+<footer>Casefile is open source under the <a href="https://github.com/azimov777/casefile/blob/main/LICENSE">MIT license</a>. <a href="../privacy/">Privacy</a> · <a href="../terms/">Terms</a> · <a href="../support/">Support</a></footer>
+</body>
+</html>
