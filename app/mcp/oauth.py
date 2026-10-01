@@ -46,7 +46,7 @@ from datetime import timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from mcp.server.auth.handlers.metadata import MetadataHandler
+from mcp.server.auth.handlers.metadata import MetadataHandler, ProtectedResourceMetadataHandler
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
@@ -60,8 +60,13 @@ from mcp.server.auth.provider import (
 from mcp.server.auth.routes import build_metadata, cors_middleware
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.shared.auth import InvalidRedirectUriError, OAuthClientInformationFull, OAuthToken
-from pydantic import AnyUrl, ValidationError
+from mcp.shared.auth import (
+    InvalidRedirectUriError,
+    OAuthClientInformationFull,
+    OAuthToken,
+    ProtectedResourceMetadata,
+)
+from pydantic import AnyHttpUrl, AnyUrl, ValidationError
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -78,6 +83,7 @@ from app.services.client_documents import ClientDocuments
 __all__ = [
     "SCOPE",
     "CasefileAuthorization",
+    "DeclaredScope",
     "IssuerOnAuthorize",
     "LoopbackClient",
     "PresentedToken",
@@ -86,6 +92,7 @@ __all__ = [
     "allowed_hosts",
     "auth_settings",
     "authorization_enabled",
+    "declare_scope",
 ]
 
 logger = get_logger("oauth")
@@ -516,6 +523,66 @@ def advertise_client_documents(application: Starlette, settings: Settings) -> No
             route.app = endpoint
     application.add_middleware(IssuerOnAuthorize, issuer=issuer)
 
+
+class DeclaredScope:
+    """Внешний слой: добавляет `scope="casefile"` в `WWW-Authenticate` ответа `401`.
+
+    SDK кладёт в вызов только `error`, `error_description` и `resource_metadata`, а область
+    берёт из `required_scopes`; их у Casefile нет намеренно (область токена не проверяется,
+    TRK-484), поэтому параметр дописывается по дороге. Ответ без `Bearer` или с уже
+    названным `scope` не трогается.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def forward(message: Message) -> None:
+            if message["type"] == "http.response.start" and message["status"] == 401:
+                headers = [
+                    (name, self._with_scope(value) if name.lower() == _CHALLENGE else value)
+                    for name, value in message.get("headers", [])
+                ]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, forward)
+
+    @staticmethod
+    def _with_scope(challenge: bytes) -> bytes:
+        text = challenge.decode()
+        if not text.startswith("Bearer ") or " scope=" in text:
+            return challenge
+        return f'{text}, scope="{SCOPE}"'.encode()
+
+
+def declare_scope(application: Starlette, settings: Settings) -> None:
+    """Объявляет единственную область `casefile` в документе ресурса и в `401`.
+
+    Документ `/.well-known/oauth-protected-resource/…` SDK строит из `required_scopes`
+    (пусто), поэтому маршрут получает тот же документ с `scopes_supported: [casefile]`.
+    Область объявляется, но не требуется: токен без неё принимается как раньше.
+    """
+    auth = auth_settings(settings)
+    resource = ProtectedResourceMetadata(
+        resource=auth.resource_server_url,
+        authorization_servers=[AnyHttpUrl(auth.issuer_url)],
+        scopes_supported=[SCOPE],
+    )
+    handler = ProtectedResourceMetadataHandler(resource)
+    endpoint = cors_middleware(handler.handle, ["GET", "OPTIONS"])
+    for route in application.router.routes:
+        if isinstance(route, Route) and route.path.startswith(_RESOURCE_METADATA_PREFIX):
+            route.app = endpoint
+    application.add_middleware(DeclaredScope)
+
+
+_RESOURCE_METADATA_PREFIX = "/.well-known/oauth-protected-resource"
+_CHALLENGE = b"www-authenticate"
 
 _AS_METADATA_PATH = "/.well-known/oauth-authorization-server"
 _AUTHORIZE_PATH = "/authorize"

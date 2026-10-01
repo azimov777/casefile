@@ -540,6 +540,7 @@ async def test_revoking_through_the_tokens_registry_cuts_the_client_off(
     assert refused.status_code == 401
     assert refused.json()["details"] == {"reason": "token_revoked"}
     assert "resource_metadata=" in refused.headers["www-authenticate"]
+    assert refused.headers["www-authenticate"].endswith(', scope="casefile"')
     assert refresh.status_code == 400
     assert refresh.json()["error"] == "invalid_grant"
 

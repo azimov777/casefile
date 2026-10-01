@@ -191,6 +191,7 @@ async def test_a_request_without_a_token_gets_401_with_the_resource_metadata(
     assert challenge.startswith("Bearer ")
     origin = _origin()
     assert f'resource_metadata="{origin}/.well-known/oauth-protected-resource/mcp"' in challenge
+    assert challenge.endswith(', scope="casefile"')
 
 
 async def test_the_protected_resource_metadata_names_the_authorization_server(
@@ -205,6 +206,7 @@ async def test_the_protected_resource_metadata_names_the_authorization_server(
     body = response.json()
     assert body["resource"] == get_settings().effective_mcp_public_url
     assert [url.rstrip("/") for url in body["authorization_servers"]] == [_origin()]
+    assert body["scopes_supported"] == ["casefile"]
 
 
 async def test_a_bearer_client_lists_tools_as_before(
