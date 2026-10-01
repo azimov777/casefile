@@ -55,19 +55,28 @@ export interface SkillTexts {
   /** Любой другой агент. */
   other: string;
   /**
-   * Одна строка на машине агента, без Docker: ставит скил во все найденные там харнессы.
-   * Оболочек две, как у переменной Codex, и по той же причине (`UI-114#5`).
+   * Одна строка на машине агента, без Docker: ставит скил во все найденные там харнессы
+   * и, с адресом установки в `CASEFILE_URL`, плагин Claude Code и Codex (`install.sh`,
+   * TRK-452#18, `docs/agent-install.md`). Оболочек две, как у переменной Codex, и по той
+   * же причине (`UI-114#5`).
    */
   machine: { bashZsh: string; powerShell: string };
 }
 
-const SKILL: SkillTexts = {
-  other: `npx skills add ${SKILL_REPO}#${SKILL_CHANNEL}`,
-  machine: {
-    bashZsh: `curl -fsSL ${SKILL_INSTALLER}/install.sh | CASEFILE_SKILL_ONLY=1 sh`,
-    powerShell: `$env:CASEFILE_SKILL_ONLY=1; irm ${SKILL_INSTALLER}/install.ps1 | iex`,
-  },
-};
+/** Адрес из безопасных знаков остаётся как есть, как в гайде; прочий берётся в одинарные кавычки. */
+function bashWord(value: string): string {
+  return /^[A-Za-z0-9:/._~?&=%@+,-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function skillTexts(mcpUrl: string): SkillTexts {
+  return {
+    other: `npx skills add ${SKILL_REPO}#${SKILL_CHANNEL}`,
+    machine: {
+      bashZsh: `curl -fsSL ${SKILL_INSTALLER}/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=${bashWord(mcpUrl)} sh`,
+      powerShell: `$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='${mcpUrl.replace(/'/g, "''")}'; irm ${SKILL_INSTALLER}/install.ps1 | iex`,
+    },
+  };
+}
 
 export interface SnippetInput {
   /** Адрес MCP из `GET /api/v1/installation` → `mcp_url`, целиком и как есть. */
@@ -106,7 +115,7 @@ export interface SnippetTexts {
   oauthAvailable: boolean;
   /** Конфигурация `mcpServers` в форме `.mcp.json` — для клиентов без OAuth, с ключом. */
   json: string;
-  /** Установка скила для клиентов без плагина; от адреса, токена и метки не зависит. */
+  /** Установка скила для клиентов без плагина; зависит только от адреса (`CASEFILE_URL`). */
   skill: SkillTexts;
 }
 
@@ -150,7 +159,7 @@ export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): S
       null,
       2,
     ),
-    skill: SKILL,
+    skill: skillTexts(mcpUrl),
   };
 }
 

@@ -204,12 +204,20 @@ function guideLines(): string {
 describe('установка скила во фрагментах', () => {
   const skill = connectionSnippets({ mcpUrl: ADDRESS, labelled: false }).skill;
 
-  it('команды скила совпадают с гайдом `docs/agent-install.md` байт в байт', () => {
+  it('команды скила совпадают с гайдом `docs/agent-install.md` байт в байт, адрес — из установки', () => {
     const guide = guideLines();
-    const commands = [skill.other, skill.machine.bashZsh, skill.machine.powerShell];
-    for (const command of commands) {
+    // Гайд пишет пример адреса; экран — адрес этой установки. Подставив пример на его место,
+    // получаем тот же текст, что в гайде.
+    const example = 'https://casefile.example.com/mcp';
+    const own = connectionSnippets({ mcpUrl: example, labelled: false }).skill;
+    for (const command of [own.other, own.machine.bashZsh, own.machine.powerShell]) {
       expect(guide, command).toContain(command);
     }
+    // Адрес установки попадает в обе строки на машину, а не зашит примером.
+    const mine = connectionSnippets({ mcpUrl: OTHER, labelled: false }).skill;
+    expect(mine.machine.bashZsh).toContain(`CASEFILE_URL=${OTHER} sh`);
+    expect(mine.machine.powerShell).toContain(`$env:CASEFILE_URL='${OTHER}';`);
+    expect(mine.machine.bashZsh).not.toContain('example.com');
   });
 
   it('поля пункта «Добавить маркетплейс» Codex согласны с флагами команды', () => {
@@ -224,22 +232,22 @@ describe('установка скила во фрагментах', () => {
     for (const path of paths) expect(codexPlugin).toContain(`--sparse ${path}`);
   });
 
-  it('скил один для всех установок: ни адреса, ни токена, ни метки в нём нет', () => {
-    const issued = connectionSnippets({
-      mcpUrl: OTHER,
-      token: TOKEN,
-      labelled: true,
-    }).skill;
-    // Тот же текст при другом адресе, токене и метке: скил от входа не зависит.
-    expect(issued).toEqual(skill);
+  it('скил зависит только от адреса: токена и метки в нём нет, а адрес с кавычкой не ломает строку', () => {
+    const base = connectionSnippets({ mcpUrl: OTHER, labelled: false }).skill;
+    const issued = connectionSnippets({ mcpUrl: OTHER, token: TOKEN, labelled: true }).skill;
+    // При том же адресе токен и метка текста не меняют.
+    expect(issued).toEqual(base);
     const all = JSON.stringify(issued);
-    for (const foreign of [OTHER, 'mcp.example.test', TOKEN, TOKEN_PLACEHOLDER, LABEL_HEADER]) {
+    for (const foreign of [TOKEN, TOKEN_PLACEHOLDER, LABEL_HEADER]) {
       expect(all).not.toContain(foreign);
     }
+    const quoted = connectionSnippets({ mcpUrl: "https://h.test/m'cp", labelled: false }).skill;
+    expect(quoted.machine.bashZsh).toContain("CASEFILE_URL='https://h.test/m'\\''cp' sh");
+    expect(quoted.machine.powerShell).toContain("$env:CASEFILE_URL='https://h.test/m''cp';");
   });
 
   it('строка на машину агента оставляет только скил в обеих оболочках', () => {
-    expect(skill.machine.bashZsh).toContain('CASEFILE_SKILL_ONLY=1 sh');
+    expect(skill.machine.bashZsh).toContain('CASEFILE_SKILL_ONLY=1 CASEFILE_URL=');
     expect(skill.machine.powerShell).toContain('$env:CASEFILE_SKILL_ONLY=1;');
   });
 });

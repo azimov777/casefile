@@ -14,7 +14,7 @@ export const connect = {
     body: 'An agent works with Casefile over MCP: Claude Code and Codex sign in by themselves and need only the address of this installation, while a key is for harnesses without OAuth and for the journal watcher. Once connected, tell the agent where to start — the phrases are on the <start>Start</start> screen.',
   },
   intro:
-    'An agent works with Casefile over MCP. Claude Code and Codex sign in by themselves: add the address of this installation and the client opens the sign-in on its own — they need no key. A key is for harnesses without OAuth and for the journal watcher between sessions: it goes in the <code>Authorization</code> header, and the fragments below are built with it.',
+    'An agent works with Casefile over MCP. Claude Code and Codex sign in by themselves: add the address of this installation and the client opens the sign-in on its own — they need no key. A key is for harnesses without OAuth and for the journal watcher between sessions: it goes in the <code>Authorization</code> header of the fragments on the tabs "JSON mcpServers" and "Any MCP client".',
   steps: 'Connection steps',
   token: {
     title: 'Get a key if the agent does not sign in by itself',
@@ -33,7 +33,7 @@ export const connect = {
   snippets: {
     title: 'Paste the fragment into your client',
     intro:
-      'Pick your client and copy the fragment. Put the token from the first step in place of <code>{{placeholder}}</code>.',
+      'Pick your client and copy the fragment. Claude Code and Codex get the plugin and sign in by OAuth: no key is needed. On the tabs "JSON mcpServers" and "Any MCP client" put the token from the first step in place of <code>{{placeholder}}</code>.',
     shared: 'Shared agent token: add <code>{{header}}</code>',
     loading: 'Reading the MCP address…',
   },

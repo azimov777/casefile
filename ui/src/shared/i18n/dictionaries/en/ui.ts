@@ -486,7 +486,7 @@ export const ui = {
         'Claude Code and Codex get the skill with the plugin (the tabs before). For clients without a plugin the skill is installed separately: it teaches the agent to use the tools — how to keep a case, what to write before stopping, what to do on a 401. It needs no token and is the same for every installation. Run the commands on the machine where the agent works.',
       otherLabel: 'Skill install for another agent',
       machineHint:
-        'Or one line on the agent machine: it installs the skill into every client found there and prints where it stands (Claude Code and Codex get the plugin only with <code>CASEFILE_URL=https://your-host/mcp</code>). It needs no Docker and no installation directory — <code>CASEFILE_SKILL_ONLY=1</code> keeps the skill only.',
+        'Or one line on the agent machine: it installs the skill into every client found there and prints where it stands (with the address of this installation in <code>CASEFILE_URL</code> it installs the Claude Code and Codex plugin too). It needs no Docker and no installation directory — <code>CASEFILE_SKILL_ONLY=1</code> keeps the skill only.',
       machineBashLabel: 'Skill for every client on the machine (bash/zsh)',
       machineBashCaption: 'Terminal, on the agent machine',
       machinePowerShellLabel: 'Skill for every client on the machine (PowerShell)',
