@@ -363,9 +363,18 @@ test.describe('тёмная тема', () => {
 
     const secretDialog = page.getByRole('dialog');
     await expect(secretDialog.getByText('Скопируйте секрет сейчас')).toBeVisible();
-    await expect(secretDialog.getByRole('region', { name: 'Claude Code' })).toContainText(
+    // Claude Code входит по OAuth: ни ключа, ни метки в его фрагменте нет; метка — на
+    // вкладке клиента без OAuth, где ключ есть.
+    await expect(secretDialog.getByRole('region', { name: 'Claude Code' })).not.toContainText(
       'X-Actor-Label',
     );
+    await secretDialog
+      .getByRole('navigation', { name: 'Клиент' })
+      .getByRole('link', { name: 'Любой клиент MCP', exact: true })
+      .click();
+    await expect(
+      secretDialog.getByRole('region', { name: 'Любой клиент MCP', exact: true }),
+    ).toContainText('X-Actor-Label');
     expect(await violations(page), 'окно секрета в тёмной теме').toEqual([]);
 
     await secretDialog.getByRole('button', { name: 'Секрет сохранён' }).click();

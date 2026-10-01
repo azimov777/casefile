@@ -134,9 +134,15 @@ test('два пользователя и администратор: у кажд
       .textContent()) ?? ''
   ).trim();
   expect(secret).toMatch(/^trk_/);
-  await expect(secretDialog.getByRole('region', { name: 'Claude Code' })).toContainText(
-    `Authorization: Bearer ${secret}`,
-  );
+  // Claude Code входит по OAuth, ключа в его фрагменте нет; ключ — на вкладке клиента без OAuth.
+  await expect(secretDialog.getByRole('region', { name: 'Claude Code' })).not.toContainText(secret);
+  await secretDialog
+    .getByRole('navigation', { name: 'Клиент' })
+    .getByRole('link', { name: 'Любой клиент MCP', exact: true })
+    .click();
+  await expect(
+    secretDialog.getByRole('region', { name: 'Любой клиент MCP', exact: true }),
+  ).toContainText(`Authorization: Bearer ${secret}`);
   expect(await violations(page), 'окно секрета у человека').toEqual([]);
   await secretDialog.getByRole('button', { name: 'Секрет сохранён' }).click();
 
