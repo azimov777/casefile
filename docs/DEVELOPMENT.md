@@ -941,7 +941,7 @@ Claude Code без новой `version` не обновит скил.
 краснит и проверки PR, и выпуск до публикации образов (TRK-441). Локально: `CLAUDE_CONFIG_DIR=$(mktemp -d) claude plugin validate --strict . </dev/null`.
 
 ZIP плагина для каталога OpenAI собирает `scripts/build-openai-plugin.sh [каталог]` (по умолчанию `dist/`,
-вне git): `.codex-plugin/`, `skills/` и `LICENSE`, падает при расхождении версии. Загрузка на
+вне git): `.codex-plugin/`, `skills/` и `LICENSE`, падает при расхождении версии; манифест в архиве без `mcpServers`, `mcp.json` не кладётся (TRK-503). Загрузка на
 platform.openai.com/plugins — отдельный шаг по слову владельца (TRK-459).
 
 Тег пушится раньше `main` — иначе автообновятель прежней установки успел бы забрать файл
