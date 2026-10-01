@@ -972,3 +972,21 @@ Code до конца требует Keychain (во временном `HOME` з�
 `codex mcp add --url` сам открывает браузер через системный `open`, мимо подмены.
 **Где:** `.claude-plugin/plugin.json`, `.claude-plugin/mcp.json`, `.codex-plugin/plugin.json`,
 `.codex-plugin/mcp.json`, `tests/test_plugin_manifest.py`.
+
+## Плагин готов к каталогу Anthropic: поля `plugin.json` и то, чего `validate` не проверяет
+
+**Что:** в `.claude-plugin/plugin.json` есть `name`, `displayName` (`Casefile`), `description`,
+`author` (имя и `url`), `homepage`, `repository`, `license`, `version`; `claude plugin validate
+--strict .` (Claude Code 2.1.286) проходит и для `plugin.json`, и для `marketplace.json`. Поля листинга
+портал читает из `plugin.json` и README, правки идут только через репозиторий. Тест
+`tests/test_plugin_manifest.py` держит набор полей.
+**Почему важно:** `validate` проверяет только форму файлов; проверки портала шире (README не короче
+40 слов, лицензия, занятость имени, сканер безопасности). Папка плагина здесь — корень репозитория
+(там `.claude-plugin/plugin.json`), поэтому сканер видит весь репозиторий: больше 512 файлов и файлы
+больше 256 КиБ (`openapi.json`, GIF в `docs/assets/`, заметки) держат версию на проверке человеком
+(«held for a reviewer», не отказ). Официальный маркетплейс `claude-plugins-official` заявок через
+портал не принимает; портал ведёт в каталог на claude.ai, Cowork и Claude Code (`<имя>@synced`).
+**Как правильно:** `version` не менять без выпуска; имя `casefile` не менять после публикации
+(переименование ломает установленные копии). Если человек на проверке станет помехой, отслеживаемой
+веткой портала можно назначить узкую ветку с одним плагином.
+**Где:** `.claude-plugin/plugin.json`, `tests/test_plugin_manifest.py`.
