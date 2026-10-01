@@ -81,6 +81,14 @@ export function StartPage() {
   const answered = useInfiniteQuery(questionsQueryOptions({ open: false, limit: 1 }));
   const questionAnswered = answered.isSuccess && (answered.data?.pages[0]?.items.length ?? 0) > 0;
 
+  /*
+   * Пока первый кадр не пришёл, учётная запись неизвестна и `setStatus` нечем ответить:
+   * нажатие молча ничего бы не сделало, а человек решил бы, что знакомство пройдено
+   * (TRK-490). Кнопки заблокированы до ответа, и нажать их можно только когда есть что
+   * менять.
+   */
+  const accountPending = bootstrap.isPending;
+
   function setStatus(status: 'completed' | 'skipped') {
     // Ключ без учётной записи (агент, вошедший ключом набора `task`) экран открывает
     // только из панели (constraints задачи) — ставить знакомство здесь нечему.
@@ -179,10 +187,17 @@ export function StartPage() {
       </Section>
 
       <div className="flex flex-wrap gap-3">
-        <Button tone="quiet" onClick={() => setStatus('skipped')} disabled={update.isPending}>
+        <Button
+          tone="quiet"
+          onClick={() => setStatus('skipped')}
+          disabled={update.isPending || accountPending}
+        >
           {t('actions.skip')}
         </Button>
-        <Button onClick={() => setStatus('completed')} disabled={update.isPending}>
+        <Button
+          onClick={() => setStatus('completed')}
+          disabled={update.isPending || accountPending}
+        >
           {t('actions.complete')}
         </Button>
       </div>
