@@ -8,9 +8,7 @@ import {
   LABEL_HEADER,
   LABEL_PLACEHOLDER,
   SERVER_NAME,
-  TOKEN_ENV,
   connectionSnippets,
-  type CodexFormField,
   type CodexMarketplaceField,
   type SkillTexts,
   type SnippetInput,
@@ -25,7 +23,6 @@ const values = {
   header: LABEL_HEADER,
   placeholder: LABEL_PLACEHOLDER,
   server: SERVER_NAME,
-  env: TOKEN_ENV,
 };
 
 /** Ключ названия клиента в словаре: у идентификатора адреса дефис, у ключа словаря — нет. */
@@ -94,7 +91,7 @@ export function ConnectionSnippets({ mcpUrl, token, labelled }: SnippetInput) {
 
       {/* Метка объяснена там же, где она появилась во фрагментах: подстановку, о которой
           не сказано, чем её заменить, человек оставит как есть. */}
-      {labelled ? (
+      {labelled && (client === 'json' || client === 'any') ? (
         <p className="text-meta text-muted">
           <Trans t={t} i18nKey="snippets.labelHint" values={values} components={code} />
         </p>
@@ -106,7 +103,7 @@ export function ConnectionSnippets({ mcpUrl, token, labelled }: SnippetInput) {
 
       {/* Второй шаг подключения (TRK-420): вне раздела клиента, чтобы тексты и роли его
           фрагментов не мешались с фрагментами подключения. */}
-      <SkillStep client={client} skill={snippets.skill} />
+      {client === 'json' || client === 'any' ? <SkillStep skill={snippets.skill} /> : null}
     </div>
   );
 }
@@ -128,10 +125,11 @@ function ClientFragments({
     case 'claude-code':
       return (
         <>
+          <PluginNotice snippets={snippets} />
           <CopyBlock
             label={t('snippets.claudeLabel')}
             caption={t('snippets.terminalCaption')}
-            text={snippets.claudeCode}
+            text={snippets.claudePlugin}
           />
           <Hint>
             <Trans t={t} i18nKey="snippets.claudeHint" values={values} components={code} />
@@ -141,28 +139,28 @@ function ClientFragments({
     case 'codex':
       return (
         <>
+          <PluginNotice snippets={snippets} />
+          <CopyBlock
+            label={t('snippets.codexLabel')}
+            caption={t('snippets.terminalCaption')}
+            text={snippets.codexPlugin}
+          />
           <Hint>
             <Trans t={t} i18nKey="snippets.codexHint" values={values} components={code} />
           </Hint>
-          <CopyBlock
-            label={t('snippets.codexFileLabel')}
-            caption={CODEX_CONFIG_PATH}
-            text={snippets.codexFile}
-          />
-          {/* Обе оболочки сразу, а не одна по умолчанию: угадывать оболочку по
-              `navigator.userAgent` запрещено, а любое умолчание без него человек мог бы не
-              заметить и скопировать нерабочую строку (`UI-114`, решение UI-114#5). */}
-          <CopyBlock
-            label={t('snippets.codexEnvBashLabel')}
-            caption={t('snippets.codexEnvBashCaption')}
-            text={snippets.codexEnv.bashZsh}
-          />
-          <CopyBlock
-            label={t('snippets.codexEnvPowerShellLabel')}
-            caption={t('snippets.codexEnvPowerShellCaption')}
-            text={snippets.codexEnv.powerShell}
-          />
-          <CodexForm fields={snippets.codexForm} />
+          {snippets.codexUrlFile === null ? null : (
+            <>
+              <Hint>
+                <Trans t={t} i18nKey="snippets.codexUrlHint" values={values} components={code} />
+              </Hint>
+              <CopyBlock
+                label={t('snippets.codexUrlLabel')}
+                caption={CODEX_CONFIG_PATH}
+                text={snippets.codexUrlFile}
+              />
+            </>
+          )}
+          <CodexMarketplace fields={snippets.codexMarketplace} />
         </>
       );
     case 'json':
@@ -204,7 +202,7 @@ function ClientFragments({
  * установок. Под клиентом стоит его команда, под ней — строка на всю машину в обеих
  * оболочках (человек на сервере запускает её там, где живёт агент, без Docker).
  */
-function SkillStep({ client, skill }: { client: Client; skill: SkillTexts }) {
+function SkillStep({ skill }: { skill: SkillTexts }) {
   const { t } = useTranslation('ui');
   const id = useId();
   const code = { code: <code /> };
@@ -218,38 +216,11 @@ function SkillStep({ client, skill }: { client: Client; skill: SkillTexts }) {
         {t('snippets.skill.title')}
       </h3>
       <Hint>{t('snippets.skill.intro')}</Hint>
-      {client === 'claude-code' ? (
-        <>
-          <CopyBlock
-            label={t('snippets.skill.claudeLabel')}
-            caption={t('snippets.terminalCaption')}
-            text={skill.claudeCode}
-          />
-          <Hint>
-            <Trans t={t} i18nKey="snippets.skill.claudeHint" components={code} />
-          </Hint>
-        </>
-      ) : null}
-      {client === 'codex' ? (
-        <>
-          <CopyBlock
-            label={t('snippets.skill.codexLabel')}
-            caption={t('snippets.terminalCaption')}
-            text={skill.codex}
-          />
-          <Hint>
-            <Trans t={t} i18nKey="snippets.skill.codexHint" components={code} />
-          </Hint>
-          <CodexMarketplace fields={skill.codexMarketplace} />
-        </>
-      ) : null}
-      {client === 'json' || client === 'any' ? (
-        <CopyBlock
-          label={t('snippets.skill.otherLabel')}
-          caption={t('snippets.terminalCaption')}
-          text={skill.other}
-        />
-      ) : null}
+      <CopyBlock
+        label={t('snippets.skill.otherLabel')}
+        caption={t('snippets.terminalCaption')}
+        text={skill.other}
+      />
       <Hint>
         <Trans t={t} i18nKey="snippets.skill.machineHint" components={code} />
       </Hint>
@@ -273,11 +244,11 @@ function CodexMarketplace({ fields }: { fields: CodexMarketplaceField[] }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <p className="text-meta text-muted">{t('snippets.skill.codexAppHint')}</p>
+      <p className="text-meta text-muted">{t('snippets.codexAppHint')}</p>
       <dl className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-1 rounded-control fold:grid-cols-[minmax(0,auto)_minmax(0,1fr)] border border-line bg-surface px-3 py-2 text-meta">
         {fields.map((field) => (
           <div key={field.key} className="contents">
-            <dt className="text-muted">{t(`snippets.skill.codexAppField.${field.key}`)}</dt>
+            <dt className="text-muted">{t(`snippets.codexAppField.${field.key}`)}</dt>
             <dd className="font-mono wrap-anywhere text-text">{field.value}</dd>
           </div>
         ))}
@@ -305,34 +276,9 @@ function Hint({ children }: { children: ReactNode }) {
   return <p className="text-meta text-muted">{children}</p>;
 }
 
-/**
- * Те же значения полями формы приложения Codex. Подпись поля — как её показывает
- * приложение, рядом ключ файла, на который поле ложится: документация Codex подписей
- * формы не называет, и ключ — то, по чему их можно сверить (`UI-105#14`).
- */
-function CodexForm({ fields }: { fields: CodexFormField[] }) {
+/** Плагин вне петли по http не подключится: служба отдаёт вход OAuth только по https. */
+function PluginNotice({ snippets }: { snippets: SnippetTexts }) {
   const { t } = useTranslation('ui');
-
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      {/* На телефоне подпись и значение — одно под другим: в две колонки длинная подпись
-          забирала ширину по своему содержимому, и адрес ломался по знаку в строку. */}
-      {/* Подпись абзацем перед списком, а не `aria-labelledby` на нём: у `dl` нет роли,
-          которой имя разрешено, и `axe` назвал бы его запрещённым атрибутом. */}
-      <p className="text-meta text-muted">{t('snippets.codexFormHint')}</p>
-      <dl className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-1 rounded-control fold:grid-cols-[minmax(0,auto)_minmax(0,1fr)] border border-line bg-surface px-3 py-2 text-meta">
-        {fields.map((field) => (
-          <div key={field.key} className="contents">
-            <dt className="text-muted">
-              {t(`snippets.codexField.${field.key}`)}{' '}
-              <code className="text-faint">{field.key}</code>
-            </dt>
-            <dd className="font-mono wrap-anywhere text-text">
-              {field.name === null ? field.value : `${field.name}: ${field.value}`}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
+  if (snippets.oauthAvailable) return null;
+  return <p className="text-meta text-danger">{t('snippets.plainHttpWarning')}</p>;
 }

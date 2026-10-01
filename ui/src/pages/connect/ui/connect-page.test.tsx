@@ -60,7 +60,7 @@ async function snippetsShown(mcpUrl = ADDRESS): Promise<void> {
     name: say.ui('snippets.clients.claudeCode'),
   });
   expect(
-    within(claude).getByText(connectionSnippets({ mcpUrl, labelled: false }).claudeCode),
+    within(claude).getByText(connectionSnippets({ mcpUrl, labelled: false }).claudePlugin, exact),
   ).toBeInTheDocument();
 }
 
@@ -96,14 +96,13 @@ describe('экран «Подключить агента»', () => {
     const expected = connectionSnippets({ mcpUrl: ADDRESS, labelled: false });
     await snippetsShown();
     expect(
-      within(client(say.ui('snippets.clients.claudeCode'))).getByText(expected.claudeCode),
+      within(client(say.ui('snippets.clients.claudeCode'))).getByText(expected.claudePlugin, exact),
     ).toBeInTheDocument();
 
     await pick(user, 'codex');
     const codex = client(say.ui('snippets.clients.codex'));
-    expect(within(codex).getByText(expected.codexFile, exact)).toBeInTheDocument();
-    expect(within(codex).getByText(expected.codexEnv.bashZsh)).toBeInTheDocument();
-    expect(within(codex).getByText(expected.codexEnv.powerShell)).toBeInTheDocument();
+    expect(within(codex).getByText(expected.codexPlugin, exact)).toBeInTheDocument();
+    expect(within(codex).getByText(expected.codexUrlFile ?? '', exact)).toBeInTheDocument();
 
     await pick(user, 'json');
     expect(
@@ -128,8 +127,10 @@ describe('экран «Подключить агента»', () => {
 
     await snippetsShown(other);
     expect(
-      screen.getByText(connectionSnippets({ mcpUrl: other, labelled: false }).claudeCode),
+      screen.getByText(connectionSnippets({ mcpUrl: other, labelled: false }).claudePlugin, exact),
     ).toBeInTheDocument();
+    // По http вне своей машины плагин не подключится: экран говорит об этом.
+    expect(screen.getByText(say.ui('snippets.plainHttpWarning'))).toBeInTheDocument();
     expect(screen.getByRole('main')).not.toHaveTextContent(ADDRESS);
   });
 
@@ -143,7 +144,7 @@ describe('экран «Подключить агента»', () => {
     expect(screen.getByRole('main')).toHaveTextContent(TOKEN_PLACEHOLDER);
   });
 
-  it('флажок общего токена добавляет `X-Actor-Label` во все фрагменты и держится адресом', async () => {
+  it('флажок общего токена добавляет `X-Actor-Label` во фрагменты с ключом и держится адресом', async () => {
     installation();
     const user = userEvent.setup();
     renderApp('/connect');
@@ -161,14 +162,16 @@ describe('экран «Подключить агента»', () => {
 
     expect(address.current).toBe('/connect?shared=true');
     const shared = connectionSnippets({ mcpUrl: ADDRESS, labelled: true });
-    expect(screen.getByText(shared.claudeCode)).toBeInTheDocument();
-    expect(screen.getByText('nightly_agent')).toBeInTheDocument();
-    // Метка во фрагментах каждого клиента, и смена клиента флажок не снимает.
+    // Плагины входят по OAuth: метка им не нужна, и её нет ни в их фрагментах, ни в объяснении.
+    expect(screen.getByText(shared.claudePlugin, exact)).toBeInTheDocument();
+    expect(client(say.ui('snippets.clients.claudeCode'))).not.toHaveTextContent(LABEL_HEADER);
     await pick(user, 'codex');
     expect(address.current).toBe('/connect?shared=true&client=codex');
-    expect(screen.getByText(shared.codexFile, exact)).toBeInTheDocument();
+    expect(client(say.ui('snippets.clients.codex'))).not.toHaveTextContent(LABEL_HEADER);
+    // Метка — во фрагментах с ключом, и смена клиента флажок не снимает.
     await pick(user, 'json');
     expect(screen.getByText(shared.json, exact)).toBeInTheDocument();
+    expect(screen.getByText('nightly_agent')).toBeInTheDocument();
     await pick(user, 'any');
     expect(screen.getByText(shared.headers, exact)).toBeInTheDocument();
   });
@@ -255,7 +258,10 @@ describe('экран «Подключить агента»', () => {
 
     expect(await screen.findByRole('checkbox', { name: new RegExp(LABEL_HEADER) })).toBeChecked();
     expect(
-      await screen.findByText(connectionSnippets({ mcpUrl: ADDRESS, labelled: true }).claudeCode),
+      await screen.findByText(
+        connectionSnippets({ mcpUrl: ADDRESS, labelled: true }).claudePlugin,
+        exact,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -272,7 +278,7 @@ describe('экран «Подключить агента»', () => {
     );
 
     expect(await navigator.clipboard.readText()).toBe(
-      connectionSnippets({ mcpUrl: ADDRESS, labelled: false }).claudeCode,
+      connectionSnippets({ mcpUrl: ADDRESS, labelled: false }).claudePlugin,
     );
   });
 
@@ -308,7 +314,10 @@ describe('экран «Подключить агента»', () => {
       await screen.findByRole('heading', { level: 1, name: say.ui('app.connect') }),
     ).toHaveTextContent('Подключить агента');
     expect(
-      await screen.findByText(connectionSnippets({ mcpUrl: ADDRESS, labelled: false }).claudeCode),
+      await screen.findByText(
+        connectionSnippets({ mcpUrl: ADDRESS, labelled: false }).claudePlugin,
+        exact,
+      ),
     ).toBeInTheDocument();
   });
 });

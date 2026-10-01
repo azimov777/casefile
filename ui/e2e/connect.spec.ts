@@ -77,11 +77,15 @@ async function openFromNavigation(page: Page): Promise<void> {
 async function expectAddress(page: Page, mcpUrl: string): Promise<void> {
   // Умолчание — Claude Code, без параметра в адресе.
   await expect(fragment(page, 'Claude Code')).toContainText(
-    ` casefile "${mcpUrl}" --header "Authorization: Bearer <token>"`,
+    `claude plugin install casefile@casefile --scope user --config "casefile_url=${mcpUrl}"`,
   );
 
+  // Codex: адрес контура не умолчание плагина, поэтому под командами — строки `config.toml`.
   await pick(page, 'Codex');
-  await expect(fragment(page, 'Codex').first()).toContainText(`url = "${mcpUrl}"`);
+  await expect(fragment(page, 'Codex').first()).toContainText('--sparse .codex-plugin');
+  await expect(fragment(page, 'Codex').nth(1)).toHaveText(
+    `[mcp_servers.casefile]\nurl = "${mcpUrl}"`,
+  );
 
   await pick(page, 'Любой клиент MCP');
   const any = client(page, 'Любой клиент MCP');
@@ -120,14 +124,18 @@ test('ключ установки: экран из навигации, адре�
   // клиента, — и скопированное совпадает с командой до переделки экрана (UI-131,
   // проверка 3): форма команды записана здесь литералом, а не взята с экрана.
   const claude = client(page, 'Claude Code');
-  await claude.getByRole('button', { name: 'Копировать: Команда Claude Code' }).click();
+  await claude.getByRole('button', { name: 'Копировать: Claude Code: плагин и вход' }).click();
   await expect(
-    claude.getByRole('button', { name: 'Скопировано: Команда Claude Code' }),
+    claude.getByRole('button', { name: 'Скопировано: Claude Code: плагин и вход' }),
   ).toBeVisible();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
+  // Команды установщика (`install.sh`), без ключа: плагин и вход OAuth.
   expect(copied).toBe(
-    `claude mcp add --transport http --scope user casefile "${mcpUrl}" --header "Authorization: Bearer <token>"`,
+    'claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills\n' +
+      `claude plugin install casefile@casefile --scope user --config "casefile_url=${mcpUrl}"\n` +
+      'claude mcp login plugin:casefile:casefile',
   );
+  expect(copied).not.toMatch(/Authorization|trk_/);
   expect(copied).toBe(await fragment(page, 'Claude Code').textContent());
 
   await expectAddress(page, mcpUrl);
@@ -169,12 +177,15 @@ test('ключ агента, введённый на `/login`: экран отк
   await shared.click();
   await expect(shared).toBeChecked();
   await expect(page).toHaveURL(/\/connect\?shared=true$/);
-  await expect(fragment(page, 'Claude Code')).toContainText('--header "X-Actor-Label: <label>"');
+  // Плагин входит по OAuth, метке в нём места нет: она — во фрагментах с ключом.
+  await expect(fragment(page, 'Claude Code')).not.toContainText('X-Actor-Label');
 
   // Выбор клиента метку не снимает и тоже держится адресом.
   await pick(page, 'Codex');
   await expect(page).toHaveURL(/\/connect\?shared=true&client=codex$/);
-  await expect(fragment(page, 'Codex').first()).toContainText('"X-Actor-Label" = "<label>"');
+  await expect(fragment(page, 'Codex').first()).not.toContainText('X-Actor-Label');
+  await pick(page, 'Любой клиент MCP');
+  await expect(fragment(page, 'Любой клиент MCP').last()).toContainText('X-Actor-Label: <label>');
 });
 
 test('на экране нет нарушений `axe` ни одного уровня — в обоих видах фрагментов', async ({

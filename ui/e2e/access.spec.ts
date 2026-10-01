@@ -118,48 +118,39 @@ test('ключ установки: агент заведён, токен вып�
   const secret = (shown ?? '').trim();
   expect(secret).toMatch(/^trk_[A-Za-z0-9_-]{8,}$/);
 
+  // Claude Code и Codex входят по OAuth: в их фрагментах ключа нет, он — у клиентов без OAuth.
   const claude = secretDialog.getByRole('region', { name: 'Claude Code' }).locator('pre code');
-  await expect(claude).toContainText(`Authorization: Bearer ${secret}`);
+  await expect(claude).toContainText('claude mcp login plugin:casefile:casefile');
+  await expect(claude).not.toContainText(secret);
 
-  // Второй шаг — установка скила: рядом с подключением, для Claude Code и для Codex, и
-  // копируется тем же нажатием; в скопированном секрета нет — скил общий (TRK-420).
+  const pickClient = (name: string) =>
+    secretDialog
+      .getByRole('navigation', { name: 'Клиент' })
+      .getByRole('link', { name, exact: true })
+      .click();
+
+  await pickClient('Codex');
+  const codex = secretDialog.getByRole('region', { name: 'Codex', exact: true });
+  await expect(codex.locator('figure pre code').first()).toContainText('--sparse .codex-plugin');
+  await expect(codex).not.toContainText(secret);
+
+  await pickClient('Любой клиент MCP');
+  const any = secretDialog.getByRole('region', { name: 'Любой клиент MCP', exact: true });
+  await expect(any.locator('pre code').last()).toContainText(`Authorization: Bearer ${secret}`);
+
+  // Установка скила отдельно — только клиентам без плагина; копируется тем же нажатием, и
+  // в скопированном секрета нет — скил общий (TRK-420).
   const skill = secretDialog.getByRole('region', { name: 'Установите скил' });
   await expect(skill).toBeVisible();
-  const claudeSkill =
-    'claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills\n' +
-    'claude plugin install casefile@casefile --scope user';
-  await skill.getByRole('button', { name: 'Копировать: Установка скила в Claude Code' }).click();
+  await skill.getByRole('button', { name: 'Копировать: Установка скила в другого агента' }).click();
   await expect(
-    skill.getByRole('button', { name: 'Скопировано: Установка скила в Claude Code' }),
+    skill.getByRole('button', { name: 'Скопировано: Установка скила в другого агента' }),
   ).toBeVisible();
-  const copiedClaudeSkill = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copiedClaudeSkill).toBe(claudeSkill);
-  expect(copiedClaudeSkill).not.toContain(secret);
-
-  await secretDialog
-    .getByRole('navigation', { name: 'Клиент' })
-    .getByRole('link', { name: 'Codex', exact: true })
-    .click();
-  await expect(
-    secretDialog
-      .getByRole('region', { name: 'Codex', exact: true })
-      .locator('figure pre code')
-      .first(),
-  ).toContainText('bearer_token_env_var');
-  await skill.getByRole('button', { name: 'Копировать: Установка скила в Codex' }).click();
-  await expect(
-    skill.getByRole('button', { name: 'Скопировано: Установка скила в Codex' }),
-  ).toBeVisible();
-  const copiedCodexSkill = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copiedCodexSkill).toBe(
-    'codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills\n' +
-      'codex plugin add casefile@casefile',
-  );
-  expect(copiedCodexSkill).not.toContain(secret);
-  await secretDialog
-    .getByRole('navigation', { name: 'Клиент' })
-    .getByRole('link', { name: 'Claude Code', exact: true })
-    .click();
+  const copiedSkill = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiedSkill).toBe('npx skills add azimov777/casefile#stable');
+  expect(copiedSkill).not.toContain(secret);
+  await pickClient('Claude Code');
+  await expect(secretDialog.getByRole('region', { name: 'Установите скил' })).toHaveCount(0);
 
   // Доступность окна секрета: сверяется полный список нарушений, а не порог тяжести.
   // Тема здесь одна — та, что у проекта; вторую меряет сценарий ниже своим контекстом,

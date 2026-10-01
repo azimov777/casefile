@@ -443,24 +443,22 @@ export const ui = {
     headersLabel: 'Заголовки запроса',
     headersCaption: 'Заголовки HTTP',
     claudeHint:
-      'Регистрирует сервер <code>{{server}}</code> для всех ваших проектов (<code>--scope user</code>). Работающая сессия новый сервер сама не подхватит: <code>/mcp</code> или перезапуск. Подключился ли он, покажет <code>claude mcp list</code>.',
-    claudeLabel: 'Команда Claude Code',
+      'Плагин несёт скил и подключение к этой установке; вход — OAuth, откроется браузер, ключ не ложится ни в один файл. Работающая сессия нового плагина не увидит: перезапустите её или выполните <code>/reload-plugins</code>. Ключ с этого экрана — для клиентов без OAuth: вкладки «JSON mcpServers» и «Любой клиент MCP».',
+    claudeLabel: 'Claude Code: плагин и вход',
     terminalCaption: 'Терминал',
+    codexLabel: 'Codex: плагин и вход',
     codexHint:
-      'Токен идёт через переменную окружения <code>{{env}}</code>, и секрет не ложится в файл конфигурации. Codex читает переменную из своего окружения: задайте её там, откуда Codex запускается, а приложение Codex после смены перезапустите.',
-    codexFileLabel: 'Секция конфигурации Codex',
-    codexEnvBashLabel: 'Переменная с токеном для Codex (bash/zsh)',
-    codexEnvBashCaption: 'Терминал, до запуска Codex',
-    codexEnvPowerShellLabel: 'Переменная с токеном для Codex (PowerShell)',
-    codexEnvPowerShellCaption: 'PowerShell, до запуска Codex',
-    codexFormHint:
-      'Или те же значения формой в приложении Codex (MCP-серверы в настройках, сервер Streamable HTTP):',
-    // Подписи полей — как их показывает приложение Codex на русском (снимок владельца
-    // из контекста UI-105); ключ файла стоит рядом, по нему поле и сверяется.
-    codexField: {
-      url: 'URL',
-      bearer_token_env_var: 'Переменная окружения токена Bearer',
-      http_headers: 'Заголовки',
+      'Плагин несёт скил и подключение; вход — OAuth, без ключа. <code>--sparse .codex-plugin</code> обязателен: подключение Codex читает оттуда. Обновить: <code>codex plugin marketplace upgrade casefile</code>; приложение Codex после установки перезапустите.',
+    codexUrlHint:
+      'В плагин зашит адрес <code>http://127.0.0.1:8100/mcp</code>. У вашей установки другой: добавьте эти строки в конфигурацию Codex (ключа в них нет) и войдите командой <code>codex mcp login casefile</code>.',
+    codexUrlLabel: 'Адрес установки для Codex',
+    plainHttpWarning:
+      'Этот адрес — обычный http вне этой машины: служба отдаёт вход OAuth только по https, и плагин не подключится. Опубликуйте установку по https или подключайтесь ключом (вкладки «JSON mcpServers» и «Любой клиент MCP»).',
+    codexAppHint: 'Или пунктом «Добавить маркетплейс» в приложении Codex:',
+    codexAppField: {
+      source: 'Источник',
+      ref: 'Git ref',
+      sparse: 'Выборочные пути',
     },
     jsonHint:
       'Форма файла <code>.mcp.json</code> Claude Code. У Cursor те же <code>url</code> и <code>headers</code>; Windsurf, Gemini CLI и VS Code называют поля иначе — сверьтесь с документацией своего клиента.',
@@ -469,22 +467,10 @@ export const ui = {
     skill: {
       title: 'Установите скил',
       intro:
-        'Подключение даёт инструменты, скил учит ими пользоваться: как вести дело, что записать перед остановкой, что делать при 401. Токен для скила не нужен — он один для всех установок, в том числе для общей установки на сервере. Команды выполняются на машине, где работает агент.',
-      claudeLabel: 'Установка скила в Claude Code',
-      claudeHint:
-        'Работающая сессия нового плагина не увидит: перезапустите её или выполните <code>/reload-plugins</code>.',
-      codexLabel: 'Установка скила в Codex',
-      codexHint:
-        'Обновить: <code>codex plugin marketplace upgrade casefile</code>. Приложение Codex после установки перезапустите.',
-      codexAppHint: 'Или пунктом «Добавить маркетплейс» в приложении Codex:',
-      codexAppField: {
-        source: 'Источник',
-        ref: 'Git ref',
-        sparse: 'Выборочные пути',
-      },
+        'Claude Code и Codex получают скил вместе с плагином (вкладки левее). Клиентам без плагина скил ставится отдельно: он учит агента пользоваться инструментами — как вести дело, что записать перед остановкой, что делать при 401. Токен ему не нужен, он один для всех установок. Команды выполняются на машине, где работает агент.',
       otherLabel: 'Установка скила в другого агента',
       machineHint:
-        'Или одна строка на машине агента: она ставит скил во все найденные там клиенты и печатает, где он встал. Docker и каталог установки для неё не нужны — переменная <code>CASEFILE_SKILL_ONLY=1</code> оставляет только скил.',
+        'Или одна строка на машине агента: она ставит скил во все найденные там клиенты и печатает, где он встал (с адресом этой установки в <code>CASEFILE_URL</code> она ставит и плагин Claude Code и Codex). Docker и каталог установки для неё не нужны — переменная <code>CASEFILE_SKILL_ONLY=1</code> оставляет только скил.',
       machineBashLabel: 'Скил во все клиенты машины (bash/zsh)',
       machineBashCaption: 'Терминал, на машине агента',
       machinePowerShellLabel: 'Скил во все клиенты машины (PowerShell)',

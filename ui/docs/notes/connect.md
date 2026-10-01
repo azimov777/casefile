@@ -16,7 +16,7 @@
 argument 'name'` (проверено 2026-09-11, UI-105#17).
 **Как правильно:** флаги с одним значением впереди, заголовки последними:
 `claude mcp add --transport http --scope user casefile "<адрес>" --header "Authorization: Bearer …"`.
-**Где:** `src/features/connect-agent/model/snippets.ts`, `claudeCodeCommand`.
+**Где:** `src/features/connect-agent/model/snippets.ts` — команда `claude mcp add` снята с экрана в TRK-479 (`claudeCodeCommand`).
 
 ## Codex берёт токен из окружения своего процесса, и список серверов этого не проверяет
 
@@ -36,7 +36,7 @@ Codex не знает. `codex mcp list` и `codex mcp get` показывают 
 `serverInfo` сервера и его инструменты, а при неверном токене `serverInfo: null` и ни
 одного инструмента (UI-105#17). Изолированный `CODEX_HOME` не трогает конфигурацию
 человека.
-**Где:** `src/features/connect-agent/model/snippets.ts`, `TOKEN_ENV`.
+**Где:** `src/features/connect-agent/model/snippets.ts` — переменная Codex снята с экрана в TRK-479 (`TOKEN_ENV`).
 
 ## Переменная окружения Codex — две строки, а не одна: экранирование PowerShell не то же, что у bash/zsh
 
@@ -59,7 +59,7 @@ CASEFILE_TOKEN="abc"'`) — `export` там не команда. Верная ф
 powerShell }`, экран показывает обе строки подряд, не выбирая по `navigator.userAgent`
 (`UI-114`, решение UI-114#5) — угадать оболочку по нему нельзя надёжно, а ошибка обошлась
 бы тем, что копия строки не сработает молча.
-**Где:** `src/features/connect-agent/model/snippets.ts`, `powerShellQuote`, `codexEnv`.
+**Где:** `src/features/connect-agent/model/snippets.ts` — обе строки сняты с экрана в TRK-479 (`powerShellQuote`, `codexEnv`).
 
 ## Единой формы JSON `mcpServers` у клиентов нет
 
@@ -146,3 +146,26 @@ PowerShell, а PowerShell декодирует вывод внешней ком�
 
 **Где:** `install.ps1`, комментарий у `[System.IO.File]::WriteAllLines` (тот же приём
 против BOM) — команда экрана и её файл сняты, `UI-171`.
+
+## Claude Code и Codex на экране подключаются плагином и входом OAuth, ключа во фрагментах у них нет
+
+**Что:** с TRK-479 вкладки «Claude Code» и «Codex» печатают команды установщика (корневой скрипт
+установки, TRK-452#18): маркетплейс, `claude plugin install … --config "casefile_url=<адрес>"`,
+`claude mcp login plugin:casefile:casefile`; у Codex — `--sparse .claude-plugin --sparse
+.codex-plugin --sparse skills`, `codex plugin add casefile@casefile`, `codex mcp login casefile`
+и, если адрес не `127.0.0.1:8100` (`localhost` — тот же), две строки `[mcp_servers.casefile] url=`
+для `config.toml`. Фрагментов с `Authorization`, переменной окружения с токеном и формой Codex с
+ключом на этих вкладках больше нет; ключ остался во вкладках «JSON mcpServers» и «Любой клиент
+MCP» (Hermes, Cursor, сторож журнала). Разделы выше про переменную окружения Codex и экранирование
+PowerShell описывают те, прежние фрагменты и остаются историей.
+
+**Почему важно:** без `--sparse .codex-plugin` Codex не находит подключение плагина: оно
+лежит в файле mcp.json папки плагина Codex (TRK-451#13). Служба отдаёт вход OAuth только по https (по
+http — на своей машине), поэтому для адреса `http://<IP>` экран предупреждает, что плагин не
+подключится, вместо молчаливой нерабочей команды.
+
+**Как правильно:** команды плагина сверять с установщиком дословно — это делает
+`snippets.test.ts`; менять строки на экране и в установщике вместе.
+
+**Где:** `src/features/connect-agent/model/snippets.ts` (`claudePlugin`, `codexPlugin`,
+`codexUrlFile`, `oauthAvailable`), `e2e/connect.spec.ts`, `e2e/access.spec.ts`.
