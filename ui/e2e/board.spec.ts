@@ -1586,6 +1586,44 @@ test('знак края читается в своей теме и не съед
   expect(result.violations).toEqual([]);
 });
 
+/**
+ * Ждёт, пока набор того, на что встаёт Tab, перестанет меняться (TRK-429). Боковая
+ * панель и шапка рисуют часть своих ссылок и кнопок по ответам API (список проектов,
+ * знакомство, входящие): пока ответ не пришёл, их нет, а пришёл он посреди прохода —
+ * и первый проход насчитывал больше второго на ту же разницу, а не на знак края
+ * (замерено: с задержкой ответов тех запросов остановок 18 вместо 22). Ждём не пауз,
+ * а трёх подряд одинаковых снимков набора: пока ответы летят, снимки разные.
+ */
+async function settledTabOrder(page: Page, inFlight: () => number, message: string) {
+  const snapshot = () =>
+    page.evaluate(() =>
+      Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+        .filter((node) => node.getClientRects().length > 0)
+        .map(
+          (node) =>
+            `${node.tagName}:${node.getAttribute('aria-label') ?? node.textContent?.trim().slice(0, 30) ?? ''}`,
+        )
+        .join('|'),
+    );
+  let previous = '';
+  let same = 0;
+  await expect
+    .poll(
+      async () => {
+        const now = `${inFlight()}:${await snapshot()}`;
+        same = inFlight() === 0 && now === previous ? same + 1 : 0;
+        previous = now;
+        return same;
+      },
+      { message, intervals: [150], timeout: 15_000 },
+    )
+    .toBeGreaterThanOrEqual(3);
+}
+
 test('знак края не добавляет остановок Tab: до первой карточки их столько же, сколько без него', async ({
   page,
   request,
@@ -1593,6 +1631,15 @@ test('знак края не добавляет остановок Tab: до п�
   const longest = await longestColumn(request);
 
   await silenceJournal(page);
+  // Запросы к API в полёте: пока они не вернулись, часть ссылок панели ещё не нарисована.
+  const pending = new Set<unknown>();
+  // Поток журнала заглушён и не отвечает никогда: в «полёте» его считать нельзя.
+  const watch = (call: { url: () => string }) =>
+    call.url().includes('/api/') && !call.url().includes('/journal/stream');
+  page.on('request', (call) => watch(call) && pending.add(call));
+  page.on('requestfinished', (call) => pending.delete(call));
+  page.on('requestfailed', (call) => pending.delete(call));
+  const inFlight = () => pending.size;
   await page.setViewportSize(SHORT_WINDOW);
   await page.goto('/tasks?project=DEMO&view=board&collapsed=');
   await expect(column(page, longest).getByRole('article').first()).toBeVisible();
@@ -1603,6 +1650,7 @@ test('знак края не добавляет остановок Tab: до п�
    * и появись у него остановка — она попала бы ровно на этот путь.
    */
   const stops = async () => {
+    await settledTabOrder(page, inFlight, 'набор остановок Tab не устоялся');
     /*
      * Точка, с которой браузер продолжает обход, живёт отдельно от фокуса, и `blur()`
      * её не двигает: второй проход считал бы шаги от той ссылки, на которой кончился
@@ -1616,22 +1664,27 @@ test('знак края не добавляет остановок Tab: до п�
     });
 
     let count = 0;
-    let at = { card: false, edge: false };
+    const path: string[] = [];
+    let at = { what: '', card: false, edge: false };
     while (count < 100 && !at.card) {
       await page.keyboard.press('Tab');
       count += 1;
       at = await page.evaluate(() => {
         const active = document.activeElement;
         return {
+          what: active
+            ? `${active.tagName.toLowerCase()}${active.getAttribute('role') ? `[role=${active.getAttribute('role')}]` : ''}${active.getAttribute('aria-label') ? `[${active.getAttribute('aria-label')}]` : ''} «${(active.textContent ?? '').trim().slice(0, 30)}»`
+            : 'none',
           card: active?.closest('article') != null,
           // Знак фокуса не принимает вовсе: у него нет ни роли, ни `tabindex`.
           edge: active?.hasAttribute('data-edge') ?? false,
         };
       });
+      path.push(at.what);
       expect(at.edge, 'фокус встал на знак края').toBe(false);
     }
     expect(at.card, `до карточки не дошли за ${count} остановок`).toBe(true);
-    return count;
+    return { count, path };
   };
 
   const low = await settledEdges(page, 'знак разошёлся с прокруткой на низком окне');
@@ -1653,11 +1706,15 @@ test('знак края не добавляет остановок Tab: до п�
   ).toBe(0);
   const withoutSign = await stops();
 
+  // Не только число, но и сам путь: расхождение скажет, какая остановка лишняя.
   await test.info().attach('остановки Tab до первой карточки', {
-    body: JSON.stringify({ withSign, withoutSign }),
+    body: JSON.stringify({ withSign, withoutSign }, null, 2),
     contentType: 'application/json',
   });
-  expect(withSign, `остановок со знаком ${withSign}, без знака ${withoutSign}`).toBe(withoutSign);
+  expect(
+    withSign.count,
+    `остановок со знаком ${withSign.count}, без знака ${withoutSign.count}: ${JSON.stringify({ withSign: withSign.path, withoutSign: withoutSign.path })}`,
+  ).toBe(withoutSign.count);
 });
 
 test('ниже точки остановки знака края нет: своей прокрутки у столбца там нет', async ({
