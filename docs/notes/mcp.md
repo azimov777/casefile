@@ -1109,7 +1109,7 @@ public, loopback-порты 27890–27894), а без `client_id_metadata_docume
 тем же клиентом не позже `REFRESH_REUSE_WINDOW` (30 с) получает ещё одну пару в той же цепочке,
 пары первого ответа живы. Окно дано только последнему погашенному refresh живой цепочки; повтор
 после окна, повтор предпоследнего и refresh у чужого `client_id` отзывают цепочку. Колонки под окно
-нет: всё решается по `used_at` строк цепочки (`_reusable`).
+нет: всё решается по `used_at` строк цепочки (`_reusable`). Решение с источниками — TRK-504#6.
 **Почему важно:** до правки второй запрос отзывал всю цепочку, и клиент терял вход («Needs
 authentication»). Одновременные запросы видят refresh непогашенным оба: развязка — в
 `claim_refresh` (`UPDATE … WHERE used_at IS NULL` ждёт блокировки строки победителя), а
@@ -1122,4 +1122,4 @@ authentication»). Одновременные запросы видят refresh 
 поправив `_reusable`.
 **Где:** `app/services/oauth.py` (`find_refresh`, `rotate_refresh`, `_reusable`),
 `app/domain/oauth.py` (`REFRESH_REUSE_WINDOW`), `app/db/repositories/oauth.py` (`list_family`),
-`tests/test_mcp_oauth.py`, `tests/test_mcp_oauth_refresh_race.py`, решение — `TRK-504#6`.
+`tests/test_mcp_oauth.py`, `tests/test_mcp_oauth_refresh_race.py`.
