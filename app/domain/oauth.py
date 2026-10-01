@@ -49,6 +49,7 @@ __all__ = [
     "OAUTH_SCOPE",
     "OAUTH_SECRET_ENTROPY_BYTES",
     "OTHER_CLIENT",
+    "REFRESH_REUSE_WINDOW",
     "OAuthRefusal",
     "client_family",
     "generate_oauth_secret",
@@ -67,6 +68,13 @@ OAUTH_SCOPE = "casefile"
 #: браузера — это миллисекунды; RFC 6749 §4.1.2 советует не больше десяти минут. Две
 #: минуты оставляют запас на медленную машину и не дают коду пролежать без дела.
 CODE_TTL = timedelta(minutes=2)
+
+#: Сколько после обмена refresh-токена его повтор тем же клиентом — ещё не кража, а второй
+#: запрос того же клиента: Claude Code обновляет токен дважды подряд одним refresh
+#: (TRK-504). Повтор в окне получает ещё одну пару в той же цепочке; после окна — отзыв
+#: цепочки (OAuth 2.1 §4.3.1). Тридцать секунд — умолчание Okta («grace period for token
+#: rotation», 0–60 с); Auth0 зовёт то же «rotation overlap period».
+REFRESH_REUSE_WINDOW = timedelta(seconds=30)
 
 #: Энтропия кода и refresh-токена — как у токена участника (256 бит).
 OAUTH_SECRET_ENTROPY_BYTES = 32

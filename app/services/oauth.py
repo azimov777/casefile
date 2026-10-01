@@ -50,7 +50,20 @@ S256, который SDK требует и сверяет сам. Поэтому
 Refresh годен, только пока жив его токен. Отзыв в «Доступах» делает refresh
 недействительным, и тихо обновиться клиент не может — ему нужен новый вход. Ротация
 гасит прежний refresh и отзывает прежний токен; повтор погашенного refresh отзывает
-цепочку целиком.
+цепочку целиком — кроме повтора в окне (ниже). Refresh у чужого клиента — тоже отзыв:
+секрет утёк.
+
+## Окно повтора refresh
+
+Один клиент может обменять один refresh дважды почти разом: Claude Code делает так сразу
+после входа, несколько его сессий — когда срок у общего токена выходит (TRK-504). Повтор
+тем же клиентом не позже `REFRESH_REUSE_WINDOW` после погашения получает ещё одну пару в
+той же цепочке; прежнюю пару первого ответа он не трогает — какой из ответов клиент
+сохранит, сервер не знает. Окно дано только последнему погашенному refresh цепочки
+(его преемник ещё не обменян) и только живой цепочке (её непогашенные refresh не
+отозваны): после отзыва в «Доступах» повтор тоже отрезан. Одновременных запросов окно
+касается так же: проигравший `claim_refresh` ждёт блокировки строки у победителя, после
+его коммита видит погашение и идёт в окно. Решение — `TRK-504` (запись `decision`).
 """
 
 import uuid
@@ -74,6 +87,7 @@ from app.domain.oauth import (
     CODE_TTL,
     OAUTH_SCOPE,
     OTHER_CLIENT,
+    REFRESH_REUSE_WINDOW,
     OAuthRefusal,
     client_family,
     generate_oauth_secret,
@@ -515,16 +529,25 @@ async def find_refresh(
 ) -> RefreshView | None:
     """Годный refresh-токен этого клиента или `None`.
 
-    Негоден погашенный — его повтор отзывает всю цепочку (OAuth 2.1, §4.3.1) — и тот,
-    чей токен отозван: отзыв в «Доступах» отрезает клиента целиком.
+    Негоден погашенный — его повтор отзывает всю цепочку (OAuth 2.1, §4.3.1), если это не
+    повтор в окне (`_reusable`), — и тот, чей токен отозван: отзыв в «Доступах» отрезает
+    клиента целиком. Refresh, предъявленный чужим клиентом, тоже отзывает цепочку: его
+    секрет вне своего клиента.
     """
+    moment = now or datetime.now(UTC)
     row = await OAuthRepository(session).get_refresh(hash_token(refresh))
-    if row is None or row.client.client_id != client_id:
+    if row is None:
+        return None
+    if row.client.client_id != client_id:
+        logger.warning("OAuth refresh presented by another client: chain revoked")
+        await _revoke_family(session, row.family_id, moment)
         return None
     if row.used_at is not None:
-        await _revoke_family(session, row.family_id, now)
-        return None
-    if row.token.is_revoked:
+        if not await _reusable(session, row, moment):
+            logger.warning("OAuth refresh replayed outside the reuse window: chain revoked")
+            await _revoke_family(session, row.family_id, moment)
+            return None
+    elif row.token.is_revoked:
         return None
     participant = row.token.participant
     return RefreshView(
@@ -549,14 +572,23 @@ async def rotate_refresh(
 
     Прежний refresh гасится, прежний токен отзывается — у клиента остаётся один живой
     доступ. Истёкший срок прежнего токена обмену не мешает: для того refresh и нужен.
-    Погашение атомарное, как у кода.
+    Погашение атомарное, как у кода. Уже погашенный refresh в окне повтора (`_reusable`)
+    даёт ещё одну пару в той же цепочке и ничего не отзывает; вне окна — отказ.
     """
     moment = now or datetime.now(UTC)
-    if not await OAuthRepository(session).claim_refresh(refresh_id, moment):
-        raise OAuthRefusal("invalid_grant", "refresh token was already used")
-    previous = await session.get(OAuthRefreshToken, refresh_id)
-    if previous is None or previous.token.is_revoked or previous.token.participant is None:
+    claimed = await OAuthRepository(session).claim_refresh(refresh_id, moment)
+    # Свежее чтение: строку только что погасил этот `UPDATE` или чужая транзакция.
+    previous = await session.get(OAuthRefreshToken, refresh_id, populate_existing=True)
+    if previous is None or previous.token.participant is None:
         raise OAuthRefusal("invalid_grant", "refresh token is no longer valid")
+    if claimed:
+        if previous.token.is_revoked:
+            raise OAuthRefusal("invalid_grant", "refresh token is no longer valid")
+        previous.token.revoked_at = moment
+    elif await _reusable(session, previous, moment):
+        logger.info("OAuth refresh reused within the window: another pair in the chain")
+    else:
+        raise OAuthRefusal("invalid_grant", "refresh token was already used")
 
     token, secret = await _issue(
         session,
@@ -565,7 +597,6 @@ async def rotate_refresh(
         client=previous.client,
         expires_at=moment + access_ttl,
     )
-    previous.token.revoked_at = moment
     granted = list(scopes or previous.scopes)
     refresh = await _add_refresh(
         session,
@@ -661,6 +692,25 @@ async def _revoke_token_id(
     token = await session.get(Token, token_id)
     if token is not None and not token.is_revoked:
         token.revoked_at = now or datetime.now(UTC)
+
+
+async def _reusable(session: AsyncSession, row: OAuthRefreshToken, moment: datetime) -> bool:
+    """Погашенный refresh в окне повтора: ещё одна пара тому же клиенту, а не отзыв.
+
+    Три условия. Погашен не раньше `REFRESH_REUSE_WINDOW` до `moment`; одновременный
+    запрос мог взять `moment` раньше погашения, и это тоже окно. Он последний погашенный в
+    цепочке: погашенный позже — его преемник, уже обменянный, и повтор тогда — кража
+    (так же у Auth0: «only the previous token can be reused»). Цепочка жива: у неё есть
+    непогашенный refresh и ни один такой не отозван — иначе её отрезали «Доступы» или
+    отзыв цепочки, и окно не возвращает отрезанное.
+    """
+    if row.used_at is None or moment - row.used_at > REFRESH_REUSE_WINDOW:
+        return False
+    family = await OAuthRepository(session).list_family(row.family_id)
+    if any(other.used_at is not None and other.used_at > row.used_at for other in family):
+        return False
+    live = [other for other in family if other.used_at is None]
+    return bool(live) and not any(other.token.is_revoked for other in live)
 
 
 async def _revoke_family(session: AsyncSession, family_id: uuid.UUID, now: datetime | None) -> None:

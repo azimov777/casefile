@@ -26,6 +26,7 @@ from starlette.applications import Starlette
 from app.core.config import Settings, get_settings
 from app.db.models.oauth import OAuthCode, OAuthRefreshToken
 from app.db.models.token import Token
+from app.domain.oauth import REFRESH_REUSE_WINDOW
 from app.domain.tokens import TokenKind, hash_token
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
@@ -607,13 +608,49 @@ async def test_an_expired_connection_is_refused_and_its_refresh_gives_a_new_pair
     assert renewed.expires_at is not None and renewed.expires_at > datetime.now(UTC)
 
 
-async def test_a_replayed_refresh_token_revokes_the_whole_chain(
+async def _age_used_refresh(session: AsyncSession, refresh: str, by: timedelta) -> None:
+    """Отодвигает погашение refresh в прошлое: повтор приходит как будто через `by`."""
+    row = await session.scalar(
+        select(OAuthRefreshToken).where(OAuthRefreshToken.token_hash == hash_token(refresh))
+    )
+    assert row is not None and row.used_at is not None
+    row.used_at -= by
+    await session.flush()
+
+
+async def test_a_repeat_within_the_window_gets_another_pair_of_the_same_chain(
     mcp_sessions: SessionFactory,
 ) -> None:
-    """Погашенный refresh предъявлен снова — признак кражи: цепочка отзывается целиком."""
+    """Повтор того же refresh тем же клиентом сразу после обмена — не кража (TRK-504).
+
+    Claude Code обновляет токен дважды подряд одним refresh (`TRK-453#13`): второй ответ —
+    ещё одна рабочая пара, и прежняя пара от первого ответа тоже жива.
+    """
+    async with _http(_server(mcp_sessions)) as client:
+        client_id, first = await _sign_in(client)
+        second = await _refresh(client, client_id, first["refresh_token"])
+        repeat = await _refresh(client, client_id, first["refresh_token"])
+        assert second.status_code == 200, second.text
+        assert repeat.status_code == 200, repeat.text
+        both = [await _initialize(client, r.json()["access_token"]) for r in (second, repeat)]
+        onward = await _refresh(client, client_id, second.json()["refresh_token"])
+
+    assert repeat.json()["access_token"] != second.json()["access_token"]
+    assert repeat.json()["refresh_token"] != second.json()["refresh_token"]
+    assert [response.status_code for response in both] == [200, 200]
+    assert onward.status_code == 200, onward.text
+
+
+async def test_a_replayed_refresh_token_revokes_the_whole_chain(
+    mcp_sessions: SessionFactory, db_session: AsyncSession
+) -> None:
+    """Погашенный refresh предъявлен снова после окна — признак кражи: цепочка отзывается."""
     async with _http(_server(mcp_sessions)) as client:
         client_id, first = await _sign_in(client)
         second = (await _refresh(client, client_id, first["refresh_token"])).json()
+        await _age_used_refresh(
+            db_session, first["refresh_token"], REFRESH_REUSE_WINDOW + timedelta(seconds=1)
+        )
         replay = await _refresh(client, client_id, first["refresh_token"])
         current = await _initialize(client, second["access_token"])
         after = await _refresh(client, client_id, second["refresh_token"])
@@ -622,6 +659,39 @@ async def test_a_replayed_refresh_token_revokes_the_whole_chain(
     assert replay.json()["error"] == "invalid_grant"
     assert current.status_code == 401
     assert after.status_code == 400
+
+
+async def test_a_replay_of_the_second_to_last_refresh_revokes_the_chain_within_the_window(
+    mcp_sessions: SessionFactory,
+) -> None:
+    """Окно — только для последнего погашенного: его преемник уже обменян — значит, кража."""
+    async with _http(_server(mcp_sessions)) as client:
+        client_id, first = await _sign_in(client)
+        second = (await _refresh(client, client_id, first["refresh_token"])).json()
+        third = (await _refresh(client, client_id, second["refresh_token"])).json()
+        replay = await _refresh(client, client_id, first["refresh_token"])
+        current = await _initialize(client, third["access_token"])
+
+    assert replay.status_code == 400
+    assert replay.json()["error"] == "invalid_grant"
+    assert current.status_code == 401
+
+
+async def test_a_refresh_presented_by_another_client_is_refused(
+    mcp_sessions: SessionFactory,
+) -> None:
+    """Чужой `client_id` с погашенным refresh — `400` и отзыв цепочки, окно ему не положено."""
+    async with _http(_server(mcp_sessions)) as client:
+        client_id, first = await _sign_in(client)
+        stranger = (await _register(client))["client_id"]
+        second = (await _refresh(client, client_id, first["refresh_token"])).json()
+        foreign = await _refresh(client, stranger, first["refresh_token"])
+        current = await _initialize(client, second["access_token"])
+
+    assert foreign.status_code == 400
+    assert foreign.json()["error"] == "invalid_grant"
+    # Секрет refresh у чужого клиента — утечка: цепочка отозвана, как при повторе после окна.
+    assert current.status_code == 401
 
 
 async def test_a_restarted_service_keeps_the_client_and_the_refresh_token(
