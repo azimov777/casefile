@@ -27,11 +27,12 @@
 #   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
 #   CASEFILE_SKILL_ONLY  1 — только агенты этой машины: без Docker, без каталога установки и
 #                      без токена; для машины, которая подключается к Casefile на сервере.
-#                      Нужен адрес сервера в `CASEFILE_URL`, и только https (http — лишь для
+#                      Адрес сервера в `CASEFILE_URL` — для чужого сервера, и только https (http — лишь для
 #                      localhost: вне своей машины служба отдаёт вход OAuth только по https):
 #                      curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh
-#                      Без `CASEFILE_URL` плагин не ставится (его коннектору нужен адрес):
-#                      ставятся скилы Hermes и прочих агентов и печатается, как задать адрес.
+#                      Без `CASEFILE_URL` плагин Claude Code и Codex ставится с адресом по
+#                      умолчанию (http://127.0.0.1:8100/mcp): скил работает сразу, вход не
+#                      ведётся, печатается, как задать адрес сервера.
 #   CASEFILE_URL       адрес MCP сервера для `CASEFILE_SKILL_ONLY=1`; при полной установке
 #                      адрес даёт сама установка
 #   CASEFILE_LOGIN     0 — не вести вход OAuth, только напечатать команды (по умолчанию вход
@@ -56,8 +57,12 @@ SKILL_SOURCE=${CASEFILE_SKILL_SOURCE:-azimov777/casefile}
 LOGIN=${CASEFILE_LOGIN:-1}
 TTY=${CASEFILE_TTY:-/dev/tty}
 # Адрес MCP, с которым ставится плагин: у полной установки — ответ самой установки, у
-# `CASEFILE_SKILL_ONLY=1` — `CASEFILE_URL`; пуст — плагин не ставится.
+# `CASEFILE_SKILL_ONLY=1` — `CASEFILE_URL`; без него — адрес по умолчанию (TRK-480).
 PLUGIN_URL=
+# 1 — адрес не назван (`CASEFILE_SKILL_ONLY=1` без `CASEFILE_URL`): плагин ставится с
+# адресом по умолчанию ради скила; вход OAuth не ведётся, чужие записи MCP не трогаются.
+DEFAULT_URL=0
+DEFAULT_NOTE=
 # Адрес, который у Codex уже прописан в плагине (`.codex-plugin/mcp.json`): другой адрес
 # ему задаёт только `codex mcp add` (TRK-451#13).
 CODEX_PLUGIN_URL=http://127.0.0.1:8100/mcp
@@ -195,12 +200,8 @@ cleanup_codex_entries() {
 
 skill_claude() {
   src="$SKILL_SOURCE#stable"
-  if [ -z "$PLUGIN_URL" ]; then
-    skill_line "Claude Code" "plugin not installed: it needs your server's address. Run this installer again with CASEFILE_URL=https://<your host>/mcp"
-    return 0
-  fi
   retry="claude plugin marketplace add $src --sparse .claude-plugin skills && claude plugin install casefile@casefile --scope user --config casefile_url=$PLUGIN_URL"
-  cleanup_claude_entries
+  [ "$DEFAULT_URL" = 1 ] || cleanup_claude_entries
   if skill_run claude plugin marketplace add "$src" --sparse .claude-plugin skills &&
     skill_run claude plugin marketplace update casefile &&
     skill_run claude plugin install casefile@casefile --scope user --config "casefile_url=$PLUGIN_URL" &&
@@ -209,11 +210,11 @@ skill_claude() {
       awk '/casefile@casefile/ {f=1; next} f && /Version:/ {v=$2} f && /Status:/ {print v, ($0 ~ /enabled/ ? "enabled" : "off"); exit}')
     case "$found" in
       *" enabled")
-        LOGIN_CLAUDE=1
+        [ "$DEFAULT_URL" = 1 ] || LOGIN_CLAUDE=1
         if claude_auto_update; then
-          skill_line "Claude Code" "installed ${found% *} (updates itself), connected to $PLUGIN_URL"
+          skill_line "Claude Code" "installed ${found% *} (updates itself), connected to $PLUGIN_URL$DEFAULT_NOTE"
         else
-          skill_line "Claude Code" "installed ${found% *}, connected to $PLUGIN_URL (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
+          skill_line "Claude Code" "installed ${found% *}, connected to $PLUGIN_URL$DEFAULT_NOTE (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
         fi ;;
       *) skill_failed "Claude Code" "$retry" ;;
     esac
@@ -232,12 +233,8 @@ codex_set_url() {
 }
 
 skill_codex() {
-  if [ -z "$PLUGIN_URL" ]; then
-    skill_line "Codex" "plugin not installed: it needs your server's address. Run this installer again with CASEFILE_URL=https://<your host>/mcp"
-    return 0
-  fi
   retry="codex plugin marketplace add $SKILL_SOURCE --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills && codex plugin add casefile@casefile"
-  cleanup_codex_entries
+  [ "$DEFAULT_URL" = 1 ] || cleanup_codex_entries
   if skill_run codex plugin marketplace add "$SKILL_SOURCE" --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills &&
     skill_run codex plugin marketplace upgrade casefile &&
     skill_run codex plugin add casefile@casefile; then
@@ -247,13 +244,13 @@ skill_codex() {
       skill_failed "Codex" "$retry"
       return 0
     fi
-    LOGIN_CODEX=1
+    [ "$DEFAULT_URL" = 1 ] || LOGIN_CODEX=1
     # Адрес плагина у Codex зашит: другой задаёт одноимённый сервер из config.toml, он
     # вытесняет плагинный (TRK-451#13). Токена в нём нет — вход OAuth. Строка пишется сюда
     # же, куда её пишет `codex mcp add`, но без него: тот сразу запускает вход и без
     # терминала возвращает ошибку, хотя запись уже есть.
     if [ "$(norm_url "$PLUGIN_URL")" = "$(norm_url "$CODEX_PLUGIN_URL")" ]; then
-      skill_line "Codex" "installed $found, connected to $PLUGIN_URL"
+      skill_line "Codex" "installed $found, connected to $PLUGIN_URL$DEFAULT_NOTE"
     elif codex_set_url; then
       skill_line "Codex" "installed $found, connected to $PLUGIN_URL (an entry without a token in config.toml)"
     else
@@ -348,10 +345,14 @@ main() {
   if [ "$SKILL_ONLY" = 1 ]; then
     # Машина агента, которая только подключается к Casefile на сервере: ни Docker, ни
     # каталога установки, ни токена (TRK-401#18). Адрес сервера — `CASEFILE_URL`; с ним
-    # ставится плагин (скил и коннектор) и ведётся вход OAuth, без него — только скилы,
-    # которым адрес не нужен, и подсказка, как его задать (TRK-452).
+    # ставится плагин (скил и коннектор) и ведётся вход OAuth, без него — тот же плагин с
+    # адресом по умолчанию ради скила, без входа, и подсказка, как задать адрес (TRK-480).
     PLUGIN_URL=${CASEFILE_URL:-}
-    if [ -n "$PLUGIN_URL" ]; then
+    if [ -z "$PLUGIN_URL" ]; then
+      PLUGIN_URL=$CODEX_PLUGIN_URL
+      DEFAULT_URL=1
+      DEFAULT_NOTE=" (default address: your server's goes in CASEFILE_URL)"
+    else
       case "$PLUGIN_URL" in
         https://?*) ;;
         http://localhost[:/]* | http://127.0.0.1[:/]* | http://\[::1\][:/]*) ;;
@@ -359,8 +360,9 @@ main() {
       esac
     fi
     install_skills || true
-    if [ -z "$PLUGIN_URL" ]; then
-      echo "To connect Claude Code and Codex, run this again with the address of your server:"
+    if [ "$DEFAULT_URL" = 1 ]; then
+      echo "The plugin carries the skill and points at the default address $PLUGIN_URL; no sign-in was started."
+      echo "To connect Claude Code and Codex to your server, run this again with its address:"
       echo "  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh"
       echo "(Windows PowerShell: \$env:CASEFILE_SKILL_ONLY=1; \$env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)"
     fi

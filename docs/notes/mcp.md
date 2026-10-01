@@ -1012,3 +1012,14 @@ Hermes и прочим. Сторож между сессиями входом х
 агента» (`ui/src/features/connect-agent`) приводит к тому же TRK-479.
 **Где:** `README.md`, `docs/agent-install.md`, `skills/casefile/SKILL.md`, `docs/CONCEPT.md` (5.3),
 `app/mcp/instructions.md` (указатель на скил: «covers sign-in, …»), `tests/test_installers.py`.
+
+## Строка только скила в документах — без адреса, адрес — для чужого сервера
+
+**Что:** README, шаг 4 гайда и скил дают `CASEFILE_SKILL_ONLY=1 sh` (PowerShell —
+`$env:CASEFILE_SKILL_ONLY=1; irm … | iex`) без `CASEFILE_URL`; с адресом строка остаётся в
+разделах «чужая установка» и в экране «Подключить агента» (там адрес — этой установки).
+**Почему важно:** TRK-454#13 требовал адрес, потому что установщик без него не ставил плагин
+(TRK-452#18); TRK-480 это снял, и обязательный адрес в строке только скила стал ложным.
+**Как правильно:** `tests/test_installers.py` (`SKILL_CHECKS`) держит в шаге 4 гайда голую
+строку; `ui/.../snippets.test.ts` сверяет строку экрана с примером чужого адреса из гайда.
+**Где:** `README.md`, `docs/agent-install.md`, `skills/casefile/SKILL.md`, `tests/test_installers.py`.

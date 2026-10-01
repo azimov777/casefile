@@ -900,9 +900,26 @@ Codex, отличный от `127.0.0.1:8100`, — две строки в config
 `url`) без токена, а не `codex mcp add`. Вход (`claude mcp login plugin:casefile:casefile`,
 `codex mcp login casefile`) — только если открывается терминал из `CASEFILE_TTY` (по
 умолчанию `/dev/tty`); иначе печатаются команды. `CASEFILE_SKILL_ONLY=1` без `CASEFILE_URL`
-плагин не ставит. Вне localhost адрес только `https`: по http служба не отдаёт OAuth.
+ставит плагин с адресом по умолчанию (TRK-480, см. заметку в конце файла). Вне localhost адрес только `https`: по http служба не отдаёт OAuth.
 **Где:** `install.sh` (`cleanup_*_entries`, `codex_set_url`, `skill_claude`, `skill_codex`,
 `sign_in`), `install.ps1` (то же), `scripts/check-skill-install.sh` (фазы A, A0, A1, F, F2),
 `tests/test_installers.py`. `install.ps1` целиком не исполнялся: PowerShell в образе под qemu
 падает (PAL_SEHException, NullReferenceException в движке уже на прежнем скрипте), парсер
 ошибок не нашёл, шаги Claude Code, Codex и входа прогнаны по отдельности.
+
+## `CASEFILE_SKILL_ONLY=1` без `CASEFILE_URL` ставит плагин с адресом по умолчанию, но не входит и не чистит записи
+
+**Что:** без `CASEFILE_URL` установщики берут `127.0.0.1:8100/mcp` (`CODEX_PLUGIN_URL`,
+`DEFAULT_URL=1`): Claude Code получает `--config casefile_url=<он>`, Codex — плагин с зашитым
+тем же адресом, строки в config.toml не пишутся. В строке итога — пометка «default address».
+**Почему важно:** решение TRK-452#18 оставляло машину агента без скила, потому что скил Claude
+Code и Codex приходит только плагином. Владелец выбрал плагин с адресом по умолчанию
+(TRK-452#27): скил работает сразу, коннектор — когда адрес задан. Но сервера по этому адресу
+может не быть: вход OAuth без адреса не запускается (ни команды, ни терминал), а ручные записи
+`casefile`/`tracker` не трогаются, потому что адрес «этой установки» неизвестен.
+**Как правильно:** с адресом — прежнее поведение целиком (чистка, вход). Без него — плагин, строка
+«connected to … (default address …)», подсказка с адресом сервера. Строка только скила в
+документах — без адреса (`CASEFILE_SKILL_ONLY=1 sh`), с адресом — для чужого сервера.
+**Где:** `install.sh` и `install.ps1` (`DEFAULT_URL`/`$script:DefaultUrl`, `skill_claude`,
+`skill_codex`, ветка `SKILL_ONLY` в `main`), `scripts/check-skill-install.sh` (A0),
+`tests/test_installers.py`. `install.ps1` не исполнялся (нет pwsh): правка по паритету с `install.sh`.

@@ -147,21 +147,21 @@ harness. A running, up-to-date service says nothing about the skill in your harn
 
 If your harness has it, go on to step 5. If it is missing, one line installs it into every
 harness on the machine without touching the running service — no Docker, no installation
-directory, no token. Put the MCP address of step 3 into `CASEFILE_URL` (the example below
-is the default address of an installation on this machine): Claude Code and Codex get the
-skill in the plugin that also carries the connection, and without an address the line
-leaves them out.
+directory, no token. Claude Code and Codex get the skill in the plugin that also carries
+the connection: without an address it points at the default `http://127.0.0.1:8100/mcp`
+(the skill works at once, no sign-in is started); for a server that is not on this machine
+add its address in `CASEFILE_URL` (step 3 names it; `https` outside `localhost`).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=http://127.0.0.1:8100/mcp sh
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
 ```
 
 ```powershell
-$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='http://127.0.0.1:8100/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
-It prints one line per harness, as in step 2, and signs Claude Code and Codex in as in
-step 3. The commands below do the same for one harness at a time.
+It prints one line per harness, as in step 2. With an address it signs Claude Code and
+Codex in as in step 3; without one it starts no sign-in. The commands below do the same for one harness at a time.
 
 ### Install it by hand
 

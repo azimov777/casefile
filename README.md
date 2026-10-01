@@ -91,11 +91,11 @@ skill teaches it how to use them. The installer puts it into Claude Code, Codex,
 and other agents it finds on the machine, and prints one line per harness. An
 installation made before v0.8.0 has no skill and no plugin, and the hourly self-update
 does not add them: it updates only the service. Run the install line again, or install
-just the plugin and the skill without touching the service, with the MCP address the
-installer printed:
+just the plugin and the skill without touching the service (add `CASEFILE_URL=<address>`
+for a server that is not on this machine):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=http://127.0.0.1:8100/mcp sh
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
 ```
 
 How to check whether an agent has the skill, and the commands for each harness, are in

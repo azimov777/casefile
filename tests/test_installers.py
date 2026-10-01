@@ -347,15 +347,15 @@ def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
 
 #: Проверка «стоит ли скил» по харнессам (TRK-431): те же признаки, по которым установщик
 #: печатает `installed`, и строка только скила для установки, которую обновлятор уже
-#: обновил, — ей скил не достаётся никогда. Строка — с адресом в `CASEFILE_URL`: без него
-#: плагин Claude Code и Codex не ставится (TRK-452#18), и скил в них не встал бы (TRK-454).
+#: обновил, — ей скил не достаётся никогда. Строка — без адреса: плагин с адресом по
+#: умолчанию несёт скил в Claude Code и Codex сразу (TRK-480), адрес нужен чужому серверу.
 SKILL_CHECKS = (
     "claude plugin list",
     "codex plugin list",
     "hermes skills list",
     "~/.agents/skills/casefile/SKILL.md",
-    "install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=",
-    "$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL=",
+    "install.sh | CASEFILE_SKILL_ONLY=1 sh",
+    "$env:CASEFILE_SKILL_ONLY=1; irm ",
 )
 
 
@@ -621,18 +621,30 @@ def test_skill_only_with_the_local_address_keeps_codex_on_the_plugin_address(
     assert LOCAL_PLUGIN_INSTALL in calls
 
 
-def test_skill_only_without_an_address_installs_no_plugin_and_says_how_to_set_it(
+def test_skill_only_without_an_address_installs_the_plugin_with_the_default_one(
     tmp_path: Path,
 ) -> None:
-    """Без `CASEFILE_URL` коннектору плагина нечего указать: плагин не ставится, скилы
-    Hermes и прочих агентов — да, и печатается, как задать адрес."""
+    """Без `CASEFILE_URL` плагин Claude Code и Codex ставится с адресом по умолчанию (скил
+    работает сразу, TRK-480): вход не ведётся, ручные записи не чистятся, config.toml Codex не
+    пишется, печатается, как задать адрес сервера."""
     env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX, npx=FAKE_NPX)
     done, calls = _install(tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1", **env})
 
     assert done.returncode == 0, done.stderr
-    assert not [c for c in calls if c.startswith(("claude ", "codex "))], calls
-    assert re.search(r"Claude Code +plugin not installed: it needs your server", done.stdout)
-    assert re.search(r"Codex +plugin not installed", done.stdout)
+    assert not [c for c in calls if c.startswith(("compose", "pull", "info", "create"))]
+    assert (
+        "claude plugin install casefile@casefile --scope user "
+        "--config casefile_url=http://127.0.0.1:8100/mcp"
+    ) in calls
+    assert "codex plugin add casefile@casefile" in calls
+    touched = [c for c in calls if " login " in c or " mcp get " in c or " mcp remove " in c]
+    assert not touched, touched
+    assert not (tmp_path / ".codex" / "config.toml").exists()
+    default = r"connected to http://127\.0\.0\.1:8100/mcp"
+    assert re.search(rf"Claude Code +installed .*{default}", done.stdout)
+    assert re.search(r"Codex +installed .*default address", done.stdout)
+    assert "plugin not installed" not in done.stdout
+    assert "no sign-in was started" in done.stdout
     assert "CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh" in done.stdout
     assert re.search(r"Other agents +installed", done.stdout)
     assert "Signing the agents in" not in done.stdout
@@ -812,7 +824,7 @@ PLUGIN_STEPS = (
     "CASEFILE_URL",
     "CASEFILE_LOGIN",
     "CASEFILE_SKILL_ONLY",
-    "plugin not installed: it needs your server's address",
+    "no sign-in was started",
     "removed the manual MCP entry",
     "left the MCP entry",
     "This needs a terminal",
