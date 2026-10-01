@@ -11,8 +11,13 @@ Claude Code без новой `version` отвечает «already at latest» �
 """
 
 import json
+import shutil
+import subprocess
 import tomllib
+import zipfile
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = ROOT / ".claude-plugin"
@@ -172,3 +177,32 @@ def test_codex_manifest_matches_the_claude_plugin_and_has_listing_fields() -> No
     for field in ("logo", "composerIcon"):
         icon = ROOT / interface[field]
         assert icon.is_file() and icon.stat().st_size <= 5 * 1024 * 1024
+
+
+def test_codex_manifest_carries_listing_pages_on_https() -> None:
+    interface = _codex()["interface"]
+    for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
+        assert interface[field].startswith("https://azimov777.github.io/casefile/"), field
+
+
+@pytest.mark.skipif(shutil.which("zip") is None, reason="нужен zip")
+def test_openai_zip_is_skills_only_without_the_connector(tmp_path: Path) -> None:
+    """ZIP для каталога OpenAI (TRK-503): без `mcpServers` и `mcp.json`, репозиторий с ними."""
+    result = subprocess.run(
+        [str(ROOT / "scripts" / "build-openai-plugin.sh"), str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    with zipfile.ZipFile(result.stdout.strip()) as archive:
+        names = archive.namelist()
+        manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
+    assert not [n for n in names if n.endswith("mcp.json")]
+    assert "skills/casefile/SKILL.md" in names
+    assert "mcpServers" not in manifest
+    assert "mcp" not in manifest["keywords"]
+    assert "connector" not in manifest["description"].lower()
+    assert "connector" not in manifest["interface"]["longDescription"].lower()
+    for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
+        assert manifest["interface"][field] == _codex()["interface"][field]
+    assert "mcpServers" in _codex()

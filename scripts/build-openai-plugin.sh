@@ -2,7 +2,9 @@
 # Собирает ZIP плагина casefile (только скил) для загрузки на platform.openai.com/plugins (TRK-461).
 #
 # В архив идёт ровно то, что плагину нужно: `.codex-plugin/` (манифест и иконка), `skills/`
-# и `LICENSE`. `.claude-plugin/`, бэкенд и интерфейс в него не попадают. Подачу команда не
+# и `LICENSE`. Манифест в архиве без `mcpServers` и без `mcp.json` рядом: заявка идёт как
+# плагин только со скилом, без MCP-ревью (TRK-503); в репозитории манифест остаётся с
+# коннектором, правится только копия в архиве. Описания в копии не говорят про коннектор. `.claude-plugin/`, бэкенд и интерфейс в него не попадают. Подачу команда не
 # делает: архив кладётся в каталог, названный первым аргументом (по умолчанию `dist/`),
 # а загрузка — отдельная задача по слову владельца.
 #
@@ -40,7 +42,29 @@ done
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/.codex-plugin" "$out_dir"
-cp "$root"/.codex-plugin/plugin.json "$root"/.codex-plugin/*.svg "$stage/.codex-plugin/"
+cp "$root"/.codex-plugin/*.svg "$stage/.codex-plugin/"
+python3 - "$manifest" "$stage/.codex-plugin/plugin.json" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1], encoding="utf-8"))
+m.pop("mcpServers", None)
+m["keywords"] = [k for k in m.get("keywords", []) if k != "mcp"]
+m["description"] = (
+    "Casefile for agents: the skill; connect to an installation, recover from 401, "
+    "keep the case and watch the journal."
+)
+i = m["interface"]
+text = i["longDescription"]
+cut = text.index(" The connector points at")
+i["longDescription"] = (
+    text[:cut]
+    .replace("This plugin carries the Casefile skill and the Casefile MCP connector.", "This plugin carries the Casefile skill.")
+    .replace("The rules for working with tasks come from the Casefile MCP server, not from this plugin.", "The rules for working with tasks come from the Casefile MCP server of the installation, not from this plugin.")
+)
+for k in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
+    if not i.get(k, "").startswith("https://"):
+        sys.exit(f"в interface нет https-адреса {k}")
+json.dump(m, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
 cp -R "$root/skills" "$stage/skills"
 cp "$root/LICENSE" "$stage/LICENSE"
 

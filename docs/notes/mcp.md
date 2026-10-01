@@ -813,7 +813,9 @@ Codex ищет манифест по порядку `.codex-plugin`, `.claude-pl
 установке из нашего маркетплейса (`marketplace.json` остаётся в `.claude-plugin/`) читает уже его.
 Формат Agent Plugin (корневой `plugin.json` с `$schema`) не взят: Codex читает такой файл раньше
 любого другого, а `interface` в нём уезжает под `extensions.com.openai`. ZIP для каталога OpenAI
-собирает `scripts/build-openai-plugin.sh`.
+собирает `scripts/build-openai-plugin.sh`: в архиве манифест без `mcpServers`, без `mcp.json` и без
+слов о коннекторе (плагин только со скилом проходит без MCP-ревью, TRK-503), а в репозитории
+манифест с коннектором остаётся; в `interface` стоят адреса страниц листинга на azimov777.github.io/casefile.
 **Почему важно:** в манифесте Codex свои `version` и `name`; разойдись они с плагином Claude Code,
 Codex ставил бы скил под другой версией. Установочные строки со `--sparse .claude-plugin --sparse
 skills` этот каталог не забирают, и Codex продолжает читать `.claude-plugin/plugin.json` — обе
