@@ -1,6 +1,6 @@
 {
   "name": "casefile",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Casefile for agents: the skill for working a task through the Casefile MCP server (take it, keep its case, ask the human, hand it off, close it with verdicts) and the MCP connector, signed in through OAuth with no token in the plugin.",
   "author": {
     "name": "azimov777",
