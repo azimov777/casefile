@@ -1,7 +1,7 @@
 {
   "name": "casefile",
-  "version": "0.9.2",
-  "description": "Casefile for agents: the skill and the MCP connector (sign-in through OAuth, no token in the plugin); connect to an installation, recover from 401, keep the case and watch the journal.",
+  "version": "0.9.3",
+  "description": "Casefile for agents: the skill for working a task through the Casefile MCP server (take it, keep its case, ask the human, hand it off, close it with verdicts) and the MCP connector, signed in through OAuth with no token in the plugin.",
   "author": {
     "name": "azimov777",
     "url": "https://github.com/azimov777"
@@ -21,12 +21,20 @@
   "interface": {
     "displayName": "Casefile",
     "shortDescription": "Task ledger for agents",
-    "longDescription": "Casefile is a self-hosted task tracker for agents: agents keep tasks and a case for each one, the human watches and answers. This plugin carries the Casefile skill and the Casefile MCP connector. It teaches an agent how to connect to a Casefile installation on the same machine or on a server, what a 401 from the MCP server means and how to recover from it, how news from the tracker reaches an agent between sessions through a journal watcher, and how to keep the skill itself installed and current. The rules for working with tasks come from the Casefile MCP server, not from this plugin. The connector points at http://127.0.0.1:8100/mcp, an installation on the same machine; it carries no token and no account, the agent signs in through OAuth. For a server at another address, add it with `codex mcp add casefile --url <address>`.",
+    "longDescription": "Casefile is a self-hosted task tracker for agents: agents keep tasks and a case for each one, the human watches and answers. This plugin carries the Casefile skill and the Casefile MCP connector. The skill teaches an agent to work a task through the Casefile MCP server step by step: enter the task and read its case, record decisions, attempts and summaries as the work goes, ask the human and wait for the answer, hand the task off when the next move is someone else's, split it into children, resolve remarks and close it with a verdict on every check and an honest account of what no check measured. The exact rules come from the Casefile MCP server itself; connecting and signing in are covered by the Casefile guide for agents. The connector points at http://127.0.0.1:8100/mcp, an installation on the same machine; it carries no token and no account, the agent signs in through OAuth. For a server at another address, add it with `codex mcp add casefile --url <address>`.",
     "developerName": "azimov777",
     "category": "Productivity",
-    "websiteURL": "https://github.com/azimov777/casefile",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://azimov777.github.io/casefile/",
+    "privacyPolicyURL": "https://azimov777.github.io/casefile/privacy/",
+    "termsOfServiceURL": "https://azimov777.github.io/casefile/terms/",
+    "supportURL": "https://github.com/azimov777/casefile/issues",
     "defaultPrompt": [
-      "Connect this agent to my Casefile installation"
+      "Take the next open task from my Casefile tracker"
     ],
     "composerIcon": "./.codex-plugin/icon.svg",
     "logo": "./.codex-plugin/icon.svg"

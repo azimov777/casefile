@@ -1,0 +1,23 @@
+{
+  "name": "casefile",
+  "displayName": "Casefile",
+  "version": "0.9.3",
+  "description": "Casefile for agents: the skill for working a task through the Casefile MCP server (take it, keep its case, ask the human, hand it off, close it with verdicts) and the MCP connector, signed in through OAuth with no token in the plugin.",
+  "author": {
+    "name": "azimov777",
+    "url": "https://github.com/azimov777"
+  },
+  "homepage": "https://github.com/azimov777/casefile",
+  "repository": "https://github.com/azimov777/casefile",
+  "license": "MIT",
+  "keywords": [
+    "casefile",
+    "tasks",
+    "tracker",
+    "agents",
+    "mcp"
+  ],
+  "logo": ".cursor-plugin/icon.svg",
+  "skills": "./skills/",
+  "mcpServers": "./.cursor-plugin/mcp.json"
+}

@@ -1,14 +1,15 @@
 {
   "name": "casefile",
   "displayName": "Casefile",
-  "description": "Casefile for agents: the skill and the MCP connector (sign-in through OAuth, no token in the plugin); connect to an installation, recover from 401, keep the case and watch the journal.",
-  "version": "0.9.2",
+  "description": "Casefile for agents: the skill for working a task through the Casefile MCP server (take it, keep its case, ask the human, hand it off, close it with verdicts) and the MCP connector, signed in through OAuth with no token in the plugin.",
+  "version": "0.9.3",
   "author": {
     "name": "azimov777",
     "url": "https://github.com/azimov777"
   },
   "homepage": "https://github.com/azimov777/casefile",
   "license": "MIT",
+  "privacyPolicyUrl": "https://azimov777.github.io/casefile/privacy/",
   "repository": "https://github.com/azimov777/casefile",
   "skills": "./skills/",
   "mcpServers": "./.claude-plugin/mcp.json",
