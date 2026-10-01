@@ -44,7 +44,7 @@ import json
 import uuid
 from datetime import timedelta
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from mcp.server.auth.handlers.metadata import MetadataHandler
 from mcp.server.auth.provider import (
@@ -78,6 +78,7 @@ from app.services.client_documents import ClientDocuments
 __all__ = [
     "SCOPE",
     "CasefileAuthorization",
+    "IssuerOnAuthorize",
     "LoopbackClient",
     "PresentedToken",
     "RefusalReasons",
@@ -443,6 +444,44 @@ async def _send_refusal(send: Send, start: Message, holder: dict[str, str]) -> N
     await send({"type": "http.response.body", "body": body})
 
 
+class IssuerOnAuthorize:
+    """Внешний слой: добавляет `iss` (RFC 9207) в каждый редирект `/authorize` к клиенту.
+
+    Редирект с кодом строит провайдер, с ошибкой — обработчик SDK (`access_denied`,
+    `invalid_scope`), и `iss` там нет; форкать SDK нельзя, поэтому `iss` дописывается в
+    `Location` по дороге. Редирект на страницу входа (без `code` и `error`) не трогается:
+    браузер вернётся к клиенту уже со страницы, и `iss` ставит она сама
+    (`app/mcp/consent.py`). `iss` — тот же issuer, что в метаданных сервера авторизации.
+    """
+
+    def __init__(self, app: ASGIApp, issuer: str) -> None:
+        self.app = app
+        self._issuer = issuer
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"] != _AUTHORIZE_PATH:
+            await self.app(scope, receive, send)
+            return
+
+        async def forward(message: Message) -> None:
+            if message["type"] == "http.response.start" and 300 <= message["status"] < 400:
+                headers = [
+                    (name, self._with_issuer(value) if name.lower() == b"location" else value)
+                    for name, value in message.get("headers", [])
+                ]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, forward)
+
+    def _with_issuer(self, location: bytes) -> bytes:
+        url = location.decode()
+        query = parse_qs(urlsplit(url).query)
+        if "iss" in query or not ({"code", "error"} & query.keys()):
+            return location
+        return construct_redirect_uri(url, iss=self._issuer).encode()
+
+
 def advertise_client_documents(application: Starlette, settings: Settings) -> None:
     """Подменяет метаданные сервера авторизации SDK на объявляющие CIMD и метод `none`.
 
@@ -461,9 +500,13 @@ def advertise_client_documents(application: Starlette, settings: Settings) -> No
         supports_identity_assertion=auth.identity_assertion_enabled,
     )
     methods = ["none", *(metadata.token_endpoint_auth_methods_supported or [])]
+    issuer = str(metadata.issuer)
     metadata = metadata.model_copy(
         update={
             "client_id_metadata_document_supported": True,
+            # RFC 9207: каждый ответ `/authorize` несёт `iss` (слой `IssuerOnAuthorize`
+            # ниже и страница согласия), поэтому флаг объявляется без оговорок.
+            "authorization_response_iss_parameter_supported": True,
             "token_endpoint_auth_methods_supported": list(dict.fromkeys(methods)),
         }
     )
@@ -471,9 +514,11 @@ def advertise_client_documents(application: Starlette, settings: Settings) -> No
     for route in application.router.routes:
         if isinstance(route, Route) and route.path == _AS_METADATA_PATH:
             route.app = endpoint
+    application.add_middleware(IssuerOnAuthorize, issuer=issuer)
 
 
 _AS_METADATA_PATH = "/.well-known/oauth-authorization-server"
+_AUTHORIZE_PATH = "/authorize"
 
 
 def allowed_hosts(settings: Settings) -> TransportSecuritySettings | None:

@@ -1012,3 +1012,21 @@ Hermes и прочим. Сторож между сессиями входом х
 агента» (`ui/src/features/connect-agent`) приводит к тому же TRK-479.
 **Где:** `README.md`, `docs/agent-install.md`, `skills/casefile/SKILL.md`, `docs/CONCEPT.md` (5.3),
 `app/mcp/instructions.md` (указатель на скил: «covers sign-in, …»), `tests/test_installers.py`.
+
+## OAuth: `iss` в каждом ответе `/authorize` и флаг в метаданных (RFC 9207)
+
+**Что:** метаданные сервера авторизации несут `authorization_response_iss_parameter_supported: true`,
+а каждый редирект `/authorize` к клиенту — `iss`, равный `issuer` метаданных: успешный (код),
+ошибочный из провайдера (`access_denied`), ошибочный из SDK (`invalid_scope`) и возврат со
+страницы согласия. Ошибки строит обработчик SDK без `iss`, а SDK не форкается, поэтому `iss`
+дописывает внешний слой `IssuerOnAuthorize` в `Location` ответов `/authorize` с `code` или
+`error`; страница согласия ставит его сама (`ConsentPage._back`). Переход `/authorize` → страница
+входа слой не трогает: клиент получает ответ только после возврата.
+**Почему важно:** клиент по `iss` отличает ответ своего сервера авторизации (защита от mix-up);
+OpenAI требует флаг и `iss` в каждом ответе, без них ChatGPT уходит на запасной redirect.
+Флаг без `iss` хотя бы в одном ответе был бы ложью метаданных.
+**Как правильно:** новый путь, строящий редирект к клиенту вне `/authorize` (как страница
+согласия), обязан сам добавить `iss`; `iss` берётся из метаданных (`metadata.issuer`), а не
+собирается заново: адрес из настроек pydantic может дописать слэш.
+**Где:** `app/mcp/oauth.py` (`IssuerOnAuthorize`, `advertise_client_documents`),
+`app/mcp/consent.py` (`_back`), `tests/test_mcp_oauth.py`, `tests/test_mcp_oauth_consent.py`.
