@@ -141,6 +141,7 @@ class ConsentPage:
         self._login = login
         issuer = urlsplit(issuer_url)
         self._origin = f"{issuer.scheme}://{issuer.netloc}"
+        self._issuer = issuer_url  # `iss` ответа (RFC 9207): тот же issuer, что в метаданных
         self._host = issuer.netloc.lower()
         self._secure = issuer.scheme == "https"
 
@@ -324,13 +325,14 @@ class ConsentPage:
         error: str | None = None,
         description: str | None = None,
     ) -> Response:
-        """Возврат браузера клиенту: код или ошибка, всегда с `state` запроса."""
+        """Возврат браузера клиенту: код или ошибка, всегда с `state` запроса и `iss` (RFC 9207)."""
         location = construct_redirect_uri(
             checked.redirect_uri,
             code=code,
             error=error,
             error_description=description,
             state=checked.request.state,
+            iss=self._issuer,
         )
         return self._guarded(RedirectResponse(location, 303))
 

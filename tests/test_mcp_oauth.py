@@ -344,6 +344,50 @@ async def test_a_client_asking_for_a_secret_is_registered_public(
     assert response.status_code == 200, response.text
 
 
+async def test_metadata_and_authorize_answers_carry_the_issuer(
+    mcp_sessions: SessionFactory,
+) -> None:
+    """RFC 9207: флаг в метаданных и `iss` в успешном и в ошибочном ответе (TRK-483)."""
+    async with _http(_server(mcp_sessions)) as client:
+        metadata = (await client.get("/.well-known/oauth-authorization-server")).json()
+        registered = await _register(client)
+        _, challenge = _pkce()
+        success = _query(await _authorize(client, registered["client_id"], challenge))
+        # Ошибку строит обработчик SDK, а не провайдер: неизвестная область.
+        bad_scope = await client.get(
+            "/authorize",
+            params={
+                "response_type": "code",
+                "client_id": registered["client_id"],
+                "redirect_uri": REDIRECT,
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "scope": "nonsense",
+                "state": "st-2",
+            },
+        )
+
+    assert metadata["authorization_response_iss_parameter_supported"] is True
+    assert metadata["issuer"]
+    assert "code" in success and success["iss"] == metadata["issuer"]
+    refused = _query(bad_scope)
+    assert refused["error"] == "invalid_scope"
+    assert refused["state"] == "st-2"
+    assert refused["iss"] == metadata["issuer"]
+
+
+async def test_a_refused_authorize_carries_the_issuer(mcp_sessions: SessionFactory) -> None:
+    """`access_denied` провайдера (согласия нет) тоже несёт `iss`."""
+    async with _http(_server(mcp_sessions, consent=False)) as client:
+        metadata = (await client.get("/.well-known/oauth-authorization-server")).json()
+        registered = await _register(client)
+        _, challenge = _pkce()
+        answer = _query(await _authorize(client, registered["client_id"], challenge))
+
+    assert answer["error"] == "access_denied"
+    assert answer["iss"] == metadata["issuer"]
+
+
 async def test_without_local_consent_authorize_is_denied(mcp_sessions: SessionFactory) -> None:
     """Порты в сети без режима входа: согласия без страницы нет, `access_denied`."""
     async with _http(_server(mcp_sessions, consent=False)) as client:

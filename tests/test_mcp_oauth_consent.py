@@ -209,6 +209,7 @@ async def _to_page(client: AsyncClient) -> tuple[str, str, Response]:
     assert authorize.status_code == 302, authorize.text
     location = authorize.headers["location"]
     assert location.startswith(f"{PUBLIC}/oauth/consent?"), location
+    assert "iss=" not in location  # `iss` ставит страница при возврате, не переход на неё
     page = await client.get(location)
     return registered["client_id"], verifier, page
 
@@ -290,6 +291,9 @@ async def test_network_sign_in_goes_through_the_page_and_the_person_issues_the_c
         assert allowed.status_code == 303, allowed.text
         answer = _query_of(allowed)
         assert answer["state"] == "st-1"
+        # RFC 9207: ответ со страницы согласия несёт `iss` — issuer метаданных (TRK-483).
+        metadata = (await client.get("/.well-known/oauth-authorization-server")).json()
+        assert answer["iss"] == metadata["issuer"]
         response = await _exchange(client, client_id, answer["code"], verifier)
         assert response.status_code == 200, response.text
         issued = response.json()
@@ -361,6 +365,7 @@ async def test_the_page_refuses_forged_forms_foreign_hosts_and_unknown_clients(
             params=_page_fields(page.text) | {"redirect_uri": "https://evil.example/cb"},
         )
         denied = await client.post("/oauth/consent", data=fields | {"action": "deny"})
+        metadata = (await client.get("/.well-known/oauth-authorization-server")).json()
         # Эндпоинт MCP в сети тоже отвечает только на своём узле (allowed hosts).
         mcp_foreign_host = await client.post(
             "/mcp",
@@ -378,6 +383,7 @@ async def test_the_page_refuses_forged_forms_foreign_hosts_and_unknown_clients(
     assert "location" not in foreign_redirect.headers
     assert SESSION_COOKIE not in client.cookies
     assert _query_of(denied)["error"] == "access_denied"
+    assert _query_of(denied)["iss"] == metadata["issuer"]
 
 
 async def test_network_sign_in_is_not_served_over_http_outside_loopback(
