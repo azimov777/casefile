@@ -14,6 +14,7 @@
 самой установки, а не собирают его из порта (TRK-71): см. `MCP_URL_PROBE` ниже.
 """
 
+import json
 import re
 import shutil
 import subprocess
@@ -350,10 +351,9 @@ SKILL_STEP = "Install the Casefile skill"
 #: Команды скила дословно: их печатают оба установщика, и они же стоят в шаге гайда
 #: (TRK-398#7). Разошлись хоть в одном флаге — агент по гайду и по выводу ставит разное.
 SKILL_COMMANDS = (
-    "claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills",
+    "claude plugin marketplace add azimov777/casefile#plugin",
     "claude plugin install casefile@casefile --scope user",
-    "codex plugin marketplace add azimov777/casefile --ref stable "
-    "--sparse .claude-plugin --sparse .codex-plugin --sparse skills",
+    "codex plugin marketplace add azimov777/casefile --ref plugin",
     "codex plugin add casefile@casefile",
     "hermes skills install azimov777/casefile/skills/casefile",
     "npx skills add azimov777/casefile#stable",
@@ -479,13 +479,23 @@ def test_the_guide_skill_step_reaches_the_shared_installation_and_verify() -> No
 
 #: Заглушки харнессов для `install.sh`: пишут вызовы в `$CALLS`; `claude` заводит
 #: `settings.json`, как это делает настоящий `marketplace add`, и отвечает на `plugin list`.
+#: Как настоящие (TRK-494), `add` отказывает, если маркетплейс уже объявлен с другим
+#: источником: у `claude` — объявление `stable` в settings.json, у `codex` — `$SCENE/codex-stable`.
 FAKE_CLAUDE = r"""#!/bin/sh
 echo "claude $*" >>"$CALLS"
 case "$*" in
   "plugin marketplace add"*)
     mkdir -p "$CLAUDE_CONFIG_DIR"
-    echo '{"extraKnownMarketplaces":{"casefile":{"source":{"source":"git","url":"u"}}}}' \
-      >"$CLAUDE_CONFIG_DIR/settings.json" ;;
+    if grep -q '"ref": *"stable"' "$CLAUDE_CONFIG_DIR/settings.json" 2>/dev/null; then
+      echo 'its network source differs from the one declared for it in settings' >&2
+      exit 1
+    fi
+    python3 -c 'import json, os, sys
+path = sys.argv[1]
+o = json.load(open(path)) if os.path.exists(path) else {}
+o.setdefault("extraKnownMarketplaces", {})["casefile"] = {
+    "source": {"source": "git", "url": "u", "ref": "plugin"}}
+json.dump(o, open(path, "w"), indent=2)' "$CLAUDE_CONFIG_DIR/settings.json" ;;
   "plugin install"*) [ -z "${FAIL_INSTALL:-}" ] || { echo "install refused" >&2; exit 1; } ;;
   "mcp get "*) [ -f "$SCENE/claude-$3" ] && cat "$SCENE/claude-$3" || exit 1 ;;
   "mcp login "*) exit "$(cat "$SCENE/login-claude" 2>/dev/null || echo 0)" ;;
@@ -496,6 +506,14 @@ esac
 """
 FAKE_CODEX = r"""#!/bin/sh
 echo "codex $*" >>"$CALLS"
+case "$*" in
+  "plugin marketplace add"*)
+    if [ -f "$SCENE/codex-stable" ]; then
+      echo "Error: marketplace 'casefile' is already added from a different source" >&2
+      exit 1
+    fi ;;
+  "plugin marketplace remove casefile") rm -f "$SCENE/codex-stable" ;;
+esac
 [ "$*" != "plugin list" ] ||
   printf 'PLUGIN  STATUS  VERSION  PATH\ncasefile@casefile  installed, enabled  0.7.1  /x\n'
 case "$*" in
@@ -595,16 +613,14 @@ def test_the_skill_step_installs_updates_and_reports_each_harness_found(tmp_path
     assert done.returncode == 0, done.stderr
     claude = [c for c in calls if c.startswith("claude ") and "mcp get" not in c]
     assert claude == [
-        "claude plugin marketplace add example/casefile#stable --sparse .claude-plugin skills",
+        "claude plugin marketplace add example/casefile#plugin",
         "claude plugin marketplace update casefile",
         f"claude plugin install casefile@casefile --scope user --config casefile_url={SERVER}",
         "claude plugin update casefile@casefile",
         "claude plugin list",
     ]
-    assert (
-        "codex plugin marketplace add example/casefile --ref stable "
-        "--sparse .claude-plugin --sparse .codex-plugin --sparse skills"
-    ) in calls
+    assert "codex plugin marketplace add example/casefile --ref plugin" in calls
+    assert not [c for c in calls if "marketplace remove" in c], "новой установке снимать нечего"
     assert "npx -y skills add example/casefile#stable -g -y --agent cursor" in calls
     assert re.search(r"Claude Code +installed 0\.7\.1 \(updates itself\)", done.stdout)
     assert re.search(r"Codex +installed 0\.7\.1", done.stdout)
@@ -612,6 +628,81 @@ def test_the_skill_step_installs_updates_and_reports_each_harness_found(tmp_path
     assert re.search(r"Other agents +installed", done.stdout)
     settings = (tmp_path / "claude" / "settings.json").read_text()
     assert '"autoUpdate": true' in settings
+
+
+#: Объявление маркетплейса у установки, поставленной до TRK-494: `stable` со `--sparse`, с
+#: включённым плагином, его адресом и автообновлением.
+OLD_CLAUDE_SETTINGS = {
+    "enabledPlugins": {"casefile@casefile": True},
+    "extraKnownMarketplaces": {
+        "casefile": {
+            "source": {
+                "source": "git",
+                "url": "u",
+                "ref": "stable",
+                "sparsePaths": [".claude-plugin", "skills"],
+            },
+            "autoUpdate": True,
+        }
+    },
+    "pluginConfigs": {"casefile@casefile": {"options": {"casefile_url": SERVER}}},
+}
+
+
+def test_an_installation_from_stable_moves_to_the_plugin_branch_and_keeps_the_plugin(
+    tmp_path: Path,
+) -> None:
+    """Прежний источник `stable` снимается только после отказа `add` (TRK-494): у Claude
+    Code — объявлением в settings.json, а не `marketplace remove`, который удалил бы и плагин
+    с его настройками; у Codex — `marketplace remove`. Затем `add` повторяется на `plugin`."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    settings_path = tmp_path / "claude" / "settings.json"
+    settings_path.parent.mkdir()
+    settings_path.write_text(json.dumps(OLD_CLAUDE_SETTINGS), encoding="utf-8")
+    done, calls = _install(
+        tmp_path,
+        extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env},
+        **{"codex-stable": ""},
+    )
+
+    assert done.returncode == 0, done.stderr
+    claude_add = "claude plugin marketplace add example/casefile#plugin"
+    assert calls.count(claude_add) == 2, "add повторяется после снятия объявления"
+    assert not [c for c in calls if c.startswith("claude plugin marketplace remove")]
+    assert not [c for c in calls if c.startswith("claude plugin uninstall")]
+    settings = json.loads(settings_path.read_text())
+    entry = settings["extraKnownMarketplaces"]["casefile"]
+    assert entry["source"]["ref"] == "plugin" and "sparsePaths" not in entry["source"]
+    assert entry["autoUpdate"] is True, "автообновление ставится снова"
+    assert settings["enabledPlugins"] == OLD_CLAUDE_SETTINGS["enabledPlugins"]
+    assert settings["pluginConfigs"] == OLD_CLAUDE_SETTINGS["pluginConfigs"]
+
+    codex_add = "codex plugin marketplace add example/casefile --ref plugin"
+    assert calls.count(codex_add) == 2
+    first, remove = calls.index(codex_add), calls.index("codex plugin marketplace remove casefile")
+    assert first < remove < len(calls) - 1 - calls[::-1].index(codex_add)
+    assert remove < calls.index("codex plugin add casefile@casefile")
+    assert re.search(r"Claude Code +installed 0\.7\.1 \(updates itself\)", done.stdout)
+    assert re.search(r"Codex +installed 0\.7\.1", done.stdout)
+
+
+def test_another_add_failure_is_not_taken_for_an_old_source(tmp_path: Path) -> None:
+    """Источник снимается только при отказе «другой источник»: иная ошибка `add` — строка
+    с командой повтора, settings.json не трогается."""
+    add = '"plugin marketplace add"*)\n'
+    failing = FAKE_CLAUDE.replace(add, add + '    echo "network down" >&2; exit 1\n', 1)
+    env = _with_harnesses(tmp_path, claude=failing)
+    settings_path = tmp_path / "claude" / "settings.json"
+    settings_path.parent.mkdir()
+    settings_path.write_text(json.dumps(OLD_CLAUDE_SETTINGS), encoding="utf-8")
+    done, calls = _install(
+        tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env}
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert calls.count("claude plugin marketplace add example/casefile#plugin") == 1
+    assert json.loads(settings_path.read_text()) == OLD_CLAUDE_SETTINGS
+    assert re.search(r"Claude Code +failed - repeat by hand:", done.stdout)
 
 
 def test_skill_only_with_an_address_installs_the_plugin_without_docker_or_a_token(
@@ -853,7 +944,10 @@ def test_a_failed_skill_command_is_reported_with_a_retry_and_does_not_stop_the_i
 #: Дословные признаки шагов, которые обязаны быть в обоих установщиках.
 PLUGIN_STEPS = (
     "--config casefile_url=",
-    "--sparse .codex-plugin",
+    "--ref plugin",
+    "differs from the one declared",
+    "already added from a different source",
+    "plugin marketplace remove casefile",
     "mcp login plugin:casefile:casefile",
     "mcp login casefile",
     "CASEFILE_URL",

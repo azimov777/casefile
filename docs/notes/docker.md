@@ -834,7 +834,7 @@ Claude Code не трогается. `autoUpdate` ставит правка `set
 python3 по наличию), файл переписывается только при отсутствии ключа. Шаг проверяет хост
 `scripts/check-skill-install.sh`; `install.ps1` — только разбор парсером и чтение.
 **Где:** `install.sh`, функции `skill_claude`, `skill_codex`, `skill_others`,
-`claude_auto_update`; `install.ps1`, `Install-ClaudeSkill`; `scripts/check-skill-install.sh`.
+`claude_settings`; `install.ps1`, `Install-ClaudeSkill`; `scripts/check-skill-install.sh`.
 
 ## Ветку `stable` двигает запуск на push main, а не запуск тега; checkout полный (TRK-445)
 
@@ -873,8 +873,7 @@ checkout не видит прежней вершины `stable`.
 корневой коммит), пуш без `--force`; то же дерево, что у вершины, нового коммита не даёт.
 Скрипт падает на расхождении версии плагина и выпуска, на 512 файлах и больше и на файле
 не-картинки больше 256 КиБ. `skills/AGENTS.md` в ветку не идёт: это карта репозитория.
-Маркетплейс (`.claude-plugin/marketplace.json`, `source: ./`) и установщики остаются на
-`stable` со `--sparse`: на ветку `plugin` они не переводятся.
+С TRK-494 с неё же ставят маркетплейс Claude Code и Codex — запись ниже.
 **Где:** `.github/workflows/images.yml`, джоб `channel`; `scripts/build-plugin-branch.sh`;
 `tests/test_plugin_branch.py`. Команды проверены на локальном bare-репозитории: создание,
 второй выпуск поверх первого, то же дерево без коммита. Сам GitHub Actions не запускался.
@@ -923,3 +922,28 @@ Code и Codex приходит только плагином. Владелец �
 **Где:** `install.sh` и `install.ps1` (`DEFAULT_URL`/`$script:DefaultUrl`, `skill_claude`,
 `skill_codex`, ветка `SKILL_ONLY` в `main`), `scripts/check-skill-install.sh` (A0),
 `tests/test_installers.py`. `install.ps1` не исполнялся (нет pwsh): правка по паритету с `install.sh`.
+
+## Маркетплейс плагина ставится с ветки `plugin`: `--sparse` не отсекает файлы корня, прежняя установка переводится только после отказа `add` (TRK-494)
+
+**Что:** со `stable` харнессы уносили к себе файлы корня репозитория (`openapi.json` с примером
+`trk_`, `install.sh`, `uv.lock`): `--sparse` у Claude Code и Codex — режим cone, а он всегда
+выписывает файлы корня; `source: "./"` плагина копирует весь выписанный корень в cache. Ветка
+`plugin` несёт одни файлы плагина, установщики и документы ставят с неё (`#plugin`, `--ref
+plugin`), без `--sparse`. Установка со `stable` держит прежний источник: Claude Code отказывает в
+`add` («its network source differs from the one declared for it in settings»), Codex — «already
+added from a different source». Codex клонирует репозиторий целиком (все ветки, без shallow) и
+только потом выписывает ref, Claude Code — shallow одну ветку.
+**Почему важно:** `claude plugin marketplace remove` снимает и плагин, его настройки и «secrets» —
+переустановка ради источника потеряла бы адрес и, возможно, вход. Объявление в settings.json, снятое
+руками, такого не делает: следующий `add` пишет новый источник, и Claude Code сам говорит «Plugins
+already installed from it now update from the new source». У Codex `marketplace remove` оставляет
+`[plugins."casefile@casefile"] enabled = true`, `plugin add` переустанавливает cache. Каталог cache
+Claude Code той же версии со `stable` остаётся до следующей версии; потом Claude Code помечает его
+`.orphaned_at` и удаляет сам.
+**Как правильно:** источник снимать только по тексту отказа `add`, иначе ничего не трогать; после
+повторного `add` поставить `autoUpdate` снова — `add` пишет объявление без него. Проверять на стенде
+с двумя ветками: `stable` с файлами корня, `plugin` — без них; `file://` оба харнесса не берут, dumb
+HTTP Claude Code не берёт (нет shallow), нужен `git http-backend`.
+**Где:** `install.sh` (`claude_settings`, `claude_marketplace_add`, `codex_marketplace_add`),
+`install.ps1` (`Add-ClaudeMarketplace`, `Add-CodexMarketplace`), `scripts/check-skill-install.sh`
+(фаза M), `tests/test_installers.py`. `install.ps1` не исполнялся (нет pwsh): правка по паритету.

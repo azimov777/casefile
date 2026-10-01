@@ -63,20 +63,20 @@ describe('фрагменты подключения', () => {
   it('Claude Code: маркетплейс, плагин с адресом установки и вход OAuth', () => {
     const { claudePlugin } = connectionSnippets({ mcpUrl: ADDRESS, labelled: false });
     expect(claudePlugin.split('\n')).toEqual([
-      'claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills',
+      'claude plugin marketplace add azimov777/casefile#plugin',
       `claude plugin install casefile@casefile --scope user --config "casefile_url=${ADDRESS}"`,
       'claude mcp login plugin:casefile:casefile',
     ]);
   });
 
-  it('Codex: в команде маркетплейса есть `--sparse .codex-plugin`, вход — `codex mcp login casefile`', () => {
+  it('Codex: маркетплейс из ветки `plugin` без `--sparse`, вход — `codex mcp login casefile`', () => {
     const { codexPlugin } = connectionSnippets({ mcpUrl: ADDRESS, labelled: false });
     expect(codexPlugin.split('\n')).toEqual([
-      'codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills',
+      'codex plugin marketplace add azimov777/casefile --ref plugin',
       'codex plugin add casefile@casefile',
       'codex mcp login casefile',
     ]);
-    expect(codexPlugin).toContain('--sparse .codex-plugin');
+    expect(codexPlugin).not.toContain('--sparse');
   });
 
   it('строки адреса в `config.toml` Codex — только когда адрес не зашит в плагин', () => {
@@ -226,10 +226,9 @@ describe('установка скила во фрагментах', () => {
       labelled: false,
     });
     const value = (key: string) => codexMarketplace.find((field) => field.key === key)?.value;
+    expect(codexMarketplace.map((field) => field.key)).toEqual(['source', 'ref']);
     expect(codexPlugin).toContain(`marketplace add ${value('source')} --ref ${value('ref')}`);
-    const paths = (value('sparse') ?? '').split(', ');
-    expect(paths).toContain('.codex-plugin');
-    for (const path of paths) expect(codexPlugin).toContain(`--sparse ${path}`);
+    expect(value('ref')).toBe('plugin');
   });
 
   it('скил зависит только от адреса: токена и метки в нём нет, а адрес с кавычкой не ломает строку', () => {

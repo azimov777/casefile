@@ -131,7 +131,7 @@ test('ключ установки: агент заведён, токен вып�
 
   await pickClient('Codex');
   const codex = secretDialog.getByRole('region', { name: 'Codex', exact: true });
-  await expect(codex.locator('figure pre code').first()).toContainText('--sparse .codex-plugin');
+  await expect(codex.locator('figure pre code').first()).toContainText('--ref plugin');
   await expect(codex).not.toContainText(secret);
 
   await pickClient('Любой клиент MCP');

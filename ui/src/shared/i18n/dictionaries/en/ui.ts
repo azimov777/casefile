@@ -464,7 +464,7 @@ export const ui = {
     terminalCaption: 'Terminal',
     codexLabel: 'Codex: plugin and sign-in',
     codexHint:
-      'The plugin carries the skill and the connection; the sign-in is OAuth, no key. <code>--sparse .codex-plugin</code> is required: Codex reads the connection from it. To update: <code>codex plugin marketplace upgrade casefile</code>; restart the Codex app after installing.',
+      'The plugin carries the skill and the connection; the sign-in is OAuth, no key. To update: <code>codex plugin marketplace upgrade casefile</code>; restart the Codex app after installing.',
     codexUrlHint:
       'The plugin has the address <code>http://127.0.0.1:8100/mcp</code> built in. Your installation has another one: add these lines to the Codex configuration (no key in them), and then sign in with <code>codex mcp login casefile</code>.',
     codexUrlLabel: 'Installation address for Codex',
@@ -474,7 +474,6 @@ export const ui = {
     codexAppField: {
       source: 'Source',
       ref: 'Git ref',
-      sparse: 'Sparse paths',
     },
     jsonHint:
       'The shape of the Claude Code <code>.mcp.json</code> file. Cursor reads <code>url</code> and <code>headers</code> under the same names; Windsurf, Gemini CLI and VS Code name the fields differently — check the documentation of your client.',

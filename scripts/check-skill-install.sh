@@ -5,8 +5,10 @@
 #   scripts/check-skill-install.sh [каталог-для-улик]
 #
 # Поднимает локальный git по http (`git http-backend` за крошечным CGI-сервером на
-# python3: `dumb http` не годится — у него нет shallow) с маркетплейсом из рабочего дерева
-# на ветке `stable`, версия скила — стендовая. Установщик запускается только с временными
+# python3: `dumb http` не годится — у него нет shallow) с двумя ветками, как у выпуска: `stable`
+# — файлы плагина из рабочего дерева и файлы корня (`openapi.json` с примером `trk_`,
+# `install.sh`), `plugin` — одни файлы плагина, как её собирает `build-plugin-branch.sh`
+# (TRK-494); версия скила — стендовая. Установщик запускается только с временными
 # `HOME`/`CLAUDE_CONFIG_DIR`/`CODEX_HOME`/`HERMES_HOME`, `CASEFILE_SKILL_SOURCE` на стенд и
 # `CASEFILE_DIR` во временном каталоге. Настоящие `~/.claude`, `~/.codex`, `~/.agents` и
 # установка `~/casefile` не читаются и не меняются; их отпечаток до и после — последняя
@@ -18,11 +20,16 @@
 #      `codex plugin list` показывают casefile со стендовой версией, `claude mcp list` и
 #      `codex mcp list` — casefile с этим адресом, у маркетплейса Claude Code
 #      `autoUpdate: true`, `npx skills` положил SKILL.md в HOME стенда, заглушка `hermes`
-#      получила команду; каталог установки не создан, `grep -r trk_` по конфигам пуст.
+#      получила команду; каталог установки не создан, `grep -r trk_` по каталогам харнессов
+#      и HOME пуст — в них нет файлов корня репозитория (TRK-494).
 #      A0: без `CASEFILE_URL` плагин ставится с адресом по умолчанию (TRK-480), вход не
 #      ведётся, docker не зовётся, печатается, как задать адрес; скил Hermes и прочих ставится. A1: адрес `http://` не с localhost — отказ.
-#   B. второй прогон подряд (идемпотентность), затем ветка `stable` сдвинута на коммит с
-#      новой версией и прогон ещё раз: версия в обоих харнессах новая.
+#   M. установка прежними строками (`#stable --sparse …`, TRK-494): `grep -r trk_` находит
+#      файлы корня; прогон установщика переводит оба харнесса на ветку `plugin` — источник в
+#      settings.json и config.toml, `autoUpdate` на месте, маркетплейсы и cache Codex без `trk_`.
+#   B. второй прогон подряд (идемпотентность), затем ветки `stable` и `plugin` сдвинуты на
+#      коммит с новой версией и прогон ещё раз: версия в обоих харнессах новая; у окружения M
+#      cache Claude Code новой версии тоже без `trk_`, прежняя помечена `.orphaned_at`.
 #   C. `CASEFILE_SKILL_ONLY=1` при PATH без `docker` ставит скил и не создаёт каталог
 #      установки; при PATH без `claude`/`codex`/`hermes`/`npx` не падает и печатает not
 #      found по каждому и ничего не ставит.
@@ -81,17 +88,30 @@ fingerprint() {
 }
 fingerprint >"$EVIDENCE/fingerprint-before.txt"
 
-# --- Стенд: репозиторий с маркетплейсом на ветке stable и git по http -------------------
+# --- Стенд: репозиторий с ветками stable и plugin и git по http ------------------------
 mkdir -p "$WORK/srv" "$WORK/repo"
 git init -q -b stable "$WORK/repo"
-publish_version() { # версия → коммит в ветке stable и в bare-репозитории
+publish_version() { # версия → коммит выпуска в `stable` и в `plugin` и в bare-репозитории
   cp -R "$ROOT/.claude-plugin" "$ROOT/.codex-plugin" "$ROOT/skills" "$WORK/repo/"
+  cp "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/openapi.json" "$ROOT/install.sh" "$WORK/repo/"
   sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$1\"/" "$WORK/repo/.claude-plugin/"*.json "$WORK/repo/.codex-plugin/plugin.json"
   rm -f "$WORK/repo/.claude-plugin/"*.bak "$WORK/repo/.codex-plugin/"*.bak
   git -C "$WORK/repo" add -A
   git -C "$WORK/repo" -c user.email=check@example.com -c user.name=check commit -q -m "stand $1"
+  # Ветка `plugin` — тот же отбор, что у `scripts/build-plugin-branch.sh` (его сверка версии
+  # с `pyproject.toml` стендовой версии не пропустит): файлы плагина без карты `skills/`.
+  rm -rf "$WORK/plugin-tree" "$WORK/plugin-index"
+  mkdir -p "$WORK/plugin-tree"
+  (cd "$WORK/repo" && cp -R .claude-plugin .codex-plugin skills LICENSE README.md "$WORK/plugin-tree/")
+  rm -f "$WORK/plugin-tree/skills/AGENTS.md"
+  GIT_INDEX_FILE="$WORK/plugin-index" git -C "$WORK/repo" --work-tree="$WORK/plugin-tree" add -A -f .
+  tree=$(GIT_INDEX_FILE="$WORK/plugin-index" git -C "$WORK/repo" write-tree)
+  parent=$(git -C "$WORK/repo" rev-parse --verify --quiet refs/heads/plugin || true)
+  commit=$(git -C "$WORK/repo" -c user.email=check@example.com -c user.name=check \
+    commit-tree "$tree" ${parent:+-p "$parent"} -m "stand $1: plugin files")
+  git -C "$WORK/repo" update-ref refs/heads/plugin "$commit"
   if [ -d "$WORK/srv/casefile.git" ]; then
-    git -C "$WORK/repo" push -q "$WORK/srv/casefile.git" stable:next
+    git -C "$WORK/repo" push -q "$WORK/srv/casefile.git" stable:next plugin:plugin
     git -C "$WORK/srv/casefile.git" update-ref refs/heads/stable refs/heads/next
   else
     git clone -q --bare "$WORK/repo" "$WORK/srv/casefile.git"
@@ -266,15 +286,47 @@ grep -q 'https' "$EVIDENCE/a1.out" || fail "A1: the refusal does not name https"
 is_empty "$WORK/a1/claude" "$WORK/a1/codex" || fail "A1: something was installed"
 note "A1 ok"
 
-say "B. second run in a row, then a shifted stable with a new version"
+say "M. an installation from stable with --sparse (before TRK-494) moves to the plugin branch"
+new_env m
+harness m claude plugin marketplace add "$URL#stable" --sparse .claude-plugin skills >/dev/null
+harness m claude plugin install casefile@casefile --scope user --config "casefile_url=$SERVER_URL" >/dev/null
+harness m codex plugin marketplace add "$URL" --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills >/dev/null
+harness m codex plugin add casefile@casefile >/dev/null
+grep -rq trk_ "$WORK/m/claude" "$WORK/m/codex" ||
+  fail "M: the install from stable carries no trk_: the stand does not reproduce the old state"
+note "M: before: $(grep -rl trk_ "$WORK/m/claude" "$WORK/m/codex" | sed "s#$WORK/##" | tr '\n' ' ')"
+run_installer m m1.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "M: exited non-zero: $(tail -5 "$EVIDENCE/m1.out")"
+cat "$EVIDENCE/m1.out" | tee -a "$EVIDENCE/run.log"
+assert_versions m "$V1"
+assert_connection m "$SERVER_URL"
+grep -Eq '"ref": *"plugin"' "$WORK/m/claude/settings.json" && ! grep -q sparsePaths "$WORK/m/claude/settings.json" ||
+  fail "M: the Claude Code marketplace is not on the plugin branch: $(cat "$WORK/m/claude/settings.json")"
+grep -A4 '^\[marketplaces.casefile\]' "$WORK/m/codex/config.toml" | grep -q 'ref = "plugin"' ||
+  fail "M: the Codex marketplace is not on the plugin branch"
+if grep -rq trk_ "$WORK/m/claude/plugins/marketplaces" "$WORK/m/codex"; then
+  grep -rl trk_ "$WORK/m/claude/plugins/marketplaces" "$WORK/m/codex" | head
+  fail "M: the marketplaces or the Codex cache still carry repository files"
+fi
+note "M ok: both harnesses on the plugin branch; left until the next version: $(grep -rl trk_ "$WORK/m/claude" | sed "s#$WORK/##" | tr '\n' ' ')"
+
+say "B. second run in a row, then shifted stable and plugin branches with a new version"
 run_installer a a2.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "B: the second run exited non-zero: $(tail -5 "$EVIDENCE/a2.out")"
 assert_versions a "$V1"
 publish_version "$V2"
-[ "$(git -C "$WORK/srv/casefile.git" rev-parse stable)" = "$(git -C "$WORK/repo" rev-parse HEAD)" ] ||
-  fail "B: the stand branch stable did not move"
+[ "$(git -C "$WORK/srv/casefile.git" rev-parse stable)" = "$(git -C "$WORK/repo" rev-parse HEAD)" ] &&
+  [ "$(git -C "$WORK/srv/casefile.git" rev-parse plugin)" = "$(git -C "$WORK/repo" rev-parse plugin)" ] ||
+  fail "B: the stand branches stable and plugin did not move"
 run_installer a a3.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "B: the run after the shift exited non-zero: $(tail -5 "$EVIDENCE/a3.out")"
 cat "$EVIDENCE/a3.out" | tee -a "$EVIDENCE/run.log"
 assert_versions a "$V2"
+run_installer m m2.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "B: the M run after the shift exited non-zero"
+assert_versions m "$V2"
+cache=$WORK/m/claude/plugins/cache/casefile/casefile
+if grep -rq trk_ "$cache/$V2" "$WORK/m/claude/plugins/marketplaces" "$WORK/m/codex"; then
+  fail "B: the $V2 plugin of the migrated install carries repository files"
+fi
+[ ! -d "$cache/$V1" ] || [ -f "$cache/$V1/.orphaned_at" ] || fail "B: the $V1 cache from stable is not marked for removal"
+note "B: the migrated install at $V2 is clean; the $V1 cache from stable: $( [ -d "$cache/$V1" ] && echo 'marked .orphaned_at, Claude Code removes it' || echo removed)"
 note "B ok: idempotent, and both harnesses moved to $V2"
 
 say "C. PATH without docker; PATH without claude/codex/hermes/npx; CASEFILE_SKILL=0"

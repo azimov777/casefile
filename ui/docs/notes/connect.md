@@ -151,16 +151,17 @@ PowerShell, а PowerShell декодирует вывод внешней ком�
 
 **Что:** с TRK-479 вкладки «Claude Code» и «Codex» печатают команды установщика (корневой скрипт
 установки, TRK-452#18): маркетплейс, `claude plugin install … --config "casefile_url=<адрес>"`,
-`claude mcp login plugin:casefile:casefile`; у Codex — `--sparse .claude-plugin --sparse
-.codex-plugin --sparse skills`, `codex plugin add casefile@casefile`, `codex mcp login casefile`
+`claude mcp login plugin:casefile:casefile`; у Codex — маркетплейс `--ref plugin` (ветка с одними
+файлами плагина, TRK-494), `codex plugin add casefile@casefile`, `codex mcp login casefile`
 и, если адрес не `127.0.0.1:8100` (`localhost` — тот же), две строки `[mcp_servers.casefile] url=`
 для `config.toml`. Фрагментов с `Authorization`, переменной окружения с токеном и формой Codex с
 ключом на этих вкладках больше нет; ключ остался во вкладках «JSON mcpServers» и «Любой клиент
 MCP» (Hermes, Cursor, сторож журнала). Разделы выше про переменную окружения Codex и экранирование
 PowerShell описывают те, прежние фрагменты и остаются историей.
 
-**Почему важно:** без `--sparse .codex-plugin` Codex не находит подключение плагина: оно
-лежит в файле mcp.json папки плагина Codex (TRK-451#13). Служба отдаёт вход OAuth только по https (по
+**Почему важно:** Codex находит подключение плагина только в файле mcp.json папки плагина Codex
+(TRK-451#13): ветка `plugin` её несёт, а со `stable` нужен был `--sparse .codex-plugin`, который к
+тому же не отсекал файлы корня репозитория (TRK-494). Служба отдаёт вход OAuth только по https (по
 http — на своей машине), поэтому для адреса `http://<IP>` экран предупреждает, что плагин не
 подключится, вместо молчаливой нерабочей команды.
 

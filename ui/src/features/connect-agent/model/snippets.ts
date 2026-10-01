@@ -43,11 +43,16 @@ const CODEX_PLUGIN_URL = 'http://127.0.0.1:8100/mcp';
  */
 const SKILL_REPO = 'azimov777/casefile';
 const SKILL_CHANNEL = 'stable';
+/**
+ * Ветка маркетплейса Claude Code и Codex: в ней одни файлы плагина (TRK-494). Со `stable`
+ * харнесс уносил к себе и файлы корня репозитория, `--sparse` их не отсекает.
+ */
+const PLUGIN_BRANCH = 'plugin';
 const SKILL_INSTALLER = `https://raw.githubusercontent.com/${SKILL_REPO}/main`;
 
 /** Поле пункта «Добавить маркетплейс» приложения Codex (`TRK-397#22`). */
 export interface CodexMarketplaceField {
-  key: 'source' | 'ref' | 'sparse';
+  key: 'source' | 'ref';
   value: string;
 }
 
@@ -131,19 +136,18 @@ export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): S
   return {
     headers: headers.map(([name, value]) => `${name}: ${value}`).join('\n'),
     claudePlugin: [
-      `claude plugin marketplace add ${SKILL_REPO}#${SKILL_CHANNEL} --sparse .claude-plugin skills`,
+      `claude plugin marketplace add ${SKILL_REPO}#${PLUGIN_BRANCH}`,
       `claude plugin install casefile@casefile --scope user --config ${shellQuote(`casefile_url=${mcpUrl}`)}`,
       `claude mcp login ${CLAUDE_LOGIN_SERVER}`,
     ].join('\n'),
     codexPlugin: [
-      `codex plugin marketplace add ${SKILL_REPO} --ref ${SKILL_CHANNEL} ${CODEX_SPARSE.map((path) => `--sparse ${path}`).join(' ')}`,
+      `codex plugin marketplace add ${SKILL_REPO} --ref ${PLUGIN_BRANCH}`,
       'codex plugin add casefile@casefile',
       `codex mcp login ${SERVER_NAME}`,
     ].join('\n'),
     codexMarketplace: [
       { key: 'source', value: SKILL_REPO },
-      { key: 'ref', value: SKILL_CHANNEL },
-      { key: 'sparse', value: CODEX_SPARSE.join(', ') },
+      { key: 'ref', value: PLUGIN_BRANCH },
     ],
     codexUrlFile:
       normalizeUrl(mcpUrl) === normalizeUrl(CODEX_PLUGIN_URL)
@@ -162,9 +166,6 @@ export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): S
     skill: skillTexts(mcpUrl),
   };
 }
-
-/** Пути, которые Codex забирает из репозитория: плагин читает `.codex-plugin` (TRK-451#13). */
-const CODEX_SPARSE = ['.claude-plugin', '.codex-plugin', 'skills'];
 
 /** Сервер плагина в Claude Code, к которому идёт вход: `plugin:<плагин>:<сервер>`. */
 const CLAUDE_LOGIN_SERVER = 'plugin:casefile:casefile';
