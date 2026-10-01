@@ -56,6 +56,7 @@ __all__ = [
     "oauth_token_name",
     "redirect_matches",
     "refuse_unsafe_redirect",
+    "resource_matches",
 ]
 
 #: Единственная область OAuth в Casefile. Права задаёт набор токена, а не область, и
@@ -132,6 +133,32 @@ def redirect_matches(registered: str, requested: str) -> bool:
     if want.username or want.password or got.username or got.password:
         return False
     return (want.path or "/") == (got.path or "/") and want.query == got.query and not got.fragment
+
+
+def resource_matches(own: str, requested: str) -> bool:
+    """Назван ли в `resource` (RFC 8707) адрес этой службы.
+
+    Схема и узел сравниваются без регистра (RFC 3986 §6.2.2.1), слэш на конце пути не
+    различается, порт умолчания равен опущенному. Запрос и фрагмент не допускаются:
+    RFC 8707 §2 запрещает фрагмент, а запрос другой службы — это другой ресурс.
+    """
+    try:
+        want, got = urlsplit(own), urlsplit(requested)
+        ports = (want.port, got.port)
+    except ValueError:
+        return False
+    if got.fragment or got.query or got.username or got.password:
+        return False
+    default = {"http": 80, "https": 443}
+    if want.scheme.lower() != got.scheme.lower():
+        return False
+    if (want.hostname or "") != (got.hostname or ""):
+        return False
+    if (ports[0] or default.get(want.scheme.lower())) != (
+        ports[1] or default.get(got.scheme.lower())
+    ):
+        return False
+    return want.path.rstrip("/") == got.path.rstrip("/")
 
 
 def refuse_unsafe_redirect(uris: list[str]) -> None:
