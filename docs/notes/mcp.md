@@ -990,3 +990,25 @@ Code до конца требует Keychain (во временном `HOME` з�
 (переименование ломает установленные копии). Если человек на проверке станет помехой, отслеживаемой
 веткой портала можно назначить узкую ветку с одним плагином.
 **Где:** `.claude-plugin/plugin.json`, `tests/test_plugin_manifest.py`.
+
+## Документы о подключении: один путь — плагин и вход OAuth, ключ — харнессам без OAuth и сторожу
+
+**Что:** README («Connect your agent», «Network mode»), `docs/agent-install.md` (шаги 2–6,
+«Joining an installation someone else runs»), `skills/casefile/SKILL.md` и CONCEPT 5.3 называют
+одно подключение Claude Code и Codex: плагин `casefile` с адресом установки и вход OAuth
+(`/mcp` → Authenticate, `claude mcp login plugin:casefile:casefile`, `codex mcp login casefile`).
+`Authorization: Bearer` в них стоит только у Hermes, у «прочих клиентов без OAuth» (JSON
+`mcpServers` README) и у сторожа журнала между сессиями; stdio README ходит ключом в
+`TRACKER_MCP_TOKEN`, потому что OAuth по stdio нет. Строка только скила везде несёт адрес:
+`CASEFILE_SKILL_ONLY=1 CASEFILE_URL=<адрес>` (TRK-454).
+**Почему важно:** `CASEFILE_SKILL_ONLY=1` без `CASEFILE_URL` плагин Claude Code и Codex не ставит
+(TRK-452#18), а скил у них приходит только плагином: прежняя строка без адреса в шаге 4 гайда
+и в скиле оставила бы агента без скила и без подключения, хотя установщик рапортует успех по
+Hermes и прочим. Сторож между сессиями входом харнесса воспользоваться не может — токен OAuth
+лежит у харнесса (TRK-469#22).
+**Как правильно:** новая строка подключения в документах — сначала плагин и вход; ключ — только
+в разделе для харнессов без OAuth или сторожа. Строку только скила писать с `CASEFILE_URL`;
+`tests/test_installers.py` (`SKILL_CHECKS`) держит её в шаге 4 гайда. Экран «Подключить
+агента» (`ui/src/features/connect-agent`) приводит к тому же TRK-479.
+**Где:** `README.md`, `docs/agent-install.md`, `skills/casefile/SKILL.md`, `docs/CONCEPT.md` (5.3),
+`app/mcp/instructions.md` (указатель на скил: «covers sign-in, …»), `tests/test_installers.py`.
