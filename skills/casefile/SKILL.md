@@ -62,7 +62,24 @@ Codex keeps the plugin's address fixed at `http://127.0.0.1:8100/mcp`; another a
 is an `[mcp_servers.casefile]` entry in `~/.codex/config.toml` with `url` alone, which
 the installer writes.
 
-### Hermes and other clients without OAuth: the agent key
+### Hermes: OAuth
+
+Hermes signs in with OAuth like the others (not yet checked against a real Hermes). Its
+`~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  casefile:
+    url: "<MCP address>"
+    auth: oauth
+```
+
+It opens the sign-in page on the first connection (or `hermes mcp login casefile`); on
+the user's machine it acts as `agent`. Without a browser: paste the redirect URL back or
+tunnel to Hermes's callback port; its device-code flow does not work with Casefile. If the
+sign-in fails, use the key (below) with `headers` in place of `auth: oauth`.
+
+### Other clients without OAuth: the agent key
 
 On the machine of the installation the key is in the installer output, or read without
 printing it anywhere else:
@@ -73,7 +90,8 @@ cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/a
 
 On a server the user issues a key for their agent on the **Access** screen; an agent
 issues no keys to itself. The key belongs in the harness's MCP configuration only, not
-in the chat or in files of the project. Hermes reads it from `~/.hermes/config.yaml`:
+in the chat or in files of the project. Hermes, when its OAuth fails, reads it from
+`~/.hermes/config.yaml`:
 
 ```yaml
 mcp_servers:

@@ -480,13 +480,13 @@ main() {
   echo "  Without the installer: codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills"
   echo "  codex plugin add casefile@casefile"
   echo
-  bold "Hermes (no OAuth: a key):"
+  bold "Hermes (OAuth, no token):"
   echo "  Add to ~/.hermes/config.yaml:"
   echo "    mcp_servers:"
   echo "      casefile:"
   echo "        url: \"$mcp_url\""
-  echo "        headers:"
-  echo "          Authorization: \"Bearer $token\""
+  echo "        auth: oauth"
+  echo "  The sign-in page opens on the first connection, or: hermes mcp login casefile"
   echo "  hermes skills install azimov777/casefile/skills/casefile"
   echo
   bold "Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:"

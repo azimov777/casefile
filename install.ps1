@@ -487,13 +487,13 @@ Write-Host '  If it did not run above: codex mcp login casefile'
 Write-Host '  Without the installer: codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills'
 Write-Host '  codex plugin add casefile@casefile'
 Write-Host ''
-Write-Host 'Hermes (no OAuth: a key):' -ForegroundColor White
+Write-Host 'Hermes (OAuth, no token):' -ForegroundColor White
 Write-Host '  Add to ~/.hermes/config.yaml:'
 Write-Host '    mcp_servers:'
 Write-Host '      casefile:'
 Write-Host "        url: `"$mcpUrl`""
-Write-Host '        headers:'
-Write-Host "          Authorization: `"Bearer $token`""
+Write-Host '        auth: oauth'
+Write-Host '  The sign-in page opens on the first connection, or: hermes mcp login casefile'
 Write-Host '  hermes skills install azimov777/casefile/skills/casefile'
 Write-Host ''
 Write-Host 'Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:' -ForegroundColor White

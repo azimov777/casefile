@@ -363,8 +363,9 @@ grep -q 'claude mcp login plugin:casefile:casefile' "$EVIDENCE/f1.out" && grep -
   fail "F: the sign-in commands are not printed"
 blocks=$(sed -n '/^Claude Code:/,/^Hermes/p' "$EVIDENCE/f1.out")
 echo "$blocks" | grep -q 'trk_\|Bearer' && fail "F: the Claude Code or Codex block carries a token"
-grep -q 'Hermes (no OAuth: a key)' "$EVIDENCE/f1.out" && grep -q 'Bearer trk_standfaketoken' "$EVIDENCE/f1.out" ||
-  fail "F: the key is not printed for the harness without OAuth"
+grep -q 'Hermes (OAuth, no token)' "$EVIDENCE/f1.out" && grep -q 'auth: oauth' "$EVIDENCE/f1.out" &&
+  grep -q 'Bearer trk_standfaketoken' "$EVIDENCE/f1.out" ||
+  fail "F: Hermes has no OAuth block or the key is not printed for the clients without OAuth"
 run_installer f f2.out "$WORK/d/path" SCENE="$WORK/d/scene" MCP_URL="$LIVE_URL" || fail "F: the second full install exited non-zero"
 assert_connection f "$LIVE_URL"
 no_secrets f

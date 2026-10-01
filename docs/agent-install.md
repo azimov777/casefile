@@ -35,7 +35,8 @@ agents through `npx skills`) and prints one line per harness: `installed <versio
 `not found` or `failed` with the command to repeat by hand. In Claude Code and Codex the
 plugin carries the connection too, and the installer then signs them in with OAuth
 (a browser page) — when it has a terminal; without one it prints the sign-in commands
-instead. For Hermes and other clients without OAuth it prints the agent key.
+instead. For Hermes it prints a config block with `auth: oauth` (no token); for other
+clients without OAuth it prints the agent key.
 `CASEFILE_SKILL=0` in front of the install line skips that step.
 
 If port 8080 or 8100 is taken, put `CASEFILE_PORT=<free port>` and/or
@@ -65,24 +66,32 @@ told to use.
   signed in as `claude` or `codex` without a password. The same commands sign in again
   after the user disconnects this agent on the board's **Access** screen
   (in Claude Code, `/mcp` → **Re-authenticate**).
-- **Hermes and any other client without OAuth** connect with the agent key. Take it from
+- **Hermes** signs in with OAuth too, no key: add this block to `~/.hermes/config.yaml`:
+
+  ```yaml
+  mcp_servers:
+    casefile:
+      url: "<MCP address from the installer output>"
+      auth: oauth
+  ```
+
+  Hermes opens the sign-in page itself on the first connection (or `hermes mcp login
+  casefile`); on the user's own machine the page closes at once and the agent is signed in
+  as `agent`. On a host without a browser Hermes offers pasting the redirect URL back or
+  an SSH tunnel to its callback port; its device-code flow (`oauth.flow: device`) does not
+  work here, because Casefile does not offer that grant. Not yet checked against a real
+  Hermes: the match with Casefile's OAuth metadata was checked from Hermes's documentation
+  and source, and the key below stays as the fallback for a Hermes that cannot sign in.
+- **Any other client without OAuth** connects with the agent key. Take it from
   the installer output, or read it without printing it anywhere else:
 
   ```bash
   cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token
   ```
 
-  Hermes: add this block to `~/.hermes/config.yaml`:
-
-  ```yaml
-  mcp_servers:
-    casefile:
-      url: "<MCP address from the installer output>"
-      headers:
-        Authorization: "Bearer <token>"
-  ```
-
-  Any other client: a streamable HTTP server at `<MCP address from the installer output>`
+  A streamable HTTP server — for Hermes too, if its sign-in fails — add to
+  `~/.hermes/config.yaml` `headers: {Authorization: "Bearer <token>"}` in place of
+  `auth: oauth`. Any other client: a streamable HTTP server at `<MCP address from the installer output>`
   with the header `Authorization: Bearer <token>`.
 
 A running session does not pick up a new plugin or MCP server by itself: tell the user to
@@ -111,7 +120,7 @@ in with their email and password and picks the agent this client acts as. The de
 their own agent, `claude_<their name>` for Claude Code and `codex_<their name>` for Codex,
 created on the first sign-in; your case entries are signed with that name. Without a
 terminal the installer prints the sign-in commands of step 3 — ask the user to run them.
-A harness without OAuth (Hermes and others) and a journal watcher running between sessions
+A harness without OAuth and a journal watcher running between sessions
 (step 6) need an agent key instead: ask the user to issue one for their agent on the
 board's **Access** screen and connect with it as in step 3. Then check the skill as in
 step 4, **Install the Casefile skill**.
