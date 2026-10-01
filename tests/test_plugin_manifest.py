@@ -189,7 +189,7 @@ def test_cursor_manifest_matches_the_claude_plugin_and_has_its_connector() -> No
 
 
 def test_cursor_manifest_is_last_in_the_codex_search_order() -> None:
-    """Codex берёт первый найденный манифест: `.codex-plugin`, `.claude-plugin`, `.cursor-plugin`."""
+    """Codex берёт первый найденный манифест: `.codex-plugin`, `.claude-plugin`, затем Cursor."""
     assert (ROOT / ".codex-plugin" / "plugin.json").is_file()
     assert (ROOT / ".claude-plugin" / "plugin.json").is_file()
     assert not (ROOT / "plugin.json").exists()

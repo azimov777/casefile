@@ -65,7 +65,12 @@ def test_the_tree_holds_only_the_plugin_within_the_portal_limits(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     files = _files(tmp_path / "tree")
-    assert {".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json", "LICENSE"} <= files
+    manifests = {
+        ".claude-plugin/plugin.json",
+        ".codex-plugin/plugin.json",
+        ".cursor-plugin/plugin.json",
+    }
+    assert manifests | {"LICENSE"} <= files
     assert "skills/casefile/SKILL.md" in files
     assert "skills/AGENTS.md" not in files
     assert all(f.split("/")[0] in TREE_ROOTS for f in files)
