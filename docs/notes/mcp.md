@@ -1125,3 +1125,24 @@ authentication»). Одновременные запросы видят refresh 
 **Где:** `app/services/oauth.py` (`find_refresh`, `rotate_refresh`, `_reusable`),
 `app/domain/oauth.py` (`REFRESH_REUSE_WINDOW`), `app/db/repositories/oauth.py` (`list_family`),
 `tests/test_mcp_oauth.py`, `tests/test_mcp_oauth_refresh_race.py`.
+
+## Манифест Cursor — последний в порядке поиска Codex и не заменяет прочие (TRK-496)
+
+**Что:** `.cursor-plugin/plugin.json` (формат Cursor Plugin: `name`, `displayName`, `version`,
+`description`, `author`, `license`, `keywords`, `logo`, `skills: ./skills/`, `mcpServers`) лежит рядом
+с `.claude-plugin/` и `.codex-plugin/`; коннектор — `.cursor-plugin/mcp.json` на адрес по умолчанию
+`http://127.0.0.1:8100/mcp`, без подстановок и токена, иконка — копия `icon.svg`. Корневой
+`plugin.json` (Agent Plugin) не заводился: Codex читает его раньше всех манифестов и перехватил бы
+плагин. Ветка `plugin` (`scripts/build-plugin-branch.sh`) несёт и этот каталог. Подачи в Cursor
+Marketplace нет: текст полей заявки лежит в деле TRK-496, отправка — по слову владельца.
+**Почему важно:** Codex берёт первый найденный манифест в порядке `.codex-plugin`, `.claude-plugin`,
+`.cursor-plugin`, Claude Code читает только `.claude-plugin/`, поэтому новый каталог чужой
+установке не мешает. Вход OAuth из Cursor без замера: документация Cursor описывает только
+статический клиент (блок auth в mcp.json) и не называет DCR; наша служба DCR умеет, а заранее
+выданного `client_id` у публичного плагина быть не может.
+**Как правильно:** версию выпуска править и здесь (`tests/test_plugin_manifest.py` краснеет при
+расхождении); пока не проверено в настоящем Cursor, не обещать вход из него. Локальный режим
+согласует без страницы только адрес возврата на петле (рабочий стол Cursor,
+`http://localhost:8787/callback`), веб-агентам Cursor (`https://www.cursor.com/agents/mcp/oauth/callback`)
+нужен сетевой режим со страницей входа.
+**Где:** `.cursor-plugin/`, `scripts/build-plugin-branch.sh`, `tests/test_plugin_manifest.py`.

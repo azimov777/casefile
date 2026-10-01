@@ -3,7 +3,7 @@
 #
 # Портал Anthropic смотрит на «отслеживаемую ветку» и сканирует всё её дерево: пределы
 # 512 файлов и 256 КиБ на файл не-картинки (TRK-457#6). Весь репозиторий в них не входит,
-# а плагину нужны только `.claude-plugin/`, `.codex-plugin/`, `skills/` (без своей карты
+# а плагину нужны только `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `skills/` (без своей карты
 # `AGENTS.md`), `LICENSE` и `README.md`. Ту же сборку берёт шаг конвейера выпуска
 # (`.github/workflows/images.yml`, джоб `channel`) и человек для проверки.
 #
@@ -37,14 +37,14 @@ if m["version"] != release:
     sys.exit(f"версия плагина {m['version']} не равна версии выпуска {release}")
 PY
 
-for path in .claude-plugin/plugin.json .codex-plugin/plugin.json skills/casefile/SKILL.md LICENSE README.md; do
+for path in .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json skills/casefile/SKILL.md LICENSE README.md; do
   [ -f "$root/$path" ] || { echo "нет файла $path" >&2; exit 1; }
 done
 
 rm -rf "$dest"
 mkdir -p "$dest"
 dest="$(cd "$dest" && pwd)"
-cp -R "$root/.claude-plugin" "$root/.codex-plugin" "$root/skills" "$dest/"
+cp -R "$root/.claude-plugin" "$root/.codex-plugin" "$root/.cursor-plugin" "$root/skills" "$dest/"
 cp "$root/LICENSE" "$root/README.md" "$dest/"
 rm -f "$dest/skills/AGENTS.md"
 

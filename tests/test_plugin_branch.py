@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "build-plugin-branch.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "images.yml"
 
-TREE_ROOTS = {".claude-plugin", ".codex-plugin", "skills", "LICENSE", "README.md"}
+TREE_ROOTS = {".claude-plugin", ".codex-plugin", ".cursor-plugin", "skills", "LICENSE", "README.md"}
 PLUGIN_FILES = (*sorted(TREE_ROOTS), "pyproject.toml")
 
 
@@ -65,7 +65,7 @@ def test_the_tree_holds_only_the_plugin_within_the_portal_limits(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     files = _files(tmp_path / "tree")
-    assert {".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "LICENSE"} <= files
+    assert {".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json", "LICENSE"} <= files
     assert "skills/casefile/SKILL.md" in files
     assert "skills/AGENTS.md" not in files
     assert all(f.split("/")[0] in TREE_ROOTS for f in files)

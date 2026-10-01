@@ -92,17 +92,17 @@ fingerprint >"$EVIDENCE/fingerprint-before.txt"
 mkdir -p "$WORK/srv" "$WORK/repo"
 git init -q -b stable "$WORK/repo"
 publish_version() { # версия → коммит выпуска в `stable` и в `plugin` и в bare-репозитории
-  cp -R "$ROOT/.claude-plugin" "$ROOT/.codex-plugin" "$ROOT/skills" "$WORK/repo/"
+  cp -R "$ROOT/.claude-plugin" "$ROOT/.codex-plugin" "$ROOT/.cursor-plugin" "$ROOT/skills" "$WORK/repo/"
   cp "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/openapi.json" "$ROOT/install.sh" "$WORK/repo/"
-  sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$1\"/" "$WORK/repo/.claude-plugin/"*.json "$WORK/repo/.codex-plugin/plugin.json"
-  rm -f "$WORK/repo/.claude-plugin/"*.bak "$WORK/repo/.codex-plugin/"*.bak
+  sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$1\"/" "$WORK/repo/.claude-plugin/"*.json "$WORK/repo/.codex-plugin/plugin.json" "$WORK/repo/.cursor-plugin/plugin.json"
+  rm -f "$WORK/repo/.claude-plugin/"*.bak "$WORK/repo/.codex-plugin/"*.bak "$WORK/repo/.cursor-plugin/"*.bak
   git -C "$WORK/repo" add -A
   git -C "$WORK/repo" -c user.email=check@example.com -c user.name=check commit -q -m "stand $1"
   # Ветка `plugin` — тот же отбор, что у `scripts/build-plugin-branch.sh` (его сверка версии
   # с `pyproject.toml` стендовой версии не пропустит): файлы плагина без карты `skills/`.
   rm -rf "$WORK/plugin-tree" "$WORK/plugin-index"
   mkdir -p "$WORK/plugin-tree"
-  (cd "$WORK/repo" && cp -R .claude-plugin .codex-plugin skills LICENSE README.md "$WORK/plugin-tree/")
+  (cd "$WORK/repo" && cp -R .claude-plugin .codex-plugin .cursor-plugin skills LICENSE README.md "$WORK/plugin-tree/")
   rm -f "$WORK/plugin-tree/skills/AGENTS.md"
   GIT_INDEX_FILE="$WORK/plugin-index" git -C "$WORK/repo" --work-tree="$WORK/plugin-tree" add -A -f .
   tree=$(GIT_INDEX_FILE="$WORK/plugin-index" git -C "$WORK/repo" write-tree)
