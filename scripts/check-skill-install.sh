@@ -19,8 +19,8 @@
 #      `codex mcp list` — casefile с этим адресом, у маркетплейса Claude Code
 #      `autoUpdate: true`, `npx skills` положил SKILL.md в HOME стенда, заглушка `hermes`
 #      получила команду; каталог установки не создан, `grep -r trk_` по конфигам пуст.
-#      A0: без `CASEFILE_URL` плагин не ставится и печатается, как задать адрес; скил
-#      Hermes и прочих агентов ставится. A1: адрес `http://` не с localhost — отказ.
+#      A0: без `CASEFILE_URL` плагин ставится с адресом по умолчанию (TRK-480), вход не
+#      ведётся, docker не зовётся, печатается, как задать адрес; скил Hermes и прочих ставится. A1: адрес `http://` не с localhost — отказ.
 #   B. второй прогон подряд (идемпотентность), затем ветка `stable` сдвинута на коммит с
 #      новой версией и прогон ещё раз: версия в обоих харнессах новая.
 #   C. `CASEFILE_SKILL_ONLY=1` при PATH без `docker` ставит скил и не создаёт каталог
@@ -241,13 +241,19 @@ no_secrets a
 grep -q 'signed in\|needs a terminal' "$EVIDENCE/a1.out" || fail "A: the output says nothing about the sign-in"
 note "A ok: plugin installed with $SERVER_URL, no installation directory, no token"
 
-say "A0. CASEFILE_SKILL_ONLY=1 without CASEFILE_URL: no plugin, the way to set the address is printed"
+say "A0. CASEFILE_SKILL_ONLY=1 without CASEFILE_URL: the plugin with the default address, no sign-in, no docker"
 new_env a0
-run_installer a0 a0.out "$full_path" CASEFILE_SKILL_ONLY=1 || fail "A0: exited non-zero: $(tail -5 "$EVIDENCE/a0.out")"
+mkdir -p "$WORK/a0/spy"
+printf '#!/bin/sh\necho "$*" >>"%s"\nexit 1\n' "$WORK/a0/docker-calls" >"$WORK/a0/spy/docker"
+chmod +x "$WORK/a0/spy/docker"
+run_installer a0 a0.out "$WORK/a0/spy:$full_path" CASEFILE_SKILL_ONLY=1 || fail "A0: exited non-zero: $(tail -5 "$EVIDENCE/a0.out")"
 cat "$EVIDENCE/a0.out" | tee -a "$EVIDENCE/run.log"
+harness a0 claude plugin list | grep -q casefile@casefile || fail "A0: the Claude Code plugin is not listed"
+harness a0 codex plugin list | grep -E '^casefile@casefile +installed' >/dev/null || fail "A0: the Codex plugin is not listed"
+assert_connection a0 "http://127.0.0.1:8100/mcp"
 grep -q 'CASEFILE_URL=https://' "$EVIDENCE/a0.out" || fail "A0: the output does not say how to set the address"
-! harness a0 claude plugin list | grep -q casefile@casefile || fail "A0: the Claude Code plugin was installed without an address"
-! harness a0 codex plugin list | grep -E '^casefile@casefile +installed' || fail "A0: the Codex plugin was installed without an address"
+! grep -q 'Signing the agents in' "$EVIDENCE/a0.out" || fail "A0: a sign-in was started without an address"
+[ ! -e "$WORK/a0/docker-calls" ] || fail "A0: docker was called: $(cat "$WORK/a0/docker-calls")"
 [ -f "$WORK/a0/hermes/skills/casefile/SKILL.md" ] || fail "A0: the Hermes skill was not installed"
 [ ! -e "$WORK/a0/casefile-dir" ] || fail "A0: the installation directory was created"
 no_secrets a0

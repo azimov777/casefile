@@ -41,7 +41,9 @@ $env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='https://casefile.example.com/mcp'
 ```
 
 Outside `localhost` the address is `https`: over plain `http` the service offers no
-OAuth. Without `CASEFILE_URL` the line installs no plugin.
+OAuth. `CASEFILE_URL` is optional: without it the same line installs the plugin with the
+default address `http://127.0.0.1:8100/mcp` (the skill works at once, no sign-in is
+started); add the address when the server is not on this machine.
 
 The installer starts the sign-in when it has a terminal. Otherwise, and after the user
 disconnects the agent on the board's **Access** screen, the sign-in is repeated by hand:
