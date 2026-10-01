@@ -2,8 +2,8 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { fontsReady, shownKeys, silenceJournal } from './contour';
 
-/** Хост шрифтов и хост их файлов: гасятся вместе, иначе останется половина. */
-const FONT_HOSTS = ['https://fonts.googleapis.com/**', 'https://fonts.gstatic.com/**'];
+/** Файлы шрифтов интерфейса: свои, со своего узла (TRK-499). Гасятся все, иначе останется половина. */
+const FONT_FILES = '**/*.woff2';
 
 /**
  * Сколько настоящих начертаний подобрано под этот текст этой гарнитурой.
@@ -17,8 +17,14 @@ const FONT_HOSTS = ['https://fonts.googleapis.com/**', 'https://fonts.gstatic.co
 async function facesFor(page: Page, font: string, text: string): Promise<string[]> {
   return page.evaluate(
     async ([family, sample]) => {
-      const faces = await document.fonts.load(`12px "${family}"`, sample);
-      return faces.map((face) => face.status);
+      // Файл начертания не пришёл (его погасили) — `load` отвечает отказом, а не пустым
+      // списком: начертание объявлено, но загрузить его нечем.
+      try {
+        const faces = await document.fonts.load(`12px "${family}"`, sample);
+        return faces.map((face) => face.status);
+      } catch {
+        return ['error'];
+      }
     },
     [font, text],
   );
@@ -26,7 +32,15 @@ async function facesFor(page: Page, font: string, text: string): Promise<string[
 
 test('с сетью: Fira Sans и Fira Code загружены, кириллица набирается моноширинной', async ({
   page,
+  baseURL,
 }) => {
+  // Страница не обращается ни к одному чужому узлу: шрифты отдаёт сам интерфейс (TRK-499).
+  const foreign: string[] = [];
+  page.on('request', (request) => {
+    const { protocol, host } = new URL(request.url());
+    const web = protocol === 'http:' || protocol === 'https:';
+    if (web && host !== new URL(String(baseURL)).host) foreign.push(request.url());
+  });
   await silenceJournal(page);
   await page.goto('/tasks?project=DEMO');
   await expect(page.locator('tbody tr').first()).toBeVisible();
@@ -40,14 +54,15 @@ test('с сетью: Fira Sans и Fira Code загружены, кириллиц
 
   const body = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
   expect(body).toContain('Fira Sans');
+  expect(foreign).toEqual([]);
 });
 
-test('без хоста шрифтов: страница читаема запасной гарнитурой и не рассыпается', async ({
+test('без файлов шрифтов: страница читаема запасной гарнитурой и не рассыпается', async ({
   page,
   request,
 }) => {
   const shown = await shownKeys(request);
-  for (const host of FONT_HOSTS) await page.route(host, (route) => route.abort());
+  await page.route(FONT_FILES, (route) => route.abort());
   await silenceJournal(page);
   await page.goto('/tasks?project=DEMO');
 
@@ -56,8 +71,8 @@ test('без хоста шрифтов: страница читаема запа
   await expect(page.getByRole('heading', { name: 'Задачи' })).toBeVisible();
 
   // Fira не пришла — значит буквы рисует системная запасная, названная в стеке.
-  expect(await facesFor(page, 'Fira Sans', 'Задачи')).toEqual([]);
-  expect(await facesFor(page, 'Fira Code', 'программа')).toEqual([]);
+  expect(await facesFor(page, 'Fira Sans', 'Задачи')).not.toContain('loaded');
+  expect(await facesFor(page, 'Fira Code', 'программа')).not.toContain('loaded');
   const body = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
   expect(body).toContain('system-ui');
 
