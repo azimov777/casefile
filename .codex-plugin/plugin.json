@@ -1,6 +1,6 @@
 {
   "name": "casefile",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Casefile for agents: the skill and the MCP connector (sign-in through OAuth, no token in the plugin); connect to an installation, recover from 401, keep the case and watch the journal.",
   "author": {
     "name": "azimov777",
