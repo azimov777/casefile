@@ -1136,7 +1136,7 @@ authentication»). Одновременные запросы видят refresh 
 без остального репозитория; версия файла равна версии выпуска. Галерея geminicli.com берёт
 публичный репозиторий с темой `gemini-cli-extension` и манифестом в корне (без ревью, обход
 ежедневный): тему ставит владелец. Antigravity CLI (замена Gemini CLI с 2026-06-18 для бесплатного и
-Pro/Ultra; Enterprise и платные ключи остаются на Gemini CLI) читает другое: `mcp_config.json`
+Pro/Ultra; Enterprise и платные ключи остаются на Gemini CLI) читает другое: файл mcp_config.json
 (`~/.gemini/config/` или `.agents/`) только с `serverUrl` — `url` и `httpUrl` «aren't supported»,
 OAuth сам при динамической регистрации клиента, скилы в `~/.gemini/antigravity-cli/skills/`,
 плагин — `plugin.json` в корне, `agy plugin install <путь>`; импорта `gemini-extension.json` и
