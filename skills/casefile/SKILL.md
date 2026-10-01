@@ -28,17 +28,11 @@ at the agent's own machine instead.
 
 ### Claude Code and Codex: the plugin and the sign-in
 
-The full install line installs the plugin connected to the installation's address. A
-machine that only connects to a server gets it from the same line in skill-only mode,
-with the address; it needs no Docker and creates no installation directory:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh
-```
-
-```powershell
-$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
-```
+The Casefile installer installs the plugin connected to the installation's address. A
+machine that only connects to a server uses the installer's skill-only mode with that
+address; it needs no Docker and creates no installation directory. This skill does not
+download or run the installer: the user takes the install line for their system from the
+README (https://github.com/azimov777/casefile#readme) and the step-by-step guide for agents (https://github.com/azimov777/casefile/blob/main/docs/agent-install.md).
 
 Outside `localhost` the address is `https`: over plain `http` the service offers no
 OAuth. `CASEFILE_URL` is optional: without it the same line installs the plugin with the
@@ -177,18 +171,18 @@ harness shows whether the skill is there:
 - Claude Code: `claude plugin list` lists `casefile@casefile` with `Status: enabled`.
 - Codex: `codex plugin list` lists `casefile@casefile` as installed.
 - Hermes: `hermes skills list` lists `casefile`.
-- Other agents (`npx skills`): the file `~/.agents/skills/casefile/SKILL.md` exists.
+- Other agents: the file `~/.agents/skills/casefile/SKILL.md` exists.
 
-Where it is missing, the install line in skill-only mode with the MCP address in
-`CASEFILE_URL`, as under "Claude Code and Codex" above, installs it into every harness on
-the machine and leaves the running service as it is. For an installation on the same
+Where it is missing, the installer's skill-only mode with the MCP address installs it
+into every harness on the machine and leaves the running service as it is; its command
+is in the README (https://github.com/azimov777/casefile#readme) and the guide (https://github.com/azimov777/casefile/blob/main/docs/agent-install.md). For an installation on the same
 machine the address is its `MCP:` line, `http://127.0.0.1:8100/mcp` by default.
 
 A session that was already running sees the new skill after a restart, or after
 `/reload-plugins` in Claude Code.
 
-Running the Casefile install line again installs the skill into every harness it finds
-on the machine, including one that appeared after the first install. Each harness also
+Running the Casefile installer again installs the skill into every harness it finds on
+the machine, including one that appeared after the first install. Each harness also
 installs and updates it by itself:
 
 ### Claude Code
@@ -220,12 +214,9 @@ Update: `hermes skills update`.
 
 ### Other agents
 
-```bash
-npx skills add azimov777/casefile#stable
-```
+Clients that read skills from a repository install and update it from the `stable`
+branch of `azimov777/casefile`; the commands are in the guide (https://github.com/azimov777/casefile/blob/main/docs/agent-install.md).
 
-Update: `npx skills update`.
-
-Claude Code and Codex follow the `plugin` branch (only the plugin files), `npx skills` the
+Claude Code and Codex follow the `plugin` branch (only the plugin files), other agents the
 `stable` branch. Both move to a release only after that release's images are published,
 so the installed skill does not run ahead of the server.
