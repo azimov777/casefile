@@ -61,11 +61,11 @@ def _server(sessions: SessionFactory, **settings: Any) -> MCPServer:
 
 
 @asynccontextmanager
-async def _http(server: MCPServer) -> AsyncIterator[AsyncClient]:
+async def _http(server: MCPServer, base_url: str = MCP_BASE_URL) -> AsyncIterator[AsyncClient]:
     application: Starlette = server.streamable_http_app()
     async with (
         application.router.lifespan_context(application),
-        AsyncClient(transport=ASGITransport(app=application), base_url=MCP_BASE_URL) as client,
+        AsyncClient(transport=ASGITransport(app=application), base_url=base_url) as client,
     ):
         yield client
 
@@ -682,3 +682,138 @@ async def test_an_empty_bearer_still_gets_the_plain_challenge(
 
     assert response.status_code == 401
     assert "resource_metadata=" in response.headers["www-authenticate"]
+
+
+# --- Имя петли в метаданных: служба называет себя узлом запроса, TRK-488 --------------
+
+
+async def _challenge(client: AsyncClient) -> str | None:
+    """`WWW-Authenticate` ответа `401`; `None`, если узел запроса отверг сам транспорт.
+
+    Эндпоинт MCP защищён от DNS rebinding: чужой `Host` получает `421` до проверки токена
+    (`docs/notes/mcp.md`), и вызова для входа там нет вовсе."""
+    response = await client.post("/mcp", headers=ACCEPT, json=INITIALIZE)
+    if response.status_code == 421:
+        return None
+    assert response.status_code == 401, response.text
+    return response.headers["www-authenticate"]
+
+
+async def _documents(
+    client: AsyncClient,
+) -> tuple[dict[str, Any], dict[str, Any], str | None]:
+    resource = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
+    server = (await client.get("/.well-known/oauth-authorization-server")).json()
+    return resource, server, await _challenge(client)
+
+
+def _named(
+    origin: str, resource: dict[str, Any], server: dict[str, Any], challenge: str | None
+) -> None:
+    path = urlsplit(OWN_RESOURCE).path
+    assert resource["resource"] == f"{origin}{path}"
+    assert [url.rstrip("/") for url in resource["authorization_servers"]] == [origin]
+    assert server["issuer"].rstrip("/") == origin
+    assert server["authorization_endpoint"] == f"{origin}/authorize"
+    assert server["token_endpoint"] == f"{origin}/token"
+    assert server["registration_endpoint"] == f"{origin}/register"
+    if challenge is not None:
+        assert f'resource_metadata="{origin}/.well-known/oauth-protected-resource{path}"' in (
+            challenge
+        )
+        assert challenge.endswith(', scope="casefile"')
+
+
+@pytest.mark.parametrize("name", ["localhost", "127.0.0.1", "[::1]", "LOCALHOST"])
+async def test_a_local_service_names_itself_by_the_loopback_name_of_the_request(
+    mcp_sessions: SessionFactory, name: str
+) -> None:
+    """Плагин ходит на `127.0.0.1`, адрес службы — `localhost`: клиент сверяет `resource`
+    метаданных с адресом подключения (RFC 9728 §3.3) и issuer — с адресом метаданных
+    (RFC 8414 §3.3). Codex и Claude Code на расхождении отказывали во входе (TRK-488#5)."""
+    port = urlsplit(OWN_RESOURCE).port
+    origin = f"http://{name.lower()}:{port}"
+    async with _http(_server(mcp_sessions), base_url=f"http://{name}:{port}") as client:
+        resource, server, challenge = await _documents(client)
+        registered = await _register(client)
+        verifier, challenge_code = _pkce()
+        answer = _query(
+            await _authorize(
+                client,
+                registered["client_id"],
+                challenge_code,
+                resource=resource["resource"],
+            )
+        )
+        issued = await _exchange(
+            client,
+            registered["client_id"],
+            answer["code"],
+            verifier,
+            resource=resource["resource"],
+        )
+
+    assert challenge is not None
+    _named(origin, resource, server, challenge)
+    assert answer["iss"] == server["issuer"]
+    assert issued.status_code == 200, issued.text
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["http://127.0.0.1:{other}", "http://192.0.2.1:{port}", "http://evil.example:{port}"],
+)
+async def test_another_host_or_port_gets_the_public_address(
+    mcp_sessions: SessionFactory, base_url: str
+) -> None:
+    """Имя петли берётся из запроса только при том же порте; чужой узел — адрес службы."""
+    port = urlsplit(OWN_RESOURCE).port or 80
+    configured = urlsplit(OWN_RESOURCE)
+    origin = f"{configured.scheme}://{configured.netloc}"
+    url = base_url.format(port=port, other=port + 1)
+    async with _http(_server(mcp_sessions), base_url=url) as client:
+        resource, server, challenge = await _documents(client)
+        registered = await _register(client)
+        _, code_challenge = _pkce()
+        answer = _query(await _authorize(client, registered["client_id"], code_challenge))
+
+    _named(origin, resource, server, challenge)
+    assert answer["iss"] == server["issuer"]
+
+
+@pytest.mark.parametrize("login", ["local", "password"])
+async def test_a_service_on_https_keeps_its_public_address_for_a_loopback_host(
+    mcp_sessions: SessionFactory, login: str
+) -> None:
+    """Сеть не меняется: публичный адрес `https` называется любому узлу запроса."""
+    public = "https://casefile.example.com"
+    settings = get_settings().model_copy(
+        update={"login": login, "bind": "0.0.0.0", "mcp_public_url": f"{public}/mcp"}
+    )
+    server = create_server(runtime=Runtime(sessions=mcp_sessions), settings=settings)
+    port = urlsplit(OWN_RESOURCE).port
+    async with _http(server, base_url=f"http://127.0.0.1:{port}") as client:
+        resource, metadata, on_loopback = await _documents(client)
+    async with _http(server, base_url=public) as client:
+        on_public = await _challenge(client)
+    # Локальный режим пускает к эндпоинту узлы петли, сетевой — только публичный узел.
+    challenge = on_loopback if login == "local" else on_public
+    assert challenge is not None
+
+    assert resource["resource"] == f"{public}/mcp"
+    assert [url.rstrip("/") for url in resource["authorization_servers"]] == [public]
+    assert metadata["issuer"].rstrip("/") == public
+    assert f'resource_metadata="{public}/.well-known/oauth-protected-resource/mcp"' in challenge
+
+
+async def test_a_local_service_in_password_mode_keeps_its_public_address(
+    mcp_sessions: SessionFactory,
+) -> None:
+    """Режим входа по учётным записям — сетевой: узел один, имя петли не подставляется."""
+    settings = get_settings().model_copy(update={"login": "password", "bind": "127.0.0.1"})
+    server = create_server(runtime=Runtime(sessions=mcp_sessions), settings=settings)
+    port = urlsplit(OWN_RESOURCE).port
+    async with _http(server, base_url=f"http://127.0.0.1:{port}") as client:
+        resource = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
+
+    assert resource["resource"] == OWN_RESOURCE

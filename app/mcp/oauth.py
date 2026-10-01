@@ -42,6 +42,7 @@ SDK отказывается подниматься с issuer по `http` не �
 import contextvars
 import json
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -63,11 +64,14 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.auth import (
     InvalidRedirectUriError,
     OAuthClientInformationFull,
+    OAuthMetadata,
     OAuthToken,
     ProtectedResourceMetadata,
 )
 from pydantic import AnyHttpUrl, AnyUrl, ValidationError
 from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import Response
 from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -89,6 +93,7 @@ __all__ = [
     "PresentedToken",
     "RefusalReasons",
     "ResourceOnToken",
+    "ServiceOrigin",
     "advertise_client_documents",
     "allowed_hosts",
     "auth_settings",
@@ -523,10 +528,11 @@ class IssuerOnAuthorize:
     `invalid_scope`), и `iss` там нет; форкать SDK нельзя, поэтому `iss` дописывается в
     `Location` по дороге. Редирект на страницу входа (без `code` и `error`) не трогается:
     браузер вернётся к клиенту уже со страницы, и `iss` ставит она сама
-    (`app/mcp/consent.py`). `iss` — тот же issuer, что в метаданных сервера авторизации.
+    (`app/mcp/consent.py`). `iss` — тот же issuer, что в метаданных сервера авторизации
+    для этого запроса: `issuer` получает область ASGI запроса и называет его.
     """
 
-    def __init__(self, app: ASGIApp, issuer: str) -> None:
+    def __init__(self, app: ASGIApp, issuer: Callable[[Scope], str]) -> None:
         self.app = app
         self._issuer = issuer
 
@@ -535,10 +541,12 @@ class IssuerOnAuthorize:
             await self.app(scope, receive, send)
             return
 
+        issuer = self._issuer(scope)
+
         async def forward(message: Message) -> None:
             if message["type"] == "http.response.start" and 300 <= message["status"] < 400:
                 headers = [
-                    (name, self._with_issuer(value) if name.lower() == b"location" else value)
+                    (name, _with_issuer(value, issuer) if name.lower() == b"location" else value)
                     for name, value in message.get("headers", [])
                 ]
                 message = {**message, "headers": headers}
@@ -546,12 +554,13 @@ class IssuerOnAuthorize:
 
         await self.app(scope, receive, forward)
 
-    def _with_issuer(self, location: bytes) -> bytes:
-        url = location.decode()
-        query = parse_qs(urlsplit(url).query)
-        if "iss" in query or not ({"code", "error"} & query.keys()):
-            return location
-        return construct_redirect_uri(url, iss=self._issuer).encode()
+
+def _with_issuer(location: bytes, issuer: str) -> bytes:
+    url = location.decode()
+    query = parse_qs(urlsplit(url).query)
+    if "iss" in query or not ({"code", "error"} & query.keys()):
+        return location
+    return construct_redirect_uri(url, iss=issuer).encode()
 
 
 def advertise_client_documents(application: Starlette, settings: Settings) -> None:
@@ -560,29 +569,44 @@ def advertise_client_documents(application: Starlette, settings: Settings) -> No
     SDK строит их сам (`build_metadata`) и отдаёт маршрутом
     `/.well-known/oauth-authorization-server`; здесь маршрут получает тот же документ
     плюс `client_id_metadata_document_supported: true` и `none` среди методов `/token`.
-    Сервер авторизации не поднят (`authorization_enabled` ложно) — маршрута нет, и
-    подменять нечего.
+    Issuer документа — адрес, которым служба себя называет этому запросу
+    (`ServiceOrigin`): клиент сверяет его с адресом, по которому документ получил
+    (RFC 8414 §3.3). Сервер авторизации не поднят (`authorization_enabled` ложно) —
+    маршрута нет, и подменять нечего.
     """
-    auth = auth_settings(settings)
-    metadata = build_metadata(
-        auth.issuer_url,
-        auth.service_documentation_url,
-        auth.client_registration_options or ClientRegistrationOptions(),
-        auth.revocation_options or RevocationOptions(),
-        supports_identity_assertion=auth.identity_assertion_enabled,
-    )
-    methods = ["none", *(metadata.token_endpoint_auth_methods_supported or [])]
-    issuer = str(metadata.issuer)
-    metadata = metadata.model_copy(
-        update={
-            "client_id_metadata_document_supported": True,
-            # RFC 9207: каждый ответ `/authorize` несёт `iss` (слой `IssuerOnAuthorize`
-            # ниже и страница согласия), поэтому флаг объявляется без оговорок.
-            "authorization_response_iss_parameter_supported": True,
-            "token_endpoint_auth_methods_supported": list(dict.fromkeys(methods)),
-        }
-    )
-    endpoint = cors_middleware(MetadataHandler(metadata).handle, ["GET", "OPTIONS"])
+    origin = ServiceOrigin(settings)
+    documents: dict[str, OAuthMetadata] = {}
+
+    def document(served: str) -> OAuthMetadata:
+        if served in documents:
+            return documents[served]
+        auth = auth_settings(settings, served)
+        metadata = build_metadata(
+            auth.issuer_url,
+            auth.service_documentation_url,
+            auth.client_registration_options or ClientRegistrationOptions(),
+            auth.revocation_options or RevocationOptions(),
+            supports_identity_assertion=auth.identity_assertion_enabled,
+        )
+        methods = ["none", *(metadata.token_endpoint_auth_methods_supported or [])]
+        documents[served] = metadata.model_copy(
+            update={
+                "client_id_metadata_document_supported": True,
+                # RFC 9207: каждый ответ `/authorize` несёт `iss` (слой `IssuerOnAuthorize`
+                # ниже и страница согласия), поэтому флаг объявляется без оговорок.
+                "authorization_response_iss_parameter_supported": True,
+                "token_endpoint_auth_methods_supported": list(dict.fromkeys(methods)),
+            }
+        )
+        return documents[served]
+
+    async def handle(request: Request) -> Response:
+        return await MetadataHandler(document(origin.of(request.scope))).handle(request)
+
+    def issuer(scope: Scope) -> str:
+        return str(document(origin.of(scope)).issuer)
+
+    endpoint = cors_middleware(handle, ["GET", "OPTIONS"])
     for route in application.router.routes:
         if isinstance(route, Route) and route.path == _AS_METADATA_PATH:
             route.app = endpoint
@@ -591,26 +615,36 @@ def advertise_client_documents(application: Starlette, settings: Settings) -> No
 
 
 class DeclaredScope:
-    """Внешний слой: добавляет `scope="casefile"` в `WWW-Authenticate` ответа `401`.
+    """Внешний слой: дописывает `scope="casefile"` в `WWW-Authenticate` ответа `401`.
 
     SDK кладёт в вызов только `error`, `error_description` и `resource_metadata`, а область
     берёт из `required_scopes`; их у Casefile нет намеренно (область токена не проверяется,
     TRK-484), поэтому параметр дописывается по дороге. Ответ без `Bearer` или с уже
-    названным `scope` не трогается.
+    названным `scope` не трогается. `resource_metadata` SDK строит из публичного адреса;
+    запросу на другое имя петли той же службы (`ServiceOrigin`) слой называет документ на
+    узле запроса: клиент сверит `resource` в нём с адресом, куда подключался (RFC 9728 §3.3).
     """
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, origin: ServiceOrigin) -> None:
         self.app = app
+        self._origin = origin
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        served = self._origin.of(scope)
+        configured = self._origin.configured
 
         async def forward(message: Message) -> None:
             if message["type"] == "http.response.start" and message["status"] == 401:
                 headers = [
-                    (name, self._with_scope(value) if name.lower() == _CHALLENGE else value)
+                    (
+                        name,
+                        _challenge(value, configured, served)
+                        if name.lower() == _CHALLENGE
+                        else value,
+                    )
                     for name, value in message.get("headers", [])
                 ]
                 message = {**message, "headers": headers}
@@ -618,12 +652,16 @@ class DeclaredScope:
 
         await self.app(scope, receive, forward)
 
-    @staticmethod
-    def _with_scope(challenge: bytes) -> bytes:
-        text = challenge.decode()
-        if not text.startswith("Bearer ") or " scope=" in text:
-            return challenge
-        return f'{text}, scope="{SCOPE}"'.encode()
+
+def _challenge(challenge: bytes, configured: str, served: str) -> bytes:
+    text = challenge.decode()
+    if not text.startswith("Bearer "):
+        return challenge
+    if served != configured:
+        text = text.replace(f'resource_metadata="{configured}/', f'resource_metadata="{served}/')
+    if " scope=" not in text:
+        text = f'{text}, scope="{SCOPE}"'
+    return text.encode()
 
 
 def declare_scope(application: Starlette, settings: Settings) -> None:
@@ -631,20 +669,73 @@ def declare_scope(application: Starlette, settings: Settings) -> None:
 
     Документ `/.well-known/oauth-protected-resource/…` SDK строит из `required_scopes`
     (пусто), поэтому маршрут получает тот же документ с `scopes_supported: [casefile]`.
-    Область объявляется, но не требуется: токен без неё принимается как раньше.
+    Область объявляется, но не требуется: токен без неё принимается как раньше. Адрес
+    ресурса и сервера авторизации в документе — тот, которым служба называет себя этому
+    запросу (`ServiceOrigin`).
     """
-    auth = auth_settings(settings)
-    resource = ProtectedResourceMetadata(
-        resource=auth.resource_server_url,
-        authorization_servers=[AnyHttpUrl(auth.issuer_url)],
-        scopes_supported=[SCOPE],
-    )
-    handler = ProtectedResourceMetadataHandler(resource)
-    endpoint = cors_middleware(handler.handle, ["GET", "OPTIONS"])
+    origin = ServiceOrigin(settings)
+    documents: dict[str, ProtectedResourceMetadataHandler] = {}
+
+    async def handle(request: Request) -> Response:
+        served = origin.of(request.scope)
+        if served not in documents:
+            auth = auth_settings(settings, served)
+            documents[served] = ProtectedResourceMetadataHandler(
+                ProtectedResourceMetadata(
+                    resource=auth.resource_server_url,
+                    authorization_servers=[AnyHttpUrl(auth.issuer_url)],
+                    scopes_supported=[SCOPE],
+                )
+            )
+        return await documents[served].handle(request)
+
+    endpoint = cors_middleware(handle, ["GET", "OPTIONS"])
     for route in application.router.routes:
         if isinstance(route, Route) and route.path.startswith(_RESOURCE_METADATA_PREFIX):
             route.app = endpoint
-    application.add_middleware(DeclaredScope)
+    application.add_middleware(DeclaredScope, origin=origin)
+
+
+class ServiceOrigin:
+    """Каким адресом служба называет себя запросу: публичным или другим именем петли.
+
+    Документы OAuth называют службу публичным адресом (`effective_mcp_public_url`), а
+    клиент обязан сверить `resource` с адресом, куда подключался (RFC 9728 §3.3), и issuer —
+    с адресом, откуда взял метаданные (RFC 8414 §3.3). У локальной установки адрес по
+    умолчанию — `localhost`, плагин же подключается к `127.0.0.1` (TRK-451), и Claude Code
+    с Codex на расхождении отказывали во входе (TRK-488). Поэтому локальная служба
+    называет себя тем именем петли, на которое пришёл запрос: `localhost`, `127.0.0.1`
+    или `[::1]`, — при том же порте, что у публичного адреса.
+
+    Только при публичном адресе `http` на петле и не в режиме входа по учётным записям:
+    в сети узел один (`allowed_hosts`), и любой другой `Host` получает публичный адрес.
+    `Host` пишет клиент, но выбрать он может лишь одно из трёх имён петли этой же машины.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        parts = urlsplit(settings.effective_mcp_public_url)
+        self.configured = f"{parts.scheme}://{parts.netloc}"
+        self._port = parts.port or 80
+        self._aliases = (
+            parts.scheme == "http"
+            and (parts.hostname or "") in _LOOPBACK
+            and settings.login != "password"
+        )
+
+    def of(self, scope: Scope) -> str:
+        """Начало адреса (`схема://узел:порт`), которым служба называет себя запросу."""
+        if not self._aliases:
+            return self.configured
+        headers = scope.get("headers", [])
+        host = next((value.decode("latin-1") for name, value in headers if name == b"host"), "")
+        try:
+            parts = urlsplit(f"//{host}")
+            name, port = (parts.hostname or "").lower(), parts.port
+        except ValueError:
+            return self.configured
+        if name not in _LOOPBACK or port != self._port:
+            return self.configured
+        return f"http://{'[::1]' if name == '::1' else name}:{port}"
 
 
 _RESOURCE_METADATA_PREFIX = "/.well-known/oauth-protected-resource"
@@ -682,15 +773,19 @@ def authorization_enabled(settings: Settings) -> bool:
     )
 
 
-def auth_settings(settings: Settings) -> AuthSettings:
+def auth_settings(settings: Settings, origin: str | None = None) -> AuthSettings:
     """Описание ресурса и сервера авторизации: оба — публичный адрес службы mcp.
 
     Адрес берётся из `effective_mcp_public_url`: клиент за прокси и по TLS ходит на него,
-    и `resource` в метаданных обязан совпасть с адресом, по которому он пришёл.
+    и `resource` в метаданных обязан совпасть с адресом, по которому он пришёл. `origin`
+    заменяет начало адреса (`схема://узел:порт`) тем, которым служба называет себя
+    запросу на другое имя петли (`ServiceOrigin`); путь остаётся прежним.
     """
     resource = settings.effective_mcp_public_url
     parts = urlsplit(resource)
-    issuer = f"{parts.scheme}://{parts.netloc}"
+    issuer = origin or f"{parts.scheme}://{parts.netloc}"
+    if origin is not None:
+        resource = f"{origin}{parts.path}"
     return AuthSettings(
         issuer_url=issuer,
         resource_server_url=resource,

@@ -1059,3 +1059,24 @@ SDK остаётся выключенным.
 обмен кода новый путь, читающий `resource` из тела `/token`, идёт тем же слоем.
 **Где:** `app/mcp/oauth.py` (`ResourceOnToken`, `CasefileAuthorization`),
 `app/domain/oauth.py` (`resource_matches`), `tests/test_mcp_oauth.py`.
+
+## OAuth: локальная служба называет себя тем именем петли, на которое пришёл запрос
+
+**Что:** при публичном адресе `http` на петле (по умолчанию `http://localhost:<порт>/mcp`) и
+режиме входа не `password` документ ресурса (`resource`, `authorization_servers`), метаданные
+сервера авторизации (`issuer` и адреса), `resource_metadata` в `401` и `iss` в редиректе
+`/authorize` строятся по `Host` запроса, если это `localhost`, `127.0.0.1` или `[::1]` с тем же
+портом. Иной узел или порт, `https` и режим `password` получают публичный адрес, как прежде.
+Замер TRK-488#5 до правки: Codex CLI 0.159.2 с адресом плагина `127.0.0.1` отказал
+(`Protected resource metadata resource mismatch`), Claude Code 2.1.286 — тоже (`Protected
+resource http://localhost:…/mcp does not match expected http://127.0.0.1:…/mcp`).
+**Почему важно:** клиент обязан сверить `resource` с адресом, к которому подключался
+(RFC 9728 §3.3), и issuer — с адресом метаданных (RFC 8414 §3.3); плагин и установщики по
+умолчанию ведут на `127.0.0.1:8100` (TRK-451, TRK-480), а служба называла себя `localhost`, и
+вход по плагину по умолчанию не работал. Смена умолчания плагина на `localhost` не починила бы
+уже поставленные клиенты и адрес, набранный руками.
+**Как правильно:** новый документ или ответ, где служба называет свой адрес, берёт начало
+адреса из `ServiceOrigin.of(scope)` и строит его через `auth_settings(settings, origin)`, а не
+из `effective_mcp_public_url` напрямую; принятие `resource` по-прежнему — `resource_matches`.
+**Где:** `app/mcp/oauth.py` (`ServiceOrigin`, `declare_scope`, `DeclaredScope`,
+`advertise_client_documents`, `IssuerOnAuthorize`, `auth_settings`), `tests/test_mcp_oauth.py`.
