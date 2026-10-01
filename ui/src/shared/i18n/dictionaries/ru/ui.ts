@@ -448,7 +448,7 @@ export const ui = {
     terminalCaption: 'Терминал',
     codexLabel: 'Codex: плагин и вход',
     codexHint:
-      'Плагин несёт скил и подключение; вход — OAuth, без ключа. <code>--sparse .codex-plugin</code> обязателен: подключение Codex читает оттуда. Обновить: <code>codex plugin marketplace upgrade casefile</code>; приложение Codex после установки перезапустите.',
+      'Плагин несёт скил и подключение; вход — OAuth, без ключа. Обновить: <code>codex plugin marketplace upgrade casefile</code>; приложение Codex после установки перезапустите.',
     codexUrlHint:
       'В плагин зашит адрес <code>http://127.0.0.1:8100/mcp</code>. У вашей установки другой: добавьте эти строки в конфигурацию Codex (ключа в них нет) и войдите командой <code>codex mcp login casefile</code>.',
     codexUrlLabel: 'Адрес установки для Codex',
@@ -458,7 +458,6 @@ export const ui = {
     codexAppField: {
       source: 'Источник',
       ref: 'Git ref',
-      sparse: 'Выборочные пути',
     },
     jsonHint:
       'Форма файла <code>.mcp.json</code> Claude Code. У Cursor те же <code>url</code> и <code>headers</code>; Windsurf, Gemini CLI и VS Code называют поля иначе — сверьтесь с документацией своего клиента.',

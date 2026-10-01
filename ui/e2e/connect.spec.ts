@@ -82,7 +82,7 @@ async function expectAddress(page: Page, mcpUrl: string): Promise<void> {
 
   // Codex: адрес контура не умолчание плагина, поэтому под командами — строки `config.toml`.
   await pick(page, 'Codex');
-  await expect(fragment(page, 'Codex').first()).toContainText('--sparse .codex-plugin');
+  await expect(fragment(page, 'Codex').first()).toContainText('--ref plugin');
   await expect(fragment(page, 'Codex').nth(1)).toHaveText(
     `[mcp_servers.casefile]\nurl = "${mcpUrl}"`,
   );
@@ -131,7 +131,7 @@ test('ключ установки: экран из навигации, адре�
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   // Команды установщика (`install.sh`), без ключа: плагин и вход OAuth.
   expect(copied).toBe(
-    'claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills\n' +
+    'claude plugin marketplace add azimov777/casefile#plugin\n' +
       `claude plugin install casefile@casefile --scope user --config "casefile_url=${mcpUrl}"\n` +
       'claude mcp login plugin:casefile:casefile',
   );
