@@ -130,28 +130,59 @@ skill_failed() {
   tail -n 3 "$skill_log" | sed 's/^/                > /'
 }
 
+# Объявление маркетплейса `casefile` в settings.json Claude Code правится тем, что есть на
+# машине; файл переписывается, только если он изменился. `auto_update` ставит
 # `"autoUpdate": true` рядом с `source` в extraKnownMarketplaces.casefile: у сторонних
 # маркетплейсов Claude Code обновляет плагин сам только с ним, а флага в CLI нет (TRK-406).
-# Правится JSON тем, что есть на машине; файл переписывается, только если ключа не было.
-claude_auto_update() {
+# `drop` убирает само объявление: так установка уходит с прежнего источника (TRK-494).
+claude_settings() {
   settings="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
   [ -f "$settings" ] || return 1
   patched="$skill_tmp/settings.json"
   if command -v jq >/dev/null 2>&1; then
-    jq '.extraKnownMarketplaces.casefile.autoUpdate = true' "$settings" >"$patched" || return 1
+    case "$1" in
+      drop) expr='del(.extraKnownMarketplaces.casefile)' ;;
+      *) expr='.extraKnownMarketplaces.casefile.autoUpdate = true' ;;
+    esac
+    jq "$expr" "$settings" >"$patched" || return 1
   elif command -v node >/dev/null 2>&1; then
     node -e 'const fs=require("fs");const o=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
-      o.extraKnownMarketplaces.casefile.autoUpdate=true;
-      process.stdout.write(JSON.stringify(o,null,2)+"\n")' "$settings" >"$patched" || return 1
+      const m=o.extraKnownMarketplaces||{};
+      if(process.argv[2]==="drop"){delete m.casefile}else{m.casefile.autoUpdate=true}
+      o.extraKnownMarketplaces=m;
+      process.stdout.write(JSON.stringify(o,null,2)+"\n")' "$settings" "$1" >"$patched" || return 1
   elif command -v python3 >/dev/null 2>&1; then
     python3 -c 'import json,sys
 o=json.load(open(sys.argv[1],encoding="utf-8"))
-o["extraKnownMarketplaces"]["casefile"]["autoUpdate"]=True
-sys.stdout.write(json.dumps(o,indent=2,ensure_ascii=False)+"\n")' "$settings" >"$patched" || return 1
+m=o.setdefault("extraKnownMarketplaces",{})
+if sys.argv[2]=="drop": m.pop("casefile",None)
+else: m["casefile"]["autoUpdate"]=True
+sys.stdout.write(json.dumps(o,indent=2,ensure_ascii=False)+"\n")' "$settings" "$1" >"$patched" || return 1
   else
     return 1
   fi
   cmp -s "$patched" "$settings" || cat "$patched" >"$settings"
+}
+
+# Маркетплейс плагина — узкая ветка `plugin`: в ней одни файлы плагина (TRK-494). Со
+# `stable` харнесс выписывал и файлы корня репозитория — `--sparse` в режиме cone берёт их
+# всегда, — и `source: "./"` уносил их в cache плагина. Установка, поставленная со
+# `stable`, держит прежний источник: Claude Code отказывает в `add` с другим источником
+# («differs from the one declared»), Codex — «already added from a different source». Тогда
+# прежний источник снимается и `add` повторяется. У Claude Code снимается только объявление в
+# settings.json: `marketplace remove` удалил бы и плагин с его настройками. У Codex
+# `marketplace remove` оставляет плагин включённым, а `plugin add` ниже ставит его заново.
+claude_marketplace_add() {
+  skill_run claude plugin marketplace add "$1" && return 0
+  tail -n 5 "$skill_log" | grep -q 'differs from the one declared' || return 1
+  claude_settings drop && skill_run claude plugin marketplace add "$1"
+}
+
+codex_marketplace_add() {
+  skill_run codex plugin marketplace add "$SKILL_SOURCE" --ref plugin && return 0
+  tail -n 5 "$skill_log" | grep -q 'already added from a different source' || return 1
+  skill_run codex plugin marketplace remove casefile &&
+    skill_run codex plugin marketplace add "$SKILL_SOURCE" --ref plugin
 }
 
 # --- Ручные записи MCP, которые плагин заменяет (TRK-452, TRK-427#10) ------------------------
@@ -200,10 +231,10 @@ cleanup_codex_entries() {
 }
 
 skill_claude() {
-  src="$SKILL_SOURCE#stable"
-  retry="claude plugin marketplace add $src --sparse .claude-plugin skills && claude plugin install casefile@casefile --scope user --config casefile_url=$PLUGIN_URL"
+  src="$SKILL_SOURCE#plugin"
+  retry="claude plugin marketplace add $src && claude plugin install casefile@casefile --scope user --config casefile_url=$PLUGIN_URL"
   [ "$DEFAULT_URL" = 1 ] || cleanup_claude_entries
-  if skill_run claude plugin marketplace add "$src" --sparse .claude-plugin skills &&
+  if claude_marketplace_add "$src" &&
     skill_run claude plugin marketplace update casefile &&
     skill_run claude plugin install casefile@casefile --scope user --config "casefile_url=$PLUGIN_URL" &&
     skill_run claude plugin update casefile@casefile; then
@@ -212,7 +243,7 @@ skill_claude() {
     case "$found" in
       *" enabled")
         [ "$DEFAULT_URL" = 1 ] || LOGIN_CLAUDE=1
-        if claude_auto_update; then
+        if claude_settings auto_update; then
           skill_line "Claude Code" "installed ${found% *} (updates itself), connected to $PLUGIN_URL$DEFAULT_NOTE"
         else
           skill_line "Claude Code" "installed ${found% *}, connected to $PLUGIN_URL$DEFAULT_NOTE (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
@@ -234,9 +265,9 @@ codex_set_url() {
 }
 
 skill_codex() {
-  retry="codex plugin marketplace add $SKILL_SOURCE --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills && codex plugin add casefile@casefile"
+  retry="codex plugin marketplace add $SKILL_SOURCE --ref plugin && codex plugin add casefile@casefile"
   [ "$DEFAULT_URL" = 1 ] || cleanup_codex_entries
-  if skill_run codex plugin marketplace add "$SKILL_SOURCE" --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills &&
+  if codex_marketplace_add &&
     skill_run codex plugin marketplace upgrade casefile &&
     skill_run codex plugin add casefile@casefile; then
     found=$(codex plugin list </dev/null 2>/dev/null | awk '$1 == "casefile@casefile" && /installed/ {
@@ -465,19 +496,19 @@ main() {
   fi
   # Подключение — по блоку на харнесс (TRK-406, решения TRK-398#7, #9, TRK-401#18, TRK-452).
   # Claude Code и Codex подключены плагином и входят по OAuth: токена для них нет нигде.
-  # Ключ агента печатается только харнессам без OAuth. Имена маркетплейса, плагина и ветки
-  # `stable` — из `.claude-plugin/marketplace.json` и `images.yml`; те же команды дословно
+  # Ключ агента печатается только харнессам без OAuth. Имена маркетплейса, плагина и веток
+  # `plugin` и `stable` — из `.claude-plugin/marketplace.json` и `images.yml`; те же команды дословно
   # стоят в `docs/agent-install.md`, и `tests/test_installers.py` сверяет их.
   bold "Claude Code:"
   echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth,"
   echo "  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile"
-  echo "  Without the installer: claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills"
+  echo "  Without the installer: claude plugin marketplace add azimov777/casefile#plugin"
   echo "  claude plugin install casefile@casefile --scope user --config casefile_url=$mcp_url"
   echo
   bold "Codex:"
   echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth."
   echo "  If it did not run above: codex mcp login casefile"
-  echo "  Without the installer: codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills"
+  echo "  Without the installer: codex plugin marketplace add azimov777/casefile --ref plugin"
   echo "  codex plugin add casefile@casefile"
   echo
   bold "Hermes (OAuth, no token):"

@@ -19,8 +19,9 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 - `.claude-plugin/` — маркетплейс `casefile` и плагин `casefile` для Claude Code и Codex: `marketplace.json`, `plugin.json` (с `userConfig` для адреса коннектора), `mcp.json` (коннектор без токена); плагин несёт скил из `skills/` и коннектор, его `version` равна версии выпуска
 - `.github/` — GitHub: конвейеры в `workflows/` (проверки на каждый PR — `ci.yml`, подпись вклада — `dco.yml`,
   образы ghcr.io после проверок — `images.yml`: `latest` на каждый коммит main, номер и канал `stable` на тег выпуска
-  и после образов ветка `stable` на коммит выпуска (канал скила для маркетплейса плагина и `npx skills`),
-  следом узкая ветка `plugin` — только файлы плагина, коммит на выпуск (её отслеживает портал Anthropic, TRK-478),
+  и после образов ветка `stable` на коммит выпуска (канал скила для `npx skills`),
+  следом узкая ветка `plugin` — только файлы плагина, коммит на выпуск (с неё ставят маркетплейс Claude Code
+  и Codex, её отслеживает портал Anthropic, TRK-478, TRK-494),
   запись Casefile в официальном реестре MCP на тот же тег, входом через GitHub OIDC — `mcp-registry.yml`,
   публикация `site/` на GitHub Pages при изменении папки на main — `pages.yml`, TRK-462), бот
   еженедельных PR с обновлением `uv.lock` (`dependabot.yml`), текст `DCO` и шаблон запроса на слияние `PULL_REQUEST_TEMPLATE.md`

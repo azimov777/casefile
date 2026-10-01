@@ -194,7 +194,7 @@ installs and updates it by itself:
 ### Claude Code
 
 ```bash
-claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills
+claude plugin marketplace add azimov777/casefile#plugin
 claude plugin install casefile@casefile --scope user --config casefile_url=<MCP address>
 ```
 
@@ -204,7 +204,7 @@ itself. A new version reaches a running session after a restart or `/reload-plug
 ### Codex
 
 ```bash
-codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills
+codex plugin marketplace add azimov777/casefile --ref plugin
 codex plugin add casefile@casefile
 ```
 
@@ -226,5 +226,6 @@ npx skills add azimov777/casefile#stable
 
 Update: `npx skills update`.
 
-All of these follow the `stable` branch, which moves to a release only after that
-release's images are published, so the installed skill does not run ahead of the server.
+Claude Code and Codex follow the `plugin` branch (only the plugin files), `npx skills` the
+`stable` branch. Both move to a release only after that release's images are published,
+so the installed skill does not run ahead of the server.

@@ -177,14 +177,15 @@ Codex in as in step 3; without one it starts no sign-in. The commands below do t
 A fresh install of step 2 already did it for every harness it found: read its
 "Installing the Casefile skill" lines and run the commands below only for your harness if
 it says `not found` or `failed`, or if the check above found no skill. The installer
-prints the same commands; they read the skill from the `stable` channel of the Casefile
-repository. Running the installer line again also installs the skill into a harness that
+prints the same commands. Claude Code and Codex read the plugin from the `plugin` branch of
+the Casefile repository, which holds only the plugin files and moves with each release;
+`npx skills` reads the skill from the `stable` branch. Running the installer line again also installs the skill into a harness that
 appeared later:
 
 - **Claude Code:**
 
   ```bash
-  claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills
+  claude plugin marketplace add azimov777/casefile#plugin
   claude plugin install casefile@casefile --scope user --config casefile_url=<MCP address>
   ```
 
@@ -196,7 +197,7 @@ appeared later:
 - **Codex:**
 
   ```bash
-  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills
+  codex plugin marketplace add azimov777/casefile --ref plugin
   codex plugin add casefile@casefile
   ```
 
@@ -212,6 +213,13 @@ appeared later:
 - **Hermes:** `hermes skills install azimov777/casefile/skills/casefile`; to update, run
   the same command again.
 - **Any other agent:** `npx skills add azimov777/casefile#stable`; to update, run it again.
+
+A plugin added earlier from `#stable` keeps working and updating. To move it to `plugin`,
+run the installer line again, or by hand: Claude Code refuses the new `marketplace add`
+with "differs from the one declared"; delete `casefile` from `extraKnownMarketplaces` in
+`~/.claude/settings.json` and repeat it (`marketplace remove` would also uninstall the
+plugin). Codex refuses with "already added from a different source": run
+`codex plugin marketplace remove casefile` and repeat both Codex lines.
 
 A running session does not see a new plugin: restart it, or run `/reload-plugins` in
 Claude Code. Then sign in as in step 3.

@@ -959,7 +959,7 @@ casefile_url=https://host/mcp` или `/plugin configure`. У Codex подста
 .claude-plugin --sparse skills` корневой файл вовсе не забирает. Без `.codex-plugin/` в установке
 (старые строки со `--sparse`) Codex читает `.claude-plugin/plugin.json` и получает литерал
 `${user_config.casefile_url}` вместо адреса: установщики обязаны добавить `--sparse .codex-plugin`
-(TRK-452). Вне петли служба отдаёт OAuth только по `https` (`authorization_enabled`): плагин с
+(TRK-452); с TRK-494 они ставят из ветки `plugin` без `--sparse`, `.codex-plugin/` в ней есть. Вне петли служба отдаёт OAuth только по `https` (`authorization_enabled`): плагин с
 `http://<IP>` не войдёт, адрес сервера — всегда `https`. `claude mcp list` на свежей установке
 плагина без `--config` сразу идёт на адрес по умолчанию: во временном окружении сначала `--config`.
 **Как правильно:** при смене адреса по умолчанию править вместе (`userConfig.default`,

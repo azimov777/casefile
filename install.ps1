@@ -99,6 +99,7 @@ function Invoke-SkillCmd {
     $out = & $exe @rest 2>&1 | Out-String
     $ok = $LASTEXITCODE -eq 0
     $script:SkillLog += $out
+    $script:SkillLast = $out
     return $ok
 }
 
@@ -128,6 +129,43 @@ function Set-ClaudeAutoUpdate {
     } catch {
         return $false
     }
+}
+
+# Близнец `claude_settings drop` из `install.sh`: убирает объявление маркетплейса `casefile`
+# из settings.json, чтобы установка ушла с прежнего источника (TRK-494).
+function Remove-ClaudeMarketplaceEntry {
+    $dir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
+    $file = Join-Path $dir 'settings.json'
+    if (-not (Test-Path $file)) { return $false }
+    try {
+        $settings = [System.IO.File]::ReadAllText($file) | ConvertFrom-Json
+        $known = $settings.extraKnownMarketplaces
+        if (-not $known) { return $false }
+        $known.PSObject.Properties.Remove('casefile')
+        $json = $settings | ConvertTo-Json -Depth 20
+        [System.IO.File]::WriteAllText($file, $json + "`n", (New-Object System.Text.UTF8Encoding($false)))
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# Маркетплейс плагина — узкая ветка `plugin` (TRK-494), близнец `claude_marketplace_add` и
+# `codex_marketplace_add` из `install.sh`: установка, поставленная со `stable`, получает
+# отказ `add` с другим источником, прежний источник снимается и `add` повторяется. У Claude
+# Code — только объявление в settings.json (`marketplace remove` удалил бы и плагин с его
+# настройками), у Codex — `marketplace remove`, после которого плагин остаётся включённым.
+function Add-ClaudeMarketplace([string] $Source) {
+    if (Invoke-SkillCmd claude plugin marketplace add $Source) { return $true }
+    if ($script:SkillLast -notmatch 'differs from the one declared') { return $false }
+    return (Remove-ClaudeMarketplaceEntry) -and (Invoke-SkillCmd claude plugin marketplace add $Source)
+}
+
+function Add-CodexMarketplace {
+    if (Invoke-SkillCmd codex plugin marketplace add $SkillSource --ref plugin) { return $true }
+    if ($script:SkillLast -notmatch 'already added from a different source') { return $false }
+    return (Invoke-SkillCmd codex plugin marketplace remove casefile) -and
+        (Invoke-SkillCmd codex plugin marketplace add $SkillSource --ref plugin)
 }
 
 # --- Ручные записи MCP, которые плагин заменяет (TRK-452, TRK-427#10) ------------------------
@@ -179,10 +217,10 @@ function Remove-CodexEntries {
 }
 
 function Install-ClaudeSkill {
-    $src = "${SkillSource}#stable"
-    $retry = "claude plugin marketplace add $src --sparse .claude-plugin skills; claude plugin install casefile@casefile --scope user --config casefile_url=$($script:PluginUrl)"
+    $src = "${SkillSource}#plugin"
+    $retry = "claude plugin marketplace add $src; claude plugin install casefile@casefile --scope user --config casefile_url=$($script:PluginUrl)"
     if (-not $script:DefaultUrl) { Remove-ClaudeEntries }
-    $ok = (Invoke-SkillCmd claude plugin marketplace add $src --sparse .claude-plugin skills) -and
+    $ok = (Add-ClaudeMarketplace $src) -and
         (Invoke-SkillCmd claude plugin marketplace update casefile) -and
         (Invoke-SkillCmd claude plugin install casefile@casefile --scope user --config "casefile_url=$($script:PluginUrl)") -and
         (Invoke-SkillCmd claude plugin update casefile@casefile)
@@ -214,9 +252,9 @@ function Set-CodexUrl {
 }
 
 function Install-CodexSkill {
-    $retry = "codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills; codex plugin add casefile@casefile"
+    $retry = "codex plugin marketplace add $SkillSource --ref plugin; codex plugin add casefile@casefile"
     if (-not $script:DefaultUrl) { Remove-CodexEntries }
-    $ok = (Invoke-SkillCmd codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills) -and
+    $ok = (Add-CodexMarketplace) -and
         (Invoke-SkillCmd codex plugin marketplace upgrade casefile) -and
         (Invoke-SkillCmd codex plugin add casefile@casefile)
     if (-not $ok) { Write-SkillFailed 'Codex' $retry; return }
@@ -478,13 +516,13 @@ if ($SkillOn) {
 Write-Host 'Claude Code:' -ForegroundColor White
 Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth,"
 Write-Host '  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile'
-Write-Host '  Without the installer: claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills'
+Write-Host '  Without the installer: claude plugin marketplace add azimov777/casefile#plugin'
 Write-Host "  claude plugin install casefile@casefile --scope user --config casefile_url=$mcpUrl"
 Write-Host ''
 Write-Host 'Codex:' -ForegroundColor White
 Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth."
 Write-Host '  If it did not run above: codex mcp login casefile'
-Write-Host '  Without the installer: codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills'
+Write-Host '  Without the installer: codex plugin marketplace add azimov777/casefile --ref plugin'
 Write-Host '  codex plugin add casefile@casefile'
 Write-Host ''
 Write-Host 'Hermes (OAuth, no token):' -ForegroundColor White
