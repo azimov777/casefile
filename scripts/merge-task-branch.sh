@@ -184,8 +184,13 @@ run_test() {
 # вершина сливаемой ветки, которую `git merge --no-commit` выставляет что при конфликте,
 # что без него, и не трогает до коммита: общее место что для обычного хода, что для
 # `--continue`, где имени ветки уже нет.
+#: Кроме `ui/` — файлы вне него, с которыми сверяется `ui/src/features/connect-agent/model/
+#: snippets.test.ts` (установщик и гайд агента, README): правка их без `ui/` красила `pnpm
+#: check` в main (TRK-446#24, TRK-507).
+UI_WATCHED_PATHS=(ui/ install.sh install.ps1 docs/agent-install.md README.md)
+
 branch_touches_ui() {
-    [ -n "$(git diff --name-only HEAD...MERGE_HEAD -- ui/)" ]
+    [ -n "$(git diff --name-only HEAD...MERGE_HEAD -- "${UI_WATCHED_PATHS[@]}")" ]
 }
 
 run_ui_check() {

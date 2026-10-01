@@ -520,6 +520,24 @@ def test_pnpm_check_is_skipped_when_the_branch_does_not_touch_ui(tmp_path: Path)
     assert "pnpm check — ветка не трогает ui/, не запускался" in body
 
 
+def test_pnpm_check_runs_when_the_branch_touches_the_installer_without_ui(tmp_path: Path) -> None:
+    """Правка `install.sh` без `ui/` тоже гоняет `pnpm check`: тест фрагментов интерфейса
+    сверяет их с установщиком (TRK-507)."""
+    repo = _make_repo_with_ui(tmp_path, branch_touches_ui=False)
+    _git(repo, ["checkout", "--quiet", "task/TRK-0"])
+    (repo / "install.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    _git(repo, ["add", "install.sh"])
+    _git(repo, ["commit", "--quiet", "-m", "установщик"])
+    _git(repo, ["checkout", "--quiet", "main"])
+    fake_bin = _make_fake_bin(tmp_path, label="fakebin-installer")
+    pnpm_log = tmp_path / "pnpm-invocations.log"
+    _add_fake_pnpm(fake_bin, log=pnpm_log)
+
+    done = _run_script(repo, fake_bin, ["task/TRK-0", "-m", "merge(x): проверка (TRK-0)"])
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert pnpm_log.exists(), "pnpm не вызван, хотя ветка трогала install.sh"
+
+
 def test_a_red_pnpm_check_stops_the_merge_when_the_branch_touches_ui(tmp_path: Path) -> None:
     """Ветка, трогающая `ui/`, с нарочной ошибкой (здесь — красным поддельным `pnpm
     check`, воспроизводящим красный `prettier`/eslint/vitest) не сливается: лог зовёт

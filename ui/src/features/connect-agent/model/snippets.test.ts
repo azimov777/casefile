@@ -178,7 +178,8 @@ describe('команды плагина совпадают с установщи
 
   it('Claude Code', () => {
     expect(script).toContain(claudeMarket);
-    expect(script).toContain(claudeInstall!.replace('ADDRESS', '$PLUGIN_URL'));
+    // В установщике адрес — переменная `claude_url`: прежний адрес плагина или PLUGIN_URL (TRK-502).
+    expect(script).toContain(claudeInstall!.replace('ADDRESS', '$claude_url'));
     expect(script).toContain(claudeLogin!);
   });
 
