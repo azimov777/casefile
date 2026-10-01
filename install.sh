@@ -10,8 +10,10 @@
 # Нужен только Docker с Compose v2. Всё остальное — образы из ghcr.io, которые конвейер
 # публикует на каждый выпуск с git-тегом (канал `stable`). Compose-файл берётся из образа
 # того же выпуска, а не с main: файл и образы установки всегда одного выпуска. Секретов
-# скрипт не спрашивает: ключ интерфейса и токен агента выпускает сама установка
-# (`docker-compose.prod.yml`).
+# скрипт не спрашивает: ключ интерфейса и ключ агента выпускает сама установка
+# (`docker-compose.prod.yml`). Claude Code и Codex подключает плагин `casefile` с входом
+# OAuth (TRK-452): токен в их файлы не пишется, прежние ручные записи `casefile`/`tracker`
+# с адресом этой установки убираются, а ключ агента печатается только харнессам без OAuth.
 #
 # Вывод для человека — по-английски, как и вся страница проекта на GitHub.
 #
@@ -23,9 +25,18 @@
 # Обе последние записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
 #   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
-#   CASEFILE_SKILL_ONLY  1 — только скил: без Docker, без каталога установки и без токена;
-#                      для машины агента, которая подключается к Casefile на сервере:
-#                      curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+#   CASEFILE_SKILL_ONLY  1 — только агенты этой машины: без Docker, без каталога установки и
+#                      без токена; для машины, которая подключается к Casefile на сервере.
+#                      Нужен адрес сервера в `CASEFILE_URL`, и только https (http — лишь для
+#                      localhost: вне своей машины служба отдаёт вход OAuth только по https):
+#                      curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh
+#                      Без `CASEFILE_URL` плагин не ставится (его коннектору нужен адрес):
+#                      ставятся скилы Hermes и прочих агентов и печатается, как задать адрес.
+#   CASEFILE_URL       адрес MCP сервера для `CASEFILE_SKILL_ONLY=1`; при полной установке
+#                      адрес даёт сама установка
+#   CASEFILE_LOGIN     0 — не вести вход OAuth, только напечатать команды (по умолчанию вход
+#                      идёт, если есть терминал человека; без него — только печать)
+#   CASEFILE_TTY       терминал для входа, по умолчанию /dev/tty (в `| sh` stdin — труба)
 #   CASEFILE_SKILL_SOURCE  откуда брать маркетплейс скила, по умолчанию azimov777/casefile;
 #                      так шаг проверяют до публикации, как CASEFILE_REGISTRY для образов
 #
@@ -42,6 +53,16 @@ COMPOSE=docker-compose.prod.yml
 SKILL=${CASEFILE_SKILL:-1}
 SKILL_ONLY=${CASEFILE_SKILL_ONLY:-0}
 SKILL_SOURCE=${CASEFILE_SKILL_SOURCE:-azimov777/casefile}
+LOGIN=${CASEFILE_LOGIN:-1}
+TTY=${CASEFILE_TTY:-/dev/tty}
+# Адрес MCP, с которым ставится плагин: у полной установки — ответ самой установки, у
+# `CASEFILE_SKILL_ONLY=1` — `CASEFILE_URL`; пуст — плагин не ставится.
+PLUGIN_URL=
+# Адрес, который у Codex уже прописан в плагине (`.codex-plugin/mcp.json`): другой адрес
+# ему задаёт только `codex mcp add` (TRK-451#13).
+CODEX_PLUGIN_URL=http://127.0.0.1:8100/mcp
+LOGIN_CLAUDE=0
+LOGIN_CODEX=0
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 fail() {
@@ -127,21 +148,72 @@ sys.stdout.write(json.dumps(o,indent=2,ensure_ascii=False)+"\n")' "$settings" >"
   cmp -s "$patched" "$settings" || cat "$patched" >"$settings"
 }
 
+# --- Ручные записи MCP, которые плагин заменяет (TRK-452, TRK-427#10) ------------------------
+# Записи `casefile` (и `tracker`, как её звали раньше) со старым токеном в заголовке
+# дублируют коннектор плагина: у Claude Code при том же адресе ручная запись главнее и
+# держит токен в файле, у Codex она вытесняет плагинную. Убирается только своё: запись с
+# этим именем И с адресом этой установки (`localhost` и `127.0.0.1` — один адрес).
+# Остальные остаются как есть, а о каждом решении печатается строка.
+
+norm_url() { printf '%s' "$1" | sed -e 's#^\(https\{0,1\}://\)localhost#\1127.0.0.1#' -e 's#/*$##'; }
+
+cleanup_claude_entries() {
+  for name in casefile tracker; do
+    info=$(claude mcp get "$name" </dev/null 2>/dev/null) || continue
+    url=$(printf '%s\n' "$info" | sed -n 's/^  URL: *//p' | head -n 1)
+    scope=$(printf '%s\n' "$info" | sed -n 's/^  Scope: *\([A-Za-z]*\).*/\1/p' | head -n 1)
+    [ -n "$url" ] || continue
+    if [ "$(norm_url "$url")" = "$(norm_url "$PLUGIN_URL")" ]; then
+      case "$scope" in User) flag=user ;; Local) flag=local ;; *) flag= ;; esac
+      if [ -n "$flag" ] && skill_run claude mcp remove "$name" --scope "$flag"; then
+        skill_line "Claude Code" "removed the manual MCP entry \"$name\" ($url, $flag scope): the plugin carries the connection"
+      else
+        skill_line "Claude Code" "left the manual MCP entry \"$name\" ($url, $scope scope): remove it by hand: claude mcp remove $name"
+      fi
+    else
+      skill_line "Claude Code" "left the MCP entry \"$name\" ($url): it is not this installation's address"
+    fi
+  done
+}
+
+cleanup_codex_entries() {
+  for name in casefile tracker; do
+    info=$(codex mcp get "$name" --json </dev/null 2>/dev/null) || continue
+    url=$(printf '%s\n' "$info" | sed -n 's/.*"url": *"\([^"]*\)".*/\1/p' | head -n 1)
+    [ -n "$url" ] || continue
+    if [ "$(norm_url "$url")" = "$(norm_url "$PLUGIN_URL")" ]; then
+      if skill_run codex mcp remove "$name"; then
+        skill_line "Codex" "removed the manual MCP entry \"$name\" ($url) from config.toml"
+      else
+        skill_line "Codex" "left the manual MCP entry \"$name\" ($url): remove it by hand: codex mcp remove $name"
+      fi
+    else
+      skill_line "Codex" "left the MCP entry \"$name\" ($url): it is not this installation's address"
+    fi
+  done
+}
+
 skill_claude() {
   src="$SKILL_SOURCE#stable"
-  retry="claude plugin marketplace add $src --sparse .claude-plugin skills && claude plugin install casefile@casefile --scope user"
+  if [ -z "$PLUGIN_URL" ]; then
+    skill_line "Claude Code" "plugin not installed: it needs your server's address. Run this installer again with CASEFILE_URL=https://<your host>/mcp"
+    return 0
+  fi
+  retry="claude plugin marketplace add $src --sparse .claude-plugin skills && claude plugin install casefile@casefile --scope user --config casefile_url=$PLUGIN_URL"
+  cleanup_claude_entries
   if skill_run claude plugin marketplace add "$src" --sparse .claude-plugin skills &&
     skill_run claude plugin marketplace update casefile &&
-    skill_run claude plugin install casefile@casefile --scope user &&
+    skill_run claude plugin install casefile@casefile --scope user --config "casefile_url=$PLUGIN_URL" &&
     skill_run claude plugin update casefile@casefile; then
     found=$(claude plugin list </dev/null 2>/dev/null |
       awk '/casefile@casefile/ {f=1; next} f && /Version:/ {v=$2} f && /Status:/ {print v, ($0 ~ /enabled/ ? "enabled" : "off"); exit}')
     case "$found" in
       *" enabled")
+        LOGIN_CLAUDE=1
         if claude_auto_update; then
-          skill_line "Claude Code" "installed ${found% *} (updates itself)"
+          skill_line "Claude Code" "installed ${found% *} (updates itself), connected to $PLUGIN_URL"
         else
-          skill_line "Claude Code" "installed ${found% *} (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
+          skill_line "Claude Code" "installed ${found% *}, connected to $PLUGIN_URL (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
         fi ;;
       *) skill_failed "Claude Code" "$retry" ;;
     esac
@@ -150,17 +222,42 @@ skill_claude() {
   fi
 }
 
+codex_set_url() {
+  cfg="${CODEX_HOME:-$HOME/.codex}/config.toml"
+  if [ -f "$cfg" ] && grep -q '^\[mcp_servers\.casefile[].]' "$cfg"; then
+    return 1
+  fi
+  mkdir -p "$(dirname "$cfg")" || return 1
+  printf '\n[mcp_servers.casefile]\nurl = "%s"\n' "$PLUGIN_URL" >>"$cfg"
+}
+
 skill_codex() {
-  retry="codex plugin marketplace add $SKILL_SOURCE --ref stable --sparse .claude-plugin --sparse skills && codex plugin add casefile@casefile"
-  if skill_run codex plugin marketplace add "$SKILL_SOURCE" --ref stable --sparse .claude-plugin --sparse skills &&
+  if [ -z "$PLUGIN_URL" ]; then
+    skill_line "Codex" "plugin not installed: it needs your server's address. Run this installer again with CASEFILE_URL=https://<your host>/mcp"
+    return 0
+  fi
+  retry="codex plugin marketplace add $SKILL_SOURCE --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills && codex plugin add casefile@casefile"
+  cleanup_codex_entries
+  if skill_run codex plugin marketplace add "$SKILL_SOURCE" --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills &&
     skill_run codex plugin marketplace upgrade casefile &&
     skill_run codex plugin add casefile@casefile; then
     found=$(codex plugin list </dev/null 2>/dev/null | awk '$1 == "casefile@casefile" && /installed/ {
       for (i = 2; i <= NF; i++) if ($i ~ /^[0-9]+[.][0-9]+/) { print $i; exit } }')
-    if [ -n "$found" ]; then
-      skill_line "Codex" "installed $found"
-    else
+    if [ -z "$found" ]; then
       skill_failed "Codex" "$retry"
+      return 0
+    fi
+    LOGIN_CODEX=1
+    # Адрес плагина у Codex зашит: другой задаёт одноимённый сервер из config.toml, он
+    # вытесняет плагинный (TRK-451#13). Токена в нём нет — вход OAuth. Строка пишется сюда
+    # же, куда её пишет `codex mcp add`, но без него: тот сразу запускает вход и без
+    # терминала возвращает ошибку, хотя запись уже есть.
+    if [ "$(norm_url "$PLUGIN_URL")" = "$(norm_url "$CODEX_PLUGIN_URL")" ]; then
+      skill_line "Codex" "installed $found, connected to $PLUGIN_URL"
+    elif codex_set_url; then
+      skill_line "Codex" "installed $found, connected to $PLUGIN_URL (an entry without a token in config.toml)"
+    else
+      skill_failed "Codex" "codex mcp add casefile --url $PLUGIN_URL"
     fi
   else
     skill_failed "Codex" "$retry"
@@ -209,17 +306,66 @@ install_skills() {
     skill_line "Other agents" "npx not found (with Node.js: npx skills add $SKILL_SOURCE#stable)"
   fi
   rm -rf "$skill_tmp"
-  echo "  A running session picks up the skill after a restart (in Claude Code: /reload-plugins)."
+  echo "  A running session picks up the plugin after a restart (in Claude Code: /reload-plugins)."
+  echo
+  sign_in || true
+}
+
+# --- Вход OAuth (TRK-452) -----------------------------------------------------------------
+# Один раз на харнесс. Claude Code входит только в интерактивном терминале (TRK-432#8), и
+# в `curl | sh` stdin — труба, поэтому терминал берётся из CASEFILE_TTY (`/dev/tty`). Нет
+# терминала или CASEFILE_LOGIN=0 — вход не запускается, печатается команда. Ошибка входа
+# установку не валит: это строка с командой повтора.
+
+have_tty() { [ "$LOGIN" != 0 ] && ( : <"$TTY" ) 2>/dev/null; }
+
+sign_in_one() { # $1 — имя харнесса, остальное — команда входа
+  name=$1
+  shift
+  if "$@" <"$TTY"; then
+    skill_line "$name" "signed in"
+  else
+    skill_line "$name" "sign-in did not finish - repeat by hand: $*"
+  fi
+}
+
+sign_in() {
+  [ "$LOGIN_CLAUDE" = 1 ] || [ "$LOGIN_CODEX" = 1 ] || return 0
+  bold "Signing the agents in to Casefile (OAuth, no token on disk):"
+  if have_tty; then
+    echo "  A browser window may open; approve the sign-in there."
+    [ "$LOGIN_CLAUDE" = 0 ] || sign_in_one "Claude Code" claude mcp login plugin:casefile:casefile
+    [ "$LOGIN_CODEX" = 0 ] || sign_in_one "Codex" codex mcp login casefile
+  else
+    echo "  This needs a terminal; run once, in a terminal of yours:"
+    [ "$LOGIN_CLAUDE" = 0 ] || echo "    claude mcp login plugin:casefile:casefile"
+    [ "$LOGIN_CODEX" = 0 ] || echo "    codex mcp login casefile"
+  fi
   echo
 }
 
 main() {
   if [ "$SKILL_ONLY" = 1 ]; then
     # Машина агента, которая только подключается к Casefile на сервере: ни Docker, ни
-    # каталога установки, ни токена (TRK-401#18).
+    # каталога установки, ни токена (TRK-401#18). Адрес сервера — `CASEFILE_URL`; с ним
+    # ставится плагин (скил и коннектор) и ведётся вход OAuth, без него — только скилы,
+    # которым адрес не нужен, и подсказка, как его задать (TRK-452).
+    PLUGIN_URL=${CASEFILE_URL:-}
+    if [ -n "$PLUGIN_URL" ]; then
+      case "$PLUGIN_URL" in
+        https://?*) ;;
+        http://localhost[:/]* | http://127.0.0.1[:/]* | http://\[::1\][:/]*) ;;
+        *) fail "CASEFILE_URL must be an https:// address (http:// only for localhost): outside the local machine the service offers the OAuth sign-in over https only" ;;
+      esac
+    fi
     install_skills || true
-    echo "Now connect the agent to your Casefile over MCP: docs/agent-install.md,"
-    echo "\"Joining an installation someone else runs\" (https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md)."
+    if [ -z "$PLUGIN_URL" ]; then
+      echo "To connect Claude Code and Codex, run this again with the address of your server:"
+      echo "  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh"
+      echo "(Windows PowerShell: \$env:CASEFILE_SKILL_ONLY=1; \$env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)"
+    fi
+    echo "Other agents (Hermes and the like): docs/agent-install.md, \"Joining an installation someone else runs\""
+    echo "(https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md)."
     return 0
   fi
 
@@ -292,6 +438,7 @@ main() {
     </dev/null)
   [ -n "$mcp_url" ] ||
     fail "the installation did not report its MCP address; see: docker compose logs api"
+  PLUGIN_URL=$mcp_url
 
   # Тот же порядок, что у compose и уже у `registry`/`image` выше: окружение, затем
   # `.env`, затем умолчание. Раньше здесь стоял один `setting`, и заданный установщику
@@ -308,30 +455,24 @@ main() {
   if [ "$SKILL" != 0 ]; then
     install_skills || echo "casefile: the skill step failed; the installation itself is done."
   fi
-  # Подключение и скил — по блоку на харнесс (TRK-406, решения TRK-398#7, #9, TRK-401#18).
-  # Токен только печатается, в файлы харнессов установщик его не пишет. Имена маркетплейса,
-  # плагина и ветки `stable` — из `.claude-plugin/marketplace.json` и `images.yml`; те же
-  # команды дословно стоят в `docs/agent-install.md`, и `tests/test_installers.py` сверяет их.
-  bold "Connect Claude Code:"
-  echo "  claude mcp add --transport http --scope user casefile $mcp_url \\"
-  echo "    --header \"Authorization: Bearer $token\""
-  echo "  claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills"
-  echo "  claude plugin install casefile@casefile --scope user"
-  echo "  Then let Claude Code keep the skill current: in ~/.claude/settings.json add"
-  echo "  \"autoUpdate\": true next to \"source\" inside extraKnownMarketplaces.casefile."
+  # Подключение — по блоку на харнесс (TRK-406, решения TRK-398#7, #9, TRK-401#18, TRK-452).
+  # Claude Code и Codex подключены плагином и входят по OAuth: токена для них нет нигде.
+  # Ключ агента печатается только харнессам без OAuth. Имена маркетплейса, плагина и ветки
+  # `stable` — из `.claude-plugin/marketplace.json` и `images.yml`; те же команды дословно
+  # стоят в `docs/agent-install.md`, и `tests/test_installers.py` сверяет их.
+  bold "Claude Code:"
+  echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth,"
+  echo "  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile"
+  echo "  Without the installer: claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills"
+  echo "  claude plugin install casefile@casefile --scope user --config casefile_url=$mcp_url"
   echo
-  bold "Connect Codex:"
-  echo "  Add to ~/.codex/config.toml (works in the terminal and in the Codex app):"
-  echo "    [mcp_servers.casefile]"
-  echo "    url = \"$mcp_url\""
-  echo "    http_headers = { Authorization = \"Bearer $token\" }"
-  echo "    tool_timeout_sec = 90"
-  echo "  Terminal only, token kept out of the file: export CASEFILE_TOKEN=<token> and write"
-  echo "  bearer_token_env_var = \"CASEFILE_TOKEN\" instead of the http_headers line."
-  echo "  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills"
+  bold "Codex:"
+  echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth."
+  echo "  If it did not run above: codex mcp login casefile"
+  echo "  Without the installer: codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills"
   echo "  codex plugin add casefile@casefile"
   echo
-  bold "Connect Hermes:"
+  bold "Hermes (no OAuth: a key):"
   echo "  Add to ~/.hermes/config.yaml:"
   echo "    mcp_servers:"
   echo "      casefile:"
@@ -340,9 +481,11 @@ main() {
   echo "          Authorization: \"Bearer $token\""
   echo "  hermes skills install azimov777/casefile/skills/casefile"
   echo
-  bold "Any other MCP client (Cursor, ...):"
+  bold "Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:"
   echo "  URL     $mcp_url"
   echo "  Header  Authorization: Bearer $token"
+  echo "  The key lives in the installation; read it again with (in $DIR):"
+  echo "    docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token"
   echo "  npx skills add azimov777/casefile#stable"
   echo
   echo "The skill teaches an agent how to work in Casefile. A running session picks up a new"
@@ -363,9 +506,10 @@ main() {
   echo "  The same phrases with copy buttons, in your language: http://localhost:$ui_port/start"
   echo
 
-  echo "Another machine whose agents will connect to this installation gets the skill with:"
-  echo "  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh"
-  echo "  (Windows PowerShell: \$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)"
+  echo "Another machine whose agents will connect to a Casefile server gets the plugin and the sign-in with"
+  echo "(the address must be https unless it is localhost):"
+  echo "  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh"
+  echo "  (Windows PowerShell: \$env:CASEFILE_SKILL_ONLY=1; \$env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)"
   echo
 
   echo "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $DIR"

@@ -878,3 +878,31 @@ checkout не видит прежней вершины `stable`.
 **Где:** `.github/workflows/images.yml`, джоб `channel`; `scripts/build-plugin-branch.sh`;
 `tests/test_plugin_branch.py`. Команды проверены на локальном bare-репозитории: создание,
 второй выпуск поверх первого, то же дерево без коммита. Сам GitHub Actions не запускался.
+
+## Установщик ставит плагин с адресом и входом OAuth: `codex mcp add` без терминала падает, а `casefile` вытесняет плагин (TRK-452)
+
+**Что:** `codex mcp add casefile --url …` сразу запускает вход OAuth: без терминала он печатает
+адрес авторизации и возвращает код 1 (на стенде — `access_denied`), хотя запись в config.toml
+уже сделана. Одноимённая запись `casefile` в config.toml вытесняет сервер плагина, а у Claude
+Code ручная запись с тем же адресом главнее плагинной и держит токен в файле. Адрес плагина
+Codex зашит (`.codex-plugin/mcp.json`, `127.0.0.1:8100`), у Claude Code он — настройка
+`casefile_url` у `claude plugin install --config`. Claude Code входит только из интерактивного
+терминала, а в `curl | sh` stdin — труба.
+**Почему важно:** установщик, считавший код `mcp add` итогом, рапортовал бы «не вышло» при
+готовой записи, а без терминала мог бы зависнуть в ожидании браузера. Оставленная ручная
+запись с токеном — это и дубль инструментов, и токен в файле, ради ухода от которого сделан
+вход OAuth.
+**Как правильно:** до установки убираются записи `casefile` и `tracker` (`claude mcp get`/`remove`,
+`codex mcp get --json`/`remove`), только если адрес записи — адрес этой установки
+(`localhost` и `127.0.0.1` — один адрес), а область — user или local; остальные остаются, и о
+каждом решении печатается строка. Адрес Claude Code — `--config casefile_url=<адрес>`. Адрес
+Codex, отличный от `127.0.0.1:8100`, — две строки в config.toml (`[mcp_servers.casefile]`,
+`url`) без токена, а не `codex mcp add`. Вход (`claude mcp login plugin:casefile:casefile`,
+`codex mcp login casefile`) — только если открывается терминал из `CASEFILE_TTY` (по
+умолчанию `/dev/tty`); иначе печатаются команды. `CASEFILE_SKILL_ONLY=1` без `CASEFILE_URL`
+плагин не ставит. Вне localhost адрес только `https`: по http служба не отдаёт OAuth.
+**Где:** `install.sh` (`cleanup_*_entries`, `codex_set_url`, `skill_claude`, `skill_codex`,
+`sign_in`), `install.ps1` (то же), `scripts/check-skill-install.sh` (фазы A, A0, A1, F, F2),
+`tests/test_installers.py`. `install.ps1` целиком не исполнялся: PowerShell в образе под qemu
+падает (PAL_SEHException, NullReferenceException в движке уже на прежнем скрипте), парсер
+ошибок не нашёл, шаги Claude Code, Codex и входа прогнаны по отдельности.

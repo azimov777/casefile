@@ -173,7 +173,7 @@ def _install(
     """
     bin_dir, scene_dir = tmp_path / "bin", tmp_path / "scene"
     bin_dir.mkdir()
-    scene_dir.mkdir()
+    scene_dir.mkdir(exist_ok=True)
     for name, body in {"docker": FAKE_DOCKER, "sleep": "#!/bin/sh\n"}.items():
         (bin_dir / name).write_text(body, encoding="utf-8")
         (bin_dir / name).chmod(0o755)
@@ -319,20 +319,15 @@ SKILL_COMMANDS = (
     "claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills",
     "claude plugin install casefile@casefile --scope user",
     "codex plugin marketplace add azimov777/casefile --ref stable "
-    "--sparse .claude-plugin --sparse skills",
+    "--sparse .claude-plugin --sparse .codex-plugin --sparse skills",
     "codex plugin add casefile@casefile",
     "hermes skills install azimov777/casefile/skills/casefile",
     "npx skills add azimov777/casefile#stable",
 )
 
-#: Строки подключения MCP, которыми блоки Codex и Hermes отличаются от Claude Code
-#: (TRK-398#9): у Codex `http_headers` работает и в приложении, у Hermes — `headers`.
-CONNECT_LINES = (
-    "[mcp_servers.casefile]",
-    "http_headers = { Authorization =",
-    "tool_timeout_sec = 90",
-    "mcp_servers:",
-)
+#: Строки подключения MCP ключом — теперь только у Hermes, харнесса без OAuth (TRK-452):
+#: Claude Code и Codex подключает плагин, и токена для них установщик не печатает.
+CONNECT_LINES = ("mcp_servers:",)
 
 
 def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
@@ -375,31 +370,47 @@ def test_the_guide_checks_the_skill_before_installing_it() -> None:
 def test_the_installers_print_the_harness_blocks_in_the_same_order() -> None:
     for text in (_read(INSTALL_SH), _read(INSTALL_PS1)):
         blocks = [
-            text.index(title)
-            for title in (
-                "Connect Claude Code:",
-                "Connect Codex:",
-                "Connect Hermes:",
-                "Any other MCP client",
+            re.search(pattern, text).start()  # type: ignore[union-attr]
+            for pattern in (
+                r"""["']Claude Code:["']""",
+                r"""["']Codex:["']""",
+                r"""["']Hermes \(no OAuth""",
+                r"""["']Any other MCP client""",
             )
         ]
         assert blocks == sorted(blocks)
 
 
-def test_the_installer_prints_the_token_and_address_in_every_harness_block(
+def test_the_installer_prints_the_key_only_for_harnesses_without_oauth(
     tmp_path: Path,
 ) -> None:
+    """Claude Code и Codex подключает плагин с входом OAuth: токена в их блоках нет.
+
+    Ключ агента печатается Hermes и «прочим клиентам без OAuth», с путём, как прочитать его
+    снова для сторожа журнала (TRK-452, TRK-469#25); ни в один файл он не пишется.
+    """
     done, _ = _install(tmp_path)
 
     assert done.returncode == 0, done.stderr
     out = done.stdout
     for command in SKILL_COMMANDS:
         assert command in out, f"вывод установщика не содержит {command!r}"
-    assert 'url = "http://localhost:8100/mcp"' in out
-    assert 'http_headers = { Authorization = "Bearer agent-token-secret" }' in out
-    assert 'url: "http://localhost:8100/mcp"' in out
-    assert 'Authorization: "Bearer agent-token-secret"' in out
-    # Токен печатается, но не пишется ни в один файл харнесса.
+    blocks = {
+        "claude": out[out.index("Claude Code:") : out.index("Codex:")],
+        "codex": out[out.index("Codex:") : out.index("Hermes (no OAuth")],
+        "hermes": out[out.index("Hermes (no OAuth") : out.index("Any other MCP client")],
+        "other": out[out.index("Any other MCP client") : out.index("The skill teaches")],
+    }
+    for name in ("claude", "codex"):
+        assert "agent-token-secret" not in blocks[name] and "Bearer" not in blocks[name], name
+        assert "http://localhost:8100/mcp" in blocks[name], name
+    assert "claude mcp login plugin:casefile:casefile" in blocks["claude"]
+    assert "codex mcp login casefile" in blocks["codex"]
+    assert 'url: "http://localhost:8100/mcp"' in blocks["hermes"]
+    assert 'Authorization: "Bearer agent-token-secret"' in blocks["hermes"]
+    assert "Authorization: Bearer agent-token-secret" in blocks["other"]
+    assert "agent-token cat .secrets/agent-token" in blocks["other"]
+    # Ключ печатается, но не пишется ни в один файл харнесса.
     assert not list(tmp_path.glob(".codex")) and not list(tmp_path.glob(".hermes"))
 
 
@@ -440,6 +451,8 @@ case "$*" in
     echo '{"extraKnownMarketplaces":{"casefile":{"source":{"source":"git","url":"u"}}}}' \
       >"$CLAUDE_CONFIG_DIR/settings.json" ;;
   "plugin install"*) [ -z "${FAIL_INSTALL:-}" ] || { echo "install refused" >&2; exit 1; } ;;
+  "mcp get "*) [ -f "$SCENE/claude-$3" ] && cat "$SCENE/claude-$3" || exit 1 ;;
+  "mcp login "*) exit "$(cat "$SCENE/login-claude" 2>/dev/null || echo 0)" ;;
   "plugin list")
     printf 'Installed plugins:\n\n  > casefile@casefile\n    Version: 0.7.1\n'
     printf '    Scope: user\n    Status: enabled\n' ;;
@@ -449,6 +462,10 @@ FAKE_CODEX = r"""#!/bin/sh
 echo "codex $*" >>"$CALLS"
 [ "$*" != "plugin list" ] ||
   printf 'PLUGIN  STATUS  VERSION  PATH\ncasefile@casefile  installed, enabled  0.7.1  /x\n'
+case "$*" in
+  "mcp get "*) [ -f "$SCENE/codex-$3" ] && cat "$SCENE/codex-$3" || exit 1 ;;
+  "mcp login "*) exit "$(cat "$SCENE/login-codex" 2>/dev/null || echo 0)" ;;
+esac
 """
 FAKE_NPX = r"""#!/bin/sh
 echo "npx $*" >>"$CALLS"
@@ -522,24 +539,36 @@ def test_the_full_install_runs_the_skill_step_after_the_contour_and_names_the_on
     assert done.returncode == 0, done.stderr
     out = done.stdout
     assert out.index("Casefile is running.") < out.index("Installing the Casefile skill")
-    assert out.index("Installing the Casefile skill") < out.index("Connect Claude Code:")
-    assert "CASEFILE_SKILL_ONLY=1 sh" in out
+    assert out.index("Installing the Casefile skill") < out.index("Claude Code:")
+    assert "CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh" in out
+
+
+SERVER = "https://casefile.example.com/mcp"
+LOCAL_PLUGIN_INSTALL = (
+    "claude plugin install casefile@casefile --scope user "
+    "--config casefile_url=http://localhost:8100/mcp"
+)
 
 
 def test_the_skill_step_installs_updates_and_reports_each_harness_found(tmp_path: Path) -> None:
     env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX, npx=FAKE_NPX)
-    done, calls = _install(tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1", **env})
+    done, calls = _install(
+        tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env}
+    )
 
     assert done.returncode == 0, done.stderr
-    claude = [c for c in calls if c.startswith("claude ")]
+    claude = [c for c in calls if c.startswith("claude ") and "mcp get" not in c]
     assert claude == [
         "claude plugin marketplace add example/casefile#stable --sparse .claude-plugin skills",
         "claude plugin marketplace update casefile",
-        "claude plugin install casefile@casefile --scope user",
+        f"claude plugin install casefile@casefile --scope user --config casefile_url={SERVER}",
         "claude plugin update casefile@casefile",
         "claude plugin list",
     ]
-    assert "codex plugin marketplace add example/casefile --ref stable" in " ".join(calls)
+    assert (
+        "codex plugin marketplace add example/casefile --ref stable "
+        "--sparse .claude-plugin --sparse .codex-plugin --sparse skills"
+    ) in calls
     assert "npx -y skills add example/casefile#stable -g -y --agent cursor" in calls
     assert re.search(r"Claude Code +installed 0\.7\.1 \(updates itself\)", done.stdout)
     assert re.search(r"Codex +installed 0\.7\.1", done.stdout)
@@ -547,6 +576,214 @@ def test_the_skill_step_installs_updates_and_reports_each_harness_found(tmp_path
     assert re.search(r"Other agents +installed", done.stdout)
     settings = (tmp_path / "claude" / "settings.json").read_text()
     assert '"autoUpdate": true' in settings
+
+
+def test_skill_only_with_an_address_installs_the_plugin_without_docker_or_a_token(
+    tmp_path: Path,
+) -> None:
+    """`CASEFILE_URL` — адрес сервера: плагин Claude Code получает его настройкой, а Codex —
+    записью без токена в config.toml (у него адрес плагина зашит, TRK-451#13)."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, calls = _install(
+        tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env}
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if c.startswith(("compose", "pull", "info", "create"))]
+    assert not (tmp_path / "casefile").exists(), "каталог установки не создаётся"
+    config = (tmp_path / ".codex" / "config.toml").read_text()
+    assert config.strip() == f'[mcp_servers.casefile]\nurl = "{SERVER}"'
+    assert f"connected to {SERVER}" in done.stdout
+    for path in tmp_path.rglob("*"):
+        if path.is_file() and path.name not in {"calls", "docker", "sleep"}:
+            assert "trk_" not in path.read_text(errors="ignore"), path
+    assert "Bearer" not in done.stdout
+
+
+def test_skill_only_with_the_local_address_keeps_codex_on_the_plugin_address(
+    tmp_path: Path,
+) -> None:
+    """Адрес плагина Codex — `127.0.0.1:8100`: тот же адрес (`localhost` — то же) записи не
+    требует."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, calls = _install(
+        tmp_path,
+        extra_env={
+            "CASEFILE_SKILL_ONLY": "1",
+            "CASEFILE_URL": "http://localhost:8100/mcp",
+            **env,
+        },
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert not (tmp_path / ".codex" / "config.toml").exists()
+    assert LOCAL_PLUGIN_INSTALL in calls
+
+
+def test_skill_only_without_an_address_installs_no_plugin_and_says_how_to_set_it(
+    tmp_path: Path,
+) -> None:
+    """Без `CASEFILE_URL` коннектору плагина нечего указать: плагин не ставится, скилы
+    Hermes и прочих агентов — да, и печатается, как задать адрес."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX, npx=FAKE_NPX)
+    done, calls = _install(tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1", **env})
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if c.startswith(("claude ", "codex "))], calls
+    assert re.search(r"Claude Code +plugin not installed: it needs your server", done.stdout)
+    assert re.search(r"Codex +plugin not installed", done.stdout)
+    assert "CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh" in done.stdout
+    assert re.search(r"Other agents +installed", done.stdout)
+    assert "Signing the agents in" not in done.stdout
+
+
+def test_skill_only_refuses_an_http_address_outside_localhost(tmp_path: Path) -> None:
+    """Вне петли служба отдаёт OAuth только по https (TRK-451#13): http — отказ до всего."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, calls = _install(
+        tmp_path,
+        extra_env={
+            "CASEFILE_SKILL_ONLY": "1",
+            "CASEFILE_URL": "http://203.0.113.7:8100/mcp",
+            **env,
+        },
+    )
+
+    assert done.returncode != 0
+    assert "https" in done.stderr
+    assert calls == []
+
+
+# --- Ручные записи и вход OAuth (TRK-452) ------------------------------------------------
+
+CLAUDE_GET = (
+    "{name}:\n  Scope: User config (available in all your projects)\n  Type: http\n  URL: {url}\n"
+)
+CODEX_GET = '{{"name": "{name}", "transport": {{"type": "streamable_http", "url": "{url}"}}}}\n'
+
+
+def test_the_manual_entries_of_this_installation_are_removed_and_the_others_stay(
+    tmp_path: Path,
+) -> None:
+    """`casefile` с адресом этой установки уходит из обоих харнессов, `tracker` с чужим
+    адресом остаётся; о каждом решении — строка (TRK-427#10)."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, calls = _install(
+        tmp_path,
+        extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": "http://localhost:8100/mcp", **env},
+        **{
+            "claude-casefile": CLAUDE_GET.format(name="casefile", url="http://127.0.0.1:8100/mcp"),
+            "claude-tracker": CLAUDE_GET.format(
+                name="tracker", url="https://other.example.com/mcp"
+            ),
+            "codex-casefile": CODEX_GET.format(name="casefile", url="http://localhost:8100/mcp"),
+            "codex-tracker": CODEX_GET.format(name="tracker", url="https://other.example.com/mcp"),
+        },
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "claude mcp remove casefile --scope user" in calls
+    assert "codex mcp remove casefile" in calls
+    assert not [c for c in calls if "remove tracker" in c], "чужой адрес не трогается"
+    assert re.search(r'Claude Code +removed the manual MCP entry "casefile"', done.stdout)
+    assert re.search(r'Codex +removed the manual MCP entry "casefile"', done.stdout)
+    assert re.search(r'Claude Code +left the MCP entry "tracker"', done.stdout)
+    assert re.search(r'Codex +left the MCP entry "tracker"', done.stdout)
+    assert calls.index("claude mcp remove casefile --scope user") < calls.index(
+        LOCAL_PLUGIN_INSTALL
+    )
+
+
+def test_a_project_scope_entry_is_left_to_its_owner(tmp_path: Path) -> None:
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE)
+    done, calls = _install(
+        tmp_path,
+        extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env},
+        **{
+            "claude-casefile": CLAUDE_GET.replace("User config", "Project config").format(
+                name="casefile", url=SERVER
+            )
+        },
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if c.startswith("claude mcp remove")]
+    assert re.search(r'Claude Code +left the manual MCP entry "casefile"', done.stdout)
+
+
+def _skill_only_login(
+    tmp_path: Path, scene: dict[str, str] | None = None, **extra: str
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    return _install(
+        tmp_path,
+        extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env, **extra},
+        **(scene or {}),
+    )
+
+
+def test_without_a_terminal_the_sign_in_is_not_started_and_the_commands_are_printed(
+    tmp_path: Path,
+) -> None:
+    done, calls = _skill_only_login(tmp_path, CASEFILE_TTY=str(tmp_path / "no-such-tty"))
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if " mcp login" in c]
+    assert "This needs a terminal" in done.stdout
+    assert "claude mcp login plugin:casefile:casefile" in done.stdout
+    assert "codex mcp login casefile" in done.stdout
+
+
+def test_with_a_terminal_the_sign_in_runs_once_per_harness(tmp_path: Path) -> None:
+    tty = tmp_path / "tty"
+    tty.write_text("")
+    done, calls = _skill_only_login(tmp_path, CASEFILE_TTY=str(tty))
+
+    assert done.returncode == 0, done.stderr
+    assert "claude mcp login plugin:casefile:casefile" in calls
+    assert "codex mcp login casefile" in calls
+    assert re.search(r"Claude Code +signed in", done.stdout)
+    assert re.search(r"Codex +signed in", done.stdout)
+    assert "This needs a terminal" not in done.stdout
+
+
+def test_a_failed_sign_in_is_a_line_with_the_command_and_does_not_fail_the_install(
+    tmp_path: Path,
+) -> None:
+    tty = tmp_path / "tty"
+    tty.write_text("")
+    done, _ = _skill_only_login(tmp_path, {"login-claude": "1"}, CASEFILE_TTY=str(tty))
+
+    assert done.returncode == 0, done.stderr
+    assert re.search(
+        r"Claude Code +sign-in did not finish - repeat by hand: "
+        r"claude mcp login plugin:casefile:casefile",
+        done.stdout,
+    )
+    assert re.search(r"Codex +signed in", done.stdout), "ошибка одного входа не гасит второй"
+
+
+def test_casefile_login_zero_prints_the_commands_even_with_a_terminal(tmp_path: Path) -> None:
+    tty = tmp_path / "tty"
+    tty.write_text("")
+    done, calls = _skill_only_login(tmp_path, CASEFILE_TTY=str(tty), CASEFILE_LOGIN="0")
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if " mcp login" in c]
+    assert "claude mcp login plugin:casefile:casefile" in done.stdout
+
+
+def test_the_full_install_connects_the_plugin_to_the_installation_address(tmp_path: Path) -> None:
+    """Полная установка ставит плагин с адресом, который ей назвала сама установка."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    assert LOCAL_PLUGIN_INSTALL in calls
+    assert not (tmp_path / ".codex" / "config.toml").exists()
+    assert "agent-token-secret" not in "".join(
+        c for c in calls if c.startswith(("claude ", "codex "))
+    )
 
 
 def test_a_failed_skill_command_is_reported_with_a_retry_and_does_not_stop_the_install(
@@ -561,3 +798,70 @@ def test_a_failed_skill_command_is_reported_with_a_retry_and_does_not_stop_the_i
     assert "claude plugin install casefile@casefile --scope user" in done.stdout
     assert "install refused" in done.stdout
     assert "Updates arrive by themselves" in done.stdout
+
+
+# --- Близнец: те же шаги плагина и входа в install.ps1 (TRK-452) --------------------------
+
+#: Дословные признаки шагов, которые обязаны быть в обоих установщиках.
+PLUGIN_STEPS = (
+    "--config casefile_url=",
+    "--sparse .codex-plugin",
+    "mcp login plugin:casefile:casefile",
+    "mcp login casefile",
+    "CASEFILE_URL",
+    "CASEFILE_LOGIN",
+    "CASEFILE_SKILL_ONLY",
+    "plugin not installed: it needs your server's address",
+    "removed the manual MCP entry",
+    "left the MCP entry",
+    "This needs a terminal",
+    "sign-in did not finish - repeat by hand",
+    "must be an https:// address (http:// only for localhost)",
+    "[mcp_servers.casefile]",
+    "agent-token cat .secrets/agent-token",
+    "Hermes (no OAuth: a key)",
+)
+
+
+def test_both_installers_carry_the_plugin_and_sign_in_steps() -> None:
+    for name, text in (("install.sh", _read(INSTALL_SH)), ("install.ps1", _read(INSTALL_PS1))):
+        for step in PLUGIN_STEPS:
+            assert step in text, f"{name} не содержит {step!r}"
+        # Прежние ручные записи убираются под обоими именами и только в своих областях.
+        assert "'casefile', 'tracker'" in text or "casefile tracker" in text, name
+
+
+def test_install_ps1_prints_no_token_in_the_claude_code_and_codex_blocks() -> None:
+    for text in (_read(INSTALL_SH), _read(INSTALL_PS1)):
+        start = re.search(r"""["']Claude Code:["']""", text).start()  # type: ignore[union-attr]
+        end = text.index("Hermes (no OAuth: a key)")
+        block = text[start:end]
+        assert "Bearer" not in block and "$token" not in block
+        assert "http_headers" not in text and "bearer_token_env_var" not in text
+
+
+def test_both_installers_sign_in_only_with_a_terminal_and_after_the_plugin_step() -> None:
+    sh_text, ps1_text = _read(INSTALL_SH), _read(INSTALL_PS1)
+
+    assert '( : <"$TTY" ) 2>/dev/null' in sh_text
+    assert "IsInputRedirected" in ps1_text and "IsOutputRedirected" in ps1_text
+    assert sh_text.index("sign_in || true") < sh_text.index("sign_in() {")
+    assert ps1_text.index("    Invoke-SignIn\n}") < ps1_text.index("function Invoke-SignIn")
+
+
+def test_install_ps1_parses_when_powershell_is_available() -> None:
+    """Парсер PowerShell без ошибок. В образе тестов pwsh нет (заметка `docs/notes/docker.md`):
+    проверка идёт там, где он есть, например `docker run --platform linux/amd64
+    mcr.microsoft.com/powershell`; здесь она пропускается."""
+    import pytest
+
+    pwsh = shutil.which("pwsh")
+    if pwsh is None:
+        pytest.skip("pwsh отсутствует")
+    script = (
+        "$e=$null;$t=$null;"
+        f"[void][System.Management.Automation.Language.Parser]::ParseFile('{INSTALL_PS1}',[ref]$t,[ref]$e);"
+        "if ($e.Count) { $e | ForEach-Object { $_.Message }; exit 1 }"
+    )
+    done = subprocess.run([pwsh, "-NoProfile", "-Command", script], capture_output=True, text=True)
+    assert done.returncode == 0, done.stdout + done.stderr

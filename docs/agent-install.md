@@ -170,7 +170,7 @@ appeared later:
 - **Codex:**
 
   ```bash
-  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills
+  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills
   codex plugin add casefile@casefile
   ```
 
