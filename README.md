@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh 
 irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
-All you need is Docker. The board opens at **http://localhost:8080**, and the installer prints the one command that connects your agent. Casefile updates itself to each new release: it checks once an hour and whenever Docker starts.
+All you need is Docker. The board opens at **http://localhost:8080**, and the installer connects Claude Code and Codex by itself — a plugin and an OAuth sign-in, no token to copy. Casefile updates itself to each new release: it checks once an hour and whenever Docker starts.
 
 **Or let your agent do it.** Paste this into Claude Code, Codex or Cursor:
 
@@ -71,32 +71,42 @@ Casefile gives every task a **case file** — an append-only log the agent write
 
 ## Connect your agent
 
-The installer prints a ready-made command with your token and its actual MCP address
-filled in — by default:
+The installer connects Claude Code and Codex by itself. It installs the Casefile plugin —
+the skill and a connection to this installation's MCP address — and signs them in with
+OAuth: no token is copied and none lands in any file. If the installer had no terminal
+for the sign-in, it prints the commands; run them once:
 
 ```bash
-claude mcp add --transport http --scope user casefile http://localhost:8100/mcp \
-  --header "Authorization: Bearer <token>"
+claude mcp login plugin:casefile:casefile
+codex mcp login casefile
 ```
 
-**Install the skill too.** Connecting gives the agent the tools; the Casefile skill teaches
-it how to use them. The installer installs it by itself into Claude Code, Codex, Hermes
-and other agents it finds on the machine, and prints one line per harness. An installation
-made before v0.8.0 has no skill, and the hourly self-update does not add one: it updates
-only the service. Run the install line again, or install just the skill without touching
-the service:
+The same commands sign an agent in again after you disconnect it on the board's
+**Access** screen (in a Claude Code session, `/mcp` → `casefile` → **Re-authenticate**).
+On your own machine the sign-in needs no password: Claude Code acts as `claude`, Codex as
+`codex`.
+
+**The skill comes with the plugin.** Connecting gives the agent the tools; the Casefile
+skill teaches it how to use them. The installer puts it into Claude Code, Codex, Hermes
+and other agents it finds on the machine, and prints one line per harness. An
+installation made before v0.8.0 has no skill and no plugin, and the hourly self-update
+does not add them: it updates only the service. Run the install line again, or install
+just the plugin and the skill without touching the service, with the MCP address the
+installer printed:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=http://127.0.0.1:8100/mcp sh
 ```
 
 How to check whether an agent has the skill, and the commands for each harness, are in
 [step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill).
 
-Any other MCP client works the same way: streamable HTTP at the MCP address the installer
-printed (`http://localhost:8100/mcp` by default) with that header. Clients that take an
-`mcpServers` JSON (Cursor, VS Code and others) use this — fill in your token and, if your
-installer printed a different address, that address instead:
+**Clients without OAuth use the agent key.** Hermes, scripts and any client that cannot
+sign in with MCP OAuth connect over streamable HTTP at the MCP address with the agent key
+in a header. The installer prints the key in their blocks; read it again with
+`docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token` in
+`~/casefile`. Such a client that takes an `mcpServers` JSON uses this — with the key and,
+if your installer printed a different address, that address instead:
 
 ```json
 {
@@ -115,8 +125,8 @@ installer printed a different address, that address instead:
 **Over stdio, as an alternative.** Streamable HTTP above is the main way in. A client
 that can only launch a command and talk to it over stdin/stdout gets the same server
 that way: it starts a short-lived container of your installation, attached to the
-installation's database — same tools, same token, same case. The token goes in the
-client's environment, not on the command line:
+installation's database — same tools, same key, same case. There is no OAuth over
+stdio: the agent key goes in the client's environment, not on the command line:
 
 ```bash
 claude mcp add --scope user casefile-stdio --env TRACKER_MCP_TOKEN=<token> -- \
@@ -129,17 +139,16 @@ client session is a process of its own, so HTTP stays the lighter choice whereve
 client supports it. An installation image older than the stdio mode answers
 `unrecognized arguments: --stdio` — update it first.
 
-**A second agent, without the terminal.** The board carries the same snippets.
-**Connect an agent** shows this installation's MCP address and ready-made snippets for
-Claude Code, Codex and any client that takes an `mcpServers` JSON — no secret on the
-screen, a placeholder where the token goes. **Access** lists your tokens — every token
-of the installation, if you are an administrator: who it speaks for, what it opens, who
-issued it and when it was last used. From there
-you register an agent, issue its own token, copy the snippet with the secret already in
-it — shown once — and revoke it when that agent is done. Give each agent a token of its
-own and its case entries are signed with its name instead of one shared `agent`. On a
-shared installation every person does this for their own agents, without the
-administrator, and sees and revokes only the tokens they issued or that speak for them.
+**A second agent, without the terminal.** **Connect an agent** on the board shows this
+installation's MCP address and ready-made snippets. **Access** lists every way in, in
+three sections: agent connections (OAuth sign-ins), agent keys and sign-in sessions —
+yours, or every one of the installation if you are an administrator: who it speaks for,
+who issued it and when it was last used. A connection is disconnected there and a key
+revoked. For a client without OAuth you register an agent, issue its own key there and
+copy the snippet with the key already in it — shown once. Give each agent its own
+sign-in or key and its case entries are signed with its name. On a shared installation
+every person does this for their own agents, without the administrator, and sees only
+the connections and keys they issued or that speak for them.
 
 ### Tell it what to do
 
@@ -160,7 +169,7 @@ with copy buttons, on its `/start` page.
 
 ## Tools
 
-Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`):
+Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 
 **Tasks**
 - `get_task` — returns everything about one task in a single call: card, parent and children, links, computed features, latest summary, open questions, unresolved remarks, case index and transition targets
@@ -169,7 +178,7 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `update_task` — changes the given fields of a task; fields left out stay as they are
 - `transition` — moves a task to another status along the fixed transition table
 - `close_task` — closes a task: files entries, verdicts and the final summary and moves it to `done`, in one transaction
-- `move_task` — moves a task, or each task of a list with an outcome per key, to another project with a reason; its previous key keeps leading to it (`main` token only)
+- `move_task` — moves a task, or each task of a list with an outcome per key, to another project with a reason; its previous key keeps leading to it
 
 **Case**
 - `read_entries` — returns entry bodies of one task's case, with payload, in number order
@@ -190,14 +199,14 @@ Every MCP tool a `task` or `main` token opens, grouped by area (`app/mcp/tools/`
 - `get_project` — returns one project by its key: key, title, description, current attribute values and the index of its case
 - `list_projects` — lists the installation's projects: key, title and archive time; archived ones only when asked
 - `list_participants` — lists the participant registry: the possible addressees of a question
-- `create_project` — creates a project (`main` token only)
-- `update_project` — changes a project's title and description, recording each change in its case (`main` token only)
-- `archive_project` — archives a project with a reason, freezing it and its tasks against changes (`main` token only)
-- `restore_project` — restores an archived project with a reason (`main` token only)
+- `create_project` — creates a project
+- `update_project` — changes a project's title and description, recording each change in its case
+- `archive_project` — archives a project with a reason, freezing it and its tasks against changes
+- `restore_project` — restores an archived project with a reason
 - `set_attribute` — sets the value of a project attribute, creating it or changing it with a reason; the history stays in the project's case
 - `remove_attribute` — removes a project attribute with a reason, filing its last value in the project's case
-- `register_participant` — registers a human or a permanent agent (`main` token only)
-- `update_participant` — changes a participant's description (`main` token only)
+- `register_participant` — registers a human or a permanent agent
+- `update_participant` — changes a participant's description
 
 **Journal**
 - `wait_journal` — returns journal entries after a sequence number, waiting for new ones
@@ -291,19 +300,22 @@ the **administrator** flag, and all it opens is managing people.
 
    It prints Alice's password once; hand it to her. `--admin` makes her an administrator
    too. `account-list` shows everyone, `account-update --disable` locks a person out and
-   revokes every token they hold or issued to their agents (their past entries stay
-   signed with their name), and
+   revokes their sessions and every connection and key they issued to their agents (their
+   past entries stay signed with their name), and
    `account-password` resets a forgotten password. Casefile sends no mail: there is no
    address confirmation and no reset link.
 
-The board at `http://<server>:8080` now opens with a sign-in screen. Agents keep
-connecting to MCP with their tokens — sign-in is for people in the browser; behind TLS
-they can sign in with OAuth instead (below). Issue each
-agent its own token on the **Access** screen; **Connect an agent** shows the address from
-`TRACKER_MCP_PUBLIC_URL`.
-Each agent's machine also needs the skill: its install commands are in
-[step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill) — they run
-on the agent's machine and do not need the service installer.
+The board at `http://<server>:8080` now opens with a sign-in screen. Agents sign in with
+OAuth behind TLS (below); **Connect an agent** shows the address from
+`TRACKER_MCP_PUBLIC_URL`. Each person's agent machine gets the plugin, the skill and the
+sign-in with one line — no Docker and no service installer there:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://mcp.casefile.example.com/mcp sh
+```
+
+The steps for the agent are in
+[the agent guide](docs/agent-install.md#joining-an-installation-someone-else-runs).
 
 **Coming from the owner password.** An installation locked with `TRACKER_PASSWORD_HASH`
 before accounts existed keeps working after the update: sign-in turns on by itself, and
@@ -332,11 +344,15 @@ with `TRACKER_MCP_PUBLIC_URL=https://mcp.casefile.example.com/mcp`. A proxy that
 **Agents sign in with OAuth.** With sign-in on and `TRACKER_MCP_PUBLIC_URL` on `https`, a
 client that speaks MCP OAuth (Claude Code, Codex) needs only the address, no token. It
 opens a page on the MCP host: the person signs in with email and password and picks which
-agent the client acts as — by default their own `claude_<name>` or `codex_<name>`
-(`agent_<name>` for other clients), created on the first sign-in; the list holds their
-own agents and agents without an owner, never someone else's. The connection counts as
-issued by that person: they see and disconnect it on **Access**, an administrator sees
-all, and disabling the account cuts it off. What the proxy must do:
+agent the client acts as. By default it is their own agent, created on the first
+sign-in: Alice's Claude Code signs its case entries as `claude_alice`, her Codex as
+`codex_alice` (`agent_<name>` for other clients). The list holds their own agents and
+agents without an owner, never someone else's. The connection counts as issued by that
+person: they see and disconnect it on **Access**, an administrator sees all. Disabling
+the person's account revokes every connection and key they issued — their agents' too:
+a connection cannot renew itself and has to be signed in anew once the account is back.
+Harnesses without OAuth, and a journal watcher running between sessions, use a key the
+person issues to their agent on **Access**. What the proxy must do:
 
 - send the **whole** MCP host to port 8100, not only `/mcp`: sign-in also uses
   `/.well-known/…`, `/register`, `/authorize`, `/token` and `/oauth/…` at the root of the
@@ -345,7 +361,7 @@ all, and disabling the account cuts it off. What the proxy must do:
   With sign-in on, MCP answers only on the host of `TRACKER_MCP_PUBLIC_URL`, and a request
   under another name gets `421`.
 
-Over plain `http` beyond localhost there is no OAuth at all — agents connect with a token
+Over plain `http` beyond localhost there is no OAuth at all — agents connect with a key
 from **Access**. On a machine of your own (sign-in off, ports on localhost) an agent is
 signed in at once, without a page: Claude Code as `claude`, Codex as `codex`, any other
 client as `agent`, each created when first needed.
@@ -385,8 +401,8 @@ What else to know:
 - **Sessions.** A sign-in lasts 7 days (`TRACKER_SESSION_HOURS`). A session is a token
   with a deadline, kept in the database: restarting the installation does not end it.
   **Sign out** revokes it at once, a changed or reset password ends the person's other
-  sessions, and disabling an account revokes all its tokens, the ones the person issued
-  to their agents included: enabling it again brings none of them back.
+  sessions, and disabling an account revokes all its sessions and every connection and
+  key the person issued to their agents: enabling it again brings none of them back.
 - **Guessing.** Wrong passwords are counted per address and per email, within a minute.
   After 5 from one address, sign-in answers "try again later" to that address — the right
   password included — until the minute has passed; after 5 for one email, from wherever

@@ -6,9 +6,8 @@
 умеет (`TRK-85#33`: без раздела `## Tools` каталог отвечает «No tools detected»).
 Сверяются **множества** имён, а не глазами (`docs/CONVENTIONS.md`, «Документация»).
 
-`## Tools` называет инструменты обоих наборов токена (`task` и `main`) — README не
-подписывается никаким токеном, поэтому в нём должен быть весь список, который отдаёт
-`MCPServer.list_tools()` без фильтра `tools/list` (`app/mcp/toolset.py`).
+`## Tools` называет весь список, который отдаёт `MCPServer.list_tools()`: наборов токена
+больше нет (TRK-471), любой доступ агента видит все инструменты (`app/mcp/toolset.py`).
 """
 
 import json
@@ -36,9 +35,8 @@ async def test_the_tools_section_names_every_registered_tool(mcp_server: MCPServ
     """Обзорная проверка 1: `## Tools` README не расходится с зарегистрированными
     инструментами.
 
-    `list_tools()` зовётся на самом объекте сервера, без сессии клиента и без фильтра по
-    набору токена (`app/mcp/toolset.py`, `Toolset.middleware`), поэтому сравнение идёт
-    против полного списка — того же, что видел бы держатель набора `main`.
+    `list_tools()` зовётся на самом объекте сервера, без сессии клиента, — это тот же
+    полный список, который видит любой доступ агента.
     """
     registered = {tool.name for tool in await mcp_server.list_tools()}
     listed = set(TOOL_IN_README.findall(_section(README.read_text(encoding="utf-8"), "Tools")))
