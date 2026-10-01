@@ -1,6 +1,6 @@
 ---
 name: casefile
-description: Applies when a Casefile task tracker is being installed, or an agent harness (Claude Code, Codex, Hermes or another MCP client) is connected to an installation on the same machine or on a server; when the casefile MCP server is missing or answers 401; when answers and remarks have to reach an agent between sessions through a journal watcher; and when this skill, read from the server, is not yet installed as a plugin or needs an update. Rules for tasks arrive with the MCP server.
+description: Applies when a Casefile task tracker is being installed, or an agent harness (Claude Code, Codex, Hermes or another MCP client) is connected to an installation on the same machine or on a server; when the casefile MCP server is missing, needs a sign-in or answers 401; when answers and remarks have to reach an agent between sessions through a journal watcher; and when this skill, read from the server, is not yet installed as a plugin or needs an update. Rules for tasks arrive with the MCP server.
 ---
 
 # Casefile outside MCP
@@ -8,53 +8,70 @@ description: Applies when a Casefile task tracker is being installed, or an agen
 Casefile is a self-hosted task tracker for agents. Everything about working with tasks
 arrives over the MCP connection itself: the server's instructions and the description of
 each tool. This skill covers what the MCP connection cannot carry: how the connection is
-made, what a refused token means, how news reaches an agent between sessions, and how
-this skill gets into a harness and stays current.
+made and signed in, what a `401` means, how news reaches an agent between sessions, and
+how this skill gets into a harness and stays current.
 
 ## Connecting to an installation
 
-### Address and token from the installer on this machine
+There is one path: the Casefile plugin carries the skill and the MCP connection, and the
+agent signs in with OAuth. No token goes into any file of Claude Code or Codex. An agent
+key is only for a harness without OAuth and for a journal watcher between sessions.
 
-The installer (`install.sh` on macOS and Linux, `install.ps1` on Windows) prints the board
-URL, an `MCP:` line with the MCP address, and a connect command with a token. The MCP
-address is the one on that `MCP:` line: an installation can run on another port or behind
-a public URL, so no default port stands in for it.
+### The MCP address
 
-The token is in the installer output. On an installation in `~/casefile` it is also read
-without printing it anywhere else:
+On the machine of the installation the installer (`install.sh` on macOS and Linux,
+`install.ps1` on Windows) prints it on its `MCP:` line; an installation can run on
+another port or behind a public URL, so no default port stands in for it. On a server
+run by someone else it is the installation's public `https` address, shown on the
+board's **Connect an agent** screen; the `localhost` address printed on the server points
+at the agent's own machine instead.
+
+### Claude Code and Codex: the plugin and the sign-in
+
+The full install line installs the plugin connected to the installation's address. A
+machine that only connects to a server gets it from the same line in skill-only mode,
+with the address; it needs no Docker and creates no installation directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh
+```
+
+```powershell
+$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+```
+
+Outside `localhost` the address is `https`: over plain `http` the service offers no
+OAuth. Without `CASEFILE_URL` the line installs no plugin.
+
+The installer starts the sign-in when it has a terminal. Otherwise, and after the user
+disconnects the agent on the board's **Access** screen, the sign-in is repeated by hand:
+
+- Claude Code: `/mcp` in the session, `casefile` → **Authenticate** (or
+  **Re-authenticate**); in a terminal, `claude mcp login plugin:casefile:casefile`.
+- Codex: `codex mcp login casefile`.
+
+On the user's own machine the sign-in passes without a page: Claude Code acts as
+`claude`, Codex as `codex`. On a server the browser shows the installation's sign-in
+page; the user signs in with email and password and picks the agent, by default their
+own `claude_<name>` or `codex_<name>`, created on the first sign-in. The connection lasts
+30 days and the harness renews it by itself.
+
+Codex keeps the plugin's address fixed at `http://127.0.0.1:8100/mcp`; another address
+is an `[mcp_servers.casefile]` entry in `~/.codex/config.toml` with `url` alone, which
+the installer writes.
+
+### Hermes and other clients without OAuth: the agent key
+
+On the machine of the installation the key is in the installer output, or read without
+printing it anywhere else:
 
 ```bash
 cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token
 ```
 
-The token belongs in the harness's MCP configuration only; it does not go into the chat,
-into files of the project or into other configuration.
-
-### Claude Code
-
-```bash
-claude mcp add --transport http --scope user casefile <MCP address> --header "Authorization: Bearer <token>"
-```
-
-`claude mcp list` then shows `casefile` as connected.
-
-### Codex
-
-Codex reads the server from `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.casefile]
-url = "<MCP address>"
-http_headers = { Authorization = "Bearer <token>" }
-tool_timeout_sec = 90
-```
-
-The key is `http_headers`: a `headers` key in the Claude Code format is not applied by
-Codex, and its requests then go out without `Authorization`.
-
-### Hermes
-
-Hermes reads the server from `~/.hermes/config.yaml`:
+On a server the user issues a key for their agent on the **Access** screen; an agent
+issues no keys to itself. The key belongs in the harness's MCP configuration only, not
+in the chat or in files of the project. Hermes reads it from `~/.hermes/config.yaml`:
 
 ```yaml
 mcp_servers:
@@ -64,72 +81,36 @@ mcp_servers:
       Authorization: "Bearer <token>"
 ```
 
-### Other MCP clients
-
-A streamable HTTP server at the MCP address, with the header
+Any other client: a streamable HTTP server at the MCP address with the header
 `Authorization: Bearer <token>`.
 
-### After the server is added
+### After the connection is added
 
-A running session does not pick up a newly added MCP server. In Claude Code `/mcp`
-reconnects the servers; in the other harnesses the server appears in the next session.
-Until then the tracker's tools are absent from the session, which is a matter of the
-session and not of the installation.
-
-### An installation on a server, run by someone else
-
-On a shared installation, where people sign in with an email and a password, there is no
-installer output and no `agent-token` to read. The token is issued by the user in their
-own signed-in session: in the board's access screen or with `POST /api/v1/tokens`. Any
-person with an account issues tokens without the administrator. A token named after the
-machine or harness stands apart in the user's token list. The MCP address
-is the one the installation publishes; the board's connect screen shows it.
-
-The installer of the service runs on the server, not on the machine where the agent
-works: the agent's machine needs neither Docker nor an installation directory. The
-access screen is the one named `Access` in the board's side panel; a token issued there
-belongs to the user who issued it, who sees it with its last use and revokes it. The MCP
-address is the installation's public address, reachable from the agent's machine: the
-`localhost` address printed by the installer on the server points at the agent's own
-machine instead. With that address and token the harness is configured as in the
-sections above.
-
-This skill reaches the agent's machine by the Casefile install line in skill-only mode.
-It installs the skill into every harness it finds on the machine and prints where it
-stands, without Docker, an installation directory or a token:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
-```
-
-```powershell
-$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
-```
-
-The per-harness commands under "Installing and updating this skill" do the same one
-harness at a time.
-
-A token revoked by the user or by the administrator, and every token of an account the
-administrator disabled, is refused with `401 unauthorized` and
-`details.reason: token_revoked`, as described in the next section. Access comes back
-only with a new token from the same access screen; enabling a disabled account again
-does not revive its old tokens.
+A running session does not pick up a new plugin or MCP server: in Claude Code
+`/reload-plugins` and `/mcp` bring them in; in the other harnesses they appear in the
+next session. Until then the tracker's tools are absent from the session, which is a
+matter of the session and not of the installation.
 
 ## 401 from the casefile server
 
-A call refused with `401 unauthorized` carries the reason in `details.reason`:
+A request refused with `401 unauthorized` carries the reason in `details.reason`:
 
-- `token_revoked` — the token was revoked by its owner or by the administrator, or the
-  account that issued it was disabled. A disabled account takes all of its tokens with
-  it, and enabling the account again does not bring them back. Only a new token from
-  the user restores access; repeating the call with the same token gets the same answer.
-- a token that never reached the server — in Claude Code a header built from an unset
-  environment variable is sent as the literal text, and in Codex a `headers` key is
-  ignored. The server then sees no valid token at all, and the cause lies in the
-  harness configuration above.
+- `token_expired` on a connection — the harness renews it by itself; when it cannot,
+  the sign-in above is repeated.
+- `token_revoked` — the user or the administrator disconnected the connection or revoked
+  the key, or disabled the account that issued it. A disabled account takes all of its
+  connections and keys with it, and enabling it again does not bring them back. A
+  connection comes back with a new sign-in, a key only with a new key from the user;
+  repeating the call with the same token gets the same answer.
+- `account_disabled` — the account behind the token is disabled; nothing gets in until
+  the administrator enables it, and then only with a new sign-in or a new key.
+- `missing_token` or `unknown_token` — no valid token reached the server. In Claude Code a header built from
+  an unset environment variable is sent as the literal text; in Codex only
+  `http_headers` is applied, a `headers` key is ignored; a manual `casefile` entry with an
+  old key shadows the plugin. The cause lies in the harness configuration.
 
-After the configuration is corrected, the new token reaches the tools only after a
-reconnect (`/mcp` in Claude Code) or a new session.
+A corrected configuration reaches the tools only after a reconnect (`/mcp` in Claude
+Code) or a new session.
 
 ## News between sessions
 
@@ -154,6 +135,12 @@ from, and how long one poll waits before it comes back empty.
   `TRACKER_URL`, `TRACKER_TOKEN_FILE`, `WAIT_SECONDS`). What happens to a printed line
   is up to the harness.
 
+Inside a session `wait_journal` goes over the connection the agent already has and needs
+no secret. A watcher between sessions reads a key from a file, since the OAuth sign-in
+stays inside the harness: on the machine of the installation the agent key
+(`agent-token`, read as above); on a server, a key the user issues for their agent on
+the **Access** screen.
+
 ## Installing and updating this skill
 
 The MCP server also serves this skill as the resource `skill://casefile/SKILL.md`, always
@@ -172,16 +159,10 @@ harness shows whether the skill is there:
 - Hermes: `hermes skills list` lists `casefile`.
 - Other agents (`npx skills`): the file `~/.agents/skills/casefile/SKILL.md` exists.
 
-Where it is missing, the install line in skill-only mode installs it into every harness
-on the machine and leaves the running service as it is:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
-```
-
-```powershell
-$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
-```
+Where it is missing, the install line in skill-only mode with the MCP address in
+`CASEFILE_URL`, as under "Claude Code and Codex" above, installs it into every harness on
+the machine and leaves the running service as it is. For an installation on the same
+machine the address is its `MCP:` line, `http://127.0.0.1:8100/mcp` by default.
 
 A session that was already running sees the new skill after a restart, or after
 `/reload-plugins` in Claude Code.
@@ -194,7 +175,7 @@ installs and updates it by itself:
 
 ```bash
 claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills
-claude plugin install casefile@casefile --scope user
+claude plugin install casefile@casefile --scope user --config casefile_url=<MCP address>
 ```
 
 With auto-update on for the `casefile` marketplace, Claude Code updates the plugin
