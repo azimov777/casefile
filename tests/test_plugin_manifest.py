@@ -1,8 +1,11 @@
 """Манифесты плагина `.claude-plugin/`: версия равна версии выпуска (TRK-404, TRK-398#7, #8).
 
 Claude Code без новой `version` отвечает «already at latest» и держит старый `SKILL.md`,
-поэтому равенство с `pyproject.toml` держит тест. Плагин несёт только скил: `.mcp.json`
-и ключа `mcpServers` нет (TRK-398#9). Каталог `.codex-plugin/` (TRK-461) — манифест для
+поэтому равенство с `pyproject.toml` держит тест. Плагин несёт скил и коннектор Casefile
+(TRK-451): адрес без токена и заголовков, вход агента — OAuth. Файл коннектора лежит в
+`.claude-plugin/`, а не в корне: корневой `.mcp.json` подхватил бы Claude Code каждого, кто
+открывает этот репозиторий, а установка `--sparse .claude-plugin --sparse skills` его бы не
+забрала. Каталог `.codex-plugin/` (TRK-461) — манифест для
 универсального каталога OpenAI: Codex предпочитает его `.claude-plugin/plugin.json`, поэтому
 версия, имя и скил в нём обязаны совпадать с плагином Claude Code.
 """
@@ -56,13 +59,87 @@ def test_plugin_skills_point_to_the_directory_with_the_skill() -> None:
     assert (skills_dir / "casefile" / "SKILL.md").is_file()
 
 
-def test_plugin_carries_only_the_skill() -> None:
-    """Токен и адрес у каждой установки свои: MCP плагином не подключается."""
-    assert "mcpServers" not in _load("plugin.json")
+DEFAULT_ADDRESS = "http://127.0.0.1:8100/mcp"
+#: Ключи, которыми в конфигурации MCP-клиента задают авторизацию. В плагине их нет: вход — OAuth.
+AUTH_KEYS = {
+    "headers",
+    "headersHelper",
+    "headers_helper",
+    "env",
+    "env_vars",
+    "bearer_token_env_var",
+    "http_headers",
+    "env_http_headers",
+    "oauth",
+    "authorization",
+    "token",
+}
+
+
+def _codex() -> dict:
+    return json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+
+def _walk_keys(node: object) -> set[str]:
+    if isinstance(node, dict):
+        return set(node) | {k for v in node.values() for k in _walk_keys(v)}
+    if isinstance(node, list):
+        return {k for v in node for k in _walk_keys(v)}
+    return set()
+
+
+def _connector(manifest: dict, base: Path) -> dict:
+    """Единственный сервер `casefile` из файла, на который указывает `mcpServers` манифеста."""
+    path = (base / manifest["mcpServers"]).resolve()
+    assert path.is_file() and ROOT in path.parents
+    servers = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]
+    assert list(servers) == ["casefile"]
+    return servers["casefile"]
+
+
+def test_plugin_carries_the_connector_with_the_address_from_user_config() -> None:
+    """Claude Code: адрес спрашивается `userConfig`, по умолчанию — эта машина (TRK-451)."""
+    plugin = _load("plugin.json")
+    connector = _connector(plugin, ROOT)
+    option = plugin["userConfig"]["casefile_url"]
+
+    assert connector == {"type": "http", "url": "${user_config.casefile_url}"}
+    assert option["type"] == "string" and option["default"] == DEFAULT_ADDRESS
+    assert option["title"] and option["description"]
+    assert not option.get("sensitive")
+
+
+def test_codex_connector_is_a_fixed_address_equal_to_the_default() -> None:
+    """У Codex подстановок нет: в манифесте адрес по умолчанию, другой — `codex mcp add`."""
+    connector = _connector(_codex(), ROOT)
+
+    assert connector == {"url": DEFAULT_ADDRESS}
+    assert "${" not in json.dumps(connector)
+    assert connector["url"] == _load("plugin.json")["userConfig"]["casefile_url"]["default"]
+
+
+def test_plugin_has_no_token_headers_or_auth_settings() -> None:
+    """Токен у каждой установки свой и в плагин не попадает: клиент входит по OAuth."""
+    plugin = _load("plugin.json")
+    codex = _codex()
+    files = {
+        "claude connector": json.loads((ROOT / plugin["mcpServers"]).read_text(encoding="utf-8")),
+        "codex connector": json.loads((ROOT / codex["mcpServers"]).read_text(encoding="utf-8")),
+        "claude userConfig": plugin["userConfig"],
+        "marketplace": _marketplace_plugin(),
+    }
+    for name, node in files.items():
+        assert not (_walk_keys(node) & AUTH_KEYS), name
+    for name in ("claude connector", "codex connector"):
+        text = json.dumps(files[name]).lower()
+        assert "bearer" not in text and "token" not in text, name
     assert "mcpServers" not in _marketplace_plugin()
+    assert "apps" not in codex
+
+
+def test_no_connector_file_in_the_repository_root() -> None:
+    """Корневой `.mcp.json` читают и Claude Code в этом репозитории, и Codex у плагина."""
     assert not (ROOT / ".mcp.json").exists()
-    codex = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    assert "mcpServers" not in codex and "apps" not in codex
 
 
 def test_codex_manifest_matches_the_claude_plugin_and_has_listing_fields() -> None:
