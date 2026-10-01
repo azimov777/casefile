@@ -62,7 +62,24 @@ Codex keeps the plugin's address fixed at `http://127.0.0.1:8100/mcp`; another a
 is an `[mcp_servers.casefile]` entry in `~/.codex/config.toml` with `url` alone, which
 the installer writes.
 
-### Hermes and other clients without OAuth: the agent key
+### Hermes: OAuth
+
+Hermes signs in with OAuth like the others (not yet checked against a real Hermes). Its
+`~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  casefile:
+    url: "<MCP address>"
+    auth: oauth
+```
+
+It opens the sign-in page on the first connection (or `hermes mcp login casefile`); on
+the user's machine it acts as `agent`. Without a browser: paste the redirect URL back or
+tunnel to Hermes's callback port; its device-code flow does not work with Casefile. If the
+sign-in fails, use the key (below) with `headers` in place of `auth: oauth`.
+
+### Other clients without OAuth: the agent key
 
 On the machine of the installation the key is in the installer output, or read without
 printing it anywhere else:
@@ -73,7 +90,8 @@ cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/a
 
 On a server the user issues a key for their agent on the **Access** screen; an agent
 issues no keys to itself. The key belongs in the harness's MCP configuration only, not
-in the chat or in files of the project. Hermes reads it from `~/.hermes/config.yaml`:
+in the chat or in files of the project. Hermes, when its OAuth fails, reads it from
+`~/.hermes/config.yaml`:
 
 ```yaml
 mcp_servers:
@@ -176,7 +194,7 @@ installs and updates it by itself:
 ### Claude Code
 
 ```bash
-claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills
+claude plugin marketplace add azimov777/casefile#plugin
 claude plugin install casefile@casefile --scope user --config casefile_url=<MCP address>
 ```
 
@@ -186,7 +204,7 @@ itself. A new version reaches a running session after a restart or `/reload-plug
 ### Codex
 
 ```bash
-codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills
+codex plugin marketplace add azimov777/casefile --ref plugin
 codex plugin add casefile@casefile
 ```
 
@@ -208,5 +226,6 @@ npx skills add azimov777/casefile#stable
 
 Update: `npx skills update`.
 
-All of these follow the `stable` branch, which moves to a release only after that
-release's images are published, so the installed skill does not run ahead of the server.
+Claude Code and Codex follow the `plugin` branch (only the plugin files), `npx skills` the
+`stable` branch. Both move to a release only after that release's images are published,
+so the installed skill does not run ahead of the server.
