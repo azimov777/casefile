@@ -1126,6 +1126,31 @@ authentication»). Одновременные запросы видят refresh 
 `app/domain/oauth.py` (`REFRESH_REUSE_WINDOW`), `app/db/repositories/oauth.py` (`list_family`),
 `tests/test_mcp_oauth.py`, `tests/test_mcp_oauth_refresh_race.py`.
 
+## Расширение Gemini CLI: манифест в корне, адрес `httpUrl`, Antigravity читает другое (TRK-497)
+
+**Что:** `gemini-extension.json` в корне репозитория ставит Casefile в Gemini CLI одной командой
+`gemini extensions install https://github.com/azimov777/casefile` (локальный путь тоже: расширение
+показывает сервер `casefile` и скил `casefile`, `skills/` Gemini находит сам, поле не нужно).
+Коннектор — `httpUrl` на адрес по умолчанию, без токена: вход клиент обнаруживает сам. Тот же файл
+кладёт в ветку `plugin` `scripts/build-plugin-branch.sh`, поэтому `--ref plugin` ставит расширение
+без остального репозитория; версия файла равна версии выпуска. Галерея geminicli.com берёт
+публичный репозиторий с темой `gemini-cli-extension` и манифестом в корне (без ревью, обход
+ежедневный): тему ставит владелец. Antigravity CLI (замена Gemini CLI с 2026-06-18 для бесплатного и
+Pro/Ultra; Enterprise и платные ключи остаются на Gemini CLI) читает другое: файл mcp_config.json
+(`~/.gemini/config/` или `.agents/`) только с `serverUrl` — `url` и `httpUrl` «aren't supported»,
+OAuth сам при динамической регистрации клиента, скилы в `~/.gemini/antigravity-cli/skills/`,
+плагин — `plugin.json` в корне, `agy plugin install <путь>`; импорта `gemini-extension.json` и
+установки по git-адресу в документации нет.
+**Почему важно:** `gemini extensions install` каталога без доверия в изолированном `HOME` ждёт
+ответа `y` на запрос о доверии папке и без терминала молча стоит; манифест Gemini нельзя
+выдавать за плагин Antigravity — адрес в нём не прочтётся.
+**Как правильно:** проверять установку с `HOME` в ките, ответ `y` по stdin и `--consent`; к
+Antigravity отдельный шаг в установщике не добавлять, пока плагин и поле `serverUrl` не проверены на
+настоящем `agy`. Источники: geminicli.com/docs/extensions/reference и /releasing,
+antigravity.google/docs/mcp, /skills, /plugins.
+**Где:** `gemini-extension.json`, `scripts/build-plugin-branch.sh`,
+`tests/test_plugin_manifest.py`.
+
 ## Манифест Cursor — последний в порядке поиска Codex и не заменяет прочие (TRK-496)
 
 **Что:** `.cursor-plugin/plugin.json` (формат Cursor Plugin: `name`, `displayName`, `version`,

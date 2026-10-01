@@ -19,7 +19,15 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "build-plugin-branch.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "images.yml"
 
-TREE_ROOTS = {".claude-plugin", ".codex-plugin", ".cursor-plugin", "skills", "LICENSE", "README.md"}
+TREE_ROOTS = {
+    ".claude-plugin",
+    ".codex-plugin",
+    ".cursor-plugin",
+    "gemini-extension.json",
+    "skills",
+    "LICENSE",
+    "README.md",
+}
 PLUGIN_FILES = (*sorted(TREE_ROOTS), "pyproject.toml")
 
 
@@ -69,6 +77,7 @@ def test_the_tree_holds_only_the_plugin_within_the_portal_limits(tmp_path: Path)
         ".claude-plugin/plugin.json",
         ".codex-plugin/plugin.json",
         ".cursor-plugin/plugin.json",
+        "gemini-extension.json",
     }
     assert manifests | {"LICENSE"} <= files
     assert "skills/casefile/SKILL.md" in files
