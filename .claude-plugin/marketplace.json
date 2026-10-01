@@ -1,0 +1,24 @@
+{
+  "name": "casefile",
+  "owner": {
+    "name": "azimov777"
+  },
+  "metadata": {
+    "description": "Casefile: the skill that teaches an agent to work with a Casefile task tracker.",
+    "version": "0.9.0"
+  },
+  "plugins": [
+    {
+      "name": "casefile",
+      "source": "./",
+      "description": "Casefile for agents: the skill and the MCP connector (sign-in through OAuth, no token in the plugin); connect to an installation, recover from 401, keep the case and watch the journal.",
+      "version": "0.9.0",
+      "author": {
+        "name": "azimov777"
+      },
+      "license": "MIT",
+      "category": "productivity",
+      "strict": false
+    }
+  ]
+}

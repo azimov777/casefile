@@ -1,0 +1,34 @@
+{
+  "name": "casefile",
+  "version": "0.9.0",
+  "description": "Casefile for agents: the skill and the MCP connector (sign-in through OAuth, no token in the plugin); connect to an installation, recover from 401, keep the case and watch the journal.",
+  "author": {
+    "name": "azimov777",
+    "url": "https://github.com/azimov777"
+  },
+  "homepage": "https://github.com/azimov777/casefile",
+  "repository": "https://github.com/azimov777/casefile",
+  "license": "MIT",
+  "keywords": [
+    "casefile",
+    "tasks",
+    "tracker",
+    "agents",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.codex-plugin/mcp.json",
+  "interface": {
+    "displayName": "Casefile",
+    "shortDescription": "Task ledger for agents",
+    "longDescription": "Casefile is a self-hosted task tracker for agents: agents keep tasks and a case for each one, the human watches and answers. This plugin carries the Casefile skill and the Casefile MCP connector. It teaches an agent how to connect to a Casefile installation on the same machine or on a server, what a 401 from the MCP server means and how to recover from it, how news from the tracker reaches an agent between sessions through a journal watcher, and how to keep the skill itself installed and current. The rules for working with tasks come from the Casefile MCP server, not from this plugin. The connector points at http://127.0.0.1:8100/mcp, an installation on the same machine; it carries no token and no account, the agent signs in through OAuth. For a server at another address, add it with `codex mcp add casefile --url <address>`.",
+    "developerName": "azimov777",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/azimov777/casefile",
+    "defaultPrompt": [
+      "Connect this agent to my Casefile installation"
+    ],
+    "composerIcon": "./.codex-plugin/icon.svg",
+    "logo": "./.codex-plugin/icon.svg"
+  }
+}

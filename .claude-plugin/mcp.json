@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "casefile": {
+      "type": "http",
+      "url": "${user_config.casefile_url}"
+    }
+  }
+}
