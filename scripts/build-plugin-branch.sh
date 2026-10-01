@@ -3,8 +3,8 @@
 #
 # Портал Anthropic смотрит на «отслеживаемую ветку» и сканирует всё её дерево: пределы
 # 512 файлов и 256 КиБ на файл не-картинки (TRK-457#6). Весь репозиторий в них не входит,
-# а плагину нужны только `.claude-plugin/`, `.codex-plugin/`, `skills/` (без своей карты
-# `AGENTS.md`), `LICENSE` и `README.md`. Ту же сборку берёт шаг конвейера выпуска
+# а плагину нужны только `.claude-plugin/`, `.codex-plugin/`, `gemini-extension.json` (расширение Gemini CLI,
+# TRK-497), `skills/` (без своей карты `AGENTS.md`), `LICENSE` и `README.md`. Ту же сборку берёт шаг конвейера выпуска
 # (`.github/workflows/images.yml`, джоб `channel`) и человек для проверки.
 #
 #   scripts/build-plugin-branch.sh [--commit ТЕГ [--parent REF]] КАТАЛОГ
@@ -29,15 +29,18 @@ done
 dest="${1:?нужен каталог назначения}"
 
 command -v python3 >/dev/null || { echo "нужен python3 (только разобрать JSON)" >&2; exit 1; }
-python3 - "$root/.claude-plugin/plugin.json" "$root/pyproject.toml" <<'PY'
+python3 - "$root/.claude-plugin/plugin.json" "$root/pyproject.toml" "$root/gemini-extension.json" <<'PY'
 import json, re, sys
 m = json.load(open(sys.argv[1], encoding="utf-8"))
 release = re.search(r'^version\s*=\s*"([^"]+)"', open(sys.argv[2], encoding="utf-8").read(), re.M).group(1)
 if m["version"] != release:
     sys.exit(f"версия плагина {m['version']} не равна версии выпуска {release}")
+g = json.load(open(sys.argv[3], encoding="utf-8"))["version"]
+if g != release:
+    sys.exit(f"версия расширения Gemini {g} не равна версии выпуска {release}")
 PY
 
-for path in .claude-plugin/plugin.json .codex-plugin/plugin.json skills/casefile/SKILL.md LICENSE README.md; do
+for path in .claude-plugin/plugin.json .codex-plugin/plugin.json gemini-extension.json skills/casefile/SKILL.md LICENSE README.md; do
   [ -f "$root/$path" ] || { echo "нет файла $path" >&2; exit 1; }
 done
 
@@ -45,7 +48,7 @@ rm -rf "$dest"
 mkdir -p "$dest"
 dest="$(cd "$dest" && pwd)"
 cp -R "$root/.claude-plugin" "$root/.codex-plugin" "$root/skills" "$dest/"
-cp "$root/LICENSE" "$root/README.md" "$dest/"
+cp "$root/LICENSE" "$root/README.md" "$root/gemini-extension.json" "$dest/"
 rm -f "$dest/skills/AGENTS.md"
 
 count=$(find "$dest" -type f | wc -l | tr -d ' ')

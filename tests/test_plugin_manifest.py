@@ -220,3 +220,19 @@ def test_openai_zip_is_skills_only_without_the_connector(tmp_path: Path) -> None
     for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
         assert manifest["interface"][field] == _codex()["interface"][field]
     assert "mcpServers" in _codex()
+
+
+def test_gemini_extension_matches_the_plugin_and_carries_the_connector() -> None:
+    """Расширение Gemini CLI в корне (TRK-497): версия выпуска, коннектор без токена.
+
+    Корневой `gemini-extension.json` читает только Gemini CLI при установке расширения; плагины
+    Claude Code и Codex его не видят. Скилы Gemini находит сам в `skills/`, поле для них не нужно.
+    """
+    manifest = json.loads((ROOT / "gemini-extension.json").read_text(encoding="utf-8"))
+
+    assert manifest["name"] == "casefile"
+    assert manifest["version"] == _release_version()
+    assert manifest["description"]
+    assert manifest["mcpServers"] == {"casefile": {"httpUrl": DEFAULT_ADDRESS}}
+    assert not (_walk_keys(manifest) & AUTH_KEYS)
+    assert (ROOT / "skills" / "casefile" / "SKILL.md").is_file()

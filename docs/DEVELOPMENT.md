@@ -931,10 +931,10 @@ e2e` в этот скрипт не входит — им сливают ветк
 
 Версию выпуска меняет коммит `chore(release): vX.Y.Z`. В список файлов версии входят
 `pyproject.toml`, `uv.lock` (`docker compose run --rm lock`), `ui/package.json`, `openapi.json`,
-пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и три файла плагина
+пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и четыре файла плагина
 скила — `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (`version` в плагине и в
-записи маркетплейса, `metadata.version`) и `.codex-plugin/plugin.json` (манифест для Codex и каталога OpenAI):
-Claude Code без новой `version` не обновит скил.
+записи маркетплейса, `metadata.version`) `.codex-plugin/plugin.json` (манифест для Codex и каталога OpenAI) и корневой `gemini-extension.json` (расширение Gemini CLI, TRK-497):
+Claude Code без новой `version` не обновит скил; `scripts/build-plugin-branch.sh` не соберёт ветку `plugin`, если версия расширения Gemini разошлась с выпуском.
 `tests/test_plugin_manifest.py` краснеет, если версии разошлись.
 Оба файла плагина проверяет и джоб `plugin` в `ci.yml` — `claude plugin validate --strict .` на закреплённой
 версии Claude Code (`CLAUDE_CODE_VERSION` в джобе); `images.yml` зовёт `ci.yml` как `checks`, поэтому нарушение
