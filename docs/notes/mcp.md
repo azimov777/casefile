@@ -1103,3 +1103,25 @@ public, loopback-порты 27890–27894), а без `client_id_metadata_docume
 основной путь без замера отказа.
 **Где:** `docs/agent-install.md` (шаг 3), `README.md`, `skills/casefile/SKILL.md`, `install.sh`,
 `install.ps1`, `tests/test_installers.py`, `scripts/check-skill-install.sh`.
+
+## Повтор refresh в окне 30 с — не кража: вторая пара в той же цепочке (TRK-504)
+
+**Что:** Claude Code сразу после входа обновляет токен дважды подряд одним refresh, а несколько
+его сессий делают так, когда срок общего токена выходит (`TRK-453#13`). Повтор погашенного refresh
+тем же клиентом не позже `REFRESH_REUSE_WINDOW` (30 с) получает ещё одну пару в той же цепочке,
+пары первого ответа живы. Окно дано только последнему погашенному refresh живой цепочки; повтор
+после окна, повтор предпоследнего и refresh у чужого `client_id` отзывают цепочку. Колонки под окно
+нет: всё решается по `used_at` строк цепочки (`_reusable`). Решение с источниками — TRK-504#6.
+**Почему важно:** до правки второй запрос отзывал всю цепочку, и клиент терял вход («Needs
+authentication»). Одновременные запросы видят refresh непогашенным оба: развязка — в
+`claim_refresh` (`UPDATE … WHERE used_at IS NULL` ждёт блокировки строки победителя), а
+проигравший идёт в окно уже в `rotate_refresh`, не в `find_refresh`.
+**Как правильно:** после `claim_refresh` строку и цепочку читать свежими (`populate_existing`):
+`UPDATE` идёт мимо ORM. Гонку проверять только на своих сессиях с настоящим коммитом
+(`tests/test_mcp_oauth_refresh_race.py`): фикстура `mcp_sessions` пускает запросы по очереди, и
+одновременность там превращается в последовательный повтор. Отозванная цепочка в окно не
+попадает, потому что `_revoke_family` ставит `used_at` всем непогашенным, — менять это нельзя, не
+поправив `_reusable`.
+**Где:** `app/services/oauth.py` (`find_refresh`, `rotate_refresh`, `_reusable`),
+`app/domain/oauth.py` (`REFRESH_REUSE_WINDOW`), `app/db/repositories/oauth.py` (`list_family`),
+`tests/test_mcp_oauth.py`, `tests/test_mcp_oauth_refresh_race.py`.

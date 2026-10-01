@@ -84,8 +84,16 @@ class OAuthRepository:
         return (await self._session.execute(statement)).scalar_one_or_none() is not None
 
     async def list_family(self, family_id: uuid.UUID) -> Sequence[OAuthRefreshToken]:
-        """Все refresh-токены цепочки ротаций — чтобы отозвать её целиком."""
-        statement = select(OAuthRefreshToken).where(OAuthRefreshToken.family_id == family_id)
+        """Все refresh-токены цепочки ротаций — чтобы отозвать её целиком или решить окно повтора.
+
+        Свежим чтением (`populate_existing`): погашение идёт `UPDATE` мимо ORM
+        (`claim_refresh`), и строки, прочитанные сессией раньше, могли устареть.
+        """
+        statement = (
+            select(OAuthRefreshToken)
+            .where(OAuthRefreshToken.family_id == family_id)
+            .execution_options(populate_existing=True)
+        )
         return (await self._session.scalars(statement)).unique().all()
 
     async def add[T: (OAuthClient, OAuthCode, OAuthRefreshToken)](self, row: T) -> T:
