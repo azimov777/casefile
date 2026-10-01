@@ -184,6 +184,27 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Загрузка документов метаданных клиентов OAuth (TRK-477). `client_id` в `/authorize`
+    # пишет любой, кто достучался до службы, а каждый новый адрес — поход в сеть до пяти
+    # секунд. Предел и отрицательный кэш не дают потоку запросов гонять службу по сети.
+    oauth_document_fetch_limit: int = Field(
+        default=30,
+        gt=0,
+        description=(
+            "How many client metadata documents the service downloads per minute, all "
+            "clients together. A request past the limit is refused as an unknown client "
+            "without touching the network; clients with a cached document are not affected"
+        ),
+    )
+    oauth_document_refusal_ttl: timedelta = Field(
+        default=timedelta(minutes=1),
+        ge=timedelta(0),
+        description=(
+            "How long an address whose client metadata document failed to load or to pass "
+            "the rules is not tried again: an ISO 8601 duration such as `PT1M`"
+        ),
+    )
+
     # --- Вход по почте и паролю -----------------------------------------------------
     # Учётные записи живут в базе (`docs/CONCEPT.md`, 5.4). Здесь — только прежний пароль
     # установки, который переносится в учётную запись администратора, и срок сеанса.

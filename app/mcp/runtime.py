@@ -96,7 +96,7 @@ class Runtime:
     #: дополняется — это по-прежнему `missing_token`. В HTTP поле пустое.
     headers: Mapping[str, str] | None = None
     #: Загрузчик документов клиентов CIMD для сервера авторизации; тесты подменяют сеть.
-    documents: ClientDocuments = field(default_factory=ClientDocuments)
+    documents: ClientDocuments = field(default_factory=ClientDocuments.from_settings)
 
     @asynccontextmanager
     async def call(self) -> AsyncIterator[tuple[AsyncSession, Actor]]:

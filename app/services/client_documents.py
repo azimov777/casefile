@@ -12,6 +12,12 @@
   DNS до последнего байта;
 - принимает только `application/json`.
 
+Адрес приходит от кого угодно, поэтому загрузка ещё и бережёт службу (TRK-477): не больше
+`fetch_limit` походов в сеть за `FETCH_WINDOW` на весь процесс, а отказавший адрес
+запоминается на `refusal_ttl`, и повтор в этот срок не ходит в сеть вовсе. Ни то, ни
+другое не ослабляет правил адреса: они проверяются раньше. Сама загрузка идёт вне
+транзакции базы (`find_client` в `app/services/oauth.py`).
+
 Любой сбой — `OAuthRefusal("invalid_client", …)`: для клиента это «такого клиента нет».
 Кэш — не здесь, а в строке клиента в базе (`app/services/oauth.py`): он переживает
 перезапуск службы и нужен коду и refresh как внешний ключ.
@@ -25,12 +31,15 @@ import json
 import socket
 import ssl
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Self
 from urllib.parse import urlsplit
 
 from app import __version__
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.domain.client_documents import (
     DOCUMENT_MAX_BYTES,
@@ -53,6 +62,11 @@ __all__ = [
 ]
 
 logger = get_logger("oauth")
+
+#: Окно предела частоты загрузок.
+FETCH_WINDOW = timedelta(minutes=1)
+#: Сколько отказавших адресов помнит отрицательный кэш; сверх этого вытесняются самые старые.
+REFUSALS_REMEMBERED = 1024
 
 _USER_AGENT = f"Casefile/{__version__} (OAuth client metadata)"
 
@@ -151,10 +165,60 @@ class ClientDocuments:
 
     resolve: Resolve = field(default=_resolve)
     request: Request = field(default=_request)
+    #: Походов в сеть за `FETCH_WINDOW` на весь процесс; сверх этого — отказ без сети.
+    fetch_limit: int = 30
+    #: Сколько отказавший адрес не пробуется заново.
+    refusal_ttl: timedelta = timedelta(minutes=1)
+    #: Часы предела и отрицательного кэша; тесты подменяют.
+    clock: Callable[[], float] = field(default=time.monotonic)
+    _fetched_at: deque[float] = field(default_factory=deque, init=False, repr=False)
+    _refused_until: dict[str, float] = field(default_factory=dict, init=False, repr=False)
+
+    @classmethod
+    def from_settings(cls) -> Self:
+        settings = get_settings()
+        return cls(
+            fetch_limit=settings.oauth_document_fetch_limit,
+            refusal_ttl=settings.oauth_document_refusal_ttl,
+        )
+
+    def remember_refusal(self, url: str) -> None:
+        """Запоминает адрес как отказавший: документ, скачанный, но не прошедший правила."""
+        now = self.clock()
+        refused = self._refused_until
+        for stale in [known for known, until in refused.items() if until <= now]:
+            del refused[stale]
+        while len(refused) >= REFUSALS_REMEMBERED:
+            del refused[next(iter(refused))]
+        refused[url] = now + self.refusal_ttl.total_seconds()
+
+    def _refuse_while_remembered(self, url: str) -> None:
+        until = self._refused_until.get(url)
+        if until is not None and until > self.clock():
+            raise OAuthRefusal("invalid_client", "client metadata document was refused recently")
+
+    def _spend_fetch(self, url: str) -> None:
+        now = self.clock()
+        window = FETCH_WINDOW.total_seconds()
+        fetched = self._fetched_at
+        while fetched and fetched[0] <= now - window:
+            fetched.popleft()
+        if len(fetched) >= self.fetch_limit:
+            raise self._refuse(url, "too many client metadata document fetches")
+        fetched.append(now)
 
     async def fetch(self, url: str) -> FetchedDocument:
         """Скачивает и разбирает документ по адресу — или `OAuthRefusal("invalid_client")`."""
         check_document_url(url)
+        self._refuse_while_remembered(url)
+        self._spend_fetch(url)
+        try:
+            return await self._fetch_document(url)
+        except OAuthRefusal:
+            self.remember_refusal(url)
+            raise
+
+    async def _fetch_document(self, url: str) -> FetchedDocument:
         try:
             async with asyncio.timeout(DOCUMENT_TIMEOUT_SECONDS):
                 response = await self._fetch(url)

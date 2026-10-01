@@ -344,14 +344,14 @@ async def test_a_document_redirect_uri_outside_its_list_is_refused(
 
 
 async def test_the_document_is_fetched_again_only_after_its_lifetime(
-    db_session: AsyncSession, network: FakeNetwork
+    mcp_sessions: SessionFactory, network: FakeNetwork
 ) -> None:
     documents = network.documents()
     start = datetime.now(UTC)
 
-    first = await oauth_service.find_client(db_session, CLAUDE_ID, documents=documents, now=start)
+    first = await oauth_service.find_client(mcp_sessions, CLAUDE_ID, documents=documents, now=start)
     cached = await oauth_service.find_client(
-        db_session, CLAUDE_ID, documents=documents, now=start + timedelta(minutes=4)
+        mcp_sessions, CLAUDE_ID, documents=documents, now=start + timedelta(minutes=4)
     )
     assert first == cached
     assert len(network.requests) == 1
@@ -364,42 +364,176 @@ async def test_the_document_is_fetched_again_only_after_its_lifetime(
         **{"cache-control": "max-age=300"},
     )
     renewed = await oauth_service.find_client(
-        db_session, CLAUDE_ID, documents=documents, now=start + timedelta(minutes=6)
+        mcp_sessions, CLAUDE_ID, documents=documents, now=start + timedelta(minutes=6)
     )
     assert len(network.requests) == 2
     assert renewed is not None and renewed["redirect_uris"] == ["http://127.0.0.1/new"]
 
 
 async def test_a_stale_document_that_no_longer_loads_is_not_trusted(
-    db_session: AsyncSession, network: FakeNetwork
+    mcp_sessions: SessionFactory, network: FakeNetwork
 ) -> None:
     documents = network.documents()
     start = datetime.now(UTC)
-    assert await oauth_service.find_client(db_session, CLAUDE_ID, documents=documents, now=start)
+    assert await oauth_service.find_client(mcp_sessions, CLAUDE_ID, documents=documents, now=start)
 
     network.responses["/oauth/claude-code-client-metadata"] = DocumentResponse(
         status=503, headers={}, body=b""
     )
     later = start + timedelta(hours=2)
     assert (
-        await oauth_service.find_client(db_session, CLAUDE_ID, documents=documents, now=later)
+        await oauth_service.find_client(mcp_sessions, CLAUDE_ID, documents=documents, now=later)
         is None
     )
 
 
 async def test_a_url_is_never_looked_up_as_a_dcr_client(
-    db_session: AsyncSession, network: FakeNetwork
+    db_session: AsyncSession, mcp_sessions: SessionFactory, network: FakeNetwork
 ) -> None:
     """Клиент DCR с `client_id`-адресом не подменит документ: такой строки DCR не бывает."""
     db_session.add(OAuthClient(client_id=CODEX_ID, client_metadata={"redirect_uris": []}))
     await db_session.flush()
-    found = await oauth_service.find_client(db_session, CODEX_ID, documents=network.documents())
+    found = await oauth_service.find_client(mcp_sessions, CODEX_ID, documents=network.documents())
 
     assert found is not None and found["client_name"] == "Codex"
     assert len(network.requests) == 1
 
 
 # --- Загрузчик: ответы сервера клиента -----------------------------------------------
+
+
+# --- Предел частоты, отрицательный кэш, загрузка вне транзакции (TRK-477) ---------------
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _urls(count: int) -> list[str]:
+    return [f"https://client{n}.example.com/m{n}" for n in range(count)]
+
+
+async def test_fetches_past_the_limit_do_not_touch_the_network(
+    mcp_sessions: SessionFactory, network: FakeNetwork
+) -> None:
+    clock = Clock()
+    limit = 3
+    documents = ClientDocuments(
+        resolve=network.resolve, request=network.request, fetch_limit=limit, clock=clock
+    )
+    urls = _urls(limit + 1)
+    for url in urls:
+        network.serve(url, {"client_id": url, "redirect_uris": ["http://127.0.0.1/cb"]})
+
+    results = [
+        await oauth_service.find_client(mcp_sessions, url, documents=documents) for url in urls
+    ]
+
+    assert [found is not None for found in results] == [True] * limit + [False]
+    assert len(network.requests) == limit
+    assert len(network.resolved) == limit
+
+    # Окно прошло — загрузки снова разрешены.
+    clock.now += 61
+    assert await oauth_service.find_client(mcp_sessions, urls[-1], documents=documents)
+    assert len(network.requests) == limit + 1
+
+
+async def test_authorize_with_many_client_id_urls_loads_no_more_than_the_limit(
+    mcp_sessions: SessionFactory, network: FakeNetwork
+) -> None:
+    limit = 2
+    urls = _urls(limit + 1)
+    for url in urls:
+        network.serve(url, {"client_id": url, "redirect_uris": ["http://127.0.0.1/cb"]})
+    documents = ClientDocuments(resolve=network.resolve, request=network.request, fetch_limit=limit)
+    server = create_server(
+        runtime=Runtime(sessions=mcp_sessions, documents=documents),
+        settings=get_settings().model_copy(update={"login": "local", "bind": "127.0.0.1"}),
+    )
+    async with _http(server) as client:
+        _, challenge = _pkce()
+        statuses = [
+            (await _authorize(client, url, challenge, "http://127.0.0.1/cb")).status_code
+            for url in urls
+        ]
+
+    assert statuses[:limit] == [302] * limit
+    assert statuses[limit] == 400
+    assert len(network.requests) == limit
+
+
+async def test_a_refused_address_is_not_requested_again_within_the_refusal_ttl(
+    mcp_sessions: SessionFactory, network: FakeNetwork
+) -> None:
+    clock = Clock()
+    documents = ClientDocuments(
+        resolve=network.resolve,
+        request=network.request,
+        refusal_ttl=timedelta(minutes=2),
+        clock=clock,
+    )
+    network.responses["/oauth/claude-code-client-metadata"] = DocumentResponse(
+        status=503, headers={}, body=b""
+    )
+    find = lambda: oauth_service.find_client(  # noqa: E731
+        mcp_sessions, CLAUDE_ID, documents=documents
+    )
+
+    assert await find() is None
+    assert await find() is None
+    assert len(network.requests) == 1
+
+    clock.now += 121
+    network.serve(CLAUDE_ID, CLAUDE_DOCUMENT)
+    assert await find() is not None
+    assert len(network.requests) == 2
+
+
+async def test_a_document_that_breaks_the_rules_is_remembered_as_refused(
+    mcp_sessions: SessionFactory, network: FakeNetwork
+) -> None:
+    network.serve(CLAUDE_ID, {"client_id": CLAUDE_ID, "redirect_uris": ["http://evil.test/cb"]})
+    documents = network.documents()
+
+    assert await oauth_service.find_client(mcp_sessions, CLAUDE_ID, documents=documents) is None
+    assert await oauth_service.find_client(mcp_sessions, CLAUDE_ID, documents=documents) is None
+    assert len(network.requests) == 1
+
+
+async def test_no_database_session_is_open_while_the_document_loads(
+    mcp_sessions: SessionFactory, network: FakeNetwork
+) -> None:
+    open_sessions = 0
+    seen: list[int] = []
+
+    @asynccontextmanager
+    async def counted() -> AsyncIterator[AsyncSession]:
+        nonlocal open_sessions
+        open_sessions += 1
+        try:
+            async with mcp_sessions() as session:
+                yield session
+        finally:
+            open_sessions -= 1
+
+    async def resolve(host: str, port: int) -> list[str]:
+        seen.append(open_sessions)
+        return await network.resolve(host, port)
+
+    async def request(document: DocumentRequest) -> DocumentResponse:
+        seen.append(open_sessions)
+        return await network.request(document)
+
+    documents = ClientDocuments(resolve=resolve, request=request)
+    assert await oauth_service.find_client(counted, CLAUDE_ID, documents=documents)
+
+    assert seen == [0, 0]
+    assert open_sessions == 0
 
 
 def _answer(status: int = 200, body: bytes = b"{}", **headers: str) -> DocumentResponse:

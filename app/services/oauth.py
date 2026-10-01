@@ -54,7 +54,8 @@ Refresh годен, только пока жив его токен. Отзыв �
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
@@ -109,6 +110,9 @@ __all__ = [
     "register_client",
     "rotate_refresh",
 ]
+
+#: Как открыть сессию с транзакцией (тот же тип, что `SessionFactory` в `app/mcp/runtime.py`).
+type SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 logger = get_logger("oauth")
 
@@ -293,7 +297,7 @@ async def register_client(
 
 
 async def find_client(
-    session: AsyncSession,
+    sessions: SessionFactory,
     client_id: str,
     *,
     documents: ClientDocuments,
@@ -303,33 +307,46 @@ async def find_client(
 
     `client_id`-адрес — клиент по документу: из строки, пока документ свеж, иначе
     скачанный заново (`documents`). Любой отказ загрузки или проверки — `None`.
-    """
-    repository = OAuthRepository(session)
-    if not is_document_client_id(client_id):
-        client = await repository.get_client(client_id)
-        if client is None or client.document_expires_at is not None:
-            return None
-        return dict(client.client_metadata)
 
+    Загрузка идёт вне транзакции: до пяти секунд сети не держат соединение с базой
+    (TRK-477), поэтому вместо сессии сюда приходит их фабрика — одна короткая на чтение
+    строки, другая на запись документа.
+    """
     moment = now or datetime.now(UTC)
-    client = await repository.get_client(client_id)
-    expires = None if client is None else client.document_expires_at
-    if client is not None and expires is not None and expires > moment:
-        return dict(client.client_metadata)
+    async with sessions() as session:
+        client = await OAuthRepository(session).get_client(client_id)
+        if not is_document_client_id(client_id):
+            if client is None or client.document_expires_at is not None:
+                return None
+            return dict(client.client_metadata)
+        expires = None if client is None else client.document_expires_at
+        if client is not None and expires is not None and expires > moment:
+            return dict(client.client_metadata)
     try:
         fetched = await documents.fetch(client_id)
-        metadata = client_from_document(client_id, fetched.document)
     except OAuthRefusal as refusal:
         logger.warning("OAuth client by CIMD refused: %s: %s", client_id, refusal.description)
         return None
-    saved = await repository.save_document_client(client_id, metadata, moment + fetched.lifetime)
+    try:
+        metadata = client_from_document(client_id, fetched.document)
+    except OAuthRefusal as refusal:
+        # Документ скачан, но не прошёл правила: повтор в срок кэша не ходит в сеть.
+        documents.remember_refusal(client_id)
+        logger.warning("OAuth client by CIMD refused: %s: %s", client_id, refusal.description)
+        return None
+    async with sessions() as session:
+        saved = await OAuthRepository(session).save_document_client(
+            client_id, metadata, moment + fetched.lifetime
+        )
+        expires_at = saved.document_expires_at
+        saved_metadata = dict(saved.client_metadata)
     logger.info(
         "OAuth client by CIMD: %s (%s), cached until %s",
         client_id,
         metadata.get("client_name"),
-        saved.document_expires_at,
+        expires_at,
     )
-    return dict(saved.client_metadata)
+    return saved_metadata
 
 
 # --- Код авторизации ---------------------------------------------------------------
