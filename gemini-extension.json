@@ -1,7 +1,7 @@
 {
   "name": "casefile",
   "version": "0.9.2",
-  "description": "Casefile task tracker for agents: the skill and the MCP connector (sign-in through OAuth, no token in the extension); connect to an installation, recover from 401, keep the case and watch the journal.",
+  "description": "Casefile task tracker for agents: the skill for working a task through the Casefile MCP server (take it, keep its case, ask the human, hand it off, close it with verdicts) and the MCP connector, signed in through OAuth with no token in the extension.",
   "mcpServers": {
     "casefile": {
       "httpUrl": "http://127.0.0.1:8100/mcp"

@@ -156,6 +156,31 @@ What the user should know, in one line each:
 - If their account is disabled, every connection and key they issued stops working at
   once, yours included, and enabling the account again does not bring them back.
 
+### When the server answers 401
+
+On a server someone else runs, the MCP address is the installation's public `https`
+address from the board's **Connect an agent** screen; a `localhost` address printed on
+that server points at your own machine instead. A connection made by the OAuth sign-in
+lasts 30 days, and the harness renews it by itself.
+
+A request refused with `401 unauthorized` names the reason in `details.reason`:
+
+- `token_expired` on a connection — the harness renews it by itself; when it cannot,
+  repeat the sign-in of step 3.
+- `token_revoked` — the user or the administrator disconnected the connection or revoked
+  the key, or disabled the account that issued it. A connection comes back with a new
+  sign-in, a key only with a new key from the user; repeating the call with the same
+  credentials gets the same answer.
+- `account_disabled` — the account behind the connection is disabled; nothing gets in
+  until the administrator enables it, and then only with a new sign-in or a new key.
+- `missing_token` or `unknown_token` — no valid credentials reached the server. The cause
+  is in the harness configuration: in Claude Code a header built from an unset environment
+  variable is sent as literal text; in Codex only `http_headers` is applied and a `headers`
+  key is ignored; a manual `casefile` entry with an old key shadows the plugin.
+
+A corrected configuration reaches the tools only after a reconnect (`/mcp` in Claude Code)
+or a new session.
+
 ## 4. Install the Casefile skill
 
 Connecting gives you the tools; the skill teaches you how to use them — how to keep a
@@ -244,6 +269,11 @@ plugin). Codex refuses with "already added from a different source": run
 A running session does not see a new plugin: restart it, or run `/reload-plugins` in
 Claude Code. Then sign in as in step 3.
 
+The MCP server also serves the skill itself, as the resource `skill://casefile/SKILL.md`,
+always of the same version as the server; a copy installed in the harness is there before
+any connection exists. The `plugin` and `stable` branches move to a release only after
+that release's images are published, so an installed skill never runs ahead of the server.
+
 ## 5. Verify
 
 - `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/` prints `200`: the board is up.
@@ -293,6 +323,7 @@ do that, and Casefile does not ship one:
 Either way, the recipe is the same three things: which tasks to watch, which `seq` to
 resume from, and how long a poll may wait before it comes back empty. The script's
 header names the exact variables.
+They are `WATCH_TASKS`, `TRACKER_URL`, `TRACKER_TOKEN_FILE` and `WAIT_SECONDS`.
 
 A watcher outside the session needs a key of its own: the OAuth sign-in of Claude Code
 and Codex stays inside the harness, and no outside process can use it. On a machine with
