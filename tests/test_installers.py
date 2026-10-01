@@ -361,7 +361,7 @@ SKILL_COMMANDS = (
 
 #: Строки подключения MCP у Hermes — вход OAuth без токена (TRK-495; до него ключом, TRK-452):
 #: Claude Code и Codex подключает плагин, и токена для них установщик не печатает.
-CONNECT_LINES = ("mcp_servers:", "auth: oauth")
+CONNECT_LINES = ("mcp_servers:", "auth: oauth", "opencode mcp auth casefile")
 
 
 def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
