@@ -1,11 +1,20 @@
 {
   "name": "casefile",
-  "description": "Casefile skill for agents: connect to an installation, recover from 401, keep the case and watch the journal.",
+  "description": "Casefile for agents: the skill and the MCP connector (sign-in through OAuth, no token in the plugin); connect to an installation, recover from 401, keep the case and watch the journal.",
   "version": "0.8.1",
   "author": {
     "name": "azimov777"
   },
   "license": "MIT",
   "repository": "https://github.com/azimov777/casefile",
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "mcpServers": "./.claude-plugin/mcp.json",
+  "userConfig": {
+    "casefile_url": {
+      "type": "string",
+      "title": "Casefile MCP address",
+      "description": "Address of the Casefile MCP server, for example http://127.0.0.1:8100/mcp for an installation on this machine or https://casefile.example.com/mcp for a server. No token here: the agent signs in through OAuth.",
+      "default": "http://127.0.0.1:8100/mcp"
+    }
+  }
 }

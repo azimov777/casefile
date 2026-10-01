@@ -919,3 +919,35 @@ rebinding: он включает её сам только при привязк�
 `app/domain/oauth.py` (`client_family`), `app/mcp/consent.py`, `app/mcp/oauth.py`
 (`allowed_hosts`, `CasefileAuthorization`), `app/mcp/server.py`, `app/core/config.py`,
 `docker-compose.prod.yml`, `tests/test_mcp_oauth_consent.py`.
+
+## Плагин несёт коннектор: адрес без токена, у Claude Code из `userConfig`, у Codex — фиксированный
+
+**Что:** `.claude-plugin/mcp.json` (`type: http`, `url: ${user_config.casefile_url}`) и
+`userConfig.casefile_url` в `plugin.json` с умолчанием `http://127.0.0.1:8100/mcp`; у Codex
+`.codex-plugin/mcp.json` с тем же адресом без подстановки, ключ `mcpServers` в обоих манифестах
+указывает на свой файл. Токена, заголовков и `headersHelper` в плагине нет: вход агента — OAuth
+(замер 2026-10-01 на временных `CLAUDE_CONFIG_DIR`/`CODEX_HOME`: оба клиента доходят до `/authorize`
+и страницы входа службы, у Codex вход завершается и 30 инструментов видны по полученному токену).
+Другой адрес в Claude Code — `claude plugin install casefile@casefile --config
+casefile_url=https://host/mcp` или `/plugin configure`. У Codex подстановки нет, и ключа адреса в
+`[plugins."casefile@casefile"]` тоже: адрес меняет `codex mcp add casefile --url <адрес>`, этот
+сервер вытесняет одноимённый сервер плагина и сам запускает вход.
+**Почему важно:** файл в корне (`.mcp.json`) не годится: Claude Code каждого, кто открывает этот
+репозиторий, получил бы проектный сервер с неподставленным `${user_config.casefile_url}`, Codex
+читает корневой `.mcp.json` плагина сам и показал бы адрес-литерал, а установка `--sparse
+.claude-plugin --sparse skills` корневой файл вовсе не забирает. Без `.codex-plugin/` в установке
+(старые строки со `--sparse`) Codex читает `.claude-plugin/plugin.json` и получает литерал
+`${user_config.casefile_url}` вместо адреса: установщики обязаны добавить `--sparse .codex-plugin`
+(TRK-452). Вне петли служба отдаёт OAuth только по `https` (`authorization_enabled`): плагин с
+`http://<IP>` не войдёт, адрес сервера — всегда `https`. `claude mcp list` на свежей установке
+плагина без `--config` сразу идёт на адрес по умолчанию: во временном окружении сначала `--config`.
+**Как правильно:** при смене адреса по умолчанию править вместе (`userConfig.default`,
+`.codex-plugin/mcp.json`, `tests/test_plugin_manifest.py`, `DEFAULT_ADDRESS`). Замер входа Claude
+Code до конца требует Keychain (во временном `HOME` запись данных входа не удаётся:
+«saveClientInformation persist resolved unsuccessful» в журнале отладки), поэтому до токена его доводит владелец
+(TRK-453). Самоподписанный сертификат для Codex — настоящий центр (`CA:TRUE`) и лист с `CA:FALSE`
+и subjectAltName, CODEX_CA_CERTIFICATE; самоподписанный лист с `CA:TRUE` rustls отвергает;
+для Claude Code — NODE_EXTRA_CA_CERTS. Подмена `open` в `PATH` перехватывает браузер Claude Code;
+`codex mcp add --url` сам открывает браузер через системный `open`, мимо подмены.
+**Где:** `.claude-plugin/plugin.json`, `.claude-plugin/mcp.json`, `.codex-plugin/plugin.json`,
+`.codex-plugin/mcp.json`, `tests/test_plugin_manifest.py`.
