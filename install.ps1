@@ -12,7 +12,8 @@
 #   CASEFILE_DIR       каталог установки
 #   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
-# Обе последние записываются в `.env` новой установки; без них действует `.env`
+# Обе последние, а также CASEFILE_PORT, TRACKER_MCP_PORT и COMPOSE_PROJECT_NAME (если заданы)
+# записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
 #   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
 #   CASEFILE_SKILL_ONLY  1 — только агенты этой машины: без Docker, без каталога установки и
@@ -378,6 +379,10 @@ if (-not (Test-Path .env)) {
     $lines = @("COMPOSE_FILE=$Compose")
     if ($env:CASEFILE_REGISTRY) { $lines += "CASEFILE_REGISTRY=$env:CASEFILE_REGISTRY" }
     if ($env:CASEFILE_VERSION) { $lines += "CASEFILE_VERSION=$env:CASEFILE_VERSION" }
+    # Порты и имя проекта (TRK-493): иначе обновлятор и `docker compose up` вернули бы 8080/8100 и `casefile`.
+    if ($env:CASEFILE_PORT) { $lines += "CASEFILE_PORT=$env:CASEFILE_PORT" }
+    if ($env:TRACKER_MCP_PORT) { $lines += "TRACKER_MCP_PORT=$env:TRACKER_MCP_PORT" }
+    if ($env:COMPOSE_PROJECT_NAME) { $lines += "COMPOSE_PROJECT_NAME=$env:COMPOSE_PROJECT_NAME" }
     [System.IO.File]::WriteAllLines((Join-Path $Dir '.env'), $lines)
 }
 

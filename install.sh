@@ -22,7 +22,8 @@
 #   CASEFILE_REGISTRY  реестр образов, по умолчанию ghcr.io/azimov777; годится и свой
 #                      реестр — так установщик проверяют до публикации
 #   CASEFILE_VERSION   выпуск: канал `stable` (по умолчанию) или номер вида 0.2.0
-# Обе последние записываются в `.env` новой установки; без них действует `.env`
+# Обе последние, а также CASEFILE_PORT, TRACKER_MCP_PORT и COMPOSE_PROJECT_NAME (если заданы)
+# записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
 #   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
 #   CASEFILE_SKILL_ONLY  1 — только агенты этой машины: без Docker, без каталога установки и
@@ -400,6 +401,11 @@ main() {
       echo "COMPOSE_FILE=$COMPOSE"
       [ -z "${CASEFILE_REGISTRY:-}" ] || echo "CASEFILE_REGISTRY=$CASEFILE_REGISTRY"
       [ -z "${CASEFILE_VERSION:-}" ] || echo "CASEFILE_VERSION=$CASEFILE_VERSION"
+      # Порты и имя проекта — тоже, если их назвали установщику (TRK-493): иначе обновлятор и
+      # `docker compose up` из этого каталога вернули бы 8080/8100 и проект `casefile`.
+      [ -z "${CASEFILE_PORT:-}" ] || echo "CASEFILE_PORT=$CASEFILE_PORT"
+      [ -z "${TRACKER_MCP_PORT:-}" ] || echo "TRACKER_MCP_PORT=$TRACKER_MCP_PORT"
+      [ -z "${COMPOSE_PROJECT_NAME:-}" ] || echo "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
     } >.env
   fi
 
