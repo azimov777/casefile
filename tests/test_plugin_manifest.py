@@ -12,6 +12,7 @@ Claude Code без новой `version` отвечает «already at latest» �
 
 import json
 import shutil
+import struct
 import subprocess
 import tomllib
 import zipfile
@@ -73,6 +74,19 @@ def test_plugin_manifest_carries_the_listing_fields_of_the_anthropic_directory()
     assert plugin["author"]["name"]
     assert plugin["homepage"].startswith("https://")
     assert plugin["repository"].startswith("https://github.com/")
+
+
+def test_plugin_carries_privacy_policy_and_square_png_icon_for_the_portal() -> None:
+    """Портал Anthropic требует `privacyPolicyUrl` и PNG 512–2048 px меньше 2 МБ (TRK-505)."""
+    plugin = _load("plugin.json")
+    assert plugin["privacyPolicyUrl"] == "https://azimov777.github.io/casefile/privacy/"
+
+    icon = PLUGIN_DIR / "icon.png"
+    data = icon.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", data[16:24])
+    assert width == height and 512 <= width <= 2048
+    assert len(data) < 2 * 1024 * 1024
 
 
 DEFAULT_ADDRESS = "http://127.0.0.1:8100/mcp"

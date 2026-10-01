@@ -16,7 +16,7 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 ## Папки
 - `ui/` — интерфейс человека: отдельное приложение со своими соглашениями, картами и проверками
 - `.codex-plugin/` — манифест плагина `casefile` для Codex и универсального каталога OpenAI: `plugin.json` с полями листинга (`interface`), `mcp.json` с коннектором на адрес по умолчанию и иконка `icon.svg`; `version` равна версии выпуска; ZIP для подачи собирает `scripts/build-openai-plugin.sh` (TRK-461)
-- `.claude-plugin/` — маркетплейс `casefile` и плагин `casefile` для Claude Code и Codex: `marketplace.json`, `plugin.json` (с `userConfig` для адреса коннектора), `mcp.json` (коннектор без токена); плагин несёт скил из `skills/` и коннектор, его `version` равна версии выпуска
+- `.claude-plugin/` — маркетплейс `casefile` и плагин `casefile` для Claude Code и Codex: `marketplace.json`, `plugin.json` (с `userConfig` для адреса коннектора и `privacyPolicyUrl`), `mcp.json` (коннектор без токена), `icon.png` (1024×1024, перевод `.codex-plugin/icon.svg` для портала Anthropic, TRK-505); плагин несёт скил из `skills/` и коннектор, его `version` равна версии выпуска
 - `.github/` — GitHub: конвейеры в `workflows/` (проверки на каждый PR — `ci.yml`, подпись вклада — `dco.yml`,
   образы ghcr.io после проверок — `images.yml`: `latest` на каждый коммит main, номер и канал `stable` на тег выпуска
   и после образов ветка `stable` на коммит выпуска (канал скила для `npx skills`),
