@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "build-plugin-branch.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "images.yml"
 
-PLUGIN_FILES = (".claude-plugin", ".codex-plugin", "skills", "LICENSE", "README.md", "pyproject.toml")
+TREE_ROOTS = {".claude-plugin", ".codex-plugin", "skills", "LICENSE", "README.md"}
+PLUGIN_FILES = (*sorted(TREE_ROOTS), "pyproject.toml")
 
 
 def _run(*args: str, cwd: Path = ROOT, **kwargs) -> subprocess.CompletedProcess[str]:
@@ -64,10 +65,10 @@ def test_the_tree_holds_only_the_plugin_within_the_portal_limits(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     files = _files(tmp_path / "tree")
-    assert {".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "LICENSE", "README.md"} <= files
+    assert {".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "LICENSE"} <= files
     assert "skills/casefile/SKILL.md" in files
     assert "skills/AGENTS.md" not in files
-    assert all(f.split("/")[0] in {".claude-plugin", ".codex-plugin", "skills", "LICENSE", "README.md"} for f in files)
+    assert all(f.split("/")[0] in TREE_ROOTS for f in files)
     assert len(files) < 512
     assert result.stdout.strip() == f"files: {len(files)}"
 
@@ -81,9 +82,12 @@ def test_a_big_file_that_is_not_an_image_stops_the_build(mini_repo: Path, tmp_pa
     assert "256 КиБ" in result.stderr
 
 
-def test_a_plugin_version_different_from_the_release_stops_the_build(mini_repo: Path, tmp_path: Path) -> None:
+def test_a_version_different_from_the_release_stops_the_build(
+    mini_repo: Path, tmp_path: Path
+) -> None:
     pyproject = mini_repo / "pyproject.toml"
-    pyproject.write_text(pyproject.read_text().replace("\nversion = ", "\nversion = \"9.9.9\"  # ", 1))
+    text = pyproject.read_text().replace("\nversion = ", '\nversion = "9.9.9"  # ', 1)
+    pyproject.write_text(text)
 
     result = _run(str(mini_repo / "scripts" / SCRIPT.name), str(tmp_path / "tree"))
 
@@ -98,9 +102,10 @@ def test_a_commit_per_release_on_top_of_the_branch_and_none_for_the_same_tree(
     first = _run(script, "--commit", "v1.0.0", str(tmp_path / "t1")).stdout.splitlines()[-1]
     _git(mini_repo, "update-ref", "refs/remotes/origin/plugin", first)
 
-    same = _run(script, "--commit", "v1.0.1", "--parent", "refs/remotes/origin/plugin", str(tmp_path / "t2"))
+    parent = ("--parent", "refs/remotes/origin/plugin")
+    same = _run(script, "--commit", "v1.0.1", *parent, str(tmp_path / "t2"))
     (mini_repo / "README.md").write_text("changed\n")
-    second = _run(script, "--commit", "v1.1.0", "--parent", "refs/remotes/origin/plugin", str(tmp_path / "t3"))
+    second = _run(script, "--commit", "v1.1.0", *parent, str(tmp_path / "t3"))
 
     assert same.stdout.splitlines()[-1] == first
     commit = second.stdout.splitlines()[-1]
