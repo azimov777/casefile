@@ -21,6 +21,9 @@
 # если у тега выпуска зелёный запуск этого workflow. Маркетплейс плагина и `npx skills`
 # смотрят на git-ref `stable`; ветка двигается только вперёд, без переписывания истории, и
 # только после публикации образов — скил не приходит к агентам раньше сервера (TRK-398#8).
+# Тем же джобом, следом за `stable`, ветка `plugin` получает коммит выпуска с одними файлами
+# плагина (`.claude-plugin/`, `.codex-plugin/`, `skills/`, LICENSE, README): её отслеживает
+# портал Anthropic, а в пределы его сканера весь репозиторий не входит (TRK-478).
 #
 # Проверки — вызовом `ci.yml`, а не параллельным workflow: публикация обязана ждать их
 # исхода, иначе красный выпуск разъехался бы по всем установкам.
@@ -132,6 +135,7 @@ jobs:
           fetch-depth: 0
 
       - name: Fast-forward stable to the release commit
+        id: stable
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
@@ -154,3 +158,20 @@ jobs:
             }
           fi
           git push origin "$SHA:refs/heads/stable"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # Узкая ветка `plugin` (TRK-478): только файлы плагина, по коммиту на выпуск. Идёт
+      # там же и после `stable`, на тот же тег: без тега или при красных образах шаг выше
+      # выходит или падает и этот не запускается. Коммит строит `scripts/build-plugin-branch.sh`,
+      # пуш без `--force`: родитель — вершина `origin/plugin`, ветки нет — пуш её создаёт.
+      - name: Add the plugin files of the release to the plugin branch
+        if: steps.stable.outputs.tag != ''
+        env:
+          TAG: ${{ steps.stable.outputs.tag }}
+        run: |
+          parent=""
+          if git rev-parse --verify --quiet refs/remotes/origin/plugin >/dev/null; then
+            parent="--parent refs/remotes/origin/plugin"
+          fi
+          commit=$(scripts/build-plugin-branch.sh --commit "$TAG" $parent "$RUNNER_TEMP/plugin" | tail -n 1)
+          git push origin "$commit:refs/heads/plugin"

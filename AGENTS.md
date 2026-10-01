@@ -20,6 +20,7 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 - `.github/` — GitHub: конвейеры в `workflows/` (проверки на каждый PR — `ci.yml`, подпись вклада — `dco.yml`,
   образы ghcr.io после проверок — `images.yml`: `latest` на каждый коммит main, номер и канал `stable` на тег выпуска
   и после образов ветка `stable` на коммит выпуска (канал скила для маркетплейса плагина и `npx skills`),
+  следом узкая ветка `plugin` — только файлы плагина, коммит на выпуск (её отслеживает портал Anthropic, TRK-478),
   запись Casefile в официальном реестре MCP на тот же тег, входом через GitHub OIDC — `mcp-registry.yml`), бот
   еженедельных PR с обновлением `uv.lock` (`dependabot.yml`), текст `DCO` и шаблон запроса на слияние `PULL_REQUEST_TEMPLATE.md`
 - `app/` — код приложения: слои api, mcp, domain, services, db, core

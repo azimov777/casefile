@@ -956,6 +956,13 @@ git push origin main
 джоб упал, `stable` двигают руками перемоткой вперёд
 (`git merge-base --is-ancestor origin/stable <коммит>`, затем `git push origin <коммит>:refs/heads/stable`).
 
+Тем же джобом, следом за `stable`, ветка `plugin` получает коммит выпуска с одними файлами плагина
+(`.claude-plugin/`, `.codex-plugin/`, `skills/`, `LICENSE`, `README.md`): её отслеживает портал Anthropic,
+а весь репозиторий в пределы его сканера не входит (TRK-478). Дерево собирает
+`scripts/build-plugin-branch.sh КАТАЛОГ` (с `--commit ТЕГ --parent origin/plugin` — коммит поверх ветки);
+локально проверить сборку и `claude plugin validate --strict КАТАЛОГ`. Ветку, как и `stable`, двигают
+вперёд без `--force`; в поле «Branch or tag» портала пишут `plugin`.
+
 Живая проверка публикации в реестр — после самого выпуска, не раньше:
 
 ```bash
