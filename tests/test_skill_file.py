@@ -89,3 +89,21 @@ def test_description_fits_harness_listings(frontmatter: dict[str, str]) -> None:
 def test_parser_rejects_what_it_does_not_understand(text: str, reason: str) -> None:
     with pytest.raises((AssertionError, pytest.fail.Exception), match=reason):
         parse_frontmatter(text)
+
+
+#: Скил не несёт команд «скачать и выполнить» (TRK-508): проверки каталогов OpenAI и
+#: Anthropic помечают `curl … | sh`, `irm … | iex` и `npx` как код вне проверенного пакета.
+#: Установка и обновление — в README и `docs/agent-install.md`, скил даёт на них ссылки.
+DOWNLOAD_AND_RUN = re.compile(r"\| *(sh|bash|iex)\b|curl |irm |npx ")
+
+
+def test_skill_has_no_download_and_run_commands() -> None:
+    text = SKILL_FILE.read_text(encoding="utf-8")
+    found = [line for line in text.splitlines() if DOWNLOAD_AND_RUN.search(line)]
+    assert not found, f"в скиле команды скачать-и-выполнить: {found}"
+
+
+def test_skill_links_to_install_instructions() -> None:
+    text = SKILL_FILE.read_text(encoding="utf-8")
+    assert "https://github.com/azimov777/casefile#readme" in text
+    assert "https://github.com/azimov777/casefile/blob/main/docs/agent-install.md" in text
