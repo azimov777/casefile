@@ -42,8 +42,12 @@ class Participant(BaseModel, CreatedByMixin):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("participants.id"), nullable=True, default=None
     )
+    # `join_depth=2`: связь самоссылочная, и без глубины жадная загрузка не идёт по ней,
+    # когда участник сам приехал по связи другой сущности (`Token.participant`) — хозяина
+    # у участника токена запроса тогда нет, и первый кадр агента с хозяином падает
+    # `MissingGreenlet` при сборке ответа (`500`).
     owner: Mapped[Participant | None] = relationship(
-        remote_side="Participant.id", lazy="joined", foreign_keys=[owner_id]
+        remote_side="Participant.id", lazy="joined", foreign_keys=[owner_id], join_depth=2
     )
 
     @property
