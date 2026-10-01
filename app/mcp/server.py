@@ -59,6 +59,7 @@ from app.mcp.oauth import (
     allowed_hosts,
     auth_settings,
     authorization_enabled,
+    declare_scope,
 )
 from app.mcp.runtime import Runtime, headers_middleware
 from app.mcp.skills import SKILLS_DIR, CasefileSkills, advertise_on_handshake
@@ -119,6 +120,7 @@ class CasefileServer(MCPServer):
         application = super().streamable_http_app(**kwargs)
         if authorization_enabled(self._casefile_settings):
             advertise_client_documents(application, self._casefile_settings)
+        declare_scope(application, self._casefile_settings)
         application.add_middleware(RefusalReasons)
         return application
 
