@@ -167,9 +167,8 @@ def _install(
 
     `dotenv`, если задан, кладётся в `.env` каталога установки *до* запуска — так, как
     он там лежит у существующей установки: сам установщик пишет в `.env` только
-    `COMPOSE_FILE`/`CASEFILE_REGISTRY`/`CASEFILE_VERSION` (и то один раз), а
-    `CASEFILE_PORT` в него добавляет только человек. `extra_env` — переменные
-    окружения самого вызова, поверх обязательных.
+    `COMPOSE_FILE`, а названные ему реестр, выпуск, порты и проект
+    (и то один раз). `extra_env` — переменные окружения самого вызова, поверх обязательных.
     """
     bin_dir, scene_dir = tmp_path / "bin", tmp_path / "scene"
     bin_dir.mkdir()
@@ -263,6 +262,41 @@ def test_install_ps1_sees_the_check_by_its_file_too() -> None:
 
 
 # --- Порт доски в напечатанном адресе (TRK-169) -----------------------------------------
+
+
+def test_the_installer_writes_named_ports_and_project_into_env_file(tmp_path: Path) -> None:
+    """Названные установщику порты и проект compose остаются в `.env` (TRK-493): иначе
+    обновлятор и `docker compose up` из каталога вернули бы 8080/8100 и проект `casefile`."""
+    done, _ = _install(
+        tmp_path,
+        extra_env={
+            "CASEFILE_PORT": "8180",
+            "TRACKER_MCP_PORT": "8190",
+            "COMPOSE_PROJECT_NAME": "trk-check",
+        },
+    )
+
+    assert done.returncode == 0, done.stderr
+    lines = (tmp_path / "casefile" / ".env").read_text(encoding="utf-8").splitlines()
+    assert "CASEFILE_PORT=8180" in lines
+    assert "TRACKER_MCP_PORT=8190" in lines
+    assert "COMPOSE_PROJECT_NAME=trk-check" in lines
+
+
+def test_the_installer_writes_no_ports_or_project_when_none_are_named(tmp_path: Path) -> None:
+    """Установка на умолчаниях ведёт себя как прежде: в `.env` только `COMPOSE_FILE`."""
+    done, _ = _install(tmp_path)
+
+    assert done.returncode == 0, done.stderr
+    env_file = (tmp_path / "casefile" / ".env").read_text(encoding="utf-8")
+    assert env_file.splitlines() == ["COMPOSE_FILE=docker-compose.prod.yml"]
+
+
+def test_install_ps1_writes_ports_and_project_into_env_file() -> None:
+    text = _read(INSTALL_PS1)
+
+    for name in ("CASEFILE_PORT", "TRACKER_MCP_PORT", "COMPOSE_PROJECT_NAME"):
+        assert f'$lines += "{name}=$env:{name}"' in text
 
 
 def test_the_installer_prints_the_port_from_the_environment_variable(tmp_path: Path) -> None:
