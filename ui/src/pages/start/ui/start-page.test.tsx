@@ -187,7 +187,9 @@ describe('экран «Начало»', () => {
     const user = userEvent.setup();
     renderApp('/start');
 
-    await user.click(await screen.findByRole('button', { name: say.start('actions.skip') }));
+    const button = await screen.findByRole('button', { name: say.start('actions.skip') });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
 
     await waitFor(() => expect(address.current).toBe('/tasks'));
     expect(body).toEqual({
@@ -209,11 +211,35 @@ describe('экран «Начало»', () => {
     const user = userEvent.setup();
     renderApp('/start');
 
-    await user.click(await screen.findByRole('button', { name: say.start('actions.complete') }));
+    const button = await screen.findByRole('button', { name: say.start('actions.complete') });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
 
     await waitFor(() => expect(address.current).toBe('/tasks'));
     // «Я разобрался» пояснения не трогает: в теле нет `hints`.
     expect(body).toEqual({ id: account().id, status: 'completed' });
+  });
+
+  it('пока первый кадр не пришёл, «Пропустить» и «Я разобрался» заблокированы: нажатию некого менять (TRK-490)', async () => {
+    signedIn();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, async () => {
+        await gate;
+        return data(bootstrap({ account: account() }));
+      }),
+    );
+    renderApp('/start');
+
+    expect(await screen.findByRole('button', { name: say.start('actions.skip') })).toBeDisabled();
+    expect(screen.getByRole('button', { name: say.start('actions.complete') })).toBeDisabled();
+
+    release();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: say.start('actions.complete') })).toBeEnabled(),
+    );
+    expect(screen.getByRole('button', { name: say.start('actions.skip') })).toBeEnabled();
   });
 
   it('пункт «Начало» в панели открывает экран любым состоянием знакомства', async () => {

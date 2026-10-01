@@ -126,6 +126,11 @@ test('«Начало» на свежем контуре объясняет сп�
 
     // «Я разобрался» гасит метку без перезагрузки страницы (TRK-415).
     await page.goto('/start');
+    // Метка ещё стоит: «Пропустить» не гасит её (см. выше). Пока первый кадр не пришёл,
+    // учётная запись неизвестна, метки нет и пункт называется просто «Начало» — проверка
+    // «метки нет» после нажатия прошла бы вхолостую, а нажатие до кадра кнопка не
+    // принимает (заблокирована, TRK-490). Ждём метку, а потом нажимаем.
+    await expect(side(page).getByRole('link', { name: UNFINISHED_START })).toBeVisible();
     await page.getByRole('button', { name: 'Я разобрался' }).click();
     await expect(page.getByRole('link', { name: 'Начало', exact: true })).toBeVisible();
     await expect(side(page).getByRole('link', { name: UNFINISHED_START })).toHaveCount(0);
