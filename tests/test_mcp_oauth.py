@@ -485,6 +485,41 @@ async def test_authorize_and_token_accept_the_resource_of_this_service(
     assert response.json()["access_token"].startswith("trk_")
 
 
+async def test_loopback_hosts_of_this_service_are_one_resource(
+    mcp_sessions: SessionFactory,
+) -> None:
+    """Плагин ходит на `127.0.0.1`, а адрес службы — `localhost`: тот же порт и путь."""
+    own = urlsplit(OWN_RESOURCE)
+    port, path = own.port, own.path
+    same = [f"http://127.0.0.1:{port}{path}", f"http://[::1]:{port}{path}"]
+    other = [f"http://127.0.0.1:{(port or 0) + 1}{path}", f"http://192.0.2.1:{port}{path}"]
+    server = _server(mcp_sessions)
+    async with _http(server) as client:
+        registered = await _register(client)
+        for resource in same:
+            verifier, challenge = _pkce()
+            answer = _query(
+                await _authorize(client, registered["client_id"], challenge, resource=resource)
+            )
+            response = await _exchange(
+                client, registered["client_id"], answer["code"], verifier, resource=resource
+            )
+            assert response.status_code == 200, (resource, response.text)
+        for resource in other:
+            _, challenge = _pkce()
+            answer = _query(
+                await _authorize(client, registered["client_id"], challenge, resource=resource)
+            )
+            assert answer["error"] == "invalid_target", resource
+        verifier, challenge = _pkce()
+        code = _query(await _authorize(client, registered["client_id"], challenge))["code"]
+        refused = await _exchange(
+            client, registered["client_id"], code, verifier, resource=other[0]
+        )
+        assert refused.status_code == 400
+        assert refused.json()["error"] == "invalid_target"
+
+
 async def test_token_refuses_a_resource_of_another_host_and_keeps_the_code(
     mcp_sessions: SessionFactory,
 ) -> None:

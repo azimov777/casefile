@@ -140,7 +140,9 @@ def resource_matches(own: str, requested: str) -> bool:
 
     Схема и узел сравниваются без регистра (RFC 3986 §6.2.2.1), слэш на конце пути не
     различается, порт умолчания равен опущенному. Запрос и фрагмент не допускаются:
-    RFC 8707 §2 запрещает фрагмент, а запрос другой службы — это другой ресурс.
+    RFC 8707 §2 запрещает фрагмент, а запрос другой службы — это другой ресурс. Узлы петли
+    (`localhost`, `127.0.0.1`, `[::1]`) — один узел: плагин подключает клиента к
+    `127.0.0.1`, а адрес службы локальной установки — `localhost`, порт и путь те же.
     """
     try:
         want, got = urlsplit(own), urlsplit(requested)
@@ -152,7 +154,8 @@ def resource_matches(own: str, requested: str) -> bool:
     default = {"http": 80, "https": 443}
     if want.scheme.lower() != got.scheme.lower():
         return False
-    if (want.hostname or "") != (got.hostname or ""):
+    same_loopback = _is_loopback_host(want.hostname) and _is_loopback_host(got.hostname)
+    if not same_loopback and (want.hostname or "") != (got.hostname or ""):
         return False
     if (ports[0] or default.get(want.scheme.lower())) != (
         ports[1] or default.get(got.scheme.lower())
