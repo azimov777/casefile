@@ -17,6 +17,7 @@ from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.tokens import TokenKind, hash_token
 from app.services import bootstrap as bootstrap_service
 from app.services import case as case_service
+from app.services import participants as participants_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
 
@@ -202,3 +203,34 @@ async def test_the_first_screen_of_an_action_without_a_token_is_refused(
         await bootstrap_service.read_bootstrap(db_session, actor=TRACKER_ACTOR)
 
     assert refused.value.details == {"reason": "first_screen_requires_token"}
+
+
+async def test_bootstrap_of_an_agent_that_has_an_owner_names_the_owner(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner: Participant,
+) -> None:
+    """Агент хозяина (`claude_<человек>`, TRK-476) открывает первый кадр: `participant.owner`.
+
+    Токен приезжает отдельной загрузкой, а не из карты тождества сессии теста: именно так
+    его читает настоящий запрос, и связь `owner` обязана прийти вместе с участником, а не
+    догружаться лениво (`MissingGreenlet` в ответе — `500`).
+    """
+    agent = await participants_service.agent_of(db_session, client="claude", owner=owner)
+    issued = await tokens_service.issue_token(
+        db_session,
+        actor=Actor(author=owner.author, participant=owner),
+        participant=agent,
+        name="key of the owned agent",
+    )
+    await db_session.flush()
+    db_session.expunge_all()
+
+    response = await client.get(
+        "/api/v1/bootstrap", headers={"Authorization": f"Bearer {issued.secret}"}
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["participant"]["name"] == f"claude_{owner.name}"
+    assert data["participant"]["owner"] == owner.name
