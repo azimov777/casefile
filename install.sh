@@ -175,7 +175,16 @@ sys.stdout.write(json.dumps(o,indent=2,ensure_ascii=False)+"\n")' "$settings" "$
 claude_marketplace_add() {
   skill_run claude plugin marketplace add "$1" && return 0
   tail -n 5 "$skill_log" | grep -q 'differs from the one declared' || return 1
-  claude_settings drop && skill_run claude plugin marketplace add "$1"
+  claude_settings drop && skill_run claude plugin marketplace add "$1" && CLAUDE_MOVED=1
+}
+
+# Вход Claude Code лежит под ключом «имя сервера | хеш type, url, headers» (TRK-502#6): другой
+# адрес, даже `127.0.0.1` вместо `localhost`, — другой ключ, и прежний вход клиент не видит.
+# Поэтому адрес установленного плагина читается до `install`: без `CASEFILE_URL` он
+# остаётся, а смена адреса печатает команду входа. Пусто — плагина нет или клиент старый.
+claude_current_url() {
+  claude plugin configure casefile@casefile --json </dev/null 2>/dev/null |
+    sed -n 's/^ *"casefile_url": *"\([^"]*\)".*/\1/p' | head -n 1
 }
 
 codex_marketplace_add() {
@@ -232,11 +241,19 @@ cleanup_codex_entries() {
 
 skill_claude() {
   src="$SKILL_SOURCE#plugin"
-  retry="claude plugin marketplace add $src && claude plugin install casefile@casefile --scope user --config casefile_url=$PLUGIN_URL"
+  claude_url=$PLUGIN_URL
+  claude_note=$DEFAULT_NOTE
+  claude_was=$(claude_current_url)
+  CLAUDE_MOVED=0
+  if [ "$DEFAULT_URL" = 1 ] && [ -n "$claude_was" ]; then
+    claude_url=$claude_was
+    claude_note=" (kept the address it had: your server's goes in CASEFILE_URL)"
+  fi
+  retry="claude plugin marketplace add $src && claude plugin install casefile@casefile --scope user --config casefile_url=$claude_url"
   [ "$DEFAULT_URL" = 1 ] || cleanup_claude_entries
   if claude_marketplace_add "$src" &&
     skill_run claude plugin marketplace update casefile &&
-    skill_run claude plugin install casefile@casefile --scope user --config "casefile_url=$PLUGIN_URL" &&
+    skill_run claude plugin install casefile@casefile --scope user --config "casefile_url=$claude_url" &&
     skill_run claude plugin update casefile@casefile; then
     found=$(claude plugin list </dev/null 2>/dev/null |
       awk '/casefile@casefile/ {f=1; next} f && /Version:/ {v=$2} f && /Status:/ {print v, ($0 ~ /enabled/ ? "enabled" : "off"); exit}')
@@ -244,9 +261,14 @@ skill_claude() {
       *" enabled")
         [ "$DEFAULT_URL" = 1 ] || LOGIN_CLAUDE=1
         if claude_settings auto_update; then
-          skill_line "Claude Code" "installed ${found% *} (updates itself), connected to $PLUGIN_URL$DEFAULT_NOTE"
+          skill_line "Claude Code" "installed ${found% *} (updates itself), connected to $claude_url$claude_note"
         else
-          skill_line "Claude Code" "installed ${found% *}, connected to $PLUGIN_URL$DEFAULT_NOTE (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
+          skill_line "Claude Code" "installed ${found% *}, connected to $claude_url$claude_note (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
+        fi
+        if [ -n "$claude_was" ] && [ "$claude_was" != "$claude_url" ]; then
+          skill_line "Claude Code" "the address changed from $claude_was: the sign-in belongs to the address, sign in again: claude mcp login plugin:casefile:casefile"
+        elif [ "$CLAUDE_MOVED" = 1 ]; then
+          skill_line "Claude Code" "moved to the plugin branch; the sign-in stays with the address - if claude mcp list shows \"Needs authentication\": claude mcp login plugin:casefile:casefile"
         fi ;;
       *) skill_failed "Claude Code" "$retry" ;;
     esac
