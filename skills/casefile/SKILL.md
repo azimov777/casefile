@@ -203,7 +203,7 @@ itself. A new version reaches a running session after a restart or `/reload-plug
 ### Codex
 
 ```bash
-codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills
+codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills
 codex plugin add casefile@casefile
 ```
 

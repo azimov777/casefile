@@ -47,8 +47,9 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
   (self-hosted контур — «custom installation path»); версию подставляет тегом `.github/workflows/mcp-registry.yml`,
   руками не правится
 - `install.sh` — установщик одной строкой для macOS и Linux: кладёт `docker-compose.prod.yml` из образа
-  выпуска в `~/casefile`, поднимает контур, ставит скил во все найденные харнессы (`CASEFILE_SKILL=0` — не ставить;
-  `CASEFILE_SKILL_ONLY=1` — только скил, без Docker: для машины агента), печатает команду подключения агента
+  выпуска в `~/casefile`, поднимает контур, ставит плагин во все найденные харнессы и ведёт вход OAuth (`CASEFILE_SKILL=0` — не ставить;
+  `CASEFILE_SKILL_ONLY=1` — без Docker, для машины агента: адрес сервера в `CASEFILE_URL`, только https), убирает прежние ручные
+  записи `casefile`, ключ агента печатает только харнессам без OAuth
 - `install.ps1` — тот же установщик для Windows (PowerShell 5.1 и 7): те же шаги в том же порядке
 - `alembic.ini` — настройка миграций, путь к ревизиям и адрес БД
 - `pyproject.toml` — зависимости нижними границами, настройки ruff и pytest

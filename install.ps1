@@ -15,9 +15,17 @@
 # Обе последние записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
 #   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
-#   CASEFILE_SKILL_ONLY  1 — только скил: без Docker, без каталога установки и без токена;
-#                      для машины агента, которая подключается к Casefile на сервере:
-#                      $env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+#   CASEFILE_SKILL_ONLY  1 — только агенты этой машины: без Docker, без каталога установки и
+#                      без токена; для машины, которая подключается к Casefile на сервере.
+#                      Нужен адрес сервера в `CASEFILE_URL`, и только https (http — лишь для
+#                      localhost: вне своей машины служба отдаёт вход OAuth только по https):
+#                      $env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+#                      Без `CASEFILE_URL` плагин не ставится (его коннектору нужен адрес):
+#                      ставятся скилы Hermes и прочих агентов и печатается, как задать адрес.
+#   CASEFILE_URL       адрес MCP сервера для `CASEFILE_SKILL_ONLY=1`; при полной установке
+#                      адрес даёт сама установка
+#   CASEFILE_LOGIN     0 — не вести вход OAuth, только напечатать команды (по умолчанию вход
+#                      идёт, если окно — интерактивный терминал; без него — только печать)
 #   CASEFILE_SKILL_SOURCE  откуда брать маркетплейс скила, по умолчанию azimov777/casefile;
 #                      так шаг проверяют до публикации, как CASEFILE_REGISTRY для образов
 
@@ -28,6 +36,15 @@ $Compose = 'docker-compose.prod.yml'
 $SkillOn = $env:CASEFILE_SKILL -ne '0'
 $SkillOnly = $env:CASEFILE_SKILL_ONLY -eq '1'
 $SkillSource = if ($env:CASEFILE_SKILL_SOURCE) { $env:CASEFILE_SKILL_SOURCE } else { 'azimov777/casefile' }
+$LoginOn = $env:CASEFILE_LOGIN -ne '0'
+# Адрес MCP, с которым ставится плагин: у полной установки — ответ самой установки, у
+# `CASEFILE_SKILL_ONLY=1` — `CASEFILE_URL`; пуст — плагин не ставится.
+$script:PluginUrl = ''
+# Адрес, прописанный в плагине Codex (`.codex-plugin/mcp.json`): другой ему задаёт только
+# `codex mcp add` (TRK-451#13).
+$CodexPluginUrl = 'http://127.0.0.1:8100/mcp'
+$script:LoginClaude = $false
+$script:LoginCodex = $false
 
 function Fail([string] $Message) {
     Write-Host "casefile: $Message" -ForegroundColor Red
@@ -107,12 +124,65 @@ function Set-ClaudeAutoUpdate {
     }
 }
 
+# --- Ручные записи MCP, которые плагин заменяет (TRK-452, TRK-427#10) ------------------------
+# Близнец `cleanup_*_entries` из `install.sh`: запись `casefile` (и `tracker`) убирается, только
+# если и имя, и адрес — этой установки (`localhost` и `127.0.0.1` — один адрес); остальные
+# остаются, о каждом решении печатается строка.
+function ConvertTo-NormalUrl([string] $Url) {
+    return ($Url -replace '^(https?://)localhost', '${1}127.0.0.1').TrimEnd('/')
+}
+
+function Remove-ClaudeEntries {
+    $ErrorActionPreference = 'Continue'
+    foreach ($name in 'casefile', 'tracker') {
+        $info = & claude mcp get $name 2>$null | Out-String
+        if ($LASTEXITCODE -ne 0) { continue }
+        $url = [regex]::Match($info, '(?m)^\s*URL:\s*(\S+)').Groups[1].Value
+        $scope = [regex]::Match($info, '(?m)^\s*Scope:\s*([A-Za-z]+)').Groups[1].Value
+        if (-not $url) { continue }
+        if ((ConvertTo-NormalUrl $url) -eq (ConvertTo-NormalUrl $script:PluginUrl)) {
+            $flag = switch ($scope) { 'User' { 'user' } 'Local' { 'local' } default { '' } }
+            if ($flag -and (Invoke-SkillCmd claude mcp remove $name --scope $flag)) {
+                Write-SkillLine 'Claude Code' "removed the manual MCP entry `"$name`" ($url, $flag scope): the plugin carries the connection"
+            } else {
+                Write-SkillLine 'Claude Code' "left the manual MCP entry `"$name`" ($url, $scope scope): remove it by hand: claude mcp remove $name"
+            }
+        } else {
+            Write-SkillLine 'Claude Code' "left the MCP entry `"$name`" ($url): it is not this installation's address"
+        }
+    }
+}
+
+function Remove-CodexEntries {
+    $ErrorActionPreference = 'Continue'
+    foreach ($name in 'casefile', 'tracker') {
+        $info = & codex mcp get $name --json 2>$null | Out-String
+        if ($LASTEXITCODE -ne 0) { continue }
+        $url = [regex]::Match($info, '"url":\s*"([^"]*)"').Groups[1].Value
+        if (-not $url) { continue }
+        if ((ConvertTo-NormalUrl $url) -eq (ConvertTo-NormalUrl $script:PluginUrl)) {
+            if (Invoke-SkillCmd codex mcp remove $name) {
+                Write-SkillLine 'Codex' "removed the manual MCP entry `"$name`" ($url) from config.toml"
+            } else {
+                Write-SkillLine 'Codex' "left the manual MCP entry `"$name`" ($url): remove it by hand: codex mcp remove $name"
+            }
+        } else {
+            Write-SkillLine 'Codex' "left the MCP entry `"$name`" ($url): it is not this installation's address"
+        }
+    }
+}
+
 function Install-ClaudeSkill {
     $src = "${SkillSource}#stable"
-    $retry = "claude plugin marketplace add $src --sparse .claude-plugin skills; claude plugin install casefile@casefile --scope user"
+    if (-not $script:PluginUrl) {
+        Write-SkillLine 'Claude Code' "plugin not installed: it needs your server's address. Run this installer again with `$env:CASEFILE_URL='https://<your host>/mcp'"
+        return
+    }
+    $retry = "claude plugin marketplace add $src --sparse .claude-plugin skills; claude plugin install casefile@casefile --scope user --config casefile_url=$($script:PluginUrl)"
+    Remove-ClaudeEntries
     $ok = (Invoke-SkillCmd claude plugin marketplace add $src --sparse .claude-plugin skills) -and
         (Invoke-SkillCmd claude plugin marketplace update casefile) -and
-        (Invoke-SkillCmd claude plugin install casefile@casefile --scope user) -and
+        (Invoke-SkillCmd claude plugin install casefile@casefile --scope user --config "casefile_url=$($script:PluginUrl)") -and
         (Invoke-SkillCmd claude plugin update casefile@casefile)
     if (-not $ok) { Write-SkillFailed 'Claude Code' $retry; return }
     $ErrorActionPreference = 'Continue'
@@ -120,23 +190,55 @@ function Install-ClaudeSkill {
     $m = [regex]::Match($text, 'casefile@casefile[^\r\n]*[\r\n]+\s*Version:\s*(\S+)[\s\S]*?Status:\s*([^\r\n]*)')
     if (-not ($m.Success -and $m.Groups[2].Value -match 'enabled')) { Write-SkillFailed 'Claude Code' $retry; return }
     $version = $m.Groups[1].Value
+    $script:LoginClaude = $true
     if (Set-ClaudeAutoUpdate) {
-        Write-SkillLine 'Claude Code' "installed $version (updates itself)"
+        Write-SkillLine 'Claude Code' "installed $version (updates itself), connected to $($script:PluginUrl)"
     } else {
-        Write-SkillLine 'Claude Code' "installed $version (automatic updates not switched on: add `"autoUpdate`": true inside extraKnownMarketplaces.casefile in settings.json)"
+        Write-SkillLine 'Claude Code' "installed $version, connected to $($script:PluginUrl) (automatic updates not switched on: add `"autoUpdate`": true inside extraKnownMarketplaces.casefile in settings.json)"
+    }
+}
+
+function Set-CodexUrl {
+    $dir = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+    $file = Join-Path $dir 'config.toml'
+    try {
+        if ((Test-Path $file) -and ([System.IO.File]::ReadAllText($file) -match '(?m)^\[mcp_servers\.casefile[\].]')) { return $false }
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        [System.IO.File]::AppendAllText($file, "`n[mcp_servers.casefile]`nurl = `"$($script:PluginUrl)`"`n", (New-Object System.Text.UTF8Encoding($false)))
+        return $true
+    } catch {
+        return $false
     }
 }
 
 function Install-CodexSkill {
-    $retry = "codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse skills; codex plugin add casefile@casefile"
-    $ok = (Invoke-SkillCmd codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse skills) -and
+    if (-not $script:PluginUrl) {
+        Write-SkillLine 'Codex' "plugin not installed: it needs your server's address. Run this installer again with `$env:CASEFILE_URL='https://<your host>/mcp'"
+        return
+    }
+    $retry = "codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills; codex plugin add casefile@casefile"
+    Remove-CodexEntries
+    $ok = (Invoke-SkillCmd codex plugin marketplace add $SkillSource --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills) -and
         (Invoke-SkillCmd codex plugin marketplace upgrade casefile) -and
         (Invoke-SkillCmd codex plugin add casefile@casefile)
     if (-not $ok) { Write-SkillFailed 'Codex' $retry; return }
     $ErrorActionPreference = 'Continue'
     $row = & codex plugin list 2>$null | Where-Object { $_ -match '^casefile@casefile\s.*installed' } | Select-Object -First 1
     $m = [regex]::Match([string] $row, '\s(\d+\.\d+\S*)')
-    if ($m.Success) { Write-SkillLine 'Codex' "installed $($m.Groups[1].Value)" } else { Write-SkillFailed 'Codex' $retry }
+    if (-not $m.Success) { Write-SkillFailed 'Codex' $retry; return }
+    $version = $m.Groups[1].Value
+    $script:LoginCodex = $true
+    # Адрес плагина у Codex зашит: другой задаёт одноимённый сервер из config.toml, он
+    # вытесняет плагинный (TRK-451#13). Токена в нём нет — вход OAuth. Строка пишется сюда
+    # же, куда её пишет `codex mcp add`, но без него: тот сразу запускает вход и без
+    # терминала возвращает ошибку, хотя запись уже есть.
+    if ((ConvertTo-NormalUrl $script:PluginUrl) -eq (ConvertTo-NormalUrl $CodexPluginUrl)) {
+        Write-SkillLine 'Codex' "installed $version, connected to $($script:PluginUrl)"
+    } elseif (Set-CodexUrl) {
+        Write-SkillLine 'Codex' "installed $version, connected to $($script:PluginUrl) (an entry without a token in config.toml)"
+    } else {
+        Write-SkillFailed 'Codex' "codex mcp add casefile --url $($script:PluginUrl)"
+    }
 }
 
 function Install-HermesSkill {
@@ -184,7 +286,42 @@ function Install-Skills {
     } else {
         Write-SkillLine 'Other agents' "npx not found (with Node.js: npx skills add ${SkillSource}#stable)"
     }
-    Write-Host '  A running session picks up the skill after a restart (in Claude Code: /reload-plugins).'
+    Write-Host '  A running session picks up the plugin after a restart (in Claude Code: /reload-plugins).'
+    Write-Host ''
+    Invoke-SignIn
+}
+
+# --- Вход OAuth (TRK-452) -----------------------------------------------------------------
+# Близнец `sign_in` из `install.sh`: один раз на харнесс, только в интерактивном терминале
+# (Claude Code иначе не входит, TRK-432#8). Не терминал (stdin или stdout перенаправлены) или
+# CASEFILE_LOGIN=0 — вход не запускается, печатается команда. Ошибка входа установку не валит.
+function Test-Interactive {
+    if (-not $LoginOn) { return $false }
+    try { return (-not [Console]::IsInputRedirected) -and (-not [Console]::IsOutputRedirected) } catch { return $false }
+}
+
+function Invoke-SignInOne([string] $Name, [string] $Exe, [string[]] $CmdArgs) {
+    $ErrorActionPreference = 'Continue'
+    & $Exe @CmdArgs
+    if ($LASTEXITCODE -eq 0) {
+        Write-SkillLine $Name 'signed in'
+    } else {
+        Write-SkillLine $Name "sign-in did not finish - repeat by hand: $Exe $($CmdArgs -join ' ')"
+    }
+}
+
+function Invoke-SignIn {
+    if (-not ($script:LoginClaude -or $script:LoginCodex)) { return }
+    Write-Host 'Signing the agents in to Casefile (OAuth, no token on disk):' -ForegroundColor White
+    if (Test-Interactive) {
+        Write-Host '  A browser window may open; approve the sign-in there.'
+        if ($script:LoginClaude) { Invoke-SignInOne 'Claude Code' 'claude' @('mcp', 'login', 'plugin:casefile:casefile') }
+        if ($script:LoginCodex) { Invoke-SignInOne 'Codex' 'codex' @('mcp', 'login', 'casefile') }
+    } else {
+        Write-Host '  This needs a terminal; run once, in a terminal of yours:'
+        if ($script:LoginClaude) { Write-Host '    claude mcp login plugin:casefile:casefile' }
+        if ($script:LoginCodex) { Write-Host '    codex mcp login casefile' }
+    }
     Write-Host ''
 }
 
@@ -192,9 +329,21 @@ function Install-Skills {
 # установки, ни токена (TRK-401#18). `return`, а не `exit`: `exit` закрыл бы окно, из
 # которого скрипт запущен через `iex`.
 if ($SkillOnly) {
+    # Адрес сервера — `CASEFILE_URL`: с ним ставится плагин (скил и коннектор) и ведётся
+    # вход OAuth, без него — только скилы, которым адрес не нужен, и подсказка (TRK-452).
+    $script:PluginUrl = if ($env:CASEFILE_URL) { $env:CASEFILE_URL } else { '' }
+    if ($script:PluginUrl -and ($script:PluginUrl -notmatch '^https://.' -and
+            $script:PluginUrl -notmatch '^http://(localhost|127\.0\.0\.1|\[::1\])([:/]|$)')) {
+        Fail 'CASEFILE_URL must be an https:// address (http:// only for localhost): outside the local machine the service offers the OAuth sign-in over https only'
+    }
     try { Install-Skills } catch { Write-Host "casefile: the skill step failed: $_" -ForegroundColor Red }
-    Write-Host 'Now connect the agent to your Casefile over MCP: docs/agent-install.md,'
-    Write-Host '"Joining an installation someone else runs" (https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md).'
+    if (-not $script:PluginUrl) {
+        Write-Host 'To connect Claude Code and Codex, run this again with the address of your server:'
+        Write-Host '  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh'
+        Write-Host '(Windows PowerShell: $env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL=''https://casefile.example.com/mcp''; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)'
+    }
+    Write-Host 'Other agents (Hermes and the like): docs/agent-install.md, "Joining an installation someone else runs"'
+    Write-Host '(https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md).'
     return
 }
 
@@ -297,6 +446,7 @@ $mcpUrl = (& docker compose run --rm --no-deps -T --entrypoint python api -c `
 if ($LASTEXITCODE -ne 0 -or -not $mcpUrl) {
     Fail 'the installation did not report its MCP address; see: docker compose logs api'
 }
+$script:PluginUrl = $mcpUrl
 
 # Тот же порядок, что у compose и уже у `$registry`/`$version` выше: окружение, затем
 # `.env`, затем умолчание (TRK-169: заданный установщику `CASEFILE_PORT` двигал реальную
@@ -312,28 +462,23 @@ Write-Host ''
 if ($SkillOn) {
     try { Install-Skills } catch { Write-Host "casefile: the skill step failed; the installation itself is done. $_" -ForegroundColor Red }
 }
-# Подключение и скил — по блоку на харнесс, как в `install.sh` (TRK-406). Токен только
-# печатается, в файлы харнессов не пишется. Команды скила дословно те же, что в
-# `install.sh` и `docs/agent-install.md`; `tests/test_installers.py` сверяет их.
-Write-Host 'Connect Claude Code:' -ForegroundColor White
-Write-Host "  claude mcp add --transport http --scope user casefile $mcpUrl --header `"Authorization: Bearer $token`""
-Write-Host '  claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills'
-Write-Host '  claude plugin install casefile@casefile --scope user'
-Write-Host '  Then let Claude Code keep the skill current: in ~/.claude/settings.json add'
-Write-Host '  "autoUpdate": true next to "source" inside extraKnownMarketplaces.casefile.'
+# Подключение — по блоку на харнесс, как в `install.sh` (TRK-406, TRK-452). Claude Code и
+# Codex подключены плагином и входят по OAuth: токена для них нет нигде. Ключ агента
+# печатается только харнессам без OAuth. Команды дословно те же, что в `install.sh` и
+# `docs/agent-install.md`; `tests/test_installers.py` сверяет их.
+Write-Host 'Claude Code:' -ForegroundColor White
+Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth,"
+Write-Host '  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile'
+Write-Host '  Without the installer: claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills'
+Write-Host "  claude plugin install casefile@casefile --scope user --config casefile_url=$mcpUrl"
 Write-Host ''
-Write-Host 'Connect Codex:' -ForegroundColor White
-Write-Host '  Add to ~/.codex/config.toml (works in the terminal and in the Codex app):'
-Write-Host '    [mcp_servers.casefile]'
-Write-Host "    url = `"$mcpUrl`""
-Write-Host "    http_headers = { Authorization = `"Bearer $token`" }"
-Write-Host '    tool_timeout_sec = 90'
-Write-Host '  Terminal only, token kept out of the file: set $env:CASEFILE_TOKEN and write'
-Write-Host '  bearer_token_env_var = "CASEFILE_TOKEN" instead of the http_headers line.'
-Write-Host '  codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse skills'
+Write-Host 'Codex:' -ForegroundColor White
+Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth."
+Write-Host '  If it did not run above: codex mcp login casefile'
+Write-Host '  Without the installer: codex plugin marketplace add azimov777/casefile --ref stable --sparse .claude-plugin --sparse .codex-plugin --sparse skills'
 Write-Host '  codex plugin add casefile@casefile'
 Write-Host ''
-Write-Host 'Connect Hermes:' -ForegroundColor White
+Write-Host 'Hermes (no OAuth: a key):' -ForegroundColor White
 Write-Host '  Add to ~/.hermes/config.yaml:'
 Write-Host '    mcp_servers:'
 Write-Host '      casefile:'
@@ -342,9 +487,11 @@ Write-Host '        headers:'
 Write-Host "          Authorization: `"Bearer $token`""
 Write-Host '  hermes skills install azimov777/casefile/skills/casefile'
 Write-Host ''
-Write-Host 'Any other MCP client (Cursor, ...):' -ForegroundColor White
+Write-Host 'Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:' -ForegroundColor White
 Write-Host "  URL     $mcpUrl"
 Write-Host "  Header  Authorization: Bearer $token"
+Write-Host "  The key lives in the installation; read it again with (in $Dir):"
+Write-Host '    docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token'
 Write-Host '  npx skills add azimov777/casefile#stable'
 Write-Host ''
 Write-Host 'The skill teaches an agent how to work in Casefile. A running session picks up a new'
@@ -365,9 +512,10 @@ Write-Host '    Carry out the tasks for this work from the Casefile tracker. Han
 Write-Host "  The same phrases with copy buttons, in your language: http://localhost:$uiPort/start"
 Write-Host ''
 
-Write-Host 'Another machine whose agents will connect to this installation gets the skill with:'
-Write-Host '  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh'
-Write-Host '  (Windows PowerShell: $env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)'
+Write-Host 'Another machine whose agents will connect to a Casefile server gets the plugin and the sign-in with'
+Write-Host '(the address must be https unless it is localhost):'
+Write-Host '  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh'
+Write-Host '  (Windows PowerShell: $env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL=''https://casefile.example.com/mcp''; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)'
 Write-Host ''
 
 Write-Host "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $Dir"
