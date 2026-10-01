@@ -1,8 +1,9 @@
 # Install Casefile — instructions for an AI agent
 
 You are setting up Casefile for the user: a local task tracker that agents use over MCP.
-Run every step yourself, in order. Never print the token in the chat or write it to any
-file other than your own MCP configuration.
+Run every step yourself, in order. Claude Code and Codex sign in with OAuth and need no
+token. A harness without OAuth uses the agent key: never print it in the chat or write it
+to any file other than that harness's MCP configuration.
 
 ## 1. Check Docker
 
@@ -28,10 +29,13 @@ irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
 It installs into `~/casefile` (`%USERPROFILE%\casefile` on Windows), starts the services
-and prints the board URL, the MCP URL and a ready-made connect command with the token. It
-also installs the Casefile skill by itself into every agent it finds on the machine
-(Claude Code, Codex, Hermes, other agents through `npx skills`) and prints one line per
-harness: `installed <version>`, `not found` or `failed` with the command to repeat by hand.
+and prints the board URL and the MCP URL. It also installs the Casefile plugin and skill
+by itself into every agent it finds on the machine (Claude Code, Codex, Hermes, other
+agents through `npx skills`) and prints one line per harness: `installed <version>`,
+`not found` or `failed` with the command to repeat by hand. In Claude Code and Codex the
+plugin carries the connection too, and the installer then signs them in with OAuth
+(a browser page) — when it has a terminal; without one it prints the sign-in commands
+instead. For Hermes and other clients without OAuth it prints the agent key.
 `CASEFILE_SKILL=0` in front of the install line skips that step.
 
 If port 8080 or 8100 is taken, put `CASEFILE_PORT=<free port>` and/or
@@ -45,28 +49,30 @@ harness. Go on with step 3 and do the check at the start of step 4 all the same.
 
 Use the MCP address from the `MCP:` line the installer printed in step 2 — never assume a
 default port. The installation may be using a different port, or a public URL it was
-told to use. Take the token from the installer output too, or read it without printing
-it anywhere else:
+told to use.
 
-```bash
-cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token
-```
+- **Claude Code and Codex:** the plugin from step 2 already carries the connection to that
+  address (Codex on another address than `http://127.0.0.1:8100/mcp` gets an
+  `[mcp_servers.casefile]` entry with only `url` in `~/.codex/config.toml`); no token goes
+  into any file. What is left is the sign-in, if the installer could not run it (its
+  `Signing the agents in` lines say so). It needs the user's terminal or session, so ask
+  the user to do it once:
+  - Claude Code: `/mcp` in the session, then `casefile` → **Authenticate**; or, in a
+    terminal, `claude mcp login plugin:casefile:casefile`.
+  - Codex: `codex mcp login casefile` in a terminal.
 
-- **Claude Code:**
-  `claude mcp add --transport http --scope user casefile <MCP address from the installer output> --header "Authorization: Bearer <token>"`
-- **Codex:** add this block to `~/.codex/config.toml`; it works in the terminal and in the
-  Codex app (the app does not see shell variables, so the token goes in the header here):
+  On a machine of the user's own a browser page opens and closes at once: the agent is
+  signed in as `claude` or `codex` without a password. The same commands sign in again
+  after the user disconnects this agent on the board's **Access** screen
+  (in Claude Code, `/mcp` → **Re-authenticate**).
+- **Hermes and any other client without OAuth** connect with the agent key. Take it from
+  the installer output, or read it without printing it anywhere else:
 
-  ```toml
-  [mcp_servers.casefile]
-  url = "<MCP address from the installer output>"
-  http_headers = { Authorization = "Bearer <token>" }
-  tool_timeout_sec = 90
+  ```bash
+  cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token
   ```
 
-  From a terminal only, the token can stay out of the file: `export CASEFILE_TOKEN=<token>`
-  and write `bearer_token_env_var = "CASEFILE_TOKEN"` instead of the `http_headers` line.
-- **Hermes:** add this block to `~/.hermes/config.yaml`:
+  Hermes: add this block to `~/.hermes/config.yaml`:
 
   ```yaml
   mcp_servers:
@@ -76,44 +82,50 @@ cd ~/casefile && docker compose run --rm --no-deps -T agent-token cat .secrets/a
         Authorization: "Bearer <token>"
   ```
 
-- **Any other MCP client:** add a streamable HTTP server at `<MCP address from the
-  installer output>` with the header `Authorization: Bearer <token>`.
+  Any other client: a streamable HTTP server at `<MCP address from the installer output>`
+  with the header `Authorization: Bearer <token>`.
 
-A running session does not pick up a new MCP server by itself: tell the user to restart
-the session (in Claude Code, `/mcp` reconnects).
+A running session does not pick up a new plugin or MCP server by itself: tell the user to
+restart the session (in Claude Code, `/reload-plugins` and then `/mcp`).
 
 ### Joining an installation someone else runs
 
 If the user does not own the installation but signs in to a shared one (a server where
-people log in with an email and a password), skip steps 1 and 2: there is no installer
-output and no `agent-token` to read. Ask the user to issue a token for you themselves, in
-the board's access screen or with `POST /api/v1/tokens` from their own signed-in session,
-and to name it after this machine or harness so they can tell it apart later. Any person
-with an account can do this without the administrator. Then connect with that token as
-above, using the MCP address the installation publishes. Then do step 4,
-**Install the Casefile skill**, on your own machine, as it stands: no installer of the
-service and no Docker are needed for it. One line on the machine where the agent runs
-installs the skill into every agent it finds there and prints where it stands:
+people log in with an email and a password), skip steps 1 and 2: there is no installer of
+the service to run and no `agent-token` to read. Ask the user for the installation's MCP
+address — the board's **Connect an agent** screen shows it; it must be `https`. Then run
+one line on the machine where you work: it installs the Casefile plugin connected to that
+address into Claude Code and Codex, the skill into the other agents it finds, and starts
+the sign-in. It needs no Docker, creates no installation directory and prints no token:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh
 ```
 
 ```powershell
-$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
-It creates no installation directory and prints no token. The per-harness commands below
-do the same one harness at a time.
+The sign-in is OAuth: a browser page on the installation's MCP host, where the user signs
+in with their email and password and picks the agent this client acts as. The default is
+their own agent, `claude_<their name>` for Claude Code and `codex_<their name>` for Codex,
+created on the first sign-in; your case entries are signed with that name. Without a
+terminal the installer prints the sign-in commands of step 3 — ask the user to run them.
+A harness without OAuth (Hermes and others) and a journal watcher running between sessions
+(step 6) need an agent key instead: ask the user to issue one for their agent on the
+board's **Access** screen and connect with it as in step 3. Then check the skill as in
+step 4, **Install the Casefile skill**.
 
 What the user should know, in one line each:
 
-- The token is theirs: they see it in their list with the time it was last used and can
-  revoke it; other people see and revoke only their own, the administrator sees all.
-- After a revoke your next call is refused with `401 unauthorized`
-  (`details.reason: token_revoked`) — ask for a new token, do not retry.
-- If their account is disabled, every token they issued stops working at once, yours
-  included, and enabling the account again does not bring those tokens back.
+- The connection and the key are theirs: they see them on **Access** with the time of
+  the last use and can disconnect or revoke them; other people see only their own, the
+  administrator sees all.
+- After a disconnect your next call is refused with `401 unauthorized` — sign in again
+  with the commands of step 3. After a key is revoked
+  (`details.reason: token_revoked`) — ask for a new key, do not retry.
+- If their account is disabled, every connection and key they issued stops working at
+  once, yours included, and enabling the account again does not bring them back.
 
 ## 4. Install the Casefile skill
 
@@ -135,18 +147,21 @@ harness. A running, up-to-date service says nothing about the skill in your harn
 
 If your harness has it, go on to step 5. If it is missing, one line installs it into every
 harness on the machine without touching the running service — no Docker, no installation
-directory, no token:
+directory, no token. Put the MCP address of step 3 into `CASEFILE_URL` (the example below
+is the default address of an installation on this machine): Claude Code and Codex get the
+skill in the plugin that also carries the connection, and without an address the line
+leaves them out.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 sh
+curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=http://127.0.0.1:8100/mcp sh
 ```
 
 ```powershell
-$env:CASEFILE_SKILL_ONLY=1; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
+$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL='http://127.0.0.1:8100/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
-It prints one line per harness, as in step 2. The commands below do the same for one
-harness at a time.
+It prints one line per harness, as in step 2, and signs Claude Code and Codex in as in
+step 3. The commands below do the same for one harness at a time.
 
 ### Install it by hand
 
@@ -161,8 +176,10 @@ appeared later:
 
   ```bash
   claude plugin marketplace add azimov777/casefile#stable --sparse .claude-plugin skills
-  claude plugin install casefile@casefile --scope user
+  claude plugin install casefile@casefile --scope user --config casefile_url=<MCP address>
   ```
+
+  `casefile_url` is the MCP address of step 3; left out, it is `http://127.0.0.1:8100/mcp`.
 
   The CLI has no flag for automatic updates. Add `"autoUpdate": true` next to `"source"`
   inside `extraKnownMarketplaces.casefile` in `~/.claude/settings.json`: from the next
@@ -174,19 +191,28 @@ appeared later:
   codex plugin add casefile@casefile
   ```
 
+  The plugin connects Codex to `http://127.0.0.1:8100/mcp`. Another address goes into
+  `~/.codex/config.toml` as two lines, without a token:
+
+  ```toml
+  [mcp_servers.casefile]
+  url = "<MCP address>"
+  ```
+
   To update: `codex plugin marketplace upgrade casefile`.
 - **Hermes:** `hermes skills install azimov777/casefile/skills/casefile`; to update, run
   the same command again.
 - **Any other agent:** `npx skills add azimov777/casefile#stable`; to update, run it again.
 
 A running session does not see a new plugin: restart it, or run `/reload-plugins` in
-Claude Code.
+Claude Code. Then sign in as in step 3.
 
 ## 5. Verify
 
 - `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/` prints `200`: the board is up.
-- `claude mcp list` shows `casefile` as connected (other clients: list the MCP tools and
-  look for `list_projects`).
+- `claude mcp list` shows `plugin:casefile:casefile` as connected, `codex mcp list` shows
+  `casefile` (other clients: list the MCP tools and look for `list_projects`). A server
+  that needs authentication is not signed in yet: do the sign-in of step 3.
 - The skill is installed: `claude plugin list` shows `casefile@casefile` enabled
   (Codex: `codex plugin list`; Hermes and others: look for the `casefile` skill in
   your harness's list of skills). If it is missing, do step 4. A session that was already
@@ -230,6 +256,13 @@ do that, and Casefile does not ship one:
 Either way, the recipe is the same three things: which tasks to watch, which `seq` to
 resume from, and how long a poll may wait before it comes back empty. The script's
 header names the exact variables.
+
+A watcher outside the session needs a key of its own: the OAuth sign-in of Claude Code
+and Codex stays inside the harness, and no outside process can use it. On a machine with
+the installation it is the agent key of step 3 (`agent-token`); on an installation
+someone else runs, the user issues a key for their agent on the board's **Access**
+screen. Inside a session no key is needed: `wait_journal` goes over the connection you
+already have.
 
 ## 7. Report to the user
 

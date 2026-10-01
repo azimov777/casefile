@@ -347,14 +347,15 @@ def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
 
 #: Проверка «стоит ли скил» по харнессам (TRK-431): те же признаки, по которым установщик
 #: печатает `installed`, и строка только скила для установки, которую обновлятор уже
-#: обновил, — ей скил не достаётся никогда.
+#: обновил, — ей скил не достаётся никогда. Строка — с адресом в `CASEFILE_URL`: без него
+#: плагин Claude Code и Codex не ставится (TRK-452#18), и скил в них не встал бы (TRK-454).
 SKILL_CHECKS = (
     "claude plugin list",
     "codex plugin list",
     "hermes skills list",
     "~/.agents/skills/casefile/SKILL.md",
-    "install.sh | CASEFILE_SKILL_ONLY=1 sh",
-    "$env:CASEFILE_SKILL_ONLY=1; irm",
+    "install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=",
+    "$env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL=",
 )
 
 
