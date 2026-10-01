@@ -191,16 +191,15 @@ class CasefileAuthorization(PresentedToken):
         super().__init__(sessions)
         self._consent = consent
         self._consent_page = consent_page
-        self._documents = documents or ClientDocuments()
+        self._documents = documents or ClientDocuments.from_settings()
         self._access_ttl = access_ttl
 
     # --- Клиенты -------------------------------------------------------------------
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
-        async with self._sessions() as session:
-            metadata = await oauth_service.find_client(
-                session, client_id, documents=self._documents
-            )
+        metadata = await oauth_service.find_client(
+            self._sessions, client_id, documents=self._documents
+        )
         if metadata is None:
             return None
         try:
