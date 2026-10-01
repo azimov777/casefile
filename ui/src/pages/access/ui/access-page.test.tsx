@@ -440,11 +440,14 @@ describe('экран «Доступы»', () => {
     // Секрет показан — и сам по себе, и внутри фрагментов подключения.
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(SECRET)).toBeInTheDocument();
+    // Claude Code входит по OAuth: ключа в его фрагменте нет, он — во вкладке без OAuth.
     expect(
       await within(dialog).findByText(
-        connectionSnippets({ mcpUrl: ADDRESS, token: SECRET, labelled: false }).claudeCode,
+        connectionSnippets({ mcpUrl: ADDRESS, token: SECRET, labelled: false }).claudePlugin,
+        { normalizer: (text) => text },
       ),
     ).toBeInTheDocument();
+    expect(within(dialog).getAllByText(SECRET)).toHaveLength(1);
     // Человеку сказано, что второго показа не будет.
     expect(within(dialog).getByText(say.access('secret.onlyOnce'))).toBeInTheDocument();
 

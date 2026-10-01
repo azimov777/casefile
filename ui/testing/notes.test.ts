@@ -126,6 +126,11 @@ const NOT_IN_CODE: Record<string, string> = {
   about_Pipeline_Chain_Operators: 'справочная статья PowerShell про `&&`/`||`, не наш код',
   ParserError: 'тип ошибки разбора PowerShell, не наш код',
   GetMkdirFunctionText: 'метод исходника движка PowerShell (`mkdir`), не наш код',
+  bearer_token_env_var:
+    'ключ конфигурации Codex: фрагмент с ним снят с экрана в TRK-479, старые заметки называют его как снесённый',
+  http_headers:
+    'ключ конфигурации Codex: фрагмент с ним снят с экрана в TRK-479, старая заметка называет его как снесённый',
+  codexEnv: 'поле снятого фрагмента Codex (TRK-479), названное старой заметкой как снесённое',
   Force: 'параметр `New-Item`/`mkdir` PowerShell, не наш код',
   Credential: 'параметр `mkdir` PowerShell, не наш код',
   about_Parameters: 'справочная статья PowerShell про сокращения имён параметров, не наш код',

@@ -14,20 +14,8 @@
 /** Имя сервера в конфигурации клиента — то же, что в README и выводе установщика. */
 export const SERVER_NAME = 'casefile';
 
-/**
- * Переменная окружения, из которой Codex берёт токен (`bearer_token_env_var`). Путь
- * через переменную выбран потому, что секрет не ложится в файл конфигурации.
- */
-export const TOKEN_ENV = 'CASEFILE_TOKEN';
-
 /** Файл конфигурации Codex, в который ложится секция `[mcp_servers.<имя>]`. */
 export const CODEX_CONFIG_PATH = '~/.codex/config.toml';
-
-/**
- * Предел ответа инструмента у Codex, секунд. По умолчанию он 60 с, а `wait_journal` ждёт
- * до 60 с: с накладными расходами клиент обрывал бы вызов раньше ответа сервера (TRK-438).
- */
-export const CODEX_TOOL_TIMEOUT_SEC = 90;
 
 /** Заголовок, которым общий агентский токен называет временного агента. */
 export const LABEL_HEADER = 'X-Actor-Label';
@@ -41,10 +29,17 @@ export const TOKEN_PLACEHOLDER = '<token>';
 export const LABEL_PLACEHOLDER = '<label>';
 
 /**
- * Установка скила — второй шаг подключения (TRK-420, `TRK-401#18`). Команды те же, что
- * печатают `install.sh` и `docs/agent-install.md` (шаг «Install the Casefile skill»);
- * `snippets.test.ts` сверяет их с гайдом. Скил общий для всех установок, поэтому ни
- * адреса, ни токена в этих текстах нет и `connectionSnippets` их из входа не собирает.
+ * Адрес, который у Codex уже прописан в плагине (`.codex-plugin/mcp.json`): другой адрес
+ * ему задаёт строка в `config.toml` (TRK-451#13, TRK-452#18).
+ */
+const CODEX_PLUGIN_URL = 'http://127.0.0.1:8100/mcp';
+
+/**
+ * Установка скила для клиентов без плагина — `npx skills` и строка на машину агента
+ * (TRK-420, `TRK-401#18`). Команды те же, что печатают `install.sh` и
+ * `docs/agent-install.md`; `snippets.test.ts` сверяет их с гайдом. Скил общий для всех
+ * установок, поэтому ни адреса, ни токена в этих текстах нет. Claude Code и Codex
+ * получают скил вместе с подключением — плагином (`claudePlugin`, `codexPlugin`).
  */
 const SKILL_REPO = 'azimov777/casefile';
 const SKILL_CHANNEL = 'stable';
@@ -57,12 +52,6 @@ export interface CodexMarketplaceField {
 }
 
 export interface SkillTexts {
-  /** Claude Code: маркетплейс и плагин, две команды, по строке на команду. */
-  claudeCode: string;
-  /** Codex: маркетплейс и плагин, две команды. */
-  codex: string;
-  /** Те же значения полями пункта «Добавить маркетплейс» приложения Codex. */
-  codexMarketplace: CodexMarketplaceField[];
   /** Любой другой агент. */
   other: string;
   /**
@@ -73,19 +62,6 @@ export interface SkillTexts {
 }
 
 const SKILL: SkillTexts = {
-  claudeCode: [
-    `claude plugin marketplace add ${SKILL_REPO}#${SKILL_CHANNEL} --sparse .claude-plugin skills`,
-    'claude plugin install casefile@casefile --scope user',
-  ].join('\n'),
-  codex: [
-    `codex plugin marketplace add ${SKILL_REPO} --ref ${SKILL_CHANNEL} --sparse .claude-plugin --sparse skills`,
-    'codex plugin add casefile@casefile',
-  ].join('\n'),
-  codexMarketplace: [
-    { key: 'source', value: SKILL_REPO },
-    { key: 'ref', value: SKILL_CHANNEL },
-    { key: 'sparse', value: '.claude-plugin, skills' },
-  ],
   other: `npx skills add ${SKILL_REPO}#${SKILL_CHANNEL}`,
   machine: {
     bashZsh: `curl -fsSL ${SKILL_INSTALLER}/install.sh | CASEFILE_SKILL_ONLY=1 sh`,
@@ -106,33 +82,31 @@ export interface SnippetInput {
   labelled: boolean;
 }
 
-/** Поле формы подключения в приложении Codex и ключ файла, на который оно ложится. */
-export interface CodexFormField {
-  key: 'url' | 'bearer_token_env_var' | 'http_headers';
-  /** Для заголовков — имя заголовка, для остальных полей — `null`. */
-  name: string | null;
-  value: string;
-}
-
 export interface SnippetTexts {
-  /** Любой клиент MCP: заголовки, которые идут с каждым запросом, по строке на заголовок. */
+  /** Любой клиент MCP без OAuth: заголовки, которые идут с каждым запросом, по строке на заголовок. */
   headers: string;
-  /** Команда Claude Code одной строкой: так она вставляется в любую оболочку. */
-  claudeCode: string;
-  /** Секция `~/.codex/config.toml`. */
-  codexFile: string;
   /**
-   * Переменная окружения с токеном для Codex: `export` — синтаксис bash/zsh, `$env:` —
-   * PowerShell, и один без другого работает только на части заявленных платформ
-   * (Casefile ставится и на Windows, `install.ps1`). Оболочку экран не угадывает по
-   * `navigator.userAgent` — показывает обе строки (`UI-114`, решение UI-114#5).
+   * Claude Code: маркетплейс, плагин с адресом установки и вход OAuth, по строке на
+   * команду. Ключа нет нигде: плагин несёт и скил, и подключение (TRK-452#18).
    */
-  codexEnv: { bashZsh: string; powerShell: string };
-  /** Те же значения полями формы приложения Codex. */
-  codexForm: CodexFormField[];
-  /** Конфигурация `mcpServers` в форме `.mcp.json` Claude Code. */
+  claudePlugin: string;
+  /** Codex: маркетплейс со всеми тремя путями, плагин и вход OAuth. Ключа нет. */
+  codexPlugin: string;
+  /** Те же значения полями пункта «Добавить маркетплейс» приложения Codex. */
+  codexMarketplace: CodexMarketplaceField[];
+  /**
+   * Строки `config.toml` с адресом установки, если он не тот, что зашит в плагин Codex;
+   * иначе `null`. Токена в них нет — вход OAuth.
+   */
+  codexUrlFile: string | null;
+  /**
+   * Служба отдаёт вход OAuth только по https, а по http — лишь на своей машине
+   * (`install.sh`, TRK-451#13). Вне этого плагин подключиться не сможет.
+   */
+  oauthAvailable: boolean;
+  /** Конфигурация `mcpServers` в форме `.mcp.json` — для клиентов без OAuth, с ключом. */
   json: string;
-  /** Установка скила для того же клиента; от адреса, токена и метки не зависит. */
+  /** Установка скила для клиентов без плагина; от адреса, токена и метки не зависит. */
   skill: SkillTexts;
 }
 
@@ -140,26 +114,33 @@ export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): S
   const secret = token ?? TOKEN_PLACEHOLDER;
   const authorization = `Bearer ${secret}`;
 
-  // Заголовки одним списком на все фрагменты: метка не может оказаться в одном и
+  // Заголовки одним списком на все фрагменты с ключом: метка не может оказаться в одном и
   // пропасть в соседнем.
   const headers: [string, string][] = [['Authorization', authorization]];
   if (labelled) headers.push([LABEL_HEADER, LABEL_PLACEHOLDER]);
 
   return {
     headers: headers.map(([name, value]) => `${name}: ${value}`).join('\n'),
-    claudeCode: claudeCodeCommand(mcpUrl, headers),
-    codexFile: codexFile(mcpUrl, labelled),
-    codexEnv: {
-      bashZsh: `export ${TOKEN_ENV}=${shellQuote(secret)}`,
-      powerShell: `$env:${TOKEN_ENV} = ${powerShellQuote(secret)}`,
-    },
-    codexForm: [
-      { key: 'url', name: null, value: mcpUrl },
-      { key: 'bearer_token_env_var', name: null, value: TOKEN_ENV },
-      ...(labelled
-        ? [{ key: 'http_headers' as const, name: LABEL_HEADER, value: LABEL_PLACEHOLDER }]
-        : []),
+    claudePlugin: [
+      `claude plugin marketplace add ${SKILL_REPO}#${SKILL_CHANNEL} --sparse .claude-plugin skills`,
+      `claude plugin install casefile@casefile --scope user --config ${shellQuote(`casefile_url=${mcpUrl}`)}`,
+      `claude mcp login ${CLAUDE_LOGIN_SERVER}`,
+    ].join('\n'),
+    codexPlugin: [
+      `codex plugin marketplace add ${SKILL_REPO} --ref ${SKILL_CHANNEL} ${CODEX_SPARSE.map((path) => `--sparse ${path}`).join(' ')}`,
+      'codex plugin add casefile@casefile',
+      `codex mcp login ${SERVER_NAME}`,
+    ].join('\n'),
+    codexMarketplace: [
+      { key: 'source', value: SKILL_REPO },
+      { key: 'ref', value: SKILL_CHANNEL },
+      { key: 'sparse', value: CODEX_SPARSE.join(', ') },
     ],
+    codexUrlFile:
+      normalizeUrl(mcpUrl) === normalizeUrl(CODEX_PLUGIN_URL)
+        ? null
+        : [`[mcp_servers.${SERVER_NAME}]`, `url = ${tomlString(mcpUrl)}`].join('\n'),
+    oauthAvailable: isOAuthAddress(mcpUrl),
     json: JSON.stringify(
       {
         mcpServers: {
@@ -173,38 +154,20 @@ export function connectionSnippets({ mcpUrl, token, labelled }: SnippetInput): S
   };
 }
 
-/**
- * `claude mcp add` с заголовками **после** имени и адреса. У флага `--header` значение
- * вариадическое (`-H, --header <header...>` в справке): поставленный раньше
- * позиционных аргументов, он забрал бы в заголовки и имя сервера, и адрес.
- */
-function claudeCodeCommand(mcpUrl: string, headers: [string, string][]): string {
-  const flags = headers.map(([name, value]) => `--header ${shellQuote(`${name}: ${value}`)}`);
-  return [
-    'claude mcp add --transport http --scope user',
-    SERVER_NAME,
-    shellQuote(mcpUrl),
-    ...flags,
-  ].join(' ');
+/** Пути, которые Codex забирает из репозитория: плагин читает `.codex-plugin` (TRK-451#13). */
+const CODEX_SPARSE = ['.claude-plugin', '.codex-plugin', 'skills'];
+
+/** Сервер плагина в Claude Code, к которому идёт вход: `plugin:<плагин>:<сервер>`. */
+const CLAUDE_LOGIN_SERVER = 'plugin:casefile:casefile';
+
+/** Адрес как сравнивает его `install.sh` (`norm_url`): `localhost` — это `127.0.0.1`, без `/` в конце. */
+function normalizeUrl(url: string): string {
+  return url.replace(/^(https?:\/\/)localhost/, '$1127.0.0.1').replace(/\/+$/, '');
 }
 
-/**
- * Секция Codex. Токен в файл не пишется вовсе — только имя переменной, из которой его
- * возьмёт Codex: ключа для токена строкой у Codex в документации нет, и это к лучшему.
- * Метка — постоянное значение и потому ложится в `http_headers`, а не в
- * `env_http_headers`.
- */
-function codexFile(mcpUrl: string, labelled: boolean): string {
-  const lines = [
-    `[mcp_servers.${SERVER_NAME}]`,
-    `url = ${tomlString(mcpUrl)}`,
-    `bearer_token_env_var = ${tomlString(TOKEN_ENV)}`,
-  ];
-  if (labelled) {
-    lines.push(`http_headers = { ${tomlString(LABEL_HEADER)} = ${tomlString(LABEL_PLACEHOLDER)} }`);
-  }
-  lines.push(`tool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SEC}`);
-  return lines.join('\n');
+/** https — любой адрес; http — только свой компьютер (`install.sh`, проверка `CASEFILE_URL`). */
+function isOAuthAddress(url: string): boolean {
+  return /^https:\/\/./.test(url) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/.test(url);
 }
 
 /**
@@ -222,15 +185,4 @@ function tomlString(value: string): string {
  */
 export function shellQuote(value: string): string {
   return `"${value.replace(/["\\$`]/g, '\\$&')}"`;
-}
-
-/**
- * Значение в двойных кавычках для PowerShell. Экранирующий знак там не обратный слеш, а
- * обратная кавычка, и экранировать нужно её саму, `$` (старт подстановки переменной или
- * `$(...)`) и закрывающую кавычку; обратный слеш для PowerShell не особый знак и не
- * трогается. Проверено round-trip в pwsh 7.4.2 (`mcr.microsoft.com/powershell`, приём —
- * как в TRK-58): `docs/notes/connect.md`, `UI-114#4`.
- */
-export function powerShellQuote(value: string): string {
-  return `"${value.replace(/[`$"]/g, '`$&')}"`;
 }

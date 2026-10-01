@@ -82,7 +82,7 @@ describe('словари языков', () => {
       'ui.snippets.clients.json',
       'ui.snippets.addressCaption',
       'ui.snippets.codexField.url',
-      'ui.snippets.skill.codexAppField.ref',
+      'ui.snippets.codexAppField.ref',
       'ui.snippets.jsonCaption',
       'ui.task.parents.caption',
       'ui.task.parents.item',

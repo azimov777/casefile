@@ -438,7 +438,7 @@ export const ui = {
    * пространстве одного из них.
    *
    * Имена из кода — заголовок метки, подстановки, имя сервера, переменная окружения —
-   * приходят значениями (`{{header}}`, `{{placeholder}}`, `{{server}}`, `{{env}}`) из
+   * приходят значениями (`{{header}}`, `{{placeholder}}`, `{{server}}`) из
    * констант среза: перевод их не повторяет, и расходиться имени во фразе с именем во
    * фрагменте негде. Названия клиентов — имена продуктов и не переводятся.
    */
@@ -459,22 +459,22 @@ export const ui = {
     headersLabel: 'Request headers',
     headersCaption: 'HTTP headers',
     claudeHint:
-      'Registers the <code>{{server}}</code> server for all your projects (<code>--scope user</code>). A running session does not pick up a new server by itself: run <code>/mcp</code> or restart it. <code>claude mcp list</code> shows whether it is connected.',
-    claudeLabel: 'Claude Code command',
+      'The plugin carries the skill and the connection to this installation; the sign-in is OAuth, a browser opens, and no key lands in any file. A running session does not see the new plugin: restart it or run <code>/reload-plugins</code>. The key from this screen is for clients without OAuth: the tabs "JSON mcpServers" and "Any MCP client".',
+    claudeLabel: 'Claude Code: plugin and sign-in',
     terminalCaption: 'Terminal',
+    codexLabel: 'Codex: plugin and sign-in',
     codexHint:
-      'The token goes through the <code>{{env}}</code> environment variable, so the secret does not land in the configuration file. Codex reads the variable from its own environment: set it where Codex is started from, and restart the Codex app after changing it.',
-    codexFileLabel: 'Codex configuration section',
-    codexEnvBashLabel: 'Codex token variable (bash/zsh)',
-    codexEnvBashCaption: 'Terminal, before starting Codex',
-    codexEnvPowerShellLabel: 'Codex token variable (PowerShell)',
-    codexEnvPowerShellCaption: 'PowerShell, before starting Codex',
-    codexFormHint:
-      'Or the same values in the form of the Codex app (MCP servers in the settings, a Streamable HTTP server):',
-    codexField: {
-      url: 'URL',
-      bearer_token_env_var: 'Bearer token environment variable',
-      http_headers: 'Headers',
+      'The plugin carries the skill and the connection; the sign-in is OAuth, no key. <code>--sparse .codex-plugin</code> is required: Codex reads the connection from it. To update: <code>codex plugin marketplace upgrade casefile</code>; restart the Codex app after installing.',
+    codexUrlHint:
+      'The plugin has the address <code>http://127.0.0.1:8100/mcp</code> built in. Your installation has another one: add these lines to the Codex configuration (no key in them), and then sign in with <code>codex mcp login casefile</code>.',
+    codexUrlLabel: 'Installation address for Codex',
+    plainHttpWarning:
+      'This address is plain http outside this machine: the service offers the OAuth sign-in over https only, so the plugin cannot connect. Publish the installation over https, or connect with a key (the tabs "JSON mcpServers" and "Any MCP client").',
+    codexAppHint: 'Or with the "Add marketplace" item in the Codex app:',
+    codexAppField: {
+      source: 'Source',
+      ref: 'Git ref',
+      sparse: 'Sparse paths',
     },
     jsonHint:
       'The shape of the Claude Code <code>.mcp.json</code> file. Cursor reads <code>url</code> and <code>headers</code> under the same names; Windsurf, Gemini CLI and VS Code name the fields differently — check the documentation of your client.',
@@ -483,22 +483,10 @@ export const ui = {
     skill: {
       title: 'Install the skill',
       intro:
-        'Connecting gives the agent the tools; the skill teaches it to use them: how to keep a case, what to write before stopping, what to do on a 401. The skill needs no token — it is the same for every installation, a shared server installation included. Run the commands on the machine where the agent works.',
-      claudeLabel: 'Skill install for Claude Code',
-      claudeHint:
-        'A running session does not see the new plugin: restart it or run <code>/reload-plugins</code>.',
-      codexLabel: 'Skill install for Codex',
-      codexHint:
-        'To update: <code>codex plugin marketplace upgrade casefile</code>. Restart the Codex app after installing.',
-      codexAppHint: 'Or with the "Add marketplace" item in the Codex app:',
-      codexAppField: {
-        source: 'Source',
-        ref: 'Git ref',
-        sparse: 'Sparse paths',
-      },
+        'Claude Code and Codex get the skill with the plugin (the tabs before). For clients without a plugin the skill is installed separately: it teaches the agent to use the tools — how to keep a case, what to write before stopping, what to do on a 401. It needs no token and is the same for every installation. Run the commands on the machine where the agent works.',
       otherLabel: 'Skill install for another agent',
       machineHint:
-        'Or one line on the agent machine: it installs the skill into every client found there and prints where it stands. It needs no Docker and no installation directory — <code>CASEFILE_SKILL_ONLY=1</code> keeps the skill only.',
+        'Or one line on the agent machine: it installs the skill into every client found there and prints where it stands (Claude Code and Codex get the plugin only with <code>CASEFILE_URL=https://your-host/mcp</code>). It needs no Docker and no installation directory — <code>CASEFILE_SKILL_ONLY=1</code> keeps the skill only.',
       machineBashLabel: 'Skill for every client on the machine (bash/zsh)',
       machineBashCaption: 'Terminal, on the agent machine',
       machinePowerShellLabel: 'Skill for every client on the machine (PowerShell)',

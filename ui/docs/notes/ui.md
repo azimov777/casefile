@@ -2675,7 +2675,7 @@ max-content своего содержимого. Длинная подпись (
 **Как правильно:** на узком экране подпись и значение одно под другим (`grid-cols-1`), две
 колонки — только с `fold:`. Снимки экрана смотреть глазами на 390, а не только мерить
 `scrollWidth`.
-**Где:** `src/features/connect-agent/ui/connection-snippets.tsx`, `CodexForm`.
+**Где:** `src/features/connect-agent/ui/connection-snippets.tsx` — форма Codex снята с экрана в TRK-479 (`CodexForm`).
 
 ## Экран-инструкция — одна колонка по центру, а не текст 62ch рядом с кодом во всю ширину (UI-131)
 

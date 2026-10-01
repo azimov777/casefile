@@ -13,4 +13,4 @@
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `ConnectionSnippets`, `connectionSnippets`, `installationQueryOptions`, `installationKeys`, `CLIENTS`, `CLIENT_PARAM`, тип `Client`, константы подстановок, имени сервера и переменной окружения, типы `SnippetInput`, `SnippetTexts`, `SkillTexts`, `CodexFormField`, `CodexMarketplaceField`, `Installation`
+- `index.ts` — публичный интерфейс среза: `ConnectionSnippets`, `connectionSnippets`, `installationQueryOptions`, `installationKeys`, `CLIENTS`, `CLIENT_PARAM`, тип `Client`, константы подстановок и имени сервера, типы `SnippetInput`, `SnippetTexts`, `SkillTexts`, `CodexMarketplaceField`, `Installation`
