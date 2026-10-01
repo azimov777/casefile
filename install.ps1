@@ -51,6 +51,8 @@ $script:DefaultNote = ''
 $CodexPluginUrl = 'http://127.0.0.1:8100/mcp'
 $script:LoginClaude = $false
 $script:LoginCodex = $false
+# $true — у Claude Code маркетплейс переведён с прежнего источника (TRK-494, TRK-502).
+$script:ClaudeMoved = $false
 
 function Fail([string] $Message) {
     Write-Host "casefile: $Message" -ForegroundColor Red
@@ -158,7 +160,24 @@ function Remove-ClaudeMarketplaceEntry {
 function Add-ClaudeMarketplace([string] $Source) {
     if (Invoke-SkillCmd claude plugin marketplace add $Source) { return $true }
     if ($script:SkillLast -notmatch 'differs from the one declared') { return $false }
-    return (Remove-ClaudeMarketplaceEntry) -and (Invoke-SkillCmd claude plugin marketplace add $Source)
+    if ((Remove-ClaudeMarketplaceEntry) -and (Invoke-SkillCmd claude plugin marketplace add $Source)) {
+        $script:ClaudeMoved = $true
+        return $true
+    }
+    return $false
+}
+
+# Близнец `claude_current_url` из `install.sh`: вход Claude Code привязан к адресу (ключ —
+# имя сервера и хеш type, url, headers; TRK-502#6), поэтому адрес установленного плагина
+# читается до `install`. Пусто — плагина нет или клиент старый.
+function Get-ClaudeCurrentUrl {
+    $ErrorActionPreference = 'Continue'
+    try {
+        $text = & claude plugin configure casefile@casefile --json 2>$null | Out-String
+        $m = [regex]::Match($text, '(?m)^\s*"casefile_url":\s*"([^"]*)"')
+        if ($m.Success) { return $m.Groups[1].Value }
+    } catch {}
+    return ''
 }
 
 function Add-CodexMarketplace {
@@ -218,11 +237,19 @@ function Remove-CodexEntries {
 
 function Install-ClaudeSkill {
     $src = "${SkillSource}#plugin"
-    $retry = "claude plugin marketplace add $src; claude plugin install casefile@casefile --scope user --config casefile_url=$($script:PluginUrl)"
+    $url = $script:PluginUrl
+    $note = $script:DefaultNote
+    $was = Get-ClaudeCurrentUrl
+    $script:ClaudeMoved = $false
+    if ($script:DefaultUrl -and $was) {
+        $url = $was
+        $note = " (kept the address it had: your server's goes in CASEFILE_URL)"
+    }
+    $retry = "claude plugin marketplace add $src; claude plugin install casefile@casefile --scope user --config casefile_url=$url"
     if (-not $script:DefaultUrl) { Remove-ClaudeEntries }
     $ok = (Add-ClaudeMarketplace $src) -and
         (Invoke-SkillCmd claude plugin marketplace update casefile) -and
-        (Invoke-SkillCmd claude plugin install casefile@casefile --scope user --config "casefile_url=$($script:PluginUrl)") -and
+        (Invoke-SkillCmd claude plugin install casefile@casefile --scope user --config "casefile_url=$url") -and
         (Invoke-SkillCmd claude plugin update casefile@casefile)
     if (-not $ok) { Write-SkillFailed 'Claude Code' $retry; return }
     $ErrorActionPreference = 'Continue'
@@ -232,9 +259,14 @@ function Install-ClaudeSkill {
     $version = $m.Groups[1].Value
     if (-not $script:DefaultUrl) { $script:LoginClaude = $true }
     if (Set-ClaudeAutoUpdate) {
-        Write-SkillLine 'Claude Code' "installed $version (updates itself), connected to $($script:PluginUrl)$($script:DefaultNote)"
+        Write-SkillLine 'Claude Code' "installed $version (updates itself), connected to $url$note"
     } else {
-        Write-SkillLine 'Claude Code' "installed $version, connected to $($script:PluginUrl)$($script:DefaultNote) (automatic updates not switched on: add `"autoUpdate`": true inside extraKnownMarketplaces.casefile in settings.json)"
+        Write-SkillLine 'Claude Code' "installed $version, connected to $url$note (automatic updates not switched on: add `"autoUpdate`": true inside extraKnownMarketplaces.casefile in settings.json)"
+    }
+    if ($was -and $was -cne $url) {
+        Write-SkillLine 'Claude Code' "the address changed from ${was}: the sign-in belongs to the address, sign in again: claude mcp login plugin:casefile:casefile"
+    } elseif ($script:ClaudeMoved) {
+        Write-SkillLine 'Claude Code' "moved to the plugin branch; the sign-in stays with the address - if claude mcp list shows `"Needs authentication`": claude mcp login plugin:casefile:casefile"
     }
 }
 
@@ -533,6 +565,12 @@ Write-Host "        url: `"$mcpUrl`""
 Write-Host '        auth: oauth'
 Write-Host '  The sign-in page opens on the first connection, or: hermes mcp login casefile'
 Write-Host '  hermes skills install azimov777/casefile/skills/casefile'
+Write-Host ''
+Write-Host 'OpenCode (OAuth, no token):' -ForegroundColor White
+Write-Host '  Add to opencode.json (or ~/.config/opencode/opencode.json):'
+Write-Host "    {`"mcp`": {`"casefile`": {`"type`": `"remote`", `"url`": `"$mcpUrl`"}}}"
+Write-Host '  Then sign in once: opencode mcp auth casefile'
+Write-Host '  The skill is the one in ~/.agents/skills/casefile that the step above installed.'
 Write-Host ''
 Write-Host 'Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:' -ForegroundColor White
 Write-Host "  URL     $mcpUrl"

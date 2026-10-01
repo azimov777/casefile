@@ -931,10 +931,10 @@ e2e` в этот скрипт не входит — им сливают ветк
 
 Версию выпуска меняет коммит `chore(release): vX.Y.Z`. В список файлов версии входят
 `pyproject.toml`, `uv.lock` (`docker compose run --rm lock`), `ui/package.json`, `openapi.json`,
-пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и четыре файла плагина
+пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и пять файлов плагина
 скила — `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (`version` в плагине и в
-записи маркетплейса, `metadata.version`) `.codex-plugin/plugin.json` (манифест для Codex и каталога OpenAI) и корневой `gemini-extension.json` (расширение Gemini CLI, TRK-497):
-Claude Code без новой `version` не обновит скил; `scripts/build-plugin-branch.sh` не соберёт ветку `plugin`, если версия расширения Gemini разошлась с выпуском.
+записи маркетплейса, `metadata.version`), `.codex-plugin/plugin.json` (манифест для Codex и каталога OpenAI), `.cursor-plugin/plugin.json` (манифест для Cursor) и корневой `gemini-extension.json` (расширение Gemini CLI, TRK-497):
+Claude Code без новой `version` не обновит скил; `scripts/build-plugin-branch.sh` не соберёт ветку `plugin`, если версия любого из манифестов разошлась с выпуском.
 `tests/test_plugin_manifest.py` краснеет, если версии разошлись.
 Оба файла плагина проверяет и джоб `plugin` в `ci.yml` — `claude plugin validate --strict .` на закреплённой
 версии Claude Code (`CLAUDE_CODE_VERSION` в джобе); `images.yml` зовёт `ci.yml` как `checks`, поэтому нарушение
@@ -963,7 +963,7 @@ git push origin main
 (`git merge-base --is-ancestor origin/stable <коммит>`, затем `git push origin <коммит>:refs/heads/stable`).
 
 Тем же джобом, следом за `stable`, ветка `plugin` получает коммит выпуска с одними файлами плагина
-(`.claude-plugin/`, `.codex-plugin/`, `skills/`, `LICENSE`, `README.md`): её отслеживает портал Anthropic,
+(`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `skills/`, `LICENSE`, `README.md`): её отслеживает портал Anthropic,
 а весь репозиторий в пределы его сканера не входит (TRK-478). С неё же ставят маркетплейс Claude Code и
 Codex: так в каталоги харнессов не попадают файлы корня репозитория (TRK-494). Дерево собирает
 `scripts/build-plugin-branch.sh КАТАЛОГ` (с `--commit ТЕГ --parent origin/plugin` — коммит поверх ветки);

@@ -167,6 +167,34 @@ def test_plugin_has_no_token_headers_or_auth_settings() -> None:
     assert "apps" not in codex
 
 
+def _cursor() -> dict:
+    return json.loads((ROOT / ".cursor-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+
+def test_cursor_manifest_matches_the_claude_plugin_and_has_its_connector() -> None:
+    """Манифест Cursor (TRK-496): версия, имя, скил как у Claude Code, коннектор без токена."""
+    cursor, claude = _cursor(), _load("plugin.json")
+
+    assert cursor["version"] == _release_version() == claude["version"]
+    assert cursor["name"] == claude["name"] == "casefile"
+    assert cursor["license"] == "MIT"
+    assert (ROOT / cursor["skills"]).resolve() == (ROOT / claude["skills"]).resolve()
+    assert (ROOT / cursor["logo"]).is_file()
+    assert not Path(cursor["logo"]).is_absolute()
+    connector = _connector(cursor, ROOT)
+    assert connector == {"url": DEFAULT_ADDRESS}
+    assert not (_walk_keys(connector) & AUTH_KEYS)
+    assert "mcpServers" not in cursor.get("variables", {})
+    assert "${" not in json.dumps(cursor)
+
+
+def test_cursor_manifest_is_last_in_the_codex_search_order() -> None:
+    """Codex берёт первый найденный манифест: `.codex-plugin`, `.claude-plugin`, затем Cursor."""
+    assert (ROOT / ".codex-plugin" / "plugin.json").is_file()
+    assert (ROOT / ".claude-plugin" / "plugin.json").is_file()
+    assert not (ROOT / "plugin.json").exists()
+
+
 def test_no_connector_file_in_the_repository_root() -> None:
     """Корневой `.mcp.json` читают и Claude Code в этом репозитории, и Codex у плагина."""
     assert not (ROOT / ".mcp.json").exists()

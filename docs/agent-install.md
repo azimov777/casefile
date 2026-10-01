@@ -82,6 +82,26 @@ told to use.
   work here, because Casefile does not offer that grant. Not yet checked against a real
   Hermes: the match with Casefile's OAuth metadata was checked from Hermes's documentation
   and source, and the key below stays as the fallback for a Hermes that cannot sign in.
+- **OpenCode** signs in with OAuth too, no key (it registers itself, RFC 7591): add this to
+  `opencode.json` in the project, or to `~/.config/opencode/opencode.json`:
+
+  ```json
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+      "casefile": {
+        "type": "remote",
+        "url": "<MCP address from the installer output>"
+      }
+    }
+  }
+  ```
+
+  Then run `opencode mcp auth casefile` in a terminal: it opens the sign-in page, which on
+  the user's own machine closes at once and signs the agent in as `agent`; `opencode mcp
+  list` then shows `casefile` as connected. Do not add a `clientId`, and do not use
+  `headers` with the key: the sign-in needs neither. OpenCode reads the skill from
+  `~/.agents/skills/casefile` (step 4 puts it there), so it needs no extra step.
 - **Any other client without OAuth** connects with the agent key. Take it from
   the installer output, or read it without printing it anywhere else:
 
@@ -232,7 +252,7 @@ Claude Code. Then sign in as in step 3.
   that needs authentication is not signed in yet: do the sign-in of step 3.
 - The skill is installed: `claude plugin list` shows `casefile@casefile` enabled
   (Codex: `codex plugin list`; Hermes and others: look for the `casefile` skill in
-  your harness's list of skills). If it is missing, do step 4. A session that was already
+  your harness's list of skills; OpenCode: `opencode debug skill`). If it is missing, do step 4. A session that was already
   running does not see it: restart the session, or run `/reload-plugins` in Claude Code.
 
 ## 6. Learn about news in your tasks

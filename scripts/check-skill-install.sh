@@ -26,7 +26,10 @@
 #      ведётся, docker не зовётся, печатается, как задать адрес; скил Hermes и прочих ставится. A1: адрес `http://` не с localhost — отказ.
 #   M. установка прежними строками (`#stable --sparse …`, TRK-494): `grep -r trk_` находит
 #      файлы корня; прогон установщика переводит оба харнесса на ветку `plugin` — источник в
-#      settings.json и config.toml, `autoUpdate` на месте, маркетплейсы и cache Codex без `trk_`.
+#      settings.json и config.toml, `autoUpdate` на месте, маркетплейсы и cache Codex без `trk_`;
+#      вывод называет команду входа Claude Code на случай «Needs authentication» (TRK-502).
+#   M2. плагин уже стоит с адресом `localhost`: прогон без `CASEFILE_URL` адрес оставляет, прогон
+#      с другим адресом печатает «the address changed from …» с командой входа (TRK-502).
 #   B. второй прогон подряд (идемпотентность), затем ветки `stable` и `plugin` сдвинуты на
 #      коммит с новой версией и прогон ещё раз: версия в обоих харнессах новая; у окружения M
 #      cache Claude Code новой версии тоже без `trk_`, прежняя помечена `.orphaned_at`.
@@ -92,17 +95,17 @@ fingerprint >"$EVIDENCE/fingerprint-before.txt"
 mkdir -p "$WORK/srv" "$WORK/repo"
 git init -q -b stable "$WORK/repo"
 publish_version() { # версия → коммит выпуска в `stable` и в `plugin` и в bare-репозитории
-  cp -R "$ROOT/.claude-plugin" "$ROOT/.codex-plugin" "$ROOT/skills" "$WORK/repo/"
+  cp -R "$ROOT/.claude-plugin" "$ROOT/.codex-plugin" "$ROOT/.cursor-plugin" "$ROOT/skills" "$WORK/repo/"
   cp "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/openapi.json" "$ROOT/install.sh" "$WORK/repo/"
-  sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$1\"/" "$WORK/repo/.claude-plugin/"*.json "$WORK/repo/.codex-plugin/plugin.json"
-  rm -f "$WORK/repo/.claude-plugin/"*.bak "$WORK/repo/.codex-plugin/"*.bak
+  sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$1\"/" "$WORK/repo/.claude-plugin/"*.json "$WORK/repo/.codex-plugin/plugin.json" "$WORK/repo/.cursor-plugin/plugin.json"
+  rm -f "$WORK/repo/.claude-plugin/"*.bak "$WORK/repo/.codex-plugin/"*.bak "$WORK/repo/.cursor-plugin/"*.bak
   git -C "$WORK/repo" add -A
   git -C "$WORK/repo" -c user.email=check@example.com -c user.name=check commit -q -m "stand $1"
   # Ветка `plugin` — тот же отбор, что у `scripts/build-plugin-branch.sh` (его сверка версии
   # с `pyproject.toml` стендовой версии не пропустит): файлы плагина без карты `skills/`.
   rm -rf "$WORK/plugin-tree" "$WORK/plugin-index"
   mkdir -p "$WORK/plugin-tree"
-  (cd "$WORK/repo" && cp -R .claude-plugin .codex-plugin skills LICENSE README.md "$WORK/plugin-tree/")
+  (cd "$WORK/repo" && cp -R .claude-plugin .codex-plugin .cursor-plugin skills LICENSE README.md "$WORK/plugin-tree/")
   rm -f "$WORK/plugin-tree/skills/AGENTS.md"
   GIT_INDEX_FILE="$WORK/plugin-index" git -C "$WORK/repo" --work-tree="$WORK/plugin-tree" add -A -f .
   tree=$(GIT_INDEX_FILE="$WORK/plugin-index" git -C "$WORK/repo" write-tree)
@@ -307,7 +310,28 @@ if grep -rq trk_ "$WORK/m/claude/plugins/marketplaces" "$WORK/m/codex"; then
   grep -rl trk_ "$WORK/m/claude/plugins/marketplaces" "$WORK/m/codex" | head
   fail "M: the marketplaces or the Codex cache still carry repository files"
 fi
+grep -q 'moved to the plugin branch; the sign-in stays with the address.*claude mcp login plugin:casefile:casefile' "$EVIDENCE/m1.out" ||
+  fail "M: the output does not name the sign-in command for Claude Code after the move"
 note "M ok: both harnesses on the plugin branch; left until the next version: $(grep -rl trk_ "$WORK/m/claude" | sed "s#$WORK/##" | tr '\n' ' ')"
+
+say "M2. the address the plugin has is kept without CASEFILE_URL; a new address names the sign-in again (TRK-502)"
+# Вход Claude Code лежит под ключом из имени сервера и адреса: `localhost` и `127.0.0.1` —
+# разные ключи. Адрес стенда — порт, на котором никого нет: `mcp list` к нему не дозвонится.
+OLD_URL=http://localhost:18399/mcp
+new_env m2
+harness m2 claude plugin marketplace add "$URL#stable" --sparse .claude-plugin skills >/dev/null
+harness m2 claude plugin install casefile@casefile --scope user --config "casefile_url=$OLD_URL" >/dev/null
+run_installer m2 m2a.out "$full_path" CASEFILE_SKILL_ONLY=1 || fail "M2: exited non-zero: $(tail -5 "$EVIDENCE/m2a.out")"
+cat "$EVIDENCE/m2a.out" | tee -a "$EVIDENCE/run.log"
+harness m2 claude mcp list | grep -q "plugin:casefile:casefile: $OLD_URL" ||
+  fail "M2: without CASEFILE_URL the Claude Code address did not stay $OLD_URL: $(harness m2 claude mcp list)"
+grep -q "kept the address it had" "$EVIDENCE/m2a.out" || fail "M2: the output does not say the address was kept"
+run_installer m2 m2b.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "M2: the run with an address exited non-zero"
+cat "$EVIDENCE/m2b.out" | tee -a "$EVIDENCE/run.log"
+harness m2 claude mcp list | grep -q "plugin:casefile:casefile: $SERVER_URL" || fail "M2: the new address is not set"
+grep -q "the address changed from $OLD_URL: .*claude mcp login plugin:casefile:casefile" "$EVIDENCE/m2b.out" ||
+  fail "M2: the output does not name the sign-in again after the address changed"
+note "M2 ok: the address stays without CASEFILE_URL; a changed address prints the sign-in command"
 
 say "B. second run in a row, then shifted stable and plugin branches with a new version"
 run_installer a a2.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "B: the second run exited non-zero: $(tail -5 "$EVIDENCE/a2.out")"

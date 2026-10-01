@@ -361,7 +361,7 @@ SKILL_COMMANDS = (
 
 #: Строки подключения MCP у Hermes — вход OAuth без токена (TRK-495; до него ключом, TRK-452):
 #: Claude Code и Codex подключает плагин, и токена для них установщик не печатает.
-CONNECT_LINES = ("mcp_servers:", "auth: oauth")
+CONNECT_LINES = ("mcp_servers:", "auth: oauth", "opencode mcp auth casefile")
 
 
 def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
@@ -497,6 +497,10 @@ o.setdefault("extraKnownMarketplaces", {})["casefile"] = {
     "source": {"source": "git", "url": "u", "ref": "plugin"}}
 json.dump(o, open(path, "w"), indent=2)' "$CLAUDE_CONFIG_DIR/settings.json" ;;
   "plugin install"*) [ -z "${FAIL_INSTALL:-}" ] || { echo "install refused" >&2; exit 1; } ;;
+  "plugin configure casefile@casefile --json")
+    [ -f "$SCENE/claude-url" ] || exit 1
+    printf '{\n  "schema": {\n    "casefile_url": {\n      "type": "string"\n    }\n  },\n'
+    printf '  "inputs": {\n    "casefile_url": "%s"\n  }\n}\n' "$(cat "$SCENE/claude-url")" ;;
   "mcp get "*) [ -f "$SCENE/claude-$3" ] && cat "$SCENE/claude-$3" || exit 1 ;;
   "mcp login "*) exit "$(cat "$SCENE/login-claude" 2>/dev/null || echo 0)" ;;
   "plugin list")
@@ -613,6 +617,7 @@ def test_the_skill_step_installs_updates_and_reports_each_harness_found(tmp_path
     assert done.returncode == 0, done.stderr
     claude = [c for c in calls if c.startswith("claude ") and "mcp get" not in c]
     assert claude == [
+        "claude plugin configure casefile@casefile --json",
         "claude plugin marketplace add example/casefile#plugin",
         "claude plugin marketplace update casefile",
         f"claude plugin install casefile@casefile --scope user --config casefile_url={SERVER}",
@@ -684,6 +689,13 @@ def test_an_installation_from_stable_moves_to_the_plugin_branch_and_keeps_the_pl
     assert remove < calls.index("codex plugin add casefile@casefile")
     assert re.search(r"Claude Code +installed 0\.7\.1 \(updates itself\)", done.stdout)
     assert re.search(r"Codex +installed 0\.7\.1", done.stdout)
+    # Вход Claude Code привязан к адресу, а не к источнику (TRK-502#6); на входе перевод не
+    # замерен, поэтому установщик называет команду на случай «Needs authentication».
+    assert re.search(
+        r"Claude Code +moved to the plugin branch; the sign-in stays with the address - if "
+        r'claude mcp list shows "Needs authentication": claude mcp login plugin:casefile:casefile',
+        done.stdout,
+    )
 
 
 def test_another_add_failure_is_not_taken_for_an_old_source(tmp_path: Path) -> None:
@@ -774,6 +786,70 @@ def test_skill_only_without_an_address_installs_the_plugin_with_the_default_one(
     assert "CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh" in done.stdout
     assert re.search(r"Other agents +installed", done.stdout)
     assert "Signing the agents in" not in done.stdout
+
+
+def test_skill_only_without_an_address_keeps_the_address_the_plugin_already_has(
+    tmp_path: Path,
+) -> None:
+    """Вход Claude Code лежит под ключом из имени сервера и адреса (TRK-502#6): установщик без
+    `CASEFILE_URL` не подменяет рабочий `localhost` адресом по умолчанию `127.0.0.1`, иначе
+    вход теряется (так было при переводе на ветку plugin, TRK-502#7)."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, calls = _install(
+        tmp_path,
+        extra_env={"CASEFILE_SKILL_ONLY": "1", **env},
+        **{"claude-url": "http://localhost:8100/mcp"},
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert LOCAL_PLUGIN_INSTALL in calls
+    assert not [c for c in calls if "casefile_url=http://127.0.0.1" in c]
+    assert re.search(
+        r"Claude Code +installed .*connected to http://localhost:8100/mcp \(kept the address",
+        done.stdout,
+    )
+    assert "the address changed" not in done.stdout
+    assert "Signing the agents in" not in done.stdout
+
+
+def test_a_changed_address_tells_to_sign_claude_code_in_again(tmp_path: Path) -> None:
+    """Названный адрес не совпадает с прежним хоть символом — у Claude Code это другой ключ
+    входа: строка с прежним адресом и командой входа."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, calls = _install(
+        tmp_path,
+        extra_env={
+            "CASEFILE_SKILL_ONLY": "1",
+            "CASEFILE_URL": "http://127.0.0.1:8100/mcp",
+            "CASEFILE_TTY": str(tmp_path / "no-such-tty"),
+            **env,
+        },
+        **{"claude-url": "http://localhost:8100/mcp"},
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert (
+        "claude plugin install casefile@casefile --scope user "
+        "--config casefile_url=http://127.0.0.1:8100/mcp"
+    ) in calls
+    assert re.search(
+        r"Claude Code +the address changed from http://localhost:8100/mcp: the sign-in belongs "
+        r"to the address, sign in again: claude mcp login plugin:casefile:casefile",
+        done.stdout,
+    )
+
+
+def test_the_same_address_says_nothing_about_signing_in_again(tmp_path: Path) -> None:
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
+    done, _ = _install(
+        tmp_path,
+        extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env},
+        **{"claude-url": SERVER},
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "the address changed" not in done.stdout
+    assert "moved to the plugin branch" not in done.stdout
 
 
 def test_skill_only_refuses_an_http_address_outside_localhost(tmp_path: Path) -> None:
@@ -946,6 +1022,11 @@ PLUGIN_STEPS = (
     "--config casefile_url=",
     "--ref plugin",
     "differs from the one declared",
+    "plugin configure casefile@casefile --json",
+    "kept the address it had",
+    "the address changed from",
+    "the sign-in belongs to the address, sign in again",
+    "moved to the plugin branch; the sign-in stays with the address",
     "already added from a different source",
     "plugin marketplace remove casefile",
     "mcp login plugin:casefile:casefile",
