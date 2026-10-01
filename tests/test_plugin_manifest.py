@@ -197,6 +197,15 @@ def test_codex_manifest_carries_listing_pages_on_https() -> None:
     interface = _codex()["interface"]
     for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
         assert interface[field].startswith("https://azimov777.github.io/casefile/"), field
+    assert interface["supportURL"].startswith("https://") and len(interface["supportURL"]) <= 1024
+
+
+def test_codex_manifest_declares_capabilities_as_a_list_of_strings() -> None:
+    """Портал OpenAI: «`interface.capabilities` must be a list of strings» (TRK-506)."""
+    capabilities = _codex()["interface"]["capabilities"]
+    assert capabilities == ["Interactive", "Read", "Write"]
+    assert len(capabilities) <= 20  # предел из руководства по подаче
+    assert all(isinstance(c, str) and len(c) <= 120 for c in capabilities)
 
 
 @pytest.mark.skipif(shutil.which("zip") is None, reason="нужен zip")
@@ -217,6 +226,7 @@ def test_openai_zip_is_skills_only_without_the_connector(tmp_path: Path) -> None
     assert "mcp" not in manifest["keywords"]
     assert "connector" not in manifest["description"].lower()
     assert "connector" not in manifest["interface"]["longDescription"].lower()
-    for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
+    assert manifest["interface"]["capabilities"] == _codex()["interface"]["capabilities"]
+    for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL", "supportURL"):
         assert manifest["interface"][field] == _codex()["interface"][field]
     assert "mcpServers" in _codex()
