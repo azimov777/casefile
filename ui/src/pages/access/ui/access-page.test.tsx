@@ -30,10 +30,11 @@ let sent: string[] = [];
 /** Ключи повтора, с которыми уходил выпуск, по порядку попыток. */
 let issueKeys: (string | null)[] = [];
 
+/** Ключ этого компьютера: вход владельца без ввода, `kind: session` без срока. */
 const UI_TOKEN = accessToken({
   id: SESSION_ID,
   name: 'local-ui',
-  scope: 'main',
+  kind: 'session',
   participant: 'owner',
   last_used_at: '2026-09-01T10:30:00Z',
 });
@@ -41,14 +42,27 @@ const UI_TOKEN = accessToken({
 const AGENT_TOKEN = accessToken({
   id: '77777777-7777-7777-7777-777777777777',
   name: 'local-agent',
-  scope: 'main',
+  kind: 'key',
   participant: 'agent',
+  created_by: { kind: 'human', signature: 'owner' },
+});
+
+/** Подключение OAuth: клиент назван именем токена, подключил человек `owner`. */
+const OAUTH_TOKEN = accessToken({
+  id: '66666666-6666-6666-6666-666666666666',
+  name: 'Claude Code',
+  kind: 'oauth',
+  participant: 'claude',
+  created_by: { kind: 'human', signature: 'owner' },
+  created_at: '2026-09-20T10:00:00Z',
+  last_used_at: '2026-09-21T10:00:00Z',
+  expires_at: '2099-01-01T00:00:00Z',
 });
 
 const REVOKED_TOKEN = accessToken({
   id: '88888888-8888-8888-8888-888888888888',
   name: 'проверка 6 сентября',
-  scope: 'task',
+  kind: 'key',
   participant: null,
   revoked_at: '2026-09-06T12:00:00Z',
 });
@@ -59,7 +73,6 @@ function issued(overrides: Record<string, unknown> = {}) {
     ...accessToken({
       id: '99999999-9999-9999-9999-999999999999',
       name: 'nightly_agent на ноутбуке',
-      scope: 'task',
       participant: 'nightly_agent',
     }),
     secret: SECRET,
@@ -106,15 +119,11 @@ function signedIn(who: Who) {
 /** Адреса запросов списка токенов за прогон: по ним видно, уходил ли `mine`. */
 let tokenQueries: URL[] = [];
 
-/** Экран с ключом названного набора: первый кадр, список доступов, реестр, установка. */
-function installation(
-  scope: 'task' | 'main' = 'main',
-  tokens = [UI_TOKEN, AGENT_TOKEN],
-  who: Who = 'admin',
-) {
+/** Экран: первый кадр, список доступов, реестр, установка. */
+function installation(tokens = [UI_TOKEN, AGENT_TOKEN], who: Who = 'admin') {
   server.use(
     http.get(`${API}/api/v1/bootstrap`, () =>
-      data(bootstrap({ token: { id: SESSION_ID, scope }, ...signedIn(who) })),
+      data(bootstrap({ token: { id: SESSION_ID, scope: 'main' }, ...signedIn(who) })),
     ),
     http.get(`${API}/api/v1/tokens`, ({ request }) => {
       tokenQueries.push(new URL(request.url));
@@ -125,6 +134,8 @@ function installation(
         participant('nightly_agent'),
         participant('owner', { kind: 'human' }),
         participant('alice', { kind: 'human' }),
+        participant('claude_alice', { owner: 'alice' }),
+        participant('claude_bob', { owner: 'bob' }),
       ]),
     ),
     http.get(`${API}/api/v1/installation`, () => data({ mcp_url: ADDRESS })),
@@ -159,8 +170,8 @@ function writes(): string[] {
 }
 
 /**
- * Кнопки-действия. Время — переключатель подписи (`aria-pressed`, UI-153), плашка набора —
- * раскрытие пояснения (`aria-expanded`, UI-163): ни то ни другое не действие над доступом.
+ * Кнопки-действия. Время — переключатель подписи (`aria-pressed`, UI-153), раскрытие —
+ * `aria-expanded`: ни то ни другое не действие над доступом.
  */
 function actions(scope: HTMLElement): HTMLElement[] {
   return within(scope)
@@ -171,8 +182,8 @@ function actions(scope: HTMLElement): HTMLElement[] {
 }
 
 describe('экран «Доступы»', () => {
-  it('открывается из навигации и показывает доступы установки, отмечая ключ этого сеанса', async () => {
-    installation('main', [UI_TOKEN, AGENT_TOKEN, REVOKED_TOKEN]);
+  it('открывается из навигации и делит доступы по виду: подключения, ключи агентов, сеансы входа', async () => {
+    installation([UI_TOKEN, AGENT_TOKEN, OAUTH_TOKEN, REVOKED_TOKEN]);
     const user = userEvent.setup();
     renderApp('/tasks');
 
@@ -186,20 +197,54 @@ describe('экран «Доступы»', () => {
       'page',
     );
 
-    const own = await screen.findByRole('article', {
+    // Подключение OAuth — в «Подключениях»: клиент, участник, кто подключил, вызовы.
+    const connections = await screen.findByRole('region', {
+      name: new RegExp(say.access('connections.title')),
+    });
+    const claude = within(connections).getByRole('article', {
+      name: say.ui('token.label', { name: 'Claude Code' }),
+    });
+    expect(within(claude).getByText('claude')).toBeInTheDocument();
+    expect(
+      within(claude).getByText(say.ui('token.connectedBy', { author: 'owner' })),
+    ).toBeInTheDocument();
+    expect(within(claude).getByText(say.ui('token.kind.oauth'))).toBeInTheDocument();
+    expect(
+      within(claude).getByText(say.ui('token.lastCall'), { exact: false }),
+    ).toBeInTheDocument();
+    expect(connections).toHaveTextContent(say.access('connections.count', { count: 1 }));
+    // Кнопка у подключения — «Отключить», а не «Отозвать».
+    expect(
+      within(claude).getByRole('button', { name: say.access('disconnect.action') }),
+    ).toBeEnabled();
+
+    // Ключ агента — в «Ключах агентов» с колонкой «кто выдал».
+    const keys = screen.getByRole('region', { name: new RegExp(say.access('keys.title')) });
+    const agent = within(keys).getByRole('article', {
+      name: say.ui('token.label', { name: 'local-agent' }),
+    });
+    expect(
+      within(agent).getByText(say.ui('token.grantedBy', { author: 'owner' })),
+    ).toBeInTheDocument();
+    expect(within(agent).getByText(say.ui('token.neverUsed'))).toBeInTheDocument();
+    expect(within(keys).queryByRole('article', { name: /Claude Code|local-ui/ })).toBeNull();
+
+    // Ключ этого компьютера — в «Сеансах входа», подписан «этот компьютер» и отмечен
+    // ровно один раз; подпись — не имя токена.
+    const sessions = screen.getByRole('region', {
+      name: new RegExp(say.access('sessions.title')),
+    });
+    const own = within(sessions).getByRole('article', {
       name: say.ui('token.label', { name: 'local-ui' }),
     });
-    // Ключ сеанса отмечен, и отмечен ровно один.
+    expect(within(own).getByText(say.ui('token.thisComputer'))).toBeInTheDocument();
     expect(within(own).getByText(say.ui('token.thisSession'))).toBeInTheDocument();
     expect(screen.getAllByText(say.ui('token.thisSession'))).toHaveLength(1);
+    // Выдавшего у входа нет: это вход самого человека.
+    expect(within(own).queryByText(say.ui('token.grantedBy', { author: 'owner' }))).toBeNull();
 
-    // Чей доступ, что открывает, когда им ходили и жив ли он — в самой строке.
-    expect(within(own).getByText('owner')).toBeInTheDocument();
-    expect(within(own).getByText('main')).toBeInTheDocument();
-    expect(within(row('local-agent')).getByText(say.ui('token.neverUsed'))).toBeInTheDocument();
-
-    // Отозванный доступ — в истории, а она свёрнута: раскрывается одним нажатием.
-    const toggle = screen.getByRole('button', { name: say.access('tokens.history', { count: 1 }) });
+    // Снятый доступ — в истории, а она свёрнута: раскрывается одним нажатием.
+    const toggle = screen.getByRole('button', { name: say.access('history.count', { count: 1 }) });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(
       screen.queryByRole('article', {
@@ -212,38 +257,102 @@ describe('экран «Доступы»', () => {
     const revoked = row('проверка 6 сентября');
     expect(within(revoked).getByText(say.ui('token.revoked'))).toBeInTheDocument();
     expect(within(revoked).getByText(say.ui('token.shared'))).toBeInTheDocument();
-    // Отозванный доступ отзывать нечего: кнопки у него нет.
-    // Действий нет. Время — переключатель подписи на точное (`aria-pressed`, UI-153),
-    // плашка набора — раскрытие пояснения (`aria-expanded`, UI-163): не действия над
-    // строкой, и в счёт не идут.
+    // Снятый доступ снимать нечего: кнопки у него нет.
     expect(actions(revoked)).toEqual([]);
   });
 
-  it('действующие идут раньше отозванных, даже если выдача их перемешала', async () => {
-    // Порядок выдачи — по времени: отозванный стоит между двумя действующими.
-    installation('main', [UI_TOKEN, REVOKED_TOKEN, AGENT_TOKEN]);
+  it('подключений нет — раздел стоит и говорит, как агент входит сам', async () => {
+    installation([UI_TOKEN, AGENT_TOKEN]);
+    renderApp('/access');
+
+    const connections = await screen.findByRole('region', {
+      name: new RegExp(say.access('connections.title')),
+    });
+    expect(
+      await within(connections).findByText(say.access('connections.empty')),
+    ).toBeInTheDocument();
+    expect(within(connections).queryAllByRole('article')).toHaveLength(0);
+  });
+
+  it('«Отключить» гасит подключение: запрос уходит после подтверждения, строка уходит в историю', async () => {
+    const tokens = [UI_TOKEN, OAUTH_TOKEN];
+    installation(tokens);
+    const revoked: string[] = [];
+    server.use(
+      http.get(`${API}/api/v1/tokens`, () =>
+        collection(
+          tokens.map((token) =>
+            revoked.includes(token.id) ? { ...token, revoked_at: '2026-09-22T12:00:00Z' } : token,
+          ),
+        ),
+      ),
+      http.delete(`${API}/api/v1/tokens/:id`, ({ params }) => {
+        revoked.push(String(params.id));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
     const user = userEvent.setup();
     renderApp('/access');
 
-    const active = await screen.findByRole('region', {
-      name: new RegExp(say.access('tokens.active')),
+    const claude = await screen.findByRole('article', {
+      name: say.ui('token.label', { name: 'Claude Code' }),
     });
-    await within(active).findByRole('article', {
+    await user.click(within(claude).getByRole('button', { name: say.access('disconnect.action') }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(say.access('disconnect.intro'))).toBeInTheDocument();
+    // Пока не подтвердили — ни одного запроса записи.
+    expect(writes()).toEqual([]);
+    await user.click(
+      within(dialog).getByRole('button', { name: say.access('disconnect.confirm') }),
+    );
+
+    await waitFor(() => expect(revoked).toEqual([OAUTH_TOKEN.id]));
+    await waitFor(() =>
+      expect(
+        within(
+          screen.getByRole('region', { name: new RegExp(say.access('connections.title')) }),
+        ).queryByRole('article'),
+      ).toBeNull(),
+    );
+  });
+
+  it('подключение с вышедшим сроком токена остаётся в списке: клиент продлит его сам, а отключить его должно быть можно', async () => {
+    installation([
+      accessToken({
+        ...OAUTH_TOKEN,
+        id: '66666666-6666-6666-6666-666666666667',
+        name: 'Codex',
+        expires_at: '2020-01-01T00:00:00Z',
+      }),
+    ]);
+    renderApp('/access');
+
+    const connections = await screen.findByRole('region', {
+      name: new RegExp(say.access('connections.title')),
+    });
+    expect(
+      await within(connections).findByRole('article', {
+        name: say.ui('token.label', { name: 'Codex' }),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('действующие идут раньше снятых, даже если выдача их перемешала', async () => {
+    // Порядок выдачи — по времени: отозванный стоит между двумя действующими.
+    installation([UI_TOKEN, REVOKED_TOKEN, AGENT_TOKEN]);
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    const keys = await screen.findByRole('region', { name: new RegExp(say.access('keys.title')) });
+    await within(keys).findByRole('article', {
       name: say.ui('token.label', { name: 'local-agent' }),
     });
     // Число действующих — у заголовка, словами для диктора.
-    expect(active).toHaveTextContent(say.access('tokens.count', { count: 2 }));
-    expect(
-      within(active)
-        .getAllByRole('article')
-        .map((item) => item.getAttribute('aria-label')),
-    ).toEqual([
-      say.ui('token.label', { name: 'local-ui' }),
-      say.ui('token.label', { name: 'local-agent' }),
-    ]);
+    expect(keys).toHaveTextContent(say.access('keys.count', { count: 1 }));
 
     await user.click(
-      screen.getByRole('button', { name: say.access('tokens.history', { count: 1 }) }),
+      screen.getByRole('button', { name: say.access('history.count', { count: 1 }) }),
     );
     const articles = screen.getAllByRole('article');
     // В разметке история идёт после всех действующих.
@@ -255,11 +364,11 @@ describe('экран «Доступы»', () => {
   });
 
   it('список дочитывается сам: действующий ключ со второй страницы стоит среди действующих', async () => {
-    installation('main');
+    installation();
     const OLD_ACTIVE = accessToken({
       id: '44444444-4444-4444-4444-444444444444',
       name: 'давний агент',
-      scope: 'task',
+      kind: 'key',
       participant: 'agent',
     });
     server.use(
@@ -271,11 +380,9 @@ describe('экран «Доступы»', () => {
     );
     renderApp('/access');
 
-    const active = await screen.findByRole('region', {
-      name: new RegExp(say.access('tokens.active')),
-    });
+    const keys = await screen.findByRole('region', { name: new RegExp(say.access('keys.title')) });
     expect(
-      await within(active).findByRole('article', {
+      await within(keys).findByRole('article', {
         name: say.ui('token.label', { name: 'давний агент' }),
       }),
     ).toBeInTheDocument();
@@ -283,8 +390,8 @@ describe('экран «Доступы»', () => {
     expect(sent.filter((call) => call === 'GET /api/v1/tokens')).toHaveLength(2);
   });
 
-  it('ключ набора `task`: список виден, действия недоступны с объяснением, запросов записи нет', async () => {
-    installation('task');
+  it('ключ агента без учётной записи: список виден, выпуск закрыт с причиной, запросов записи нет', async () => {
+    installation([UI_TOKEN, OAUTH_TOKEN], 'agent');
     renderApp('/access');
 
     expect(await screen.findByRole('article', { name: /local-ui/ })).toBeInTheDocument();
@@ -295,18 +402,18 @@ describe('экран «Доступы»', () => {
     expect(issue).toBeDisabled();
 
     // Запрет объяснён, и запрещённые кнопки ссылаются на то же объяснение.
-    const explanation = screen.getByText(say.access('closed.text', { scope: 'task' }));
+    const explanation = screen.getByText(say.access('closed.noAccount'));
     expect(newAgent).toHaveAttribute('aria-describedby', explanation.id);
     expect(issue).toHaveAttribute('aria-describedby', explanation.id);
 
-    // Отзыв с таким ключом не предлагается вовсе.
+    // Чужие доступы ему не отзываются: кнопок нет. И ни одного запроса записи:
+    // отказ `403` проверкой прав не служит.
     expect(screen.queryByRole('button', { name: say.access('revoke.action') })).toBeNull();
-    // И ни одного запроса записи: отказ `403` проверкой прав не служит.
     expect(writes()).toEqual([]);
   });
 
   it('выпуск показывает секрет один раз вместе с фрагментами, а закрытие окна его уносит', async () => {
-    installation('main');
+    installation();
     let body: Record<string, unknown> = {};
     server.use(
       http.post(`${API}/api/v1/tokens`, async ({ request }) => {
@@ -370,7 +477,7 @@ describe('экран «Доступы»', () => {
   });
 
   it('повтор того же выпуска идёт с тем же ключом повтора, а исправленный — с новым', async () => {
-    installation('main');
+    installation();
     let left = 1;
     server.use(
       http.post(`${API}/api/v1/tokens`, ({ request }) => {
@@ -410,7 +517,7 @@ describe('экран «Доступы»', () => {
   });
 
   it('исправленный выпуск получает новый ключ повтора: тот же ключ с другим запросом отвергнут бэкендом', async () => {
-    installation('main');
+    installation();
     server.use(
       http.post(`${API}/api/v1/tokens`, ({ request }) => {
         issueKeys.push(request.headers.get('Idempotency-Key'));
@@ -438,7 +545,7 @@ describe('экран «Доступы»', () => {
   });
 
   it('заведение агента объясняет занятое имя и ведёт к выпуску ему токена', async () => {
-    installation('main');
+    installation();
     let taken = true;
     const registry = [participant('nightly_agent'), participant('owner', { kind: 'human' })];
     server.use(
@@ -480,7 +587,7 @@ describe('экран «Доступы»', () => {
   });
 
   it('отзыв ключа этого сеанса спрашивает подтверждение и объясняет последствия', async () => {
-    installation('main');
+    installation();
     const revoked: string[] = [];
     server.use(
       http.delete(`${API}/api/v1/tokens/:id`, ({ params }) => {
@@ -507,7 +614,7 @@ describe('экран «Доступы»', () => {
   });
 
   it('отзыв чужого доступа объясняет последствия без предупреждения о своём ключе', async () => {
-    installation('main');
+    installation();
     const user = userEvent.setup();
     renderApp('/access');
 
@@ -522,7 +629,7 @@ describe('экран «Доступы»', () => {
   });
 
   it('говорит по-русски целиком', async () => {
-    installation('main');
+    installation();
     renderApp('/access', { language: 'ru' });
 
     expect(
@@ -548,8 +655,8 @@ describe('чьи токены на экране (TRK-114)', () => {
     created_by: { kind: 'human', signature: 'owner' },
   });
 
-  it('человек без флага администратора: вид «свои» без дорожки, отзыв только своих, выбор без чужих людей', async () => {
-    installation('main', [ALICE_AGENT, FOREIGN], 'alice');
+  it('человек без флага администратора: вид «свои» без дорожки, отзыв только своих, в выпуске свои агенты без людей и чужих агентов', async () => {
+    installation([ALICE_AGENT, FOREIGN], 'alice');
     const user = userEvent.setup();
     renderApp('/access');
 
@@ -573,18 +680,21 @@ describe('чьи токены на экране (TRK-114)', () => {
     // Выпуск открыт: за сеансом человек с учётной записью.
     await user.click(screen.getByRole('button', { name: say.access('actions.issue') }));
     const whom = await screen.findByLabelText(say.access('issue.whomLabel'));
-    await screen.findByRole('option', { name: 'nightly_agent — agent' });
+    await screen.findByRole('option', { name: /^nightly_agent — / });
     const options = within(whom)
       .getAllByRole('option')
       .map((option) => option.getAttribute('value'));
-    // Себя и агентов — можно, другого человека — нет (`foreign_human`).
-    expect(options).toContain('alice');
+    // Свой агент и агент без хозяина — можно; людей в выборе нет никому (TRK-472),
+    // чужого агента — тоже (TRK-476).
+    expect(options).toContain('claude_alice');
     expect(options).toContain('nightly_agent');
+    expect(options).not.toContain('claude_bob');
+    expect(options).not.toContain('alice');
     expect(options).not.toContain('owner');
   });
 
   it('администратор: все токены установки по умолчанию, «Мои» — в адресе и с `mine=true`', async () => {
-    installation('main', [UI_TOKEN, AGENT_TOKEN], 'admin');
+    installation([UI_TOKEN, AGENT_TOKEN], 'admin');
     const user = userEvent.setup();
     renderApp('/access');
 
@@ -612,32 +722,84 @@ describe('чьи токены на экране (TRK-114)', () => {
     ).toBeEnabled();
   });
 
+  it('администратор в выпуске видит всех агентов с именем хозяина и ни одного человека', async () => {
+    installation([UI_TOKEN], 'admin');
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    await user.click(await screen.findByRole('button', { name: say.access('actions.issue') }));
+    const whom = await screen.findByLabelText(say.access('issue.whomLabel'));
+    await screen.findByRole('option', { name: /^claude_bob — / });
+
+    const options = within(whom)
+      .getAllByRole('option')
+      .map((option) => option.getAttribute('value'));
+    expect(options).toEqual(
+      expect.arrayContaining(['nightly_agent', 'claude_alice', 'claude_bob']),
+    );
+    expect(options).not.toContain('alice');
+    expect(options).not.toContain('owner');
+    // Хозяин назван рядом с агентом; у агента без хозяина — ничего.
+    expect(
+      within(whom).getByRole('option', {
+        name: new RegExp(say.access('issue.ownerOf', { owner: 'bob' })),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('ключ чужого агента отвергнут: отказ называет причину словами', async () => {
+    installation([UI_TOKEN], 'admin');
+    server.use(
+      http.post(`${API}/api/v1/tokens`, () =>
+        failure('agent_owned_by_another', 403, 'Not allowed', {
+          action: 'token.issue',
+          agent: 'claude_bob',
+          owner: 'bob',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    await user.click(await screen.findByRole('button', { name: say.access('actions.issue') }));
+    await user.selectOptions(
+      await screen.findByLabelText(say.access('issue.whomLabel')),
+      'claude_bob',
+    );
+    await user.type(screen.getByLabelText(say.access('issue.nameLabel')), 'чужой');
+    await user.click(screen.getByRole('button', { name: say.access('issue.submit') }));
+
+    expect(
+      await screen.findByText(say.errors('agent_owned_by_another'), { exact: false }),
+    ).toBeInTheDocument();
+  });
+
   it('сеансы входа — своим разделом и только живые; закончившиеся не показываются нигде', async () => {
     const future = new Date(Date.now() + 86_400_000).toISOString();
     const past = new Date(Date.now() - 86_400_000).toISOString();
     const LIVE = accessToken({
       id: 'bbbbbbbb-0000-0000-0000-000000000001',
       name: 'вход с ноутбука',
-      scope: 'main',
+      kind: 'session',
       participant: 'alice',
       expires_at: future,
     });
     const EXPIRED = accessToken({
       id: 'bbbbbbbb-0000-0000-0000-000000000002',
       name: 'вход вчера',
-      scope: 'main',
+      kind: 'session',
       participant: 'alice',
       expires_at: past,
     });
     const SIGNED_OUT = accessToken({
       id: 'bbbbbbbb-0000-0000-0000-000000000003',
       name: 'вход с телефона',
-      scope: 'main',
+      kind: 'session',
       participant: 'alice',
       expires_at: future,
       revoked_at: '2026-09-22T11:00:00Z',
     });
-    installation('main', [ALICE_AGENT, LIVE, EXPIRED, SIGNED_OUT, REVOKED_TOKEN], 'alice');
+    installation([ALICE_AGENT, LIVE, EXPIRED, SIGNED_OUT, REVOKED_TOKEN], 'alice');
     const user = userEvent.setup();
     renderApp('/access');
 
@@ -653,7 +815,7 @@ describe('чьи токены на экране (TRK-114)', () => {
     expect(within(sessions).getAllByRole('article')).toHaveLength(1);
 
     // Среди ключей агентов сеанса нет.
-    const active = screen.getByRole('region', { name: new RegExp(say.access('tokens.active')) });
+    const active = screen.getByRole('region', { name: new RegExp(say.access('keys.title')) });
     expect(
       within(active)
         .getAllByRole('article')
@@ -662,7 +824,7 @@ describe('чьи токены на экране (TRK-114)', () => {
 
     // И в истории отозванных — только ключ агента: закончившиеся сеансы не история доступа.
     await user.click(
-      screen.getByRole('button', { name: say.access('tokens.history', { count: 1 }) }),
+      screen.getByRole('button', { name: say.access('history.count', { count: 1 }) }),
     );
     expect(
       screen.queryByRole('article', { name: say.ui('token.label', { name: 'вход вчера' }) }),
@@ -677,10 +839,9 @@ describe('чьи токены на экране (TRK-114)', () => {
     const OWN = accessToken({
       id: 'cccccccc-0000-0000-0000-000000000001',
       name: 'ключ агента',
-      scope: 'main',
       participant: 'agent',
     });
-    installation('main', [OWN], 'agent');
+    installation([OWN], 'agent');
     renderApp('/access');
 
     const own = await screen.findByRole('article', {
@@ -696,8 +857,8 @@ describe('чьи токены на экране (TRK-114)', () => {
     expect(writes()).toEqual([]);
   });
 
-  it('отказ выпуска от имени другого человека объяснён причиной, а не только кодом', async () => {
-    installation('main', [UI_TOKEN], 'admin');
+  it('отказ выпуска объяснён причиной, а не только кодом', async () => {
+    installation([UI_TOKEN], 'admin');
     server.use(
       http.post(`${API}/api/v1/tokens`, () =>
         failure('permission_denied', 403, 'Not allowed', {
@@ -710,8 +871,11 @@ describe('чьи токены на экране (TRK-114)', () => {
     renderApp('/access');
 
     await user.click(await screen.findByRole('button', { name: say.access('actions.issue') }));
-    await user.selectOptions(await screen.findByLabelText(say.access('issue.whomLabel')), 'alice');
-    await user.type(screen.getByLabelText(say.access('issue.nameLabel')), 'от имени Алисы');
+    await user.selectOptions(
+      await screen.findByLabelText(say.access('issue.whomLabel')),
+      'nightly_agent',
+    );
+    await user.type(screen.getByLabelText(say.access('issue.nameLabel')), 'проверка отказа');
     await user.click(screen.getByRole('button', { name: say.access('issue.submit') }));
 
     expect(
@@ -721,7 +885,7 @@ describe('чьи токены на экране (TRK-114)', () => {
   });
 
   it('отказ отзыва чужого ключа объяснён причиной', async () => {
-    installation('main', [UI_TOKEN, AGENT_TOKEN], 'admin');
+    installation([UI_TOKEN, AGENT_TOKEN], 'admin');
     server.use(
       http.delete(`${API}/api/v1/tokens/:id`, () =>
         failure('permission_denied', 403, 'Not allowed', {
@@ -743,45 +907,5 @@ describe('чьи токены на экране (TRK-114)', () => {
     expect(
       await within(dialog).findByText(say.access('denied.not_own_token'), { exact: false }),
     ).toBeInTheDocument();
-  });
-});
-
-describe('смысл набора токена достижим без наведения (UI-163)', () => {
-  it('нажатие на плашку набора раскрывает, что он открывает, повторное — прячет', async () => {
-    installation('main', [UI_TOKEN, AGENT_TOKEN, REVOKED_TOKEN]);
-    const user = userEvent.setup();
-    renderApp('/access');
-
-    const own = await screen.findByRole('article', {
-      name: say.ui('token.label', { name: 'local-ui' }),
-    });
-    // Плашка — кнопка-раскрытие: на телефоне подсказки `title` нет вовсе.
-    const scope = within(own).getByRole('button', {
-      name: say.ui('token.scopeExplain', { scope: 'main' }),
-    });
-    const hint = within(own).getByText(say.ui('token.scopeMain'));
-    expect(scope).toHaveAttribute('aria-expanded', 'false');
-    expect(scope).toHaveAttribute('aria-controls', hint.id);
-    expect(hint).not.toBeVisible();
-
-    await user.click(scope);
-    expect(scope).toHaveAttribute('aria-expanded', 'true');
-    expect(hint).toBeVisible();
-
-    await user.click(scope);
-    expect(hint).not.toBeVisible();
-
-    // Набор `task` называет своё, и раскрытие одной строки не трогает соседнюю.
-    await user.click(
-      screen.getByRole('button', { name: say.access('tokens.history', { count: 1 }) }),
-    );
-    const revoked = row('проверка 6 сентября');
-    const task = within(revoked).getByRole('button', {
-      name: say.ui('token.scopeExplain', { scope: 'task' }),
-    });
-    task.focus();
-    await user.keyboard('{Enter}');
-    expect(within(revoked).getByText(say.ui('token.scopeTask'))).toBeVisible();
-    expect(within(row('local-agent')).getByText(say.ui('token.scopeMain'))).not.toBeVisible();
   });
 });

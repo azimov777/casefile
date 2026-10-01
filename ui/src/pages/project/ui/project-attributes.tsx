@@ -14,7 +14,7 @@ const BLOCK_HEAD = 'flex flex-col gap-1 border-b border-b-line px-3 pt-3 pb-2';
 interface ProjectAttributesProps {
   projectKey: string;
   attributes: ProjectAttribute[];
-  /** Ставить, менять и снимать атрибуты: любой набор ключа (`useProjectRights`). */
+  /** Ставить, менять и снимать атрибуты: запись открыта всем (`useProjectRights`). */
   canWrite: boolean;
   /** Имя атрибута из адреса (`?attribute=`), чья история открыта; `null` — ничья. */
   open: string | null;

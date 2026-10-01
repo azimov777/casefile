@@ -1,9 +1,17 @@
-import { useId, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Activity, Ban, CalendarPlus, Hourglass, UserRound, type LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  Ban,
+  CalendarPlus,
+  Hourglass,
+  UserCheck,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react';
 import { Badge, RelativeTime } from '@/shared/ui';
 import { cn } from '@/shared/lib';
-import { isRevoked, isSession, type Token } from '../api/tokens';
+import { isConnection, isRevoked, isSession, isThisComputer, type Token } from '../api/tokens';
 
 /**
  * Один доступ установки: чей он, что открывает, кем и когда выпущен, когда им ходили
@@ -13,8 +21,8 @@ import { isRevoked, isSession, type Token } from '../api/tokens';
  * из них либо уезжает вбок, либо схлопывает колонки до нечитаемого. Карточка
  * переносит своё содержимое сама и на любой ширине остаётся одним куском.
  *
- * Две строки и место действия справа (UI-131). Первая — что это за ключ: имя, набор,
- * отметки. Вторая — сведения о нём, каждое со своим знаком: чей, кем выпущен, когда им
+ * Две строки и место действия справа (UI-131). Первая — что это за доступ: имя (у
+ * подключения — клиент, у ключа этого компьютера — «этот компьютер»), вид, отметки. Вторая — сведения о нём, каждое со своим знаком: чей, кем выпущен, когда им
  * ходили; раньше они шли одной сплошной серой строкой, и глазу не за что было
  * зацепиться. Место действия стоит всегда, есть кнопка или нет: сетка в две колонки
  * не переносит кнопку на свою строку, и строки с отзывом и без него одной высоты.
@@ -38,17 +46,15 @@ export function TokenItem({
   const revoked = isRevoked(token);
   const author = token.created_by.signature ?? null;
   const shared = token.participant === null || token.participant === undefined;
-  const scope = token.scope;
-  const scopeHint = t(scope === 'main' ? 'token.scopeMain' : 'token.scopeTask');
-  const scopeHintId = useId();
-  // Что открывает набор, человек узнаёт нажатием на плашку, а не только наведением
-  // (UI-163): на телефоне подсказки `title` нет вовсе.
-  const [scopeShown, setScopeShown] = useState(false);
+  const connection = isConnection(token);
+  const session = isSession(token);
+  const computer = isThisComputer(token);
+  const grantedBy = author === null ? t('token.byTracker') : author;
 
   return (
     <article
       aria-label={t('token.label', { name: token.name })}
-      data-token-scope={token.scope}
+      data-token-kind={token.kind}
       data-revoked={revoked ? 'true' : undefined}
       className={cn(
         'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-block border px-4 py-3',
@@ -60,46 +66,14 @@ export function TokenItem({
       <div className="flex min-w-0 flex-col gap-1.5">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {/* Имя токена написал человек или установка: это данные, а не подпись. */}
-          <span className="font-semibold wrap-anywhere text-text">{token.name}</span>
+          <span className="font-semibold wrap-anywhere text-text">
+            {computer ? t('token.thisComputer') : token.name}
+          </span>
 
-          {/*
-           * Плашка набора — кнопка-раскрытие, как пояснение к архиву в отборе списка
-           * (UI-153): строка пояснения встаёт под первой строкой карточки. Карточка не
-           * плотная строка таблицы, и нажатие по ней никуда не ведёт — занять его
-           * можно. Кнопка без своего вида: рамку и фон снимает явно
-           * (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`
-           * браузера»), на телефоне мишень не ниже `--ui-tap` (UI-154).
-           */}
-          {/* Набора в контракте больше нет (TRK-471): плашка — до задачи TRK-473. */}
-          {scope === undefined ? null : (
-            <button
-              type="button"
-              className="inline-flex min-w-0 cursor-pointer items-center border-none border-current bg-transparent p-0 max-fold:min-h-(--ui-tap) max-fold:min-w-(--ui-tap)"
-              aria-label={t('token.scopeExplain', { scope })}
-              aria-expanded={scopeShown}
-              aria-controls={scopeHintId}
-              onClick={() => setScopeShown((shown) => !shown)}
-            >
-              <Badge
-                mono
-                kind={t('token.scopeKind')}
-                tone={scope === 'main' ? 'attention' : 'neutral'}
-                title={scopeHint}
-              >
-                {scope}
-              </Badge>
-            </button>
-          )}
+          <Badge tone={connection ? 'progress' : 'neutral'}>{t(`token.kind.${token.kind}`)}</Badge>
 
           {current ? <Badge tone="progress">{t('token.thisSession')}</Badge> : null}
           {revoked ? <Badge tone="dropped">{t('token.revoked')}</Badge> : null}
-        </p>
-
-        {/* Узел стоит всегда: на него указывает `aria-controls` кнопки. Прячет его
-            атрибут `hidden`, а не утилита: у строки нет своего `display`, и правило
-            браузера `[hidden]` ничем не перебито (preflight не подключён). */}
-        <p id={scopeHintId} className="text-meta text-muted" hidden={!scopeShown}>
-          {scopeHint}
         </p>
 
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-muted">
@@ -113,10 +87,15 @@ export function TokenItem({
             )}
           </Fact>
 
-          {/* Срок есть только у сеанса входа: ключ агента живёт до отзыва. */}
-          {isSession(token) && !revoked ? (
+          {/* Срок сеанса входа; у подключения — срок его токена, который клиент продлевает
+              сам. Ключ агента живёт до отзыва, и срока у него нет. */}
+          {(session || connection) &&
+          !revoked &&
+          token.expires_at !== null &&
+          token.expires_at !== undefined ? (
             <Fact icon={Hourglass}>
-              {t('token.expiresAt')} <RelativeTime value={token.expires_at} />
+              {connection ? t('token.tokenExpires') : t('token.expiresAt')}{' '}
+              <RelativeTime value={token.expires_at} />
             </Fact>
           ) : null}
 
@@ -130,16 +109,35 @@ export function TokenItem({
               к началу, оно читается как оборванное предложение. */}
           <Fact icon={Activity}>
             {token.last_used_at === null || token.last_used_at === undefined ? (
-              t('token.neverUsed')
+              connection ? (
+                t('token.neverCalled')
+              ) : (
+                t('token.neverUsed')
+              )
             ) : (
               <>
-                {t('token.lastUsed')} <RelativeTime value={token.last_used_at} />
+                {connection ? t('token.lastCall') : t('token.lastUsed')}{' '}
+                <RelativeTime value={token.last_used_at} />
               </>
             )}
           </Fact>
 
+          {/* Кто выдал доступ: человек, который выпустил ключ или согласил подключение.
+              У сеанса входа выдающего нет — это вход самого человека. */}
+          {session ? null : (
+            <Fact icon={UserCheck}>
+              {connection
+                ? t('token.connectedBy', { author: grantedBy })
+                : t('token.grantedBy', { author: grantedBy })}
+            </Fact>
+          )}
+
           <Fact icon={CalendarPlus}>
-            {author === null ? t('token.issuedByTracker') : t('token.issuedBy', { author })}{' '}
+            {session
+              ? t('token.signedIn')
+              : connection
+                ? t('token.connectedAt')
+                : t('token.issuedAt')}{' '}
             <RelativeTime value={token.created_at} />
           </Fact>
         </p>

@@ -184,20 +184,28 @@ export const ui = {
 
   token: {
     label: 'Access {{name}}',
-    scopeKind: 'scope',
-    scopeTask: 'The working cycle of an agent: tasks, case entries, and reading everything.',
-    scopeMain:
-      'The working cycle plus writing to the registries: participants, tokens and projects.',
-    scopeExplain: 'What does scope {{scope}} open',
+    kind: {
+      session: 'sign-in',
+      key: 'agent key',
+      oauth: 'connection',
+    },
     thisSession: 'key of this session',
+    thisComputer: 'this computer',
     revoked: 'revoked',
     shared: 'shared agent token',
-    issuedBy: 'issued by {{author}}',
-    issuedByTracker: 'issued by the installation itself',
+    grantedBy: 'issued by: {{author}}',
+    connectedBy: 'connected by: {{author}}',
+    byTracker: 'the installation',
+    signedIn: 'signed in',
+    connectedAt: 'signed in',
+    issuedAt: 'issued',
     lastUsed: 'last used',
+    lastCall: 'last call',
     neverUsed: 'never used yet',
+    neverCalled: 'no calls yet',
     revokedAt: 'revocation:',
     expiresAt: 'session ends',
+    tokenExpires: 'token expires',
   },
 
   /** Представление задачи: строка списка, карточка доски, знаки и навигация. */

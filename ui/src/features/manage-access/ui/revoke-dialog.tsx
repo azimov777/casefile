@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Token } from '@/entities/token';
+import { isConnection, type Token } from '@/entities/token';
 import { errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog } from '@/shared/ui';
 import { denialReason } from '../model/problem';
@@ -8,7 +8,9 @@ import { useRevokeToken } from '../model/use-access-actions';
 
 /**
  * Кнопка «Отозвать» у строки доступа и подтверждение отзыва: действие необратимо, и
- * спрашивают о нём до, а не после.
+ * спрашивают о нём до, а не после. У подключения OAuth то же действие зовётся «Отключить»:
+ * отзыв его токена гасит и цепочку обновления (TRK-470), и человеку понятнее слово про
+ * агента, который вошёл сам.
  *
  * Отзыв ключа, которым работает сам интерфейс, не запрещён — запрет был бы вторым
  * поведением ровно там, где действие нужнее всего (утёкший ключ отзывают немедленно,
@@ -32,18 +34,19 @@ export function RevokeDialog({
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useTranslation('access');
+  const group = isConnection(token) ? 'disconnect' : 'revoke';
 
   return (
     <Dialog
       alert
       open={open}
       onOpenChange={setOpen}
-      title={t('revoke.title', { name: token.name })}
-      description={t('revoke.intro')}
+      title={t(`${group}.title`, { name: token.name })}
+      description={t(`${group}.intro`)}
       closeLabel={t('close')}
       trigger={
         <Button tone="quiet" size="sm">
-          {t('revoke.action')}
+          {t(`${group}.action`)}
         </Button>
       }
     >
@@ -64,6 +67,7 @@ function RevokeForm({
 }) {
   const revoke = useRevokeToken();
   const { t } = useTranslation('access');
+  const group = isConnection(token) ? 'disconnect' : 'revoke';
   const failed = revoke.error !== null && revoke.error !== undefined;
   const denied = denialReason(revoke.error);
 
@@ -76,7 +80,7 @@ function RevokeForm({
           disabled={revoke.isPending}
           onClick={() => revoke.mutate(token.id, { onSuccess: onClose })}
         >
-          {revoke.isPending ? t('revoke.pending') : t('revoke.confirm')}
+          {revoke.isPending ? t(`${group}.pending`) : t(`${group}.confirm`)}
         </Button>
         <Button tone="quiet" onClick={onClose}>
           {t('cancel')}

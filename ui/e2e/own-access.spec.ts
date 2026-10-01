@@ -1,16 +1,26 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { E2E_EMAIL, E2E_PASSWORD, LOGIN_URL, fontsReady, motionSettled } from './contour';
+import {
+  E2E_EMAIL,
+  E2E_PASSWORD,
+  LOGIN_URL,
+  fontsReady,
+  grantAccess,
+  motionSettled,
+} from './contour';
 
 /**
- * Свои токены людей (UI-123 поверх TRK-114): человек без флага администратора выпускает
- * ключ своему агенту из интерфейса, видит только свои доступы и отзывает свой ключ;
- * администратор видит все токены установки и сужает их до своих.
+ * Свои доступы людей (UI-123 поверх TRK-114, TRK-473): у каждого пользователя свои агенты
+ * (`claude_<человек>`, TRK-475#14) — свои подключения OAuth и ключи; человек без флага
+ * администратора видит в «Доступах» только их и выдаёт ключи только своим агентам;
+ * администратор видит всё с именами хозяев и выдавших. Ключей людям нет (TRK-472).
  *
  * Режим входа по учётным записям — второй экземпляр интерфейса контура (`LOGIN_URL`,
- * `global-setup.ts`): настоящий nginx и настоящий API, без подмен. Сценарий пишущий —
- * заводит учётную запись, — поэтому идёт проектом «запись» (имя файла кончается на
- * `access.spec.ts`). Почта и имя уникальны на прогон.
+ * `global-setup.ts`): настоящий nginx и настоящий API, без подмен. Подключение OAuth и
+ * агента по клиенту собирает `grantAccess` теми же службами, что соберёт вход (контур
+ * MCP-сервера не поднимает). Сценарий пишущий — заводит учётные записи, — поэтому идёт
+ * проектом «запись» (имя файла кончается на `access.spec.ts`). Почта и имена уникальны на
+ * прогон.
  */
 test.use({ baseURL: LOGIN_URL });
 
@@ -48,47 +58,71 @@ async function violations(page: Page): Promise<string[]> {
   );
 }
 
-test('человек выпускает ключ своему агенту, видит только свои и отзывает; администратор видит все', async ({
+test('два пользователя и администратор: у каждого свои подключения и ключи, в выпуске только свои агенты', async ({
   page,
   browser,
   request,
 }) => {
   const stamp = Date.now().toString(36);
-  const email = `keys-${stamp}@example.com`;
-  const name = `keys_${stamp}`;
   const password = `keys password ${stamp}`;
-  const tokenName = `агент ${name}`;
+  const alice = { name: `alice_${stamp}`, email: `alice-${stamp}@example.com` };
+  const bob = { name: `bob_${stamp}`, email: `bob-${stamp}@example.com` };
+  const aliceAgent = `claude_${alice.name}`;
+  const bobAgent = `claude_${bob.name}`;
+  const aliceConnection = `Claude Code ${alice.name}`;
+  const bobConnection = `Claude Code ${bob.name}`;
+  const aliceKey = `ключ ${alice.name}`;
+  const bobKey = `ключ ${bob.name}`;
 
   const admin = await adminKey(request);
-  const created = await request.post(`${LOGIN_URL}/api/v1/accounts`, {
-    headers: { Authorization: `Bearer ${admin}` },
-    data: { email, name, description: '', is_admin: false, password },
-  });
-  expect(created.status()).toBe(201);
+  for (const person of [alice, bob]) {
+    const created = await request.post(`${LOGIN_URL}/api/v1/accounts`, {
+      headers: { Authorization: `Bearer ${admin}` },
+      data: { email: person.email, name: person.name, description: '', is_admin: false, password },
+    });
+    expect(created.status()).toBe(201);
+  }
 
-  // Товарищ входит и открывает «Доступы»: там только его, и сказано об этом словами.
-  await signIn(page, email, password);
+  // У каждого своя строка подключения (`claude_alice`, `claude_bob`), у Боба — ещё и ключ.
+  grantAccess({ human: alice.name, kind: 'oauth', client: 'claude', name: aliceConnection });
+  grantAccess({ human: bob.name, kind: 'oauth', client: 'claude', name: bobConnection });
+  grantAccess({ human: bob.name, kind: 'key', client: 'claude', name: bobKey });
+
+  // Алиса входит и открывает «Доступы»: там только её, и сказано об этом словами.
+  await signIn(page, alice.email, password);
   await page.goto('/access');
   await expect(page.getByRole('heading', { level: 1, name: 'Доступы' })).toBeVisible();
   await expect(page.getByText('Ваши доступы:', { exact: false })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Чьи токены показаны' })).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Чьи доступы показаны' })).toHaveCount(0);
 
-  // Его вход — сеанс со сроком — стоит своим разделом, а ключей агентов у него пока нет.
+  const connections = page.getByRole('region', { name: /^Подключения/ });
+  const keys = page.getByRole('region', { name: /^Ключи агентов/ });
   const sessions = page.getByRole('region', { name: /^Сеансы входа/ });
+
+  // Её подключение — в «Подключениях» с хозяином-агентом и «кто подключил»; Боба нет.
+  await expect(connections.getByRole('article')).toHaveCount(1);
+  const connection = connections.getByRole('article', { name: `Доступ «${aliceConnection}»` });
+  await expect(connection.getByText(aliceAgent)).toBeVisible();
+  await expect(connection.getByText(`кто подключил: ${alice.name}`)).toBeVisible();
+  // Её вход — сеанс со сроком, ключей агентов у неё пока нет.
   await expect(sessions.getByRole('article')).toHaveCount(1);
   await expect(sessions.getByText('ключ этого сеанса')).toBeVisible();
   await expect(
     page.getByText('У вас пока нет ни одного ключа агента.', { exact: false }),
   ).toBeVisible();
+  await expect(page.getByText(bobAgent)).toHaveCount(0);
 
-  // Выпуск: себе можно, другого человека в выборе нет.
-  await page.getByRole('button', { name: 'Выпустить токен' }).click();
+  // Выпуск: свой агент есть, чужого агента и людей нет.
+  await page.getByRole('button', { name: 'Выпустить ключ' }).click();
   const issueDialog = page.getByRole('dialog');
-  const whom = issueDialog.getByLabel('За кого говорит токен');
-  await expect(whom.locator(`option[value="${name}"]`)).toHaveCount(1);
+  const whom = issueDialog.getByLabel('За кого говорит ключ');
+  await expect(whom.locator(`option[value="${aliceAgent}"]`)).toHaveCount(1);
+  await expect(whom.locator(`option[value="${bobAgent}"]`)).toHaveCount(0);
+  await expect(whom.locator(`option[value="${alice.name}"]`)).toHaveCount(0);
+  await expect(whom.locator(`option[value="${bob.name}"]`)).toHaveCount(0);
   await expect(whom.locator('option[value="owner"]')).toHaveCount(0);
-  await whom.selectOption(name);
-  await issueDialog.getByLabel('Имя токена').fill(tokenName);
+  await whom.selectOption(aliceAgent);
+  await issueDialog.getByLabel('Имя ключа').fill(aliceKey);
   await issueDialog.getByRole('button', { name: 'Выпустить', exact: true }).click();
 
   const secretDialog = page.getByRole('dialog');
@@ -106,54 +140,101 @@ test('человек выпускает ключ своему агенту, ви
   expect(await violations(page), 'окно секрета у человека').toEqual([]);
   await secretDialog.getByRole('button', { name: 'Секрет сохранён' }).click();
 
-  // Ключ работает и говорит за него.
+  // Ключ работает и говорит за её агента.
   expect(await bootstrapStatus(request, secret)).toBe(200);
 
-  // В действующих — ровно его ключ: чужих ключей установки на экране нет.
-  const active = page.getByRole('region', { name: /^Действующие токены/ });
-  await expect(active.getByRole('article')).toHaveCount(1);
-  const row = active.getByRole('article', { name: `Доступ «${tokenName}»` });
+  // В «Ключах агентов» — ровно её ключ и колонка «кто выдал»; ключа Боба на экране нет.
+  await expect(keys.getByRole('article')).toHaveCount(1);
+  const row = keys.getByRole('article', { name: `Доступ «${aliceKey}»` });
   await expect(row).toBeVisible();
-  // Возврат на экран и перезагрузка секрета не показывают.
+  await expect(row.getByText(`кто выдал: ${alice.name}`)).toBeVisible();
+  await expect(page.getByRole('article', { name: `Доступ «${bobKey}»` })).toHaveCount(0);
+  await expect(page.getByRole('article', { name: `Доступ «${bobConnection}»` })).toHaveCount(0);
+  // Перезагрузка второго показа секрета не даёт.
   await page.reload();
   await expect(row).toBeVisible();
   expect(await page.content()).not.toContain(secret);
   expect(await violations(page), 'экран своих доступов').toEqual([]);
 
-  // Администратор во втором браузере видит все токены установки, и ключ товарища среди них.
+  // Администратор во втором браузере видит все доступы установки, строки обоих — с именами.
   const context = await browser.newContext({ baseURL: LOGIN_URL, locale: 'ru-RU' });
   const adminPage = await context.newPage();
   await signIn(adminPage, E2E_EMAIL, E2E_PASSWORD);
   await adminPage.goto('/access');
-  const view = adminPage.getByRole('navigation', { name: 'Чьи токены показаны' });
-  await expect(view.getByRole('link', { name: 'Все токены установки' })).toHaveAttribute(
+  const view = adminPage.getByRole('navigation', { name: 'Чьи доступы показаны' });
+  await expect(view.getByRole('link', { name: 'Все доступы установки' })).toHaveAttribute(
     'aria-current',
     'true',
   );
-  const foreign = adminPage.getByRole('article', { name: `Доступ «${tokenName}»` });
-  await expect(foreign).toBeVisible();
-  // Чужой ключ администратор отозвать может: кнопка у строки есть.
-  await expect(foreign.getByRole('button', { name: 'Отозвать' })).toBeVisible();
-  // «Мои» — в адресе, и ключа товарища там нет.
+  for (const [title, agent, who] of [
+    [aliceConnection, aliceAgent, alice.name],
+    [bobConnection, bobAgent, bob.name],
+  ] as const) {
+    const theirs = adminPage.getByRole('article', { name: `Доступ «${title}»` });
+    await expect(theirs).toBeVisible();
+    await expect(theirs.getByText(agent)).toBeVisible();
+    await expect(theirs.getByText(`кто подключил: ${who}`)).toBeVisible();
+    // Чужое подключение администратор отключить может.
+    await expect(theirs.getByRole('button', { name: 'Отключить' })).toBeVisible();
+  }
+  for (const [title, agent, who] of [
+    [aliceKey, aliceAgent, alice.name],
+    [bobKey, bobAgent, bob.name],
+  ] as const) {
+    const theirs = adminPage.getByRole('article', { name: `Доступ «${title}»` });
+    await expect(theirs).toBeVisible();
+    await expect(theirs.getByText(agent)).toBeVisible();
+    await expect(theirs.getByText(`кто выдал: ${who}`)).toBeVisible();
+    await expect(theirs.getByRole('button', { name: 'Отозвать' })).toBeVisible();
+  }
+
+  // В выпуске у администратора оба агента с именами хозяев и ни одного человека.
+  await adminPage.getByRole('button', { name: 'Выпустить ключ' }).click();
+  const adminWhom = adminPage.getByRole('dialog').getByLabel('За кого говорит ключ');
+  await expect(
+    adminWhom.getByRole('option', { name: new RegExp(`^${aliceAgent} — .*хозяин ${alice.name}`) }),
+  ).toHaveCount(1);
+  await expect(
+    adminWhom.getByRole('option', { name: new RegExp(`^${bobAgent} — .*хозяин ${bob.name}`) }),
+  ).toHaveCount(1);
+  await expect(adminWhom.locator(`option[value="${alice.name}"]`)).toHaveCount(0);
+  await expect(adminWhom.locator('option[value="owner"]')).toHaveCount(0);
+  await adminPage.keyboard.press('Escape');
+
+  // «Мои» — в адресе, и доступов Алисы и Боба там нет.
   await view.getByRole('link', { name: 'Мои' }).click();
   await expect(adminPage).toHaveURL(/\/access\?tokens=mine$/);
-  await expect(foreign).toHaveCount(0);
+  await expect(adminPage.getByRole('article', { name: `Доступ «${bobKey}»` })).toHaveCount(0);
+  await expect(adminPage.getByRole('article', { name: `Доступ «${aliceKey}»` })).toHaveCount(0);
   await expect(adminPage.getByRole('article').first()).toBeVisible();
   await context.close();
 
-  // Товарищ отзывает свой ключ: следующий же запрос с ним — отказ, а строка уходит в историю.
+  // Алиса отключает своё подключение и отзывает свой ключ: следующий же запрос с ключом —
+  // отказ, а обе строки уходят в историю.
+  await connection.getByRole('button', { name: 'Отключить' }).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Отключить', exact: true })
+    .click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(connection).toHaveCount(0);
+
   await row.getByRole('button', { name: 'Отозвать' }).click();
   const confirm = page.getByRole('alertdialog');
   await confirm.getByRole('button', { name: 'Отозвать', exact: true }).click();
   // Окно закрывается по успеху отзыва; пока оно открыто, строка скрыта от дерева доступности
   // (`aria-hidden` у фона модального окна), и её «исчезновение» ещё ничего не значит.
   await expect(confirm).toHaveCount(0);
-  const toggle = page.getByRole('button', { name: /^История: 1 отозванный токен/ });
+  const toggle = page.getByRole('button', { name: /^История: 2 снятых доступа/ });
   await expect(toggle).toBeVisible();
   await expect(row).toHaveCount(0);
   expect(await bootstrapStatus(request, secret)).toBe(401);
   await toggle.click();
-  await expect(page.getByRole('article', { name: `Доступ «${tokenName}»` })).toHaveAttribute(
+  await expect(page.getByRole('article', { name: `Доступ «${aliceKey}»` })).toHaveAttribute(
+    'data-revoked',
+    'true',
+  );
+  await expect(page.getByRole('article', { name: `Доступ «${aliceConnection}»` })).toHaveAttribute(
     'data-revoked',
     'true',
   );

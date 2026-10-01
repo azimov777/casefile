@@ -3,8 +3,8 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import {
   fontsReady,
   installWithoutKey,
+  readAgentKey,
   readE2eToken,
-  readTaskToken,
   side,
   silenceJournal,
 } from './contour';
@@ -12,7 +12,7 @@ import {
 /**
  * Экран «Подключить агента» (UI-105): адрес во фрагментах — тот, что отдала установка
  * контура, копирование кладёт в буфер текст фрагмента, экран работает и ключом
- * установки, и ключом набора `task`, введённым на `/login`.
+ * установки, и ключом агента, введённым на `/login`.
  *
  * Контур MCP не поднимает, и адрес ему задан нарочно чужим (`TRACKER_MCP_PUBLIC_URL`
  * в `docker-compose.yml`): экран, зашивший умолчание `localhost:8100`, с ним бы
@@ -139,18 +139,18 @@ test('ключ установки: экран из навигации, адре�
   expect(writes).toEqual([]);
 });
 
-test('ключ набора `task`, введённый на `/login`: экран открывается и берёт тот же адрес', async ({
+test('ключ агента, введённый на `/login`: экран открывается и берёт тот же адрес', async ({
   page,
   request,
 }) => {
-  const token = readTaskToken();
-  // Набор ключа проверяется у бэкенда, а не предполагается по имени файла.
+  const token = readAgentKey();
+  // За ключом агент, а не человек: проверяется у бэкенда, а не предполагается по имени файла.
   const session = await request.get('/api/v1/bootstrap', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  expect(((await session.json()) as { data: { token: { scope: string } } }).data.token.scope).toBe(
-    'task',
-  );
+  expect(
+    ((await session.json()) as { data: { participant: { kind: string } } }).data.participant.kind,
+  ).toBe('agent');
   const mcpUrl = await installationUrl(request, token);
 
   await installWithoutKey(page);

@@ -21,7 +21,7 @@ type EntryHeading = components['schemas']['EntryHeadingRead'];
 type Summary = components['schemas']['SummaryEntryRead'];
 type Question = components['schemas']['QuestionEntryRead'];
 type Remark = components['schemas']['RemarkEntryRead'];
-type AccessToken = components['schemas']['TokenRead'] & { scope: 'task' | 'main' };
+type AccessToken = components['schemas']['TokenRead'];
 type Participant = components['schemas']['ParticipantRead'];
 type ProjectDetail = components['schemas']['ProjectDetailRead'];
 type Release = components['schemas']['ReleaseRead'];
@@ -59,8 +59,8 @@ const AUTHOR = { kind: 'tracker', signature: null } as const;
 const STAMPS = { created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' };
 
 /**
- * Первый кадр. Токен сеанса по умолчанию набора `task`, у которого запись закрыта:
- * тест, которому нужна запись, называет `main` явно через `overrides`.
+ * Первый кадр. Наборов токена нет (TRK-471): `scope` в контракте остался устаревшим полем и всегда `main`,
+ * интерфейс его не читает.
  */
 export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
   return {
@@ -72,7 +72,7 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
       created_by: AUTHOR,
       ...STAMPS,
     },
-    token: { id: '33333333-3333-3333-3333-333333333333', scope: 'task' },
+    token: { id: '33333333-3333-3333-3333-333333333333', scope: 'main' },
     projects: [
       {
         id: '22222222-2222-2222-2222-222222222222',
@@ -139,14 +139,13 @@ export function taskListing(url: URL, items: Task[]) {
 
 /**
  * Доступ так, как его отдаёт `GET /api/v1/tokens`: без секрета — его нет ни в списке,
- * ни в базе. Умолчание — живой ключ участника `owner` набора `task`.
+ * ни в базе. Умолчание — живой ключ агента `claude`, выданный человеком `owner`.
  */
 export function accessToken(overrides: Partial<AccessToken> = {}): AccessToken {
   return {
     id: '55555555-5555-5555-5555-555555555555',
-    name: 'local-ui',
-    scope: 'task',
-    participant: 'owner',
+    name: 'nightly',
+    participant: 'claude',
     created_by: AUTHOR,
     created_at: '2026-09-01T10:00:00Z',
     last_used_at: null,

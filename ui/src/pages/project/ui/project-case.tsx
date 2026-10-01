@@ -14,7 +14,7 @@ const BLOCK_HEAD = 'flex flex-wrap items-baseline gap-3 border-b border-b-line p
 
 interface ProjectCaseProps {
   projectKey: string;
-  /** Писать заметки в дело: любой набор ключа (`useProjectRights`). */
+  /** Писать заметки в дело: запись открыта всем (`useProjectRights`). */
   canWrite: boolean;
   /** Раскрытая запись из адреса (`?entry=N`): ссылка `TRK#7` приходит сюда. */
   openAt: number | null;

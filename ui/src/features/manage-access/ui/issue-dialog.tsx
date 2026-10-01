@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { complainsAbout, errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog, Input, QueryState } from '@/shared/ui';
-import { participantsQueryOptions, type IssuedToken, type TokenScope } from '../api/access';
+import { participantsQueryOptions, type IssuedToken } from '../api/access';
 import { denialReason } from '../model/problem';
 import { useIssueToken } from '../model/use-access-actions';
 
@@ -13,22 +13,19 @@ import { useIssueToken } from '../model/use-access-actions';
  */
 const SHARED = '*shared*';
 
-/** Наборы контракта по порядку: умолчание первым. */
-const SCOPES: TokenScope[] = ['task', 'main'];
-
 /**
- * Окно «Выпустить токен»: кому, какого набора и как его назвать.
+ * Окно «Выпустить ключ»: кому и как его назвать. Наборов у ключа нет (TRK-471): любой
+ * ключ агента открывает всё, что открыто агенту.
  *
- * Умолчание набора — `task`: он открывает рабочий цикл агента и ничего больше. `main`
- * выбирается явно, и рядом сказано, что он добавляет: запись реестров, то есть выпуск
- * и отзыв доступов на этой установке.
+ * Людям ключи не выпускаются (TRK-472): в выборе только агенты и «общий ключ». Человек
+ * видит своих агентов и агентов без хозяина, администратор — всех, с именем хозяина
+ * (TRK-476): ключ чужого агента бэкенд ему не выпустит (`agent_owned_by_another`).
  *
  * Секрет из ответа сюда не оседает: он уходит вызывающему (`onIssued`), а тот
  * показывает его один раз и забывает при закрытии окна (`UI-106#18`).
  *
- * Выбор «за кого» у человека без флага администратора не называет других людей: ключ
- * от чужого имени бэкенд ему не выпустит (`foreign_human`, TRK-114#12), а пункт,
- * который наверняка кончится отказом, в выборе — ловушка, а не возможность.
+ * Пункт, который наверняка кончится отказом, в выборе — ловушка, а не возможность,
+ * поэтому чужих агентов человек без флага администратора в нём не видит.
  *
  * Открывает окно либо своя кнопка «Выпустить» (пропс `trigger`, `participant === null`),
  * либо «Выпустить ему токен» изнутри `AgentDialog` — тогда окно уже открывает вызывающий
@@ -97,19 +94,20 @@ function IssueForm({
   const participants = useQuery(participantsQueryOptions());
   const issue = useIssueToken();
   const [chosen, setChosen] = useState(participant ?? '');
-  const [scope, setScope] = useState<TokenScope>('task');
   const [name, setName] = useState('');
   const [problem, setProblem] = useState<'participant' | 'name' | null>(null);
   const whomId = useId();
   const nameId = useId();
   const nameHintId = useId();
-  const scopeName = useId();
   const { t } = useTranslation('access');
   // Род участника — подпись кирпича (`ui`), а не экрана: та же, что у автора записи.
   const { t: brick } = useTranslation('ui');
 
+  // Агенты: свои, без хозяина и — администратору — все. Людей в выборе нет никому.
   const known = (participants.data ?? []).filter(
-    (item) => admin || item.kind !== 'human' || item.name === me,
+    (item) =>
+      item.kind === 'agent' &&
+      (admin || item.owner === null || item.owner === undefined || item.owner === me),
   );
   const failed = issue.error !== null && issue.error !== undefined;
   const badName = complainsAbout(issue.error, 'name');
@@ -130,7 +128,6 @@ function IssueForm({
 
     const issued = await issue.submit({
       participant: chosen === SHARED ? null : chosen,
-      scope,
       name: name.trim(),
     });
     if (issued !== null) onIssued(issued);
@@ -166,6 +163,9 @@ function IssueForm({
           {known.map((item) => (
             <option key={item.id} value={item.name}>
               {item.name} — {brick(`participantKind.${item.kind}`)}
+              {admin && item.owner !== null && item.owner !== undefined
+                ? `, ${t('issue.ownerOf', { owner: item.owner })}`
+                : ''}
             </option>
           ))}
           <option value={SHARED}>{t('issue.whomShared')}</option>
@@ -180,27 +180,6 @@ function IssueForm({
           </span>
         ) : null}
       </div>
-
-      {/* Набор — не оформление доступа, а само право: рядом с каждым сказано, что он
-          открывает, потому что выбор делают один раз и навсегда. */}
-      <fieldset className="flex min-w-0 flex-col gap-2 border-0 p-0">
-        <legend className="text-meta text-muted">{t('issue.scopeLabel')}</legend>
-        {SCOPES.map((value) => (
-          <label key={value} className="flex cursor-pointer items-baseline gap-2">
-            <input
-              type="radio"
-              name={scopeName}
-              value={value}
-              checked={scope === value}
-              onChange={() => setScope(value)}
-            />
-            <span className="max-w-(--ui-text-max) text-meta">
-              <code className="font-mono text-text">{value}</code>{' '}
-              {t(value === 'main' ? 'issue.scopeMainHint' : 'issue.scopeTaskHint')}
-            </span>
-          </label>
-        ))}
-      </fieldset>
 
       <div className="flex flex-col gap-1">
         <label className="text-meta text-muted" htmlFor={nameId}>

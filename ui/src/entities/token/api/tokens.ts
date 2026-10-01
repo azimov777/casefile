@@ -2,12 +2,13 @@ import { infiniteQueryOptions } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components } from '@/shared/api';
 
 /** Токен доступа без секрета: секрет живёт только в ответе на выпуск. */
-/**
- * Набор токена: контракт его снял (TRK-471), тип остаётся только до задачи интерфейса TRK-473,
- * которая уберёт наборы из экрана «Доступы».
- */
-export type TokenScope = 'task' | 'main';
-export type Token = components['schemas']['TokenRead'] & { scope?: TokenScope };
+export type Token = components['schemas']['TokenRead'];
+
+/** Вид строки доступа (`kind` в контракте): чем человек узнаёт, что это за доступ. */
+export type TokenKind = Token['kind'];
+
+/** Имя ключа, которым работает интерфейс на этом компьютере: вход человека без ввода. */
+export const LOCAL_SESSION_NAME = 'local-ui';
 
 /**
  * Отозван ли доступ. Признака «отозван» в контракте нет — есть время отзыва, и
@@ -17,21 +18,39 @@ export function isRevoked(token: Token): boolean {
   return token.revoked_at !== null && token.revoked_at !== undefined;
 }
 
-/**
- * Сеанс входа в интерфейс, а не ключ агента: срок жизни бывает только у ключа, который
- * выдаёт `POST /api/v1/session` (`expires_at` в контракте).
- */
+/** Вход человека в интерфейс: сеанс браузера или ключ этого компьютера (`kind: session`). */
 export function isSession(token: Token): boolean {
-  return token.expires_at !== null && token.expires_at !== undefined;
+  return token.kind === 'session';
+}
+
+/** Подключение агента по OAuth (`kind: oauth`): клиент вошёл сам, секрета человек не видел. */
+export function isConnection(token: Token): boolean {
+  return token.kind === 'oauth';
+}
+
+/** Ключ агента (`kind: key`): статический секрет, который выпустил человек. */
+export function isKey(token: Token): boolean {
+  return token.kind === 'key';
+}
+
+/** Ключ интерфейса этого компьютера: сеанс без срока, его выдаёт сама установка. */
+export function isThisComputer(token: Token): boolean {
+  return isSession(token) && token.name === LOCAL_SESSION_NAME;
 }
 
 /**
- * Пускает ли ещё токен: не отозван и, если это сеанс, не истёк. Срок сравнивается
- * с часами клиента — признака «истёк» контракт не отдаёт, есть только сам срок.
+ * Пускает ли ещё доступ. Подключение OAuth живо, пока не отозвано: срок его токена
+ * клиент продлевает сам через refresh, и подключение, которым давно не ходили, всё равно
+ * остаётся открытым — скрыв его, человек не смог бы его отключить. Сеанс входа живёт до
+ * своего срока; ключ агента — до отзыва. Срок сравнивается с часами клиента: признака
+ * «истёк» контракт не отдаёт, есть только сам срок.
  */
 export function isLive(token: Token, now: number = Date.now()): boolean {
   if (isRevoked(token)) return false;
-  return !isSession(token) || Date.parse(token.expires_at ?? '') > now;
+  if (!isSession(token) || token.expires_at === null || token.expires_at === undefined) {
+    return true;
+  }
+  return Date.parse(token.expires_at) > now;
 }
 
 /**

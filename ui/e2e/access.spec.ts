@@ -2,24 +2,28 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import {
   fontsReady,
+  grantAccess,
   installWithoutKey,
   motionSettled,
-  readTaskToken,
+  readAgentKey,
+  readE2eToken,
   side,
   silenceJournal,
 } from './contour';
 
 /**
- * Экран «Доступы» (UI-106): список токенов установки, заведение агента, выпуск с
- * показом секрета один раз и отзыв.
+ * Экран «Доступы» (UI-106, TRK-473): доступы установки тремя разделами — «Подключения»,
+ * «Ключи агентов», «Сеансы входа»; заведение агента, выпуск ключа с показом секрета один
+ * раз, отзыв и отключение подключения.
  *
  * Сценарий **пишет** в установку контура: заводит участника (удалить его нельзя) и
  * выпускает токен, поэтому живёт в проекте «запись» и идёт после читающих. Установка
  * контура поднимается заново на каждый прогон (`global-teardown.ts` гасит её вместе с
  * томом), так что имя участника свободно.
  *
- * Ключ контура — набора `main` (TRK-69), и запись на экране открыта без всякого ввода:
- * это и есть путь человека на локальной установке (`UI-104#7`).
+ * Ключ контура — `local-ui`, вход владельца без ввода: запись на экране открыта без всякого
+ * ввода, это и есть путь человека на локальной установке (`UI-104#7`). Наборов токена нет
+ * (TRK-471), и сценарии их не называют.
  */
 
 // Буфер читается из самой страницы (`navigator.clipboard.readText`): контексту нужны оба права.
@@ -43,7 +47,7 @@ async function openFromNavigation(page: Page): Promise<void> {
 
 /** Кнопка раскрытия истории отозванных доступов: число в подписи — данные контура. */
 function historyToggle(page: Page) {
-  return page.getByRole('button', { name: /^История: \d+ отозванн/ });
+  return page.getByRole('button', { name: /^История: \d+ снят/ });
 }
 
 /**
@@ -95,13 +99,13 @@ test('ключ установки: агент заведён, токен вып�
 
   // Заведённый участник — ещё не подключённый агент: окно ведёт к выпуску токена.
   await expect(agentDialog.getByText(`Участник ${AGENT} заведён`)).toBeVisible();
-  await agentDialog.getByRole('button', { name: 'Выпустить ему токен' }).click();
+  await agentDialog.getByRole('button', { name: 'Выпустить ему ключ' }).click();
 
   const issueDialog = page.getByRole('dialog');
-  await expect(issueDialog.getByLabel('За кого говорит токен')).toHaveValue(AGENT);
-  // Умолчание набора — `task`, и его никто не выбирал.
-  await expect(issueDialog.getByRole('radio', { name: /^task/ })).toBeChecked();
-  await issueDialog.getByLabel('Имя токена').fill(TOKEN_NAME);
+  await expect(issueDialog.getByLabel('За кого говорит ключ')).toHaveValue(AGENT);
+  // Выбора набора нет: у ключа один вид права.
+  await expect(issueDialog.getByRole('radio')).toHaveCount(0);
+  await issueDialog.getByLabel('Имя ключа').fill(TOKEN_NAME);
   await issueDialog.getByRole('button', { name: 'Выпустить', exact: true }).click();
 
   // Секрет показан один раз — и сразу во фрагментах подключения.
@@ -168,10 +172,9 @@ test('ключ установки: агент заведён, токен вып�
   });
   expect(asAgent.status()).toBe(200);
   const session = (await asAgent.json()) as {
-    data: { participant: { name: string }; token: { scope: string } };
+    data: { participant: { name: string } };
   };
   expect(session.data.participant.name).toBe(AGENT);
-  expect(session.data.token.scope).toBe('task');
 
   await secretDialog.getByRole('button', { name: 'Секрет сохранён' }).click();
 
@@ -208,7 +211,7 @@ test('ключ установки: агент заведён, токен вып�
   await confirm.getByRole('button', { name: 'Отозвать', exact: true }).click();
 
   // Отозванный уходит из действующих в историю, а история свёрнута (UI-131).
-  const active = page.getByRole('region', { name: /^Действующие токены/ });
+  const active = page.getByRole('region', { name: /^Ключи агентов/ });
   await expect(active.getByRole('article', { name: `Доступ «${TOKEN_NAME}»` })).toHaveCount(0);
   const toggle = historyToggle(page);
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -243,6 +246,96 @@ test('ключ установки: агент заведён, токен вып�
   });
 });
 
+test('подключение OAuth стоит в «Подключениях», «Отключить» убирает его из списка, а в выпуске нет людей', async ({
+  page,
+  request,
+}) => {
+  const CLIENT = 'Claude Code на прогоне';
+  // Вход агента по OAuth идёт через его клиента; здесь строка собрана службой выпуска
+  // (`grantAccess`): участник — заведённый агент, подключил человек `owner`.
+  grantAccess({ human: 'owner', kind: 'oauth', agent: 'demo_agent', name: CLIENT });
+
+  await silenceJournal(page);
+  await page.goto('/access');
+  await expect(page.getByRole('heading', { level: 1, name: 'Доступы' })).toBeVisible();
+
+  // Три раздела по виду доступа; подключение — в первом, а не среди ключей.
+  const connections = page.getByRole('region', { name: /^Подключения/ });
+  const keys = page.getByRole('region', { name: /^Ключи агентов/ });
+  const sessions = page.getByRole('region', { name: /^Сеансы входа/ });
+  await expect(keys).toBeVisible();
+  await expect(sessions).toBeVisible();
+
+  const row = connections.getByRole('article', { name: `Доступ «${CLIENT}»` });
+  await expect(row).toBeVisible();
+  await expect(keys.getByRole('article', { name: `Доступ «${CLIENT}»` })).toHaveCount(0);
+  await expect(row.getByText('demo_agent')).toBeVisible();
+  await expect(row.getByText('кто подключил: owner')).toBeVisible();
+  await expect(row.getByText('последний вызов')).toBeVisible();
+  // Секрета подключения нет нигде на экране: человек его не видел и не увидит.
+  await expect(page.getByRole('main')).not.toContainText(/trk_[A-Za-z0-9_-]{8,}/);
+
+  // Ключ этого компьютера — среди сеансов входа и подписан «этот компьютер».
+  const own = sessions.getByRole('article', { name: 'Доступ «local-ui»' });
+  await expect(own.getByText('этот компьютер')).toBeVisible();
+  await expect(own.getByText('ключ этого сеанса')).toBeVisible();
+  // У ключей агентов есть колонка «кто выдал».
+  await expect(keys.getByText(/^кто выдал: /).first()).toBeVisible();
+
+  // Телефон: страница не прокручивается вбок.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await fontsReady(page);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'горизонтальная прокрутка на 390 px').toBeLessThanOrEqual(0);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  expect(await violations(page), 'экран с подключением').toEqual([]);
+
+  // В выпуске ключа людей нет: у участника `owner` род — человек, и в выборе его не будет.
+  await page.getByRole('button', { name: 'Выпустить ключ' }).click();
+  const whom = page.getByRole('dialog').getByLabel('За кого говорит ключ');
+  await expect(whom.locator('option[value="demo_agent"]')).toHaveCount(1);
+  await expect(whom.locator('option[value="owner"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // «Отключить» спрашивает подтверждение и убирает подключение из раздела.
+  const disconnect = row.getByRole('button', { name: 'Отключить' });
+  await disconnect.click();
+  const confirm = page.getByRole('alertdialog');
+  await expect(confirm).toContainText('сразу');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(disconnect).toBeFocused();
+
+  await disconnect.click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Отключить', exact: true })
+    .click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(row).toHaveCount(0);
+
+  // Подключение ушло в историю: на сервере оно отозвано, а не удалено.
+  await historyToggle(page).click();
+  await expect(page.getByRole('article', { name: `Доступ «${CLIENT}»` })).toHaveAttribute(
+    'data-revoked',
+    'true',
+  );
+  const listed = await request.get('/api/v1/tokens?limit=200', {
+    headers: { Authorization: `Bearer ${readE2eToken()}` },
+  });
+  const mine = (
+    (await listed.json()) as {
+      data: { name: string; kind: string; revoked_at: string | null }[];
+    }
+  ).data.find((token) => token.name === CLIENT);
+  expect(mine?.kind).toBe('oauth');
+  expect(mine?.revoked_at).not.toBeNull();
+});
+
 test.describe('тёмная тема', () => {
   /*
    * Тема задаётся контекстом, а не `emulateMedia` посреди страницы: замер `axe`,
@@ -259,7 +352,7 @@ test.describe('тёмная тема', () => {
     await page.goto('/access');
     await expect(page.getByRole('heading', { level: 1, name: 'Доступы' })).toBeVisible();
 
-    const issueButton = page.getByRole('button', { name: 'Выпустить токен' });
+    const issueButton = page.getByRole('button', { name: 'Выпустить ключ' });
     await issueButton.click();
     await expect(page.getByRole('dialog')).toBeVisible();
     // `Esc` возвращает фокус на кнопку-триггер и в тёмной теме (`UI-178`).
@@ -272,9 +365,9 @@ test.describe('тёмная тема', () => {
     // Общий агентский токен: у фрагментов появляется `X-Actor-Label`, и объяснение
     // метки — часть того, что меряется.
     await issueDialog
-      .getByLabel('За кого говорит токен')
-      .selectOption({ label: 'Общий агентский токен, без участника' });
-    await issueDialog.getByLabel('Имя токена').fill(SHARED_TOKEN_NAME);
+      .getByLabel('За кого говорит ключ')
+      .selectOption({ label: 'Общий ключ, без участника' });
+    await issueDialog.getByLabel('Имя ключа').fill(SHARED_TOKEN_NAME);
     await issueDialog.getByRole('button', { name: 'Выпустить', exact: true }).click();
 
     const secretDialog = page.getByRole('dialog');
@@ -303,7 +396,7 @@ test.describe('тёмная тема', () => {
   });
 });
 
-test('ключ набора `task` с экрана входа: список виден, запись недоступна с причиной', async ({
+test('ключ агента с экрана входа: список виден, выпуск закрыт с причиной, запросов записи нет', async ({
   page,
 }) => {
   const writes: string[] = [];
@@ -314,28 +407,27 @@ test('ключ набора `task` с экрана входа: список ви
   await silenceJournal(page);
   await installWithoutKey(page);
   await page.goto('/login');
-  await page.getByLabel('Токен участника').fill(readTaskToken());
+  await page.getByLabel('Токен участника').fill(readAgentKey());
   await page.getByRole('button', { name: 'Войти' }).click();
   await expect(page).toHaveURL(/\/tasks$/);
 
   await openFromNavigation(page);
 
-  // Список доступов открыт и такому ключу: чтение токенов не требует `main`.
+  // Список доступов открыт и такому ключу: чтение токенов не требует учётной записи.
   await expect(page.getByRole('article', { name: /Доступ «/ }).first()).toBeVisible();
 
   const newAgent = page.getByRole('button', { name: 'Завести агента' });
-  const issue = page.getByRole('button', { name: 'Выпустить токен' });
+  const issue = page.getByRole('button', { name: 'Выпустить ключ' });
   await expect(newAgent).toBeDisabled();
   await expect(issue).toBeDisabled();
   // Причина сказана там же, и запрещённые кнопки ссылаются на неё.
-  const explanation = page.getByText('Запись закрыта: этот сеанс работает ключом набора task');
+  const explanation = page.getByText('Выпуск закрыт: этот сеанс работает ключом агента');
   await expect(explanation).toBeVisible();
   const explanationId = await explanation.getAttribute('id');
   await expect(newAgent).toHaveAttribute('aria-describedby', explanationId ?? '');
   await expect(issue).toHaveAttribute('aria-describedby', explanationId ?? '');
-  await expect(page.getByRole('button', { name: 'Отозвать' })).toHaveCount(0);
 
-  expect(await violations(page), 'экран с ключом `task`').toEqual([]);
+  expect(await violations(page), 'экран с ключом агента').toEqual([]);
 
   // Ни одного запроса записи: отказ `403` проверкой прав не служит.
   expect(writes).toEqual([]);

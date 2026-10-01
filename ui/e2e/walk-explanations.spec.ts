@@ -40,7 +40,7 @@ function steps(project: string): { path: string; text: string }[] {
     { path: `/projects/${project}`, text: 'Проект отвечает на вопрос «про что задачи».' },
     { path: '/questions', text: 'Сюда приходят вопросы, которые агенты задали вам.' },
     { path: '/connect', text: 'Агент работает с Casefile через MCP' },
-    { path: '/access', text: 'Здесь все токены установки' },
+    { path: '/access', text: 'Здесь всё, чем ходят в установку' },
   ];
 }
 

@@ -71,21 +71,3 @@ test('в строке списка знак признака не перехва
   await mark.tap();
   await expect(page).toHaveURL(new RegExp(`${href}$`));
 });
-
-test('значение набора токена раскрывается нажатием на плашку', async ({ page }) => {
-  await silenceJournal(page);
-  await page.goto('/access');
-
-  // Ключ контура — набора `main` (TRK-69): такой доступ в списке есть всегда.
-  const own = page.locator('article[data-token-scope="main"]').first();
-  const scope = own.getByRole('button', { name: 'Что открывает набор main' });
-  const hint = own.getByText('Рабочий цикл плюс запись реестров: участники, токены и проекты.');
-  await expect(hint).toBeHidden();
-
-  await scope.tap();
-  await expect(scope).toHaveAttribute('aria-expanded', 'true');
-  await expect(hint).toBeVisible();
-
-  await scope.tap();
-  await expect(hint).toBeHidden();
-});
