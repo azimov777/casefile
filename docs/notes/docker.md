@@ -947,3 +947,25 @@ HTTP Claude Code не берёт (нет shallow), нужен `git http-backend`
 **Где:** `install.sh` (`claude_settings`, `claude_marketplace_add`, `codex_marketplace_add`),
 `install.ps1` (`Add-ClaudeMarketplace`, `Add-CodexMarketplace`), `scripts/check-skill-install.sh`
 (фаза M), `tests/test_installers.py`. `install.ps1` не исполнялся (нет pwsh): правка по паритету.
+
+## Вход Claude Code привязан к адресу плагина: установщик без `CASEFILE_URL` адрес не меняет, а при смене называет команду входа (TRK-502)
+
+**Что:** Claude Code хранит вход MCP под ключом `<имя сервера>|sha256(type, url, headers)[:16]`
+(claude 2.1.286), имя сервера плагина — `plugin:casefile:casefile` без версии. Смена версии и
+источника маркетплейса ключ не меняют, смена адреса — меняет, даже `localhost` → `127.0.0.1`.
+`claude plugin install … --config casefile_url=…` у уже стоящего плагина отвечает «already
+installed», но адрес переписывает. Так владелец потерял вход: полная установка поставила
+`http://localhost:8100/mcp`, а перевод строкой `CASEFILE_SKILL_ONLY=1` без адреса — адрес по
+умолчанию `http://127.0.0.1:8100/mcp`. Codex вход сохранил: адрес его плагина зашит.
+**Почему важно:** после такой смены `claude mcp list` пишет «Needs authentication», хотя ни
+сервер, ни плагин не менялись; войти снова может только человек в терминале.
+**Как правильно:** адрес стоящего плагина читается до `install` (`claude plugin configure
+casefile@casefile --json`, `inputs.casefile_url`). Без `CASEFILE_URL` он остаётся («kept the
+address it had»), при названном другом адресе печатается «the address changed from … sign in
+again: claude mcp login plugin:casefile:casefile», после перевода источника — строка с той же
+командой на случай «Needs authentication» (перевод со входом не замерен). Хранилище входа на macOS —
+служба Keychain `Claude Code-credentials`, одна на пользователя; подмена одного `HOME` её не
+изолирует, своя служба (с суффиксом) — только при `CLAUDE_CONFIG_DIR`. Опыты со входом — с ним.
+**Где:** `install.sh` (`claude_current_url`, `skill_claude`), `install.ps1`
+(`Get-ClaudeCurrentUrl`, `Install-ClaudeSkill`), `scripts/check-skill-install.sh` (фазы M и M2),
+`tests/test_installers.py`. `install.ps1` не исполнялся (нет pwsh): правка по паритету.
