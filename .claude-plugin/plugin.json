@@ -1,10 +1,13 @@
 {
   "name": "casefile",
+  "displayName": "Casefile",
   "description": "Casefile for agents: the skill and the MCP connector (sign-in through OAuth, no token in the plugin); connect to an installation, recover from 401, keep the case and watch the journal.",
   "version": "0.8.1",
   "author": {
-    "name": "azimov777"
+    "name": "azimov777",
+    "url": "https://github.com/azimov777"
   },
+  "homepage": "https://github.com/azimov777/casefile",
   "license": "MIT",
   "repository": "https://github.com/azimov777/casefile",
   "skills": "./skills/",

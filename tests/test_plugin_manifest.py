@@ -59,6 +59,17 @@ def test_plugin_skills_point_to_the_directory_with_the_skill() -> None:
     assert (skills_dir / "casefile" / "SKILL.md").is_file()
 
 
+def test_plugin_manifest_carries_the_listing_fields_of_the_anthropic_directory() -> None:
+    """Поля, которые каталог Anthropic показывает в листинге и требует от плагина (TRK-457)."""
+    plugin = _load("plugin.json")
+
+    for field in ("name", "displayName", "description", "homepage", "repository", "version"):
+        assert plugin[field], field
+    assert plugin["author"]["name"]
+    assert plugin["homepage"].startswith("https://")
+    assert plugin["repository"].startswith("https://github.com/")
+
+
 DEFAULT_ADDRESS = "http://127.0.0.1:8100/mcp"
 #: Ключи, которыми в конфигурации MCP-клиента задают авторизацию. В плагине их нет: вход — OAuth.
 AUTH_KEYS = {
