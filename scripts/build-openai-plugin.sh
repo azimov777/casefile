@@ -49,8 +49,8 @@ m = json.load(open(sys.argv[1], encoding="utf-8"))
 m.pop("mcpServers", None)
 m["keywords"] = [k for k in m.get("keywords", []) if k != "mcp"]
 m["description"] = (
-    "Casefile for agents: the skill; connect to an installation, recover from 401, "
-    "keep the case and watch the journal."
+    "Casefile for agents: the skill for working a task through the Casefile MCP server "
+    "(take it, keep its case, ask the human, hand it off, close it with verdicts)."
 )
 i = m["interface"]
 text = i["longDescription"]
@@ -58,7 +58,6 @@ cut = text.index(" The connector points at")
 i["longDescription"] = (
     text[:cut]
     .replace("This plugin carries the Casefile skill and the Casefile MCP connector.", "This plugin carries the Casefile skill.")
-    .replace("The rules for working with tasks come from the Casefile MCP server, not from this plugin.", "The rules for working with tasks come from the Casefile MCP server of the installation, not from this plugin.")
 )
 for k in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
     if not i.get(k, "").startswith("https://"):

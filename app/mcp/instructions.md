@@ -1,4 +1,4 @@
-The tracker stores tasks and a case for each. A case lets an agent with a clean context continue the work; what it lacks is known to neither the successor nor the human. A conversation with a result or a decision becomes a task, even if one session holds it all. The resource `skill://casefile/SKILL.md` covers sign-in, journal watching and installing the casefile skill if the harness lacks it.
+The tracker stores tasks and a case for each. A case lets an agent with a clean context continue the work; what it lacks is known to neither the successor nor the human. A conversation with a result or a decision becomes a task, even if one session holds it all. The resource `skill://casefile/SKILL.md` shows this cycle; its guide covers installing the casefile skill if the harness lacks it.
 
 The tracker is a ledger, not an orchestrator: it assigns no work and watches, wakes or reminds no one. A status changes only when an agent moves it; no hidden automation exists beyond what tools describe. A journal-corrupting write is rejected with the reason stated.
 

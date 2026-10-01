@@ -14,10 +14,16 @@ YAML-библиотеки в зависимостях нет, поэтому ф�
 а не догадка: так любой разборщик YAML в харнессе прочтёт те же два значения.
 """
 
+import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+from app.domain.tasks import TaskStatus
+from conftest import Connect
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = PROJECT_ROOT / "skills" / "casefile"
@@ -96,6 +102,19 @@ def test_parser_rejects_what_it_does_not_understand(text: str, reason: str) -> N
 #: Установка и обновление — в README и `docs/agent-install.md`, скил даёт на них ссылки.
 DOWNLOAD_AND_RUN = re.compile(r"\| *(sh|bash|iex)\b|curl |irm |npx ")
 
+#: Второй отказ портала OpenAI — «security risk» (TRK-459#30): ключ из `.secrets`, заголовок
+#: `Bearer` в конфиге, внешний скрипт из `scripts/`. С TRK-509 скил учит работе с задачами
+#: через MCP, а подключение, ключи и сторож журнала живут в `docs/agent-install.md`:
+#: в скиле нет ни установки, ни секретов, ни кода вне пакета.
+SECURITY_MARKERS = re.compile(r"docker|\.secrets|bearer|\btokens?\b|scripts/", re.IGNORECASE)
+
+GUIDE_URL = "https://github.com/azimov777/casefile/blob/main/docs/agent-install.md"
+
+
+def skill_body() -> str:
+    text = SKILL_FILE.read_text(encoding="utf-8")
+    return text[text.index("---", 3) + 3 :]
+
 
 def test_skill_has_no_download_and_run_commands() -> None:
     text = SKILL_FILE.read_text(encoding="utf-8")
@@ -103,7 +122,84 @@ def test_skill_has_no_download_and_run_commands() -> None:
     assert not found, f"в скиле команды скачать-и-выполнить: {found}"
 
 
-def test_skill_links_to_install_instructions() -> None:
+def test_skill_has_no_install_secrets_or_outside_scripts() -> None:
     text = SKILL_FILE.read_text(encoding="utf-8")
-    assert "https://github.com/azimov777/casefile#readme" in text
-    assert "https://github.com/azimov777/casefile/blob/main/docs/agent-install.md" in text
+    found = [line for line in text.splitlines() if SECURITY_MARKERS.search(line)]
+    assert not found, f"в скиле установка, секреты или внешние скрипты: {found}"
+
+
+def test_skill_links_to_the_connection_guide_once_in_its_last_section() -> None:
+    """Скил не про установку (TRK-509): гайд подключения — одной ссылкой в последнем разделе."""
+    body = skill_body()
+    last = body[body.rindex("\n## ") :]
+    assert GUIDE_URL in last
+    assert body.count("https://") == 1, "кроме ссылки на гайд, адресов в скиле нет"
+
+
+def test_the_detectors_catch_what_they_are_for() -> None:
+    for line in (
+        "curl -fsSL https://x/install.sh | sh",
+        "irm https://x/install.ps1 | iex",
+        "npx skills add a/b",
+    ):
+        assert DOWNLOAD_AND_RUN.search(line), line
+    for line in (
+        "cd ~/casefile && docker compose run agent-token",
+        "cat .secrets/agent-token",
+        'Authorization: "Bearer <x>"',
+        "put the token into the config",
+        "run scripts/watch-journal.sh",
+    ):
+        assert SECURITY_MARKERS.search(line), line
+
+
+#: Имя вида snake_case вне пути к файлу: `get_task`, `in_progress`, `after_no`.
+SNAKE = re.compile(r"(?<![\w/.])([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(?![\w.])")
+#: Одно слово в обратных кавычках: `waiting`, `decision`, `parent`.
+QUOTED_WORD = re.compile(r"`([a-z][a-z0-9_]*)`")
+#: Вызов инструмента в примере: `get_task(` и т. п.
+CALL = re.compile(r"(?<![\w.])([a-z][a-z0-9_]*)\(")
+#: Целевой статус перехода в примере: `to="waiting"`.
+TARGET = re.compile(r'\bto="([a-z_]+)"')
+
+
+def words(node: Any) -> Iterator[str]:
+    """Все слова вида snake_case в живом `tools/list`: имена, аргументы, перечисления, описания."""
+    yield from re.findall(r"[a-z][a-z0-9_]*", json.dumps(node))
+
+
+@pytest.fixture
+async def served(mcp_session: Connect, main_secret: str) -> tuple[set[str], set[str]]:
+    """Имена инструментов и словарь сервера — то, что агент видит при подключении."""
+    async with mcp_session(main_secret) as session:
+        init = await session.initialize()
+        tools = (await session.list_tools()).tools
+    names = {tool.name for tool in tools}
+    vocabulary = set(words([tool.model_dump(mode="json") for tool in tools]))
+    vocabulary |= set(re.findall(r"[a-z][a-z0-9_]*", init.instructions or ""))
+    return names, vocabulary
+
+
+async def test_every_called_tool_exists_on_the_server(served: tuple[set[str], set[str]]) -> None:
+    names, _ = served
+    called = set(CALL.findall(skill_body()))
+    assert called, "в скиле нет примеров вызовов"
+    assert called <= names, f"в скиле вызовы инструментов, которых нет: {called - names}"
+
+
+async def test_every_identifier_in_the_skill_is_served(served: tuple[set[str], set[str]]) -> None:
+    """Имена инструментов, аргументов, статусов и типов записей из скила есть в коде MCP."""
+    _, vocabulary = served
+    body = skill_body()
+    named = set(SNAKE.findall(body)) | set(QUOTED_WORD.findall(body))
+    assert named <= vocabulary, f"в скиле имена, которых сервер не знает: {named - vocabulary}"
+
+
+def test_every_status_in_the_skill_is_a_task_status() -> None:
+    body = skill_body()
+    statuses = {status.value for status in TaskStatus}
+    targets = set(TARGET.findall(body))
+    assert targets, "в скиле нет примеров перехода"
+    assert targets <= statuses, f"переходы в несуществующий статус: {targets - statuses}"
+    mentioned = {word for word in QUOTED_WORD.findall(body) if word in statuses}
+    assert {"in_progress", "waiting", "open"} <= mentioned | targets
