@@ -74,7 +74,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.core.config import Settings
 from app.core.errors import UnauthorizedError
 from app.core.logging import get_logger
-from app.domain.oauth import OAUTH_SCOPE, OAuthRefusal, redirect_matches
+from app.domain.oauth import OAUTH_SCOPE, OAuthRefusal, redirect_matches, resource_matches
 from app.mcp.runtime import SessionFactory
 from app.services import oauth as oauth_service
 from app.services.auth import verify_token
@@ -88,6 +88,7 @@ __all__ = [
     "LoopbackClient",
     "PresentedToken",
     "RefusalReasons",
+    "ResourceOnToken",
     "advertise_client_documents",
     "allowed_hosts",
     "auth_settings",
@@ -189,11 +190,13 @@ class CasefileAuthorization(PresentedToken):
         documents: ClientDocuments | None = None,
         *,
         access_ttl: timedelta,
+        resource: str,
         consent_page: str | None = None,
     ) -> None:
         """`consent` — согласие сразу (локальный режим); `consent_page` — адрес страницы
         входа (сетевой режим, `app/mcp/consent.py`), куда `/authorize` отправляет браузер.
-        Задаётся одно из двух."""
+        Задаётся одно из двух. `resource` — адрес этой службы: с ним сверяется параметр
+        `resource` запроса `/authorize` (RFC 8707)."""
         if (consent is None) == (consent_page is None):
             raise ValueError("Exactly one of consent and consent_page is required")
         super().__init__(sessions)
@@ -201,6 +204,7 @@ class CasefileAuthorization(PresentedToken):
         self._consent_page = consent_page
         self._documents = documents or ClientDocuments.from_settings()
         self._access_ttl = access_ttl
+        self._resource = resource
 
     # --- Клиенты -------------------------------------------------------------------
 
@@ -243,6 +247,8 @@ class CasefileAuthorization(PresentedToken):
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
+        if params.resource is not None and not resource_matches(self._resource, params.resource):
+            raise AuthorizeError(error="invalid_target", error_description=_FOREIGN_RESOURCE)
         if self._consent_page is not None:
             return _consent_page_url(self._consent_page, client, params)
         assert self._consent is not None  # одно из двух, проверено в конструкторе
@@ -451,6 +457,65 @@ async def _send_refusal(send: Send, start: Message, holder: dict[str, str]) -> N
     await send({"type": "http.response.body", "body": body})
 
 
+_FOREIGN_RESOURCE = "resource names a server other than this one"
+
+
+class ResourceOnToken:
+    """Внешний слой: `/token` с чужим `resource` (RFC 8707) отвечает `invalid_target`.
+
+    SDK принимает `resource` в запросе `/token`, но провайдеру его не отдаёт, и
+    сверить его в провайдере нельзя. Слой читает форму запроса, сверяет каждое значение
+    `resource` с адресом службы и пересылает тело приложению нетронутым. Запрос без
+    `resource` проходит как прежде.
+    """
+
+    def __init__(self, app: ASGIApp, resource: str) -> None:
+        self.app = app
+        self._resource = resource
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"] != _TOKEN_PATH or scope["method"] != "POST":
+            await self.app(scope, receive, send)
+            return
+        chunks: list[Message] = []
+        body = b""
+        more = True
+        while more:
+            message = await receive()
+            chunks.append(message)
+            if message["type"] != "http.request":
+                break
+            body += message.get("body", b"")
+            more = message.get("more_body", False)
+        wanted = parse_qs(body.decode("utf-8", "replace"), keep_blank_values=True).get(
+            "resource", []
+        )
+        if any(not resource_matches(self._resource, value) for value in wanted):
+            payload = json.dumps(
+                {"error": "invalid_target", "error_description": _FOREIGN_RESOURCE}
+            ).encode()
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 400,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"cache-control", b"no-store"),
+                        (b"pragma", b"no-cache"),
+                        (b"content-length", str(len(payload)).encode()),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": payload})
+            return
+        replay = iter(chunks)
+
+        async def replayed() -> Message:
+            return next(replay, None) or await receive()
+
+        await self.app(scope, replayed, send)
+
+
 class IssuerOnAuthorize:
     """Внешний слой: добавляет `iss` (RFC 9207) в каждый редирект `/authorize` к клиенту.
 
@@ -522,6 +587,7 @@ def advertise_client_documents(application: Starlette, settings: Settings) -> No
         if isinstance(route, Route) and route.path == _AS_METADATA_PATH:
             route.app = endpoint
     application.add_middleware(IssuerOnAuthorize, issuer=issuer)
+    application.add_middleware(ResourceOnToken, resource=settings.effective_mcp_public_url)
 
 
 class DeclaredScope:
@@ -586,6 +652,7 @@ _CHALLENGE = b"www-authenticate"
 
 _AS_METADATA_PATH = "/.well-known/oauth-authorization-server"
 _AUTHORIZE_PATH = "/authorize"
+_TOKEN_PATH = "/token"
 
 
 def allowed_hosts(settings: Settings) -> TransportSecuritySettings | None:
@@ -628,6 +695,8 @@ def auth_settings(settings: Settings) -> AuthSettings:
         issuer_url=issuer,
         resource_server_url=resource,
         # Область токена не проверяется: у агента один вид доступа, наборов нет.
+        # `resource` сверяется сам: на `/authorize` провайдером, на `/token` слоем
+        # `ResourceOnToken`; проверка SDK на запросе с токеном (`aud`) без JWT не нужна.
         validate_token_resource=False,
         required_scopes=None,
         client_registration_options=ClientRegistrationOptions(

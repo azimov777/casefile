@@ -1041,3 +1041,21 @@ OpenAI требует флаг и `iss` в каждом ответе, без н�
 собирается заново: адрес из настроек pydantic может дописать слэш.
 **Где:** `app/mcp/oauth.py` (`IssuerOnAuthorize`, `advertise_client_documents`),
 `app/mcp/consent.py` (`_back`), `tests/test_mcp_oauth.py`, `tests/test_mcp_oauth_consent.py`.
+
+## OAuth: `resource` (RFC 8707) сверяется с адресом службы на `/authorize` и `/token`
+
+**Что:** запрос `/authorize` или `/token` с `resource`, не равным адресу этой службы
+(`effective_mcp_public_url`), получает `invalid_target`; запрос без `resource` и с верным (со
+слэшем на конце и без, схема без учёта регистра) проходит как прежде. На `/authorize` сверяет
+провайдер (`CasefileAuthorization.authorize`, до страницы согласия), на `/token` — внешний слой
+`ResourceOnToken`: SDK принимает `resource` в теле, но провайдеру не отдаёт. Слой читает форму,
+отказывает до обмена (код не погашен) и пересылает тело нетронутым. Токены остаются
+непрозрачными `trk_…` без `aud`; привязка к ресурсу — эта сверка, а `validate_token_resource`
+SDK остаётся выключенным.
+**Почему важно:** OpenAI требует эхо `resource` через весь поток; без сверки токен «для
+чужого ресурса» выдавался бы молча. Клиенты без `resource` (Claude Code, Codex в части
+запросов) не должны ломаться, поэтому отсутствие параметра — не отказ.
+**Как правильно:** сравнивать через `resource_matches` (`app/domain/oauth.py`), а не строкой; в
+обмен кода новый путь, читающий `resource` из тела `/token`, идёт тем же слоем.
+**Где:** `app/mcp/oauth.py` (`ResourceOnToken`, `CasefileAuthorization`),
+`app/domain/oauth.py` (`resource_matches`), `tests/test_mcp_oauth.py`.

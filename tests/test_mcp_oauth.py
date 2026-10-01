@@ -90,11 +90,17 @@ async def _register(client: AsyncClient, **metadata: Any) -> dict[str, Any]:
 
 
 async def _authorize(
-    client: AsyncClient, client_id: str, challenge: str, *, redirect: str = REDIRECT
+    client: AsyncClient,
+    client_id: str,
+    challenge: str,
+    *,
+    redirect: str = REDIRECT,
+    resource: str | None = None,
 ) -> Response:
     return await client.get(
         "/authorize",
         params={
+            **({"resource": resource} if resource is not None else {}),
             "response_type": "code",
             "client_id": client_id,
             "redirect_uri": redirect,
@@ -113,11 +119,18 @@ def _query(response: Response) -> dict[str, str]:
 
 
 async def _exchange(
-    client: AsyncClient, client_id: str, code: str, verifier: str, *, redirect: str = REDIRECT
+    client: AsyncClient,
+    client_id: str,
+    code: str,
+    verifier: str,
+    *,
+    redirect: str = REDIRECT,
+    resource: str | None = None,
 ) -> Response:
     return await client.post(
         "/token",
         data={
+            **({"resource": resource} if resource is not None else {}),
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": redirect,
@@ -424,6 +437,119 @@ async def test_plain_http_outside_loopback_keeps_the_resource_without_authorizat
 
     assert authorize.status_code == 404
     assert works.status_code == 200, works.text
+
+
+# --- Параметр resource (RFC 8707): адрес службы, TRK-485 -----------------------------
+
+OWN_RESOURCE = _settings().effective_mcp_public_url
+
+
+async def test_authorize_refuses_a_resource_of_another_host(
+    mcp_sessions: SessionFactory,
+) -> None:
+    server = _server(mcp_sessions)
+    async with _http(server) as client:
+        registered = await _register(client)
+        _, challenge = _pkce()
+        for foreign in (
+            "https://evil.example/mcp",
+            OWN_RESOURCE + "/other",
+            "http://localhost:9/mcp",
+        ):
+            answer = _query(
+                await _authorize(client, registered["client_id"], challenge, resource=foreign)
+            )
+            assert answer["error"] == "invalid_target", foreign
+            assert "code" not in answer
+            assert answer["state"] == "st-1"
+
+
+@pytest.mark.parametrize(
+    "resource", [OWN_RESOURCE, OWN_RESOURCE + "/", OWN_RESOURCE.replace("http://", "HTTP://")]
+)
+async def test_authorize_and_token_accept_the_resource_of_this_service(
+    mcp_sessions: SessionFactory, resource: str
+) -> None:
+    """Адрес службы со слэшем и без (и с другим регистром схемы) — тот же ресурс."""
+    server = _server(mcp_sessions)
+    async with _http(server) as client:
+        registered = await _register(client)
+        verifier, challenge = _pkce()
+        answer = _query(
+            await _authorize(client, registered["client_id"], challenge, resource=resource)
+        )
+        response = await _exchange(
+            client, registered["client_id"], answer["code"], verifier, resource=resource
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["access_token"].startswith("trk_")
+
+
+async def test_loopback_hosts_of_this_service_are_one_resource(
+    mcp_sessions: SessionFactory,
+) -> None:
+    """Плагин ходит на `127.0.0.1`, а адрес службы — `localhost`: тот же порт и путь."""
+    own = urlsplit(OWN_RESOURCE)
+    port, path = own.port, own.path
+    same = [f"http://127.0.0.1:{port}{path}", f"http://[::1]:{port}{path}"]
+    other = [f"http://127.0.0.1:{(port or 0) + 1}{path}", f"http://192.0.2.1:{port}{path}"]
+    server = _server(mcp_sessions)
+    async with _http(server) as client:
+        registered = await _register(client)
+        for resource in same:
+            verifier, challenge = _pkce()
+            answer = _query(
+                await _authorize(client, registered["client_id"], challenge, resource=resource)
+            )
+            response = await _exchange(
+                client, registered["client_id"], answer["code"], verifier, resource=resource
+            )
+            assert response.status_code == 200, (resource, response.text)
+        for resource in other:
+            _, challenge = _pkce()
+            answer = _query(
+                await _authorize(client, registered["client_id"], challenge, resource=resource)
+            )
+            assert answer["error"] == "invalid_target", resource
+        verifier, challenge = _pkce()
+        code = _query(await _authorize(client, registered["client_id"], challenge))["code"]
+        refused = await _exchange(
+            client, registered["client_id"], code, verifier, resource=other[0]
+        )
+        assert refused.status_code == 400
+        assert refused.json()["error"] == "invalid_target"
+
+
+async def test_token_refuses_a_resource_of_another_host_and_keeps_the_code(
+    mcp_sessions: SessionFactory,
+) -> None:
+    """Отказ `/token` — `invalid_target`, код не погашен: верный повтор проходит."""
+    server = _server(mcp_sessions)
+    async with _http(server) as client:
+        registered = await _register(client)
+        verifier, challenge = _pkce()
+        code = _query(await _authorize(client, registered["client_id"], challenge))["code"]
+        refused = await _exchange(
+            client, registered["client_id"], code, verifier, resource="https://evil.example/mcp"
+        )
+        assert refused.status_code == 400
+        assert refused.json()["error"] == "invalid_target"
+        retry = await _exchange(
+            client, registered["client_id"], code, verifier, resource=OWN_RESOURCE
+        )
+        assert retry.status_code == 200, retry.text
+
+        refreshed = await client.post(
+            "/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": retry.json()["refresh_token"],
+                "client_id": registered["client_id"],
+                "resource": "https://evil.example/mcp",
+            },
+        )
+    assert refreshed.status_code == 400
+    assert refreshed.json()["error"] == "invalid_target"
 
 
 # --- Проверка 2: refresh, перезапуск, отзыв -----------------------------------------
