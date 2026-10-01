@@ -325,9 +325,9 @@ SKILL_COMMANDS = (
     "npx skills add azimov777/casefile#stable",
 )
 
-#: Строки подключения MCP ключом — теперь только у Hermes, харнесса без OAuth (TRK-452):
+#: Строки подключения MCP у Hermes — вход OAuth без токена (TRK-495; до него ключом, TRK-452):
 #: Claude Code и Codex подключает плагин, и токена для них установщик не печатает.
-CONNECT_LINES = ("mcp_servers:",)
+CONNECT_LINES = ("mcp_servers:", "auth: oauth")
 
 
 def test_both_installers_and_the_guide_carry_the_same_skill_commands() -> None:
@@ -375,7 +375,7 @@ def test_the_installers_print_the_harness_blocks_in_the_same_order() -> None:
             for pattern in (
                 r"""["']Claude Code:["']""",
                 r"""["']Codex:["']""",
-                r"""["']Hermes \(no OAuth""",
+                r"""["']Hermes \(OAuth""",
                 r"""["']Any other MCP client""",
             )
         ]
@@ -387,7 +387,7 @@ def test_the_installer_prints_the_key_only_for_harnesses_without_oauth(
 ) -> None:
     """Claude Code и Codex подключает плагин с входом OAuth: токена в их блоках нет.
 
-    Ключ агента печатается Hermes и «прочим клиентам без OAuth», с путём, как прочитать его
+    Ключ агента печатается только «прочим клиентам без OAuth», с путём, как прочитать его
     снова для сторожа журнала (TRK-452, TRK-469#25); ни в один файл он не пишется.
     """
     done, _ = _install(tmp_path)
@@ -398,8 +398,8 @@ def test_the_installer_prints_the_key_only_for_harnesses_without_oauth(
         assert command in out, f"вывод установщика не содержит {command!r}"
     blocks = {
         "claude": out[out.index("Claude Code:") : out.index("Codex:")],
-        "codex": out[out.index("Codex:") : out.index("Hermes (no OAuth")],
-        "hermes": out[out.index("Hermes (no OAuth") : out.index("Any other MCP client")],
+        "codex": out[out.index("Codex:") : out.index("Hermes (OAuth")],
+        "hermes": out[out.index("Hermes (OAuth") : out.index("Any other MCP client")],
         "other": out[out.index("Any other MCP client") : out.index("The skill teaches")],
     }
     for name in ("claude", "codex"):
@@ -408,7 +408,8 @@ def test_the_installer_prints_the_key_only_for_harnesses_without_oauth(
     assert "claude mcp login plugin:casefile:casefile" in blocks["claude"]
     assert "codex mcp login casefile" in blocks["codex"]
     assert 'url: "http://localhost:8100/mcp"' in blocks["hermes"]
-    assert 'Authorization: "Bearer agent-token-secret"' in blocks["hermes"]
+    assert "auth: oauth" in blocks["hermes"] and "hermes mcp login casefile" in blocks["hermes"]
+    assert "Bearer" not in blocks["hermes"] and "agent-token-secret" not in blocks["hermes"]
     assert "Authorization: Bearer agent-token-secret" in blocks["other"]
     assert "agent-token cat .secrets/agent-token" in blocks["other"]
     # Ключ печатается, но не пишется ни в один файл харнесса.
@@ -832,7 +833,7 @@ PLUGIN_STEPS = (
     "must be an https:// address (http:// only for localhost)",
     "[mcp_servers.casefile]",
     "agent-token cat .secrets/agent-token",
-    "Hermes (no OAuth: a key)",
+    "Hermes (OAuth, no token)",
 )
 
 
@@ -847,7 +848,7 @@ def test_both_installers_carry_the_plugin_and_sign_in_steps() -> None:
 def test_install_ps1_prints_no_token_in_the_claude_code_and_codex_blocks() -> None:
     for text in (_read(INSTALL_SH), _read(INSTALL_PS1)):
         start = re.search(r"""["']Claude Code:["']""", text).start()  # type: ignore[union-attr]
-        end = text.index("Hermes (no OAuth: a key)")
+        end = text.index("Hermes (OAuth, no token)")
         block = text[start:end]
         assert "Bearer" not in block and "$token" not in block
         assert "http_headers" not in text and "bearer_token_env_var" not in text

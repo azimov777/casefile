@@ -1080,3 +1080,24 @@ resource http://localhost:…/mcp does not match expected http://127.0.0.1:…/m
 из `effective_mcp_public_url` напрямую; принятие `resource` по-прежнему — `resource_matches`.
 **Где:** `app/mcp/oauth.py` (`ServiceOrigin`, `declare_scope`, `DeclaredScope`,
 `advertise_client_documents`, `IssuerOnAuthorize`, `auth_settings`), `tests/test_mcp_oauth.py`.
+
+## Hermes входит по OAuth, а не ключом (TRK-495); не проверено на настоящем Hermes
+
+**Что:** блок Hermes в `docs/agent-install.md`, README, скиле и вывод установщиков — `mcp_servers.casefile`
+с `url` и `auth: oauth`, без `headers` и токена; ключ агента остаётся «прочим клиентам без OAuth» и
+Hermes как запасной путь. Основание: Hermes (`tools/mcp_oauth.py` в NousResearch/hermes-agent на SDK
+`mcp`) идёт по CIMD (`https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json`,
+public, loopback-порты 27890–27894), а без `client_id_metadata_document_supported` — по DCR со
+случайным loopback-портом; наш сервер объявляет CIMD, `none`, S256 и сравнивает loopback без порта.
+Замер 2026-10-01 в дев-контуре: документ Hermes скачан, `/register` отвечает 201 на его redirect.
+Не измерено: обмен кода и сессия настоящего Hermes. Device-код Hermes (`oauth.flow: device`) с нашим
+сервером не работает — грант не объявлен. Локальный вход подписывает Hermes именем `agent`
+(семьи `claude` и `codex` в `app/domain/oauth.py`, Hermes среди них нет).
+**Почему важно:** прежние документы называли Hermes клиентом без OAuth по умолчанию и печатали ему
+ключ в `config.yaml`, хотя Hermes входит по OAuth не хуже Claude Code; ключ в файле харнесса — то,
+чего OAuth избегает.
+**Как правильно:** при расхождении с настоящим Hermes сначала смотреть лог службы
+(`OAuth client by CIMD` или `registered by DCR`) и ответ `/authorize`; не возвращать ключ как
+основной путь без замера отказа.
+**Где:** `docs/agent-install.md` (шаг 3), `README.md`, `skills/casefile/SKILL.md`, `install.sh`,
+`install.ps1`, `tests/test_installers.py`, `scripts/check-skill-install.sh`.

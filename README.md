@@ -101,7 +101,9 @@ curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh 
 How to check whether an agent has the skill, and the commands for each harness, are in
 [step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill).
 
-**Clients without OAuth use the agent key.** Hermes, scripts and any client that cannot
+**Hermes signs in with OAuth** (`auth: oauth` in `~/.hermes/config.yaml`; the installer
+prints the block; not yet checked against a real Hermes). **Clients without OAuth use the
+agent key.** Scripts and any client that cannot
 sign in with MCP OAuth connect over streamable HTTP at the MCP address with the agent key
 in a header. The installer prints the key in their blocks; read it again with
 `docker compose run --rm --no-deps -T agent-token cat .secrets/agent-token` in
