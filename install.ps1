@@ -566,6 +566,12 @@ Write-Host '        auth: oauth'
 Write-Host '  The sign-in page opens on the first connection, or: hermes mcp login casefile'
 Write-Host '  hermes skills install azimov777/casefile/skills/casefile'
 Write-Host ''
+Write-Host 'OpenCode (OAuth, no token):' -ForegroundColor White
+Write-Host '  Add to opencode.json (or ~/.config/opencode/opencode.json):'
+Write-Host "    {`"mcp`": {`"casefile`": {`"type`": `"remote`", `"url`": `"$mcpUrl`"}}}"
+Write-Host '  Then sign in once: opencode mcp auth casefile'
+Write-Host '  The skill is the one in ~/.agents/skills/casefile that the step above installed.'
+Write-Host ''
 Write-Host 'Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:' -ForegroundColor White
 Write-Host "  URL     $mcpUrl"
 Write-Host "  Header  Authorization: Bearer $token"

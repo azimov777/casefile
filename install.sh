@@ -542,6 +542,12 @@ main() {
   echo "  The sign-in page opens on the first connection, or: hermes mcp login casefile"
   echo "  hermes skills install azimov777/casefile/skills/casefile"
   echo
+  bold "OpenCode (OAuth, no token):"
+  echo "  Add to opencode.json (or ~/.config/opencode/opencode.json):"
+  echo "    {\"mcp\": {\"casefile\": {\"type\": \"remote\", \"url\": \"$mcp_url\"}}}"
+  echo "  Then sign in once: opencode mcp auth casefile"
+  echo "  The skill is the one in ~/.agents/skills/casefile that the step above installed."
+  echo
   bold "Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:"
   echo "  URL     $mcp_url"
   echo "  Header  Authorization: Bearer $token"
