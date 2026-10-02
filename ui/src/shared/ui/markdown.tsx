@@ -77,8 +77,18 @@ const NODES = {
 /** Заголовок разметки набран кеглем тела: внутри записи он метка раздела, а не голос. */
 const HEADING = 'mt-3 mb-2 text-body font-bold';
 
-/** Рамка у ячеек одна на обе роли: заголовок столбца отличается весом `<th>`, а не линией. */
-const CELL = 'border border-line px-3 py-1 text-left';
+/**
+ * Рамка у ячеек одна на обе роли: заголовок столбца отличается весом `<th>`, а не линией.
+ *
+ * `wrap-break-word` (`overflow-wrap: break-word`) перекрывает унаследованный от обёртки
+ * `wrap-anywhere` (TRK-532). Перенос в обоих один, разница в `min-content`: `anywhere`
+ * считает точкой переноса каждую букву, и `min-content` ячейки падает до ширины буквы.
+ * Автораскладка таблицы, которой не хватает места, сжимает столбцы как раз до `min-content`
+ * — короткий столбец рядом с длинным текстом уходил в столбик по букве («С/и/л/а»).
+ * С `break-word` `min-content` равен самому длинному слову ячейки. Слово длиннее
+ * экрана распирает таблицу, но не страницу: её держит прокрутка обёртки (`Table`).
+ */
+const CELL = 'border border-line px-3 py-1 text-left wrap-break-word';
 
 /**
  * Внутренняя ссылка идёт роутером, внешняя — обычной ссылкой в новую вкладку.
@@ -158,8 +168,18 @@ function Quote({ node: _node, className, ...rest }: ComponentProps<'blockquote'>
   );
 }
 
+/**
+ * Таблица прокручивается вбок в своей обёртке, а не тянет за собой страницу (UI-150):
+ * ячейки переносятся только по словам (`CELL`), и таблица из многих столбцов шире экрана
+ * телефона. Поля `my-2` стоят на обёртке — первым и последним потомком разметки
+ * оказывается она, и `[&>:first-child]:mt-0` у `Markdown` гасит именно её поле.
+ */
 function Table({ node: _node, className, ...rest }: ComponentProps<'table'> & ExtraProps) {
-  return <table {...rest} className={cn('my-2 border-collapse', className)} />;
+  return (
+    <div className="my-2 overflow-x-auto">
+      <table {...rest} className={cn('border-collapse', className)} />
+    </div>
+  );
 }
 
 function HeadCell({ node: _node, className, ...rest }: ComponentProps<'th'> & ExtraProps) {
