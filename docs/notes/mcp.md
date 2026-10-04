@@ -1212,3 +1212,27 @@ TRK-459#30). Решение TRK-140#8 «договор только в instructi
 **Где:** `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`,
 `.cursor-plugin/plugin.json`, `gemini-extension.json`, `server.json`, `scripts/build-openai-plugin.sh`,
 `tests/test_plugin_manifest.py`.
+
+## Claude Desktop связывает расширение с чатом по имени сервера (TRK-514)
+
+**Что:** чат Claude Desktop получает Casefile не плагином, а расширением `casefile.mcpb`: мост
+`mcp-remote` на встроенной в Desktop среде Node. По разбору anthropics/claude-code#70397 Desktop
+отдаёт модели инструменты расширения, только если `name` манифеста равен `serverInfo.name`, который
+сервер вернул на `initialize`; мост пропускает `serverInfo` сервера как есть, поэтому манифест
+назван `tracker`, а на экранах Desktop стоит `display_name` «Casefile». `mcp-remote` пускает `http://`
+только для `localhost` и `127.0.0.1` (`[::1]` — нет, нужен бы `--allow-http`), регистрируется DCR с
+именем клиента из `--static-oauth-client-metadata` («Claude Desktop») и в локальном режиме получает
+участника `agent`. Расширение, поставленное из файла, само не обновляется. У Desktop из Microsoft
+Store папка данных не `%APPDATA%\Claude`, а `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`
+(anthropics/claude-code#25579).
+**Почему важно:** переименовал сервер без манифеста — расширение «включено», `tools/list` проходит,
+а инструменты в чат не попадают ни разу и без ошибки. Дев-контур публикует порты на `0.0.0.0`, и
+локальное согласие без страницы там отказывает: проверка моста на нём без `TRACKER_BIND=127.0.0.1`
+у службы mcp падает на `/authorize` с `access_denied`, хотя у установки всё работает.
+**Как правильно:** имя сервера и манифеста менять вместе (`SERVER_NAME` и `mcpb/manifest.json`,
+равенство держит тест). Мост проверять в контейнере `node` на сети проекта compose, с петлёй
+контейнера, проброшенной на службу mcp, и `TRACKER_BIND=127.0.0.1` у mcp — ссылку входа проходит
+скрипт, браузер на машине не открывается (дело TRK-514, находка #19). Папку Desktop на Windows искать
+в обоих местах.
+**Где:** `mcpb/manifest.json`, `app/mcp/server.py` (`SERVER_NAME`), `tests/test_mcpb_manifest.py`,
+`install.ps1` (`Get-DesktopDirs`), `scripts/build-mcpb.sh`.

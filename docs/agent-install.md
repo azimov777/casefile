@@ -36,12 +36,15 @@ agents through `npx skills`) and prints one line per harness: `installed <versio
 plugin carries the connection too, and the installer then signs them in with OAuth
 (a browser page) — when it has a terminal; without one it prints the sign-in commands
 instead. For Hermes it prints a config block with `auth: oauth` (no token); for other
-clients without OAuth it prints the agent key.
+clients without OAuth it prints the agent key. If it finds the Claude desktop app, it
+downloads the Casefile extension for its chat and opens it (see **Claude Desktop** in step 3).
 
 That step changes files that belong to other programs: `~/.claude/settings.json` (it adds
 `"autoUpdate": true` inside `extraKnownMarketplaces.casefile`), `~/.codex/config.toml`, the
 manual MCP entries `casefile` and `tracker` that point at this installation, and
-`~/.agents/skills`. The installer prints that list; on the user's terminal it asks `[y/N]`,
+`~/.agents/skills`; for Claude Desktop it downloads `casefile.mcpb` into `~/casefile` and opens
+it, and Claude Desktop asks before it installs anything (`claude_desktop_config.json` is not
+touched). The installer prints that list; on the user's terminal it asks `[y/N]`,
 and `N` skips the whole step and leaves those files alone. Before the first change to a
 file it saves a copy next to it (`settings.json.casefile-bak`, `config.toml.casefile-bak`;
 kept, never overwritten; it holds whatever the file held, a token of a removed manual entry
@@ -132,6 +135,42 @@ told to use.
 
 A running session does not pick up a new plugin or MCP server by itself: tell the user to
 restart the session (in Claude Code, `/reload-plugins` and then `/mcp`).
+
+### Claude Desktop: Casefile in the chat app
+
+The chat of the Claude desktop app (macOS and Windows) does not use the Claude Code plugin.
+It gets Casefile from its own extension, `casefile.mcpb`, attached to every release:
+https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb
+
+When the installer of step 2 finds Claude Desktop, it downloads the file to
+`~/casefile/casefile.mcpb` and opens it; its `Claude Desktop` line says so. By hand: download
+the file and double-click it, or in Claude Desktop:
+Settings > Extensions > Advanced settings > Install Extension...
+Claude Desktop shows the extension with an address field: keep `http://127.0.0.1:8100/mcp` for
+an installation on this machine, or put in the MCP address from step 2. Then **Install**.
+Claude Desktop may say the extension is not signed — it is not, it comes from the Casefile
+release on GitHub. The first connection opens a browser page for the OAuth sign-in, which on
+the user's own machine closes at once: the chat is signed in as `agent`, and the board's
+**Access** screen lists the connection as `oauth: Claude Desktop`. To check, ask in a new chat:
+"List my Casefile projects".
+
+- Only the desktop app, and only while the installation runs. claude.ai in a browser and the
+  phone app run their connectors in Anthropic's cloud, which cannot reach this machine.
+- No Node.js needed: the extension carries the `mcp-remote` bridge and runs it on the Node.js
+  built into Claude Desktop.
+- It does not update itself: a newer release's file is installed the same way, over the old one.
+  The installer opens the file only while the extension is missing.
+- If the extension does not install, fall back to an entry in `claude_desktop_config.json`; it
+  needs Node.js 20 or newer for `npx`. The file is
+  `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and
+  `%APPDATA%\Claude\claude_desktop_config.json` on Windows — or, for the Microsoft Store build,
+  `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json`.
+  Add one entry inside `mcpServers` and leave the others as they are, then quit and restart
+  Claude Desktop:
+
+  ```json
+  "casefile": {"command": "npx", "args": ["-y", "mcp-remote@0.14.3", "http://127.0.0.1:8100/mcp"]}
+  ```
 
 ### Joining an installation someone else runs
 

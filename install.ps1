@@ -37,6 +37,8 @@
 #                      идёт, если окно — интерактивный терминал; без него — только печать)
 #   CASEFILE_SKILL_SOURCE  откуда брать маркетплейс скила, по умолчанию azimov777/casefile;
 #                      так шаг проверяют до публикации, как CASEFILE_REGISTRY для образов
+#   CASEFILE_MCPB_URL  откуда качать расширение Claude Desktop `casefile.mcpb`, по умолчанию
+#                      файл выпуска на GitHub (TRK-514); так его тоже проверяют до публикации
 
 $ErrorActionPreference = 'Stop'
 
@@ -67,6 +69,8 @@ $script:LoginClaude = $false
 $script:LoginCodex = $false
 # $true — у Claude Code маркетплейс переведён с прежнего источника (TRK-494, TRK-502).
 $script:ClaudeMoved = $false
+# Куда шаг Claude Desktop кладёт скачанный `casefile.mcpb` (`Install-Skills`, TRK-514).
+$script:McpbFile = ''
 
 function Fail([string] $Message) {
     Write-Host "casefile: $Message" -ForegroundColor Red
@@ -239,7 +243,8 @@ function Confirm-SkillStep {
     $hasCodex = [bool] (Get-Command codex -ErrorAction SilentlyContinue)
     $hasHermes = [bool] (Get-Command hermes -ErrorAction SilentlyContinue)
     $hasNpx = [bool] (Get-Command npx -ErrorAction SilentlyContinue)
-    if (-not ($hasClaude -or $hasCodex -or $hasHermes -or $hasNpx)) { return $true }
+    $hasDesktop = Test-DesktopPending
+    if (-not ($hasClaude -or $hasCodex -or $hasHermes -or $hasNpx -or $hasDesktop)) { return $true }
     Write-Host '  This step changes files that belong to other programs. Before the first change to a file'
     Write-Host '  a copy is saved next to it as <name>.casefile-bak (kept, never overwritten). What it touches:'
     if ($hasClaude) {
@@ -262,6 +267,10 @@ function Confirm-SkillStep {
     }
     if ($hasHermes) { Write-SkillLine 'Hermes' 'hermes skills install (its own skills folder)' }
     if ($hasNpx) { Write-SkillLine 'Other agents' "$(Join-Path $HOME '.agents/skills/casefile') (npx skills add)" }
+    if ($hasDesktop) {
+        Write-SkillLine 'Claude Desktop' "casefile.mcpb is downloaded to $($script:McpbFile) and opened; Claude Desktop then"
+        Write-SkillLine '' 'asks before it installs anything (claude_desktop_config.json is not touched)'
+    }
     if (-not $SkillAsk) {
         Write-Host '  CASEFILE_SKILL=1 is set: going ahead without asking.'
         return $true
@@ -614,7 +623,116 @@ function Install-OtherAgentsSkill {
     }
 }
 
+# --- Claude Desktop (TRK-514) -------------------------------------------------------------
+# Близнец шага из `install.sh`: чат Claude Desktop получает Casefile расширением
+# `casefile.mcpb` из выпуска GitHub (решение TRK-514#5) — мост `mcp-remote` на встроенной в
+# Desktop среде Node, адрес в форме Desktop, вход OAuth. Установщик файл скачивает и
+# открывает (`Start-Process`), ставит его сам Desktop по щелчку человека;
+# `claude_desktop_config.json` никто не правит. Папка данных Desktop — `%APPDATA%\Claude`, а у
+# сборки MSIX — `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`
+# (anthropics/claude-code#25579): ищутся обе. Стоящее расширение узнаётся по адресу
+# репозитория в его распакованном `Claude Extensions\<id>\manifest.json`.
+
+function Get-DesktopDirs {
+    if ($env:APPDATA) {
+        $dir = Join-Path $env:APPDATA 'Claude'
+        if (Test-Path -LiteralPath $dir -PathType Container) { $dir }
+    }
+    if ($env:LOCALAPPDATA) {
+        $packages = Join-Path $env:LOCALAPPDATA 'Packages'
+        if (Test-Path -LiteralPath $packages -PathType Container) {
+            foreach ($package in Get-ChildItem -LiteralPath $packages -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue) {
+                $dir = Join-Path $package.FullName 'LocalCache\Roaming\Claude'
+                if (Test-Path -LiteralPath $dir -PathType Container) { $dir }
+            }
+        }
+    }
+}
+
+# Файл выпуска, названного CASEFILE_VERSION (полная установка — ещё и её `.env`), иначе
+# последнего; CASEFILE_MCPB_URL — свой адрес.
+function Get-McpbUrl {
+    if ($env:CASEFILE_MCPB_URL) { return $env:CASEFILE_MCPB_URL }
+    $mcpbVersion = $env:CASEFILE_VERSION
+    if (-not $mcpbVersion -and -not $SkillOnly) { $mcpbVersion = Get-Setting 'CASEFILE_VERSION' 'stable' }
+    if ($mcpbVersion -match '^[0-9]') {
+        return "https://github.com/azimov777/casefile/releases/download/v$mcpbVersion/casefile.mcpb"
+    }
+    return 'https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb'
+}
+
+# Версия стоящего расширения Casefile (или `installed`); пустая строка — его нет.
+function Get-DesktopExtension {
+    foreach ($dir in @(Get-DesktopDirs)) {
+        $extensions = Join-Path $dir 'Claude Extensions'
+        if (-not (Test-Path -LiteralPath $extensions -PathType Container)) { continue }
+        foreach ($extension in Get-ChildItem -LiteralPath $extensions -Directory -ErrorAction SilentlyContinue) {
+            $manifest = Join-Path $extension.FullName 'manifest.json'
+            if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { continue }
+            $text = Get-Content -LiteralPath $manifest -Raw -ErrorAction SilentlyContinue
+            if ($text -and $text.Contains('github.com/azimov777/casefile')) {
+                if ($text -match '"version"\s*:\s*"([^"]+)"') { return $Matches[1] }
+                return 'installed'
+            }
+        }
+    }
+    return ''
+}
+
+# Шагу есть что делать: Desktop стоит, адрес сервера известен, расширения ещё нет.
+function Test-DesktopPending {
+    return ((@(Get-DesktopDirs).Count -gt 0) -and (-not $script:DefaultUrl) -and (-not (Get-DesktopExtension)))
+}
+
+function Install-DesktopExtension {
+    $url = Get-McpbUrl
+    $byHand = 'double-click it, or in Claude Desktop: Settings > Extensions > Advanced settings > Install Extension...'
+    if ($script:DefaultUrl) {
+        Write-SkillLine 'Claude Desktop' "not set up: it needs your server's address in CASEFILE_URL (or install $url by hand)"
+        return
+    }
+    $found = Get-DesktopExtension
+    if ($found) {
+        Write-SkillLine 'Claude Desktop' "has the Casefile extension ($found); a newer one: $url, $byHand"
+        return
+    }
+    # Адрес по умолчанию у расширения тот же, что у плагина Codex (`mcpb/manifest.json`).
+    if ((ConvertTo-NormalUrl $script:PluginUrl) -eq (ConvertTo-NormalUrl $CodexPluginUrl)) {
+        $address = "keep the address it shows ($CodexPluginUrl)"
+    } else {
+        $address = "put $($script:PluginUrl) into its address field"
+    }
+    $part = "$($script:McpbFile).download"
+    try {
+        # Без -UseBasicParsing PowerShell 5.1 зовёт движок Internet Explorer; полоса прогресса
+        # замедляет загрузку в разы.
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $url -OutFile $part -UseBasicParsing
+        Move-Item -LiteralPath $part -Destination $script:McpbFile -Force
+    } catch {
+        Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue
+        Write-SkillLine 'Claude Desktop' "could not download $url - download it and $byHand; $address"
+        Write-Host "                > $($_.Exception.Message)"
+        return
+    }
+    try {
+        Start-Process -FilePath $script:McpbFile
+        Write-SkillLine 'Claude Desktop' "opened $($script:McpbFile): click Install in Claude Desktop and $address;"
+        Write-SkillLine '' 'its first connection opens a browser page for the sign-in (Node.js is not needed)'
+    } catch {
+        Write-SkillLine 'Claude Desktop' "could not open $($script:McpbFile) - $byHand; $address"
+    }
+}
+
 function Install-Skills {
+    # Полная установка кладёт расширение в свой каталог, `CASEFILE_SKILL_ONLY=1` каталога не
+    # заводит — туда же, куда его положил бы браузер.
+    if ($SkillOnly) {
+        $downloads = Join-Path $HOME 'Downloads'
+        $script:McpbFile = if (Test-Path -LiteralPath $downloads -PathType Container) { Join-Path $downloads 'casefile.mcpb' } else { Join-Path $HOME 'casefile.mcpb' }
+    } else {
+        $script:McpbFile = Join-Path $Dir 'casefile.mcpb'
+    }
     $script:SkillLog = ''
     Write-Host 'Installing the Casefile skill for the agents on this machine:' -ForegroundColor White
     if (-not (Confirm-SkillStep)) { return }
@@ -632,6 +750,11 @@ function Install-Skills {
         Install-OtherAgentsSkill
     } else {
         Write-SkillLine 'Other agents' "npx not found (with Node.js: npx skills add ${SkillSource}#stable)"
+    }
+    if (@(Get-DesktopDirs).Count -gt 0) {
+        Install-DesktopExtension
+    } else {
+        Write-SkillLine 'Claude Desktop' 'not found (run this installer again after installing it)'
     }
     Write-Host '  A running session picks up the plugin after a restart (in Claude Code: /reload-plugins).'
     Write-Host ''
@@ -846,6 +969,12 @@ if ($script:SkillSkipped) {
 }
 Write-Host '  Without the installer: codex plugin marketplace add azimov777/casefile --ref plugin'
 Write-Host '  codex plugin add casefile@casefile'
+Write-Host ''
+Write-Host 'Claude Desktop (the chat app on macOS and Windows; OAuth, no token):' -ForegroundColor White
+Write-Host '  The Casefile extension: https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb'
+Write-Host '  Double-click it (or Settings > Extensions > Advanced settings > Install Extension...), keep or set'
+Write-Host "  the address $mcpUrl and sign in on the page its first connection opens; it works while"
+Write-Host '  this installation runs. No Node.js needed: the extension runs on the one inside Claude Desktop.'
 Write-Host ''
 Write-Host 'Hermes (OAuth, no token):' -ForegroundColor White
 Write-Host '  Add to ~/.hermes/config.yaml:'

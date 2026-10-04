@@ -119,6 +119,13 @@ curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh 
 How to check whether an agent has the skill, and the commands for each harness, are in
 [step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill).
 
+**Claude Desktop gets an extension for its chat.** The chat of the Claude desktop app
+(macOS, Windows) does not load the Claude Code plugin; it gets Casefile from
+[`casefile.mcpb`](https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb),
+attached to every release. The installer downloads and opens it when it finds Claude Desktop;
+by hand, double-click the file. It signs in with OAuth, needs no Node.js and works while the
+installation runs ([details](docs/agent-install.md#claude-desktop-casefile-in-the-chat-app)).
+
 **Hermes signs in with OAuth** (`auth: oauth` in `~/.hermes/config.yaml`; the installer
 prints the block; not yet checked against a real Hermes). **Clients without OAuth use the
 agent key.** Scripts and any client that cannot
