@@ -429,9 +429,11 @@ function Remove-ClaudeMarketplaceEntry {
 # отказ `add` с другим источником, прежний источник снимается и `add` повторяется. У Claude
 # Code — только объявление в settings.json (`marketplace remove` удалил бы и плагин с его
 # настройками), у Codex — `marketplace remove`, после которого плагин остаётся включённым.
+# Отказ Claude Code называется двумя фразами: «differs from the one declared» (до 2.1.289) и
+# «match its extraKnownMarketplaces entry» (с 2.1.289, TRK-550); иная ошибка `add` не в счёт.
 function Add-ClaudeMarketplace([string] $Source) {
     if (Invoke-SkillCmd claude plugin marketplace add $Source) { return $true }
-    if ($script:SkillLast -notmatch 'differs from the one declared') { return $false }
+    if ($script:SkillLast -notmatch 'differs from the one declared|match its extraKnownMarketplaces entry') { return $false }
     if ((Remove-ClaudeMarketplaceEntry) -and (Invoke-SkillCmd claude plugin marketplace add $Source)) {
         $script:ClaudeMoved = $true
         return $true

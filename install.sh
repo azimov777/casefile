@@ -412,13 +412,15 @@ sys.stdout.buffer.write(out.encode("utf-8"))' "$settings" "$1" >"$patched" || re
 # `stable` харнесс выписывал и файлы корня репозитория — `--sparse` в режиме cone берёт их
 # всегда, — и `source: "./"` уносил их в cache плагина. Установка, поставленная со
 # `stable`, держит прежний источник: Claude Code отказывает в `add` с другим источником
-# («differs from the one declared»), Codex — «already added from a different source». Тогда
-# прежний источник снимается и `add` повторяется. У Claude Code снимается только объявление в
+# (до 2.1.289 — «differs from the one declared», с 2.1.289 — «its source doesn't match its
+# extraKnownMarketplaces entry»), Codex — «already added from a different source». Тогда
+# прежний источник снимается и `add` повторяется. Сопоставляются обе фразы Claude Code, и
+# только они: иная ошибка `add` — не повод править settings.json (TRK-550). У Claude Code снимается только объявление в
 # settings.json: `marketplace remove` удалил бы и плагин с его настройками. У Codex
 # `marketplace remove` оставляет плагин включённым, а `plugin add` ниже ставит его заново.
 claude_marketplace_add() {
   skill_run claude plugin marketplace add "$1" && return 0
-  tail -n 5 "$skill_log" | grep -q 'differs from the one declared' || return 1
+  tail -n 5 "$skill_log" | grep -Eq 'differs from the one declared|match its extraKnownMarketplaces entry' || return 1
   claude_settings drop && skill_run claude plugin marketplace add "$1" && CLAUDE_MOVED=1
 }
 

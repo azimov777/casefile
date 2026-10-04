@@ -277,7 +277,8 @@ appeared later:
 
 A plugin added earlier from `#stable` keeps working and updating. To move it to `plugin`,
 run the installer line again, or by hand: Claude Code refuses the new `marketplace add`
-with "differs from the one declared"; delete `casefile` from `extraKnownMarketplaces` in
+("differs from the one declared" before 2.1.289, "its source doesn't match its
+extraKnownMarketplaces entry" since); delete `casefile` from `extraKnownMarketplaces` in
 `~/.claude/settings.json` and repeat it (`marketplace remove` would also uninstall the
 plugin). Codex refuses with "already added from a different source": run
 `codex plugin marketplace remove casefile` and repeat both Codex lines.

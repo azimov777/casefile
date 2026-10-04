@@ -950,6 +950,33 @@ HTTP Claude Code не берёт (нет shallow), нужен `git http-backend`
 `install.ps1` (`Add-ClaudeMarketplace`, `Add-CodexMarketplace`), `scripts/check-skill-install.sh`
 (фаза M), `tests/test_installers.py`. `install.ps1` не исполнялся (нет pwsh): правка по паритету.
 
+## Отказ `marketplace add` у Claude Code называется по-разному в разных версиях: установщик узнаёт обе фразы, а чужие ошибки не считает прежним источником (TRK-550)
+
+**Что:** установка со `stable` переводится на `plugin` только после отказа `add` (TRK-494), и узнаёт
+его установщик по тексту. Claude Code до 2.1.289 писал «its network source differs from the one
+declared for it in settings», с 2.1.289 пишет «Cannot add marketplace "casefile": its source
+doesn't match its extraKnownMarketplaces entry in user or managed settings; add it from the source
+that entry lists, or change the entry.». Прежняя фраза не совпадала с новой: объявление со `stable`
+не снималось, `add` не повторялся, шаг Claude Code кончался «failed - repeat by hand». Codex свой
+отказ («already added from a different source») не менял. Нашла живая проверка TRK-546: она падала в
+фазе M и на `main` без правок TRK-546, а набор тестов был зелёным, потому что заглушка `claude` в
+нём отказывала старой фразой.
+**Почему важно:** сопоставление по тексту — единственное, что отличает «источник другой» от «`add`
+упал по иной причине»: снятие объявления руками правит чужой `settings.json`, и при сетевой ошибке
+делать этого нельзя. Поэтому нельзя ни сопоставлять по общему началу «Cannot add marketplace»
+(его пишет и сеть, и иная ошибка), ни снимать объявление по любому отказу. Когда Claude Code в
+очередной раз переформулирует отказ, перевод тихо сломается снова, и поймает это только прогон с
+настоящим `claude` нужной версии.
+**Как правильно:** сопоставлять конец новой фразы — «match its extraKnownMarketplaces entry», без
+апострофа в «doesn't»: апостроф бывает прямым и типографским, а конец фразы от него не зависит. Обе фразы стоят в одном сопоставлении, в обоих установщиках. Заглушка `claude` в
+тестах берёт слова отказа из `$SCENE/claude-refusal`, тест перевода идёт на обеих
+(`CLAUDE_SOURCE_REFUSALS`), иная ошибка `add` (в том числе «Cannot add marketplace "casefile":
+network down») источник не снимает. После обновления Claude Code — прогнать
+`scripts/check-skill-install.sh` на хосте с настоящими `claude` и `codex`, фаза M.
+**Где:** `install.sh` (`claude_marketplace_add`), `install.ps1` (`Add-ClaudeMarketplace`),
+`tests/test_installers.py` (`FAKE_CLAUDE`, `CLAUDE_SOURCE_REFUSALS`), `scripts/check-skill-install.sh`
+(фаза M). `install.ps1` не исполнялся (нет pwsh): правка по паритету.
+
 ## Вход Claude Code привязан к адресу плагина: установщик без `CASEFILE_URL` адрес не меняет, а при смене называет команду входа (TRK-502)
 
 **Что:** Claude Code хранит вход MCP под ключом `<имя сервера>|sha256(type, url, headers)[:16]`
