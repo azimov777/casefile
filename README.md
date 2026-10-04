@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh 
 irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
-All you need is Docker. The board opens at **http://localhost:8080**, and the installer connects Claude Code and Codex by itself — a plugin and an OAuth sign-in, no token to copy. Casefile updates itself to each new release: it checks once an hour and whenever Docker starts.
+All you need is Docker. The board opens at **http://localhost:8080**, and the installer connects Claude Code and Codex by itself — a plugin and an OAuth sign-in, no token to copy. Casefile updates itself to each new release: it checks once an hour and whenever Docker starts. A small `updater` service does it and holds the Docker socket for that; [you can turn it off](#updates).
 
 **Or let your agent do it.** Paste this into Claude Code, Codex or Cursor:
 
@@ -236,7 +236,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 | | |
 |---|---|
 | Update right now | run the install line again |
-| Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
+| Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile` |
 | Stay on one release | `CASEFILE_VERSION=0.9.4` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
@@ -254,6 +254,19 @@ minute, so a release reaches it within about an hour and ten minutes, with nothi
 restart. Commits to `main` without a tag never reach an installation. The update
 recreates the Casefile containers and keeps your data in its volumes. An agent in the
 middle of an MCP call when that happens gets a dropped connection and has to retry.
+
+**The updater holds the Docker socket.** To replace containers the `updater` service
+mounts `/var/run/docker.sock`, which is root access to the machine; Casefile gives it to
+this one service on purpose (`docker-compose.prod.yml` says why). The installer tells you
+this before it installs and again at the end. To turn auto-update off, put
+`CASEFILE_AUTO_UPDATE=false` into `~/casefile/.env` (exactly `false`: any other value
+leaves it on) and run `docker compose up -d --no-deps updater` in `~/casefile`. The
+service then idles, so the socket stays mounted; `docker compose stop updater` stops it
+until the next `docker compose up` or run of the installer. With auto-update off the
+board tells you when a new release is out: a note at the bottom of the side panel links
+to the release notes, and you update by running the install line again. That note comes
+from a read of the latest release on GitHub, at most once an hour;
+`TRACKER_RELEASE_CHECK=false` in `.env` turns the read off, and the note with it.
 
 The first release on this channel was 0.2.0. An installation from before it (on
 `latest`) moves to `stable` by itself the next time Docker starts, and from then on

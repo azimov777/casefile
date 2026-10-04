@@ -1066,3 +1066,33 @@ PowerShell — `ConvertFrom-Json` и `ConvertTo-Json`) и копии не дел
 **Где:** `install.sh` (`claude_settings`, `backup_once`, `claude_json_file`, `skill_claude`,
 `skill_codex`), `install.ps1` (`Update-ClaudeSettings`, `Edit-ClaudeSettingsText`,
 `Backup-Once`), `tests/test_installers.py` (`SETTINGS_VECTORS`).
+
+## `CASEFILE_AUTO_UPDATE` читает только `updater`, и выключает его лишь точное `false` (TRK-548)
+
+**Что:** переменную читают два места — подстановка `${CASEFILE_AUTO_UPDATE:-true}` в
+окружение службы `updater` и её скрипт, который сверяет значение с `false` дословно. `False`,
+`0`, пустое значение и закомментированная строка автообновление не выключают; побеждает
+последняя строка `.env`. Приложение переменную не читает: настройки берут только `TRACKER_*`,
+хотя compose отдаёт `.env` и контейнерам API через `env_file`. Поэтому плашка «Доступен
+выпуск» в интерфейсе от автообновления не зависит — её решают `TRACKER_RELEASE_CHECK` и
+`TRACKER_ENVIRONMENT=production`, а версию установки даёт `pyproject.toml` образа. Выключенная
+служба остаётся запущенной (спит) и держит сокет Docker смонтированным.
+**Почему важно:** установщик и README говорят человеку, что автообновление включено, по
+`.env`, а не по умолчанию: у того, кто его выключил, строка «обновляется само» была бы
+неправдой, а у того, кто написал `False`, — наоборот. Изменение, из-за которого приложение
+или `updater` начнут читать переменную иначе, расходится с этими строками молча. Чтобы
+увидеть плашку без выпуска новее, версию подменяют, а не выпуск: в сквозном контуре
+интерфейса (`ui/docker-compose.yml`) у `api` ставят `TRACKER_ENVIRONMENT=production` и
+монтируют копию `pyproject.toml` со старой версией поверх `/app/pyproject.toml`; настоящий
+GitHub ответит последним выпуском, плашка покажется. Настоящий `docker-compose.prod.yml` для
+этого поднимать нельзя: его `updater` делает `docker tag` над общими тегами образов
+установки.
+**Как правильно:** слова об автообновлении в `install.sh`, `install.ps1`, README и руководстве
+агента держать вместе и по `.env`: `auto_update_off` сверяет значение так же, как скрипт
+службы (`tests/test_installers.py` проверяет оба конца). Выключение вступает в силу после
+`docker compose up -d --no-deps updater`: переменная попадает в окружение службы при её
+создании, а читает её скрипт при старте.
+**Где:** `install.sh` (`auto_update_off`, `auto_update_intro`, `auto_update_outro`),
+`install.ps1` (`Test-AutoUpdateOff`, `Write-AutoUpdateIntro`, `Write-AutoUpdateOutro`),
+`docker-compose.prod.yml` (`updater`), `app/services/releases.py` (`ReleaseWatch`),
+`tests/test_releases.py` (`test_switching_auto_update_off_does_not_hide_the_new_release`).

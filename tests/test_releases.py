@@ -168,6 +168,28 @@ def test_the_switch_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) 
     assert Settings().release_check is False
 
 
+async def test_switching_auto_update_off_does_not_hide_the_new_release(
+    monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession, task_secret: str, github: FakeGitHub
+) -> None:
+    """Выключил автообновление — плашка «вышел выпуск» остаётся: человек обновляется сам (TRK-548).
+
+    Переменную `CASEFILE_AUTO_UPDATE` читает только служба `updater`
+    (`docker-compose.prod.yml`). Строка из `.env` при этом доходит и до контейнера API
+    (`env_file`), и она ему ничего не говорит: настройки приложения берут только `TRACKER_*`.
+    Тест держит эту независимость: проверку выпуска выключает `TRACKER_RELEASE_CHECK`, а не
+    автообновление.
+    """
+    monkeypatch.setenv("CASEFILE_AUTO_UPDATE", "false")
+    monkeypatch.setenv("TRACKER_ENVIRONMENT", "production")
+
+    async with client_of(Settings(), db_session) as client:
+        data = await read(client, task_secret)
+
+    assert github.calls == 1
+    assert data["update_available"] is True
+    assert data["latest_version"] == "99.0.0"
+
+
 # --- Обзорная проверка 3: два запроса в течение часа — один поход -------------------
 
 

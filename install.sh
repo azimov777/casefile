@@ -98,6 +98,51 @@ setting() {
   printf '%s' "${value:-$2}"
 }
 
+# Автообновление сервера (TRK-548): по умолчанию включено, и человек должен узнать об этом
+# до установки и после неё, вместе с тем, что служба `updater` для этого держит сокет
+# Docker, и как это выключить. Выключено оно только точным `false` в `.env` — так читает
+# его сама служба (`docker-compose.prod.yml`): `False`, `0` и пустое значение оставляют его
+# включённым, и строки об этом печатаются по `.env`, а не по умолчанию. Строки есть только
+# здесь, в полной установке: при `CASEFILE_SKILL_ONLY=1` сервера на машине нет, и слова об
+# его автообновлении были бы неправдой.
+auto_update_off() {
+  [ "$(sed -n 's/^CASEFILE_AUTO_UPDATE=//p' "$DIR/.env" 2>/dev/null | tail -n 1)" = false ]
+}
+
+# До установки: каталог ещё не создан, и человек может остановиться (Ctrl+C), ничего не
+# получив на диск.
+auto_update_intro() {
+  if auto_update_off; then
+    bold "Auto-update is off in this installation (CASEFILE_AUTO_UPDATE=false in $DIR/.env)."
+    echo "  This run installs the latest release. After it, the board tells you when a newer one is out,"
+    echo "  and you update by running this installer again."
+  else
+    bold "Casefile updates itself."
+    echo "  Once installed, its updater service checks for a new release when Docker starts and then every"
+    echo "  hour, and installs it by replacing the Casefile containers; your data stays in its volumes."
+    echo "  To replace containers the updater holds the Docker socket (/var/run/docker.sock), which is"
+    echo "  root access to this machine."
+    echo "  To turn it off, put CASEFILE_AUTO_UPDATE=false into $DIR/.env and run, in $DIR:"
+    echo "    docker compose up -d --no-deps updater"
+    echo "  Then the board tells you when a new release is out, and you update by running this installer again."
+  fi
+  echo
+}
+
+# В конце: тот же факт короткой строкой, с командой выключения (или включения обратно).
+auto_update_outro() {
+  if auto_update_off; then
+    echo "Auto-update is off (CASEFILE_AUTO_UPDATE=false in $DIR/.env): the board tells you when a new release is out;"
+    echo "update by running this installer again. To turn it on, delete that line and run, in $DIR:"
+    echo "  docker compose up -d --no-deps updater"
+  else
+    echo "Updates arrive by themselves: the updater checks for a new release when Docker starts and then every hour,"
+    echo "and holds the Docker socket (/var/run/docker.sock) for that. To turn it off, put CASEFILE_AUTO_UPDATE=false into $DIR/.env and run, in $DIR:"
+    echo "  docker compose up -d --no-deps updater"
+  fi
+  echo "Files and data: $DIR"
+}
+
 # Обновлятор установки на время установщика стоит: иначе его проверка, пришедшаяся на
 # `pull` и `up` установщика, звала бы свой `up`, и два compose останавливали бы контейнеры
 # друг друга (TRK-131). Идущую проверку он доводит до конца. Её видно по файлу
@@ -649,6 +694,8 @@ main() {
       fail "Docker Desktop is set to Windows containers, but Casefile needs Linux containers. Switch to Linux containers (right-click the Docker Desktop tray icon and choose \"Switch to Linux containers...\") and run this again." ;;
   esac
 
+  auto_update_intro
+
   mkdir -p "$DIR"
   cd "$DIR"
 
@@ -796,7 +843,7 @@ main() {
   echo "  (Windows PowerShell: \$env:CASEFILE_SKILL_ONLY=1; \$env:CASEFILE_URL='https://casefile.example.com/mcp'; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)"
   echo
 
-  echo "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $DIR"
+  auto_update_outro
 }
 
 main "$@"

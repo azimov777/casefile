@@ -351,7 +351,9 @@ already have.
 ## 7. Report to the user
 
 In one short message: the board URL, that you are connected, that the Casefile skill is installed, and that Casefile updates
-itself to each new release (it checks every hour). To remove it later: `docker compose down -v` in `~/casefile`.
+itself to each new release (it checks every hour), which is why its `updater` service holds the Docker socket. To turn that
+off: `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile`; the board
+then says when a release is out, and the install line updates it. To remove it later: `docker compose down -v` in `~/casefile`.
 
 Then tell the user what to say to their agent next — the same two phrases the installer
 printed, and the same ones with copy buttons are on the board's `/start` page:
