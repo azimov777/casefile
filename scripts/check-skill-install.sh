@@ -43,6 +43,11 @@
 #      конфигам пуст, в блоках Claude Code и Codex вывода токена нет; без терминала вход
 #      не запускается, печатаются команды. F2: полная установка с адресом не по умолчанию
 #      кладёт Codex запись без токена с этим адресом.
+#   N. ответ «N» (TRK-546): у настоящих `claude` и `codex` в PATH ни одна команда не идёт, файлы
+#      `settings.json`, `.claude.json`, `config.toml` и записи MCP — те же байты, копий `.casefile-bak`
+#      нет, шаг печатает, как поставить плагин позже. M и F проверяют копии: `.casefile-bak` с байтами
+#      до установщика (у Claude Code — и `.claude.json`, откуда уходит ручная запись), а B — что
+#      повторный запуск `settings.json` и копию не меняет.
 #   E. отпечаток `~/.claude/settings.json`, `~/.codex/config.toml` и `ls -la ~/.agents`
 #      совпадает с отпечатком до всех фаз.
 #
@@ -224,13 +229,17 @@ assert_versions() { # $1 — окружение, $2 — версия
     fail "$e: codex plugin list is not at $v: $codex"
   grep -Eq '"autoUpdate": *true' "$WORK/$e/claude/settings.json" ||
     fail "$e: extraKnownMarketplaces.casefile has no autoUpdate: true"
+  python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$WORK/$e/claude/settings.json" ||
+    fail "$e: settings.json is not valid JSON after the point edit"
   note "$e: claude plugin list -> $(echo "$claude" | grep 'Version:' | xargs), codex plugin list -> $(echo "$codex" | grep '^casefile@casefile' | tr -s ' ' | cut -d' ' -f1-4)"
   note "$e: settings.json autoUpdate: $(grep -E '"autoUpdate"' "$WORK/$e/claude/settings.json" | xargs)"
 }
 
 no_secrets() { # $1 — окружение: ни одного токена `trk_` в конфигах харнессов и в HOME
-  if grep -rq 'trk_' "$WORK/$1/claude" "$WORK/$1/codex" "$WORK/$1/home" 2>/dev/null; then
-    grep -rl 'trk_' "$WORK/$1/claude" "$WORK/$1/codex" "$WORK/$1/home" 2>/dev/null | head
+  # Копии `.casefile-bak` — исходное содержимое файлов человека, токен удалённой ручной записи
+  # в них остаётся намеренно (TRK-546), поэтому они не в счёт.
+  if grep -rq --exclude='*.casefile-bak' 'trk_' "$WORK/$1/claude" "$WORK/$1/codex" "$WORK/$1/home" 2>/dev/null; then
+    grep -rl --exclude='*.casefile-bak' 'trk_' "$WORK/$1/claude" "$WORK/$1/codex" "$WORK/$1/home" 2>/dev/null | head
     fail "$1: a token (trk_) is written into a harness config"
   fi
   note "$1: grep -r trk_ over the Claude Code, Codex and HOME of the stand finds nothing"
@@ -298,9 +307,17 @@ harness m codex plugin add casefile@casefile >/dev/null
 grep -rq trk_ "$WORK/m/claude" "$WORK/m/codex" ||
   fail "M: the install from stable carries no trk_: the stand does not reproduce the old state"
 note "M: before: $(grep -rl trk_ "$WORK/m/claude" "$WORK/m/codex" | sed "s#$WORK/##" | tr '\n' ' ')"
+cp "$WORK/m/claude/settings.json" "$WORK/m/settings.before"
+cp "$WORK/m/codex/config.toml" "$WORK/m/config.before"
 run_installer m m1.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "M: exited non-zero: $(tail -5 "$EVIDENCE/m1.out")"
 cat "$EVIDENCE/m1.out" | tee -a "$EVIDENCE/run.log"
 assert_versions m "$V1"
+cmp -s "$WORK/m/settings.before" "$WORK/m/claude/settings.json.casefile-bak" ||
+  fail "M: settings.json.casefile-bak is not the settings.json from before the installer"
+cmp -s "$WORK/m/config.before" "$WORK/m/codex/config.toml.casefile-bak" ||
+  fail "M: config.toml.casefile-bak is not the config.toml from before the installer"
+grep -q 'saved a copy of .*settings.json as settings.json.casefile-bak' "$EVIDENCE/m1.out" ||
+  fail "M: the output does not say that a copy was saved"
 assert_connection m "$SERVER_URL"
 grep -Eq '"ref": *"plugin"' "$WORK/m/claude/settings.json" && ! grep -q sparsePaths "$WORK/m/claude/settings.json" ||
   fail "M: the Claude Code marketplace is not on the plugin branch: $(cat "$WORK/m/claude/settings.json")"
@@ -334,8 +351,11 @@ grep -q "the address changed from $OLD_URL: .*claude mcp login plugin:casefile:c
 note "M2 ok: the address stays without CASEFILE_URL; a changed address prints the sign-in command"
 
 say "B. second run in a row, then shifted stable and plugin branches with a new version"
+cp "$WORK/a/claude/settings.json" "$WORK/a/settings.before"
 run_installer a a2.out "$full_path" CASEFILE_SKILL_ONLY=1 CASEFILE_URL="$SERVER_URL" || fail "B: the second run exited non-zero: $(tail -5 "$EVIDENCE/a2.out")"
 assert_versions a "$V1"
+cmp -s "$WORK/a/settings.before" "$WORK/a/claude/settings.json" ||
+  fail "B: the second run changed settings.json that already had autoUpdate"
 publish_version "$V2"
 [ "$(git -C "$WORK/srv/casefile.git" rev-parse stable)" = "$(git -C "$WORK/repo" rev-parse HEAD)" ] &&
   [ "$(git -C "$WORK/srv/casefile.git" rev-parse plugin)" = "$(git -C "$WORK/repo" rev-parse plugin)" ] ||
@@ -420,9 +440,18 @@ http_headers = { Authorization = "Bearer trk_manualtoken" }
 url = "https://other.example.test/mcp"
 TOML
 grep -rq trk_manualtoken "$WORK/f/claude" "$WORK/f/codex" || fail "F: the stand has no manual token to remove"
+[ -f "$WORK/f/claude/.claude.json" ] ||
+  fail "F: claude mcp add did not write .claude.json into CLAUDE_CONFIG_DIR: the installer copies it by that path"
+cp "$WORK/f/claude/.claude.json" "$WORK/f/claude-json.before"
+cp "$WORK/f/codex/config.toml" "$WORK/f/config.before"
 run_installer f f1.out "$WORK/d/path" SCENE="$WORK/d/scene" MCP_URL="$LIVE_URL" || fail "F: the full install exited non-zero: $(tail -5 "$EVIDENCE/f1.out")"
 cat "$EVIDENCE/f1.out" | tee -a "$EVIDENCE/run.log"
 grep -q 'Claude Code .*removed the manual MCP entry "casefile"' "$EVIDENCE/f1.out" || fail "F: Claude Code manual entry not reported removed"
+cmp -s "$WORK/f/claude-json.before" "$WORK/f/claude/.claude.json.casefile-bak" ||
+  fail "F: .claude.json.casefile-bak is not the .claude.json from before the removal (the manual entry with its token)"
+grep -q trk_manualtoken "$WORK/f/claude/.claude.json.casefile-bak" || fail "F: the copy of .claude.json lost the removed entry"
+cmp -s "$WORK/f/config.before" "$WORK/f/codex/config.toml.casefile-bak" ||
+  fail "F: config.toml.casefile-bak is not the config.toml from before the removal"
 grep -q 'Codex .*removed the manual MCP entry "casefile"' "$EVIDENCE/f1.out" || fail "F: Codex manual entry not reported removed"
 grep -q 'Claude Code .*left the MCP entry "tracker"' "$EVIDENCE/f1.out" || fail "F: Claude Code foreign tracker entry not left"
 grep -q 'Codex .*left the MCP entry "tracker"' "$EVIDENCE/f1.out" || fail "F: Codex foreign tracker entry not left"
@@ -454,6 +483,28 @@ assert_connection f2 https://casefile.stand.test/mcp
 grep -A1 '^\[mcp_servers.casefile\]' "$WORK/f2/codex/config.toml" | grep -q 'url = "https://casefile.stand.test/mcp"' || fail "F2: config.toml has no casefile entry"
 no_secrets f2
 note "F2 ok"
+
+say "N. the answer N: the real claude and codex are on the PATH, and not one command of theirs runs, not one byte of their files changes"
+new_env n
+harness n claude mcp add --transport http --scope user casefile http://localhost:18552/mcp \
+  --header "Authorization: Bearer trk_manualtoken" >/dev/null
+cp "$WORK/f/config.before" "$WORK/n/codex/config.toml"
+printf '{"model": "opus", "extraKnownMarketplaces": {"casefile": {"source": {"source": "git", "url": "u", "ref": "plugin"}}}}\n' >"$WORK/n/claude/settings.json"
+printf 'n\n' >"$WORK/n/tty"
+sums() { (cd "$WORK/$1" && shasum claude/settings.json claude/.claude.json codex/config.toml | cut -d' ' -f1 && find . -type f | LC_ALL=C sort | grep -v -e '^./tty$' -e '^./casefile-dir/'); }
+sums n >"$WORK/n.before"
+run_installer n n1.out "$WORK/d/path" SCENE="$WORK/d/scene" MCP_URL="http://localhost:18552/mcp" CASEFILE_TTY="$WORK/n/tty" ||
+  fail "N: the full install exited non-zero: $(tail -5 "$EVIDENCE/n1.out")"
+cat "$EVIDENCE/n1.out" | tee -a "$EVIDENCE/run.log"
+sums n >"$WORK/n.after"
+diff "$WORK/n.before" "$WORK/n.after" || fail "N: a file of the harnesses changed or appeared after the answer N (diff above)"
+grep -q 'Casefile is running' "$EVIDENCE/n1.out" || fail "N: the service step did not run"
+grep -q 'Skipped: no file of another program was touched' "$EVIDENCE/n1.out" || fail "N: the output does not say the step was skipped"
+grep -q 'CASEFILE_SKILL=1 sh' "$EVIDENCE/n1.out" || fail "N: the output does not say how to install the plugin later"
+! grep -q 'signed in\|Signing the agents in' "$EVIDENCE/n1.out" || fail "N: a sign-in started after N"
+[ -z "$(find "$WORK/n" -name '*.casefile-bak')" ] || fail "N: a copy was made although nothing was changed"
+harness n claude mcp list | grep -q '^casefile:' || fail "N: the manual Claude Code entry is gone after N"
+note "N ok: nothing of the harnesses changed after N; the manual entry stays; the service step ran"
 
 say "E. the owner's settings are as they were"
 fingerprint >"$EVIDENCE/fingerprint-after.txt"
