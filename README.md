@@ -81,6 +81,24 @@ claude mcp login plugin:casefile:casefile
 codex mcp login casefile
 ```
 
+**The installer asks before it changes anything of another program.** The plugin step edits
+files that are not Casefile's: Claude Code's `~/.claude/settings.json` (one line,
+`"autoUpdate": true`, inside `extraKnownMarketplaces.casefile`), Codex's
+`~/.codex/config.toml`, the manual MCP entries `casefile` and `tracker` that point at this
+installation, and `~/.agents/skills`. It prints that list and asks `[y/N]` on your terminal
+(also under `curl … | sh`); `N` skips the whole plugin step, leaves those files alone and
+installs the service as usual. Before the first change to a file it saves a copy next to
+it — `settings.json.casefile-bak`, `config.toml.casefile-bak`, kept and never overwritten —
+and it writes only the line it needs, leaving the rest of the file as it was. The copy
+holds whatever the file held, a token of a manual entry the installer removes included:
+delete it when you no longer need it. These variables go in front of `sh`:
+
+- `CASEFILE_SKILL=0` skips the plugin step; `CASEFILE_SKILL=1` answers the question in
+  advance. Without a terminal (an agent, CI) nothing is asked and the step runs, as it does
+  with `1`.
+- `CASEFILE_PLUGIN_AUTOUPDATE=0` installs the Claude Code plugin without `autoUpdate`;
+  update it yourself with `claude plugin update casefile@casefile`.
+
 The same commands sign an agent in again after you disconnect it on the board's
 **Access** screen (in a Claude Code session, `/mcp` → `casefile` → **Re-authenticate**).
 On your own machine the sign-in needs no password: Claude Code acts as `claude`, Codex as

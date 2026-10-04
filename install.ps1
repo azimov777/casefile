@@ -15,7 +15,14 @@
 # Обе последние, а также CASEFILE_PORT, TRACKER_MCP_PORT и COMPOSE_PROJECT_NAME (если заданы)
 # записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
-#   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
+#   CASEFILE_SKILL     0 — не ставить скил агентам этой машины; 1, названная явно, — «да» заранее,
+#                      без вопроса. Без неё в интерактивном окне перед шагом печатается список
+#                      файлов чужих программ, которые он изменит, и спрашивается «y/N»; «N»
+#                      пропускает шаг целиком (сервер при этом ставится как обычно). Без
+#                      интерактивного окна (агент, CI) вопроса нет, шаг идёт как при 1
+#                      (TRK-408, TRK-546)
+#   CASEFILE_PLUGIN_AUTOUPDATE  0 — плагин Claude Code ставится, но `"autoUpdate": true` в
+#                      его settings.json не пишется (по умолчанию 1, TRK-546)
 #   CASEFILE_SKILL_ONLY  1 — только агенты этой машины: без Docker, без каталога установки и
 #                      без токена; для машины, которая подключается к Casefile на сервере.
 #                      Адрес сервера в `CASEFILE_URL` — для чужого сервера, и только https (http — лишь для
@@ -36,6 +43,13 @@ $ErrorActionPreference = 'Stop'
 $Dir = if ($env:CASEFILE_DIR) { $env:CASEFILE_DIR } else { Join-Path $HOME 'casefile' }
 $Compose = 'docker-compose.prod.yml'
 $SkillOn = $env:CASEFILE_SKILL -ne '0'
+# $true — перед шагом скила спросить «y/N», если есть кого (`Test-CanAsk`); явно названная
+# `CASEFILE_SKILL` — ответ заранее, вопроса нет (TRK-546).
+$SkillAsk = [string]::IsNullOrEmpty($env:CASEFILE_SKILL)
+$PluginAutoUpdate = $env:CASEFILE_PLUGIN_AUTOUPDATE -ne '0'
+# $true — шаг скила не выполнялся: человек ответил «N» (TRK-546); итог по нему не печатает
+# про плагин то, чего нет.
+$script:SkillSkipped = $false
 $SkillOnly = $env:CASEFILE_SKILL_ONLY -eq '1'
 $SkillSource = if ($env:CASEFILE_SKILL_SOURCE) { $env:CASEFILE_SKILL_SOURCE } else { 'azimov777/casefile' }
 $LoginOn = $env:CASEFILE_LOGIN -ne '0'
@@ -112,44 +126,256 @@ function Write-SkillFailed([string] $Name, [string] $Retry) {
         ForEach-Object { Write-Host "                > $_" }
 }
 
-# `"autoUpdate": true` рядом с `source` в extraKnownMarketplaces.casefile: у сторонних
-# маркетплейсов Claude Code обновляет плагин сам только с ним, а флага в CLI нет (TRK-406).
-# Файл переписывается, только если ключа не было; без BOM.
-function Set-ClaudeAutoUpdate {
+# --- Согласие и копии (TRK-546) -----------------------------------------------------------
+# Близнец одноимённого шага из `install.sh`. Шаг скила меняет файлы чужих программ:
+# `settings.json` Claude Code, `config.toml` Codex, их записи MCP, `~/.agents/skills`. Он идёт
+# с согласия человека, а перед первой правкой файла рядом остаётся его копия
+# `<имя>.casefile-bak` (TRK-527#7: Beads потерял доверие тем, что переписывал
+# `~/.claude/settings.json` без вопроса).
+
+function Get-ClaudeSettingsPath {
     $dir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
-    $file = Join-Path $dir 'settings.json'
-    if (-not (Test-Path $file)) { return $false }
+    return (Join-Path $dir 'settings.json')
+}
+
+# Пользовательские и локальные записи MCP Claude Code лежат не в settings.json, а в
+# `.claude.json`: `claude mcp remove` правит его, и копия нужна ему.
+function Get-ClaudeJsonPath {
+    $dir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { $HOME }
+    return (Join-Path $dir '.claude.json')
+}
+
+function Get-CodexConfigPath {
+    $dir = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+    return (Join-Path $dir 'config.toml')
+}
+
+# Спросить можно только в интерактивном окне: ни ввод, ни вывод не перенаправлены, службой
+# окно не является и PowerShell запущен без -NonInteractive (там Read-Host бросает
+# исключение). Под `irm | iex` скрипт приходит по конвейеру, а не по stdin, поэтому
+# `IsInputRedirected` остаётся ложью, пока окно - консоль человека; агент или CI с трубами
+# получает «нельзя» и идёт по CASEFILE_SKILL, не дожидаясь ответа.
+function Test-CanAsk {
     try {
-        $settings = [System.IO.File]::ReadAllText($file) | ConvertFrom-Json
-        $entry = $settings.extraKnownMarketplaces.casefile
-        if (-not $entry) { return $false }
-        if ($entry.autoUpdate -eq $true) { return $true }
-        $entry | Add-Member -NotePropertyName autoUpdate -NotePropertyValue $true -Force
-        $json = $settings | ConvertTo-Json -Depth 20
-        [System.IO.File]::WriteAllText($file, $json + "`n", (New-Object System.Text.UTF8Encoding($false)))
+        if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { return $false }
+        if (-not [Environment]::UserInteractive) { return $false }
+    } catch { return $false }
+    foreach ($arg in [Environment]::GetCommandLineArgs()) {
+        if ($arg -like '-non*') { return $false }
+    }
+    return $true
+}
+
+# Копия кладётся один раз и дальше не затирается: повторный запуск видит файл уже тронутым и
+# должен сохранить исходный. Нет файла - копировать нечего ($true). Не вышло - $false: файл
+# тогда не меняется, а вызывающий пропускает свой шаг.
+function Backup-Once([string] $Label, [string] $File) {
+    if (-not (Test-Path -LiteralPath $File -PathType Leaf)) { return $true }
+    $copy = "$File.casefile-bak"
+    if (Test-Path -LiteralPath $copy) { return $true }
+    try {
+        Copy-Item -LiteralPath $File -Destination $copy -ErrorAction Stop
+        Write-SkillLine $Label "saved a copy of $File as $(Split-Path -Leaf $copy) (the original, kept: it is never overwritten)"
+        return $true
+    } catch {
+        Write-SkillLine $Label "could not save a copy of $File, so nothing in it was changed"
+        return $false
+    }
+}
+
+# Что шаг изменит, и вопрос. $true - идти дальше, $false - человек ответил «N»: шаг пропущен
+# целиком (сервер уже стоит). Список печатается и без окна - в журнале агента или CI видно,
+# что было тронуто. Строится по найденным харнессам и режиму, как в `install.sh`: чужие
+# записи MCP убираются, только если адрес известен, а config.toml Codex получает запись,
+# только если адрес не тот, что зашит в его плагине.
+function Confirm-SkillStep {
+    $hasClaude = [bool] (Get-Command claude -ErrorAction SilentlyContinue)
+    $hasCodex = [bool] (Get-Command codex -ErrorAction SilentlyContinue)
+    $hasHermes = [bool] (Get-Command hermes -ErrorAction SilentlyContinue)
+    $hasNpx = [bool] (Get-Command npx -ErrorAction SilentlyContinue)
+    if (-not ($hasClaude -or $hasCodex -or $hasHermes -or $hasNpx)) { return $true }
+    Write-Host '  This step changes files that belong to other programs. Before the first change to a file'
+    Write-Host '  a copy is saved next to it as <name>.casefile-bak (kept, never overwritten). What it touches:'
+    if ($hasClaude) {
+        Write-SkillLine 'Claude Code' "$(Get-ClaudeSettingsPath): the claude command adds the plugin there"
+        if ($PluginAutoUpdate) {
+            Write-SkillLine '' 'and "autoUpdate": true goes into extraKnownMarketplaces.casefile (CASEFILE_PLUGIN_AUTOUPDATE=0 leaves it out)'
+        }
+        if (-not $script:DefaultUrl) {
+            Write-SkillLine '' "the manual MCP entries `"casefile`" and `"tracker`" at $($script:PluginUrl) are removed ($(Get-ClaudeJsonPath); its copy keeps them)"
+        }
+    }
+    if ($hasCodex) {
+        Write-SkillLine 'Codex' "$(Get-CodexConfigPath): the codex command adds the plugin there"
+        if ((ConvertTo-NormalUrl $script:PluginUrl) -ne (ConvertTo-NormalUrl $CodexPluginUrl)) {
+            Write-SkillLine '' "and the lines [mcp_servers.casefile] url = `"$($script:PluginUrl)`" are appended"
+        }
+        if (-not $script:DefaultUrl) {
+            Write-SkillLine '' "the manual MCP entries `"casefile`" and `"tracker`" at $($script:PluginUrl) are removed (its copy keeps them)"
+        }
+    }
+    if ($hasHermes) { Write-SkillLine 'Hermes' 'hermes skills install (its own skills folder)' }
+    if ($hasNpx) { Write-SkillLine 'Other agents' "$(Join-Path $HOME '.agents/skills/casefile') (npx skills add)" }
+    if (-not $SkillAsk) {
+        Write-Host '  CASEFILE_SKILL=1 is set: going ahead without asking.'
+        return $true
+    }
+    if (-not (Test-CanAsk)) {
+        Write-Host '  No terminal to ask on, so it goes ahead (CASEFILE_SKILL=0 skips it).'
+        return $true
+    }
+    $answer = $null
+    try { $answer = Read-Host '  Install the plugin and make these changes? [y/N]' } catch { $answer = $null }
+    if ($null -eq $answer) {
+        Write-Host '  No terminal to ask on, so it goes ahead (CASEFILE_SKILL=0 skips it).'
+        return $true
+    }
+    if ($answer.Trim() -match '^(?i:y|yes)$') { return $true }
+    $script:SkillSkipped = $true
+    $later = '$env:CASEFILE_SKILL=1; '
+    if ($SkillOnly) { $later += '$env:CASEFILE_SKILL_ONLY=1; ' }
+    if ($env:CASEFILE_URL) { $later += "`$env:CASEFILE_URL='$($env:CASEFILE_URL)'; " }
+    Write-Host '  Skipped: no file of another program was touched. To install the plugin later, run the'
+    Write-Host '  installer again and answer y ($env:CASEFILE_SKILL=1 before it skips the question):'
+    Write-Host "    ${later}irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex"
+    Write-Host '  Or by hand: docs/agent-install.md, step 4'
+    Write-Host '  (https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md).'
+    Write-Host ''
+    return $false
+}
+
+# Объявление маркетплейса `casefile` в settings.json Claude Code правится точечно, как в
+# `install.sh` (TRK-546): файл не пересобирается разбором и обратной сборкой JSON (она
+# переформатирует всё и портит значения: целое больше 2^64 становится объектом, замер на
+# PowerShell 7.4), а получает ровно одну текстовую вставку. Узел находится сканером по
+# тексту, вставка проверяется разбором. Тот же алгоритм, что в `install.sh`.
+function Skip-JsonWs([string] $t, [int] $i) {
+    while ($i -lt $t.Length) {
+        $c = $t[$i]
+        if ($c -eq ' ' -or $c -eq "`t" -or $c -eq "`r" -or $c -eq "`n" -or $c -eq [char]0xFEFF) { $i++ } else { break }
+    }
+    return $i
+}
+
+function Get-JsonStringEnd([string] $t, [int] $i) {
+    $i++
+    while ($t[$i] -ne '"') {
+        if ($t[$i] -eq '\') { $i += 2 } else { $i++ }
+    }
+    return $i + 1
+}
+
+function Get-JsonValueEnd([string] $t, [int] $i) {
+    $c = $t[$i]
+    if ($c -eq '"') { return (Get-JsonStringEnd $t $i) }
+    if ($c -eq '{' -or $c -eq '[') {
+        $depth = 0
+        while ($true) {
+            $c = $t[$i]
+            if ($c -eq '"') { $i = Get-JsonStringEnd $t $i; continue }
+            if ($c -eq '{' -or $c -eq '[') { $depth++ } elseif ($c -eq '}' -or $c -eq ']') { $depth-- }
+            $i++
+            if ($depth -eq 0) { return $i }
+        }
+    }
+    while ($i -lt $t.Length -and " `t`r`n,}]".IndexOf($t[$i]) -lt 0) { $i++ }
+    return $i
+}
+
+# Члены объекта, открытого в `$t[$open]`: ключ вместе с кавычками и границы ключа (KS, KE) и
+# значения (VS, VE).
+function Get-JsonMembers([string] $t, [int] $open) {
+    $list = New-Object System.Collections.ArrayList
+    $i = Skip-JsonWs $t ($open + 1)
+    while ($t[$i] -ne '}') {
+        $ks = $i
+        $ke = Get-JsonStringEnd $t $i
+        $i = Skip-JsonWs $t $ke
+        $vs = Skip-JsonWs $t ($i + 1)
+        $ve = Get-JsonValueEnd $t $vs
+        [void] $list.Add([pscustomobject] @{ Key = $t.Substring($ks, $ke - $ks); KS = $ks; KE = $ke; VS = $vs; VE = $ve })
+        $i = Skip-JsonWs $t $ve
+        if ($t[$i] -eq ',') { $i = Skip-JsonWs $t ($i + 1) }
+    }
+    return , $list
+}
+
+function Find-JsonMember($members, [string] $name) {
+    foreach ($m in $members) {
+        if ($m.Key -ceq ('"' + $name + '"')) { return $m }
+    }
+    return $null
+}
+
+# Новый текст; `$null` - узла нет (`auto_update` без объявления `casefile`); без объявления
+# `drop` не меняет ничего.
+function Edit-ClaudeSettingsText([string] $Text, [string] $Op) {
+    $tm = Find-JsonMember (Get-JsonMembers $Text (Skip-JsonWs $Text 0)) 'extraKnownMarketplaces'
+    $km = @()
+    if ($tm -and $Text[$tm.VS] -eq '{') { $km = Get-JsonMembers $Text $tm.VS }
+    $mc = Find-JsonMember $km 'casefile'
+    if (-not $mc -or $Text[$mc.VS] -ne '{') {
+        if ($Op -ne 'drop') { return $null }
+        return $Text
+    }
+    if ($Op -eq 'drop') {
+        $i = $km.IndexOf($mc)
+        if ($km.Count -eq 1) { return $Text.Substring(0, $tm.VS + 1) + $Text.Substring($mc.VE) }
+        if ($i -lt $km.Count - 1) { return $Text.Substring(0, $mc.KS) + $Text.Substring($km[$i + 1].KS) }
+        return $Text.Substring(0, $km[$i - 1].VE) + $Text.Substring($mc.VE)
+    }
+    $cm = Get-JsonMembers $Text $mc.VS
+    $au = Find-JsonMember $cm 'autoUpdate'
+    if ($au) { return $Text.Substring(0, $au.VS) + 'true' + $Text.Substring($au.VE) }
+    if ($cm.Count -eq 0) { return $Text.Substring(0, $mc.VS + 1) + '"autoUpdate": true' + $Text.Substring($mc.VS + 1) }
+    $first = $cm[0]
+    $end = $cm[$cm.Count - 1].VE
+    $lead = $Text.Substring($mc.VS + 1, $first.KS - $mc.VS - 1)
+    $sep = $Text.Substring($first.KE, $first.VS - $first.KE)
+    return $Text.Substring(0, $end) + ',' + $lead + '"autoUpdate"' + $sep + 'true' + $Text.Substring($end)
+}
+
+# Вставка разбирается как JSON и проверяется на нужный результат; иначе файл не пишется.
+function Test-ClaudeSettingsText([string] $Text, [string] $Op) {
+    try {
+        $entry = ($Text | ConvertFrom-Json).extraKnownMarketplaces.casefile
+        if ($Op -eq 'drop') { return (-not $entry) }
+        return ($entry.autoUpdate -eq $true)
+    } catch {
+        return $false
+    }
+}
+
+# Файл пишется, только если изменился, в той же кодировке (BOM, если был) и с теми же
+# концами строк. Копию `.casefile-bak` кладёт `Backup-Once` до первой команды харнесса.
+function Update-ClaudeSettings([string] $Op) {
+    $file = Get-ClaudeSettingsPath
+    if (-not (Test-Path -LiteralPath $file)) { return $false }
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($file)
+        $bom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+        $text = [System.IO.File]::ReadAllText($file)
+        $new = Edit-ClaudeSettingsText $text $Op
+        if ($null -eq $new) { return $false }
+        if ($new -ceq $text) { return $true }
+        if (-not (Test-ClaudeSettingsText $new $Op)) { return $false }
+        [System.IO.File]::WriteAllText($file, $new, (New-Object System.Text.UTF8Encoding($bom)))
         return $true
     } catch {
         return $false
     }
 }
 
-# Близнец `claude_settings drop` из `install.sh`: убирает объявление маркетплейса `casefile`
+# `"autoUpdate": true` последним ключом extraKnownMarketplaces.casefile: у сторонних
+# маркетплейсов Claude Code обновляет плагин сам только с ним, а флага в CLI нет (TRK-406).
+function Set-ClaudeAutoUpdate {
+    return (Update-ClaudeSettings 'auto_update')
+}
+
+# Близнец `claude_settings drop` из `install.sh`: вырезает объявление маркетплейса `casefile`
 # из settings.json, чтобы установка ушла с прежнего источника (TRK-494).
 function Remove-ClaudeMarketplaceEntry {
-    $dir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
-    $file = Join-Path $dir 'settings.json'
-    if (-not (Test-Path $file)) { return $false }
-    try {
-        $settings = [System.IO.File]::ReadAllText($file) | ConvertFrom-Json
-        $known = $settings.extraKnownMarketplaces
-        if (-not $known) { return $false }
-        $known.PSObject.Properties.Remove('casefile')
-        $json = $settings | ConvertTo-Json -Depth 20
-        [System.IO.File]::WriteAllText($file, $json + "`n", (New-Object System.Text.UTF8Encoding($false)))
-        return $true
-    } catch {
-        return $false
-    }
+    return (Update-ClaudeSettings 'drop')
 }
 
 # Маркетплейс плагина — узкая ветка `plugin` (TRK-494), близнец `claude_marketplace_add` и
@@ -205,7 +431,7 @@ function Remove-ClaudeEntries {
         if (-not $url) { continue }
         if ((ConvertTo-NormalUrl $url) -eq (ConvertTo-NormalUrl $script:PluginUrl)) {
             $flag = switch ($scope) { 'User' { 'user' } 'Local' { 'local' } default { '' } }
-            if ($flag -and (Invoke-SkillCmd claude mcp remove $name --scope $flag)) {
+            if ($flag -and (Backup-Once 'Claude Code' (Get-ClaudeJsonPath)) -and (Invoke-SkillCmd claude mcp remove $name --scope $flag)) {
                 Write-SkillLine 'Claude Code' "removed the manual MCP entry `"$name`" ($url, $flag scope): the plugin carries the connection"
             } else {
                 Write-SkillLine 'Claude Code' "left the manual MCP entry `"$name`" ($url, $scope scope): remove it by hand: claude mcp remove $name"
@@ -236,6 +462,7 @@ function Remove-CodexEntries {
 }
 
 function Install-ClaudeSkill {
+    if (-not (Backup-Once 'Claude Code' (Get-ClaudeSettingsPath))) { return }
     $src = "${SkillSource}#plugin"
     $url = $script:PluginUrl
     $note = $script:DefaultNote
@@ -258,7 +485,9 @@ function Install-ClaudeSkill {
     if (-not ($m.Success -and $m.Groups[2].Value -match 'enabled')) { Write-SkillFailed 'Claude Code' $retry; return }
     $version = $m.Groups[1].Value
     if (-not $script:DefaultUrl) { $script:LoginClaude = $true }
-    if (Set-ClaudeAutoUpdate) {
+    if (-not $PluginAutoUpdate) {
+        Write-SkillLine 'Claude Code' "installed $version, connected to $url$note (automatic updates not switched on, as CASEFILE_PLUGIN_AUTOUPDATE=0 says; to update by hand: claude plugin update casefile@casefile)"
+    } elseif (Set-ClaudeAutoUpdate) {
         Write-SkillLine 'Claude Code' "installed $version (updates itself), connected to $url$note"
     } else {
         Write-SkillLine 'Claude Code' "installed $version, connected to $url$note (automatic updates not switched on: add `"autoUpdate`": true inside extraKnownMarketplaces.casefile in settings.json)"
@@ -284,6 +513,7 @@ function Set-CodexUrl {
 }
 
 function Install-CodexSkill {
+    if (-not (Backup-Once 'Codex' (Get-CodexConfigPath))) { return }
     $retry = "codex plugin marketplace add $SkillSource --ref plugin; codex plugin add casefile@casefile"
     if (-not $script:DefaultUrl) { Remove-CodexEntries }
     $ok = (Add-CodexMarketplace) -and
@@ -339,6 +569,7 @@ function Install-OtherAgentsSkill {
 function Install-Skills {
     $script:SkillLog = ''
     Write-Host 'Installing the Casefile skill for the agents on this machine:' -ForegroundColor White
+    if (-not (Confirm-SkillStep)) { return }
     foreach ($h in @(
             @{ Exe = 'claude'; Name = 'Claude Code'; Run = { Install-ClaudeSkill } },
             @{ Exe = 'codex'; Name = 'Codex'; Run = { Install-CodexSkill } },
@@ -411,7 +642,7 @@ if ($SkillOnly) {
         Fail 'CASEFILE_URL must be an https:// address (http:// only for localhost): outside the local machine the service offers the OAuth sign-in over https only'
     }
     try { Install-Skills } catch { Write-Host "casefile: the skill step failed: $_" -ForegroundColor Red }
-    if ($script:DefaultUrl) {
+    if ($script:DefaultUrl -and -not $script:SkillSkipped) {
         Write-Host "The plugin carries the skill and points at the default address $($script:PluginUrl); no sign-in was started."
         Write-Host 'To connect Claude Code and Codex to your server, run this again with its address:'
         Write-Host '  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh'
@@ -546,14 +777,23 @@ if ($SkillOn) {
 # печатается только харнессам без OAuth. Команды дословно те же, что в `install.sh` и
 # `docs/agent-install.md`; `tests/test_installers.py` сверяет их.
 Write-Host 'Claude Code:' -ForegroundColor White
-Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth,"
-Write-Host '  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile'
+if ($script:SkillSkipped) {
+    Write-Host '  The plugin is not installed: you skipped that step. It carries the skill and the connection'
+    Write-Host "  to $mcpUrl; once installed, sign in with: claude mcp login plugin:casefile:casefile"
+} else {
+    Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth,"
+    Write-Host '  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile'
+}
 Write-Host '  Without the installer: claude plugin marketplace add azimov777/casefile#plugin'
 Write-Host "  claude plugin install casefile@casefile --scope user --config casefile_url=$mcpUrl"
 Write-Host ''
 Write-Host 'Codex:' -ForegroundColor White
-Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth."
-Write-Host '  If it did not run above: codex mcp login casefile'
+if ($script:SkillSkipped) {
+    Write-Host '  The plugin is not installed: you skipped that step. Once installed, sign in with: codex mcp login casefile'
+} else {
+    Write-Host "  The plugin carries the skill and the connection to $mcpUrl; the sign-in is OAuth."
+    Write-Host '  If it did not run above: codex mcp login casefile'
+}
 Write-Host '  Without the installer: codex plugin marketplace add azimov777/casefile --ref plugin'
 Write-Host '  codex plugin add casefile@casefile'
 Write-Host ''
@@ -570,7 +810,7 @@ Write-Host 'OpenCode (OAuth, no token):' -ForegroundColor White
 Write-Host '  Add to opencode.json (or ~/.config/opencode/opencode.json):'
 Write-Host "    {`"mcp`": {`"casefile`": {`"type`": `"remote`", `"url`": `"$mcpUrl`"}}}"
 Write-Host '  Then sign in once: opencode mcp auth casefile'
-Write-Host '  The skill is the one in ~/.agents/skills/casefile that the step above installed.'
+if (-not $script:SkillSkipped) { Write-Host '  The skill is the one in ~/.agents/skills/casefile that the step above installed.' }
 Write-Host ''
 Write-Host 'Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:' -ForegroundColor White
 Write-Host "  URL     $mcpUrl"

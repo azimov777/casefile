@@ -37,7 +37,23 @@ plugin carries the connection too, and the installer then signs them in with OAu
 (a browser page) — when it has a terminal; without one it prints the sign-in commands
 instead. For Hermes it prints a config block with `auth: oauth` (no token); for other
 clients without OAuth it prints the agent key.
-`CASEFILE_SKILL=0` in front of the install line skips that step.
+
+That step changes files that belong to other programs: `~/.claude/settings.json` (it adds
+`"autoUpdate": true` inside `extraKnownMarketplaces.casefile`), `~/.codex/config.toml`, the
+manual MCP entries `casefile` and `tracker` that point at this installation, and
+`~/.agents/skills`. The installer prints that list; on the user's terminal it asks `[y/N]`,
+and `N` skips the whole step and leaves those files alone. Before the first change to a
+file it saves a copy next to it (`settings.json.casefile-bak`, `config.toml.casefile-bak`;
+kept, never overwritten; it holds whatever the file held, a token of a removed manual entry
+included) and writes only the line it needs. An agent usually has no terminal
+to answer on, and then the installer asks nothing: tell the user what it will change before
+you run it. Variables, in front of `sh`:
+
+- `CASEFILE_SKILL=0` skips the plugin step (the service is installed all the same);
+  `CASEFILE_SKILL=1` answers the question in advance. Put `CASEFILE_SKILL=0` in front if the
+  user does not want the step.
+- `CASEFILE_PLUGIN_AUTOUPDATE=0` installs the Claude Code plugin without `autoUpdate`; update
+  it with `claude plugin update casefile@casefile`.
 
 If port 8080 or 8100 is taken, put `CASEFILE_PORT=<free port>` and/or
 `TRACKER_MCP_PORT=<free port>` into `~/casefile/.env` and run the install line again.
