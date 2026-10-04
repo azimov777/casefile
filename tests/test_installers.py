@@ -509,7 +509,10 @@ case "$*" in
   "plugin marketplace add"*)
     mkdir -p "$CLAUDE_CONFIG_DIR"
     if grep -q '"ref": *"stable"' "$CLAUDE_CONFIG_DIR/settings.json" 2>/dev/null; then
-      echo 'its network source differs from the one declared for it in settings' >&2
+      # Слова отказа зависят от версии Claude Code (TRK-550): берутся из `$SCENE/claude-refusal`,
+      # без него — слова до 2.1.289.
+      if [ -f "$SCENE/claude-refusal" ]; then cat "$SCENE/claude-refusal" >&2
+      else echo 'its network source differs from the one declared for it in settings' >&2; fi
       exit 1
     fi
     # Объявление уже на нужной ветке — настоящий `add` пишет «already on disk» и файл не
@@ -663,6 +666,17 @@ def test_the_skill_step_installs_updates_and_reports_each_harness_found(tmp_path
     assert '"autoUpdate": true' in settings
 
 
+#: Как Claude Code отказывает в `marketplace add` с другим источником, чем объявленный в
+#: settings.json: слова зависят от версии (TRK-550). Вторые — настоящий вывод 2.1.289.
+CLAUDE_SOURCE_REFUSALS = {
+    "before 2.1.289": "its network source differs from the one declared for it in settings\n",
+    "since 2.1.289": (
+        'Cannot add marketplace "casefile": its source doesn\'t match its extraKnownMarketplaces '
+        "entry in user or managed settings; add it from the source that entry lists, or change "
+        "the entry.\n"
+    ),
+}
+
 #: Объявление маркетплейса у установки, поставленной до TRK-494: `stable` со `--sparse`, с
 #: включённым плагином, его адресом и автообновлением.
 OLD_CLAUDE_SETTINGS = {
@@ -682,12 +696,15 @@ OLD_CLAUDE_SETTINGS = {
 }
 
 
+@pytest.mark.parametrize("refusal", CLAUDE_SOURCE_REFUSALS.values(), ids=CLAUDE_SOURCE_REFUSALS)
 def test_an_installation_from_stable_moves_to_the_plugin_branch_and_keeps_the_plugin(
-    tmp_path: Path,
+    tmp_path: Path, refusal: str
 ) -> None:
     """Прежний источник `stable` снимается только после отказа `add` (TRK-494): у Claude
     Code — объявлением в settings.json, а не `marketplace remove`, который удалил бы и плагин
-    с его настройками; у Codex — `marketplace remove`. Затем `add` повторяется на `plugin`."""
+    с его настройками; у Codex — `marketplace remove`. Затем `add` повторяется на `plugin`.
+    Отказ Claude Code называется по-разному в разных версиях, и снимается источник при обоих
+    (TRK-550)."""
     env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX)
     settings_path = tmp_path / "claude" / "settings.json"
     settings_path.parent.mkdir()
@@ -695,7 +712,7 @@ def test_an_installation_from_stable_moves_to_the_plugin_branch_and_keeps_the_pl
     done, calls = _install(
         tmp_path,
         extra_env={"CASEFILE_SKILL_ONLY": "1", "CASEFILE_URL": SERVER, **env},
-        **{"codex-stable": ""},
+        **{"codex-stable": "", "claude-refusal": refusal},
     )
 
     assert done.returncode == 0, done.stderr
@@ -726,11 +743,19 @@ def test_an_installation_from_stable_moves_to_the_plugin_branch_and_keeps_the_pl
     )
 
 
-def test_another_add_failure_is_not_taken_for_an_old_source(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "network down",
+        # Общее начало нового отказа ещё не отказ о несовпадении источника.
+        'Cannot add marketplace "casefile": network down',
+    ],
+)
+def test_another_add_failure_is_not_taken_for_an_old_source(tmp_path: Path, failure: str) -> None:
     """Источник снимается только при отказе «другой источник»: иная ошибка `add` — строка
     с командой повтора, settings.json не трогается."""
     add = '"plugin marketplace add"*)\n'
-    failing = FAKE_CLAUDE.replace(add, add + '    echo "network down" >&2; exit 1\n', 1)
+    failing = FAKE_CLAUDE.replace(add, add + f"    echo '{failure}' >&2; exit 1\n", 1)
     env = _with_harnesses(tmp_path, claude=failing)
     settings_path = tmp_path / "claude" / "settings.json"
     settings_path.parent.mkdir()
@@ -1050,6 +1075,7 @@ PLUGIN_STEPS = (
     "--config casefile_url=",
     "--ref plugin",
     "differs from the one declared",
+    "match its extraKnownMarketplaces entry",
     "plugin configure casefile@casefile --json",
     "kept the address it had",
     "the address changed from",
@@ -1080,6 +1106,19 @@ def test_both_installers_carry_the_plugin_and_sign_in_steps() -> None:
             assert step in text, f"{name} не содержит {step!r}"
         # Прежние ручные записи убираются под обоими именами и только в своих областях.
         assert "'casefile', 'tracker'" in text or "casefile tracker" in text, name
+
+
+def test_both_installers_take_both_wordings_of_the_claude_code_source_refusal() -> None:
+    """Фразы отказа — в одном сопоставлении, а не одна в строке, другая рядом в комментарии
+    (TRK-550): прежняя установка со `stable` переводится на `plugin` при любой из них."""
+    for name, text in (("install.sh", _read(INSTALL_SH)), ("install.ps1", _read(INSTALL_PS1))):
+        lines = [
+            line
+            for line in text.splitlines()
+            if not line.lstrip().startswith("#") and "differs from the one declared" in line
+        ]
+        assert len(lines) == 1, name
+        assert "match its extraKnownMarketplaces entry" in lines[0], name
 
 
 def test_install_ps1_prints_no_token_in_the_claude_code_and_codex_blocks() -> None:

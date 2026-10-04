@@ -28,6 +28,10 @@
 #      файлы корня; прогон установщика переводит оба харнесса на ветку `plugin` — источник в
 #      settings.json и config.toml, `autoUpdate` на месте, маркетплейсы и cache Codex без `trk_`;
 #      вывод называет команду входа Claude Code на случай «Needs authentication» (TRK-502).
+#      Отказ `claude plugin marketplace add` о прежнем источнике называется по-разному в разных
+#      версиях Claude Code («differs from the one declared», с 2.1.289 — «its source doesn't match
+#      its extraKnownMarketplaces entry»): фаза идёт с версией, что стоит на хосте, поэтому только
+#      она ловит очередную смену слов (TRK-550).
 #   M2. плагин уже стоит с адресом `localhost`: прогон без `CASEFILE_URL` адрес оставляет, прогон
 #      с другим адресом печатает «the address changed from …» с командой входа (TRK-502).
 #   B. второй прогон подряд (идемпотентность), затем ветки `stable` и `plugin` сдвинуты на
