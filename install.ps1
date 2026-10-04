@@ -94,6 +94,52 @@ function Get-Setting([string] $Name, [string] $Default) {
     return $Default
 }
 
+# Автообновление сервера (TRK-548), близнец `auto_update_*` из `install.sh`: до установки и
+# после неё человек читает, что Casefile обновляет себя сам, что служба `updater` держит для
+# этого сокет Docker и как это выключить. Выключено оно только точным `false` в `.env` (так
+# читает его сама служба: `False`, `0` и пустое значение оставляют его включённым), и строки
+# печатаются по `.env`, а не по умолчанию. Только в полной установке: при
+# `CASEFILE_SKILL_ONLY=1` сервера на машине нет.
+function Test-AutoUpdateOff {
+    $envFile = Join-Path $Dir '.env'
+    if (-not (Test-Path $envFile)) { return $false }
+    $line = Get-Content $envFile | Where-Object { $_ -match '^CASEFILE_AUTO_UPDATE=' } | Select-Object -Last 1
+    return [bool]($line -and $line.Substring('CASEFILE_AUTO_UPDATE='.Length).Trim() -ceq 'false')
+}
+
+# До установки: каталог ещё не создан, и человек может остановиться (Ctrl+C).
+function Write-AutoUpdateIntro {
+    if (Test-AutoUpdateOff) {
+        Write-Host "Auto-update is off in this installation (CASEFILE_AUTO_UPDATE=false in $(Join-Path $Dir '.env'))." -ForegroundColor White
+        Write-Host '  This run installs the latest release. After it, the board tells you when a newer one is out,'
+        Write-Host '  and you update by running this installer again.'
+    } else {
+        Write-Host 'Casefile updates itself.' -ForegroundColor White
+        Write-Host '  Once installed, its updater service checks for a new release when Docker starts and then every'
+        Write-Host '  hour, and installs it by replacing the Casefile containers; your data stays in its volumes.'
+        Write-Host '  To replace containers the updater holds the Docker socket (/var/run/docker.sock), which is'
+        Write-Host '  root access to this machine.'
+        Write-Host "  To turn it off, put CASEFILE_AUTO_UPDATE=false into $(Join-Path $Dir '.env') and run, in $Dir`:"
+        Write-Host '    docker compose up -d --no-deps updater'
+        Write-Host '  Then the board tells you when a new release is out, and you update by running this installer again.'
+    }
+    Write-Host ''
+}
+
+# В конце: тот же факт короткой строкой, с командой выключения (или включения обратно).
+function Write-AutoUpdateOutro {
+    if (Test-AutoUpdateOff) {
+        Write-Host "Auto-update is off (CASEFILE_AUTO_UPDATE=false in $(Join-Path $Dir '.env')): the board tells you when a new release is out;"
+        Write-Host "update by running this installer again. To turn it on, delete that line and run, in $Dir`:"
+        Write-Host '  docker compose up -d --no-deps updater'
+    } else {
+        Write-Host 'Updates arrive by themselves: the updater checks for a new release when Docker starts and then every hour,'
+        Write-Host "and holds the Docker socket (/var/run/docker.sock) for that. To turn it off, put CASEFILE_AUTO_UPDATE=false into $(Join-Path $Dir '.env') and run, in $Dir`:"
+        Write-Host '  docker compose up -d --no-deps updater'
+    }
+    Write-Host "Files and data: $Dir"
+}
+
 # --- Скил во все найденные харнессы (TRK-408, решения TRK-401#11, #18) -------------------
 # Близнец шага из `install.sh`: для каждого найденного `claude`, `codex`, `hermes` —
 # маркетплейс и плагин, для прочих агентов — `npx skills`; всё идемпотентно, токен в файлы
@@ -668,6 +714,8 @@ if ($osType -eq 'windows') {
     Fail 'Docker Desktop is set to Windows containers, but Casefile needs Linux containers. Switch to Linux containers (right-click the Docker Desktop tray icon and choose "Switch to Linux containers...") and run this again.'
 }
 
+Write-AutoUpdateIntro
+
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 Set-Location $Dir
 
@@ -843,4 +891,4 @@ Write-Host '  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/ma
 Write-Host '  (Windows PowerShell: $env:CASEFILE_SKILL_ONLY=1; $env:CASEFILE_URL=''https://casefile.example.com/mcp''; irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex)'
 Write-Host ''
 
-Write-Host "Updates arrive by themselves: Casefile checks for a new release every hour. Files and data: $Dir"
+Write-AutoUpdateOutro

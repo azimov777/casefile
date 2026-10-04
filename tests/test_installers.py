@@ -1820,3 +1820,146 @@ def test_the_new_variables_are_described_where_people_look() -> None:
         text = _read(path)
         assert "CASEFILE_PLUGIN_AUTOUPDATE" in text, path.name
         assert ".casefile-bak" in text, path.name
+
+
+# --- Автообновление сервера названо до установки и после неё (TRK-548) ------------------------
+#
+# Служба `updater` по умолчанию обновляет установку сама и держит для этого сокет Docker.
+# Человек должен прочесть об этом, пока ещё может остановиться, и в итоге, вместе с тем, как
+# это выключить. Решение владельца (TRK-548#6): автообновление остаётся, переключатель остаётся.
+
+SOCKET = "/var/run/docker.sock"
+AUTO_UPDATE_OFF = "CASEFILE_AUTO_UPDATE=false"
+#: Правка `.env` вступает в силу, когда обновлятор пересоздан: переменную читает его
+#: скрипт, а в окружение она попадает при создании контейнера. Той же командой
+#: `scripts/check-auto-update.sh` (фаза E) переключает его в живой проверке.
+RESTART_UPDATER = "docker compose up -d --no-deps updater"
+INTRO = "Casefile updates itself."
+OUTRO = "Updates arrive by themselves"
+OFF_INTRO = "Auto-update is off in this installation"
+OFF_OUTRO = "Auto-update is off (CASEFILE_AUTO_UPDATE=false"
+ENV_OFF = "COMPOSE_FILE=docker-compose.prod.yml\nCASEFILE_AUTO_UPDATE=false\n"
+
+
+def test_the_installer_says_before_it_installs_that_it_updates_itself(tmp_path: Path) -> None:
+    done, _ = _install(tmp_path)
+
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    intro = out[out.index(INTRO) : out.index("Installing Casefile into")]
+    assert SOCKET in intro, "строка до установки не называет сокет Docker"
+    assert AUTO_UPDATE_OFF in intro
+    assert f"{tmp_path / 'casefile' / '.env'}" in intro, "не названо, какой файл править"
+    assert RESTART_UPDATER in intro, "не названо, что перезапустить"
+    assert OFF_INTRO not in out and OFF_OUTRO not in out
+
+
+def test_the_intro_comes_before_anything_is_created_or_downloaded() -> None:
+    """Каталога ещё нет, образов ещё нет: человек может остановиться, ничего не получив."""
+    text = _read(INSTALL_SH)
+    main = text[text.index("main() {") :]
+
+    assert main.index("Docker is not running") < main.index("auto_update_intro\n")
+    assert main.index("auto_update_intro\n") < main.index('mkdir -p "$DIR"')
+    assert main.index("auto_update_intro\n") < main.index("docker pull")
+
+
+def test_the_final_output_repeats_it_with_the_command_to_turn_it_off(tmp_path: Path) -> None:
+    done, _ = _install(tmp_path)
+
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    assert out.index("Tell your agent what to do:") < out.index(OUTRO)
+    outro = out[out.index(OUTRO) :]
+    assert SOCKET in outro and AUTO_UPDATE_OFF in outro and RESTART_UPDATER in outro
+    assert f"Files and data: {tmp_path / 'casefile'}" in outro
+
+
+def test_an_installation_with_auto_update_off_is_not_told_that_it_updates_itself(
+    tmp_path: Path,
+) -> None:
+    """Повторный запуск у того, кто выключил: «обновляется само» было бы неправдой."""
+    done, _ = _install(tmp_path, dotenv=ENV_OFF)
+
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    assert OFF_INTRO in out and OFF_OUTRO in out
+    assert INTRO not in out and OUTRO not in out
+    assert "running this installer again" in out, "не сказано, чем обновляться"
+    assert "delete that line" in out and RESTART_UPDATER in out, "не сказано, как включить"
+
+
+@pytest.mark.parametrize(
+    "dotenv",
+    [
+        "CASEFILE_AUTO_UPDATE=False\n",
+        "CASEFILE_AUTO_UPDATE=0\n",
+        "CASEFILE_AUTO_UPDATE=\n",
+        "CASEFILE_AUTO_UPDATE=true\n",
+        "CASEFILE_AUTO_UPDATE=false\nCASEFILE_AUTO_UPDATE=true\n",
+        "# CASEFILE_AUTO_UPDATE=false\n",
+    ],
+)
+def test_only_an_exact_false_in_env_means_off_as_the_updater_reads_it(
+    tmp_path: Path, dotenv: str
+) -> None:
+    """Служба сверяет значение с `false` дословно, последняя строка `.env` побеждает."""
+    done, _ = _install(tmp_path, dotenv=f"COMPOSE_FILE=docker-compose.prod.yml\n{dotenv}")
+
+    assert done.returncode == 0, done.stderr
+    assert INTRO in done.stdout and OUTRO in done.stdout
+    assert OFF_INTRO not in done.stdout
+
+
+def test_the_updater_compares_the_switch_with_an_exact_false() -> None:
+    """Слова установщиков и README «точное `false`» держатся на этой строке compose-файла."""
+    compose = _read(PROJECT_ROOT / "docker-compose.prod.yml")
+    assert '[ "$$CASEFILE_AUTO_UPDATE" = "false" ]' in compose
+
+
+def test_skill_only_says_nothing_about_updating_a_server_that_is_not_there(
+    tmp_path: Path,
+) -> None:
+    """При `CASEFILE_SKILL_ONLY=1` сервера на машине нет, и его автообновления тоже."""
+    done, _ = _install(tmp_path, extra_env={"CASEFILE_SKILL_ONLY": "1"})
+
+    assert done.returncode == 0, done.stderr
+    for phrase in (INTRO, OUTRO, OFF_INTRO, OFF_OUTRO, SOCKET, "updater"):
+        assert phrase not in done.stdout, phrase
+
+
+def test_install_ps1_says_the_same_before_and_after() -> None:
+    text = _read(INSTALL_PS1)
+
+    for phrase in (
+        INTRO,
+        OUTRO,
+        OFF_INTRO,
+        OFF_OUTRO,
+        SOCKET,
+        AUTO_UPDATE_OFF,
+        RESTART_UPDATER,
+        "delete that line",
+        "running this installer again",
+    ):
+        assert phrase in text, f"install.ps1 не содержит {phrase!r}"
+    assert text.index("Docker is not running") < text.index("Write-AutoUpdateIntro\n")
+    assert text.index("Write-AutoUpdateIntro\n") < text.index(
+        "New-Item -ItemType Directory -Force -Path $Dir"
+    )
+    assert text.rstrip().endswith("Write-AutoUpdateOutro"), "итог — последняя строка установщика"
+    assert text.index("if ($SkillOnly)") < text.index("Write-AutoUpdateIntro\n"), (
+        "режим только скила уходит раньше: про автообновление сервера он молчит"
+    )
+    assert "-ceq 'false'" in text, "PowerShell сравнивает без учёта регистра, служба — дословно"
+
+
+def test_the_readme_and_the_guide_name_the_socket_and_the_way_to_turn_it_off() -> None:
+    for path in (PROJECT_ROOT / "README.md", AGENT_GUIDE):
+        text = _read(path)
+        assert "updater" in text and AUTO_UPDATE_OFF in text, path.name
+        assert RESTART_UPDATER in text, f"{path.name}: не названо, что перезапустить"
+    readme = _read(PROJECT_ROOT / "README.md")
+    assert SOCKET in readme, "README не говорит, что служба держит сокет Docker"
+    assert "TRACKER_RELEASE_CHECK=false" in readme, "README не называет выключатель плашки"
+    assert "docker socket" in _read(AGENT_GUIDE).lower()
