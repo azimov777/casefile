@@ -73,13 +73,19 @@ from app.services.oauth import LocalConsent
 
 logger = get_logger("mcp")
 
-__all__ = ["INSTRUCTIONS", "INSTRUCTIONS_PATH", "create_server"]
+__all__ = ["INSTRUCTIONS", "INSTRUCTIONS_PATH", "SERVER_NAME", "create_server"]
 
 #: Текст `instructions`: лежит рядом со сборкой и уезжает в образ вместе с `app/`.
 INSTRUCTIONS_PATH = Path(__file__).with_name("instructions.md")
 
 #: То, что сервер отдаёт в `initialize`. Концевой перевод строки файла клиенту не нужен.
 INSTRUCTIONS = INSTRUCTIONS_PATH.read_text(encoding="utf-8").strip()
+
+#: `serverInfo.name` в ответе на `initialize`. Тем же именем назван манифест расширения
+#: Claude Desktop (`mcpb/manifest.json`, поле `name`): по разбору anthropics/claude-code#70397
+#: Desktop отдаёт чату инструменты расширения, только если имена равны, а иначе молча их
+#: не вызывает (решение TRK-514#20). Равенство держит `tests/test_mcpb_manifest.py`.
+SERVER_NAME = "tracker"
 
 
 def create_server(
@@ -165,7 +171,7 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
             )
         }
     server = CasefileServer(
-        name="tracker",
+        name=SERVER_NAME,
         title="Tracker",
         version=__version__,
         instructions=INSTRUCTIONS,

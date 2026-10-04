@@ -1,0 +1,48 @@
+# Кладёт расширение Claude Desktop `casefile.mcpb` в GitHub Release выпуска (TRK-514).
+#
+# Срабатывает на публикацию Release, а не на тег: Release координатор создаёт руками
+# (`gh release create`, `docs/DEVELOPMENT.md`, раздел «Выпуск») уже после тега, и на тег
+# прикреплять архив ещё некуда. Release, созданный своим токеном человека, событие запускает;
+# созданный GITHUB_TOKEN — нет (так устроен GitHub), поэтому есть и ручной запуск с тегом —
+# им же повторяют упавшую сборку.
+#
+# Архив собирается из кода тега тем же `scripts/build-mcpb.sh`, что и локально: версия
+# манифеста `mcpb/manifest.json` обязана равняться версии выпуска, иначе сборка падает и
+# Release остаётся без архива. Имя файла без версии: установщики и инструкция качают его по
+# постоянному адресу `releases/latest/download/casefile.mcpb` (`--clobber` заменяет архив
+# при повторе). Сбой здесь образы и реестр не трогает: это отдельный потребитель выпуска.
+
+name: Claude Desktop extension
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.10.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  mcpb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # gh release upload
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Build casefile.mcpb
+        run: scripts/build-mcpb.sh "$RUNNER_TEMP/mcpb"
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP/mcpb/casefile.mcpb" --clobber

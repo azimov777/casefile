@@ -933,9 +933,11 @@ e2e` в этот скрипт не входит — им сливают ветк
 `pyproject.toml`, `uv.lock` (`docker compose run --rm lock`), `ui/package.json`, `openapi.json`,
 пример `CASEFILE_VERSION` в `README.md`, заметки `docs/release-notes/vX.Y.Z.md` и пять файлов плагина
 скила — `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (`version` в плагине и в
-записи маркетплейса, `metadata.version`), `.codex-plugin/plugin.json` (манифест для Codex и каталога OpenAI), `.cursor-plugin/plugin.json` (манифест для Cursor) и корневой `gemini-extension.json` (расширение Gemini CLI, TRK-497):
-Claude Code без новой `version` не обновит скил; `scripts/build-plugin-branch.sh` не соберёт ветку `plugin`, если версия любого из манифестов разошлась с выпуском.
-`tests/test_plugin_manifest.py` краснеет, если версии разошлись.
+записи маркетплейса, `metadata.version`), `.codex-plugin/plugin.json` (манифест для Codex и каталога OpenAI), `.cursor-plugin/plugin.json` (манифест для Cursor) и корневой `gemini-extension.json` (расширение Gemini CLI, TRK-497),
+а также манифест расширения Claude Desktop `mcpb/manifest.json` (TRK-514):
+Claude Code без новой `version` не обновит скил; `scripts/build-plugin-branch.sh` не соберёт ветку `plugin`, если версия любого из манифестов разошлась с выпуском,
+а `scripts/build-mcpb.sh` — архив расширения.
+`tests/test_plugin_manifest.py` и `tests/test_mcpb_manifest.py` краснеют, если версии разошлись.
 Оба файла плагина проверяет и джоб `plugin` в `ci.yml` — `claude plugin validate --strict .` на закреплённой
 версии Claude Code (`CLAUDE_CODE_VERSION` в джобе); `images.yml` зовёт `ci.yml` как `checks`, поэтому нарушение
 краснит и проверки PR, и выпуск до публикации образов (TRK-441). Локально: `CLAUDE_CONFIG_DIR=$(mktemp -d) claude plugin validate --strict . </dev/null`.
@@ -943,6 +945,17 @@ Claude Code без новой `version` не обновит скил; `scripts/b
 ZIP плагина для каталога OpenAI собирает `scripts/build-openai-plugin.sh [каталог]` (по умолчанию `dist/`,
 вне git): `.codex-plugin/`, `skills/` и `LICENSE`, падает при расхождении версии; манифест в архиве без `mcpServers`, `mcp.json` не кладётся (TRK-503). Загрузка на
 platform.openai.com/plugins — отдельный шаг по слову владельца (TRK-459).
+
+Расширение чата Claude Desktop `casefile.mcpb` (формат MCPB, TRK-514) собирает
+`scripts/build-mcpb.sh [каталог]` (по умолчанию `dist/`): манифест из `mcpb/`, иконка плагина и
+мост `mcp-remote` с зависимостями по `mcpb/package-lock.json`, в контейнере `node` (`npm ci`,
+`mcpb validate`, `mcpb pack`); на хосте нужны Docker и python3. Архив кладётся в GitHub Release
+сам: публикация Release запускает `.github/workflows/mcpb.yml`, который собирает его из кода тега
+и прикрепляет файлом `casefile.mcpb` (имя без версии — у последнего выпуска постоянный адрес
+`releases/latest/download/casefile.mcpb`, его качают установщики). Упала сборка — повтор вручную
+тем же workflow с тегом (`gh workflow run mcpb.yml -f tag=vX.Y.Z`). Новая версия `mcp-remote` —
+правка `mcpb/package.json` и `npm install --package-lock-only` в контейнере `node`, затем
+локальная сборка и проверка моста (дело `TRK-514`).
 
 Тег пушится раньше `main` — иначе автообновятель прежней установки успел бы забрать файл
 compose, который зовёт канал `stable` до того, как тот на него укажет (комментарий в
@@ -980,6 +993,9 @@ curl https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.azim
 
 Затем идут площадки. GitHub Release руками создают из заметок к выпуску:
 `gh release create vX.Y.Z --verify-tag --title "Casefile vX.Y.Z" --notes-file docs/release-notes/vX.Y.Z.md --latest`.
+Через минуту-две `gh release view vX.Y.Z --json assets` называет `casefile.mcpb` — его прикрепил
+`mcpb.yml`. До этого установщик с `main` не скачает расширение и напечатает ручной путь, поэтому
+Release создают сразу за пушем `main`.
 От него сама обновляется версия в Glama (Auto-Release). Что на каких площадках (GitHub,
 Glama, mcp.so, списки awesome, каталоги поверх реестра) обновляется само, а что руками и где, —
 таблица в деле `TRK-138#12`.
