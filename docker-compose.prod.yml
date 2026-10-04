@@ -89,7 +89,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "08d84d6dc4fc"
+x-updater-revision: &updater-revision "75f2c08fdd98"
 
 services:
   db:
@@ -274,6 +274,12 @@ services:
   # `…:failed`. Пока под тегом канала стоит он же, проверки его не пробуют, а следующий
   # выпуск идёт как обычно (TRK-122, `docs/notes/docker.md`).
   #
+  # Выпуск, который меняет схему базы, обновлятор предваряет снимком `pg_dump -Fc`. Снимок
+  # лежит в именованном томе `updater-snapshot` (в контейнере — `/snapshot`) и остаётся там
+  # после обновления: контейнер обновлятора пересоздаётся, и в его `/tmp` копия пропала бы
+  # вместе с ним. Копия одна: следующий удачный снимок затирает прежний, а неудачный его не
+  # трогает. Где лежит и как восстановить — `docs/backup-restore.md` (TRK-547).
+  #
   # Чужой `up` служба не перебивает: не прочёлся этот файл или состояние служб — проверка
   # пропускается, а не зовёт `up`; идёт разовый шаг, `docker compose run` или первая
   # проверка здоровья — ждёт тишины или пропускает. Установщик дожидается конца её
@@ -302,6 +308,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/project
+      - updater-snapshot:/snapshot
     environment:
       COMPOSE_FILE: docker-compose.prod.yml
       CASEFILE_AUTO_UPDATE: ${CASEFILE_AUTO_UPDATE:-true}
@@ -498,10 +505,19 @@ services:
             docker compose up -d --no-deps db api mcp ui && settled
         }
 
-        # Снимок базы на время обновления с миграцией (TRK-134): формат и команда те же, что
-        # у ручной процедуры (`docs/backup-restore.md`), — годится и для ручного `pg_restore`.
-        # Лежит в своём `/tmp`, не в каталоге установки.
-        SNAPSHOT=/tmp/casefile-before-update.dump
+        # Снимок базы перед обновлением с миграцией (TRK-134): формат и команда те же, что у
+        # ручной процедуры (`docs/backup-restore.md`), — годится и для ручного `pg_restore`.
+        # Лежит в именованном томе `updater-snapshot`, а не в `/tmp` контейнера и не в
+        # каталоге установки: контейнер обновлятора пересоздаётся, и его `/tmp` пропал бы
+        # вместе с ним (TRK-547). Копия одна: её затирает только следующий удачный снимок.
+        SNAPSHOT=/snapshot/before-update.dump
+
+        # Имя тома со снимком, каким его видит Docker, — по монтированию этого контейнера,
+        # а не по догадке `<проект>_updater-snapshot`.
+        snapshot_volume() {
+          docker inspect -f '{{range .Mounts}}{{if eq .Destination "/snapshot"}}{{.Name}}{{end}}{{end}}' \
+            "$$(hostname)" 2>/dev/null
+        }
 
         # Ревизия схемы базы; пусто — базы или таблицы версии нет.
         schema_revision() {
@@ -516,9 +532,17 @@ services:
             awk 'NR == 1 { print $$1 }'
         }
 
+        # Снимок пишется во временный файл в том же томе и занимает место прежнего, только
+        # когда не пуст: неудачный снимок не должен стереть прежний удачный.
         take_snapshot() {
-          docker compose exec -T db sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' \
-            </dev/null >"$$SNAPSHOT" 2>/dev/null && [ -s "$$SNAPSHOT" ]
+          rm -f "$$SNAPSHOT.part"
+          if docker compose exec -T db sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' \
+            </dev/null >"$$SNAPSHOT.part" 2>/dev/null && [ -s "$$SNAPSHOT.part" ]; then
+            mv -f "$$SNAPSHOT.part" "$$SNAPSHOT"
+          else
+            rm -f "$$SNAPSHOT.part"
+            return 1
+          fi
         }
 
         # Базу — в вид снимка одной транзакцией: схема `public` заново, затем SQL снимка.
@@ -581,19 +605,20 @@ services:
             return 0
           fi
           # Выпуск несёт миграцию — снимок базы до неё: откат вернёт базу в этот вид.
-          # Без миграции снимка нет: платить за него на каждом обновлении незачем.
-          rm -f "$$SNAPSHOT"
+          # Без миграции снимка нет: платить за него на каждом обновлении незачем. Прежний
+          # снимок в томе при этом остаётся, но откату он не годится: `taken` пуст.
+          taken=
           schema_before=$$(schema_revision)
           schema_after=$$([ -z "$$schema_before" ] || image_head "$$(image_of api)")
           if [ -n "$$schema_after" ] && [ "$$schema_after" != "$$schema_before" ]; then
             if ! take_snapshot; then
-              rm -f "$$SNAPSHOT"
               [ -z "$$changed" ] || cat /tmp/previous-compose.yml >"$$COMPOSE_FILE"
               hold_back
               log "could not take a snapshot of the database before a release that changes it; not updating this time"
               return 0
             fi
-            log "the release changes the database ($$schema_before -> $$schema_after); snapshot taken first ($$(wc -c <"$$SNAPSHOT") bytes)"
+            taken=1
+            log "the release changes the database ($$schema_before -> $$schema_after); snapshot taken first ($$(wc -c <"$$SNAPSHOT") bytes), kept in the volume $$(snapshot_volume) as $$(basename "$$SNAPSHOT")"
           fi
           previous=$$(running_images)
           running=$$(running_of api)
@@ -606,13 +631,14 @@ services:
           after=$$(version "$$image")
           if docker compose up -d db api mcp ui && settled; then
             log "updated to $${after:-$$image}"
+            [ -z "$$taken" ] ||
+              log "the database as it was before this update (release $${before:-unknown}) is kept in the volume $$(snapshot_volume), file $$(basename "$$SNAPSHOT"); how to restore it: docs/backup-restore.md"
             # Службы, которых в новом файле нет, — прочь: их остановленные контейнеры иначе
             # живут до ручного `up --remove-orphans`, и compose на каждом `up` предупреждает о
             # сиротах (TRK-390). Только после успеха: откат возвращает прежний файл, и его
             # службы должны быть на месте. Службы уже на этом файле, `up` их не пересоздаёт.
             docker compose up -d --no-deps --remove-orphans db api mcp ui ||
               log "could not remove the containers of services this release no longer has"
-            rm -f "$$SNAPSHOT"
             docker rmi "$$(kept api:failed)" >/dev/null 2>&1 || true
             docker rmi "$$(kept ui:failed)" >/dev/null 2>&1 || true
           else
@@ -621,12 +647,11 @@ services:
             docker tag "$$(image_of ui)" "$$(kept ui:failed)"
             # Упавший выпуск успел сдвинуть схему — базу обратно из снимка. Записи после
             # снимка при этом теряются: это цена отката на прежний код с его схемой.
-            if [ -s "$$SNAPSHOT" ] && [ "$$(schema_revision)" != "$$schema_before" ]; then
+            if [ -n "$$taken" ] && [ -s "$$SNAPSHOT" ] && [ "$$(schema_revision)" != "$$schema_before" ]; then
               if restore_snapshot; then
-                rm -f "$$SNAPSHOT"
-                log "database restored from the snapshot taken before the update (schema $$schema_before); changes made since then are gone"
+                log "database restored from the snapshot taken before the update (schema $$schema_before); changes made since then are gone; the snapshot stays in the volume $$(snapshot_volume), file $$(basename "$$SNAPSHOT")"
               else
-                log "could not restore the database snapshot; the previous release will run on the new schema. The snapshot is kept: docker compose cp updater:$$SNAPSHOT ."
+                log "could not restore the database snapshot; the previous release will run on the new schema. The snapshot is kept in the volume $$(snapshot_volume): docker compose cp updater:$$SNAPSHOT ."
               fi
             fi
             if roll_back; then
@@ -656,7 +681,7 @@ services:
         }
 
         trap 'exit 0' TERM INT
-        rm -f /tmp/checking
+        rm -f /tmp/checking "$$SNAPSHOT.part"
         # Теги `previous` живут только внутри `update`, и на старте они — остаток чужого
         # обновления. Обновлятор 0.6.0 не снимает `api:previous`, пока его образ держит
         # остановленный контейнер сироты `tutorial`: её убирает `updater-renew` уже после него
@@ -762,3 +787,5 @@ volumes:
   pgdata:
   ui-key:
   agent-key:
+  # Последний снимок базы перед обновлением с миграцией; его держит служба `updater`.
+  updater-snapshot:

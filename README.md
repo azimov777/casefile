@@ -251,18 +251,22 @@ as usual. `docker compose logs updater` tells what happened.
 
 A release that changes the database schema costs one more step. Before installing it,
 the updater takes a snapshot of the database (`pg_dump -Fc`, the same format as
-[backup and restore](docs/backup-restore.md)). The snapshot stays inside the updater
-container, at `/tmp/casefile-before-update.dump`, and takes about as much space as a
-manual backup. If that release then fails to start after changing the schema, the
-database goes back to the snapshot before the previous version starts again. So the
+[backup and restore](docs/backup-restore.md)). The snapshot goes into a Docker volume of
+the installation, `casefile_updater-snapshot`, as `before-update.dump`, and takes about
+as much space as a manual backup. If that release then fails to start after changing the
+schema, the database goes back to the snapshot before the previous version starts again. So the
 schema and the data are exactly as they were before the update, and a manual
 `docker compose up -d` works as usual. The price: **anything written between the
 snapshot and the rollback is lost.** That window is the failed start, up to a few
 minutes. While the new version is being brought up, the old one keeps answering for a
-few seconds. The snapshot is deleted once the update succeeds or the database is
-restored. If the snapshot cannot be taken, that release is not installed this time. If
-it cannot be restored, the previous version runs on the new schema, the snapshot is kept,
-and the log says how to copy it out.
+few seconds. The snapshot is not deleted afterwards, neither after a good update nor after
+a rollback: it stays in the volume as a copy of the database from before the update, and
+`docker compose logs updater` says where. There is one copy: the next update that changes
+the schema replaces it, and a snapshot that fails never replaces the earlier one. How to
+restore from it: [backup and restore](docs/backup-restore.md#restoring-from-the-updaters-snapshot).
+If the snapshot cannot be taken, that release is not installed this time. If it cannot be
+restored, the previous version runs on the new schema, and the log says how to copy the
+snapshot out.
 
 ## Network mode
 

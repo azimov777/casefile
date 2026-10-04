@@ -117,6 +117,100 @@ explicitly:
 The installation's own `local-ui`/`local-agent` need no manual revocation: standing up the
 full stack (previous section) already replaces them.
 
+## Restoring from the updater's snapshot
+
+Before it installs a release that changes the database schema, the auto-update service
+(`updater`) takes a snapshot of the database — the same `pg_dump -Fc` as in "Taking a
+backup" above — and keeps it in a Docker volume. So after such an update there is a copy
+of the database as it was just before it, whether the update went well or was rolled back
+by itself (the rollback uses this same file; see "Updates" in the root `README.md`).
+
+- **One copy.** The next snapshot, taken before the next release that changes the schema,
+  replaces it. A release that does not change the schema leaves it alone, and so does a
+  snapshot that fails: the earlier file is replaced only once the new one is complete.
+- **It stays.** Neither a successful update nor a rollback deletes it. `docker compose
+  down -v` does, together with every other volume of the installation.
+- **Only from the updater that has it.** An update done by an older updater keeps no
+  snapshot in the volume; the update that brings the new updater is still done by the old
+  one (see "Updates" in the root `README.md`).
+- **It is a copy on the same machine**, so it is not a backup in the sense of "Taking a
+  backup": copy it off the machine as well. It holds the whole database, token hashes
+  included.
+
+The volume is called `<project>_updater-snapshot`, where `<project>` is the compose project
+name of the installation — `casefile` for the standard install, so `casefile_updater-snapshot`.
+The file in it is `before-update.dump`. The updater names both in its log, along with the
+release the snapshot belongs to:
+
+```bash
+cd ~/casefile
+docker compose logs updater | grep "before this update"
+docker volume ls --filter name=updater-snapshot
+```
+
+The commands below use a POSIX shell (macOS, Linux, WSL). Copy the file out of the volume
+into the current directory:
+
+```bash
+docker compose cp updater:/snapshot/before-update.dump ./casefile-before-update.dump
+```
+
+If the `updater` container no longer exists, read the volume directly, with the volume
+name `docker volume ls` showed:
+
+```bash
+docker run --rm -v casefile_updater-snapshot:/snapshot:ro -v "$PWD":/out \
+  --entrypoint cp postgres:17-alpine /snapshot/before-update.dump /out/casefile-before-update.dump
+```
+
+Check that it reads, then pick what you need:
+
+```bash
+docker compose exec -T db pg_restore --list < casefile-before-update.dump | head
+```
+
+**Into a clean database** — a new installation, or the empty `db` of one, the same way as
+"Restoring into a clean installation" above, with this file as the dump:
+
+```bash
+cd ~/casefile          # the target installation directory
+docker compose up -d db
+cat casefile-before-update.dump | \
+  docker compose exec -T db sh -c \
+  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --no-privileges'
+docker compose up -d
+```
+
+**Back into this installation, as it was before the update.** `pg_restore --clean` is not
+enough here: it drops only what the snapshot has, so the tables the new release added
+would stay. This command rebuilds the schema `public` from the snapshot in one
+transaction — it is what the updater does itself when a release fails to start — and if
+anything goes wrong, the transaction leaves the database as it was. Everything written
+after the snapshot is gone.
+
+```bash
+cd ~/casefile
+docker compose stop api mcp ui
+docker compose exec -T db sh -c 'pg_restore -f /tmp/restore.sql --no-owner --no-privileges &&
+  { echo "BEGIN; DROP SCHEMA public CASCADE; CREATE SCHEMA public;"; cat /tmp/restore.sql; echo "COMMIT;"; } |
+  PGOPTIONS="-c client_min_messages=warning" psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
+  status=$?; rm -f /tmp/restore.sql; exit $status' < casefile-before-update.dump
+```
+
+The database is now at the schema of the old release, so start that release, not the new
+one. Its number is in the log line you found above (`release X.Y.Z`). Set
+`CASEFILE_VERSION=X.Y.Z` in `~/casefile/.env` (edit the line if there is one already) and
+bring everything up:
+
+```bash
+docker compose up -d
+```
+
+With the release pinned the updater does not move. To follow releases again, remove that
+line from `.env`: the next check installs the new release again, taking a fresh snapshot
+first. Tokens behave as in "Tokens after a restore": the ones in the snapshot work again,
+and `local-ui`/`local-agent` are re-checked by `up`.
+
 ## What this procedure does not do
 
 - **No volumes.** `ui-key` and `agent-key` (the token secret files) are not part of the
@@ -127,7 +221,9 @@ full stack (previous section) already replaces them.
   stays valid on the restored copy. Deciding what to revoke is a manual step, on purpose.
 - **No scheduling, no retention, no off-site copy.** This document covers one dump and one
   restore, run by hand. Keeping daily copies, expiring old ones, and shipping them off the
-  server they were taken on is the paid service panel's job, not core's.
+  server they were taken on is the paid service panel's job, not core's. The one exception
+  is the updater's snapshot above: automatic, but only before a release that changes the
+  schema, and a single copy on the same machine.
 - **No integrity check beyond row counts.** The procedure does not checksum the dump or
   diff two installations for you; verifying a restore worked is up to whoever runs it.
 - **No downgrade path.** Restoring a dump taken on a newer Postgres major version onto an

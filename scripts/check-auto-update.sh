@@ -23,7 +23,8 @@
 #      после него доходит как обычно (TRK-122);
 #   H. выпуск с миграцией, у которого api не проходит проверку здоровья: перед ним снимок
 #      базы, после отката база из снимка — ревизия, таблицы и данные как до обновления, и
-#      ручной `docker compose up -d` проходит `migrate` (TRK-134).
+#      ручной `docker compose up -d` проходит `migrate` (TRK-134); снимок остаётся в томе
+#      `updater-snapshot` и после отката (TRK-547).
 #   I. установка на обновляторе прежнего выпуска (без уборки сирот) со службой, которой в
 #      следующем выпуске нет: обновлятор сам переходит на выпуск, `updater-renew` меняет
 #      обновлятор и убирает контейнер этой службы, compose о сиротах не предупреждает, а
@@ -438,7 +439,9 @@ on_release "$r4_api" "$r4_ui" || fail "services are not back on 0.3.1"
 api "http://127.0.0.1:$UI_PORT/api/v1/projects" >"$EVIDENCE/H-projects-after.json"
 diff "$EVIDENCE/H-projects-before.json" "$EVIDENCE/H-projects-after.json" ||
   fail "the data differs from before the update"
-note "H: back on 0.3.1, schema $schema_before, data as before the update"
+dc exec -T updater test -s /snapshot/before-update.dump ||
+  fail "the snapshot is not kept in the volume after the rollback"
+note "H: back on 0.3.1, schema $schema_before, data as before the update, snapshot kept in the volume"
 
 say "H. a manual docker compose up -d after the rollback"
 dc up -d >"$EVIDENCE/H-manual-up.log" 2>&1 || { cat "$EVIDENCE/H-manual-up.log"; fail "manual up -d failed"; }
