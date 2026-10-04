@@ -25,7 +25,13 @@
 # Обе последние, а также CASEFILE_PORT, TRACKER_MCP_PORT и COMPOSE_PROJECT_NAME (если заданы)
 # записываются в `.env` новой установки; без них действует `.env`
 # существующей установки, а без него — умолчания compose-файла.
-#   CASEFILE_SKILL     0 — не ставить скил агентам этой машины (по умолчанию 1, TRK-408)
+#   CASEFILE_SKILL     0 — не ставить скил агентам этой машины; 1, названная явно, — «да» заранее,
+#                      без вопроса. Без неё на терминале перед шагом печатается список файлов
+#                      чужих программ, которые он изменит, и спрашивается «y/N»; «N» пропускает
+#                      шаг целиком (сервер при этом ставится как обычно). Без терминала (агент,
+#                      CI) вопроса нет, шаг идёт как при 1 (TRK-408, TRK-546)
+#   CASEFILE_PLUGIN_AUTOUPDATE  0 — плагин Claude Code ставится, но `"autoUpdate": true` в
+#                      его settings.json не пишется (по умолчанию 1, TRK-546)
 #   CASEFILE_SKILL_ONLY  1 — только агенты этой машины: без Docker, без каталога установки и
 #                      без токена; для машины, которая подключается к Casefile на сервере.
 #                      Адрес сервера в `CASEFILE_URL` — для чужого сервера, и только https (http — лишь для
@@ -38,7 +44,8 @@
 #                      адрес даёт сама установка
 #   CASEFILE_LOGIN     0 — не вести вход OAuth, только напечатать команды (по умолчанию вход
 #                      идёт, если есть терминал человека; без него — только печать)
-#   CASEFILE_TTY       терминал для входа, по умолчанию /dev/tty (в `| sh` stdin — труба)
+#   CASEFILE_TTY       терминал для вопроса и входа, по умолчанию /dev/tty (в `| sh` stdin — труба);
+#                      вопрос задаётся и при названном CASEFILE_TTY, даже если вывод не терминал
 #   CASEFILE_SKILL_SOURCE  откуда брать маркетплейс скила, по умолчанию azimov777/casefile;
 #                      так шаг проверяют до публикации, как CASEFILE_REGISTRY для образов
 #
@@ -53,6 +60,14 @@ set -eu
 DIR=${CASEFILE_DIR:-"$HOME/casefile"}
 COMPOSE=docker-compose.prod.yml
 SKILL=${CASEFILE_SKILL:-1}
+# 1 — перед шагом скила спросить «y/N», если есть кого (`can_ask`); явно названная
+# `CASEFILE_SKILL` — ответ заранее, вопроса нет (TRK-546).
+SKILL_ASK=1
+[ -z "${CASEFILE_SKILL:-}" ] || SKILL_ASK=0
+# 1 — шаг скила не выполнялся: человек ответил «N» (TRK-546); `main` по нему не печатает
+# про плагин то, чего нет.
+SKILL_SKIPPED=0
+PLUGIN_AUTOUPDATE=${CASEFILE_PLUGIN_AUTOUPDATE:-1}
 SKILL_ONLY=${CASEFILE_SKILL_ONLY:-0}
 SKILL_SOURCE=${CASEFILE_SKILL_SOURCE:-azimov777/casefile}
 LOGIN=${CASEFILE_LOGIN:-1}
@@ -130,34 +145,218 @@ skill_failed() {
   tail -n 3 "$skill_log" | sed 's/^/                > /'
 }
 
-# Объявление маркетплейса `casefile` в settings.json Claude Code правится тем, что есть на
-# машине; файл переписывается, только если он изменился. `auto_update` ставит
-# `"autoUpdate": true` рядом с `source` в extraKnownMarketplaces.casefile: у сторонних
-# маркетплейсов Claude Code обновляет плагин сам только с ним, а флага в CLI нет (TRK-406).
-# `drop` убирает само объявление: так установка уходит с прежнего источника (TRK-494).
+# --- Согласие и копии (TRK-546) -----------------------------------------------------------
+# Шаг скила меняет файлы чужих программ: `settings.json` Claude Code, `config.toml` Codex,
+# их записи MCP, `~/.agents/skills`. Он идёт с согласия человека, а перед первой правкой
+# файла рядом остаётся его копия `<имя>.casefile-bak`. Beads потерял доверие именно этим:
+# переписывал `~/.claude/settings.json` без вопроса (TRK-527#7).
+
+claude_settings_file() { printf '%s' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; }
+# Пользовательские и локальные записи MCP Claude Code лежат не в settings.json, а в
+# `.claude.json`: `claude mcp remove` правит его, и копия нужна ему.
+claude_json_file() { printf '%s' "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"; }
+codex_config_file() { printf '%s' "${CODEX_HOME:-$HOME/.codex}/config.toml"; }
+
+# Есть ли у кого спросить. В `curl | sh` stdin — труба, поэтому читается терминал `$TTY`
+# (по умолчанию `/dev/tty`), а не stdin. Одного «открывается» мало: потомок сеанса с
+# терминалом (агент, запущенный из терминала без `setsid`) его тоже открывает, но ответа
+# оттуда никто не даст, и установщик встал бы навсегда на терминале чужой программы.
+# Поэтому и вывод обязан идти на терминал, как у человека; названный `CASEFILE_TTY` —
+# слово того, кто запускает (свой терминал, тест).
+can_ask() {
+  ( : <"$TTY" ) 2>/dev/null || return 1
+  [ -n "${CASEFILE_TTY:-}" ] || [ -t 1 ] || [ -t 2 ]
+}
+
+# Копия кладётся один раз и дальше не затирается: повторный запуск видит файл уже тронутым
+# и должен сохранить исходный. `cp -p` — с правами: в settings.json бывают ключи окружения,
+# копия не должна оказаться читаемой всем. Нет файла — копировать нечего (0). Не вышло —
+# 1: файл тогда не меняется, а вызывающий пропускает свой шаг.
+backup_once() { # $1 — метка в выводе, $2 — файл
+  [ -f "$2" ] || return 0
+  [ ! -e "$2.casefile-bak" ] && [ ! -L "$2.casefile-bak" ] || return 0
+  if cp -p "$2" "$2.casefile-bak" 2>/dev/null; then
+    skill_line "$1" "saved a copy of $2 as $(basename "$2").casefile-bak (the original, kept: it is never overwritten)"
+  else
+    skill_line "$1" "could not save a copy of $2, so nothing in it was changed"
+    return 1
+  fi
+}
+
+# Что шаг изменит, и вопрос. 0 — идти дальше, 1 — человек ответил «N»: шаг пропущен
+# целиком (сервер уже стоит). Список печатается и без терминала — в журнале агента или CI
+# видно, что было тронуто. Строится по найденным харнессам и режиму: чужие записи MCP
+# убираются, только если адрес известен (не `DEFAULT_URL`), а config.toml Codex получает
+# запись, только если адрес не тот, что зашит в его плагине.
+skill_consent() {
+  c_claude=0 c_codex=0 c_hermes=0 c_npx=0
+  if command -v claude >/dev/null 2>&1; then c_claude=1; fi
+  if command -v codex >/dev/null 2>&1; then c_codex=1; fi
+  if command -v hermes >/dev/null 2>&1; then c_hermes=1; fi
+  if command -v npx >/dev/null 2>&1; then c_npx=1; fi
+  [ $((c_claude + c_codex + c_hermes + c_npx)) -gt 0 ] || return 0
+  echo "  This step changes files that belong to other programs. Before the first change to a file"
+  echo "  a copy is saved next to it as <name>.casefile-bak (kept, never overwritten). What it touches:"
+  if [ "$c_claude" = 1 ]; then
+    skill_line "Claude Code" "$(claude_settings_file): the claude command adds the plugin there"
+    if [ "$PLUGIN_AUTOUPDATE" != 0 ]; then
+      skill_line "" "and \"autoUpdate\": true goes into extraKnownMarketplaces.casefile (CASEFILE_PLUGIN_AUTOUPDATE=0 leaves it out)"
+    fi
+    if [ "$DEFAULT_URL" != 1 ]; then
+      skill_line "" "the manual MCP entries \"casefile\" and \"tracker\" at $PLUGIN_URL are removed ($(claude_json_file); its copy keeps them)"
+    fi
+  fi
+  if [ "$c_codex" = 1 ]; then
+    skill_line "Codex" "$(codex_config_file): the codex command adds the plugin there"
+    if [ "$(norm_url "$PLUGIN_URL")" != "$(norm_url "$CODEX_PLUGIN_URL")" ]; then
+      skill_line "" "and the lines [mcp_servers.casefile] url = \"$PLUGIN_URL\" are appended"
+    fi
+    if [ "$DEFAULT_URL" != 1 ]; then
+      skill_line "" "the manual MCP entries \"casefile\" and \"tracker\" at $PLUGIN_URL are removed (its copy keeps them)"
+    fi
+  fi
+  if [ "$c_hermes" = 1 ]; then
+    skill_line "Hermes" "hermes skills install (its own skills folder)"
+  fi
+  if [ "$c_npx" = 1 ]; then
+    skill_line "Other agents" "$HOME/.agents/skills/casefile (npx skills add)"
+  fi
+  if [ "$SKILL_ASK" = 0 ]; then
+    echo "  CASEFILE_SKILL=1 is set: going ahead without asking."
+  elif can_ask; then
+    printf '  Install the plugin and make these changes? [y/N] '
+    answer=
+    read -r answer <"$TTY" || echo
+    case "$answer" in
+      y | Y | yes | Yes | YES) ;;
+      *)
+        SKILL_SKIPPED=1
+        later="curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL=1"
+        [ "$SKILL_ONLY" != 1 ] || later="$later CASEFILE_SKILL_ONLY=1"
+        [ -z "${CASEFILE_URL:-}" ] || later="$later CASEFILE_URL=$CASEFILE_URL"
+        echo "  Skipped: no file of another program was touched. To install the plugin later, run the"
+        echo "  installer again and answer y (CASEFILE_SKILL=1 in front of sh skips the question):"
+        echo "    $later sh"
+        echo "  Or by hand: docs/agent-install.md, step 4"
+        echo "  (https://raw.githubusercontent.com/azimov777/casefile/main/docs/agent-install.md)."
+        echo
+        return 1 ;;
+    esac
+  else
+    echo "  No terminal to ask on, so it goes ahead (CASEFILE_SKILL=0 skips it)."
+  fi
+}
+
+# Объявление маркетплейса `casefile` в settings.json Claude Code правится точечно (TRK-546):
+# файл не пересобирается из разобранного JSON, а получает ровно одну текстовую вставку —
+# так порядок ключей, отступы, концы строк и всё, что лежит рядом, остаются байт в байт.
+# Узел находится сканером по тексту (границы строк и вложенных значений), вставка
+# проверяется разбором: результат обязан равняться исходному объекту с одним изменённым
+# ключом, иначе файл не пишется. `auto_update` ставит `"autoUpdate": true` последним ключом
+# extraKnownMarketplaces.casefile: у сторонних маркетплейсов Claude Code обновляет плагин
+# сам только с ним, а флага в CLI нет (TRK-406). `drop` вырезает само объявление вместе с
+# запятой: так установка уходит с прежнего источника (TRK-494). Нужны node или python3 (один
+# и тот же алгоритм в обоих; jq пересобирает файл целиком, поэтому не годится); без них —
+# отказ, и установщик печатает правку для ручного ввода. Файл пишется, только если изменился;
+# копию `.casefile-bak` кладёт `backup_once` до первой команды харнесса.
 claude_settings() {
-  settings="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+  settings=$(claude_settings_file)
   [ -f "$settings" ] || return 1
   patched="$skill_tmp/settings.json"
-  if command -v jq >/dev/null 2>&1; then
-    case "$1" in
-      drop) expr='del(.extraKnownMarketplaces.casefile)' ;;
-      *) expr='.extraKnownMarketplaces.casefile.autoUpdate = true' ;;
-    esac
-    jq "$expr" "$settings" >"$patched" || return 1
-  elif command -v node >/dev/null 2>&1; then
-    node -e 'const fs=require("fs");const o=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
-      const m=o.extraKnownMarketplaces||{};
-      if(process.argv[2]==="drop"){delete m.casefile}else{m.casefile.autoUpdate=true}
-      o.extraKnownMarketplaces=m;
-      process.stdout.write(JSON.stringify(o,null,2)+"\n")' "$settings" "$1" >"$patched" || return 1
+  if command -v node >/dev/null 2>&1; then
+    node -e 'const fs=require("fs");
+const text=fs.readFileSync(process.argv[1],"utf8"),op=process.argv[2];
+JSON.parse(text.replace(/^\ufeff/,""));
+const WS=" \t\r\n\ufeff";
+const ws=i=>{while(i<text.length&&WS.includes(text[i]))i++;return i};
+const sEnd=i=>{i++;while(text[i]!=="\"")i+=text[i]==="\\"?2:1;return i+1};
+const vEnd=i=>{let c=text[i];
+  if(c==="\"")return sEnd(i);
+  if(c==="{"||c==="["){let d=0;for(;;){c=text[i];if(c==="\""){i=sEnd(i);continue}
+    if(c==="{"||c==="[")d++;else if(c==="}"||c==="]")d--;i++;if(d===0)return i}}
+  while(i<text.length&&!(WS+",}]").includes(text[i]))i++;return i};
+const members=i=>{const out=[];i=ws(i+1);
+  while(text[i]!=="}"){const ks=i,ke=sEnd(i);i=ws(ke);const vs=ws(i+1),ve=vEnd(vs);
+    out.push({k:text.slice(ks,ke),ks,ke,vs,ve});i=ws(ve);if(text[i]===",")i=ws(i+1)}
+  return out};
+const find=(ms,k)=>ms.find(m=>m.k==="\""+k+"\"");
+const want=JSON.parse(text.replace(/^\ufeff/,""));
+const tm=find(members(ws(0)),"extraKnownMarketplaces");
+const km=tm&&text[tm.vs]==="{"?members(tm.vs):[];
+const mc=find(km,"casefile");
+let out=text;
+if(!mc||text[mc.vs]!=="{"){if(op!=="drop")process.exit(1)}
+else if(op==="drop"){const i=km.indexOf(mc);
+  out=km.length===1?text.slice(0,tm.vs+1)+text.slice(mc.ve)
+    :i<km.length-1?text.slice(0,mc.ks)+text.slice(km[i+1].ks)
+    :text.slice(0,km[i-1].ve)+text.slice(mc.ve);
+  delete want.extraKnownMarketplaces.casefile}
+else{const cm=members(mc.vs),au=find(cm,"autoUpdate");
+  if(au)out=text.slice(0,au.vs)+"true"+text.slice(au.ve);
+  else if(!cm.length)out=text.slice(0,mc.vs+1)+"\"autoUpdate\": true"+text.slice(mc.vs+1);
+  else{const e=cm[cm.length-1].ve,f=cm[0];
+    out=text.slice(0,e)+","+text.slice(mc.vs+1,f.ks)+"\"autoUpdate\""+text.slice(f.ke,f.vs)+"true"+text.slice(e)}
+  want.extraKnownMarketplaces.casefile.autoUpdate=true}
+if(JSON.stringify(JSON.parse(out.replace(/^\ufeff/,"")))!==JSON.stringify(want))process.exit(2);
+process.stdout.write(out)' "$settings" "$1" >"$patched" || return 1
   elif command -v python3 >/dev/null 2>&1; then
     python3 -c 'import json,sys
-o=json.load(open(sys.argv[1],encoding="utf-8"))
-m=o.setdefault("extraKnownMarketplaces",{})
-if sys.argv[2]=="drop": m.pop("casefile",None)
-else: m["casefile"]["autoUpdate"]=True
-sys.stdout.write(json.dumps(o,indent=2,ensure_ascii=False)+"\n")' "$settings" "$1" >"$patched" || return 1
+path,op=sys.argv[1],sys.argv[2]
+text=open(path,encoding="utf-8",newline="").read()
+want=json.loads(text.lstrip("\ufeff"))
+WS=" \t\r\n\ufeff"
+def ws(i):
+    while i<len(text) and text[i] in WS: i+=1
+    return i
+def s_end(i):
+    i+=1
+    while text[i]!="\"": i+=2 if text[i]=="\\" else 1
+    return i+1
+def v_end(i):
+    c=text[i]
+    if c=="\"": return s_end(i)
+    if c in "{[":
+        d=0
+        while True:
+            c=text[i]
+            if c=="\"": i=s_end(i); continue
+            if c in "{[": d+=1
+            elif c in "}]": d-=1
+            i+=1
+            if d==0: return i
+    while i<len(text) and text[i] not in WS+",}]": i+=1
+    return i
+def members(i):
+    out=[]; i=ws(i+1)
+    while text[i]!="}":
+        ks=i; ke=s_end(i); i=ws(ke); vs=ws(i+1); ve=v_end(vs)
+        out.append((text[ks:ke],ks,ke,vs,ve)); i=ws(ve)
+        if text[i]==",": i=ws(i+1)
+    return out
+def find(ms,k):
+    return next((m for m in ms if m[0]=="\""+k+"\""),None)
+tm=find(members(ws(0)),"extraKnownMarketplaces")
+km=members(tm[3]) if tm and text[tm[3]]=="{" else []
+mc=find(km,"casefile")
+out=text
+if mc is None or text[mc[3]]!="{":
+    if op!="drop": sys.exit(1)
+elif op=="drop":
+    i=km.index(mc)
+    if len(km)==1: out=text[:tm[3]+1]+text[mc[4]:]
+    elif i<len(km)-1: out=text[:mc[1]]+text[km[i+1][1]:]
+    else: out=text[:km[i-1][4]]+text[mc[4]:]
+    del want["extraKnownMarketplaces"]["casefile"]
+else:
+    cm=members(mc[3]); au=find(cm,"autoUpdate")
+    if au: out=text[:au[3]]+"true"+text[au[4]:]
+    elif not cm: out=text[:mc[3]+1]+"\"autoUpdate\": true"+text[mc[3]+1:]
+    else:
+        e=cm[-1][4]; f=cm[0]
+        out=text[:e]+","+text[mc[3]+1:f[1]]+"\"autoUpdate\""+text[f[2]:f[3]]+"true"+text[e:]
+    want["extraKnownMarketplaces"]["casefile"]["autoUpdate"]=True
+if json.loads(out.lstrip("\ufeff"))!=want: sys.exit(2)
+sys.stdout.buffer.write(out.encode("utf-8"))' "$settings" "$1" >"$patched" || return 1
   else
     return 1
   fi
@@ -211,7 +410,8 @@ cleanup_claude_entries() {
     [ -n "$url" ] || continue
     if [ "$(norm_url "$url")" = "$(norm_url "$PLUGIN_URL")" ]; then
       case "$scope" in User) flag=user ;; Local) flag=local ;; *) flag= ;; esac
-      if [ -n "$flag" ] && skill_run claude mcp remove "$name" --scope "$flag"; then
+      if [ -n "$flag" ] && backup_once "Claude Code" "$(claude_json_file)" &&
+        skill_run claude mcp remove "$name" --scope "$flag"; then
         skill_line "Claude Code" "removed the manual MCP entry \"$name\" ($url, $flag scope): the plugin carries the connection"
       else
         skill_line "Claude Code" "left the manual MCP entry \"$name\" ($url, $scope scope): remove it by hand: claude mcp remove $name"
@@ -240,6 +440,7 @@ cleanup_codex_entries() {
 }
 
 skill_claude() {
+  backup_once "Claude Code" "$(claude_settings_file)" || return 0
   src="$SKILL_SOURCE#plugin"
   claude_url=$PLUGIN_URL
   claude_note=$DEFAULT_NOTE
@@ -260,7 +461,9 @@ skill_claude() {
     case "$found" in
       *" enabled")
         [ "$DEFAULT_URL" = 1 ] || LOGIN_CLAUDE=1
-        if claude_settings auto_update; then
+        if [ "$PLUGIN_AUTOUPDATE" = 0 ]; then
+          skill_line "Claude Code" "installed ${found% *}, connected to $claude_url$claude_note (automatic updates not switched on, as CASEFILE_PLUGIN_AUTOUPDATE=0 says; to update by hand: claude plugin update casefile@casefile)"
+        elif claude_settings auto_update; then
           skill_line "Claude Code" "installed ${found% *} (updates itself), connected to $claude_url$claude_note"
         else
           skill_line "Claude Code" "installed ${found% *}, connected to $claude_url$claude_note (automatic updates not switched on: add \"autoUpdate\": true inside extraKnownMarketplaces.casefile in settings.json)"
@@ -278,7 +481,7 @@ skill_claude() {
 }
 
 codex_set_url() {
-  cfg="${CODEX_HOME:-$HOME/.codex}/config.toml"
+  cfg=$(codex_config_file)
   if [ -f "$cfg" ] && grep -q '^\[mcp_servers\.casefile[].]' "$cfg"; then
     return 1
   fi
@@ -287,6 +490,7 @@ codex_set_url() {
 }
 
 skill_codex() {
+  backup_once "Codex" "$(codex_config_file)" || return 0
   retry="codex plugin marketplace add $SKILL_SOURCE --ref plugin && codex plugin add casefile@casefile"
   [ "$DEFAULT_URL" = 1 ] || cleanup_codex_entries
   if codex_marketplace_add &&
@@ -343,6 +547,10 @@ install_skills() {
   skill_log="$skill_tmp/log"
   : >"$skill_log"
   bold "Installing the Casefile skill for the agents on this machine:"
+  if ! skill_consent; then
+    rm -rf "$skill_tmp"
+    return 0
+  fi
   for harness in claude codex hermes; do
     if command -v "$harness" >/dev/null 2>&1; then
       "skill_$harness"
@@ -414,7 +622,7 @@ main() {
       esac
     fi
     install_skills || true
-    if [ "$DEFAULT_URL" = 1 ]; then
+    if [ "$DEFAULT_URL" = 1 ] && [ "$SKILL_SKIPPED" = 0 ]; then
       echo "The plugin carries the skill and points at the default address $PLUGIN_URL; no sign-in was started."
       echo "To connect Claude Code and Codex to your server, run this again with its address:"
       echo "  curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh | CASEFILE_SKILL_ONLY=1 CASEFILE_URL=https://casefile.example.com/mcp sh"
@@ -522,14 +730,23 @@ main() {
   # `plugin` и `stable` — из `.claude-plugin/marketplace.json` и `images.yml`; те же команды дословно
   # стоят в `docs/agent-install.md`, и `tests/test_installers.py` сверяет их.
   bold "Claude Code:"
-  echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth,"
-  echo "  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile"
+  if [ "$SKILL_SKIPPED" = 1 ]; then
+    echo "  The plugin is not installed: you skipped that step. It carries the skill and the connection"
+    echo "  to $mcp_url; once installed, sign in with: claude mcp login plugin:casefile:casefile"
+  else
+    echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth,"
+    echo "  no token in any file. If it did not run above: claude mcp login plugin:casefile:casefile"
+  fi
   echo "  Without the installer: claude plugin marketplace add azimov777/casefile#plugin"
   echo "  claude plugin install casefile@casefile --scope user --config casefile_url=$mcp_url"
   echo
   bold "Codex:"
-  echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth."
-  echo "  If it did not run above: codex mcp login casefile"
+  if [ "$SKILL_SKIPPED" = 1 ]; then
+    echo "  The plugin is not installed: you skipped that step. Once installed, sign in with: codex mcp login casefile"
+  else
+    echo "  The plugin carries the skill and the connection to $mcp_url; the sign-in is OAuth."
+    echo "  If it did not run above: codex mcp login casefile"
+  fi
   echo "  Without the installer: codex plugin marketplace add azimov777/casefile --ref plugin"
   echo "  codex plugin add casefile@casefile"
   echo
@@ -546,7 +763,7 @@ main() {
   echo "  Add to opencode.json (or ~/.config/opencode/opencode.json):"
   echo "    {\"mcp\": {\"casefile\": {\"type\": \"remote\", \"url\": \"$mcp_url\"}}}"
   echo "  Then sign in once: opencode mcp auth casefile"
-  echo "  The skill is the one in ~/.agents/skills/casefile that the step above installed."
+  [ "$SKILL_SKIPPED" = 1 ] || echo "  The skill is the one in ~/.agents/skills/casefile that the step above installed."
   echo
   bold "Any other MCP client without OAuth (Cursor, ...), or a journal watcher between sessions:"
   echo "  URL     $mcp_url"

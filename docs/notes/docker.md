@@ -831,8 +831,9 @@ up to date» (TRK-390#14, TRK-391). Теперь `publish` сверяет тег
 `install`, `update`, затем чтение версии из `claude plugin list` — итог строится по ней, а
 не по коду выхода. У Codex `marketplace upgrade` и повторный `plugin add`. Для прочих
 агентов `npx skills add … -g -y --agent cursor`: это общий `~/.agents/skills`, каталог
-Claude Code не трогается. `autoUpdate` ставит правка `settings.json` (jq, node или
-python3 по наличию), файл переписывается только при отсутствии ключа. Шаг проверяет хост
+Claude Code не трогается. `autoUpdate` ставит точечная правка `settings.json` (node или
+python3 по наличию, TRK-546 — запись в конце файла; jq из неё убран), файл пишется только
+при отсутствии ключа. Шаг проверяет хост
 `scripts/check-skill-install.sh`; `install.ps1` — только разбор парсером и чтение.
 **Где:** `install.sh`, функции `skill_claude`, `skill_codex`, `skill_others`,
 `claude_settings`; `install.ps1`, `Install-ClaudeSkill`; `scripts/check-skill-install.sh`.
@@ -1006,3 +1007,62 @@ again: claude mcp login plugin:casefile:casefile», после перевода 
 **Где:** `docker-compose.prod.yml` (служба `updater`: `SNAPSHOT`, `snapshot_volume`,
 `take_snapshot`, `restore_snapshot`, `update`; верхний `volumes:`), `tests/test_auto_update.py`,
 `docs/backup-restore.md`, `README.md` (раздел «Updates»).
+
+## Установщик спрашивает согласие через `/dev/tty`, и только если вывод идёт на терминал (TRK-546)
+
+**Что:** главный путь человека — `curl … | sh`: stdin там труба со скриптом, поэтому `[ -t 0 ]`
+вопроса не задал бы никогда, а `read` из stdin съел бы остаток скрипта. Ответ читается из
+`$TTY` (`CASEFILE_TTY`, по умолчанию `/dev/tty`). Но `/dev/tty` открывается и у процесса,
+который агент запустил из терминала без `setsid`: у него терминал сеанса есть, а ответить на
+вопрос некому. Поэтому `can_ask` требует ещё и вывод на терминал (`[ -t 1 ]` или `[ -t 2 ]`),
+либо названный `CASEFILE_TTY` — слово того, кто запускает (тест, свой терминал).
+**Почему важно:** без второго условия установщик, запущенный агентом, ждёт ответа на чужом
+терминале вечно: тест `test_an_agent_that_inherited_the_terminal_is_not_asked_and_does_not_hang`
+на установщике без условия упирается в 40-секундный предел драйвера. С другой стороны, набор,
+запущенный из терминала человека, видит его `/dev/tty` и спросил бы человека посреди прогона,
+если не назвать `CASEFILE_TTY` несуществующим файлом (так делает `_prepare`).
+**Как правильно:** явно названная `CASEFILE_SKILL=1` — «да» заранее (`SKILL_ASK=0`), `0` — шага нет;
+без терминала список изменений всё равно печатается, а шаг идёт, как шёл. «N» пропускает
+шаг плагина целиком, сервер ставится как обычно. Настоящий путь `cat install.sh | sh` с pty
+как управляющим терминалом гоняет драйвер `PTY_DRIVER` в `tests/test_installers.py`; в
+`install.ps1` интерактивность — `Test-CanAsk` (ни ввод, ни вывод не перенаправлены, нет
+`-NonInteractive`): под `irm | iex` скрипт приходит по конвейеру, `IsInputRedirected` остаётся
+ложью. Проверено в PowerShell 7.4 под pty: скрипт, поданный в конвейер (`… | Invoke-Expression`),
+видит `Test-CanAsk` истинным и читает ответ из `Read-Host`; с `-NonInteractive` или при
+перенаправленном выводе — ложь, и `Read-Host` не вызывается. Вход OAuth (`have_tty`) этого
+условия не получил: он ведёт себя как до TRK-546.
+**Где:** `install.sh` (`can_ask`, `skill_consent`, `SKILL_ASK`), `install.ps1` (`Test-CanAsk`,
+`Confirm-SkillStep`), `tests/test_installers.py`. `install.ps1` целиком не исполнялся: `Confirm-SkillStep` прогнан
+в контейнере PowerShell 7.4 с подставными `Test-CanAsk` и `Read-Host` (все ветки), сканер JSON — на
+тех же текстах, что и у node (см. запись ниже).
+
+## `settings.json` получает одну вставку, а перед первой правкой лежит копия `.casefile-bak` (TRK-546)
+
+**Что:** прежний установщик пересобирал `settings.json` целиком (jq, node, python3, а в
+PowerShell — `ConvertFrom-Json` и `ConvertTo-Json`) и копии не делал. Пересборка меняет
+отступы и портит значения: целое больше 2^64 в PowerShell 7.4 после разбора и сборки
+становится объектом с полями вместо числа. Теперь `claude_settings` (node или python3, один алгоритм) и
+`Update-ClaudeSettings` (PowerShell) ищут узел `extraKnownMarketplaces.casefile` сканером по
+тексту и вставляют `,<отступ>"autoUpdate": true` после последнего ключа (или вырезают
+объявление с запятой). Результат разбирается и сверяется с исходным объектом с одним
+изменённым ключом, иначе файл не пишется. jq в цепочке нет: он файл пересобирает, и без node
+и python3 установщик отказывает и печатает правку для ручного ввода.
+**Почему важно:** копию надо снимать до первой команды харнесса, а не только перед своей
+записью: `claude plugin marketplace add` и `plugin install` сами правят `settings.json`, а
+`codex plugin add` и `codex mcp remove` — `config.toml`. Записи MCP Claude Code лежат не в
+`settings.json`, а в `.claude.json` (`claude_json_file`): копия нужна и ему перед
+`claude mcp remove`, иначе удалённая запись с токеном не вернётся. Копия кладётся один раз
+(`backup_once`) и не затирается: при повторном запуске файл уже тронут, а исходник — тот, что
+был до первого. `cp -p` оставляет права: копия `0600`-файла не должна читаться всеми. Токен
+удалённой ручной записи остаётся в копии: это исходник человека, и фаза F живой проверки
+исключает `*.casefile-bak` из поиска `trk_`.
+**Как правильно:** не вставлять в `claude_settings` разбор «что попроще»: корректность держат
+четырнадцать текстов (`SETTINGS_VECTORS`: отступы 2, 4, табы, одна строка, CRLF, BOM,
+`autoUpdate` уже есть, объявление последнее или единственное, не-ASCII, большие числа) — по
+каждому вставка равна `old` с одним заменённым куском, а три реализации дают одни байты (node
+и python3 — в тестах, PowerShell 7.4 — прогнан руками на тех же текстах). Копия не вышла —
+файл не меняется и шаг харнесса пропускается. `CASEFILE_PLUGIN_AUTOUPDATE=0` пропускает только
+запись `autoUpdate`: копия и команды харнесса остаются.
+**Где:** `install.sh` (`claude_settings`, `backup_once`, `claude_json_file`, `skill_claude`,
+`skill_codex`), `install.ps1` (`Update-ClaudeSettings`, `Edit-ClaudeSettingsText`,
+`Backup-Once`), `tests/test_installers.py` (`SETTINGS_VECTORS`).

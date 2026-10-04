@@ -18,7 +18,10 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SH = PROJECT_ROOT / "install.sh"
@@ -157,19 +160,16 @@ esac
 """
 
 
-def _install(
+def _prepare(
     tmp_path: Path,
     *,
     extra_env: dict[str, str] | None = None,
     dotenv: str | None = None,
     **scene: str,
-) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    """`install.sh` против подставного `docker`; `sleep` — мгновенный.
+) -> tuple[dict[str, str], Path]:
+    """Окружение для `install.sh`: подставные `docker` и `sleep`, сцена, `HOME` — `tmp_path`.
 
-    `dotenv`, если задан, кладётся в `.env` каталога установки *до* запуска — так, как
-    он там лежит у существующей установки: сам установщик пишет в `.env` только
-    `COMPOSE_FILE`, а названные ему реестр, выпуск, порты и проект
-    (и то один раз). `extra_env` — переменные окружения самого вызова, поверх обязательных.
+    Возвращает окружение и файл, в который заглушки пишут вызовы.
     """
     bin_dir, scene_dir = tmp_path / "bin", tmp_path / "scene"
     bin_dir.mkdir()
@@ -192,8 +192,30 @@ def _install(
         "CASEFILE_DIR": str(install_dir),
         "CALLS": str(calls),
         "SCENE": str(scene_dir),
+        # Терминала нет: `/dev/tty` у процесса набора есть, когда его запустили из
+        # терминала, и установщик (TRK-546) спросил бы согласие у человека за клавиатурой.
+        # Тесты, которым терминал нужен, называют свой.
+        "CASEFILE_TTY": str(tmp_path / "no-such-tty"),
     }
     env.update(extra_env or {})
+    return env, calls
+
+
+def _install(
+    tmp_path: Path,
+    *,
+    extra_env: dict[str, str] | None = None,
+    dotenv: str | None = None,
+    **scene: str,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """`install.sh` против подставного `docker`; `sleep` — мгновенный.
+
+    `dotenv`, если задан, кладётся в `.env` каталога установки *до* запуска — так, как
+    он там лежит у существующей установки: сам установщик пишет в `.env` только
+    `COMPOSE_FILE`, а названные ему реестр, выпуск, порты и проект
+    (и то один раз). `extra_env` — переменные окружения самого вызова, поверх обязательных.
+    """
+    env, calls = _prepare(tmp_path, extra_env=extra_env, dotenv=dotenv, **scene)
     done = subprocess.run(
         ["sh", str(INSTALL_SH)],
         env=env,
@@ -489,6 +511,12 @@ case "$*" in
     if grep -q '"ref": *"stable"' "$CLAUDE_CONFIG_DIR/settings.json" 2>/dev/null; then
       echo 'its network source differs from the one declared for it in settings' >&2
       exit 1
+    fi
+    # Объявление уже на нужной ветке — настоящий `add` пишет «already on disk» и файл не
+    # трогает (TRK-546: так видно, что байты settings.json меняет только установщик).
+    if grep -q '"ref": *"plugin"' "$CLAUDE_CONFIG_DIR/settings.json" 2>/dev/null; then
+      echo 'already on disk'
+      exit 0
     fi
     python3 -c 'import json, os, sys
 path = sys.argv[1]
@@ -951,7 +979,7 @@ def test_without_a_terminal_the_sign_in_is_not_started_and_the_commands_are_prin
 
 def test_with_a_terminal_the_sign_in_runs_once_per_harness(tmp_path: Path) -> None:
     tty = tmp_path / "tty"
-    tty.write_text("")
+    tty.write_text("y\n")
     done, calls = _skill_only_login(tmp_path, CASEFILE_TTY=str(tty))
 
     assert done.returncode == 0, done.stderr
@@ -966,7 +994,7 @@ def test_a_failed_sign_in_is_a_line_with_the_command_and_does_not_fail_the_insta
     tmp_path: Path,
 ) -> None:
     tty = tmp_path / "tty"
-    tty.write_text("")
+    tty.write_text("y\n")
     done, _ = _skill_only_login(tmp_path, {"login-claude": "1"}, CASEFILE_TTY=str(tty))
 
     assert done.returncode == 0, done.stderr
@@ -980,7 +1008,7 @@ def test_a_failed_sign_in_is_a_line_with_the_command_and_does_not_fail_the_insta
 
 def test_casefile_login_zero_prints_the_commands_even_with_a_terminal(tmp_path: Path) -> None:
     tty = tmp_path / "tty"
-    tty.write_text("")
+    tty.write_text("y\n")
     done, calls = _skill_only_login(tmp_path, CASEFILE_TTY=str(tty), CASEFILE_LOGIN="0")
 
     assert done.returncode == 0, done.stderr
@@ -1076,8 +1104,6 @@ def test_install_ps1_parses_when_powershell_is_available() -> None:
     """Парсер PowerShell без ошибок. В образе тестов pwsh нет (заметка `docs/notes/docker.md`):
     проверка идёт там, где он есть, например `docker run --platform linux/amd64
     mcr.microsoft.com/powershell`; здесь она пропускается."""
-    import pytest
-
     pwsh = shutil.which("pwsh")
     if pwsh is None:
         pytest.skip("pwsh отсутствует")
@@ -1088,3 +1114,709 @@ def test_install_ps1_parses_when_powershell_is_available() -> None:
     )
     done = subprocess.run([pwsh, "-NoProfile", "-Command", script], capture_output=True, text=True)
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+# --- Согласие, копии и точечная запись (TRK-546) ----------------------------------------
+#
+# Установщик не меняет файлы чужих программ без согласия человека (Beads потерял доверие
+# тем, что переписывал `~/.claude/settings.json` без вопроса, TRK-527#7): перед шагом скила
+# печатает, что изменит, и на терминале спрашивает «y/N»; «N» пропускает шаг целиком.
+# Перед первой правкой файла рядом остаётся его копия `.casefile-bak`, а `settings.json`
+# получает одну текстовую вставку, а не перезапись.
+
+BOM = "\ufeff"
+SETTINGS_4 = json.dumps(
+    {
+        "model": "opus",
+        "env": {"NOTE": "тест é", "HTML": "<a href='x'>&</a>", "N": 1.0},
+        "extraKnownMarketplaces": {
+            "casefile": {"source": {"source": "git", "url": "u", "ref": "plugin"}},
+            "other": {"source": {"source": "github", "repo": "a/b"}},
+        },
+        "enabledPlugins": {"casefile@casefile": True},
+    },
+    indent=4,
+    ensure_ascii=False,
+)
+CODEX_TOML = (
+    '# hand-written\nmodel = "gpt"\n\n[mcp_servers.other]\nurl = "https://o.example.com/mcp"'
+)
+
+
+def _terminal(tmp_path: Path, answer: str) -> dict[str, str]:
+    """Свой «терминал» теста: файл с ответом человека; `CASEFILE_TTY` называет его."""
+    tty = tmp_path / "tty"
+    tty.write_text(answer, encoding="utf-8")
+    return {"CASEFILE_TTY": str(tty)}
+
+
+def _harness_env(tmp_path: Path, **extra: str) -> dict[str, str]:
+    return {
+        **_with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX, npx=FAKE_NPX),
+        "CASEFILE_SKILL_ONLY": "1",
+        "CASEFILE_URL": SERVER,
+        **extra,
+    }
+
+
+def _other_programs_files(tmp_path: Path) -> dict[Path, str]:
+    """Чужие файлы такими, какими они лежали у человека: настройки, конфиг, записи MCP."""
+    files = {
+        tmp_path / "claude" / "settings.json": SETTINGS_4,
+        tmp_path / "claude" / ".claude.json": '{"mcpServers": {"casefile": {"url": "x"}}}\n',
+        tmp_path / ".codex" / "config.toml": CODEX_TOML,
+    }
+    for path, text in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return files
+
+
+def _manual_entries(url: str) -> dict[str, str]:
+    """Прежние ручные записи MCP `casefile` у обоих харнессов, с адресом `url`."""
+    return {
+        "claude-casefile": CLAUDE_GET.format(name="casefile", url=url),
+        "codex-casefile": CODEX_GET.format(name="casefile", url=url),
+    }
+
+
+def test_answering_n_touches_no_file_of_another_program(tmp_path: Path) -> None:
+    """«N» пропускает шаг плагина целиком: ни одной команды харнесса, ни байта в их файлах,
+    ни копии рядом. Сервер ставится как обычно, а вывод говорит, как поставить плагин позже."""
+    files = _other_programs_files(tmp_path)
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX, npx=FAKE_NPX)
+    done, calls = _install(
+        tmp_path,
+        extra_env={**env, **_terminal(tmp_path, "n\n")},
+        **_manual_entries("http://localhost:8100/mcp"),
+    )
+
+    assert done.returncode == 0, done.stderr
+    for path, text in files.items():
+        assert path.read_bytes() == text.encode("utf-8"), path
+    assert not list(tmp_path.rglob("*.casefile-bak"))
+    assert not [c for c in calls if c.startswith(("claude ", "codex ", "npx ", "hermes "))], calls
+    assert not (tmp_path / ".agents").exists()
+    assert "compose up -d --remove-orphans" in calls and "Casefile is running." in done.stdout
+    out = done.stdout
+    assert "Install the plugin and make these changes? [y/N]" in out
+    assert "Skipped: no file of another program was touched" in out
+    assert "| CASEFILE_SKILL=1 sh" in out, "строка, как поставить плагин позже"
+    assert "Signing the agents in" not in out and "signed in" not in out
+    assert "The plugin is not installed: you skipped that step" in out
+    assert "claude plugin marketplace add azimov777/casefile#plugin" in out
+
+
+@pytest.mark.parametrize("answer", ["", "no\n", "\n", "yep\n"])
+def test_anything_but_yes_is_no(tmp_path: Path, answer: str) -> None:
+    """Пустой ответ и конец ввода — «N»: согласие должно быть сказано, а не угадано."""
+    done, calls = _install(
+        tmp_path,
+        extra_env={**_harness_env(tmp_path), **_terminal(tmp_path, answer)},
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if c.startswith(("claude ", "codex ", "npx "))]
+    assert "Skipped: no file of another program was touched" in done.stdout
+
+
+def test_skill_only_n_says_how_to_install_later_with_its_own_address(tmp_path: Path) -> None:
+    done, _ = _install(tmp_path, extra_env={**_harness_env(tmp_path), **_terminal(tmp_path, "n\n")})
+
+    assert done.returncode == 0, done.stderr
+    assert (f"| CASEFILE_SKILL=1 CASEFILE_SKILL_ONLY=1 CASEFILE_URL={SERVER} sh") in done.stdout
+    assert "no sign-in was started" not in done.stdout
+
+
+def test_answering_y_saves_copies_and_changes_only_the_named_lines(tmp_path: Path) -> None:
+    """«y»: рядом с каждым тронутым файлом лежит копия с исходными байтами; в settings.json
+    прибавилась одна вставка `autoUpdate` (остальное — байт в байт, включая отступы и
+    не-ASCII), в config.toml — дописаны строки адреса, запись MCP убрана командой харнесса."""
+    files = _other_programs_files(tmp_path)
+    done, calls = _install(
+        tmp_path,
+        extra_env={**_harness_env(tmp_path), **_terminal(tmp_path, "y\n")},
+        **_manual_entries(SERVER),
+    )
+
+    assert done.returncode == 0, done.stderr
+    for path, text in files.items():
+        bak = path.with_name(path.name + ".casefile-bak")
+        assert bak.read_bytes() == text.encode("utf-8"), f"копия {bak.name} — не исходник"
+    assert "claude mcp remove casefile --scope user" in calls
+    assert "codex mcp remove casefile" in calls
+
+    settings = (tmp_path / "claude" / "settings.json").read_text(encoding="utf-8")
+    removed, inserted = _single_edit(SETTINGS_4, settings)
+    assert removed == "" and re.sub(r"\s", "", inserted) == ',"autoUpdate":true', (
+        removed,
+        inserted,
+    )
+    before, after = json.loads(SETTINGS_4), json.loads(settings)
+    assert after["extraKnownMarketplaces"]["casefile"].pop("autoUpdate") is True
+    assert after == before
+
+    config = (tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8")
+    assert config == f'{CODEX_TOML}\n[mcp_servers.casefile]\nurl = "{SERVER}"\n'
+    for line in (
+        "Install the plugin and make these changes? [y/N]",
+        "settings.json: the claude command adds the plugin there",
+        '"autoUpdate": true goes into extraKnownMarketplaces.casefile',
+        "config.toml: the codex command adds the plugin there",
+        "are removed",
+        "Other agents",
+    ):
+        assert line in done.stdout, line
+    assert re.search(
+        r"Claude Code +saved a copy of .*settings\.json as settings\.json\.casefile-bak",
+        done.stdout,
+    )
+    assert re.search(r"Claude Code +installed 0\.7\.1 \(updates itself\)", done.stdout)
+    assert (tmp_path / ".agents" / "skills" / "casefile" / "SKILL.md").exists()
+
+
+def test_the_list_names_only_what_the_step_will_touch(tmp_path: Path) -> None:
+    """Без `CASEFILE_URL` адрес сервера неизвестен: чужие записи MCP не удаляются, а значит
+    и в списке их нет. Не найденный харнесс в списке не значится."""
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE)
+    done, _ = _install(
+        tmp_path,
+        extra_env={**env, "CASEFILE_SKILL_ONLY": "1", **_terminal(tmp_path, "n\n")},
+    )
+
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    assert "settings.json: the claude command adds the plugin there" in out
+    assert "are removed" not in out, "адрес неизвестен: записи MCP не трогаются"
+    assert "config.toml" not in out and "npx skills add)" not in out
+
+
+def test_without_a_terminal_nothing_is_asked_and_the_step_goes_by_casefile_skill(
+    tmp_path: Path,
+) -> None:
+    """Агент и CI (stdin не терминал, `/dev/tty` нет) не ждут ответа: шаг идёт, как шёл, а
+    список изменений остаётся в журнале."""
+    done, calls = _install(tmp_path, extra_env=_harness_env(tmp_path))
+
+    assert done.returncode == 0, done.stderr
+    assert "[y/N]" not in done.stdout
+    assert "No terminal to ask on, so it goes ahead" in done.stdout
+    assert (
+        f"claude plugin install casefile@casefile --scope user --config casefile_url={SERVER}"
+        in calls
+    )
+    assert re.search(r"Claude Code +installed 0\.7\.1", done.stdout)
+
+
+def test_casefile_skill_one_is_the_answer_given_in_advance(tmp_path: Path) -> None:
+    """Названная явно `CASEFILE_SKILL=1` — «да» заранее: вопроса нет и на терминале; а при
+    `CASEFILE_SKILL=0` нет и самого шага."""
+    done, calls = _install(
+        tmp_path,
+        extra_env={**_harness_env(tmp_path), **_terminal(tmp_path, "n\n"), "CASEFILE_SKILL": "1"},
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "[y/N]" not in done.stdout
+    assert "CASEFILE_SKILL=1 is set: going ahead without asking" in done.stdout
+    assert any(c.startswith("claude plugin install") for c in calls)
+
+
+def test_casefile_skill_zero_asks_nothing_and_touches_nothing(tmp_path: Path) -> None:
+    files = _other_programs_files(tmp_path)
+    env = _with_harnesses(tmp_path, claude=FAKE_CLAUDE, codex=FAKE_CODEX, npx=FAKE_NPX)
+    done, calls = _install(
+        tmp_path,
+        extra_env={**env, **_terminal(tmp_path, "y\n"), "CASEFILE_SKILL": "0"},
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "[y/N]" not in done.stdout and "Installing the Casefile skill" not in done.stdout
+    assert not [c for c in calls if c.startswith(("claude ", "codex ", "npx "))]
+    assert not list(tmp_path.rglob("*.casefile-bak"))
+    for path, text in files.items():
+        assert path.read_bytes() == text.encode("utf-8"), path
+
+
+def test_plugin_autoupdate_zero_installs_the_plugin_and_writes_no_autoupdate(
+    tmp_path: Path,
+) -> None:
+    """`CASEFILE_PLUGIN_AUTOUPDATE=0`: плагин ставится, а `autoUpdate` в settings.json не
+    пишется; в выводе — строка об этом и команда ручного обновления. Копия по-прежнему есть:
+    сама команда `claude` тоже правит этот файл."""
+    _other_programs_files(tmp_path)
+    done, calls = _install(
+        tmp_path,
+        extra_env={
+            **_harness_env(tmp_path),
+            **_terminal(tmp_path, "y\n"),
+            "CASEFILE_PLUGIN_AUTOUPDATE": "0",
+        },
+    )
+
+    assert done.returncode == 0, done.stderr
+    settings = tmp_path / "claude" / "settings.json"
+    assert "autoUpdate" not in settings.read_text(encoding="utf-8")
+    assert settings.read_bytes() == SETTINGS_4.encode("utf-8")
+    assert settings.with_name("settings.json.casefile-bak").exists()
+    assert any(c.startswith("claude plugin install") for c in calls)
+    assert re.search(
+        r"Claude Code +installed 0\.7\.1, connected to .* \(automatic updates not switched on, "
+        r"as CASEFILE_PLUGIN_AUTOUPDATE=0 says; to update by hand: "
+        r"claude plugin update casefile@casefile\)",
+        done.stdout,
+    )
+    assert "goes into extraKnownMarketplaces.casefile" not in done.stdout, "список честен"
+
+
+def test_a_second_run_does_not_overwrite_the_copy(tmp_path: Path) -> None:
+    """Копия — исходник человека, а не вчерашнее состояние: повторный запуск её не затирает,
+    даже если файл с тех пор изменился."""
+    bak = tmp_path / "claude" / "settings.json.casefile-bak"
+    _other_programs_files(tmp_path)
+    bak.write_text("the very first original", encoding="utf-8")
+    done, _ = _install(tmp_path, extra_env={**_harness_env(tmp_path), **_terminal(tmp_path, "y\n")})
+
+    assert done.returncode == 0, done.stderr
+    assert bak.read_text(encoding="utf-8") == "the very first original"
+    assert not re.search(r"saved a copy of \S*settings\.json ", done.stdout)
+
+
+def test_a_failed_copy_leaves_the_file_and_the_harness_alone(tmp_path: Path) -> None:
+    """Копию сделать не вышло — файл не меняется и команды харнесса не идут: правка без
+    копии — ровно то, ради чего шаг устроен."""
+    files = _other_programs_files(tmp_path)
+    env = _harness_env(tmp_path)
+    stubs = Path(env["PATH"].split(":")[1])
+    (stubs / "cp").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    (stubs / "cp").chmod(0o755)
+    done, calls = _install(tmp_path, extra_env={**env, **_terminal(tmp_path, "y\n")})
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if c.startswith(("claude ", "codex "))], calls
+    for path, text in files.items():
+        assert path.read_bytes() == text.encode("utf-8"), path
+    assert "could not save a copy of" in done.stdout
+
+
+# Терминал, как он у человека, а не файл: `curl | sh` — stdin там труба, ответ идёт с
+# управляющего терминала. Драйвер даёт ребёнку свой pty как управляющий терминал и вывод
+# либо на него (человек), либо в трубы (агент, унаследовавший терминал сеанса).
+PTY_DRIVER = r"""
+import fcntl, json, os, pty, select, subprocess, sys, termios, time
+
+answer, on_terminal, command = sys.argv[1], sys.argv[2] == "1", sys.argv[3]
+master, slave = pty.openpty()
+
+
+def own_terminal():
+    os.setsid()
+    fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
+
+stdio = slave if on_terminal else subprocess.PIPE
+proc = subprocess.Popen(
+    ["sh", "-c", command], stdin=subprocess.DEVNULL, stdout=stdio, stderr=stdio,
+    preexec_fn=own_terminal,
+)
+timed_out, out = False, b""
+if on_terminal:
+    os.close(slave)
+    answered, deadline = False, time.time() + 40
+    while time.time() < deadline:
+        if select.select([master], [], [], 0.2)[0]:
+            try:
+                chunk = os.read(master, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+            if not answered and b"[y/N]" in out:
+                os.write(master, answer.encode() + b"\n")
+                answered = True
+        elif proc.poll() is not None:
+            break
+    timed_out = proc.poll() is None
+    if timed_out:
+        proc.kill()
+    proc.wait()
+else:
+    try:
+        stdout, stderr = proc.communicate(timeout=40)
+        out = stdout + stderr
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        proc.kill()
+        proc.communicate()
+text = out.decode(errors="replace")
+print(json.dumps({"rc": proc.returncode, "out": text, "timed_out": timed_out}))
+"""
+
+
+def _curl_pipe_sh(
+    tmp_path: Path, answer: str, *, on_terminal: bool, **extra: str
+) -> tuple[dict[str, object], list[str]]:
+    """`cat install.sh | sh` — как `curl … | sh` — с управляющим терминалом `/dev/tty`."""
+    pytest.importorskip("pty")
+    env, calls = _prepare(
+        tmp_path, extra_env={**_harness_env(tmp_path), "CASEFILE_TTY": "", **extra}
+    )
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            PTY_DRIVER,
+            answer,
+            "1" if on_terminal else "0",
+            f"cat {INSTALL_SH} | sh",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout), calls.read_text().splitlines()
+
+
+def test_curl_pipe_sh_in_a_terminal_asks_on_the_controlling_terminal_and_n_skips(
+    tmp_path: Path,
+) -> None:
+    """Главный путь человека: stdin — труба со скриптом, вопрос идёт через `/dev/tty`."""
+    files = _other_programs_files(tmp_path)
+    result, calls = _curl_pipe_sh(tmp_path, "n", on_terminal=True)
+
+    assert not result["timed_out"], result["out"]
+    assert "Install the plugin and make these changes? [y/N]" in str(result["out"])
+    assert "Skipped: no file of another program was touched" in str(result["out"])
+    assert not [c for c in calls if c.startswith(("claude ", "codex ", "npx "))], calls
+    for path, text in files.items():
+        assert path.read_bytes() == text.encode("utf-8"), path
+
+
+def test_curl_pipe_sh_in_a_terminal_y_installs_the_plugin(tmp_path: Path) -> None:
+    result, calls = _curl_pipe_sh(tmp_path, "y", on_terminal=True)
+
+    assert not result["timed_out"], result["out"]
+    assert any(c.startswith("claude plugin install") for c in calls), result["out"]
+    assert "Skipped" not in str(result["out"])
+
+
+def test_an_agent_that_inherited_the_terminal_is_not_asked_and_does_not_hang(
+    tmp_path: Path,
+) -> None:
+    """`/dev/tty` открывается и у процесса, запущенного агентом из терминала, но вывод у него
+    в трубах, и ответа не даст никто: вопроса нет, шаг идёт по `CASEFILE_SKILL`."""
+    result, calls = _curl_pipe_sh(tmp_path, "n", on_terminal=False)
+
+    assert not result["timed_out"], result["out"]
+    assert "[y/N]" not in str(result["out"])
+    assert "No terminal to ask on, so it goes ahead" in str(result["out"])
+    assert any(c.startswith("claude plugin install") for c in calls)
+
+
+# Точечная запись settings.json: одна текстовая вставка, а не пересборка файла. Тот же
+# алгоритм у node и python3 (jq файл пересобирает целиком и не годится); `install.ps1` — тот
+# же сканер на PowerShell, там проверка текстом ниже.
+
+
+def _settings_vectors() -> dict[str, str]:
+    base = {
+        "model": "opus",
+        "extraKnownMarketplaces": {
+            "casefile": {"source": {"source": "git", "url": "https://x/y.git", "ref": "plugin"}}
+        },
+        "x": [1, 2, {"a": "}"}],
+    }
+    two = {
+        "extraKnownMarketplaces": {
+            "first": {"source": {"source": "github"}},
+            "casefile": {"source": {"source": "git"}, "autoUpdate": False},
+            "last": {"s": 1},
+        },
+        "tail": '\\"}{',
+    }
+    on = {"extraKnownMarketplaces": {"casefile": {"source": {"source": "git"}, "autoUpdate": True}}}
+    last = {"extraKnownMarketplaces": {"a": {"s": 1}, "casefile": {"source": {"source": "git"}}}}
+    plain = json.dumps(base, indent=2) + "\n"
+    return {
+        "indent2": plain,
+        "indent4_no_final_newline": json.dumps(base, indent=4),
+        "tabs": json.dumps(base, indent="\t") + "\n",
+        "compact": json.dumps(base, separators=(",", ":")),
+        "crlf": plain.replace("\n", "\r\n"),
+        "bom": BOM + plain,
+        "autoupdate_false": json.dumps(two, indent=2) + "\n",
+        "autoupdate_true": json.dumps(on, indent=2) + "\n",
+        "casefile_last": json.dumps(last, indent=2) + "\n",
+        "no_marketplaces": json.dumps({"model": "x"}, indent=2) + "\n",
+        "no_casefile": json.dumps({"extraKnownMarketplaces": {"a": {"s": 1}}}, indent=2) + "\n",
+        "unicode": json.dumps(
+            {"t": "тест é 💥", "extraKnownMarketplaces": {"casefile": {"source": {"k": "v"}}}},
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        "spaced_colon": (
+            '{\n  "extraKnownMarketplaces" : {\n    "casefile" : {\n'
+            '      "source" : {"k": 1}\n    }\n  }\n}\n'
+        ),
+        "numbers": (
+            '{"n": 1.0, "big": 12345678901234567890, "e": 1E3, '
+            '"extraKnownMarketplaces": {"casefile": {"source": {}}}}'
+        ),
+    }
+
+
+SETTINGS_VECTORS = _settings_vectors()
+#: Объявления `casefile` нет: `auto_update` отказывает, `drop` ничего не делает.
+NO_CASEFILE = {"no_marketplaces", "no_casefile"}
+SETTINGS_TOOLS = [
+    "python3",
+    pytest.param(
+        "node", marks=pytest.mark.skipif(shutil.which("node") is None, reason="node отсутствует")
+    ),
+]
+
+
+def _single_edit(old: str, new: str) -> tuple[str, str]:
+    """`new` — это `old` с одним заменённым куском: (что убрано, что вставлено)."""
+    limit = min(len(old), len(new))
+    head = 0
+    while head < limit and old[head] == new[head]:
+        head += 1
+    tail = 0
+    while tail < limit - head and old[-1 - tail] == new[-1 - tail]:
+        tail += 1
+    return old[head : len(old) - tail], new[head : len(new) - tail]
+
+
+def _shell_functions(*names: str) -> str:
+    """Определения функций `install.sh` по именам: в строку или до `}` в первом столбце."""
+    text = _read(INSTALL_SH)
+    found = []
+    for name in names:
+        match = re.search(rf"^{name}\(\) \{{.*\}}$", text, re.M) or re.search(
+            rf"^{name}\(\) \{{[^\n]*\n.*?^\}}$", text, re.M | re.S
+        )
+        assert match, f"в install.sh нет функции {name}"
+        found.append(match.group(0))
+    return "\n".join(found)
+
+
+def _edit_settings(tmp_path: Path, tool: str, op: str, text: str) -> tuple[int, str]:
+    """`claude_settings <op>` из `install.sh` над файлом с этим текстом, при PATH только с
+    нужным инструментом: так видно, какой из двух (node, python3) отработал."""
+    work = tmp_path / f"{tool}-{op}"
+    (work / "claude").mkdir(parents=True)
+    (work / "bin").mkdir()
+    settings = work / "claude" / "settings.json"
+    settings.write_bytes(text.encode("utf-8"))
+    for name in (tool, "cmp", "cat", "mktemp", "rm"):
+        found = shutil.which(name)
+        assert found, name
+        (work / "bin" / name).symlink_to(found)
+    script = (
+        "set -eu\n"
+        + _shell_functions("claude_settings_file", "claude_settings")
+        + f"\nskill_tmp=$(mktemp -d)\nclaude_settings {op}\n"
+    )
+    done = subprocess.run(
+        ["/bin/sh", "-c", script],
+        env={
+            "PATH": str(work / "bin"),
+            "HOME": str(work),
+            "CLAUDE_CONFIG_DIR": str(work / "claude"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return done.returncode, settings.read_bytes().decode("utf-8")
+
+
+@pytest.mark.parametrize("tool", SETTINGS_TOOLS)
+@pytest.mark.parametrize("name", SETTINGS_VECTORS)
+def test_auto_update_is_one_insertion_and_everything_else_stays_byte_for_byte(
+    tmp_path: Path, tool: str, name: str
+) -> None:
+    old = SETTINGS_VECTORS[name]
+    code, new = _edit_settings(tmp_path, tool, "auto_update", old)
+
+    if name in NO_CASEFILE:
+        assert code == 1 and new == old, "нет объявления — отказ, файл не тронут"
+        return
+    assert code == 0
+    want = json.loads(old.lstrip(BOM))
+    want["extraKnownMarketplaces"]["casefile"]["autoUpdate"] = True
+    assert json.loads(new.lstrip(BOM)) == want
+    removed, inserted = _single_edit(old, new)
+    if name == "autoupdate_true":
+        assert new == old, "уже включено — файл не пишется"
+    elif name == "autoupdate_false":
+        assert new == old.replace('"autoUpdate": false', '"autoUpdate": true')
+    else:
+        assert removed == "", removed
+        assert re.sub(r"\s", "", inserted) == ',"autoUpdate":true', inserted
+    if name == "crlf":
+        assert "\n" not in new.replace("\r\n", ""), "концы строк файла не смешиваются"
+    if name == "bom":
+        assert new.startswith(BOM)
+
+
+@pytest.mark.parametrize("tool", SETTINGS_TOOLS)
+@pytest.mark.parametrize("name", SETTINGS_VECTORS)
+def test_drop_cuts_out_the_declaration_and_nothing_else(
+    tmp_path: Path, tool: str, name: str
+) -> None:
+    old = SETTINGS_VECTORS[name]
+    code, new = _edit_settings(tmp_path, tool, "drop", old)
+
+    assert code == 0
+    if name in NO_CASEFILE:
+        assert new == old
+        return
+    want = json.loads(old.lstrip(BOM))
+    del want["extraKnownMarketplaces"]["casefile"]
+    assert json.loads(new.lstrip(BOM)) == want
+    removed, inserted = _single_edit(old, new)
+    assert inserted == "" and "casefile" in removed, (removed, inserted)
+
+
+def test_the_settings_edit_without_node_and_python_is_a_refusal_not_a_rewrite(
+    tmp_path: Path,
+) -> None:
+    """Только jq (он пересобирает файл целиком) не годится: отказ, файл не тронут."""
+    work = tmp_path / "bare"
+    (work / "claude").mkdir(parents=True)
+    (work / "bin").mkdir()
+    settings = work / "claude" / "settings.json"
+    settings.write_text(SETTINGS_VECTORS["indent2"], encoding="utf-8")
+    for name in ("cmp", "cat", "mktemp"):
+        (work / "bin" / name).symlink_to(shutil.which(name) or "")
+    script = (
+        "set -eu\n"
+        + _shell_functions("claude_settings_file", "claude_settings")
+        + "\nskill_tmp=$(mktemp -d)\nclaude_settings auto_update\n"
+    )
+    done = subprocess.run(
+        ["/bin/sh", "-c", script],
+        env={
+            "PATH": str(work / "bin"),
+            "HOME": str(work),
+            "CLAUDE_CONFIG_DIR": str(work / "claude"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert done.returncode == 1
+    assert settings.read_text(encoding="utf-8") == SETTINGS_VECTORS["indent2"]
+
+
+def _backup_once(tmp_path: Path, target: Path, *, cp: str | None = None) -> tuple[int, str]:
+    bin_dir = tmp_path / "bin-backup"
+    bin_dir.mkdir(exist_ok=True)
+    if cp is not None:
+        (bin_dir / "cp").write_text(cp, encoding="utf-8")
+        (bin_dir / "cp").chmod(0o755)
+    script = (
+        "set -eu\n"
+        + _shell_functions("skill_line", "backup_once")
+        + f'\nbackup_once Label "{target}"\n'
+    )
+    done = subprocess.run(
+        ["/bin/sh", "-c", script],
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return done.returncode, done.stdout
+
+
+def test_backup_once_keeps_the_first_original_and_the_permissions(tmp_path: Path) -> None:
+    target = tmp_path / "settings.json"
+    target.write_text("first", encoding="utf-8")
+    target.chmod(0o600)
+    code, out = _backup_once(tmp_path, target)
+    bak = tmp_path / "settings.json.casefile-bak"
+
+    assert code == 0 and bak.read_text(encoding="utf-8") == "first"
+    assert bak.stat().st_mode & 0o777 == 0o600, "копия не читается всеми, как и сам файл"
+    assert "saved a copy of" in out and "never overwritten" in out
+
+    target.write_text("second", encoding="utf-8")
+    code, out = _backup_once(tmp_path, target)
+    assert code == 0 and bak.read_text(encoding="utf-8") == "first" and out == ""
+
+
+def test_backup_once_has_nothing_to_copy_without_a_file_and_fails_when_it_cannot(
+    tmp_path: Path,
+) -> None:
+    code, out = _backup_once(tmp_path, tmp_path / "absent.json")
+    assert code == 0 and out == "" and not list(tmp_path.glob("*.casefile-bak"))
+
+    target = tmp_path / "config.toml"
+    target.write_text("x", encoding="utf-8")
+    code, out = _backup_once(tmp_path, target, cp="#!/bin/sh\nexit 1\n")
+    assert code == 1 and "could not save a copy of" in out
+    assert not (tmp_path / "config.toml.casefile-bak").exists()
+
+
+# Близнец в install.ps1: pwsh в образе нет, поэтому шаги стерегутся текстом, а сам сканер
+# JSON прогнан на этих же 14 текстах в контейнере PowerShell 7 и дал те же байты, что node и
+# python3 (заметка в `docs/notes/docker.md`).
+
+
+def test_install_ps1_carries_the_consent_the_copies_and_the_point_edit() -> None:
+    text = _read(INSTALL_PS1)
+
+    for step in (
+        "CASEFILE_PLUGIN_AUTOUPDATE",
+        "function Confirm-SkillStep",
+        "function Test-CanAsk",
+        "Read-Host",
+        "[Console]::IsInputRedirected",
+        "function Backup-Once",
+        ".casefile-bak",
+        "function Update-ClaudeSettings",
+        "function Edit-ClaudeSettingsText",
+        "Install the plugin and make these changes? [y/N]",
+        "Skipped: no file of another program was touched",
+        "CASEFILE_SKILL=1 is set: going ahead without asking",
+        "No terminal to ask on, so it goes ahead",
+        "automatic updates not switched on, as CASEFILE_PLUGIN_AUTOUPDATE=0 says",
+    ):
+        assert step in text, f"install.ps1 не содержит {step!r}"
+    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    assert "ConvertTo-Json" not in code, "settings.json больше не пересобирается целиком"
+
+
+def test_both_installers_ask_before_the_plugin_step_and_copy_before_any_harness_command() -> None:
+    sh_text, ps1_text = _read(INSTALL_SH), _read(INSTALL_PS1)
+
+    assert sh_text.index("if ! skill_consent; then") < sh_text.index("for harness in claude")
+    assert ps1_text.index("if (-not (Confirm-SkillStep)) { return }") < ps1_text.index(
+        "@{ Exe = 'claude'"
+    )
+    claude_sh = sh_text[sh_text.index("skill_claude() {") :]
+    assert claude_sh.index('backup_once "Claude Code"') < claude_sh.index("claude_marketplace_add")
+    codex_sh = sh_text[sh_text.index("skill_codex() {") :]
+    assert codex_sh.index('backup_once "Codex"') < codex_sh.index("codex_marketplace_add")
+    claude_ps1 = ps1_text[ps1_text.index("function Install-ClaudeSkill") :]
+    assert claude_ps1.index("Backup-Once 'Claude Code'") < claude_ps1.index(
+        "Add-ClaudeMarketplace $src"
+    )
+    codex_ps1 = ps1_text[ps1_text.index("function Install-CodexSkill") :]
+    assert codex_ps1.index("Backup-Once 'Codex'") < codex_ps1.index("Add-CodexMarketplace)")
+    assert "command -v jq" not in sh_text, "jq пересобирает settings.json целиком"
+
+
+def test_the_new_variables_are_described_where_people_look() -> None:
+    for path in (INSTALL_SH, INSTALL_PS1, PROJECT_ROOT / "README.md", AGENT_GUIDE):
+        text = _read(path)
+        assert "CASEFILE_PLUGIN_AUTOUPDATE" in text, path.name
+        assert ".casefile-bak" in text, path.name
