@@ -11,10 +11,18 @@ import hashlib
 import os
 import stat
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
-from tests.test_compose import COMPOSE_FILES, PROJECT_ROOT, _indent, _services
+from tests.test_compose import (
+    COMPOSE_FILES,
+    PROJECT_ROOT,
+    _from_host,
+    _indent,
+    _meaningful_lines,
+    _mounts,
+    _services,
+)
 
 PROD = COMPOSE_FILES["prod"]
 IMAGES_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "images.yml"
@@ -89,6 +97,64 @@ def test_the_updater_revision_matches_its_definition() -> None:
     )
 
 
+def _declared_volumes(text: str) -> set[str]:
+    """Тома верхнего блока `volumes:` файла: имена, а не настройки."""
+    lines = _meaningful_lines(text)
+    start = next(number for number, line in enumerate(lines) if line == "volumes:")
+    declared: set[str] = set()
+    for line in lines[start + 1 :]:
+        if _indent(line) == 0:
+            break
+        if _indent(line) == 2:
+            declared.add(line.strip().rstrip(":"))
+    return declared
+
+
+def test_the_snapshot_of_the_updater_lives_in_a_named_volume_it_mounts() -> None:
+    """Снимок перед миграцией переживает пересоздание обновлятора, потому что лежит в томе.
+
+    Том обязан быть объявлен в этом файле: файл выпуска заменяет локальный, и службу,
+    которая его держит, поднимает `updater-renew` по новому файлу (TRK-547). В `/tmp`
+    контейнера снимок пропадал бы вместе с ним.
+    """
+    snapshot = next(
+        line for line in _script("updater").splitlines() if line.startswith("SNAPSHOT=")
+    )
+    folder = str(PurePosixPath(snapshot.split("=", 1)[1]).parent)
+
+    mounted = [
+        source for source, target in _mounts(_services(_prod())["updater"]) if target == folder
+    ]
+    assert mounted == ["updater-snapshot"]
+    assert not _from_host(mounted[0])
+    assert "updater-snapshot" in _declared_volumes(_prod())
+
+
+def test_every_named_volume_a_service_mounts_is_declared() -> None:
+    """Том без объявления compose не создаст: служба не поднимется, а обновление упадёт."""
+    text = _prod()
+    declared = _declared_volumes(text)
+
+    for name, body in _services(text).items():
+        for source, _target in _mounts(body):
+            if source and not _from_host(source):
+                assert source in declared, f"{name}: том {source} не объявлен в `volumes:`"
+    assert {"pgdata", "ui-key", "agent-key", "updater-snapshot"} <= declared
+
+
+def test_the_renewal_needs_no_snapshot_volume_of_its_own() -> None:
+    """`updater-renew` сценарий обновления не исполняет: снимков не снимает и не читает.
+
+    Том появляется вместе с обновлятором: её `up -d --no-deps updater` читает новый файл.
+    """
+    renew = "\n".join(_services(_prod())["updater-renew"])
+
+    assert "snapshot" not in renew.lower()
+    assert _mounts(_services(_prod())["updater-renew"]) == [
+        ("/var/run/docker.sock", "/var/run/docker.sock")
+    ]
+
+
 def test_every_up_of_the_application_runs_the_renewal() -> None:
     """`up -d db api mcp ui` обновлятора прежнего выпуска запускает `updater-renew`."""
     ui = "\n".join(_services(_prod())["ui"])
@@ -157,7 +223,8 @@ case "$*" in
   "compose exec -T db sh -c psql "*) next schema "" ;;
   "compose exec -T db sh -c pg_dump "*)
     [ ! -s "$SCENE/dump-fails" ] || exit 1
-    echo DUMP ;;
+    [ ! -s "$SCENE/dump-empty" ] || exit 0
+    echo "DUMP$(cat "$SCENE/dump-name" 2>/dev/null)" ;;
   "compose exec -T db sh -c pg_restore "*)
     cat >"$SCENE/restored"
     exit "$(cat "$SCENE/restore" 2>/dev/null || echo 0)" ;;
@@ -170,6 +237,7 @@ case "$*" in
   "compose ps -q "*) echo "container-$4" ;;
   "ps -q "*) echo container-updater ;;
   "ps --filter "*) cat "$SCENE/containers" 2>/dev/null ;;
+  "inspect -f {{range .Mounts}}{{if eq .Destination \"/snapshot\"}}"*) echo test_updater-snapshot ;;
   "inspect -f {{range .Mounts}}"*) cat "$SCENE/directory" ;;
   "compose pull"*)
     [ ! -e "$CHECKING" ] || echo "(checking)" >>"$CALLS"
@@ -230,6 +298,9 @@ class Updater:
         docker.chmod(docker.stat().st_mode | stat.S_IEXEC)
         self.project = root / "project"
         self.project.mkdir()
+        #: Том со снимком: каталог `/snapshot` обновлятора.
+        self.snapshot = root / "snapshot" / "before-update.dump"
+        self.snapshot.parent.mkdir()
         (self.project / "docker-compose.prod.yml").write_text("release: 1\n", encoding="utf-8")
         self.calls = root / "calls"
         self.calls.touch()
@@ -259,7 +330,7 @@ class Updater:
         script = script.replace("/tmp/previous-compose.yml", str(self.root / "previous.yml"))
         script = script.replace("sleep 5", "sleep 0")
         script = script.replace("/tmp/checking", str(self.root / "checking"))
-        script = script.replace(SNAPSHOT, str(self.root / "snapshot.dump"))
+        script = script.replace(SNAPSHOT, str(self.snapshot))
         if tail:
             script = script[: script.index("trap 'exit 0' TERM INT")] + tail
         done = subprocess.run(
@@ -338,8 +409,11 @@ def test_the_compose_file_of_the_release_replaces_the_local_one(updater: Updater
     assert updater.called("compose up")
 
 
-#: Снимок базы на время обновления с миграцией — в контейнере обновлятора.
-SNAPSHOT = "/tmp/casefile-before-update.dump"
+#: Снимок базы перед обновлением с миграцией — в именованном томе обновлятора (TRK-547).
+SNAPSHOT = "/snapshot/before-update.dump"
+
+#: Том, как его называет подставной `docker`, и как он попадает в журнал обновлятора.
+SNAPSHOT_VOLUME = "test_updater-snapshot"
 
 #: Свои теги обновлятора в проекте подставного `docker`.
 KEPT = "casefile-updater/test-project"
@@ -649,6 +723,21 @@ def test_the_updater_drops_previous_tags_left_by_an_earlier_updater(updater: Upd
     assert not updater.called("compose up")
 
 
+def test_the_updater_drops_a_half_written_snapshot_left_by_a_stopped_updater(
+    updater: Updater,
+) -> None:
+    """Остановленный посреди `pg_dump` обновлятор оставил `.part`: на старте его нет, снимок цел."""
+    part = updater.snapshot.with_name("before-update.dump.part")
+    part.write_text("HALF", encoding="utf-8")
+    updater.snapshot.write_text("EARLIER\n", encoding="utf-8")
+    loop = _script("updater")[_script("updater").index("trap 'exit 0' TERM INT") :]
+
+    updater.run("updater", loop.split('if [ "$CASEFILE_AUTO_UPDATE"', 1)[0])
+
+    assert not part.exists()
+    assert updater.snapshot.read_text() == "EARLIER\n"
+
+
 # --- Выпуск с миграцией: снимок базы и его восстановление (TRK-134) -------------------
 
 
@@ -662,7 +751,7 @@ def test_a_release_without_a_migration_takes_no_snapshot(updater: Updater) -> No
 
 
 def test_a_release_with_a_migration_is_preceded_by_a_snapshot(updater: Updater) -> None:
-    """Ревизия базы не та, что head нового образа: снимок до `up`, после успеха — прочь."""
+    """Ревизия базы не та, что head нового образа: снимок до `up`, после успеха он остаётся."""
     updater.set(wanted="sha256:new", schema="rev1\n", head="rev2")
 
     out = updater.run("updater", "update\n")
@@ -673,8 +762,77 @@ def test_a_release_with_a_migration_is_preceded_by_a_snapshot(updater: Updater) 
     assert dump < calls.index("compose up -d db api mcp ui")
     assert "the release changes the database (rev1 -> rev2); snapshot taken first" in out
     assert "updated to 0.2.0" in out
-    assert not (updater.root / "snapshot.dump").exists(), "удачное обновление снимок убирает"
+    assert updater.snapshot.read_text() == "DUMP\n", "удачное обновление снимок не убирает"
+    assert not updater.snapshot.with_name("before-update.dump.part").exists()
     assert not updater.called("compose exec -T db sh -c pg_restore")
+
+
+def test_the_log_names_the_volume_and_the_file_of_the_snapshot(updater: Updater) -> None:
+    """Человек читает `docker compose logs updater` и узнаёт, где копия и как её достать."""
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev2")
+
+    out = updater.run("updater", "update\n")
+
+    assert f"kept in the volume {SNAPSHOT_VOLUME} as before-update.dump" in out
+    assert (
+        "the database as it was before this update (release 0.2.0) is kept in the volume "
+        f"{SNAPSHOT_VOLUME}, file before-update.dump; how to restore it: docs/backup-restore.md"
+    ) in out
+
+
+def test_the_next_update_with_a_migration_replaces_the_snapshot(updater: Updater) -> None:
+    """Копия одна: второе обновление с миграцией затирает снимок первого."""
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev2")
+    updater.run("updater", "update\n")
+    assert updater.snapshot.read_text() == "DUMP\n"
+
+    updater.set(schema="rev2\n", head="rev3", dump_name="-second")
+    updater.run("updater", "update\n")
+
+    assert updater.snapshot.read_text() == "DUMP-second\n"
+    assert sorted(path.name for path in updater.snapshot.parent.iterdir()) == [
+        "before-update.dump"
+    ], "в томе одна копия, ни временных файлов, ни прежних снимков"
+
+
+def test_a_release_without_a_migration_leaves_the_earlier_snapshot_alone(
+    updater: Updater,
+) -> None:
+    """Снимок прежнего обновления лежит, пока его не затрёт следующий снимок."""
+    updater.snapshot.write_text("EARLIER\n", encoding="utf-8")
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev1")
+
+    updater.run("updater", "update\n")
+
+    assert updater.snapshot.read_text() == "EARLIER\n"
+    assert not updater.called("compose exec -T db sh -c pg_dump")
+
+
+def test_a_check_without_a_new_release_leaves_the_earlier_snapshot_alone(
+    updater: Updater,
+) -> None:
+    updater.snapshot.write_text("EARLIER\n", encoding="utf-8")
+
+    updater.run("updater", "update\n")
+
+    assert updater.snapshot.read_text() == "EARLIER\n"
+
+
+def test_an_earlier_snapshot_is_never_put_back_by_a_release_without_a_migration(
+    updater: Updater,
+) -> None:
+    """Выпуск без миграции упал, а ревизия базы прочлась иначе: чужой снимок не восстанавливать.
+
+    Прежний снимок — база прошлого обновления, и записи после него были бы потеряны ни за что.
+    """
+    updater.snapshot.write_text("EARLIER\n", encoding="utf-8")
+    updater.set(wanted="sha256:new", schema="rev1\nrev2\n", head="rev1", up="1\n")
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose exec -T db sh -c pg_restore")
+    assert "rolled back to 0.2.0" in out
+    assert updater.snapshot.read_text() == "EARLIER\n"
 
 
 def test_a_failed_release_that_moved_the_schema_gets_the_snapshot_back(updater: Updater) -> None:
@@ -692,8 +850,9 @@ def test_a_failed_release_that_moved_the_schema_gets_the_snapshot_back(updater: 
     assert "DROP SCHEMA public CASCADE" in _script("updater"), "таблицы упавшего выпуска — прочь"
     assert (updater.scene / "restored").read_text() == "DUMP\n", "восстановлен тот самый снимок"
     assert "database restored from the snapshot" in out
+    assert f"the snapshot stays in the volume {SNAPSHOT_VOLUME}, file before-update.dump" in out
     assert "rolled back to 0.2.0" in out
-    assert not (updater.root / "snapshot.dump").exists()
+    assert updater.snapshot.read_text() == "DUMP\n", "и после восстановления копия лежит в томе"
 
 
 def test_a_failed_migration_leaves_nothing_to_restore(updater: Updater) -> None:
@@ -724,12 +883,38 @@ def test_no_snapshot_no_migration(updater: Updater) -> None:
     assert "tag sha256:old registry/casefile:stable" in updater.called("tag ")
 
 
+def test_a_failed_snapshot_does_not_destroy_the_earlier_good_one(updater: Updater) -> None:
+    """Неудачный снимок не стирает прежний удачный: пишется во временный файл (TRK-547)."""
+    updater.snapshot.write_text("EARLIER\n", encoding="utf-8")
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev2", dump_fails="1")
+
+    out = updater.run("updater", "update\n")
+
+    assert "could not take a snapshot of the database" in out
+    assert updater.snapshot.read_text() == "EARLIER\n"
+    assert [path.name for path in updater.snapshot.parent.iterdir()] == ["before-update.dump"]
+
+
+def test_an_empty_dump_is_a_failed_snapshot_and_keeps_the_earlier_one(updater: Updater) -> None:
+    """`pg_dump` кончился без ошибки, но ничего не отдал: это тоже неудача, а не снимок."""
+    updater.snapshot.write_text("EARLIER\n", encoding="utf-8")
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev2", dump_empty="1")
+
+    out = updater.run("updater", "update\n")
+
+    assert "could not take a snapshot of the database" in out
+    assert not updater.called("compose up")
+    assert updater.snapshot.read_text() == "EARLIER\n"
+    assert [path.name for path in updater.snapshot.parent.iterdir()] == ["before-update.dump"]
+
+
 def test_a_snapshot_that_cannot_be_restored_is_kept_and_named(updater: Updater) -> None:
     updater.set(wanted="sha256:new", schema="rev1\nrev2\n", head="rev2", up="1\n", restore="1")
 
     out = updater.run("updater", "update\n")
 
     assert "could not restore the database snapshot" in out
-    assert "docker compose cp updater:" in out
-    assert (updater.root / "snapshot.dump").exists()
+    assert f"kept in the volume {SNAPSHOT_VOLUME}: " in out
+    assert f"docker compose cp updater:{updater.snapshot} ." in out
+    assert updater.snapshot.exists()
     assert updater.called("compose up -d --no-deps db api mcp ui"), "откат идёт как прежде"
