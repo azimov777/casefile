@@ -1191,3 +1191,24 @@ TRK-459#30). Решение TRK-140#8 «договор только в instructi
 дописывать в гайд, не в скил.
 **Где:** `skills/casefile/SKILL.md`, `app/mcp/instructions.md`, `docs/agent-install.md`,
 `tests/test_skill_file.py`, `scripts/build-openai-plugin.sh`.
+
+## Позиционирование Casefile живёт в описаниях манифестов — их правят вместе (TRK-540)
+
+**Что:** фраза о том, что такое Casefile, стоит в `description` четырёх манифестов плагина
+(`.claude-plugin/plugin.json`, запись в `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`,
+`.cursor-plugin/plugin.json`) слово в слово; рядом свои формулировки в `metadata.description`
+маркетплейса, `interface.shortDescription` и `interface.longDescription` Codex, корневом
+`gemini-extension.json` и `server.json`. У ZIP для каталога OpenAI собственная строка `description`,
+зашитая в `scripts/build-openai-plugin.sh`: скрипт подменяет описание манифеста, потому что
+в архиве нет коннектора.
+**Почему важно:** поправить манифесты и забыть скрипт — значит отдать каталогу OpenAI прежнюю
+формулировку, а в репозитории держать новую; расхождение никто не заметит, пока не откроет листинг.
+Пределы длины: `server.json` `description` — до 100 знаков (схема реестра), `shortDescription` Codex —
+до 30, `longDescription` — до 4000; тест ZIP требует, чтобы после подмены слова «connector» не осталось
+ни в `description`, ни в `longDescription` (скрипт режет текст по фразе «The connector points at»).
+**Как правильно:** менял описание — правь все перечисленные места в одной ветке; четыре одинаковые
+фразы стережёт `tests/test_plugin_manifest.py`, строку ZIP и сокращённую для `server.json` — глаза.
+Слова «memory» и «todo list» в описаниях не использовать: возражения рынка бьют по ним (TRK-540).
+**Где:** `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`,
+`.cursor-plugin/plugin.json`, `gemini-extension.json`, `server.json`, `scripts/build-openai-plugin.sh`,
+`tests/test_plugin_manifest.py`.

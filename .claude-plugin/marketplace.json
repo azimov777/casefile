@@ -4,14 +4,14 @@
     "name": "azimov777"
   },
   "metadata": {
-    "description": "Casefile: the skill that teaches an agent to work with a Casefile task tracker.",
+    "description": "Casefile: the case file for every task, shared across sessions, agents and people.",
     "version": "0.9.4"
   },
   "plugins": [
     {
       "name": "casefile",
       "source": "./",
-      "description": "Casefile for agents: the skill for working a task through the Casefile MCP server (take it, keep its case, ask the human, hand it off, close it with verdicts) and the MCP connector, signed in through OAuth with no token in the plugin.",
+      "description": "Casefile: the case file for every task, shared across sessions, agents and people. The skill walks an agent through taking a task, keeping its case, asking the human, handing it off and closing it with verdicts; the MCP connector signs in through OAuth, no token in the plugin.",
       "version": "0.9.4",
       "author": {
         "name": "azimov777"

@@ -49,8 +49,9 @@ m = json.load(open(sys.argv[1], encoding="utf-8"))
 m.pop("mcpServers", None)
 m["keywords"] = [k for k in m.get("keywords", []) if k != "mcp"]
 m["description"] = (
-    "Casefile for agents: the skill for working a task through the Casefile MCP server "
-    "(take it, keep its case, ask the human, hand it off, close it with verdicts)."
+    "Casefile: the case file for every task, shared across sessions, agents and people. "
+    "The skill walks an agent through taking a task, keeping its case, asking the human, "
+    "handing it off and closing it with verdicts."
 )
 i = m["interface"]
 text = i["longDescription"]
