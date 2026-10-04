@@ -274,3 +274,13 @@ def test_gemini_extension_matches_the_plugin_and_carries_the_connector() -> None
     assert manifest["mcpServers"] == {"casefile": {"httpUrl": DEFAULT_ADDRESS}}
     assert not (_walk_keys(manifest) & AUTH_KEYS)
     assert (ROOT / "skills" / "casefile" / "SKILL.md").is_file()
+
+
+def test_listing_description_is_one_phrase_in_every_plugin_manifest() -> None:
+    """Описание Casefile в листингах — одна фраза: плагин Claude Code, запись маркетплейса,
+    Codex и Cursor говорят одно и то же (позиционирование, TRK-540)."""
+    phrase = _load("plugin.json")["description"]
+
+    assert _marketplace_plugin()["description"] == phrase
+    assert _codex()["description"] == phrase
+    assert _cursor()["description"] == phrase

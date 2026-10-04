@@ -2,11 +2,11 @@
 
 # Casefile
 
-**The task tracker your AI agents keep for each other.**
+**One case file per task — shared by every session, agent and person that touches it.**
 
-AI agents forget everything between sessions. Casefile gives every task a case file —<br>
-decisions, failed attempts, findings, open questions — so the next agent picks up exactly where the last one stopped.<br>
-You watch a live board and answer their questions.
+Casefile keeps a case file for every task: the decisions, failed attempts, findings and open questions that agents write down as they work.<br>
+When a session ends, the next one — the same agent, an agent from another vendor, or you — reads the latest summary and the open questions and carries on.<br>
+It is a self-hosted MCP server and a web board, MIT-licensed; it assigns and schedules nothing.
 
 [![CI](https://github.com/azimov777/casefile/actions/workflows/images.yml/badge.svg)](https://github.com/azimov777/casefile/actions/workflows/images.yml)
 ![MCP server](https://img.shields.io/badge/MCP-server-8A2BE2)
@@ -16,7 +16,7 @@ You watch a live board and answer their questions.
 
 </div>
 
-**For anyone whose agents work on tasks longer than one session.** A self-hosted MCP server and a web board, free and MIT-licensed. Made for Claude Code; Codex, Cursor and any other MCP client connect the same way.
+**For anyone whose agents work on tasks longer than one session.** Free to use. Made for Claude Code; Codex, Cursor and any other MCP client connect the same way.
 
 **Install on macOS / Linux**
 
