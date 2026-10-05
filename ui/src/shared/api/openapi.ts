@@ -448,11 +448,13 @@ export interface paths {
         };
         /**
          * Read a project
-         * @description Карточка проекта вместе с описанием и нынешними значениями атрибутов.
+         * @description Карточка проекта вместе с описанием, нынешними значениями атрибутов и решениями.
          *
          *     Описание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и
          *     таскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи
-         *     дела проекта (`/projects/{key}/entries`).
+         *     дела проекта (`/projects/{key}/entries`). Решения проекта — все, со статусом,
+         *     посчитанным при чтении, и числом задач, которые на каждое ссылаются (`CONCEPT.md`,
+         *     3.2): на этом строится раздел «Решения» экрана проекта.
          */
         get: operations["read_project"];
         put?: never;
@@ -760,8 +762,9 @@ export interface paths {
          * Read a task
          * @description Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
          *
-         *     Карточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые
-         *     признаки, последняя сводка целиком, открытые вопросы и неразобранные замечания
+         *     Карточка, связи с обеих сторон со статусом задачи на другой стороне, решения проекта,
+         *     на которые опирается задача, со статусом и преемником, вычисляемые признаки, последняя
+         *     сводка целиком, открытые вопросы и неразобранные замечания
          *     целиком, опись дела и переходы по таблице. Тела остальных записей читаются отдельно
          *     в `GET /tasks/{key}/entries`.
          *     Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
@@ -778,10 +781,11 @@ export interface paths {
          * @description Меняет только переданные поля.
          *
          *     Название, описание и пять разделов — только в `backlog` (иначе `409
-         *     task_field_locked`); исполнитель и приоритет — в любом незакрытом статусе; в
-         *     `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение
-         *     подшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,
-         *     приоритет — `field_changed`. Поля без записи не бывает: изменение, не
+         *     task_field_locked`); исполнитель, приоритет и решения проекта — в любом незакрытом
+         *     статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое
+         *     изменение подшивает запись: раздел — `section_changed`, исполнитель —
+         *     `assignee_changed`, приоритет и решения — `field_changed`. Новая ссылка на заменённое
+         *     решение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не
          *     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
          *     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
          *
@@ -2294,6 +2298,33 @@ export interface components {
              */
             text: string;
         };
+        /**
+         * CitedDecisionRead
+         * @description Решение проекта, на которое ссылается задача, и его преемник (`CONCEPT.md`, 4.2).
+         *
+         *     Та же форма, что у `get_task` в MCP (`CitedDecisionView`): пакет задачи совпадает в
+         *     обоих интерфейсах поле в поле.
+         */
+        CitedDecisionRead: {
+            /**
+             * Ref
+             * @description Address of the `decision` entry in the project's case
+             * @example TRK#15
+             */
+            ref: string;
+            /**
+             * Title
+             * @example Сервис не строим до сигнала спроса
+             */
+            title: string;
+            /**
+             * @description Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then
+             * @example in_force
+             */
+            status: components["schemas"]["DecisionStatus"];
+            /** @description The later decision that named this one in `supersedes`, with its own status; `null` while this one is in force */
+            superseded_by: components["schemas"]["DecisionRefRead"] | null;
+        };
         ClosingEntryCreate: components["schemas"]["PlainEntryCreate"] | components["schemas"]["RemarkEntryCreate"];
         /**
          * ClosingSummaryPayload
@@ -2483,6 +2514,163 @@ export interface components {
             data: components["schemas"]["TokenIssued"];
         };
         /**
+         * DecisionEntryRead
+         * @description Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.
+         *
+         *     Нагрузка одна на оба дела: `supersedes` — номера решений того же проекта, которые это
+         *     заменило (`CONCEPT.md`, 3.2). У решения задачи и у решения проекта, подшитого до
+         *     замены, список пуст. Статуса здесь нет: он меняется без записи в этом деле и
+         *     считается при чтении проекта и задачи (`ProjectDecisionRead`, `CitedDecisionRead`).
+         */
+        DecisionEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @description Key of the owning task; `null` for an entry of a project's case
+             * @example TRK-42
+             */
+            task_key: string | null;
+            /**
+             * Project Key
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`
+             * @example null
+             */
+            project_key: string | null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "decision";
+            payload?: components["schemas"]["DecisionPayload"];
+        };
+        /**
+         * DecisionPayload
+         * @description Нагрузка решения: какие решения проекта оно заменило.
+         *
+         *     Список со значением по умолчанию: решения задач и решения проекта, подшитые до замены
+         *     (`TRK-554`), ключа не несут, а ответ несёт его всегда — форма записи одна.
+         */
+        DecisionPayload: {
+            /**
+             * Supersedes
+             * @description Numbers of the earlier decisions of the same project that this project decision superseded; empty for a task decision
+             * @example [
+             *       12
+             *     ]
+             */
+            supersedes?: number[];
+        };
+        /**
+         * DecisionRefRead
+         * @description Решение проекта, названное ссылкой: адрес, заголовок и статус.
+         */
+        DecisionRefRead: {
+            /**
+             * Ref
+             * @description Address of the `decision` entry in the project's case
+             * @example TRK#15
+             */
+            ref: string;
+            /**
+             * Title
+             * @example Сервис не строим до сигнала спроса
+             */
+            title: string;
+            /**
+             * @description Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then
+             * @example in_force
+             */
+            status: components["schemas"]["DecisionStatus"];
+        };
+        /**
+         * DecisionStatus
+         * @description Действует ли решение проекта. Хранимым значением не бывает: только при чтении.
+         * @enum {string}
+         */
+        DecisionStatus: "in_force" | "superseded";
+        /**
+         * DecisionsChangedPayload
+         * @description Правка решений проекта задачи (`decisions`): списки ссылок «было» и «стало».
+         *
+         *     Своя форма, а не расширение `FieldChangedPayload` до «строка либо список»: там
+         *     значения — строки, и объединение «на всякий случай» сделало бы тип каждого поля
+         *     обвязки неопределённым. Разметка — `field`: у этой формы оно всегда `decisions`.
+         */
+        DecisionsChangedPayload: {
+            /**
+             * Field
+             * @example decisions
+             * @constant
+             */
+            field: "decisions";
+            /**
+             * Before
+             * @description References before the edit
+             * @example [
+             *       "TRK#12"
+             *     ]
+             */
+            before: string[];
+            /**
+             * After
+             * @description References after the edit
+             * @example [
+             *       "TRK#12",
+             *       "TRK#15"
+             *     ]
+             */
+            after: string[];
+        };
+        /**
          * EmptyPayload
          * @description Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках.
          */
@@ -2521,7 +2709,7 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
@@ -2557,8 +2745,11 @@ export interface components {
         };
         /**
          * FieldChangedEntryRead
-         * @description Служебная запись о правке обвязки задачи (`priority`) или карточки проекта
-         *     (название, описание).
+         * @description Служебная запись о правке обвязки задачи (`priority`, `decisions`) или карточки
+         *     проекта (название, описание).
+         *
+         *     Нагрузка — одна из двух форм: строки «было» и «стало» у полей-значений и списки у
+         *     `decisions`. Различает их `field`; списки бывают только у `decisions`.
          */
         FieldChangedEntryRead: {
             /**
@@ -2628,7 +2819,8 @@ export interface components {
              * @enum {string}
              */
             type: "field_changed";
-            payload: components["schemas"]["FieldChangedPayload"];
+            /** Payload */
+            payload: components["schemas"]["DecisionsChangedPayload"] | components["schemas"]["FieldChangedPayload"];
         };
         /**
          * FieldChangedFactsRead
@@ -3317,8 +3509,8 @@ export interface components {
         };
         /**
          * PlainEntryRead
-         * @description Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи
-         *     или проекта.
+         * @description Запись без нагрузки: попытка, находка, артефакт, заметка, заведение задачи или
+         *     проекта.
          */
         PlainEntryRead: {
             /**
@@ -3387,7 +3579,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "artifact" | "attempt" | "created" | "decision" | "finding" | "note";
+            type: "artifact" | "attempt" | "created" | "finding" | "note";
             payload?: components["schemas"]["EmptyPayload"];
         };
         /**
@@ -3516,11 +3708,70 @@ export interface components {
             description: string;
         };
         /**
-         * ProjectDetailRead
-         * @description Один проект с нынешними значениями атрибутов.
+         * ProjectDecisionRead
+         * @description Решение проекта в чтении проекта: всё, что нужно разделу «Решения» интерфейса.
          *
-         *     Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов
-         *     не показывают, и запрос атрибутов на каждый проект списка стоил бы им без пользы.
+         *     Все решения проекта, действующие и заменённые: интерфейс показывает действующие и
+         *     сворачивает остальные (`CONCEPT.md`, 5.1). Тело решения — в записи дела
+         *     (`GET /projects/{key}/entries/{no}`), задачи, которые на него ссылаются, — отбором
+         *     `decision:` в поиске.
+         */
+        ProjectDecisionRead: {
+            /**
+             * No
+             * @description Entry number in the project's case
+             * @example 15
+             */
+            no: number;
+            /**
+             * Ref
+             * @description Address of the `decision` entry in the project's case
+             * @example TRK#15
+             */
+            ref: string;
+            /**
+             * Title
+             * @example Сервис не строим до сигнала спроса
+             */
+            title: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then
+             * @example in_force
+             */
+            status: components["schemas"]["DecisionStatus"];
+            /**
+             * Supersedes
+             * @description Numbers of the earlier decisions of this project that this one superseded
+             * @example [
+             *       12
+             *     ]
+             */
+            supersedes: number[];
+            /**
+             * Superseded By
+             * @description Number of the later decision that superseded this one; `null` while in force
+             * @example null
+             */
+            superseded_by: number | null;
+            /**
+             * Tasks
+             * @description How many tasks name this decision in their `decisions` field, in any status; they are found by the search condition `decision: TRK#15`
+             * @example 3
+             */
+            tasks: number;
+        };
+        /**
+         * ProjectDetailRead
+         * @description Один проект с нынешними значениями атрибутов и его решениями.
+         *
+         *     Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и
+         *     решений не показывают, и запрос их на каждый проект списка стоил бы им без пользы.
          */
         ProjectDetailRead: {
             /**
@@ -3572,6 +3823,11 @@ export interface components {
              * @description Current attribute values, ordered by name ignoring case. Every change is an entry of the project's case: `attribute_created`, `attribute_changed`, `attribute_removed`
              */
             attributes: components["schemas"]["AttributeRead"][];
+            /**
+             * Decisions
+             * @description Every project decision — a `decision` entry of the project's case — in number order, in force or superseded, with its status computed on read and the number of tasks that name it
+             */
+            decisions: components["schemas"]["ProjectDecisionRead"][];
         };
         /**
          * ProjectEntryCreate
@@ -3580,6 +3836,10 @@ export interface components {
          *     Отдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой
          *     (`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не
          *     отказом `entry_fields_invalid` после.
+         *
+         *     `supersedes` — только у решения: новое решение проекта заменяет названные
+         *     (`CONCEPT.md`, 3.2). Без значения по умолчанию в схеме (`default_factory`): иначе
+         *     клиент интерфейса требовал бы его у каждой заметки (`docs/notes/api.md`).
          */
         ProjectEntryCreate: {
             /**
@@ -3605,6 +3865,14 @@ export interface components {
              * @enum {string}
              */
             type: "note" | "decision" | "finding" | "artifact";
+            /**
+             * Supersedes
+             * @description Numbers of earlier decisions of this project that the new decision supersedes; only with `decision`. A number outside the project's case or of another type answers `entry_fields_invalid`; a decision superseded already, `decision_not_in_force` with its successor
+             * @example [
+             *       12
+             *     ]
+             */
+            supersedes?: number[];
         };
         /**
          * ProjectRead
@@ -4743,6 +5011,14 @@ export interface components {
             assignee?: string | null;
             /** @default normal */
             priority: components["schemas"]["TaskPriority"];
+            /**
+             * Decisions
+             * @description Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor
+             * @example [
+             *       "TRK#15"
+             *     ]
+             */
+            decisions?: string[];
         };
         /**
          * TaskFeaturesRead
@@ -4795,7 +5071,7 @@ export interface components {
          *     `payload.field` записи `section_changed`, и читающий видит то же имя, что в схеме.
          * @enum {string}
          */
-        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "priority";
+        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "priority" | "decisions";
         /**
          * TaskLinkRead
          * @description Связь со стороны одной задачи.
@@ -4964,6 +5240,11 @@ export interface components {
              * @description Other links: `blocks`, `blocked_by`, `relates`, each named from this task's point of view, with the status of the task on the other side. Parent and children are not here: they are the `parent` and `children` fields
              */
             links: components["schemas"]["TaskLinkRead"][];
+            /**
+             * Decisions
+             * @description Project decisions the task relies on, in the order of its `decisions` field, each with its status computed on read and, once superseded, its successor. The project's other decisions are part of the project read
+             */
+            decisions: components["schemas"]["CitedDecisionRead"][];
             features: components["schemas"]["TaskFeaturesRead"];
             /** @description The latest summary in full: what was done, what is left, what is in the way, what is next. Null until the case has one */
             summary?: components["schemas"]["SummaryEntryRead"] | null;
@@ -5280,6 +5561,14 @@ export interface components {
             assignee?: string | null;
             /** @example high */
             priority?: components["schemas"]["TaskPriority"];
+            /**
+             * Decisions
+             * @description Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor. Replaces the whole list in any status but `done` and `cancelled`; a reference already in it stays after its decision is superseded
+             * @example [
+             *       "TRK#15"
+             *     ]
+             */
+            decisions?: string[];
             /**
              * Version
              * @description Version the client last saw. Sent back it turns a lost update into a `version_conflict` instead of a silent overwrite; omit it to skip the check
@@ -8093,7 +8382,7 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
@@ -8111,6 +8400,8 @@ export interface operations {
                 project?: string[] | null;
                 /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a project. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
                 parent?: string[] | null;
+                /** @description Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page */
+                decision?: string[] | null;
                 /** @description Task statuses */
                 status?: components["schemas"]["TaskStatus"][] | null;
                 /** @description Assignee names, matched exactly; `empty()` finds unassigned tasks */
@@ -9517,7 +9808,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

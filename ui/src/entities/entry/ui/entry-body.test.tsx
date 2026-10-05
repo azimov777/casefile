@@ -299,4 +299,32 @@ describe('служебная запись', () => {
     expect(paragraph?.className.split(' ')).not.toEqual(expect.arrayContaining(['flex']));
     expect(screen.getByRole('link', { name: 'DEMO-1#1' })).toBeVisible();
   });
+
+  /*
+   * Правка решений задачи (TRK-554): «было» и «стало» — списки ссылок `TRK#15`, и каждая
+   * ссылкой ведёт на запись решения в деле его проекта. Пустой список — та же пометка
+   * «пусто», что у пустой строки, а не пропавшая сторона.
+   */
+  it('правка решений показывает ссылки на решения, пустой список — словами', () => {
+    const entry = entryOfType(9, 'DEMO-1', 'field_changed');
+    const decisions = {
+      ...entry,
+      payload: { field: 'decisions', before: [], after: ['DEMO#4', 'DEMO#6'] },
+    } as typeof entry;
+
+    const { container } = render(
+      <MemoryRouter>
+        <EntryCard entry={decisions} checks={[]} />
+      </MemoryRouter>,
+    );
+
+    const was = container.querySelector('[data-side="was"]');
+    const now = container.querySelector('[data-side="now"]');
+    expect(was).toHaveTextContent(say.ui('entry.emptyValue'));
+    expect(screen.getByRole('link', { name: 'DEMO#4' })).toHaveAttribute(
+      'href',
+      '/projects/DEMO?entry=4',
+    );
+    expect(now).toHaveTextContent('DEMO#6');
+  });
 });
