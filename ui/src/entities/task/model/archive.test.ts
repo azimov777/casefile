@@ -14,7 +14,8 @@ const NOW = new Date('2026-09-11T12:00:00.000Z');
  * Правило показа при этих часах — написано здесь заново, а не собрано кодом: тест,
  * берущий строку оттуда же, откуда её берёт запрос, сверял бы код с самим собой.
  */
-const RULE = 'status: not in done, cancelled or last_entry_at: >= "2026-09-08T12:00:00.000Z"';
+const RULE =
+  'status: not in done, cancelled or last_entry_at: >= "2026-09-08T12:00:00.000Z" or open_warnings: > 0';
 
 function refusal(code: string, details: Record<string, unknown>): ApiError {
   return new ApiError(code, 'Search query is invalid', 422, details);
@@ -28,6 +29,12 @@ describe('правило архива', () => {
 
   it('«не в архиве» — не закрыта или писали после порога; время в кавычках', () => {
     expect(outsideArchive(NOW)).toBe(RULE);
+  });
+
+  it('задача с открытым предупреждением в архив не уходит, сколько бы ни молчало дело', () => {
+    // Слово владельца TRK-561#9: закрытая не целиком задача остаётся на виду, пока на
+    // её предупреждение не отреагировали.
+    expect(outsideArchive(NOW)).toContain(' or open_warnings: > 0');
   });
 
   it('без запроса уходит одно правило', () => {

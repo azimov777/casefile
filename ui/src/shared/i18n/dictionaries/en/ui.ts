@@ -2,6 +2,10 @@ import type { components } from '@/shared/api';
 
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
+type IncompleteOutcome = Extract<
+  components['schemas']['VerdictOutcome'],
+  'partial' | 'unverifiable'
+>;
 type LinkKind = components['schemas']['LinkKind'];
 /** Виды иерархии: у них заголовок записи о связи называет роль второй задачи словами. */
 type HierarchyKind = Extract<LinkKind, 'parent' | 'child'>;
@@ -89,6 +93,8 @@ export const ui = {
     openQuestions_zero: 'No open questions',
     openQuestions_one: '{{count, number}} open question',
     openQuestions_other: '{{count, number}} open questions',
+    openWarnings_one: '{{count, number}} task closed not in full',
+    openWarnings_other: '{{count, number}} tasks closed not in full',
     loadingParticipant: 'Loading the participant…',
     noParticipant: 'no participant',
     signOut: 'Sign out',
@@ -237,6 +243,7 @@ export const ui = {
       blockingOf_other: '{{count, number}} of them blocking',
       remarks_one: '{{count, number}} remark not yet resolved',
       remarks_other: '{{count, number}} remarks not yet resolved',
+      warning: 'closed not in full: awaits a decision — accept or return',
     },
     // Родитель задачи подписью на карточке доски и в строке списка (UI-119).
     parents: {
@@ -300,6 +307,7 @@ export const ui = {
       verdict: 'verdict',
       remark: 'remark',
       resolution: 'resolution',
+      acceptance: 'acceptance',
       note: 'note',
       created: 'created',
       status_changed: 'status change',
@@ -309,6 +317,7 @@ export const ui = {
       link_added: 'link added',
       link_removed: 'link removed',
       moved: 'move to another project',
+      warning: 'warning',
       attribute_created: 'attribute created',
       attribute_changed: 'attribute change',
       attribute_removed: 'attribute removed',
@@ -323,6 +332,12 @@ export const ui = {
       needs_detail: 'needs detail',
       declined: 'will not change',
     } satisfies Record<RemarkOutcome, string>,
+    // Исходы проверки «не целиком» (TRK-561) — словами: на них реагирует человек.
+    // `passed` и `failed` остаются идентификаторами, как были.
+    verdictOutcome: {
+      partial: 'partial',
+      unverifiable: 'cannot be verified',
+    } satisfies Record<IncompleteOutcome, string>,
     headline: {
       created: 'Task created',
       projectCreated: 'Project created',
@@ -350,6 +365,9 @@ export const ui = {
       withdrawn: 'withdrawn',
       replacedBy: 'replaced by',
       check: 'Review check {{no}}',
+      // Предупреждение закрытия (TRK-561): «Closed not in full: check 2 partial».
+      warning: 'Closed not in full:',
+      warningCheck: 'check {{no}}',
       resolution: 'Resolution of',
       resolutionOutcome: '· {{outcome}}',
       /** Пара «было → стало»: отсутствие значения называется словом, а не пустотой. */
@@ -433,6 +451,17 @@ export const ui = {
       'Sending it again will not file a second remark: the attempt keeps the same idempotency key.',
     receiptLabel: 'The remark on {{key}} is filed',
     receiptHeadline: 'Remark filed',
+  },
+
+  /** Предупреждение закрытия на карточке задачи (`features/accept-warning`, TRK-561). */
+  warning: {
+    title: 'Closed not in full',
+    text: 'The agent closed the task, but these checks did not pass in full. Accept the gap, or return the task for rework with a remark — the agent will resolve it.',
+    accept: 'Accept',
+    accepting: 'Accepting…',
+    acceptTitle: 'Accepted without rework',
+    return: 'Return for rework',
+    closedBy: 'Closed by:',
   },
 
   /**

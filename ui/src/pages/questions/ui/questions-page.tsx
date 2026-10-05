@@ -17,6 +17,7 @@ import {
   type Remark,
 } from '@/entities/entry';
 import { bootstrapQueryOptions } from '@/entities/session';
+import { attentionQueryOptions, type Task } from '@/entities/task';
 import {
   AnswerForm,
   AnswerReceipt,
@@ -86,6 +87,11 @@ function Inbox() {
     enabled: author !== '',
   });
   const myRemarks = remarks.data?.pages.flatMap((page) => page.items) ?? [];
+
+  // Задачи, закрытые не целиком (TRK-561): адресата у предупреждения нет, как у
+  // замечания, — раздел один на всех, и отбирает его только проект.
+  const attention = useInfiniteQuery(attentionQueryOptions(project));
+  const attentionTasks = attention.data?.pages.flatMap((page) => page.items) ?? [];
 
   // Вопросы, по которым отправка уже пошла, остаются на экране вместе со своим
   // подтверждением, даже когда выдача их больше не содержит: удачный ответ убирает
@@ -187,6 +193,51 @@ function Inbox() {
        * вычисленный стиль расходится, а вместе с ним и слепок, которым доказывают,
        * что вид не изменился.
        */}
+      {/*
+       * «Требуют внимания» — над двумя половинами, на всю ширину (TRK-561): задачи,
+       * которые агент закрыл не целиком и которые ждут решения человека — принять или
+       * вернуть на доработку. Решают на карточке задачи, здесь только список и переход.
+       */}
+      <section aria-labelledby="attention-section" className="flex flex-col gap-3">
+        <h2 className="text-screen" id="attention-section">
+          {t('attentionTitle')}
+        </h2>
+        <p className="text-meta text-muted">{t('attentionIntro')}</p>
+
+        <QueryState
+          query={attention}
+          loading={t('loadingAttention')}
+          empty={
+            attentionTasks.length === 0
+              ? project === ''
+                ? t('noAttention')
+                : emptyByFilter(
+                    [t('condition.project', { project })],
+                    () => apply({ project: '' }),
+                    t,
+                  )
+              : undefined
+          }
+        />
+
+        <ul className="flex list-none flex-col gap-3 p-0">
+          {attentionTasks.map((task) => (
+            <li key={task.key}>
+              <AttentionRow task={task} />
+            </li>
+          ))}
+        </ul>
+
+        {attention.hasNextPage ? (
+          <Button
+            onClick={() => void attention.fetchNextPage()}
+            disabled={attention.isFetchingNextPage}
+          >
+            {attention.isFetchingNextPage ? t('loadingMore') : t('more')}
+          </Button>
+        ) : null}
+      </section>
+
       <div className="grid gap-4 [align-items:start] wide:grid-cols-2">
         <section aria-labelledby="questions-section" className="flex flex-col gap-3">
           <h2 className="text-screen" id="questions-section">
@@ -314,6 +365,32 @@ function emptyByFilter(conditions: string[], onReset: () => void, t: TFunction<'
         {t('resetFilter')}
       </button>
     </>
+  );
+}
+
+/**
+ * Задача, закрытая не целиком, во входящей: ключ, название и когда в её деле писали
+ * последний раз — обычно это закрытие. Что именно не целиком и кнопки решения — на
+ * карточке задачи: туда ведёт ключ.
+ */
+function AttentionRow({ task }: { task: Task }) {
+  const { t } = useTranslation('questions');
+  const lastEntryAt = task.features?.last_entry_at ?? null;
+
+  return (
+    <article
+      className="flex flex-col gap-2 rounded-control border border-attention-line bg-surface p-3"
+      aria-label={t('attentionLabel', { key: task.key })}
+    >
+      <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
+        <Link className="font-mono whitespace-nowrap" to={`/tasks/${task.key}`}>
+          {task.key}
+        </Link>
+        <Badge tone="attention">{t('awaitingDecision')}</Badge>
+        {lastEntryAt === null ? null : <RelativeTime value={lastEntryAt} />}
+      </header>
+      <h3 className="text-screen">{task.title}</h3>
+    </article>
   );
 }
 

@@ -47,7 +47,8 @@ export interface paths {
          *     (`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.
          *
          *     Архивные проекты — только с `include_archived=true`, как в `GET /api/v1/projects`;
-         *     вопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6).
+         *     вопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6), как
+         *     и `open_warnings` — их предупреждения.
          */
         get: operations["read_bootstrap"];
         put?: never;
@@ -664,8 +665,8 @@ export interface paths {
          *     `parent` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в языке нет.
          *
          *     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
-         *     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
-         *     связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
+         *     `open_blocking_questions`, `open_remarks`, `open_warnings`): колонок под них нет, они
+         *     считаются из связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
          *     `project: TRK and status: open and blocked: false and open_blocking_questions: 0`.
          *     Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
          *     названная задача ещё не закрыта».
@@ -810,8 +811,9 @@ export interface paths {
          *     transition_reason_required`); `backlog → open` требует заполненных разделов (`422
          *     task_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после
          *     последнего входа в него (`409 summary_required`); `in_progress → done` —
-         *     положительного последнего вердикта по каждой проверке, подшитого после последнего
-         *     входа в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в
+         *     засчитанного последнего вердикта по каждой проверке (`passed`, `partial`,
+         *     `unverifiable`), подшитого после последнего входа в `in_progress` (`409
+         *     checks_not_passed`, незасчитанные проверки в
          *     `details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только
          *     исполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи
          *     (имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с
@@ -881,12 +883,16 @@ export interface paths {
          *     closing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части не
          *     оставляет в деле ни одной записи и статуса не меняет.
          *
-         *     Порядок подшивки: присланные записи, вердикты, сводка. Требования выхода прежние и
-         *     проверяются после подшивки: положительный последний вердикт по каждой проверке
-         *     среди подшитых после последнего входа в `in_progress` (`409 checks_not_passed`),
+         *     Порядок подшивки: присланные записи, вердикты, предупреждение, сводка. Требования
+         *     выхода проверяются после подшивки: последний вердикт по каждой проверке среди
+         *     подшитых после последнего входа в `in_progress` — `passed`, `partial` или
+         *     `unverifiable`, а не `failed` и не его отсутствие (`409 checks_not_passed`),
          *     закрытые дети (`409 task_has_unclosed_children`), задача в `in_progress` (`409
          *     transition_not_allowed`). Вердикты этого запроса засчитываются наравне с подшитыми
-         *     раньше по ходу работы, поэтому список может быть пуст.
+         *     раньше по ходу работы, поэтому список может быть пуст. Если среди последних
+         *     вердиктов есть `partial` или `unverifiable`, закрытие подшивает служебную запись
+         *     `warning` с их номерами и исходами: задача приходит в `done` с открытым
+         *     предупреждением (`features.open_warnings`).
          *
          *     Повтор с тем же `Idempotency-Key` отвечает первым результатом и второго закрытия не
          *     заводит. В ответе — карточка задачи; подшитые записи читаются `GET
@@ -920,8 +926,13 @@ export interface paths {
         put?: never;
         /**
          * Append a case entry
-         * @description Подшивает запись агента: сводку, решение, попытку, находку, артефакт, вопрос,
-         *     ответ, вердикт или заметку.
+         * @description Подшивает запись агента или человека: сводку, решение, попытку, находку,
+         *     артефакт, вопрос, ответ, вердикт, замечание, резолюцию, принятие или заметку.
+         *
+         *     `acceptance` принимает открытое предупреждение задачи: без него — `409
+         *     warning_not_open`, от подписи, закрывшей задачу, — `409 acceptance_by_closer`.
+         *     Вердикт `partial` или `unverifiable` требует непустого тела — это его доказательство
+         *     (`422 entry_fields_invalid`, поле `evidence`).
          *
          *     Форма нагрузки зависит от типа: тело запроса — размеченное по `type` объединение.
          *     Заголовок принимается только там, где его нечем вывести: у `summary` он равен
@@ -1206,6 +1217,111 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AcceptanceEntryCreate
+         * @description Принятие открытого предупреждения: нагрузки нет, заголовок пишет автор.
+         *
+         *     Без открытого предупреждения — `409 warning_not_open`; от подписи, закрывшей
+         *     задачу, — `409 acceptance_by_closer`.
+         */
+        AcceptanceEntryCreate: {
+            /**
+             * Body
+             * @description Markdown body of the entry
+             * @default
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @example []
+             */
+            refs?: string[];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Номер задачи выдаётся до валидации
+             */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "acceptance";
+        };
+        /**
+         * AcceptanceEntryRead
+         * @description Принятие: недостаток, названный предупреждением, принят. Снимает предупреждение.
+         */
+        AcceptanceEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "acceptance";
+            payload?: components["schemas"]["EmptyPayload"];
+        };
         /**
          * AccountCreate
          * @description Заведение учётной записи администратором.
@@ -2270,6 +2386,12 @@ export interface components {
              * @example 3
              */
             open_questions: number;
+            /**
+             * Open Warnings
+             * @description Tasks with an open warning, in projects that are not archived: closed with checks `partial` or `unverifiable`, with no `acceptance` or `remark` filed after the warning. A warning has no addressee, so the number is the same for every token
+             * @example 1
+             */
+            open_warnings: number;
         };
         /**
          * CheckUpdate
@@ -2487,7 +2609,7 @@ export interface components {
          * @description Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках.
          */
         EmptyPayload: Record<string, never>;
-        EntryFactsRead: components["schemas"]["NoFactsRead"] | components["schemas"]["StatusChangedFactsRead"] | components["schemas"]["SectionChangedFactsRead"] | components["schemas"]["FieldChangedFactsRead"] | components["schemas"]["AssigneeChangedFactsRead"] | components["schemas"]["LinkFactsRead"] | components["schemas"]["QuestionFactsRead"] | components["schemas"]["AnswerFactsRead"] | components["schemas"]["VerdictFactsRead"] | components["schemas"]["ResolutionFactsRead"] | components["schemas"]["AttributeFactsRead"] | components["schemas"]["MovedFactsRead"];
+        EntryFactsRead: components["schemas"]["NoFactsRead"] | components["schemas"]["StatusChangedFactsRead"] | components["schemas"]["SectionChangedFactsRead"] | components["schemas"]["FieldChangedFactsRead"] | components["schemas"]["AssigneeChangedFactsRead"] | components["schemas"]["LinkFactsRead"] | components["schemas"]["QuestionFactsRead"] | components["schemas"]["AnswerFactsRead"] | components["schemas"]["VerdictFactsRead"] | components["schemas"]["ResolutionFactsRead"] | components["schemas"]["AttributeFactsRead"] | components["schemas"]["MovedFactsRead"] | components["schemas"]["WarningFactsRead"];
         /**
          * EntryHeadingRead
          * @description Строка описи дела: то, что видно о записи, не читая её тела.
@@ -2521,13 +2643,13 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
          * @enum {string}
          */
-        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "moved" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
+        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "acceptance" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "moved" | "warning" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
         /**
          * ErrorDetail
          * @description Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд.
@@ -3064,7 +3186,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "archived" | "artifact" | "attempt" | "created" | "decision" | "finding" | "note" | "remark" | "restored" | "summary";
+            type: "acceptance" | "archived" | "artifact" | "attempt" | "created" | "decision" | "finding" | "note" | "remark" | "restored" | "summary";
         };
         /**
          * OnboardingHintsRead
@@ -4673,7 +4795,7 @@ export interface components {
             outcome: components["schemas"]["VerdictOutcome"];
             /**
              * Evidence
-             * @description Proof of the outcome; it becomes the body of the verdict entry
+             * @description Proof of the outcome; it becomes the body of the verdict entry. Required with `partial` and `unverifiable`: it names the missing part or why the check cannot run as written
              * @default
              * @example docker compose run --rm test: 214 passed
              */
@@ -4776,6 +4898,12 @@ export interface components {
              * @example 1
              */
             open_remarks: number;
+            /**
+             * Open Warnings
+             * @description 1 while the task carries an open warning: it was closed with checks `partial` or `unverifiable`, and no `acceptance` or `remark` has been filed after the warning; otherwise 0
+             * @example 0
+             */
+            open_warnings: number;
             /**
              * Last Summary At
              * @description When the latest summary was filed; null if the case has none
@@ -5429,7 +5557,8 @@ export interface components {
         };
         /**
          * VerdictEntryCreate
-         * @description Вердикт. Заголовок не принимается; тело записи — доказательство исхода.
+         * @description Вердикт. Заголовок не принимается; тело записи — доказательство исхода, у
+         *     `partial` и `unverifiable` обязательное (`422 entry_fields_invalid`, поле `evidence`).
          */
         VerdictEntryCreate: {
             /**
@@ -5551,10 +5680,25 @@ export interface components {
         };
         /**
          * VerdictOutcome
-         * @description Исход обзорной проверки. Значений ровно два: третьего состояния у проверки нет.
+         * @description Исход обзорной проверки (`CONCEPT.md`, 3.4; решение TRK-533#27).
+         *
+         *     Выбор — два вопроса, ответы на которые исполнитель знает в момент вердикта: прогнал
+         *     ли он проверку так, как она написана, и получил ли ожидаемое целиком.
+         *
+         *     - `passed` — прогнана как написана, ожидаемое получено целиком. Доказательство, где
+         *       названо несделанное, подменённый объект или окружение либо красный прогон, — уже
+         *       не `passed`.
+         *     - `partial` — прогнана как написана, ожидаемое получено частью.
+         *     - `unverifiable` — как написана, её прогнать нельзя: объекта или окружения нет под
+         *       рукой, или требования сменились.
+         *     - `failed` — прогнана как написана, ожидаемого нет.
+         *
+         *     `partial` и `unverifiable` задачу закрыть дают, но с предупреждением
+         *     (`INCOMPLETE_OUTCOMES`); `failed` — не даёт. До них честного исхода у недоделанной и
+         *     невыполнимой проверки не было, и её закрывали `passed` с оговоркой рядом (TRK-545#11).
          * @enum {string}
          */
-        VerdictOutcome: "passed" | "failed";
+        VerdictOutcome: "passed" | "partial" | "unverifiable" | "failed";
         /**
          * VerdictPayload
          * @description Исход одной обзорной проверки.
@@ -5568,6 +5712,136 @@ export interface components {
             check_no: number;
             /** @example passed */
             outcome: components["schemas"]["VerdictOutcome"];
+        };
+        /**
+         * WarningCheckRead
+         * @description Проверка, закрытая не целиком: номер и исход.
+         */
+        WarningCheckRead: {
+            /**
+             * Check No
+             * @description Number of the check
+             * @example 2
+             */
+            check_no: number;
+            /**
+             * @description Last verdict of the closing pass: `partial` or `unverifiable`
+             * @example partial
+             */
+            outcome: components["schemas"]["VerdictOutcome"];
+        };
+        /**
+         * WarningEntryRead
+         * @description Служебная запись закрытия: задача закрыта с проверками `partial` или
+         *     `unverifiable`. Открыта, пока после неё нет `acceptance` или `remark`.
+         */
+        WarningEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "warning";
+            payload: components["schemas"]["WarningPayload"];
+        };
+        /**
+         * WarningFactsRead
+         * @description Предупреждение закрытия: номера проверок, закрытых `partial` и `unverifiable`.
+         */
+        WarningFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "warning";
+            /**
+             * Partial
+             * @description Checks closed `partial`, by ascending number
+             * @example [
+             *       2
+             *     ]
+             */
+            partial?: number[] | null;
+            /**
+             * Unverifiable
+             * @description Checks closed `unverifiable`, by ascending number
+             * @example [
+             *       3
+             *     ]
+             */
+            unverifiable?: number[] | null;
+        };
+        /**
+         * WarningPayload
+         * @description Предупреждение закрытия: проверки, чей последний вердикт закрывающего захода —
+         *     `partial` или `unverifiable`.
+         */
+        WarningPayload: {
+            /**
+             * Checks
+             * @description Checks closed not in full, by ascending number. The warning stays open until an `acceptance` or a `remark` is filed after it
+             */
+            checks: components["schemas"]["WarningCheckRead"][];
         };
     };
     responses: never;
@@ -8093,11 +8367,11 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -8125,6 +8399,8 @@ export interface operations {
                 open_blocking_questions?: number | null;
                 /** @description Exact number of remarks with no resolution. Use the query language for ranges: `open_remarks: > 0` */
                 open_remarks?: number | null;
+                /** @description 1 for tasks closed with checks `partial` or `unverifiable` whose warning has no `acceptance` or `remark` after it yet, 0 for the rest */
+                open_warnings?: number | null;
                 /** @description Remarks resolved as `accepted` whose continuation task is still open: reviewed, but the work is not finished */
                 remarks_in_work?: number | null;
                 /** @description Substring of the title or the description, matched case-insensitively */
@@ -8894,7 +9170,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlainEntryCreate"] | components["schemas"]["SummaryEntryCreate"] | components["schemas"]["QuestionEntryCreate"] | components["schemas"]["AnswerEntryCreate"] | components["schemas"]["VerdictEntryCreate"] | components["schemas"]["RemarkEntryCreate"] | components["schemas"]["ResolutionEntryCreate"];
+                "application/json": components["schemas"]["PlainEntryCreate"] | components["schemas"]["SummaryEntryCreate"] | components["schemas"]["QuestionEntryCreate"] | components["schemas"]["AnswerEntryCreate"] | components["schemas"]["VerdictEntryCreate"] | components["schemas"]["RemarkEntryCreate"] | components["schemas"]["ResolutionEntryCreate"] | components["schemas"]["AcceptanceEntryCreate"];
             };
         };
         responses: {
@@ -9517,7 +9793,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

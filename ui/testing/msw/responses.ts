@@ -85,6 +85,7 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
       },
     ],
     open_questions: 2,
+    open_warnings: 0,
     ...overrides,
   };
 }
@@ -189,6 +190,7 @@ export function task(key: string, overrides: Partial<Task> = {}): Task {
       open_questions: 0,
       open_blocking_questions: 0,
       open_remarks: 0,
+      open_warnings: 0,
       last_summary_at: null,
       last_entry_at: '2026-09-01T10:00:00Z',
     },
@@ -387,6 +389,7 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
       open_questions: 0,
       open_blocking_questions: 0,
       open_remarks: 0,
+      open_warnings: 0,
       last_summary_at: '2026-09-01T10:00:00Z',
     },
     summary: summaryEntry(7, key),
@@ -496,6 +499,18 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         type,
         payload: { name: 'repo', before: 'github.com/demo', reason: 'Репозиторий закрыт' },
       };
+    case 'warning':
+      return {
+        ...base,
+        body: '',
+        type,
+        payload: {
+          checks: [
+            { check_no: 2, outcome: 'partial' },
+            { check_no: 3, outcome: 'unverifiable' },
+          ],
+        },
+      };
     case 'moved':
       return {
         ...base,
@@ -520,8 +535,8 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         payload: { reason: 'Демо отложено до выпуска' },
       };
     default:
-      // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`:
-      // общая форма.
+      // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `acceptance`,
+      // `note`: общая форма.
       return { ...base, type, refs: ['DEMO-2', 'https://example.test/build/42'] };
   }
 }

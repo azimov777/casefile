@@ -3,6 +3,11 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge, Markdown, TaskText } from '@/shared/ui';
 import type { Entry } from '../api/entries';
+import {
+  isIncompleteOutcome,
+  type IncompleteOutcome,
+  type VerdictOutcome,
+} from '../model/headline';
 
 interface EntryBodyProps {
   entry: Entry;
@@ -207,13 +212,43 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
         </div>
       );
 
-    // `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`: заголовок и тело.
-    // У них общая форма и общая нагрузка — пустая.
+    /*
+     * Предупреждение закрытия (TRK-561): номера и исходы назвал заголовок, в теле —
+     * сами проверки, чтобы человек решал, принимать или возвращать, не листая к
+     * разделу заданий. Доказательства — в вердиктах, на них ведут строки описи выше.
+     */
+    case 'warning':
+      return (
+        <ul className="flex list-none flex-col gap-2 p-0">
+          {entry.payload.checks.map((item) => {
+            const check = checks[item.check_no - 1];
+            return (
+              <li key={item.check_no} className="flex flex-col gap-1">
+                <p className={META}>
+                  <span>{t('entry.headline.warningCheck', { no: item.check_no })}</span>
+                  <Badge tone="attention">
+                    {t(`entry.verdictOutcome.${incomplete(item.outcome)}`)}
+                  </Badge>
+                </p>
+                {check === undefined ? null : (
+                  <div className="border-l-2 border-line-strong pl-3">
+                    <Markdown>{check}</Markdown>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      );
+
+    // `decision`, `attempt`, `finding`, `artifact`, `remark`, `acceptance`, `note`:
+    // заголовок и тело. У них общая форма и общая нагрузка — пустая.
     case 'decision':
     case 'attempt':
     case 'finding':
     case 'artifact':
     case 'remark':
+    case 'acceptance':
     case 'note':
       return (
         <div className={BLOCK}>
@@ -225,6 +260,15 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     default:
       return assertNever(entry);
   }
+}
+
+/**
+ * Исход пары предупреждения. В нагрузке `warning` бэкенд кладёт только `partial` и
+ * `unverifiable`, но тип нагрузки шире — у него общее перечисление исходов. Чужое
+ * значение называется ближайшим честным словом «частично», а не роняет экран.
+ */
+function incomplete(outcome: VerdictOutcome): IncompleteOutcome {
+  return isIncompleteOutcome(outcome) ? outcome : 'partial';
 }
 
 function Part({ title, value }: { title: string; value: string }) {

@@ -12,7 +12,9 @@ import {
   failure,
   questionEntry,
   remarkEntry,
+  task,
   taskPackage,
+  taskPage,
   withdrawalEntry,
 } from '@testing/msw/responses';
 import { liveJournal } from '@testing/live-journal';
@@ -33,6 +35,9 @@ let sent: Sent[] = [];
 beforeEach(() => {
   sent = [];
   setToken('trk_test');
+  // Раздел «Требуют внимания» читает список задач (TRK-561); по умолчанию он пуст, а
+  // сценарии, которым он нужен, ставят свой ответ поверх.
+  server.use(http.get(`${API}/api/v1/tasks`, () => taskPage([])));
 });
 
 /** Входящая: пока не ответили — один вопрос, после ответа — пусто. */
@@ -586,6 +591,62 @@ describe('входящая: мои замечания', () => {
 
     expect(await screen.findByText(say.questions('noRemarks'))).toBeInTheDocument();
     expect(screen.getByText(say.questions('noQuestions'))).toBeInTheDocument();
+  });
+});
+
+describe('входящая: требуют внимания (TRK-561)', () => {
+  it('задача с открытым предупреждением видна в разделе и ведёт в свою карточку', async () => {
+    const asked: URL[] = [];
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ open_warnings: 1 }))),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+      http.get(`${API}/api/v1/tasks`, ({ request }) => {
+        asked.push(new URL(request.url));
+        return taskPage([
+          task('DEMO-8', {
+            title: 'Подсказка о сгоревшем номере',
+            status: 'done',
+            features: {
+              blocked: false,
+              open_questions: 0,
+              open_blocking_questions: 0,
+              open_remarks: 0,
+              open_warnings: 1,
+              last_summary_at: '2026-09-01T10:00:00Z',
+              last_entry_at: '2026-09-01T10:00:00Z',
+            },
+          }),
+        ]);
+      }),
+    );
+
+    renderApp('/questions');
+
+    const section = await screen.findByRole('region', { name: say.questions('attentionTitle') });
+    expect(await within(section).findByText('Подсказка о сгоревшем номере')).toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: 'DEMO-8' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-8',
+    );
+    expect(within(section).getByText(say.questions('awaitingDecision'))).toBeInTheDocument();
+
+    // Раздел — отбор по признаку, от давних к свежим; правила архива в нём нет: задача
+    // с открытым предупреждением не архивная по определению.
+    expect(asked.at(-1)?.searchParams.get('query')).toBe('open_warnings: > 0');
+    expect(asked.at(-1)?.searchParams.getAll('sort')).toEqual(['last_entry_at']);
+  });
+
+  it('пустой раздел говорит словами', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+
+    renderApp('/questions');
+
+    expect(await screen.findByText(say.questions('noAttention'))).toBeInTheDocument();
   });
 });
 

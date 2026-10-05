@@ -13,6 +13,7 @@ import {
   withHeld,
   type Answering,
 } from '@/features/answer-question';
+import { WarningPanel } from '@/features/accept-warning';
 import { RemarkForm } from '@/features/leave-remark';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { ApiError } from '@/shared/api';
@@ -232,6 +233,16 @@ export function TaskPage() {
   const canAct = !frozen;
 
   /*
+   * Открытое предупреждение закрытия (TRK-561): признак считает бэкенд, а что именно
+   * не целиком — факты последней записи `warning` в описи. Пакет приносит опись
+   * целиком, второго запроса здесь нет.
+   */
+  const warning =
+    features.open_warnings > 0
+      ? ([...index].reverse().find((heading) => heading.type === 'warning') ?? null)
+      : null;
+
+  /*
    * Три блока левой колонки — сводка, вопросы, замечания — решают порознь, пусты ли
    * они, а рисует их `renderCardBlocks`: подряд идущие пустые сшиваются в одну рамку
    * (`block`, kind `empty`, выше), а непустой остаётся своим `full`-блоком на месте.
@@ -432,6 +443,21 @@ export function TaskPage() {
            * пакета — в отличие от формы ответа, которая уходит вместе со своим
            * вопросом.
            */}
+          {/*
+           * Предупреждение — первым: это ход человека, и пока его не сделали, задача
+           * не уходит в архив (TRK-561#9). «Вернуть на доработку» раскрывает форму
+           * замечания в блоке ниже — замечание и есть возврат.
+           */}
+          {warning === null ? null : (
+            <WarningPanel
+              taskKey={task.key}
+              warning={warning}
+              checks={task.checks}
+              canAct={canAct}
+              onReturn={() => setRemarkOpen(true)}
+            />
+          )}
+
           {renderCardBlocks(cardBlocks)}
 
           <section className={block({ kind: 'list' })} aria-labelledby="case">

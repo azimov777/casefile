@@ -142,13 +142,13 @@ test('ссылка вопроса ведёт в саму запись, а не �
   ).toHaveAttribute('aria-expanded', 'true');
 });
 
-test('проект отбирает обе половины, и это сказано словами', async ({ page }) => {
+test('проект отбирает все части входящей, и это сказано словами', async ({ page }) => {
   await page.goto('/questions');
   await expect(page.getByRole('main')).toBeVisible();
 
   // Область действия названа у самого поля: проект общий, «только блокирующие» —
   // условие вопросов и стоит внутри их половины.
-  await expect(page.getByText('Проект отбирает обе половины входящей.')).toBeVisible();
+  await expect(page.getByText('Проект отбирает все части входящей.')).toBeVisible();
   const questions = page.getByRole('region').filter({ hasText: 'Вопросы ко мне' });
   await expect(page.getByRole('checkbox', { name: 'только блокирующие' })).toBeVisible();
 

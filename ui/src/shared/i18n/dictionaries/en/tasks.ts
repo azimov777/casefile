@@ -83,6 +83,7 @@ export const tasks = {
     blocked: 'blocked',
     withQuestions: 'has open questions',
     withRemarks: 'has unresolved remarks',
+    withWarnings: 'closed not in full, awaits a decision',
     pending: 'not applied, Enter applies it',
     pendingShort: '↵ apply',
     apply: 'Apply',
@@ -132,6 +133,7 @@ export const tasks = {
       blocked: 'blocked only',
       questions: 'has open questions',
       remarks: 'has unresolved remarks',
+      warnings: 'closed not in full, awaits a decision',
     },
   },
 } as const;
