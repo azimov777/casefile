@@ -38,6 +38,10 @@ Read before you act, because the case already holds choices you must not redo:
 - decisions and attempts, failed ones included — `read_entries(key="TRK-42", types=["decision", "attempt"])`;
 - if there is a `parent`: its summary and its decisions bind this task —
   `get_task(key="TRK-40")`, `read_entries(key="TRK-40", types=["decision"])`;
+- the project's decisions in force bind it as well: the ones it relies on come in
+  `decisions` of `get_task` with their status, all of them in `get_project(key="TRK")`;
+  a superseded one names its successor, and `search_tasks(decision=["TRK#15"])` lists
+  the tasks done under it;
 - a reference like `TRK-7#12` in the text is an entry — `read_entries(key="TRK-7", nos=[12])`.
 
 **Check:** you can say in two sentences what the goal is, where the work stands and what
@@ -60,7 +64,10 @@ your name over theirs silently takes the task from them.
 File what happens when it happens, with `add_entry`: a `decision` when you choose between
 options (say what was rejected and why), an `attempt` when you try something — failures
 too, they spare the next agent the same try — a `finding` for an established fact and its
-source, an `artifact` for a pointer to the result.
+source, an `artifact` for a pointer to the result. A choice that outlives the task and
+that other tasks are to follow is a project decision: `add_project_entry(key="TRK",
+type="decision", ...)`, with `supersedes=[N]` when it replaces decision N, and the task
+cites it with `update_task(key="TRK-42", changes={"decisions": ["TRK#16"]})`.
 
 ```
 add_entry(key="TRK-42", type="decision",
