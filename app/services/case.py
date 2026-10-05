@@ -76,6 +76,7 @@ from app.db.wakeup import journal_wakeup
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
     CLOSING_SUMMARY_PART,
+    CLOSING_WITHOUT_ANSWER,
     EntryContext,
     EntryDraft,
     EntryHeading,
@@ -85,6 +86,7 @@ from app.domain.case import (
     QuestionOrder,
     TrackerRef,
     VerdictOutcome,
+    answer_outcome,
     build_entry,
     build_project_entry,
     continuation_key,
@@ -451,6 +453,12 @@ async def append_entry(
     знает, что подшивает последнюю запись работы.
 
     `action_id` доезжает до `_append` как есть: не передан — тот сгенерирует его сам.
+
+    Очередь изменений (`lock_changes`) берётся **до** проверок по базе, а не только в
+    `_append`: проверки читают факты, от которых зависит, законна ли запись, — «на
+    вопрос ещё не ответили» у снятия вопроса. Без очереди снятие и одновременный ответ
+    оба увидели бы вопрос открытым, и в деле оказалось бы снятие поверх ответа. Форма
+    записи проверяется раньше: на неё база не нужна, и отказ формы очереди не ждёт.
     """
     draft = build_entry(
         EntryContext(task_key=task.key, checks=task.checks, closing=closing),
@@ -460,6 +468,7 @@ async def append_entry(
         payload=payload,
         refs=refs,
     )
+    await lock_changes(session)
     await _ensure_targets_exist(session, task, draft)
     return await _append(
         session,
@@ -555,10 +564,18 @@ async def answer(
     actor: Actor,
     question_no: Any,
     body: Any = "",
+    outcome: Any = None,
+    replaced_by: Any = None,
     refs: Any = (),
     action_id: uuid.UUID | None = None,
 ) -> Entry:
-    """Ответ на вопрос той же задачи. Ответить может кто угодно, ответов может быть много."""
+    """Ответ на вопрос той же задачи. Ответить может кто угодно, ответов может быть много.
+
+    Исход по умолчанию — ответ по существу. `withdrawn` и `replaced` закрывают вопрос
+    без ответа: снятый или заменённый вопрос уходит из открытых так же, как отвеченный,
+    потому что и это запись `answer`. Правила исхода — в домене (`_answer_payload`) и в
+    `_check_question_no`; здесь они только передаются дальше.
+    """
     return await append_entry(
         session,
         task,
@@ -566,7 +583,7 @@ async def answer(
         type=EntryType.ANSWER,
         body=body,
         refs=refs,
-        payload={"question_no": question_no},
+        payload={"question_no": question_no, "outcome": outcome, "replaced_by": replaced_by},
         action_id=action_id,
     )
 
@@ -1108,11 +1125,19 @@ async def _check_question_no(
     Проверяются оба условия сразу: запись другой задачи сюда не попадёт по построению
     (номер ищется в этой), а запись не того типа — вполне, и ответ на сводку сделал бы
     вопрос закрытым неизвестно чем.
+
+    У снятия и замены (`CLOSING_WITHOUT_ANSWER`) — ещё два правила. Вопрос ещё без
+    ответа: снять отвеченный нельзя, иначе в деле остался бы ответ без вопроса
+    (TRK-549#14). Читается это под очередью изменений, которую `append_entry` занял до
+    проверок, — одновременный ответ встанет за снятием и подошьётся дополнением, а не
+    первым. И `replaced_by` указывает на вопрос этой задачи — тем же правилом, что
+    `question_no`.
     """
     if draft.type is not EntryType.ANSWER:
         return
+    repository = EntryRepository(session)
     question_no = draft.payload["question_no"]
-    question = await EntryRepository(session).get_by_no(task.id, question_no)
+    question = await repository.get_by_no(task.id, question_no)
     if question is None:
         problems.add("question_no", "unknown_entry", key=task.key, no=question_no)
     elif question.type is not EntryType.QUESTION:
@@ -1122,6 +1147,31 @@ async def _check_question_no(
             key=task.key,
             no=question_no,
             got=question.type.value,
+        )
+    elif answer_outcome(draft.payload) in CLOSING_WITHOUT_ANSWER:
+        answered_by = await repository.first_answer_no(task.id, question_no)
+        if answered_by is not None:
+            problems.add(
+                "question_no",
+                "already_answered",
+                key=task.key,
+                no=question_no,
+                answer_no=answered_by,
+            )
+
+    replaced_by = draft.payload.get("replaced_by")
+    if replaced_by is None:
+        return
+    replacement = await repository.get_by_no(task.id, replaced_by)
+    if replacement is None:
+        problems.add("replaced_by", "unknown_entry", key=task.key, no=replaced_by)
+    elif replacement.type is not EntryType.QUESTION:
+        problems.add(
+            "replaced_by",
+            "not_a_question",
+            key=task.key,
+            no=replaced_by,
+            got=replacement.type.value,
         )
 
 
