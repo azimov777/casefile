@@ -15,4 +15,4 @@
 - `resolve.py` — `resolve`: номер замечания, исход и задача-продолжение
 - `add_verdict.py` — `add_verdict`: исход одной обзорной проверки
 - `read_project_entries.py` — `read_project_entries`: тела записей дела проекта по номерам, типам и «после»
-- `add_project_entry.py` — `add_project_entry`: решение, находка, артефакт или заметка в деле проекта
+- `add_project_entry.py` — `add_project_entry`: решение, находка, артефакт или заметка в деле проекта; решение проекта заменяет прежние через `supersedes`

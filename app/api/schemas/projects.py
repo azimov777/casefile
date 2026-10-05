@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
+from app.api.schemas.decisions import ProjectDecisionRead
 from app.domain.attributes import MAX_ATTRIBUTE_REASON_LENGTH, MAX_ATTRIBUTE_VALUE_LENGTH
 from app.domain.projects import (
     MAX_PROJECT_DESCRIPTION_LENGTH,
@@ -113,10 +114,10 @@ class AttributeRead(BaseModel):
 
 
 class ProjectDetailRead(ProjectRead):
-    """Один проект с нынешними значениями атрибутов.
+    """Один проект с нынешними значениями атрибутов и его решениями.
 
-    Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов
-    не показывают, и запрос атрибутов на каждый проект списка стоил бы им без пользы.
+    Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и
+    решений не показывают, и запрос их на каждый проект списка стоил бы им без пользы.
     """
 
     attributes: list[AttributeRead] = Field(
@@ -124,6 +125,13 @@ class ProjectDetailRead(ProjectRead):
             "Current attribute values, ordered by name ignoring case. Every change is an "
             "entry of the project's case: `attribute_created`, `attribute_changed`, "
             "`attribute_removed`"
+        )
+    )
+    decisions: list[ProjectDecisionRead] = Field(
+        description=(
+            "Every project decision — a `decision` entry of the project's case — in number "
+            "order, in force or superseded, with its status computed on read and the number "
+            "of tasks that name it"
         )
     )
 

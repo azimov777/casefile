@@ -156,6 +156,19 @@ class TaskFilters:
             ),
         ),
     ] = None
+    decision: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["TRK#15"]],
+            description=(
+                "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one "
+                "of them, in any status, also once the decision is superseded. `empty()` "
+                "finds tasks that name no decision. An address that is not a `decision` "
+                "entry of a project's case answers 422 instead of an empty page"
+            ),
+        ),
+    ] = None
     status: Annotated[
         list[TaskStatus] | None, Query(examples=[[TaskStatus.OPEN]], description="Task statuses")
     ] = None
@@ -238,6 +251,7 @@ class TaskFilters:
                 ("key", self.key),
                 ("project", self.project),
                 ("parent", self.parent),
+                ("decision", self.decision),
                 ("status", None if self.status is None else [item.value for item in self.status]),
                 ("assignee", self.assignee),
                 (

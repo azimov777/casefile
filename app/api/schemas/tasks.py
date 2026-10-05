@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
+from app.api.schemas.decisions import CitedDecisionRead
 from app.api.schemas.entries import (
     ClosingEntryCreate,
     EntryHeadingRead,
@@ -31,6 +32,7 @@ from app.domain.tasks import (
     MAX_ASSIGNEE_LENGTH,
     MAX_CHECK_LENGTH,
     MAX_CHECKS,
+    MAX_DECISIONS,
     MAX_MOVE_KEYS,
     MAX_TEXT_LENGTH,
     MAX_TITLE_LENGTH,
@@ -52,6 +54,13 @@ _ASSIGNEE_DESCRIPTION = (
     "the caller's signature (participant name or agent label) must match it, case-insensitively"
 )
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
+_DECISIONS_DESCRIPTION = (
+    "Project decisions the task relies on: references `PROJECT#N` to `decision` entries of "
+    f"a project's case, up to {MAX_DECISIONS}, in the order set. A task entry (`TRK-42#7`) "
+    "answers `task_fields_invalid` with reason `task_entry`, a project entry of another "
+    "type `not_a_decision`. A reference not yet in the field must lead to a decision in "
+    "force, otherwise `decision_not_in_force` names its successor"
+)
 
 
 class ProjectRefRead(BaseModel):
@@ -205,6 +214,13 @@ class TaskPackageRead(BaseModel):
             "children are not here: they are the `parent` and `children` fields"
         )
     )
+    decisions: list[CitedDecisionRead] = Field(
+        description=(
+            "Project decisions the task relies on, in the order of its `decisions` field, "
+            "each with its status computed on read and, once superseded, its successor. "
+            "The project's other decisions are part of the project read"
+        )
+    )
     features: TaskFeaturesRead
     summary: SummaryEntryRead | None = Field(
         default=None,
@@ -264,6 +280,12 @@ class TaskCreate(BaseModel):
         description=_ASSIGNEE_DESCRIPTION,
     )
     priority: TaskPriority = Field(default=TaskPriority.NORMAL)
+    decisions: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_DECISIONS,
+        examples=[["TRK#15"]],
+        description=_DECISIONS_DESCRIPTION,
+    )
 
 
 class CheckUpdate(BaseModel):
@@ -334,6 +356,14 @@ class TaskUpdate(BaseModel):
         description=f"{_ASSIGNEE_DESCRIPTION}. Pass null to unassign",
     )
     priority: TaskPriority = unset_field(examples=[TaskPriority.HIGH])
+    decisions: list[str] = unset_field(
+        max_length=MAX_DECISIONS,
+        examples=[["TRK#15"]],
+        description=(
+            f"{_DECISIONS_DESCRIPTION}. Replaces the whole list in any status but `done` and "
+            "`cancelled`; a reference already in it stays after its decision is superseded"
+        ),
+    )
     version: int | None = Field(
         default=None,
         ge=1,

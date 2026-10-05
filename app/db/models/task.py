@@ -87,6 +87,15 @@ class Task(BaseModel, CreatedByMixin):
             postgresql_using="gin",
             postgresql_ops={"previous_keys": "jsonb_path_ops"},
         ),
+        # «Какие задачи опираются на решение» — `decisions @> '["TRK#15"]'`: обратный путь от
+        # решения проекта к задачам, отбор `decision:` (`CONCEPT.md`, 4.4). Тот же класс
+        # операторов, что у прежних ключей: индекс ровно под `@>`.
+        Index(
+            "ix_tasks_decisions",
+            "decisions",
+            postgresql_using="gin",
+            postgresql_ops={"decisions": "jsonb_path_ops"},
+        ),
         # Версия только растёт и начинается с единицы: ноль означал бы, что счётчик
         # правили руками, и оптимистичная блокировка перестала бы ловить гонку.
         CheckConstraint("version >= 1", name="version_positive"),
@@ -144,6 +153,18 @@ class Task(BaseModel, CreatedByMixin):
         string_enum(TaskPriority, name="task_priority", length=16),
         default=TaskPriority.NORMAL,
         server_default=text(f"'{TaskPriority.NORMAL.value}'"),
+        nullable=False,
+    )
+    # Решения проекта, на которые опирается задача: канонические ссылки `TRK#15` в порядке
+    # постановки (`CONCEPT.md`, 3.3). Строки, а не идентификаторы записей: ключ проекта и
+    # номер записи неизменяемы, ссылка читается без соединения, а отбор `decision:` ищет
+    # ровно ту строку, которую пишет агент. Внешнего ключа нет, как у `refs` записи:
+    # существование решения проверяет сценарий при постановке ссылки, а записи дела не
+    # удаляются. Статус решения здесь не хранится — он считается при чтении.
+    decisions: Mapped[list[str]] = mapped_column(
+        JSONB,
+        default=list,
+        server_default=text("'[]'::jsonb"),
         nullable=False,
     )
 

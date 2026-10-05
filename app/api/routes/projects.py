@@ -20,7 +20,9 @@ from app.api.deps import (
     SessionDep,
 )
 from app.api.idempotency import OnceDep
+from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse, DataResponse
+from app.api.schemas.decisions import ProjectDecisionRead
 from app.api.schemas.entries import EntryRead, ProjectEntryCreate, entry_read
 from app.api.schemas.projects import (
     AttributeRead,
@@ -36,8 +38,10 @@ from app.db.models.project import Project
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.services import attributes as attributes_service
 from app.services import case as case_service
+from app.services import decisions as decisions_service
 from app.services import projects as service
 from app.services.auth import Actor
+from app.services.decisions import ProjectDecision
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -132,11 +136,13 @@ async def read_project(
     session: SessionDep,
     actor: ActorDep,
 ) -> DataResponse[ProjectDetailRead]:
-    """Карточка проекта вместе с описанием и нынешними значениями атрибутов.
+    """Карточка проекта вместе с описанием, нынешними значениями атрибутов и решениями.
 
     Описание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и
     таскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи
-    дела проекта (`/projects/{key}/entries`).
+    дела проекта (`/projects/{key}/entries`). Решения проекта — все, со статусом,
+    посчитанным при чтении, и числом задач, которые на каждое ссылаются (`CONCEPT.md`,
+    3.2): на этом строится раздел «Решения» экрана проекта.
     """
     project = await service.read_project(session, project_key, actor=actor)
     return await _detail(session, project, actor=actor)
@@ -314,6 +320,7 @@ async def create_project_entry(
             title=given["title"],
             body=given["body"],
             refs=given["refs"],
+            supersedes=given["supersedes"],
         )
         return DataResponse[EntryRead](data=entry_read(appended, project_key=project.key))
 
@@ -381,13 +388,31 @@ async def read_project_entry(
 async def _detail(
     session: AsyncSession, project: Project, *, actor: Actor
 ) -> DataResponse[ProjectDetailRead]:
-    """Проект с атрибутами: тот же ответ у чтения, заведения и правки карточки."""
+    """Проект с атрибутами и решениями: тот же ответ у чтения, заведения и правки карточки."""
     attributes = await attributes_service.list_attributes(session, project, actor=actor)
+    decisions = await decisions_service.project_decisions(session, project, actor=actor)
+    counts = await decisions_service.citing_task_counts(session, decisions, actor=actor)
     return DataResponse[ProjectDetailRead](
         data=ProjectDetailRead.model_validate(
             {
                 **ProjectRead.model_validate(project).model_dump(),
                 "attributes": [AttributeRead.model_validate(item) for item in attributes],
+                "decisions": [_decision(item, counts) for item in decisions],
             }
         )
+    )
+
+
+def _decision(item: ProjectDecision, counts: dict[str, int]) -> ProjectDecisionRead:
+    """Решение проекта со статусом, преемником и числом задач, которые на него ссылаются."""
+    return ProjectDecisionRead(
+        no=item.entry.no,
+        ref=item.ref,
+        title=item.entry.title,
+        author=AuthorRead.model_validate(item.entry.author),
+        created_at=item.entry.created_at,
+        status=item.status,
+        supersedes=list(item.supersedes),
+        superseded_by=None if item.superseded_by is None else item.superseded_by.no,
+        tasks=counts.get(item.ref, 0),
     )

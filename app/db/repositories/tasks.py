@@ -8,7 +8,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import or_, select
+from sqlalchemy import distinct, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -51,6 +51,26 @@ class TaskRepository:
             for key in wanted.intersection((task.key, *task.previous_keys)):
                 found[key] = task
         return found
+
+    async def decision_counts(self, refs: Sequence[str]) -> dict[str, int]:
+        """Сколько задач ссылается на каждое из решений: ссылка `TRK#15` → число задач.
+
+        Задачи любого статуса и любого проекта: это история «что сделано по решению»
+        (`CONCEPT.md`, 3.2), и закрытая задача в ней важнее открытой. Решения без ссылок в
+        словарь не попадают — их число ноль. Один запрос на весь список: раскладка поля
+        `decisions` по строкам и подсчёт по ссылке.
+        """
+        if not refs:
+            return {}
+        ref = func.jsonb_array_elements_text(Task.decisions).table_valued("value").alias("ref")
+        statement = (
+            select(ref.c.value, func.count(distinct(Task.id)))
+            .select_from(Task)
+            .join(ref, true())
+            .where(ref.c.value.in_(sorted(set(refs))))
+            .group_by(ref.c.value)
+        )
+        return {value: int(count) for value, count in (await self._session.execute(statement))}
 
     async def add(self, task: Task) -> Task:
         """Кладёт задачу в сессию и отправляет INSERT, не закрывая транзакцию."""

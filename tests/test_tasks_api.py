@@ -110,6 +110,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     package = (await auth_client.get("/api/v1/tasks/trk-1")).json()["data"]
     assert sorted(package) == [
         "children",
+        "decisions",
         "features",
         "index",
         "links",
@@ -121,6 +122,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
         "transitions",
     ]
     assert package["links"] == []
+    assert package["decisions"] == []
     assert package["task"]["key"] == "TRK-1"
     assert package["transitions"] == ["open", "waiting", "cancelled"]
     assert package["summary"] is None

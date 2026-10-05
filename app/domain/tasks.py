@@ -21,8 +21,8 @@ FastAPI, и правило, записанное только в схеме, д�
 
 ## Правки полей зависят от статуса
 
-Название, описание и пять разделов меняются только в `backlog`; исполнитель, теги и
-приоритет — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего.
+Название, описание и пять разделов меняются только в `backlog`; исполнитель, приоритет и
+решения проекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего.
 Правило выражено одной функцией (`editable_fields`), чтобы частичное обновление и
 инструмент MCP спрашивали её, а не держали по своей копии таблицы.
 """
@@ -193,6 +193,59 @@ def is_plain_number(part: str) -> bool:
     return part.isascii() and part.isdigit() and part.lstrip("0") == part
 
 
+# --- Ссылка на решение проекта ----------------------------------------------------------
+
+#: Разделитель ссылки на запись дела: `TRK-42#12` — двенадцатая запись задачи `TRK-42`,
+#: `TRK#7` — седьмая запись дела проекта `TRK`. Объявлен здесь, а не в `case.py`: им же
+#: разбирается поле задачи `decisions` (ниже), а `case.py` сам импортирует этот модуль.
+ENTRY_REF_SEPARATOR = "#"
+
+#: Форма ссылки на решение проекта в подробностях отказа: по ней агент чинит опечатку.
+DECISION_REF_SHAPE = f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number>"
+
+#: Номер первой записи дела — у задачи и у проекта (`CONCEPT.md`, 3.4). Сквозной `seq`
+#: выдаёт база, а `no` считается внутри владельца.
+FIRST_ENTRY_NUMBER = 1
+
+#: Сколько решений проекта называет одна задача (`CONCEPT.md`, 3.3). Решения проекта —
+#: выборы, которые переживают задачу; задача, опирающаяся на два десятка таких выборов,
+#: называет не своё основание, а весь проект, и тот уже отдаёт `get_project`.
+MAX_DECISIONS = 20
+
+
+def normalize_decision_ref(value: Any) -> str:
+    """Ссылка на решение проекта в каноническом виде: `trk#15` → `TRK#15`.
+
+    Решение проекта — только запись дела проекта (`CONCEPT.md`, 3.2, «Слухи»), поэтому
+    форма одна — ключ проекта и номер. Запись задачи (`TRK-42#7`) отвергается своей
+    причиной `task_entry`, а не общей «не та форма»: это ровно та ссылка, которой практику
+    одной задачи выдают за решение, и отказ называет её прямо. Существует ли запись и
+    решение ли это, проверяет сценарий — домен в базу не ходит.
+    """
+    text = _text(value).strip()
+    if not text:
+        raise FieldProblem("empty_item")
+    head, separator, tail = text.partition(ENTRY_REF_SEPARATOR)
+    if separator and is_plain_number(tail) and int(tail) >= FIRST_ENTRY_NUMBER:
+        try:
+            parse_task_key(head)
+        except InvalidTaskKeyError:
+            pass
+        else:
+            raise FieldProblem("task_entry", ref=text, expected=DECISION_REF_SHAPE)
+        try:
+            return f"{validate_project_key(head)}{ENTRY_REF_SEPARATOR}{int(tail)}"
+        except InvalidProjectKeyError:
+            pass
+    raise FieldProblem("not_a_decision_ref", ref=text, expected=DECISION_REF_SHAPE)
+
+
+def split_decision_ref(ref: str) -> tuple[str, int]:
+    """Канонический `TRK#15` → `("TRK", 15)`. Ссылка уже прошла `normalize_decision_ref`."""
+    key, _, no = ref.partition(ENTRY_REF_SEPARATOR)
+    return key, int(no)
+
+
 # --- Статусы ------------------------------------------------------------------------
 
 
@@ -320,6 +373,9 @@ class TaskField(StrEnum):
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
+    #: Решения проекта, на которые опирается задача (`CONCEPT.md`, 3.3): обвязка, а не
+    #: задание, поэтому меняется в любом незакрытом статусе и пишет `field_changed`.
+    DECISIONS = "decisions"
 
 
 #: Четыре текстовых раздела; пятый — `checks` — устроен иначе (список), поэтому отдельно.
@@ -338,7 +394,9 @@ BACKLOG_ONLY_FIELDS: frozenset[TaskField] = frozenset(
 )
 
 #: Меняются в любом незакрытом статусе: это не содержание задачи, а её обвязка.
-OPEN_FIELDS: frozenset[TaskField] = frozenset({TaskField.ASSIGNEE, TaskField.PRIORITY})
+OPEN_FIELDS: frozenset[TaskField] = frozenset(
+    {TaskField.ASSIGNEE, TaskField.PRIORITY, TaskField.DECISIONS}
+)
 
 
 def editable_fields(status: TaskStatus) -> frozenset[TaskField]:
@@ -525,6 +583,25 @@ def _normalize_priority(value: Any) -> TaskPriority:
         ) from None
 
 
+def _normalize_decisions(value: Any) -> list[str]:
+    """Решения проекта задачи: канонические ссылки `TRK#15` без повторов, в порядке постановки.
+
+    Повтор схлопывается, а не отвергается: ссылка — не адрес по номеру, как проверка, и
+    второй `TRK#15` ничего не сдвигает. Пустой элемент и чужая форма отвергаются с
+    причиной (`normalize_decision_ref`).
+    """
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        raise FieldProblem("not_a_list")
+    refs: list[str] = []
+    for item in value:
+        ref = normalize_decision_ref(item)
+        if ref not in refs:
+            refs.append(ref)
+    if len(refs) > MAX_DECISIONS:
+        raise FieldProblem("too_many", max=MAX_DECISIONS, got=len(refs))
+    return refs
+
+
 _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.TITLE: _normalize_title,
     TaskField.DESCRIPTION: _normalize_description,
@@ -535,6 +612,7 @@ _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.CHECKS: _normalize_checks,
     TaskField.ASSIGNEE: _normalize_assignee,
     TaskField.PRIORITY: _normalize_priority,
+    TaskField.DECISIONS: _normalize_decisions,
 }
 
 

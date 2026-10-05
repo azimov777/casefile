@@ -394,3 +394,21 @@ TRK-76 стоит в обоих.
 **Где:** `app/domain/search.py` (`NamedInFilter`, `named_in_filter`),
 `app/db/repositories/search.py` (`compile_filter`, `_archive_visibility`),
 `app/db/repositories/projects.py` (`in_active_project`).
+
+## `#` входит в тело слова языка запросов — ради ссылки на решение `TRK#15`
+
+**Что:** отбор `decision: TRK#15` (TRK-554) пишет значение со знаком `#`, и лексер принимает
+его внутри слова (`_WORD_BODY_RE`), но не в его начале. До этого `#` отвечал
+`invalid_search_query`, `unexpected_character`.
+**Почему важно:** без `#` в теле слова ссылку на решение пришлось бы брать в кавычки, а без
+кавычек агент получил бы отказ на самый частый вопрос истории — «какие задачи делались по
+этому решению». Значение канонизирует сценарий (`normalize_decision_ref`), и в базе оно
+ищется той же строкой, что лежит в `tasks.decisions`, через `@>` под GIN-индексом
+`ix_tasks_decisions`. Неизвестное решение — отказ `search_value_invalid` с причиной
+`decision_not_found`, а не пустая выдача, как у `parent`; запись задачи (`TRK-42#7`) —
+причина `task_entry`.
+**Как правильно:** новому значению с непривычным знаком добавлять знак в тело слова, а не
+в начало: начало слова отличает значение от оператора и скобок. Заменённое решение отбор
+находит так же, как действующее, — история нужна именно после замены.
+**Где:** `app/domain/query_language.py` (`_WORD_BODY_RE`), `app/services/search.py`
+(`_decision_ref`), `app/db/repositories/search.py` (`_decision`).

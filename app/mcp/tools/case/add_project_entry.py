@@ -23,11 +23,24 @@ ProjectEntryTypeArg = Annotated[
     Field(
         description=(
             "What the entry records about the project:\n"
-            "- `decision` — an option chosen among several, with the reason;\n"
+            "- `decision` — a project decision: an option chosen among several, with the "
+            "reason, that outlives a task and that other tasks are to follow;\n"
             "- `finding` — an established fact with its source;\n"
             "- `artifact` — a pointer to a result;\n"
             "- `note` — an entry that fits none of the types above.\n"
             "Summaries, questions, attempts, verdicts and remarks exist only in task cases"
+        )
+    ),
+]
+
+SupersedesArg = Annotated[
+    list[int] | None,
+    Field(
+        description=(
+            "Numbers of earlier `decision` entries of this project that the new decision "
+            "supersedes; accepted only with `decision`. A number outside the project's case "
+            "or of another entry type is refused with `entry_fields_invalid`, a decision "
+            "superseded already with `decision_not_in_force`, its successor in `details`"
         )
     ),
 ]
@@ -54,6 +67,7 @@ def register(tools: Toolset) -> None:
         title: ProjectEntryTitleArg,
         body: EntryBodyArg = "",
         refs: EntryRefsArg = None,
+        supersedes: SupersedesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedProjectEntryView:
         """Files an entry in a project's case: a decision, finding, artifact or note that
@@ -63,6 +77,10 @@ def register(tools: Toolset) -> None:
         `refs` of any task or project case. Like a task entry filed by `add_entry`, a
         project entry stays as filed. A `task` token files project entries as it files
         task entries.
+
+        A project decision is in force until a later decision names it in `supersedes`;
+        no entry changes, and the status is computed on read. Withdrawing a decision with
+        no replacement is a decision too, one that supersedes it.
 
         An empty title, or a reference to a missing entry, task or project, returns
         `entry_fields_invalid` naming the offending fields.
@@ -79,6 +97,7 @@ def register(tools: Toolset) -> None:
                     title=title,
                     body=body,
                     refs=refs or (),
+                    supersedes=supersedes,
                 )
                 return appended_project_entry(entry, project_key=project.key)
 
@@ -90,6 +109,7 @@ def register(tools: Toolset) -> None:
                     "title": title,
                     "body": body,
                     "refs": refs,
+                    "supersedes": supersedes,
                 },
                 build=append,
             )

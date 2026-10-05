@@ -77,6 +77,7 @@
 | `checks_not_passed` | Some checks have no passing verdict recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке положительного вердикта, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
+| `decision_not_in_force` | Project decision is superseded by a later decision | Решение проекта уже заменено другим, а его называют как действующее. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `installation_not_empty` | Only an installation without projects can take an archive | Приём архива в установку, где уже есть проекты. |
 | `last_admin` | The installation must keep at least one active administrator | Действие оставило бы установку без действующего администратора. |
