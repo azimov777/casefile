@@ -17,7 +17,7 @@ from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.links import LinkKind
 from app.domain.search import FEATURES_FIELD, PARENT_FIELD, SELECTABLE_FIELDS
-from app.domain.tasks import TaskPriority, TaskStatus
+from app.domain.tasks import PARENT_GOAL_LIMIT, TaskPriority, TaskStatus
 from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
@@ -592,6 +592,148 @@ async def test_parents_are_picked_by_name_and_are_absent_when_not_asked(
     error = response.json()["error"]
     assert error["code"] == "search_field_unknown"
     assert PARENT_FIELD in error["details"]["allowed"]
+
+
+# --- Поддерево и цель родителя в карточке (TRK-468) ---------------------------------------
+
+
+@pytest.fixture
+async def tree(db_session: AsyncSession, task_actor: Actor, project: Project) -> dict[str, Task]:
+    """Корень → ребёнок → внук → правнук и задача рядом: глубже одного колена."""
+    tasks = {
+        name: await make(db_session, task_actor, project, name)
+        for name in ("корень", "ребёнок", "внук", "правнук", "чужая")
+    }
+    for parent, child in (("корень", "ребёнок"), ("ребёнок", "внук"), ("внук", "правнук")):
+        await links_service.add_link(
+            db_session, tasks[parent], tasks[child], actor=task_actor, kind=LinkKind.PARENT
+        )
+    return tasks
+
+
+async def test_under_selects_the_whole_subtree_by_query_and_by_parameter(
+    auth_client: AsyncClient, tree: dict[str, Task]
+) -> None:
+    """TRK-468 через HTTP: `?under=X` и `query=under: X` — одно и то же, `parent` — одно колено."""
+    root = tree["корень"].key
+    expected = [tree[name].key for name in ("ребёнок", "внук", "правнук")]
+
+    by_query = await listed_keys(auth_client, query=f"under: {root}")
+    by_parameter = await listed_keys(auth_client, under=root)
+    children = await listed_keys(auth_client, parent=root)
+
+    assert by_query == by_parameter == expected
+    assert children == [tree["ребёнок"].key]
+    assert await listed_keys(auth_client, under=tree["ребёнок"].key) == expected[1:]
+
+
+async def test_an_unknown_under_key_is_a_named_error_over_http(
+    auth_client: AsyncClient, tree: dict[str, Task]
+) -> None:
+    """Опечатка в корне поддерева — `422 search_value_invalid`, а не пустая страница."""
+    del tree
+    response = await auth_client.get("/api/v1/tasks", params={"under": "TRK-404"})
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "search_value_invalid"
+    assert error["details"]["field"] == "under"
+    assert error["details"]["reason"] == "task_not_found"
+
+
+async def test_the_card_of_a_child_carries_the_goal_of_its_direct_parent_only(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    project: Project,
+) -> None:
+    """TRK-468: у `parent` в карточке ребёнка есть `goal`; у родителя родителя и у детей — нет.
+
+    Задача без родителя по-прежнему отдаёт `parent: null`. Короткая цель приходит целиком
+    и без пометки, а у пустой цели родителя поле стоит, но пустое.
+    """
+    root = await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        project=project,
+        title="корень",
+        description="описание",
+        goal="Цель корня: видеть программу целиком",
+    )
+    middle = await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        project=project,
+        title="середина",
+        description="описание",
+        goal="Цель середины",
+    )
+    leaf = await tasks_service.create_task(
+        db_session, actor=task_actor, project=project, title="лист", description="описание"
+    )
+    for parent, child in ((root, middle), (middle, leaf)):
+        await links_service.add_link(
+            db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT
+        )
+
+    top = (await auth_client.get(f"/api/v1/tasks/{root.key}")).json()["data"]
+    mid = (await auth_client.get(f"/api/v1/tasks/{middle.key}")).json()["data"]
+    bottom = (await auth_client.get(f"/api/v1/tasks/{leaf.key}")).json()["data"]
+
+    assert top["parent"] is None
+    assert mid["parent"] == {
+        "key": root.key,
+        "title": "корень",
+        "status": "backlog",
+        "goal": "Цель корня: видеть программу целиком",
+        "goal_truncated": False,
+    }
+    # Цель родителя родителя ребёнку не едет, и дети в карточке цели не несут.
+    assert bottom["parent"]["key"] == middle.key
+    assert bottom["parent"]["goal"] == "Цель середины"
+    assert set(mid["children"][0]) == {"key", "title", "status"}
+
+
+async def test_a_long_parent_goal_is_cut_at_the_limit_and_says_so(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    project: Project,
+) -> None:
+    """Цель длиннее потолка режется ровно по нему и объявляет обрезку признаком рядом."""
+    long_goal = "ц" * PARENT_GOAL_LIMIT + "хвост"
+    exact_goal = "ш" * PARENT_GOAL_LIMIT
+    parents = [
+        await tasks_service.create_task(
+            db_session,
+            actor=task_actor,
+            project=project,
+            title=title,
+            description="описание",
+            goal=goal,
+        )
+        for title, goal in (("длинная", long_goal), ("в самый потолок", exact_goal))
+    ]
+    children = []
+    for parent in parents:
+        child = await tasks_service.create_task(
+            db_session, actor=task_actor, project=project, title="ребёнок", description="описание"
+        )
+        await links_service.add_link(
+            db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT
+        )
+        children.append(child)
+
+    cut = (await auth_client.get(f"/api/v1/tasks/{children[0].key}")).json()["data"]["parent"]
+    whole = (await auth_client.get(f"/api/v1/tasks/{children[1].key}")).json()["data"]["parent"]
+
+    assert cut["goal"] == "ц" * PARENT_GOAL_LIMIT
+    assert cut["goal_truncated"] is True
+    assert whole["goal"] == exact_goal
+    assert whole["goal_truncated"] is False
+    # Полный текст — у самого родителя, а не потерян.
+    full = (await auth_client.get(f"/api/v1/tasks/{parents[0].key}")).json()["data"]["task"]
+    assert full["goal"] == long_goal
 
 
 # --- Страницами: общее число выдачи и адрес страницы --------------------------------------
