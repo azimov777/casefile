@@ -3,7 +3,8 @@
 Правила — `CONCEPT.md`, 3.2 («Архивирование»), 3.6 и 4.4: архивный проект не показывают
 список проектов и `bootstrap` без `include_archived`; его задачи не находит поиск, пока
 отбор не назовёт их равенством или вхождением — проект в `project`, саму задачу в `key`,
-её родителя в `parent` (`TRK-164#9`, `TRK-151#17`); его вопросы и замечания не попадают во
+её родителя в `parent`, корень её поддерева в `under` (`TRK-164#9`, `TRK-151#17`,
+`TRK-468`); его вопросы и замечания не попадают во
 «входящую» без названного проекта, а вопросы — и в счётчик первого экрана. Лента и чтение
 по ключу не скрывают ничего.
 
@@ -116,6 +117,10 @@ async def test_list_projects_hides_archived_unless_asked(
         ("key: != OPS-1", []),
         ("parent: OPS-1", ["TRK-2"]),
         ("parent: empty()", ["OPS-1"]),
+        # Корень поддерева названа — поддерево видно, как у `parent:`; отрицание и
+        # так ничего не называет и архива не открывает (TRK-468).
+        ("under: OPS-1", ["TRK-2"]),
+        ("under: != OPS-1", ["OPS-1"]),
         # Названное в одной ветке `or` не открывает архив остальным: TRK-2 в backlog, но
         # не названа.
         ("key: TRK-1 or status: backlog", ["OPS-1", "TRK-1"]),
@@ -129,8 +134,8 @@ async def test_search_finds_archived_tasks_only_by_name(
     query: str | None,
     expected: list[str],
 ) -> None:
-    """Обзорная проверка 2: без названия архивных задач нет, с `project:`, `key:` и
-    `parent:` — есть."""
+    """Обзорная проверка 2: без названия архивных задач нет, с `project:`, `key:`,
+    `parent:` и `under:` — есть."""
     await _archive(db_session, world, main_actor)
 
     assert await _keys(db_session, task_actor, query) == expected

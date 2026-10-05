@@ -156,6 +156,19 @@ class TaskFilters:
             ),
         ),
     ] = None
+    under: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["TRK-7"]],
+            description=(
+                "Root task keys: the answer holds all their descendants at any depth — "
+                "children, grandchildren and so on — without the roots themselves. "
+                "`parent` is the direct children only. An unknown key answers 422 "
+                "instead of an empty page"
+            ),
+        ),
+    ] = None
     status: Annotated[
         list[TaskStatus] | None, Query(examples=[[TaskStatus.OPEN]], description="Task statuses")
     ] = None
@@ -238,6 +251,7 @@ class TaskFilters:
                 ("key", self.key),
                 ("project", self.project),
                 ("parent", self.parent),
+                ("under", self.under),
                 ("status", None if self.status is None else [item.value for item in self.status]),
                 ("assignee", self.assignee),
                 (

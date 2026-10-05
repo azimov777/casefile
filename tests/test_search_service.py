@@ -383,6 +383,181 @@ async def test_an_unknown_parent_key_is_refused_and_named(
     assert details["reason"] == "task_not_found"
 
 
+# --- Поддерево: отбор `under` (TRK-468) --------------------------------------------------
+
+
+@pytest.fixture
+async def lineage(db_session: AsyncSession, task_actor: Actor, project: Project) -> dict[str, Task]:
+    """Дерево на четыре колена: A → B → C → D, у A ещё ребёнок E, рядом чужая и вторая корень.
+
+    Ровно та расстановка, где `parent:` и `under:` расходятся: внуки и правнуки у A есть,
+    и одним `parent: A` их не собрать.
+    """
+    tasks = {
+        name: await make(db_session, task_actor, project, name)
+        for name in ("A", "B", "C", "D", "E", "outsider", "other_root", "other_child")
+    }
+    for parent, child in (
+        ("A", "B"),
+        ("B", "C"),
+        ("C", "D"),
+        ("A", "E"),
+        ("other_root", "other_child"),
+    ):
+        await links_service.add_link(
+            db_session, tasks[parent], tasks[child], actor=task_actor, kind=LinkKind.PARENT
+        )
+    return tasks
+
+
+def _titles(lineage: dict[str, Task], found: list[str]) -> set[str]:
+    """Названия найденных задач: так проверки читаются деревом, а не номерами."""
+    by_key = {task.key: name for name, task in lineage.items()}
+    return {by_key[key] for key in found}
+
+
+async def test_under_selects_the_whole_subtree_and_parent_only_the_children(
+    db_session: AsyncSession, task_actor: Actor, lineage: dict[str, Task]
+) -> None:
+    """Обзорная проверка 1: у A → B → C → D `under: A` отдаёт потомков любой глубины.
+
+    `parent: A` остаётся прежним — только дети, одно колено; самой A в `under: A` нет.
+    """
+    root = lineage["A"].key
+
+    under_root = await keys(db_session, task_actor, query=f"under: {root}")
+    assert _titles(lineage, under_root) == {"B", "C", "D", "E"}
+    assert root not in under_root
+
+    children = await keys(db_session, task_actor, query=f"parent: {root}")
+    assert _titles(lineage, children) == {"B", "E"}
+
+    under_b = await keys(db_session, task_actor, query=f"under: {lineage['B'].key}")
+    assert _titles(lineage, under_b) == {"C", "D"}
+
+    leaf = await keys(db_session, task_actor, query=f"under: {lineage['D'].key}")
+    assert leaf == [], "лист без потомков: пустая выдача на существующий ключ — не отказ"
+
+
+async def test_under_combines_with_the_other_conditions_and_the_structured_input(
+    db_session: AsyncSession, task_actor: Actor, lineage: dict[str, Task]
+) -> None:
+    """Поддерево складывается с остальными условиями, и структурный вход отвечает так же."""
+    root = lineage["A"].key
+    await open_task(db_session, task_actor, lineage["C"])
+
+    by_query = await keys(db_session, task_actor, query=f"under: {root} and status: open")
+    by_filter = await keys(
+        db_session,
+        task_actor,
+        structured=[
+            StructuredTerm(name="under", values=[root]),
+            StructuredTerm(name="status", values=["open"]),
+        ],
+    )
+
+    assert _titles(lineage, by_query) == {"C"}
+    assert by_filter == by_query
+
+
+async def test_under_takes_several_roots_by_or_and_negation_keeps_the_roots(
+    db_session: AsyncSession, task_actor: Actor, lineage: dict[str, Task]
+) -> None:
+    """Несколько корней — потомки любого из них; `!=` — всё, что не потомок названных."""
+    roots = f"{lineage['B'].key}, {lineage['other_root'].key}"
+
+    several = await keys(db_session, task_actor, query=f"under: {roots}")
+    assert _titles(lineage, several) == {"C", "D", "other_child"}
+
+    negated = await keys(db_session, task_actor, query=f"under: != {lineage['A'].key}")
+    assert _titles(lineage, negated) == {"A", "outsider", "other_root", "other_child"}
+
+    by_filter = await keys(
+        db_session,
+        task_actor,
+        structured=[StructuredTerm(name="under", values=[lineage["A"].key], operator=Operator.NE)],
+    )
+    assert by_filter == negated
+
+
+async def test_an_unknown_under_key_is_refused_and_empty_is_not_supported(
+    db_session: AsyncSession, task_actor: Actor, lineage: dict[str, Task]
+) -> None:
+    """Опечатка в корне — отказ с ключом, как у `parent:`; `empty()` здесь не значит ничего.
+
+    Верхний уровень проекта по-прежнему называет `parent: empty()`: у каждой задачи
+    «чьей-то потомком не быть» тривиально, и поле пустого состояния не заводит.
+    """
+    del lineage
+    with pytest.raises(SearchValueInvalidError) as unknown:
+        await keys(db_session, task_actor, query="under: TRK-404")
+    assert unknown.value.details["field"] == "under"
+    assert unknown.value.details["value"] == "TRK-404"
+    assert unknown.value.details["reason"] == "task_not_found"
+
+    with pytest.raises(SearchValueInvalidError) as empty:
+        await keys(db_session, task_actor, query="under: empty()")
+    assert empty.value.details["reason"] == "empty_not_supported"
+
+    with pytest.raises(SearchOperatorNotSupportedError):
+        await keys(db_session, task_actor, query="under: ~ A")
+
+
+async def test_the_subtree_walk_stops_at_the_depth_ceiling_on_a_cycle_from_older_data(
+    db_session: AsyncSession, task_actor: Actor, project: Project
+) -> None:
+    """Кольцо в базе (гонка двух запросов, `docs/notes/links.md`) не вешает отбор.
+
+    Сценарий кольца уже не поставит (`link_cycle_detected`), поэтому замыкающая связь
+    кладётся мимо него. Обход ограничен глубиной, как проверка цикла, и выдача конечна:
+    каждый член кольца назван один раз.
+    """
+    first = await make(db_session, task_actor, project, "первая")
+    second = await make(db_session, task_actor, project, "вторая")
+    await links_service.add_link(db_session, first, second, actor=task_actor, kind=LinkKind.PARENT)
+    db_session.add(
+        Link(
+            source=second,
+            target=first,
+            kind=LinkKind.PARENT,
+            **created_by_columns(task_actor.author),
+        )
+    )
+    await db_session.flush()
+
+    found = await keys(db_session, task_actor, query=f"under: {first.key}")
+
+    assert sorted(found) == sorted([first.key, second.key])
+
+
+async def test_under_costs_a_constant_number_of_queries_whatever_the_depth_and_the_page(
+    db_session: AsyncSession, task_actor: Actor, project: Project
+) -> None:
+    """Поддерево — одна рекурсия внутри запроса страницы, а не запрос на колено и строку.
+
+    Цепочка из двадцати задач и страница из одной строки или из всех стоят одинаково:
+    одна выборка страницы с рекурсией внутри плюс один запрос на разрешение ключа корня.
+    """
+    root = await make(db_session, task_actor, project, "корень")
+    previous = root
+    for index in range(20):
+        child = await make(db_session, task_actor, project, f"колено {index}")
+        await links_service.add_link(
+            db_session, previous, child, actor=task_actor, kind=LinkKind.PARENT
+        )
+        previous = child
+
+    query = f"under: {root.key}"
+    one = await _page_selects(db_session, task_actor, query=query, limit=1)
+    all_rows = await _page_selects(db_session, task_actor, query=query, limit=50)
+    by_parent = await _page_selects(db_session, task_actor, query=f"parent: {root.key}", limit=50)
+
+    # Разрешение ключа корня плюс сама страница, а у `parent:` столько же: поддерево не
+    # добавило запросов ни на колено, ни на строку.
+    assert one[0] == all_rows[0] == by_parent[0] == 2, (one, all_rows, by_parent)
+    assert all_rows[1] == 20, "родителей в строках — столько, сколько потомков (колен двадцать)"
+
+
 # --- Родители в строке выдачи ----------------------------------------------------------
 
 
@@ -487,7 +662,7 @@ async def test_parents_are_not_selected_when_the_fields_leave_them_out(
 
 
 async def _page_selects(session: AsyncSession, actor: Actor, **call: Any) -> tuple[int, int]:
-    """Сколько `SELECT` ушло на страницу поиска и сколько строк в ней пришло с родителем.
+    """Сколько выборок ушло на страницу поиска и сколько строк в ней пришло с родителем.
 
     Запросы считаются событием SQLAlchemy на соединении, как у `last_entry_at`
     (`tests/test_last_entry_at.py`): запрос на строку не виден ни по ответу, ни по времени
@@ -508,7 +683,8 @@ async def _page_selects(session: AsyncSession, actor: Actor, **call: Any) -> tup
     with_parents = sum(
         1 for found in outcome.page.items if found.parent is not None and found.parent.value
     )
-    selects = [item for item in statements if item.lstrip().upper().startswith("SELECT")]
+    # Запрос с рекурсией (`under:`) начинается с `WITH`, а не с `SELECT`: это тоже выборка.
+    selects = [item for item in statements if item.lstrip().upper().startswith(("SELECT", "WITH"))]
     return len(selects), with_parents
 
 
