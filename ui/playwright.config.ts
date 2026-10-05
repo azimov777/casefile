@@ -56,13 +56,13 @@ export default defineConfig({
     {
       name: 'светлая',
       testIgnore:
-        /(access|answer|board-column|case-readable|case-latest|explanations|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|filter-stability|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|api-recreate|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|explanations|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|filter-stability|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|api-recreate|warning|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
     {
       name: 'тёмная',
       testIgnore:
-        /(access|answer|board-column|case-readable|case-latest|explanations|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|filter-stability|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|api-recreate|language|language-formats|english)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|explanations|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|filter-stability|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|api-recreate|warning|language|language-formats|english)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
     },
     {
@@ -91,7 +91,7 @@ export default defineConfig({
     {
       name: 'запись',
       testMatch:
-        /(access|answer|board-column|case-readable|case-latest|explanations|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|filter-stability|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|api-recreate)\.spec\.ts/,
+        /(access|answer|board-column|case-readable|case-latest|explanations|key-wrap|link-groups|live|live-board|live-list|long-word|moving|paging|filter-stability|layout|reason-line|group-chevron-align|task-list-screen|task-move|remark|people|parents-long|project-place|project-screen|project-actions|project-archive|hierarchy|section-edits|service-i18n|start-onboarding|api-recreate|warning)\.spec\.ts/,
       // По одному пишущему сценарию за раз: они меняют одну и ту же демо-установку,
       // и параллельно каждый видел бы следы соседа.
       fullyParallel: false,

@@ -14,7 +14,7 @@
 это состояние, открывает `/tasks` напрямую — так делает большинство файлов ниже, кроме
 `install-key.spec.ts` (её первый сценарий идёт через `/` нарочно) и `start-onboarding.spec.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `filter-stability.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts` и `start-onboarding.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `filter-stability.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts`, `start-onboarding.spec.ts` и `warning.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -105,6 +105,7 @@ invalid_search_query`); ограничение снято (TRK-21).
 - `questions.spec.ts` — входящая: адресованный вопрос, отбор в адресе, ссылка вопроса открывает свою запись, область действия проекта, красная кромка блокирующего замером вычисленных стилей, `axe`; без параметров — входящая, история вторым видом и `axe` истории
 - `remarks.spec.ts` — чтение замечаний: карточка закрытой задачи, разбор под замечанием, признак и отбор, входящая, `axe`
 - `remark.spec.ts` — замечание с карточки: подшивка с ключом повтора, подтверждение, черновик; проект «запись»
+- `warning.spec.ts` — закрытие не целиком (TRK-561): агент закрывает задачу с `unverifiable`, она ждёт в «Требуют внимания», человек принимает на карточке, раздел пустеет; ширина 390 без прокрутки вбок, `axe`; снимки только с `SHOTS_DIR`; проект «запись»
 - `remark-cancel.spec.ts` — отмена формы замечания (UI-142): пустой черновик сворачивает
   сразу, непустой — только после подтверждения окном, а не браузерным `confirm`; «Продолжить
   писать» его не трогает; ничего не отправляет, читает в обеих темах

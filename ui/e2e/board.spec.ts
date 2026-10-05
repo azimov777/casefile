@@ -574,14 +574,26 @@ test('ниже точки остановки доска остаётся на п
   expect(measured.sideways).toBe(0);
 });
 
+/** Порядок столбцов на доске: слева направо, как их ставит интерфейс. */
+const BOARD_ORDER = ['backlog', 'open', 'in_progress', 'waiting', 'done', 'cancelled'];
+
 /**
  * Самый длинный столбец демо: его решает состав демо, а не память сценария. Прокрутка
  * меряется там, где ей есть куда ехать, и выписанный здесь статус устарел бы вместе
  * с бэкендом (так уже было с `open` — TRK-15).
+ *
+ * При равной длине берётся левый столбец доски: на узком окне (`SHORT_WINDOW`) правые
+ * столбцы стоят за краем ряда, и точки замера там не попадают ни во что. Равенство не
+ * выдумано: с TRK-561 в демо две закрытые задачи, как и две в работе, а порядок выдачи
+ * по ключу ставил `done` первым (DEMO-1).
  */
 async function longestColumn(request: APIRequestContext): Promise<string> {
   const all = await tasksByStatus(request);
-  const longest = [...all.entries()].sort(([, left], [, right]) => right.length - left.length)[0];
+  const longest = [...all.entries()].sort(
+    ([leftStatus, left], [rightStatus, right]) =>
+      right.length - left.length ||
+      BOARD_ORDER.indexOf(leftStatus) - BOARD_ORDER.indexOf(rightStatus),
+  )[0];
   expect(longest, 'в демо нет ни одной задачи').toBeDefined();
   return (longest as [string, string[]])[0];
 }
