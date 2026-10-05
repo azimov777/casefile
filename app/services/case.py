@@ -77,6 +77,7 @@ from app.domain.case import (
     AGENT_ENTRY_TYPES,
     CLOSING_SUMMARY_PART,
     CLOSING_WITHOUT_ANSWER,
+    INCOMPLETE_OUTCOMES,
     EntryContext,
     EntryDraft,
     EntryHeading,
@@ -86,6 +87,7 @@ from app.domain.case import (
     QuestionOrder,
     TrackerRef,
     VerdictOutcome,
+    WarningCheck,
     answer_outcome,
     build_entry,
     build_project_entry,
@@ -93,12 +95,16 @@ from app.domain.case import (
     format_entry_ref,
     is_blocking_question,
     mark_outdated_verdicts,
+    open_warning,
+    warning_title,
 )
 from app.domain.errors import (
+    AcceptanceByCloserError,
     ActorNotAddressableError,
     AddresseeWithAnyAddresseeError,
     EntryFieldsInvalidError,
     EntryNotFoundError,
+    WarningNotOpenError,
 )
 from app.domain.fields import FieldProblems
 from app.domain.links import LinkKind, other_side_phrase
@@ -239,7 +245,8 @@ def features(
 
     Признак «вопрос блокирующий» берётся из домена (`is_blocking_question`), а не
     проверяется здесь по месту: тот же признак поиск считает запросом, и третьей формы
-    одного определения быть не должно.
+    одного определения быть не должно. По той же причине открытое предупреждение
+    читается из описи доменной `open_warning`.
     """
     return TaskFeatures(
         blocked=blocked,
@@ -248,6 +255,7 @@ def features(
             1 for question in questions if is_blocking_question(question.payload)
         ),
         open_remarks=len(remarks),
+        open_warnings=0 if open_warning(index) is None else 1,
         last_summary_at=summary.created_at if summary is not None else None,
         last_entry_at=_last_entry_at(index),
     )
@@ -372,6 +380,15 @@ async def list_remarks(
     )
 
 
+async def count_open_warnings(session: AsyncSession) -> int:
+    """Сколько задач несут открытое предупреждение — число для первого экрана.
+
+    Адресата у предупреждения нет, как и у замечания: число одно на установку, его видит
+    любой вошедший. Задачи архивных проектов не считаются (`CONCEPT.md`, 3.6).
+    """
+    return await EntryRepository(session).count_open_warnings()
+
+
 async def count_open_questions(session: AsyncSession, *, participant: Participant) -> int:
     """Сколько открытых вопросов адресовано участнику.
 
@@ -470,6 +487,8 @@ async def append_entry(
     )
     await lock_changes(session)
     await _ensure_targets_exist(session, task, draft)
+    if draft.type is EntryType.ACCEPTANCE:
+        await _ensure_warning_acceptable(session, task, actor=actor)
     return await _append(
         session,
         task,
@@ -1085,6 +1104,28 @@ async def record_moved(
 # --- Внутреннее -----------------------------------------------------------------------
 
 
+async def _ensure_warning_acceptable(session: AsyncSession, task: Task, *, actor: Actor) -> None:
+    """`acceptance` принимается, только если у задачи есть открытое предупреждение и
+    принимает не тот, кто её закрыл (решение TRK-561#11).
+
+    Отказы — конфликты состояния, а не формы записи: та же запись пройдёт в другой
+    задаче или от другой подписи. Читается под очередью изменений, которую
+    `append_entry` занял до проверок, — два одновременных принятия не подошьются оба
+    поверх одного предупреждения.
+    """
+    repository = EntryRepository(session)
+    warning = await repository.latest_warning(task.id)
+    details: dict[str, Any] = {"key": task.key}
+    if warning is None:
+        raise WarningNotOpenError(details=details)
+    details["warning_no"] = warning.no
+    reaction = await repository.first_warning_reaction(task.id, after_no=warning.no)
+    if reaction is not None:
+        raise WarningNotOpenError(details={**details, "reaction_no": reaction})
+    if warning.created_by_signature == actor.author.signature:
+        raise AcceptanceByCloserError(details={**details, "signature": actor.author.signature})
+
+
 async def _ensure_targets_exist(session: AsyncSession, task: Task, draft: EntryDraft) -> None:
     """Проверки, которым нужна база: адресаты, ссылки, номер вопроса.
 
@@ -1351,8 +1392,53 @@ async def _append(
     return entry
 
 
+async def record_warning(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    checks: Sequence[WarningCheck],
+    action_id: uuid.UUID | None = None,
+) -> Entry:
+    """Предупреждение закрытия: задача закрыта с проверками `partial` или `unverifiable`.
+
+    Служебная запись, как `status_changed`: её подшивает само закрытие в своей
+    транзакции (`app/services/tasks.py`, `close_task`), выводя её из исходов, которые
+    выбрал исполнитель. Автор — тот, кто закрыл, и по нему `acceptance` отличает
+    закрывшего (`_ensure_warning_acceptable`).
+    """
+    return await _append(
+        session,
+        task,
+        actor=actor,
+        type=EntryType.WARNING,
+        title=warning_title(checks),
+        payload={"checks": [item.as_payload() for item in checks]},
+        action_id=action_id,
+    )
+
+
+async def incomplete_checks(session: AsyncSession, task: Task) -> list[WarningCheck]:
+    """Проверки, чей последний вердикт **этого захода** — `partial` или `unverifiable`.
+
+    Тот же заход, что у `verdict_gaps`: всё после последнего входа в `in_progress`. Без
+    такого входа — пусто: тогда и закрытие откажет переходом, и предупреждать не о чем.
+    По возрастанию номера проверки — в этом порядке пары лягут в нагрузку `warning`.
+    """
+    repository = EntryRepository(session)
+    entered = await repository.last_entry_into_status(task.id, TaskStatus.IN_PROGRESS)
+    if entered is None:
+        return []
+    outcomes = await repository.last_verdict_outcomes(task.id, after_no=entered)
+    return [
+        WarningCheck(check_no=check_no, outcome=outcome)
+        for check_no, outcome in sorted(outcomes.items())
+        if outcome in INCOMPLETE_OUTCOMES
+    ]
+
+
 async def verdict_gaps(session: AsyncSession, task: Task) -> list[CheckGap]:
-    """Проверки, у которых в **этом заходе** нет положительного вердикта, с причиной.
+    """Проверки, у которых в **этом заходе** нет засчитанного вердикта, с причиной.
 
     Этот заход — всё, что подшито после последнего входа задачи в `in_progress`
     (`CONCEPT.md`, 3.3). Вердикты прошлых заходов остаются в деле как история, но в
@@ -1362,7 +1448,9 @@ async def verdict_gaps(session: AsyncSession, task: Task) -> list[CheckGap]:
 
     Причина у каждой проверки своя: `no_verdict` — вердикта после границы нет вовсе,
     `failed` — последний вердикт провальный. Отказ перехода несёт её в `details.checks`:
-    по одному номеру проверки читающий не понял бы, что именно не так.
+    по одному номеру проверки читающий не понял бы, что именно не так. `partial` и
+    `unverifiable` засчитаны: с ними закрытие подшивает предупреждение
+    (`incomplete_checks`), но задачу не держит.
 
     Записи о входе в `in_progress` нет — значит, и вердиктов этого захода нет, и
     непройденными числятся все проверки. Такое дело испорчено (вход в `in_progress`
@@ -1381,7 +1469,7 @@ async def verdict_gaps(session: AsyncSession, task: Task) -> list[CheckGap]:
     gaps: list[CheckGap] = []
     for check_no in range(FIRST_CHECK_NUMBER, FIRST_CHECK_NUMBER + len(task.checks)):
         outcome = outcomes.get(check_no)
-        if outcome is VerdictOutcome.PASSED:
+        if outcome is VerdictOutcome.PASSED or outcome in INCOMPLETE_OUTCOMES:
             continue
         reason = CheckGapReason.NO_VERDICT if outcome is None else CheckGapReason.FAILED
         gaps.append(CheckGap(check_no=check_no, reason=reason))

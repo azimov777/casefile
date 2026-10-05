@@ -1,5 +1,5 @@
 """Инструмент `add_entry`: запись без нагрузки — решение, попытка, находка, артефакт,
-замечание, заметка.
+замечание, принятие предупреждения, заметка.
 """
 
 from app.mcp.arguments import IdempotencyKeyArg, TaskKeyArg
@@ -24,8 +24,8 @@ def register(tools: Toolset) -> None:
         refs: EntryRefsArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedEntryView:
-        """Files an entry without payload: a decision, attempt, finding, artifact, remark
-        or note.
+        """Files an entry without payload: a decision, attempt, finding, artifact, remark,
+        acceptance or note.
 
         Entries are immutable: no call edits or deletes one, and a mistaken entry is
         corrected by a new entry that references it in `refs`. Summaries, questions,

@@ -100,6 +100,7 @@ class NoFactsRead(_EntryFactsBase):
         EntryType.FINDING,
         EntryType.ARTIFACT,
         EntryType.REMARK,
+        EntryType.ACCEPTANCE,
         EntryType.NOTE,
         EntryType.CREATED,
         EntryType.ARCHIVED,
@@ -246,6 +247,32 @@ class MovedFactsRead(_EntryFactsBase):
     )
 
 
+class WarningCheckRead(BaseModel):
+    """Проверка, закрытая не целиком: номер и исход."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    check_no: int = Field(ge=FIRST_CHECK_NUMBER, examples=[2], description="Number of the check")
+    outcome: VerdictOutcome = Field(
+        examples=[VerdictOutcome.PARTIAL],
+        description="Last verdict of the closing pass: `partial` or `unverifiable`",
+    )
+
+
+class WarningFactsRead(_EntryFactsBase):
+    """Предупреждение закрытия: номера проверок, закрытых `partial` и `unverifiable`."""
+
+    type: Literal[EntryType.WARNING]
+    partial: list[int] | None = Field(
+        default=None, examples=[[2]], description="Checks closed `partial`, by ascending number"
+    )
+    unverifiable: list[int] | None = Field(
+        default=None,
+        examples=[[3]],
+        description="Checks closed `unverifiable`, by ascending number",
+    )
+
+
 # Состав полей каждой формы объявлен схемой, а не угадывается по тому, какие ключи
 # пришли непустыми. Разметка повторяет `type` строки описи, и это осознанная плата за
 # то, чтобы `facts` читался сам по себе: клиент принимает его отдельным значением — и из
@@ -264,7 +291,8 @@ type EntryFactsRead = Annotated[
     | VerdictFactsRead
     | ResolutionFactsRead
     | AttributeFactsRead
-    | MovedFactsRead,
+    | MovedFactsRead
+    | WarningFactsRead,
     Field(discriminator="type"),
 ]
 """Факты записи: размеченное по `type` объединение всех форм."""
@@ -638,6 +666,21 @@ class AttributeRemovedPayload(BaseModel):
     )
 
 
+class WarningPayload(BaseModel):
+    """Предупреждение закрытия: проверки, чей последний вердикт закрывающего захода —
+    `partial` или `unverifiable`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checks: list[WarningCheckRead] = Field(
+        min_length=1,
+        description=(
+            "Checks closed not in full, by ascending number. The warning stays open "
+            "until an `acceptance` or a `remark` is filed after it"
+        ),
+    )
+
+
 class ProjectArchivePayload(BaseModel):
     """Проект архивирован или восстановлен: причина действия."""
 
@@ -818,6 +861,21 @@ class ResolutionEntryRead(_EntryReadBase):
     payload: ResolutionPayload
 
 
+class AcceptanceEntryRead(_EntryReadBase):
+    """Принятие: недостаток, названный предупреждением, принят. Снимает предупреждение."""
+
+    type: Literal[EntryType.ACCEPTANCE]
+    payload: EmptyPayload = Field(default_factory=EmptyPayload)
+
+
+class WarningEntryRead(_EntryReadBase):
+    """Служебная запись закрытия: задача закрыта с проверками `partial` или
+    `unverifiable`. Открыта, пока после неё нет `acceptance` или `remark`."""
+
+    type: Literal[EntryType.WARNING]
+    payload: WarningPayload
+
+
 class StatusChangedEntryRead(_EntryReadBase):
     """Служебная запись о переходе статуса."""
 
@@ -897,6 +955,8 @@ type EntryRead = Annotated[
     | VerdictEntryRead
     | RemarkEntryRead
     | ResolutionEntryRead
+    | AcceptanceEntryRead
+    | WarningEntryRead
     | StatusChangedEntryRead
     | SectionChangedEntryRead
     | FieldChangedEntryRead
@@ -937,6 +997,8 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.VERDICT: VerdictEntryRead,
     EntryType.REMARK: RemarkEntryRead,
     EntryType.RESOLUTION: ResolutionEntryRead,
+    EntryType.ACCEPTANCE: AcceptanceEntryRead,
+    EntryType.WARNING: WarningEntryRead,
     EntryType.STATUS_CHANGED: StatusChangedEntryRead,
     EntryType.SECTION_CHANGED: SectionChangedEntryRead,
     EntryType.FIELD_CHANGED: FieldChangedEntryRead,
@@ -1058,7 +1120,8 @@ class AnswerEntryCreate(_EntryCreateBase):
 
 
 class VerdictEntryCreate(_EntryCreateBase):
-    """Вердикт. Заголовок не принимается; тело записи — доказательство исхода."""
+    """Вердикт. Заголовок не принимается; тело записи — доказательство исхода, у
+    `partial` и `unverifiable` обязательное (`422 entry_fields_invalid`, поле `evidence`)."""
 
     type: Literal[EntryType.VERDICT]
     payload: VerdictPayload
@@ -1068,6 +1131,16 @@ class RemarkEntryCreate(_TitledEntryCreate):
     """Замечание: «вышло не то». Нагрузки нет, заголовок пишет автор."""
 
     type: Literal[EntryType.REMARK]
+
+
+class AcceptanceEntryCreate(_TitledEntryCreate):
+    """Принятие открытого предупреждения: нагрузки нет, заголовок пишет автор.
+
+    Без открытого предупреждения — `409 warning_not_open`; от подписи, закрывшей
+    задачу, — `409 acceptance_by_closer`.
+    """
+
+    type: Literal[EntryType.ACCEPTANCE]
 
 
 class ResolutionEntryCreate(_EntryCreateBase):
@@ -1084,7 +1157,8 @@ type EntryCreate = Annotated[
     | AnswerEntryCreate
     | VerdictEntryCreate
     | RemarkEntryCreate
-    | ResolutionEntryCreate,
+    | ResolutionEntryCreate
+    | AcceptanceEntryCreate,
     Field(discriminator="type"),
 ]
 """Подшиваемая запись: те же типы, что доступны агенту, размеченные по `type`."""

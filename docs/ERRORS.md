@@ -70,11 +70,12 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `acceptance_by_closer` | The warning cannot be accepted by the signature that closed the task | Предупреждение принимает та же подпись, что закрыла задачу. |
 | `account_email_taken` | Account email is already taken | Почта уже занята другой учётной записью: адреса уникальны без учёта регистра. |
 | `archive_revision_unknown` | The archive comes from a newer Casefile; update this installation first | Ревизии схемы архива приёмник не знает: архив снят более новым Casefile. |
 | `assignee_mismatch` | Task is assigned to someone else | Вход в `in_progress` не от исполнителя задачи. |
 | `assignee_required` | Task has no assignee | Вход в `in_progress` у задачи без исполнителя. |
-| `checks_not_passed` | Some checks have no passing verdict recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке положительного вердикта, подшитого после последнего входа в `in_progress`. |
+| `checks_not_passed` | Some checks have no verdict, or a failed one, recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке вердикта не `failed`, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
@@ -96,6 +97,7 @@
 | `task_has_unclosed_children` | Task has children that are not closed | Закрытие задачи при детях не в `done` и не в `cancelled`. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
 | `version_conflict` | Task version is outdated | Версия задачи разошлась: её изменили между чтением и записью. |
+| `warning_not_open` | Task has no open warning to accept | `acceptance` в задаче, где нечего принимать: открытого предупреждения нет. |
 
 ## 422 — не прошло проверку
 

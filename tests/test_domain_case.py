@@ -383,12 +383,43 @@ def test_an_outcome_outside_the_three_values_is_refused_with_all_problems_at_onc
     assert outcome["allowed"] == ["answered", "withdrawn", "replaced"]
 
 
-def test_an_outcome_outside_the_two_values_is_refused() -> None:
+def test_an_outcome_outside_the_four_values_is_refused() -> None:
     with pytest.raises(EntryFieldsInvalidError) as error:
         build_entry(CONTEXT, type=EntryType.VERDICT, payload={"check_no": 1, "outcome": "maybe"})
 
     assert problems(error) == {"outcome": "not_allowed"}
-    assert error.value.details["fields"][0]["allowed"] == ["passed", "failed"]
+    assert error.value.details["fields"][0]["allowed"] == [
+        "passed",
+        "partial",
+        "unverifiable",
+        "failed",
+    ]
+
+
+@pytest.mark.parametrize("outcome", ["partial", "unverifiable"])
+def test_an_outcome_not_in_full_needs_evidence(outcome: str) -> None:
+    """У `partial` и `unverifiable` доказательство — тело записи — обязательно (TRK-561)."""
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(
+            CONTEXT, type=EntryType.VERDICT, body="  ", payload={"check_no": 1, "outcome": outcome}
+        )
+
+    assert error.value.details["fields"] == [
+        {"field": "evidence", "reason": "required", "required_for": outcome}
+    ]
+    filed = build_entry(
+        CONTEXT, type=EntryType.VERDICT, body="half", payload={"check_no": 1, "outcome": outcome}
+    )
+    assert filed.title == f"Verdict on check 1: {outcome}"
+
+
+def test_passed_and_failed_keep_evidence_optional() -> None:
+    """Прежние исходы не меняются: пустое доказательство у них по-прежнему законно."""
+    for outcome in ("passed", "failed"):
+        filed = build_entry(
+            CONTEXT, type=EntryType.VERDICT, payload={"check_no": 1, "outcome": outcome}
+        )
+        assert filed.body == ""
 
 
 def test_a_payload_field_of_another_type_is_refused_rather_than_dropped() -> None:

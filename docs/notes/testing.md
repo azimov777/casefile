@@ -477,3 +477,17 @@ GitHub идёт только при `TRACKER_ENVIRONMENT=production`.
 `create_app(Settings(environment="production", release_check=True))`; разбор ответа GitHub
 и сбой сети — подменой `releases.urllib.request.urlopen`.
 **Где:** `app/services/releases.py`, `ReleaseWatch`; `tests/test_releases.py`.
+
+## После отказа инструмента MCP объект задачи теста больше не читается
+
+**Что:** вызов инструмента, который отказал (`refuse(...)` в `tests/conftest.py`), откатывает
+транзакцию сессии теста — ту же, в которой фикстура завела задачу, — и объекты ORM этой
+сессии протухают. Следующее `task.key` идёт в базу ленивой загрузкой и падает
+исключением SQLAlchemy о синхронном вводе-выводе вне greenlet (TRK-561).
+**Почему важно:** падение выглядит как дефект сценария, а не теста: стек уходит в
+`sqlalchemy/orm/attributes.py`, и проверка «дело не выросло после отказа» не доходит до
+сравнения.
+**Как правильно:** ключ и прочие поля задачи брать в переменные до вызова, который должен
+отказать (`key = task.key`), и дальше ходить по ключу через REST или MCP.
+**Где:** `tests/test_closing_warning.py`, `test_failed_still_refuses_closing_and_files_nothing`;
+`tests/conftest.py`, `refuse`.

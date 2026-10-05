@@ -25,7 +25,14 @@ from app.services.auth import TRACKER_ACTOR, Actor
 #: и поле, добавленное мимо него, обязано уронить тест, а не тихо уехать во фронтенд.
 #: `token` вошёл сюда с доводом, почему это первый кадр (`TRK-65#12`); адрес MCP — нет,
 #: он живёт в `GET /api/v1/installation`.
-BOOTSTRAP_FIELDS = ["account", "open_questions", "participant", "projects", "token"]
+BOOTSTRAP_FIELDS = [
+    "account",
+    "open_questions",
+    "open_warnings",
+    "participant",
+    "projects",
+    "token",
+]
 
 #: Поля токена в первом кадре: чем узнать его в списке и что он открывает. Имя, автор
 #: выпуска и последнее использование сюда не входят — их отдаёт список по тому же `id`.

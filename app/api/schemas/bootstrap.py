@@ -46,3 +46,12 @@ class BootstrapRead(BaseModel):
             "cannot be addressed at all"
         ),
     )
+    open_warnings: int = Field(
+        examples=[1],
+        description=(
+            "Tasks with an open warning, in projects that are not archived: closed with "
+            "checks `partial` or `unverifiable`, with no `acceptance` or `remark` filed "
+            "after the warning. A warning has no addressee, so the number is the same "
+            "for every token"
+        ),
+    )
