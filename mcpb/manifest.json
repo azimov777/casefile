@@ -1,0 +1,52 @@
+{
+  "manifest_version": "0.3",
+  "name": "tracker",
+  "display_name": "Casefile",
+  "version": "0.9.5",
+  "description": "Casefile in the Claude Desktop chat: the case file for every task, shared across sessions, agents and people. Connects to your Casefile installation and signs in through OAuth, no token in the extension.",
+  "long_description": "Casefile keeps a case file for every task, shared by every session, agent and person: decisions, attempts, findings, summaries and open questions, so the next one carries on instead of starting over. This extension connects the Claude Desktop chat to a Casefile installation over MCP. It carries the mcp-remote bridge and runs on the Node.js built into Claude Desktop, so nothing else has to be installed. The address field takes the MCP address of the installation: http://127.0.0.1:8100/mcp for an installation on this machine (it has to be running), or the https address of a server. The first connection opens a browser page for the OAuth sign-in; on your own machine it closes at once. Installing: https://github.com/azimov777/casefile/blob/main/docs/agent-install.md",
+  "author": {
+    "name": "azimov777",
+    "url": "https://github.com/azimov777"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/azimov777/casefile"
+  },
+  "homepage": "https://github.com/azimov777/casefile",
+  "documentation": "https://github.com/azimov777/casefile/blob/main/docs/agent-install.md",
+  "support": "https://github.com/azimov777/casefile/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "node_modules/mcp-remote/dist/proxy.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/node_modules/mcp-remote/dist/proxy.js",
+        "${user_config.casefile_url}",
+        "--static-oauth-client-metadata",
+        "{\"client_name\":\"Claude Desktop\"}"
+      ]
+    }
+  },
+  "tools_generated": true,
+  "keywords": ["casefile", "tasks", "tracker", "agents", "mcp"],
+  "license": "MIT",
+  "privacy_policies": ["https://azimov777.github.io/casefile/privacy/"],
+  "compatibility": {
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "node": ">=20.18.1"
+    }
+  },
+  "user_config": {
+    "casefile_url": {
+      "type": "string",
+      "title": "Casefile MCP address",
+      "description": "MCP address of the Casefile installation: http://127.0.0.1:8100/mcp for one on this machine (the MCP line the installer printed), or the https address of a server. No token here: the sign-in is OAuth.",
+      "default": "http://127.0.0.1:8100/mcp",
+      "required": true
+    }
+  }
+}

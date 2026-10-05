@@ -1,0 +1,9 @@
+{
+  "name": "casefile-claude-desktop",
+  "private": true,
+  "description": "The Casefile extension for Claude Desktop: the mcp-remote bridge to a Casefile MCP server, packed into casefile.mcpb by scripts/build-mcpb.sh",
+  "license": "MIT",
+  "dependencies": {
+    "mcp-remote": "0.14.3"
+  }
+}

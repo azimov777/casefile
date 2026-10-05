@@ -431,6 +431,7 @@ def test_the_installers_print_the_harness_blocks_in_the_same_order() -> None:
             for pattern in (
                 r"""["']Claude Code:["']""",
                 r"""["']Codex:["']""",
+                r"""["']Claude Desktop \(the chat app""",
                 r"""["']Hermes \(OAuth""",
                 r"""["']Any other MCP client""",
             )
@@ -2002,3 +2003,223 @@ def test_the_readme_and_the_guide_name_the_socket_and_the_way_to_turn_it_off() -
     assert SOCKET in readme, "README не говорит, что служба держит сокет Docker"
     assert "TRACKER_RELEASE_CHECK=false" in readme, "README не называет выключатель плашки"
     assert "docker socket" in _read(AGENT_GUIDE).lower()
+
+
+# --- Claude Desktop: расширение casefile.mcpb (TRK-514) ---------------------------------
+#
+# Чат Claude Desktop получает Casefile расширением `casefile.mcpb` из выпуска GitHub: шаг
+# установщика его скачивает и открывает, а ставит сам Desktop по щелчку человека. Здесь
+# `curl`, `open` и `uname` — заглушки: настоящий `open` поставил бы расширение в Desktop
+# машины, на которой идёт набор.
+
+MCPB_LATEST = "https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb"
+DESKTOP = ("Library", "Application Support", "Claude")
+
+FAKE_CURL = r"""#!/bin/sh
+echo "curl $*" >>"$CALLS"
+if [ -n "${FAIL_CURL:-}" ]; then
+  echo "curl: (22) The requested URL returned error: 404" >&2
+  exit 22
+fi
+out=
+while [ $# -gt 0 ]; do
+  case "$1" in -o) out=$2; shift 2 ;; *) shift ;; esac
+done
+printf 'PK fake mcpb' >"$out"
+"""
+FAKE_OPEN = r"""#!/bin/sh
+echo "open $*" >>"$CALLS"
+[ -f "$1" ] || exit 1
+exit "${OPEN_EXIT:-0}"
+"""
+
+
+def _desktop_env(tmp_path: Path, *, desktop: bool = True, **extra: str) -> dict[str, str]:
+    """Заглушки `curl`, `open` и `uname` (Darwin) и папка поддержки Claude Desktop в `HOME`."""
+    stubs = tmp_path / "desktop-stubs"
+    stubs.mkdir()
+    for name, body in {
+        "curl": FAKE_CURL,
+        "open": FAKE_OPEN,
+        "uname": "#!/bin/sh\necho Darwin\n",
+    }.items():
+        (stubs / name).write_text(body, encoding="utf-8")
+        (stubs / name).chmod(0o755)
+    if desktop:
+        support = tmp_path.joinpath(*DESKTOP)
+        support.mkdir(parents=True)
+        # Чужой файл Desktop: шаг его не трогает (сверка байтов в тестах ниже).
+        (support / "claude_desktop_config.json").write_text(
+            '{"mcpServers": {"davinci-resolve": {"command": "x"}}}\n', encoding="utf-8"
+        )
+    python_dir = Path(shutil.which("python3") or "/usr/bin/python3").parent
+    return {"PATH": f"{tmp_path / 'bin'}:{stubs}:/usr/bin:/bin:{python_dir}", **extra}
+
+
+def _installed_extension(tmp_path: Path, version: str) -> None:
+    """Расширение, которое Desktop распаковал: его манифест — наш, с адресом репозитория.
+
+    Раскладка настоящая: у владельца (TRK-514#34) Desktop 2.19675.0 положил расширение в
+    `Claude Extensions/local.mcpb.azimov777.tracker/manifest.json`, и `grep -l azimov777/casefile`
+    по `Claude Extensions/*/manifest.json` нашёл ровно этот один файл.
+    """
+    manifest = json.loads((PROJECT_ROOT / "mcpb" / "manifest.json").read_text(encoding="utf-8"))
+    manifest["version"] = version
+    target = tmp_path.joinpath(*DESKTOP, "Claude Extensions", "local.mcpb.azimov777.tracker")
+    target.mkdir(parents=True)
+    (target / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+def _desktop_calls(calls: list[str]) -> list[str]:
+    return [c for c in calls if c.startswith(("curl ", "open "))]
+
+
+def test_skill_only_downloads_the_extension_and_opens_it_for_claude_desktop(
+    tmp_path: Path,
+) -> None:
+    """Без терминала шаг идёт (TRK-546): файл выпуска скачан в «Загрузки» и открыт; адрес
+    сервера назван для поля формы; чужой `claude_desktop_config.json` не тронут."""
+    (tmp_path / "Downloads").mkdir()
+    env = _desktop_env(tmp_path, CASEFILE_SKILL_ONLY="1", CASEFILE_URL=SERVER)
+    config = tmp_path.joinpath(*DESKTOP, "claude_desktop_config.json")
+    before = config.read_bytes()
+
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    file = tmp_path / "Downloads" / "casefile.mcpb"
+    assert _desktop_calls(calls) == [
+        f"curl -fsSL -o {file}.download {MCPB_LATEST}",
+        f"open {file}",
+    ]
+    assert file.read_bytes() == b"PK fake mcpb" and not file.with_suffix(".mcpb.download").exists()
+    out = done.stdout
+    assert f"casefile.mcpb is downloaded to {file} and opened" in out, "строка в списке согласия"
+    assert re.search(rf"Claude Desktop +opened {re.escape(str(file))}: click Install", out)
+    assert f"put {SERVER} into its address field" in out
+    assert config.read_bytes() == before
+    assert not list(tmp_path.rglob("*.casefile-bak"))
+
+
+def test_the_full_install_puts_the_extension_of_its_release_into_its_directory(
+    tmp_path: Path,
+) -> None:
+    """Полная установка: файл названного выпуска — в каталог установки, адрес по умолчанию."""
+    env = _desktop_env(tmp_path, CASEFILE_VERSION="0.9.4")
+
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    file = tmp_path / "casefile" / "casefile.mcpb"
+    release = "https://github.com/azimov777/casefile/releases/download/v0.9.4/casefile.mcpb"
+    assert _desktop_calls(calls) == [f"curl -fsSL -o {file}.download {release}", f"open {file}"]
+    assert "keep the address it shows (http://127.0.0.1:8100/mcp)" in done.stdout
+    assert "Casefile is running." in done.stdout
+
+
+def test_an_installed_extension_is_not_downloaded_or_opened_again(tmp_path: Path) -> None:
+    """Повтор не плодит записей: стоящее расширение узнаётся по манифесту, файл не открывается."""
+    env = _desktop_env(tmp_path, CASEFILE_SKILL_ONLY="1", CASEFILE_URL=SERVER)
+    _installed_extension(tmp_path, "0.9.4")
+
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    assert _desktop_calls(calls) == []
+    assert re.search(r"Claude Desktop +has the Casefile extension \(0\.9\.4\)", done.stdout)
+    assert "casefile.mcpb is downloaded" not in done.stdout, "в списке согласия не названо"
+
+
+def test_without_node_the_extension_is_set_up_all_the_same(tmp_path: Path) -> None:
+    """Node.js человеку не нужен: расширение идёт на среде Node внутри Desktop."""
+    env = _desktop_env(tmp_path, CASEFILE_SKILL_ONLY="1", CASEFILE_URL=SERVER)
+    assert shutil.which("node", path=env["PATH"]) is None
+    assert shutil.which("npx", path=env["PATH"]) is None
+
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    assert [c.split()[0] for c in _desktop_calls(calls)] == ["curl", "open"]
+    assert "Node.js is not needed" in done.stdout
+    assert re.search(r"Other agents +npx not found", done.stdout)
+
+
+@pytest.mark.parametrize(
+    ("failure", "line"),
+    [
+        ({"FAIL_CURL": "1"}, f"could not download {MCPB_LATEST} - download it and double-click it"),
+        ({"OPEN_EXIT": "1"}, "could not open "),
+    ],
+    ids=["download", "open"],
+)
+def test_a_failed_download_or_open_is_a_line_and_the_install_goes_on(
+    tmp_path: Path, failure: dict[str, str], line: str
+) -> None:
+    env = _desktop_env(tmp_path, **failure)
+
+    done, _ = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    assert re.search(rf"Claude Desktop +{re.escape(line)}", out), out
+    assert "Settings > Extensions > Advanced settings > Install Extension..." in out
+    assert "Casefile is running." in out and "Any other MCP client" in out
+    assert not (tmp_path / "casefile" / "casefile.mcpb.download").exists()
+
+
+@pytest.mark.parametrize("refusal", ["skill-zero", "answer-n"])
+def test_skill_zero_or_n_leaves_claude_desktop_alone(tmp_path: Path, refusal: str) -> None:
+    extra = {"CASEFILE_SKILL": "0"} if refusal == "skill-zero" else _terminal(tmp_path, "n\n")
+    env = _desktop_env(tmp_path, **extra)
+
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    assert _desktop_calls(calls) == []
+    assert not (tmp_path / "casefile" / "casefile.mcpb").exists()
+
+
+def test_without_an_address_claude_desktop_is_not_set_up(tmp_path: Path) -> None:
+    """`CASEFILE_SKILL_ONLY=1` без адреса ставит плагин ради скила; расширению нужен сервер."""
+    env = _desktop_env(tmp_path, CASEFILE_SKILL_ONLY="1")
+
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    assert _desktop_calls(calls) == []
+    assert re.search(r"Claude Desktop +not set up: it needs your server's address", done.stdout)
+
+
+def test_a_mac_without_claude_desktop_says_not_found(tmp_path: Path) -> None:
+    env = _desktop_env(tmp_path, desktop=False, CASEFILE_SKILL_ONLY="1", CASEFILE_URL=SERVER)
+
+    done, calls = _install(tmp_path, extra_env=env)
+
+    assert done.returncode == 0, done.stderr
+    assert _desktop_calls(calls) == []
+    assert re.search(r"Claude Desktop +not found", done.stdout)
+
+
+def test_casefile_mcpb_url_names_the_file_to_download(tmp_path: Path) -> None:
+    own = "https://example.test/casefile.mcpb"
+    env = _desktop_env(
+        tmp_path, CASEFILE_SKILL_ONLY="1", CASEFILE_URL=SERVER, CASEFILE_MCPB_URL=own
+    )
+
+    _, calls = _install(tmp_path, extra_env=env)
+
+    assert _desktop_calls(calls)[0].endswith(f".download {own}")
+
+
+def test_both_installers_and_the_guide_name_the_same_extension_file_and_steps() -> None:
+    sh_text, ps1_text, guide = _read(INSTALL_SH), _read(INSTALL_PS1), _read(AGENT_GUIDE)
+    for text in (sh_text, ps1_text, guide):
+        assert MCPB_LATEST in text
+        assert "Settings > Extensions > Advanced settings > Install Extension..." in text
+    for text in (sh_text, ps1_text):
+        assert "CASEFILE_MCPB_URL" in text
+        assert "releases/download/v" in text
+        assert "claude_desktop_config.json is not touched" in text
+    assert 'skill_run open "$MCPB_FILE"' in sh_text
+    assert "Start-Process -FilePath $script:McpbFile" in ps1_text
+    assert "LocalCache\\Roaming\\Claude" in ps1_text and "Get-DesktopDirs" in ps1_text

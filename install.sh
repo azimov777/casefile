@@ -14,6 +14,8 @@
 # (`docker-compose.prod.yml`). Claude Code и Codex подключает плагин `casefile` с входом
 # OAuth (TRK-452): токен в их файлы не пишется, прежние ручные записи `casefile`/`tracker`
 # с адресом этой установки убираются, а ключ агента печатается только харнессам без OAuth.
+# Чату Claude Desktop он скачивает расширение `casefile.mcpb` выпуска и открывает его — ставит
+# его сам Desktop, по щелчку человека (TRK-514).
 #
 # Вывод для человека — по-английски, как и вся страница проекта на GitHub.
 #
@@ -48,6 +50,8 @@
 #                      вопрос задаётся и при названном CASEFILE_TTY, даже если вывод не терминал
 #   CASEFILE_SKILL_SOURCE  откуда брать маркетплейс скила, по умолчанию azimov777/casefile;
 #                      так шаг проверяют до публикации, как CASEFILE_REGISTRY для образов
+#   CASEFILE_MCPB_URL  откуда качать расширение Claude Desktop `casefile.mcpb`, по умолчанию
+#                      файл выпуска на GitHub (TRK-514); так его тоже проверяют до публикации
 #
 # Всё тело — в `main`, который зовётся последней строкой. Запущенный через `| sh`
 # скрипт читается из трубы по мере исполнения, и любая команда, читающая stdin, съела бы
@@ -84,6 +88,8 @@ DEFAULT_NOTE=
 CODEX_PLUGIN_URL=http://127.0.0.1:8100/mcp
 LOGIN_CLAUDE=0
 LOGIN_CODEX=0
+# Куда шаг Claude Desktop кладёт скачанный `casefile.mcpb` (`install_skills`, TRK-514).
+MCPB_FILE=
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 fail() {
@@ -234,12 +240,13 @@ backup_once() { # $1 — метка в выводе, $2 — файл
 # убираются, только если адрес известен (не `DEFAULT_URL`), а config.toml Codex получает
 # запись, только если адрес не тот, что зашит в его плагине.
 skill_consent() {
-  c_claude=0 c_codex=0 c_hermes=0 c_npx=0
+  c_claude=0 c_codex=0 c_hermes=0 c_npx=0 c_desktop=0
   if command -v claude >/dev/null 2>&1; then c_claude=1; fi
   if command -v codex >/dev/null 2>&1; then c_codex=1; fi
   if command -v hermes >/dev/null 2>&1; then c_hermes=1; fi
   if command -v npx >/dev/null 2>&1; then c_npx=1; fi
-  [ $((c_claude + c_codex + c_hermes + c_npx)) -gt 0 ] || return 0
+  if desktop_pending; then c_desktop=1; fi
+  [ $((c_claude + c_codex + c_hermes + c_npx + c_desktop)) -gt 0 ] || return 0
   echo "  This step changes files that belong to other programs. Before the first change to a file"
   echo "  a copy is saved next to it as <name>.casefile-bak (kept, never overwritten). What it touches:"
   if [ "$c_claude" = 1 ]; then
@@ -265,6 +272,10 @@ skill_consent() {
   fi
   if [ "$c_npx" = 1 ]; then
     skill_line "Other agents" "$HOME/.agents/skills/casefile (npx skills add)"
+  fi
+  if [ "$c_desktop" = 1 ]; then
+    skill_line "Claude Desktop" "casefile.mcpb is downloaded to $MCPB_FILE and opened; Claude Desktop then"
+    skill_line "" "asks before it installs anything (claude_desktop_config.json is not touched)"
   fi
   if [ "$SKILL_ASK" = 0 ]; then
     echo "  CASEFILE_SKILL=1 is set: going ahead without asking."
@@ -589,7 +600,96 @@ skill_others() {
   fi
 }
 
+# --- Claude Desktop (TRK-514) -------------------------------------------------------------
+# Чат десктоп-приложения Claude не видит ни плагин, ни записи Claude Code: у него свои
+# локальные серверы. Casefile приходит туда расширением `casefile.mcpb` из выпуска GitHub
+# (решение TRK-514#5): внутри мост `mcp-remote` на встроенной в Desktop среде Node — Node.js
+# человеку не нужен, — адрес спрашивает форма Desktop, вход — OAuth моста. Установщик файл
+# только скачивает и открывает (`open`): ставит его сам Desktop, по щелчку человека, и
+# `claude_desktop_config.json` никто не правит. Стоящее расширение второй раз не открывается:
+# Desktop держит его распакованный манифест в `Claude Extensions/<id>/manifest.json`, а наш
+# узнаётся по адресу репозитория. Новый выпуск расширения сам не приезжает — его файл
+# называется в строке итога.
+
+desktop_dir() { printf '%s' "$HOME/Library/Application Support/Claude"; }
+
+# Файл выпуска, названного CASEFILE_VERSION (полная установка — ещё и её `.env`), иначе
+# последнего; CASEFILE_MCPB_URL — свой адрес. Имя файла без версии, и у последнего выпуска
+# адрес постоянный (`.github/workflows/mcpb.yml`).
+mcpb_url() {
+  if [ -n "${CASEFILE_MCPB_URL:-}" ]; then
+    printf '%s' "$CASEFILE_MCPB_URL"
+    return 0
+  fi
+  mcpb_version=${CASEFILE_VERSION:-}
+  if [ -z "$mcpb_version" ] && [ "$SKILL_ONLY" != 1 ]; then
+    mcpb_version=$(setting CASEFILE_VERSION stable)
+  fi
+  case "$mcpb_version" in
+    [0-9]*) printf 'https://github.com/azimov777/casefile/releases/download/v%s/casefile.mcpb' "$mcpb_version" ;;
+    *) printf '%s' https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb ;;
+  esac
+}
+
+# Версия стоящего расширения Casefile (или `installed`, если её не прочесть); пусто — нет.
+desktop_extension() {
+  for manifest in "$(desktop_dir)/Claude Extensions"/*/manifest.json; do
+    [ -f "$manifest" ] && grep -q 'github.com/azimov777/casefile' "$manifest" || continue
+    found=$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$manifest" | head -n 1)
+    printf '%s' "${found:-installed}"
+    return 0
+  done
+}
+
+# Шагу есть что делать: Desktop стоит, адрес сервера известен, расширения ещё нет.
+desktop_pending() {
+  [ -d "$(desktop_dir)" ] && [ "$DEFAULT_URL" != 1 ] && [ -z "$(desktop_extension)" ]
+}
+
+skill_desktop() {
+  url=$(mcpb_url)
+  by_hand="double-click it, or in Claude Desktop: Settings > Extensions > Advanced settings > Install Extension..."
+  if [ "$DEFAULT_URL" = 1 ]; then
+    skill_line "Claude Desktop" "not set up: it needs your server's address in CASEFILE_URL (or install $url by hand)"
+    return 0
+  fi
+  found=$(desktop_extension)
+  if [ -n "$found" ]; then
+    skill_line "Claude Desktop" "has the Casefile extension ($found); a newer one: $url, $by_hand"
+    return 0
+  fi
+  # Адрес по умолчанию у расширения тот же, что у плагина Codex (`mcpb/manifest.json`).
+  if [ "$(norm_url "$PLUGIN_URL")" = "$(norm_url "$CODEX_PLUGIN_URL")" ]; then
+    address="keep the address it shows ($CODEX_PLUGIN_URL)"
+  else
+    address="put $PLUGIN_URL into its address field"
+  fi
+  if ! skill_run curl -fsSL -o "$MCPB_FILE.download" "$url"; then
+    rm -f "$MCPB_FILE.download"
+    skill_line "Claude Desktop" "could not download $url - download it and $by_hand; $address"
+    tail -n 2 "$skill_log" | sed 's/^/                > /'
+    return 0
+  fi
+  mv -f "$MCPB_FILE.download" "$MCPB_FILE" || {
+    skill_line "Claude Desktop" "could not save $MCPB_FILE - download $url and $by_hand"
+    return 0
+  }
+  if skill_run open "$MCPB_FILE"; then
+    skill_line "Claude Desktop" "opened $MCPB_FILE: click Install in Claude Desktop and $address;"
+    skill_line "" "its first connection opens a browser page for the sign-in (Node.js is not needed)"
+  else
+    skill_line "Claude Desktop" "could not open $MCPB_FILE - $by_hand; $address"
+  fi
+}
+
 install_skills() {
+  # Полная установка кладёт расширение в свой каталог, `CASEFILE_SKILL_ONLY=1` каталога не
+  # заводит — туда же, куда его положил бы браузер.
+  if [ "$SKILL_ONLY" = 1 ]; then
+    if [ -d "$HOME/Downloads" ]; then MCPB_FILE="$HOME/Downloads/casefile.mcpb"; else MCPB_FILE="$HOME/casefile.mcpb"; fi
+  else
+    MCPB_FILE="$DIR/casefile.mcpb"
+  fi
   skill_tmp=$(mktemp -d)
   skill_log="$skill_tmp/log"
   : >"$skill_log"
@@ -610,6 +710,11 @@ install_skills() {
     skill_others
   else
     skill_line "Other agents" "npx not found (with Node.js: npx skills add $SKILL_SOURCE#stable)"
+  fi
+  if [ -d "$(desktop_dir)" ]; then
+    skill_desktop
+  elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+    skill_line "Claude Desktop" "not found (run this installer again after installing it)"
   fi
   rm -rf "$skill_tmp"
   echo "  A running session picks up the plugin after a restart (in Claude Code: /reload-plugins)."
@@ -798,6 +903,12 @@ main() {
   fi
   echo "  Without the installer: codex plugin marketplace add azimov777/casefile --ref plugin"
   echo "  codex plugin add casefile@casefile"
+  echo
+  bold "Claude Desktop (the chat app on macOS and Windows; OAuth, no token):"
+  echo "  The Casefile extension: https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb"
+  echo "  Double-click it (or Settings > Extensions > Advanced settings > Install Extension...), keep or set"
+  echo "  the address $mcp_url and sign in on the page its first connection opens; it works while"
+  echo "  this installation runs. No Node.js needed: the extension runs on the one inside Claude Desktop."
   echo
   bold "Hermes (OAuth, no token):"
   echo "  Add to ~/.hermes/config.yaml:"
