@@ -2057,7 +2057,12 @@ def _desktop_env(tmp_path: Path, *, desktop: bool = True, **extra: str) -> dict[
 
 
 def _installed_extension(tmp_path: Path, version: str) -> None:
-    """Расширение, которое Desktop распаковал: его манифест — наш, с адресом репозитория."""
+    """Расширение, которое Desktop распаковал: его манифест — наш, с адресом репозитория.
+
+    Раскладка настоящая: у владельца (TRK-514#34) Desktop 2.19675.0 положил расширение в
+    `Claude Extensions/local.mcpb.azimov777.tracker/manifest.json`, и `grep -l azimov777/casefile`
+    по `Claude Extensions/*/manifest.json` нашёл ровно этот один файл.
+    """
     manifest = json.loads((PROJECT_ROOT / "mcpb" / "manifest.json").read_text(encoding="utf-8"))
     manifest["version"] = version
     target = tmp_path.joinpath(*DESKTOP, "Claude Extensions", "local.mcpb.azimov777.tracker")
