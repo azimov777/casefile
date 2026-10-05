@@ -661,7 +661,11 @@ export interface paths {
          *
          *     Задачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством
          *     или вхождением: проект условием `project`, саму задачу — `key`, её родителя —
-         *     `parent` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в языке нет.
+         *     `parent`, корень её поддерева — `under` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в
+         *     языке нет.
+         *
+         *     `parent: X` — прямые дети X на одно колено, `under: X` — всё поддерево X на любой
+         *     глубине, без самой X: дети, внуки и так далее.
          *
          *     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
          *     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
@@ -3069,6 +3073,42 @@ export interface components {
             hints?: components["schemas"]["OnboardingHintsUpdate"];
         };
         /**
+         * PackageParentRead
+         * @description Родитель в карточке ребёнка: как у любой связи, плюс его цель (`CONCEPT.md`, 4.2).
+         *
+         *     Цель нужна затем, чтобы агент, взявший задачу из программы, видел, чему она служит, без
+         *     второго вызова. Только у прямого родителя и не длиннее потолка
+         *     (`app/domain/tasks.py`, `PARENT_GOAL_LIMIT`); детям и другим связям цель не едет.
+         */
+        PackageParentRead: {
+            /**
+             * Key
+             * @example TRK-7
+             */
+            key: string;
+            /**
+             * Title
+             * @example Выдать номера проектам
+             */
+            title: string;
+            /**
+             * @description Status of the other task; `blocked` is computed from exactly this
+             * @example open
+             */
+            status: components["schemas"]["TaskStatus"];
+            /**
+             * Goal
+             * @description The parent's `goal` section, cut at 320 characters; empty if the parent has none. The whole text is `get_task` of the parent
+             * @example Агент одним запросом находит все задачи программы
+             */
+            goal: string;
+            /**
+             * Goal Truncated
+             * @description `true` when `goal` was cut at the limit and the parent's text is longer
+             */
+            goal_truncated: boolean;
+        };
+        /**
          * PageMeta
          * @description Служебные поля коллекции. Всё, что не сам ресурс, живёт здесь, а не рядом с `data`.
          */
@@ -4881,8 +4921,8 @@ export interface components {
          */
         TaskPackageRead: {
             task: components["schemas"]["TaskRead"];
-            /** @description The parent of this task: key, title and status; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links` */
-            parent?: components["schemas"]["LinkTaskRead"] | null;
+            /** @description The parent of this task: key, title, status and its goal; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links` */
+            parent?: components["schemas"]["PackageParentRead"] | null;
             /**
              * Children
              * @description Children of this task: key, title and status of each, in the order they were linked; empty if none. Set with `link`, shown here and not in `links`
@@ -8022,7 +8062,7 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
@@ -8040,6 +8080,8 @@ export interface operations {
                 project?: string[] | null;
                 /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a project. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
                 parent?: string[] | null;
+                /** @description Root task keys: the answer holds all their descendants at any depth — children, grandchildren and so on — without the roots themselves. `parent` is the direct children only. An unknown key answers 422 instead of an empty page */
+                under?: string[] | null;
                 /** @description Task statuses */
                 status?: components["schemas"]["TaskStatus"][] | null;
                 /** @description Assignee names, matched exactly; `empty()` finds unassigned tasks */
