@@ -5,6 +5,10 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import {
   AuthorName,
+  answerOutcome,
+  entryHeadline,
+  EntryHeadline,
+  factsOfEntry,
   questionHistoryQueryOptions,
   questionsQueryOptions,
   remarksQueryOptions,
@@ -633,6 +637,11 @@ function QuestionHistory() {
  * называет открытым вопросом (`docs/FRONTEND.md`, «История вопросов»), и клиент здесь
  * ничего не считает сам. Кромка и плашка «блокирующий» — только у открытого: у
  * отвеченного вопроса работа уже не стоит, и красное соврало бы о положении дел.
+ *
+ * Чем закрыт вопрос, говорит исход **первого** ответа (TRK-552): ответили, сняли как
+ * устаревший или заменили другим вопросом. Снять можно только вопрос без ответа, поэтому
+ * исход снятия бывает лишь у первой записи, а следующие ответы её дополняют. Плашка
+ * снятого тона не имеет: он не «хорошо» и не «плохо», он больше не нужен.
  */
 function HistoryRow({ question }: { question: Question }) {
   const { t } = useTranslation('questions');
@@ -641,13 +650,16 @@ function HistoryRow({ question }: { question: Question }) {
   // `answers` в схеме необязателен только по форме: у поля есть значение по
   // умолчанию, и генератор типов делает его `?`. Выдача несёт его всегда.
   const answers = question.answers ?? [];
-  const open = answers.length === 0;
+  const first = answers[0];
+  const open = first === undefined;
   const blocking = open && question.payload.blocking;
+  const closedAs = open ? null : answerOutcome(first.payload.outcome);
 
   return (
     <article
       className={blocking ? `${QUESTION_CARD} ${BLOCKING_EDGE}` : QUESTION_CARD}
       data-answered={open ? 'false' : 'true'}
+      data-closed-as={closedAs ?? undefined}
       data-blocking={blocking ? 'true' : undefined}
       aria-label={t('questionLabel', { reference })}
     >
@@ -658,10 +670,12 @@ function HistoryRow({ question }: { question: Question }) {
         >
           {reference}
         </Link>
-        {open ? (
+        {closedAs === null ? (
           <Badge tone="attention">{t('awaitingAnswer')}</Badge>
         ) : (
-          <Badge tone="positive">{t('answered')}</Badge>
+          <Badge tone={closedAs === 'answered' ? 'positive' : 'neutral'}>
+            {t(`closedAs.${closedAs}`)}
+          </Badge>
         )}
         {blocking ? <Badge tone="danger">{brick('entry.blocking')}</Badge> : null}
         <AuthorName author={question.author} />
@@ -694,10 +708,19 @@ function HistoryRow({ question }: { question: Question }) {
   );
 }
 
-/** Ответ под вопросом: ссылка `KEY#N` ведёт к самой записи ответа в деле. */
+/**
+ * Ответ под вопросом: ссылка `KEY#N` ведёт к самой записи ответа в деле.
+ *
+ * Снятие и замена (TRK-552) называют исход словами над причиной — тем же заголовком, что
+ * у этой записи в деле и описи: «Вопрос KEY#N снят», «Вопрос KEY#N заменён вопросом
+ * KEY#M» со ссылкой на заменивший вопрос. Тело такой записи — причина. У ответа по
+ * существу строки нет: он выглядит как до появления исходов.
+ */
 function HistoryAnswer({ answer }: { answer: QuestionAnswer }) {
   const { t } = useTranslation('questions');
+  const { t: brick } = useTranslation('ui');
   const reference = `${answer.task_key}#${answer.no}`;
+  const outcome = answerOutcome(answer.payload.outcome);
 
   return (
     <article className="flex flex-col gap-1" aria-label={t('answerLabel', { reference })}>
@@ -708,6 +731,11 @@ function HistoryAnswer({ answer }: { answer: QuestionAnswer }) {
         <AuthorName author={answer.author} />
         <RelativeTime value={answer.created_at} />
       </header>
+      {outcome === 'answered' ? null : (
+        <p data-answer-outcome={outcome}>
+          <EntryHeadline headline={entryHeadline(factsOfEntry(answer), answer.task_key, brick)} />
+        </p>
+      )}
       <Markdown>{answer.body}</Markdown>
     </article>
   );
