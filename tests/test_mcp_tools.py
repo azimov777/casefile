@@ -27,8 +27,11 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.author import created_by_columns
+from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
+from app.db.repositories import EntryRepository
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
 from app.domain.links import LinkKind
@@ -1479,6 +1482,77 @@ async def test_a_withdrawn_question_leaves_the_package_and_stays_in_the_case(
     }
     assert "entry_fields_invalid" in twice
     assert "already_answered" in twice
+
+
+async def test_an_answer_filed_before_outcomes_reads_the_same_through_mcp_and_rest(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_secret: str,
+    task: Task,
+) -> None:
+    """TRK-563: ответ с нагрузкой `{question_no}` читают одинаково и агент, и человек.
+
+    Старую запись подшиваем прямо в базу: через инструмент её не получить, а читать её
+    будут именно так. Рядом — ответ, поданный через настоящий вызов, чтобы сверка
+    охватывала оба поколения нагрузки, а не только прежнее.
+    """
+    key, task_id, created_by = task.key, task.id, created_by_columns(task.created_by)
+    async with mcp_session(task_secret) as session:
+        old_question = await call(
+            session, "ask", key=key, addressees=["owner"], title="Какой ключ?", blocking=True
+        )
+        new_question = await call(
+            session, "ask", key=key, addressees=["owner"], title="Верхний регистр?", blocking=True
+        )
+
+    repository = EntryRepository(db_session)
+    old_no = await repository.allocate_no(task_id)
+    await repository.add(
+        Entry(
+            task_id=task_id,
+            no=old_no,
+            type=EntryType.ANSWER,
+            title=f"Answer to {key}#{old_question['no']}",
+            body="Верхний",
+            payload={"question_no": old_question["no"]},
+            **created_by,
+        )
+    )
+    await db_session.flush()
+
+    async with mcp_session(task_secret) as session:
+        current = await call(
+            session, "answer", key=key, question_no=new_question["no"], body="Годится"
+        )
+        from_mcp = await call(session, "read_entries", key=key, nos=[old_no, current["no"]])
+        package = await call(session, "get_task", key=key)
+
+    from_rest = []
+    for no in (old_no, current["no"]):
+        response = await auth_client.get(f"/api/v1/tasks/{key}/entries/{no}")
+        assert response.status_code == 200, response.text
+        from_rest.append(response.json()["data"])
+
+    assert [item["no"] for item in from_mcp["items"]] == [old_no, current["no"]]
+    assert [item["payload"] for item in from_mcp["items"]] == [
+        item["payload"] for item in from_rest
+    ]
+    assert from_mcp["items"][0]["payload"] == {
+        "question_no": old_question["no"],
+        "outcome": "answered",
+        "replaced_by": None,
+    }
+    assert from_mcp["items"][1]["payload"] == {
+        "question_no": new_question["no"],
+        "outcome": "answered",
+        "replaced_by": None,
+    }
+    # Опись читала ответ так всегда: все три двери сходятся на одном исходе.
+    index = {line["no"]: line["facts"] for line in package["index"]}
+    assert index[old_no]["outcome"] == "answered"
+    assert index[old_no]["replaced_by"] is None
+    assert package["features"]["open_questions"] == 0
 
 
 async def test_asking_an_unknown_participant_is_refused(

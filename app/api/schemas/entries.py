@@ -58,6 +58,7 @@ from app.domain.case import (
     EntryType,
     RemarkOutcome,
     VerdictOutcome,
+    read_payload,
 )
 from app.domain.links import LinkKind
 from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
@@ -451,9 +452,10 @@ class AnswerPayload(BaseModel):
     """Ответ, как его **читают**: исход есть всегда.
 
     Трекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,
-    подшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —
-    `answered` и `null`: тогда других исходов не было (`app/domain/case.py`,
-    `answer_outcome`).
+    подшитый до появления исхода, этих ключей не несёт; значения «тогда» — `answered` и
+    `null` — подставляет не эта модель, а `read_payload` (`app/domain/case.py`), одно
+    правило на REST и на MCP. Поэтому у полей нет умолчаний: модель только подтверждает,
+    что правило отработало, а не повторяет его.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -464,13 +466,10 @@ class AnswerPayload(BaseModel):
         description="Number of a `question` entry of the same task",
     )
     outcome: AnswerOutcome = Field(
-        default=AnswerOutcome.ANSWERED,
         examples=[AnswerOutcome.ANSWERED],
         description=_ANSWER_OUTCOME_DESCRIPTION,
     )
-    replaced_by: int | None = Field(
-        default=None, ge=1, examples=[None], description=_REPLACED_BY_DESCRIPTION
-    )
+    replaced_by: int | None = Field(ge=1, examples=[None], description=_REPLACED_BY_DESCRIPTION)
 
 
 class VerdictPayload(BaseModel):
@@ -976,7 +975,7 @@ def entry_read(
         author=AuthorRead.model_validate(entry.author),
         title=entry.title,
         body=entry.body,
-        payload=entry.payload,
+        payload=read_payload(entry.type, entry.payload),
         refs=list(entry.refs),
         created_at=entry.created_at,
         action_id=entry.action_id,
