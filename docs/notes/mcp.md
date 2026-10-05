@@ -1238,6 +1238,23 @@ Store папка данных не `%APPDATA%\Claude`, а `%LOCALAPPDATA%\Packag
 **Где:** `mcpb/manifest.json`, `app/mcp/server.py` (`SERVER_NAME`), `tests/test_mcpb_manifest.py`,
 `install.ps1` (`Get-DesktopDirs`), `scripts/build-mcpb.sh`.
 
+## Нагрузка записи читается одним правилом из домена, а не умолчанием схемы REST (TRK-563)
+
+**Что:** `payload` записи дела отдаёт не слой интерфейса, а `read_payload` в `app/domain/case.py`: его
+зовут и `entry_read` (REST), и `entry` (MCP). Ответ, подшитый до TRK-552 (нагрузка `{question_no}`),
+читается там как `outcome: answered`, `replaced_by: null` — и через REST, и через `read_entries`,
+`get_task` и `wait_journal`. В базе старая нагрузка как была, так и лежит: записи неизменяемы.
+**Почему важно:** пока умолчание `answered` стояло полем модели `AnswerPayload`, MCP отдавал
+`dict(value.payload)` как лежит, и агент с человеком читали одну запись по-разному: у агента исхода
+нет, у человека — `answered`. Сверка дверей на старой записи отсутствовала, потому что новые ответы
+пишутся уже с ключами, и расхождение видно только на данных, подшитых раньше.
+**Как правильно:** новый ключ в нагрузке существующего типа получает ветвь в `read_payload`, а не поле с
+`default` в модели REST и не правку в `entry` MCP; у модели чтения (`AnswerPayload`) умолчаний нет —
+она лишь подтверждает, что правило отработало. Тест сверки подшивает старую запись прямо в базу
+(`EntryRepository.add`): через инструмент её не получить.
+**Где:** `app/domain/case.py` (`read_payload`), `app/api/schemas/entries.py` (`entry_read`),
+`app/mcp/tools/case/views.py` (`entry`), `tests/test_mcp_tools.py`, `tests/test_domain_case.py`.
+
 ## Форма фактов описи стоит в `outputSchema` каждого инструмента с описью
 
 **Что:** объединение фактов строки описи (`FactsView`, `app/mcp/tools/case/views.py`) целиком

@@ -34,6 +34,7 @@ from app.domain.tasks import (
     MAX_MOVE_KEYS,
     MAX_TEXT_LENGTH,
     MAX_TITLE_LENGTH,
+    PARENT_GOAL_LIMIT,
     TaskPriority,
     TaskStatus,
 )
@@ -182,6 +183,26 @@ class TaskFeaturesRead(BaseModel):
     )
 
 
+class PackageParentRead(LinkTaskRead):
+    """Родитель в карточке ребёнка: как у любой связи, плюс его цель (`CONCEPT.md`, 4.2).
+
+    Цель нужна затем, чтобы агент, взявший задачу из программы, видел, чему она служит, без
+    второго вызова. Только у прямого родителя и не длиннее потолка
+    (`app/domain/tasks.py`, `PARENT_GOAL_LIMIT`); детям и другим связям цель не едет.
+    """
+
+    goal: str = Field(
+        examples=["Агент одним запросом находит все задачи программы"],
+        description=(
+            f"The parent's `goal` section, cut at {PARENT_GOAL_LIMIT} characters; empty "
+            "if the parent has none. The whole text is `get_task` of the parent"
+        ),
+    )
+    goal_truncated: bool = Field(
+        description="`true` when `goal` was cut at the limit and the parent's text is longer"
+    )
+
+
 class TaskPackageRead(BaseModel):
     """Пакет преемника (`CONCEPT.md`, 4.2).
 
@@ -192,12 +213,12 @@ class TaskPackageRead(BaseModel):
     """
 
     task: TaskRead
-    parent: LinkTaskRead | None = Field(
+    parent: PackageParentRead | None = Field(
         default=None,
         description=(
-            "The parent of this task: key, title and status; `null` for a top-level task. "
-            "A task has at most one parent. Set with the same `link` call as any other "
-            "link, but shown here and not in `links`"
+            "The parent of this task: key, title, status and its goal; `null` for a "
+            "top-level task. A task has at most one parent. Set with the same `link` call "
+            "as any other link, but shown here and not in `links`"
         ),
     )
     children: list[LinkTaskRead] = Field(

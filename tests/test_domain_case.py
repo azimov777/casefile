@@ -18,6 +18,7 @@ from app.domain.case import (
     TaskRef,
     build_entry,
     parse_ref,
+    read_payload,
     summary_title,
 )
 from app.domain.errors import EntryFieldsInvalidError
@@ -275,6 +276,42 @@ def test_an_answer_without_an_outcome_is_answered_and_carries_both_keys() -> Non
 
     assert draft.payload == {"question_no": 7, "outcome": "answered", "replaced_by": None}
     assert draft.title == "Answer to TRK-1#7"
+
+
+def test_an_answer_filed_before_outcomes_is_read_as_answered() -> None:
+    """TRK-563: нагрузка `{question_no}` читается `answered` и без заменившего вопроса.
+
+    Запись в базе остаётся как была: правило — в чтении, оно не переписывает данные и не
+    правит словарь, который ему дали.
+    """
+    stored = {"question_no": 7}
+
+    assert read_payload(EntryType.ANSWER, stored) == {
+        "question_no": 7,
+        "outcome": "answered",
+        "replaced_by": None,
+    }
+    assert stored == {"question_no": 7}
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        {"question_no": 7, "outcome": "answered", "replaced_by": None},
+        {"question_no": 7, "outcome": "withdrawn", "replaced_by": None},
+        {"question_no": 7, "outcome": "replaced", "replaced_by": 12},
+    ],
+)
+def test_an_answer_with_an_outcome_is_read_as_it_was_filed(stored: dict[str, Any]) -> None:
+    assert read_payload(EntryType.ANSWER, stored) == stored
+
+
+def test_the_payload_of_other_types_is_read_as_it_lies() -> None:
+    """Правило чтения заведено для ответа; чужую нагрузку оно не дополняет."""
+    stored = {"addressees": ["owner"], "blocking": True}
+
+    assert read_payload(EntryType.QUESTION, stored) == stored
+    assert read_payload(EntryType.QUESTION, {}) == {}
 
 
 def test_a_withdrawal_names_its_outcome_in_the_title() -> None:

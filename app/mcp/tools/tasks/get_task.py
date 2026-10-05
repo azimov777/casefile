@@ -6,8 +6,9 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.domain.tasks import PARENT_GOAL_LIMIT, clip_parent_goal
 from app.mcp.arguments import TaskKeyArg
 from app.mcp.enums import LinkKindSchema, TaskStatusSchema
 from app.mcp.tools.case.views import EntryView, HeadingView, entry, heading
@@ -25,6 +26,17 @@ class LinkOtherView(BaseModel):
     key: str
     title: str
     status: TaskStatusSchema
+
+
+class ParentCardView(LinkOtherView):
+    """Parent task: key, title, status and its goal."""
+
+    goal: str = Field(
+        description=f"The parent's `goal` section, cut at {PARENT_GOAL_LIMIT} characters"
+    )
+    goal_truncated: bool = Field(
+        description="`true` when `goal` was cut and the full text is longer"
+    )
 
 
 class LinkView(BaseModel):
@@ -58,6 +70,12 @@ def link(value: TaskLink) -> LinkView:
     )
 
 
+def parent_card(value: TaskLink) -> ParentCardView:
+    """Родитель в карточке ребёнка: как `link_other`, плюс цель не длиннее потолка."""
+    goal, truncated = clip_parent_goal(value.other.goal)
+    return ParentCardView(**link_other(value).model_dump(), goal=goal, goal_truncated=truncated)
+
+
 # Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 class TaskPackageView(BaseModel):
     """Everything about one task: card, parent and children, links, features, latest
@@ -67,7 +85,7 @@ class TaskPackageView(BaseModel):
     task: TaskView
     #: Родитель и дети — полями, а не видами в `links` (TRK-135): имя поля и есть ответ
     #: на «кто родитель», направление разбирать не нужно.
-    parent: LinkOtherView | None
+    parent: ParentCardView | None
     children: list[LinkOtherView]
     links: list[LinkView]
     features: FeaturesView
@@ -88,7 +106,7 @@ def task_package(package: TaskPackage) -> TaskPackageView:
     key = package.task.key
     return TaskPackageView(
         task=task(package.task),
-        parent=None if package.parent is None else link_other(package.parent),
+        parent=None if package.parent is None else parent_card(package.parent),
         children=[link_other(item) for item in package.children],
         links=[link(item) for item in package.links],
         features=features(package.features),
@@ -112,7 +130,8 @@ def register(tools: Toolset) -> None:
 
         `parent` and `children` are fields of their own and are absent from `links`,
         which holds `blocks`, `blocked_by` and `relates`, each named by this task's
-        role. The parent's summary and decisions are in the parent's own case.
+        role. `parent` carries the parent's `goal`, cut when long (`goal_truncated`); the full
+        text, its summary and decisions are in the parent's own case.
 
         The summary covers the case up to its own `no`; entries with a greater `no` are
         returned by `read_entries` with `after_no`. The index carries titles only, and

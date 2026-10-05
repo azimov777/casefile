@@ -926,6 +926,26 @@ def open_warning(index: Sequence[EntryHeading]) -> EntryHeading | None:
     return None
 
 
+def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Нагрузка записи в том виде, в каком её отдают наружу, — одна на REST и на MCP.
+
+    Записи неизменяемы, а форма нагрузки со временем растёт: ключ, которого у старой
+    записи нет, при чтении получает значение, которое он имел тогда, и в базе ничего не
+    переписывается. Правило стоит здесь, а не в схеме одного интерфейса: пока REST
+    подставлял умолчание полем модели, а MCP отдавал нагрузку как лежит, агент и человек
+    читали один и тот же ответ по-разному (TRK-563).
+
+    Сегодня так читается только ответ: подшитый до появления исходов (`question_no` и
+    ничего более), он читается как `answered` без заменившего вопроса. Нагрузка остальных
+    типов отдаётся как лежит; новый ключ в чужой нагрузке получает ветвь здесь же.
+    """
+    data = dict(payload)
+    if entry_type is EntryType.ANSWER:
+        data["outcome"] = answer_outcome(payload).value
+        data.setdefault("replaced_by", None)
+    return data
+
+
 def is_blocking_question(payload: Mapping[str, Any]) -> bool:
     """Помечен ли вопрос как блокирующий — определение признака `open_blocking_questions`.
 

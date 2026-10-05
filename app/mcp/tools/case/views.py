@@ -29,6 +29,7 @@ from app.domain.case import (
     StatusChangedFacts,
     VerdictFacts,
     WarningFacts,
+    read_payload,
 )
 from app.mcp.enums import (
     AnswerOutcomeSchema,
@@ -334,7 +335,9 @@ def entry(
     value: Entry, *, task_key: str | None = None, project_key: str | None = None
 ) -> EntryView:
     """Запись дела целиком. Ключ владельца приходит извне: у записи только `task_id` или
-    `project_id`. Передаётся ровно один — как и в REST (`entry_read`)."""
+    `project_id`. Передаётся ровно один — как и в REST (`entry_read`). Нагрузка читается
+    тем же правилом, что и в REST, — `read_payload`: ответ, подшитый до исходов, приходит
+    с `outcome: answered`, а не без ключа."""
     assert (task_key is None) != (project_key is None), "entry owner is exactly one key"
     return EntryView(
         id=str(value.id),
@@ -346,7 +349,7 @@ def entry(
         author=author(value.author),
         title=value.title,
         body=value.body,
-        payload=dict(value.payload),
+        payload=read_payload(value.type, value.payload),
         refs=list(value.refs),
         created_at=value.created_at,
         action_id=None if value.action_id is None else str(value.action_id),

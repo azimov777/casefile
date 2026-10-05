@@ -153,6 +153,17 @@ ParentFilterArg = Annotated[
     ),
 ]
 
+UnderArg = Annotated[
+    list[str] | None,
+    Field(
+        description=(
+            "Root task keys: all their descendants at any depth, without the roots. "
+            "`parent` is the direct children only. An unknown key is refused"
+        ),
+        examples=[["TRK-7"]],
+    ),
+]
+
 PrioritiesArg = Annotated[list[TaskPrioritySchema] | None, Field(description="Priorities")]
 
 
@@ -340,6 +351,7 @@ def register(tools: Toolset) -> None:
         key: KeysArg = None,
         project: ProjectsArg = None,
         parent: ParentFilterArg = None,
+        under: UnderArg = None,
         status: StatusesArg = None,
         assignee: AssigneesArg = None,
         priority: PrioritiesArg = None,
@@ -361,7 +373,7 @@ def register(tools: Toolset) -> None:
         string of the same meaning; no condition at all selects every task of the
         projects that are not archived. A task of an archived project is found only when
         the search names it with `=` or `in`: its project in `project`, the task itself in
-        `key`, or its parent in `parent`. Rows are
+        `key`, its parent in `parent` or a root of its subtree in `under`. Rows are
         ordered by `sort`, by key when it is left out. A long text is cut at the
         installation limit and marked by `<field>_truncated` and `<field>_length`; one
         task in full, with its case and links, is returned by `get_task`.
@@ -379,6 +391,7 @@ def register(tools: Toolset) -> None:
                     key=key,
                     project=project,
                     parent=parent,
+                    under=under,
                     status=status,
                     assignee=assignee,
                     priority=priority,
@@ -413,6 +426,7 @@ def _terms(
     key: Sequence[str] | None,
     project: Sequence[str] | None,
     parent: Sequence[str] | None,
+    under: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
     assignee: Sequence[str] | None,
     priority: Sequence[TaskPriority] | None,
@@ -441,6 +455,7 @@ def _terms(
             ("key", key),
             ("project", project),
             ("parent", parent),
+            ("under", under),
             ("status", None if status is None else [item.value for item in status]),
             ("assignee", assignee),
             ("priority", None if priority is None else [item.value for item in priority]),
