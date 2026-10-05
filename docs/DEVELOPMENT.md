@@ -364,7 +364,8 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/
 похожие реализации. Условия из обоих источников складываются по `and`.
 
 Поля отбора: `project`, `parent` (прямые дети названной задачи; `empty()` — верхний
-уровень проекта), `status`, `assignee`, `priority`, `text` (подстрока в названии
+уровень проекта), `under` (всё поддерево названной задачи на любой глубине, без неё самой),
+`status`, `assignee`, `priority`, `text` (подстрока в названии
 и описании) и вычисляемые признаки — `blocked`, `open_questions` и соседи. Признаки не
 хранятся колонками, а считаются из связей и дела прямо в запросе, поэтому они всегда
 согласованы с карточкой. Полный список полей отбора трекер называет сам: отказ на
@@ -381,7 +382,9 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/tasks/TRK-1/
 относится задача, без чтения её карточки. Выбирается поле тоже именем
 (`fields=key,parent`), и тем же именем по родителю отбирают: `parent: TRK-7`. В карточке
 (`GET /api/v1/tasks/{key}`) родитель и дети — поля `parent` и `children`, а не виды в
-`links`.
+`links`; у родителя, и только у прямого, есть ещё цель (`goal`, обрезанная по потолку, и
+признак `goal_truncated`), чтобы задача из программы показывала, чему она служит, без
+второго чтения.
 
 ```bash
 # кандидаты назначателя одной строкой: что можно брать в работу прямо сейчас
@@ -403,6 +406,10 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 # дети программы и её имя в каждой строке: parent и отбирает, и приезжает в ответе
 curl -H "Authorization: Bearer $TOKEN" --get --data-urlencode 'query=parent: TRK-7' \
+     --data-urlencode 'fields=title,parent' http://localhost:8000/api/v1/tasks
+
+# всё поддерево программы на любой глубине: under берёт детей, внуков и правнуков
+curl -H "Authorization: Bearer $TOKEN" --get --data-urlencode 'query=under: TRK-7' \
      --data-urlencode 'fields=title,parent' http://localhost:8000/api/v1/tasks
 
 # порядок и страницы: sort принимает key, updated_at и priority, минус — по убыванию

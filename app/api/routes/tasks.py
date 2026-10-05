@@ -40,6 +40,7 @@ from app.api.schemas.search import (
     search_page,
 )
 from app.api.schemas.tasks import (
+    PackageParentRead,
     TaskAlreadyThereRead,
     TaskClosing,
     TaskCreate,
@@ -55,11 +56,12 @@ from app.api.schemas.tasks import (
     TaskUpdate,
 )
 from app.db.pagination import DEFAULT_PAGE_SIZE
-from app.domain.tasks import CheckEdit
+from app.domain.tasks import CheckEdit, clip_parent_goal
 from app.services import case as case_service
 from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import tasks as service
+from app.services.links import TaskLink
 from app.services.tasks import (
     TaskAlreadyThere,
     TaskChanges,
@@ -151,7 +153,11 @@ async def list_tasks(
 
     Задачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством
     или вхождением: проект условием `project`, саму задачу — `key`, её родителя —
-    `parent` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в языке нет.
+    `parent`, корень её поддерева — `under` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в
+    языке нет.
+
+    `parent: X` — прямые дети X на одно колено, `under: X` — всё поддерево X на любой
+    глубине, без самой X: дети, внуки и так далее.
 
     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
@@ -265,6 +271,16 @@ def _move_outcome_read(
             )
 
 
+def _package_parent(link: TaskLink) -> PackageParentRead:
+    """Родитель карточки ребёнка: ключ, название, статус и цель не длиннее потолка."""
+    goal, truncated = clip_parent_goal(link.other.goal)
+    return PackageParentRead(
+        **LinkTaskRead.model_validate(link.other).model_dump(),
+        goal=goal,
+        goal_truncated=truncated,
+    )
+
+
 @router.get("/{task_key}", summary="Read a task")
 async def read_task(
     task_key: TaskKeyPath,
@@ -285,9 +301,7 @@ async def read_task(
     return DataResponse[TaskPackageRead](
         data=TaskPackageRead(
             task=TaskRead.model_validate(package.task),
-            parent=None
-            if package.parent is None
-            else LinkTaskRead.model_validate(package.parent.other),
+            parent=None if package.parent is None else _package_parent(package.parent),
             children=[LinkTaskRead.model_validate(link.other) for link in package.children],
             links=[TaskLinkRead.model_validate(link) for link in package.links],
             features=TaskFeaturesRead.model_validate(package.features, from_attributes=True),
