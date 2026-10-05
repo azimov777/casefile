@@ -8292,7 +8292,6 @@
           "outcome": {
             "$ref": "#/components/schemas/AnswerOutcome",
             "description": "How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer",
-            "default": "answered",
             "examples": [
               "answered"
             ]
@@ -8317,10 +8316,12 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "question_no"
+          "question_no",
+          "outcome",
+          "replaced_by"
         ],
         "title": "AnswerPayload",
-        "description": "Ответ, как его **читают**: исход есть всегда.\n\nТрекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,\nподшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —\n`answered` и `null`: тогда других исходов не было (`app/domain/case.py`,\n`answer_outcome`)."
+        "description": "Ответ, как его **читают**: исход есть всегда.\n\nТрекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,\nподшитый до появления исхода, этих ключей не несёт; значения «тогда» — `answered` и\n`null` — подставляет не эта модель, а `read_payload` (`app/domain/case.py`), одно\nправило на REST и на MCP. Поэтому у полей нет умолчаний: модель только подтверждает,\nчто правило отработало, а не повторяет его."
       },
       "AnsweredQuestionRead": {
         "properties": {

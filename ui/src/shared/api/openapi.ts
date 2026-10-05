@@ -1550,9 +1550,10 @@ export interface components {
          * @description Ответ, как его **читают**: исход есть всегда.
          *
          *     Трекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,
-         *     подшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —
-         *     `answered` и `null`: тогда других исходов не было (`app/domain/case.py`,
-         *     `answer_outcome`).
+         *     подшитый до появления исхода, этих ключей не несёт; значения «тогда» — `answered` и
+         *     `null` — подставляет не эта модель, а `read_payload` (`app/domain/case.py`), одно
+         *     правило на REST и на MCP. Поэтому у полей нет умолчаний: модель только подтверждает,
+         *     что правило отработало, а не повторяет его.
          */
         AnswerPayload: {
             /**
@@ -1563,7 +1564,6 @@ export interface components {
             question_no: number;
             /**
              * @description How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer
-             * @default answered
              * @example answered
              */
             outcome: components["schemas"]["AnswerOutcome"];
@@ -1572,7 +1572,7 @@ export interface components {
              * @description Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome
              * @example null
              */
-            replaced_by?: number | null;
+            replaced_by: number | null;
         };
         /**
          * AnsweredQuestionRead
