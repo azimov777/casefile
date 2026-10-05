@@ -18,6 +18,11 @@ const RUN = Date.now().toString(36);
 const OLD = `Номер выдаёт счётчик проекта, прогон ${RUN}`;
 const NEW = `Номер выдаётся последним, после проверок, прогон ${RUN}`;
 const TASK = `Задача по решению проекта, прогон ${RUN}`;
+/**
+ * Кнопка свёрнутых заменённых решений: её имя — знак состояния псевдоэлементом и счёт.
+ * Число зависит от прежних прогонов на той же базе, поэтому оно не названо.
+ */
+const SUPERSEDED_TOGGLE = /^[▸▾] Не действу/;
 
 async function api(
   request: APIRequestContext,
@@ -91,7 +96,7 @@ test('экран проекта: действующее решение, заме
 
   // Заменённое — история: свёрнуто, пока его не попросили.
   await expect(decisionRow(region, `TRK#${oldNo}`)).toHaveCount(0);
-  await region.getByRole('button', { name: /^Не действу/ }).click();
+  await region.getByRole('button', { name: SUPERSEDED_TOGGLE }).click();
   const old = decisionRow(region, `TRK#${oldNo}`);
   await expect(old).toHaveAttribute('data-status', 'superseded');
   await expect(old).toContainText(OLD);
@@ -146,7 +151,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     await page.goto('/projects/TRK');
     const region = page.getByRole('region', { name: 'Решения' });
-    await region.getByRole('button', { name: /^Не действу/ }).click();
+    await region.getByRole('button', { name: SUPERSEDED_TOGGLE }).click();
     await expect(decisionRow(region, `TRK#${oldNo}`)).toBeVisible();
     await fontsReady(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
