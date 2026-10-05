@@ -2,11 +2,11 @@
 
 # Casefile
 
-**The task tracker your AI agents keep for each other.**
+**One case file per task — shared by every session, agent and person that touches it.**
 
-AI agents forget everything between sessions. Casefile gives every task a case file —<br>
-decisions, failed attempts, findings, open questions — so the next agent picks up exactly where the last one stopped.<br>
-You watch a live board and answer their questions.
+Casefile keeps a case file for every task: the decisions, failed attempts, findings and open questions that agents write down as they work.<br>
+When a session ends, the next one — the same agent, an agent from another vendor, or you — reads the latest summary and the open questions and carries on.<br>
+It is a self-hosted MCP server and a web board, MIT-licensed; it assigns and schedules nothing.
 
 [![CI](https://github.com/azimov777/casefile/actions/workflows/images.yml/badge.svg)](https://github.com/azimov777/casefile/actions/workflows/images.yml)
 ![MCP server](https://img.shields.io/badge/MCP-server-8A2BE2)
@@ -16,7 +16,7 @@ You watch a live board and answer their questions.
 
 </div>
 
-**For anyone whose agents work on tasks longer than one session.** A self-hosted MCP server and a web board, free and MIT-licensed. Made for Claude Code; Codex, Cursor and any other MCP client connect the same way.
+**For anyone whose agents work on tasks longer than one session.** Free to use. Made for Claude Code; Codex, Cursor and any other MCP client connect the same way.
 
 **Install on macOS / Linux**
 
@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh 
 irm https://raw.githubusercontent.com/azimov777/casefile/main/install.ps1 | iex
 ```
 
-All you need is Docker. The board opens at **http://localhost:8080**, and the installer connects Claude Code and Codex by itself — a plugin and an OAuth sign-in, no token to copy. Casefile updates itself to each new release: it checks once an hour and whenever Docker starts.
+All you need is Docker. The board opens at **http://localhost:8080**, and the installer connects Claude Code and Codex by itself — a plugin and an OAuth sign-in, no token to copy. Casefile updates itself to each new release: it checks once an hour and whenever Docker starts. A small `updater` service does it and holds the Docker socket for that; [you can turn it off](#updates).
 
 **Or let your agent do it.** Paste this into Claude Code, Codex or Cursor:
 
@@ -81,6 +81,24 @@ claude mcp login plugin:casefile:casefile
 codex mcp login casefile
 ```
 
+**The installer asks before it changes anything of another program.** The plugin step edits
+files that are not Casefile's: Claude Code's `~/.claude/settings.json` (one line,
+`"autoUpdate": true`, inside `extraKnownMarketplaces.casefile`), Codex's
+`~/.codex/config.toml`, the manual MCP entries `casefile` and `tracker` that point at this
+installation, and `~/.agents/skills`. It prints that list and asks `[y/N]` on your terminal
+(also under `curl … | sh`); `N` skips the whole plugin step, leaves those files alone and
+installs the service as usual. Before the first change to a file it saves a copy next to
+it — `settings.json.casefile-bak`, `config.toml.casefile-bak`, kept and never overwritten —
+and it writes only the line it needs, leaving the rest of the file as it was. The copy
+holds whatever the file held, a token of a manual entry the installer removes included:
+delete it when you no longer need it. These variables go in front of `sh`:
+
+- `CASEFILE_SKILL=0` skips the plugin step; `CASEFILE_SKILL=1` answers the question in
+  advance. Without a terminal (an agent, CI) nothing is asked and the step runs, as it does
+  with `1`.
+- `CASEFILE_PLUGIN_AUTOUPDATE=0` installs the Claude Code plugin without `autoUpdate`;
+  update it yourself with `claude plugin update casefile@casefile`.
+
 The same commands sign an agent in again after you disconnect it on the board's
 **Access** screen (in a Claude Code session, `/mcp` → `casefile` → **Re-authenticate**).
 On your own machine the sign-in needs no password: Claude Code acts as `claude`, Codex as
@@ -100,6 +118,13 @@ curl -fsSL https://raw.githubusercontent.com/azimov777/casefile/main/install.sh 
 
 How to check whether an agent has the skill, and the commands for each harness, are in
 [step 4 of the agent guide](docs/agent-install.md#4-install-the-casefile-skill).
+
+**Claude Desktop gets an extension for its chat.** The chat of the Claude desktop app
+(macOS, Windows) does not load the Claude Code plugin; it gets Casefile from
+[`casefile.mcpb`](https://github.com/azimov777/casefile/releases/latest/download/casefile.mcpb),
+attached to every release. The installer downloads and opens it when it finds Claude Desktop;
+by hand, double-click the file. It signs in with OAuth, needs no Node.js and works while the
+installation runs ([details](docs/agent-install.md#claude-desktop-casefile-in-the-chat-app)).
 
 **Hermes signs in with OAuth** (`auth: oauth` in `~/.hermes/config.yaml`; the installer
 prints the block; not yet checked against a real Hermes). **Clients without OAuth use the
@@ -218,8 +243,8 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 | | |
 |---|---|
 | Update right now | run the install line again |
-| Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env` |
-| Stay on one release | `CASEFILE_VERSION=0.9.4` in `~/casefile/.env` |
+| Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile` |
+| Stay on one release | `CASEFILE_VERSION=0.9.5` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
@@ -237,6 +262,19 @@ restart. Commits to `main` without a tag never reach an installation. The update
 recreates the Casefile containers and keeps your data in its volumes. An agent in the
 middle of an MCP call when that happens gets a dropped connection and has to retry.
 
+**The updater holds the Docker socket.** To replace containers the `updater` service
+mounts `/var/run/docker.sock`, which is root access to the machine; Casefile gives it to
+this one service on purpose (`docker-compose.prod.yml` says why). The installer tells you
+this before it installs and again at the end. To turn auto-update off, put
+`CASEFILE_AUTO_UPDATE=false` into `~/casefile/.env` (exactly `false`: any other value
+leaves it on) and run `docker compose up -d --no-deps updater` in `~/casefile`. The
+service then idles, so the socket stays mounted; `docker compose stop updater` stops it
+until the next `docker compose up` or run of the installer. With auto-update off the
+board tells you when a new release is out: a note at the bottom of the side panel links
+to the release notes, and you update by running the install line again. That note comes
+from a read of the latest release on GitHub, at most once an hour;
+`TRACKER_RELEASE_CHECK=false` in `.env` turns the read off, and the note with it.
+
 The first release on this channel was 0.2.0. An installation from before it (on
 `latest`) moves to `stable` by itself the next time Docker starts, and from then on
 checks every hour. A release can also bring a new updater: the update to that release is
@@ -251,18 +289,22 @@ as usual. `docker compose logs updater` tells what happened.
 
 A release that changes the database schema costs one more step. Before installing it,
 the updater takes a snapshot of the database (`pg_dump -Fc`, the same format as
-[backup and restore](docs/backup-restore.md)). The snapshot stays inside the updater
-container, at `/tmp/casefile-before-update.dump`, and takes about as much space as a
-manual backup. If that release then fails to start after changing the schema, the
-database goes back to the snapshot before the previous version starts again. So the
+[backup and restore](docs/backup-restore.md)). The snapshot goes into a Docker volume of
+the installation, `casefile_updater-snapshot`, as `before-update.dump`, and takes about
+as much space as a manual backup. If that release then fails to start after changing the
+schema, the database goes back to the snapshot before the previous version starts again. So the
 schema and the data are exactly as they were before the update, and a manual
 `docker compose up -d` works as usual. The price: **anything written between the
 snapshot and the rollback is lost.** That window is the failed start, up to a few
 minutes. While the new version is being brought up, the old one keeps answering for a
-few seconds. The snapshot is deleted once the update succeeds or the database is
-restored. If the snapshot cannot be taken, that release is not installed this time. If
-it cannot be restored, the previous version runs on the new schema, the snapshot is kept,
-and the log says how to copy it out.
+few seconds. The snapshot is not deleted afterwards, neither after a good update nor after
+a rollback: it stays in the volume as a copy of the database from before the update, and
+`docker compose logs updater` says where. There is one copy: the next update that changes
+the schema replaces it, and a snapshot that fails never replaces the earlier one. How to
+restore from it: [backup and restore](docs/backup-restore.md#restoring-from-the-updaters-snapshot).
+If the snapshot cannot be taken, that release is not installed this time. If it cannot be
+restored, the previous version runs on the new schema, and the log says how to copy the
+snapshot out.
 
 ## Network mode
 
