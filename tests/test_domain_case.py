@@ -262,6 +262,127 @@ def test_an_answer_titles_itself_with_the_reference_to_the_question() -> None:
     assert draft.title == "Answer to TRK-1#7"
 
 
+# --- Исход ответа: снятие и замена вопроса (TRK-552) ----------------------------------
+
+
+def test_an_answer_without_an_outcome_is_answered_and_carries_both_keys() -> None:
+    """(а) Прежний вызов не меняется: исход по умолчанию — ответ по существу.
+
+    Ключи исхода и замены лежат в нагрузке всегда, пустыми тоже: форма записи одна в
+    любом интерфейсе, как `task` у резолюции.
+    """
+    draft = build_entry(CONTEXT, type=EntryType.ANSWER, body="", payload={"question_no": 7})
+
+    assert draft.payload == {"question_no": 7, "outcome": "answered", "replaced_by": None}
+    assert draft.title == "Answer to TRK-1#7"
+
+
+def test_a_withdrawal_names_its_outcome_in_the_title() -> None:
+    draft = build_entry(
+        CONTEXT,
+        type=EntryType.ANSWER,
+        body="Решение принято в TRK-9#4, вопрос больше не нужен",
+        payload={"question_no": 7, "outcome": "withdrawn"},
+    )
+
+    assert draft.payload == {"question_no": 7, "outcome": "withdrawn", "replaced_by": None}
+    assert draft.title == "Answer to TRK-1#7: withdrawn"
+
+
+def test_a_replacement_names_the_question_that_replaced_it() -> None:
+    draft = build_entry(
+        CONTEXT,
+        type=EntryType.ANSWER,
+        body="Спрашиваю иначе: два варианта",
+        payload={"question_no": 7, "outcome": "replaced", "replaced_by": 12},
+    )
+
+    assert draft.payload == {"question_no": 7, "outcome": "replaced", "replaced_by": 12}
+    assert draft.title == "Answer to TRK-1#7: replaced by TRK-1#12"
+
+
+@pytest.mark.parametrize("outcome", ["withdrawn", "replaced"])
+@pytest.mark.parametrize("body", ["", "   \n "])
+def test_a_withdrawal_or_replacement_without_a_reason_is_refused(outcome: str, body: str) -> None:
+    """(г) Причина — тело записи: снятие без неё — вопрос, молча исчезнувший из входящей."""
+    payload: dict[str, Any] = {"question_no": 7, "outcome": outcome}
+    if outcome == "replaced":
+        payload["replaced_by"] = 9
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(CONTEXT, type=EntryType.ANSWER, body=body, payload=payload)
+
+    assert error.value.details["fields"] == [
+        {"field": "body", "reason": "required", "required_for": outcome}
+    ]
+
+
+def test_a_replacement_without_the_replacing_question_is_refused() -> None:
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(
+            CONTEXT,
+            type=EntryType.ANSWER,
+            body="Причина",
+            payload={"question_no": 7, "outcome": "replaced"},
+        )
+
+    assert error.value.details["fields"] == [
+        {"field": "replaced_by", "reason": "required", "required_for": "replaced"}
+    ]
+
+
+@pytest.mark.parametrize("outcome", [None, "answered", "withdrawn"])
+def test_the_replacing_question_is_refused_with_any_other_outcome(outcome: str | None) -> None:
+    payload: dict[str, Any] = {"question_no": 7, "replaced_by": 9}
+    if outcome is not None:
+        payload["outcome"] = outcome
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(CONTEXT, type=EntryType.ANSWER, body="Причина", payload=payload)
+
+    assert error.value.details["fields"] == [
+        {
+            "field": "replaced_by",
+            "reason": "not_allowed",
+            "required_for": "replaced",
+            "got": outcome or "answered",
+        }
+    ]
+
+
+@pytest.mark.parametrize("replaced_by", [7, 3])
+def test_the_replacing_question_comes_after_the_withdrawn_one(replaced_by: int) -> None:
+    """Сам себя вопрос не заменяет, и более ранний вопрос — тоже: он уже стоял в деле."""
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(
+            CONTEXT,
+            type=EntryType.ANSWER,
+            body="Причина",
+            payload={"question_no": 7, "outcome": "replaced", "replaced_by": replaced_by},
+        )
+
+    assert error.value.details["fields"] == [
+        {
+            "field": "replaced_by",
+            "reason": "not_after_question",
+            "question_no": 7,
+            "got": replaced_by,
+        }
+    ]
+
+
+def test_an_outcome_outside_the_three_values_is_refused_with_all_problems_at_once() -> None:
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        build_entry(
+            CONTEXT,
+            type=EntryType.ANSWER,
+            body="",
+            payload={"question_no": 0, "outcome": "superseded"},
+        )
+
+    assert problems(error) == {"question_no": "out_of_range", "outcome": "not_allowed"}
+    outcome = next(p for p in error.value.details["fields"] if p["field"] == "outcome")
+    assert outcome["allowed"] == ["answered", "withdrawn", "replaced"]
+
+
 def test_an_outcome_outside_the_two_values_is_refused() -> None:
     with pytest.raises(EntryFieldsInvalidError) as error:
         build_entry(CONTEXT, type=EntryType.VERDICT, payload={"check_no": 1, "outcome": "maybe"})

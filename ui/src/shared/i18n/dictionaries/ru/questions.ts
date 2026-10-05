@@ -1,3 +1,7 @@
+import type { components } from '@/shared/api';
+
+type AnswerOutcome = components['schemas']['AnswerOutcome'];
+
 /** Экран входящей: вопросы ко мне, мои замечания без разбора и история вопросов (`src/pages/questions`). */
 export const questions = {
   /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-362`). */
@@ -36,7 +40,15 @@ export const questions = {
   noHistory: 'Вам ещё не задавали вопросов.',
   noHistoryAnyone: 'Вопросов ещё не задавали.',
   addressees: 'Кому: {{names}}',
-  answered: 'отвечен',
+  /**
+   * Чем закрыт вопрос в истории — исход первого ответа (TRK-552): ответили, сняли как
+   * устаревший или заменили другим вопросом.
+   */
+  closedAs: {
+    answered: 'отвечен',
+    withdrawn: 'снят',
+    replaced: 'заменён',
+  } satisfies Record<AnswerOutcome, string>,
   awaitingAnswer: 'ждёт ответа',
   noAnswerYet: 'Ответа пока нет.',
   answersLabel: 'Ответы на {{reference}}',

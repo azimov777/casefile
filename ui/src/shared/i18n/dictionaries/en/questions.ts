@@ -1,3 +1,7 @@
+import type { components } from '@/shared/api';
+
+type AnswerOutcome = components['schemas']['AnswerOutcome'];
+
 /** Экран входящей: вопросы ко мне, мои замечания без разбора и история вопросов (`src/pages/questions`). */
 export const questions = {
   /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-362`). */
@@ -36,7 +40,11 @@ export const questions = {
   noHistory: 'Nobody has asked you a question yet.',
   noHistoryAnyone: 'Nobody has asked a question yet.',
   addressees: 'To: {{names}}',
-  answered: 'answered',
+  closedAs: {
+    answered: 'answered',
+    withdrawn: 'withdrawn',
+    replaced: 'replaced',
+  } satisfies Record<AnswerOutcome, string>,
   awaitingAnswer: 'awaiting an answer',
   noAnswerYet: 'There is no answer yet.',
   answersLabel: 'Answers to {{reference}}',

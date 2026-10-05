@@ -11,6 +11,7 @@
  * breaking the screen.
  */
 export const fieldReasons = {
+  already_answered: 'The question already has an answer: it cannot be withdrawn or replaced.',
   conflicts_with: 'Cannot be combined with another change in the same request.',
   empty_item: 'The list has an empty value.',
   malformed_entry_ref: 'The entry reference cannot be parsed.',
@@ -23,6 +24,7 @@ export const fieldReasons = {
   not_a_question: 'The entry with that number is not a question.',
   not_a_remark: 'The entry with that number is not a remark.',
   not_a_string: 'A string was expected.',
+  not_after_question: 'The replacing question was not asked after the withdrawn one.',
   not_allowed: 'This value is not allowed.',
   not_an_integer: 'A whole number was expected.',
   out_of_range: 'The value is outside the allowed range.',

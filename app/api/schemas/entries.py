@@ -53,6 +53,8 @@ from app.domain.case import (
     MAX_REFS,
     MAX_SUMMARY_PART_LENGTH,
     OUTCOME_WITH_CONTINUATION,
+    OUTCOME_WITH_REPLACEMENT,
+    AnswerOutcome,
     EntryType,
     RemarkOutcome,
     VerdictOutcome,
@@ -172,11 +174,23 @@ class QuestionFactsRead(_EntryFactsBase):
 
 
 class AnswerFactsRead(_EntryFactsBase):
-    """Ответ: на какой вопрос той же задачи."""
+    """Ответ: на какой вопрос той же задачи, чем он закрыт и каким вопросом заменён."""
 
     type: Literal[EntryType.ANSWER]
     question_no: int | None = Field(
         default=None, examples=[7], description="Number of the question answered"
+    )
+    outcome: AnswerOutcome | None = Field(
+        default=None,
+        examples=[AnswerOutcome.ANSWERED],
+        description=(
+            "How the question was closed; `answered` for answers filed before outcomes existed"
+        ),
+    )
+    replaced_by: int | None = Field(
+        default=None,
+        examples=[None],
+        description="Number of the question that replaced it; set only with `replaced`",
     )
 
 
@@ -394,8 +408,27 @@ class QuestionPayload(BaseModel):
     )
 
 
-class AnswerPayload(BaseModel):
-    """Ответ на вопрос той же задачи."""
+_ANSWER_OUTCOME_DESCRIPTION = (
+    "How the question is closed: `answered` — answered on its merits; `withdrawn` — "
+    "withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. "
+    "`withdrawn` and `replaced` need a reason in the body and are accepted only while the "
+    "question has no answer yet: an answered question stays with its answer"
+)
+_REPLACED_BY_DESCRIPTION = (
+    "Number of a later `question` entry of the same task that replaces this one; required "
+    "with `" + OUTCOME_WITH_REPLACEMENT.value + "` and not accepted with any other outcome"
+)
+
+
+class AnswerFilingPayload(BaseModel):
+    """Ответ, как его **подшивают**: по существу, снятие вопроса или его замена.
+
+    Исход здесь необязателен и без значения по умолчанию в схеме: прежний запрос — один
+    `question_no` — остаётся верным и в сгенерированном клиенте, а не превращается в запрос
+    без обязательного поля. Пустой исход домен читает как `answered`. Отдельной моделью от
+    `AnswerPayload` по той же причине, что `SummaryPartsPayload` от `SummaryPayload`: у
+    подшивки и чтения разные обязательства, и одна модель на две роли разошлась бы молча.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -403,6 +436,40 @@ class AnswerPayload(BaseModel):
         ge=1,
         examples=[7],
         description="Number of a `question` entry of the same task",
+    )
+    outcome: AnswerOutcome | None = Field(
+        default=None,
+        examples=[AnswerOutcome.WITHDRAWN],
+        description=_ANSWER_OUTCOME_DESCRIPTION + "; absent means `answered`",
+    )
+    replaced_by: int | None = Field(
+        default=None, ge=1, examples=[None], description=_REPLACED_BY_DESCRIPTION
+    )
+
+
+class AnswerPayload(BaseModel):
+    """Ответ, как его **читают**: исход есть всегда.
+
+    Трекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,
+    подшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —
+    `answered` и `null`: тогда других исходов не было (`app/domain/case.py`,
+    `answer_outcome`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    question_no: int = Field(
+        ge=1,
+        examples=[7],
+        description="Number of a `question` entry of the same task",
+    )
+    outcome: AnswerOutcome = Field(
+        default=AnswerOutcome.ANSWERED,
+        examples=[AnswerOutcome.ANSWERED],
+        description=_ANSWER_OUTCOME_DESCRIPTION,
+    )
+    replaced_by: int | None = Field(
+        default=None, ge=1, examples=[None], description=_REPLACED_BY_DESCRIPTION
     )
 
 
@@ -703,7 +770,8 @@ class QuestionEntryRead(_EntryReadBase):
 
 
 class AnswerEntryRead(_EntryReadBase):
-    """Ответ на вопрос. Ответить может кто угодно; первый ответ закрывает вопрос."""
+    """Ответ на вопрос, его снятие или замена. Ответить может кто угодно; первый ответ
+    закрывает вопрос."""
 
     type: Literal[EntryType.ANSWER]
     payload: AnswerPayload
@@ -722,8 +790,9 @@ class AnsweredQuestionRead(QuestionEntryRead):
         default_factory=list,
         description=(
             "`answer` entries of the same task that point at this question, by entry "
-            "number. The first one closed the question, the rest add to it. Empty means "
-            "the question is still open"
+            "number. The first one closed the question, the rest add to it; its "
+            "`payload.outcome` says whether it was answered, withdrawn or replaced. Empty "
+            "means the question is still open"
         ),
     )
 
@@ -982,10 +1051,10 @@ class QuestionEntryCreate(_TitledEntryCreate):
 
 
 class AnswerEntryCreate(_EntryCreateBase):
-    """Ответ. Заголовок не принимается: он собирается из ссылки на вопрос."""
+    """Ответ. Заголовок не принимается: он собирается из ссылки на вопрос и исхода."""
 
     type: Literal[EntryType.ANSWER]
-    payload: AnswerPayload
+    payload: AnswerFilingPayload
 
 
 class VerdictEntryCreate(_EntryCreateBase):

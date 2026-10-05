@@ -1379,7 +1379,7 @@ export interface components {
         };
         /**
          * AnswerEntryCreate
-         * @description Ответ. Заголовок не принимается: он собирается из ссылки на вопрос.
+         * @description Ответ. Заголовок не принимается: он собирается из ссылки на вопрос и исхода.
          */
         AnswerEntryCreate: {
             /**
@@ -1399,11 +1399,12 @@ export interface components {
              * @enum {string}
              */
             type: "answer";
-            payload: components["schemas"]["AnswerPayload"];
+            payload: components["schemas"]["AnswerFilingPayload"];
         };
         /**
          * AnswerEntryRead
-         * @description Ответ на вопрос. Ответить может кто угодно; первый ответ закрывает вопрос.
+         * @description Ответ на вопрос, его снятие или замена. Ответить может кто угодно; первый ответ
+         *     закрывает вопрос.
          */
         AnswerEntryRead: {
             /**
@@ -1476,7 +1477,7 @@ export interface components {
         };
         /**
          * AnswerFactsRead
-         * @description Ответ: на какой вопрос той же задачи.
+         * @description Ответ: на какой вопрос той же задачи, чем он закрыт и каким вопросом заменён.
          */
         AnswerFactsRead: {
             /**
@@ -1490,10 +1491,68 @@ export interface components {
              * @example 7
              */
             question_no?: number | null;
+            /**
+             * @description How the question was closed; `answered` for answers filed before outcomes existed
+             * @example answered
+             */
+            outcome?: components["schemas"]["AnswerOutcome"] | null;
+            /**
+             * Replaced By
+             * @description Number of the question that replaced it; set only with `replaced`
+             * @example null
+             */
+            replaced_by?: number | null;
         };
         /**
+         * AnswerFilingPayload
+         * @description Ответ, как его **подшивают**: по существу, снятие вопроса или его замена.
+         *
+         *     Исход здесь необязателен и без значения по умолчанию в схеме: прежний запрос — один
+         *     `question_no` — остаётся верным и в сгенерированном клиенте, а не превращается в запрос
+         *     без обязательного поля. Пустой исход домен читает как `answered`. Отдельной моделью от
+         *     `AnswerPayload` по той же причине, что `SummaryPartsPayload` от `SummaryPayload`: у
+         *     подшивки и чтения разные обязательства, и одна модель на две роли разошлась бы молча.
+         */
+        AnswerFilingPayload: {
+            /**
+             * Question No
+             * @description Number of a `question` entry of the same task
+             * @example 7
+             */
+            question_no: number;
+            /**
+             * @description How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer; absent means `answered`
+             * @example withdrawn
+             */
+            outcome?: components["schemas"]["AnswerOutcome"] | null;
+            /**
+             * Replaced By
+             * @description Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome
+             * @example null
+             */
+            replaced_by?: number | null;
+        };
+        /**
+         * AnswerOutcome
+         * @description Чем закрыт вопрос записью `answer` (`CONCEPT.md`, 3.4; решение TRK-549#16).
+         *
+         *     `answered` — ответ по существу, как было всегда. `withdrawn` — вопрос снят: устарел,
+         *     и ответ на него больше не нужен. `replaced` — вопрос заменён другим вопросом той же
+         *     задачи (`replaced_by`). Снятие и замена — тоже записи `answer`, а не новый тип и не
+         *     флаг у вопроса: записи неизменяемы, и вопрос закрывается так же, как всегда, —
+         *     первым ответом. Поэтому формула «вопрос открыт» (`app/db/repositories/entries.py`,
+         *     `_unanswered`) снятия не знает и знать не должна.
+         * @enum {string}
+         */
+        AnswerOutcome: "answered" | "withdrawn" | "replaced";
+        /**
          * AnswerPayload
-         * @description Ответ на вопрос той же задачи.
+         * @description Ответ, как его **читают**: исход есть всегда.
+         *
+         *     Трекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,
+         *     подшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —
+         *     `answered` и `null`: тогда других исходов не было (`app/domain/case.py`,
+         *     `answer_outcome`).
          */
         AnswerPayload: {
             /**
@@ -1502,6 +1561,18 @@ export interface components {
              * @example 7
              */
             question_no: number;
+            /**
+             * @description How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer
+             * @default answered
+             * @example answered
+             */
+            outcome: components["schemas"]["AnswerOutcome"];
+            /**
+             * Replaced By
+             * @description Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome
+             * @example null
+             */
+            replaced_by?: number | null;
         };
         /**
          * AnsweredQuestionRead
@@ -1582,7 +1653,7 @@ export interface components {
             payload: components["schemas"]["QuestionPayload"];
             /**
              * Answers
-             * @description `answer` entries of the same task that point at this question, by entry number. The first one closed the question, the rest add to it. Empty means the question is still open
+             * @description `answer` entries of the same task that point at this question, by entry number. The first one closed the question, the rest add to it; its `payload.outcome` says whether it was answered, withdrawn or replaced. Empty means the question is still open
              */
             answers?: components["schemas"]["AnswerEntryRead"][];
         };

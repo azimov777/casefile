@@ -212,7 +212,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `add_summary` — files a summary: the handover note of a case, in four parts
 - `add_entry` — files an entry without payload: a decision, attempt, finding, artifact, remark or note
 - `ask` — files a question to registry participants
-- `answer` — answers a question of the same task
+- `answer` — answers a question of the same task, or closes one still unanswered as `withdrawn` or `replaced` by a later question, with a reason; an answered question cannot be withdrawn
 - `resolve` — resolves a remark on a task: its outcome and where the work went
 - `add_verdict` — files the outcome of one review check
 - `read_project_entries` — returns entry bodies of one project's case, with payload, in number order

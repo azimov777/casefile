@@ -340,6 +340,11 @@ export const ui = {
         child: '— родитель',
       } satisfies Record<HierarchyKind, string>,
       answerTo: 'Ответ на',
+      // Снятие и замена вопроса (TRK-552): «Вопрос KEY#N снят», «Вопрос KEY#N заменён
+      // вопросом KEY#M» — называется то, что случилось с вопросом, а не «ответ».
+      question: 'Вопрос',
+      withdrawn: 'снят',
+      replacedBy: 'заменён вопросом',
       check: 'Обзорная проверка {{no}}',
       resolution: 'Разбор',
       resolutionOutcome: '· {{outcome}}',

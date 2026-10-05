@@ -303,7 +303,32 @@ export function answerEntry(no: number, taskKey: string, questionNo: number, bod
     ...entryBase(no, taskKey, '', body),
     author: { kind: 'human', signature: 'owner' },
     type: 'answer',
-    payload: { question_no: questionNo },
+    // Исход и замена приходят в каждом ответе REST (TRK-552): у ответа по существу это
+    // `answered` и пустая замена.
+    payload: { question_no: questionNo, outcome: 'answered', replaced_by: null },
+  };
+}
+
+/**
+ * Снятие вопроса агентом (TRK-552): запись `answer` с исходом `withdrawn` или, когда
+ * назван заменивший вопрос, `replaced`. Тело — причина.
+ */
+export function withdrawalEntry(
+  no: number,
+  taskKey: string,
+  questionNo: number,
+  body: string,
+  replacedBy: number | null = null,
+): Entry {
+  return {
+    ...entryBase(no, taskKey, '', body),
+    author: { kind: 'agent', signature: 'claude' },
+    type: 'answer',
+    payload: {
+      question_no: questionNo,
+      outcome: replacedBy === null ? 'withdrawn' : 'replaced',
+      replaced_by: replacedBy,
+    },
   };
 }
 
@@ -408,7 +433,7 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
     case 'question':
       return questionEntry(no, taskKey);
     case 'answer':
-      return { ...base, type, payload: { question_no: 1 } };
+      return { ...base, type, payload: { question_no: 1, outcome: 'answered', replaced_by: null } };
     case 'verdict':
       return verdictEntry(no, taskKey);
     case 'status_changed':

@@ -13,6 +13,7 @@ import {
   questionEntry,
   remarkEntry,
   taskPackage,
+  withdrawalEntry,
 } from '@testing/msw/responses';
 import { liveJournal } from '@testing/live-journal';
 import { server } from '@testing/msw/server';
@@ -780,7 +781,10 @@ describe('история вопросов', () => {
     expect(answered).toHaveAttribute('data-answered', 'true');
     // У отвеченного вопроса работа не стоит: красного нет, хотя вопрос был блокирующим.
     expect(answered).not.toHaveAttribute('data-blocking');
-    expect(within(answered).getByText(say.questions('answered'))).toBeInTheDocument();
+    expect(within(answered).getByText(say.questions('closedAs.answered'))).toBeInTheDocument();
+    expect(answered).toHaveAttribute('data-closed-as', 'answered');
+    // Ответ по существу выглядит как до исходов: строки «снят»/«заменён» под ним нет.
+    expect(answered.querySelector('[data-answer-outcome]')).toBeNull();
 
     const answers = within(answered).getByRole('list', {
       name: say.questions('answersLabel', { reference: 'DEMO-4#4' }),
@@ -831,5 +835,89 @@ describe('история вопросов', () => {
     );
     renderApp('/questions?view=history');
     expect(await screen.findByText(say.questions('noHistory'))).toBeInTheDocument();
+  });
+
+  /**
+   * Снятый и заменённый вопросы (TRK-552) и один новый открытый. Бэкенд считает снятый
+   * вопрос закрытым той же записью `answer`, поэтому во входящую (`open=true`) он не
+   * приезжает; подмена отвечает так же — по пустоте `answers`, как и сам бэкенд.
+   */
+  function withdrawn() {
+    const dropped = {
+      ...questionEntry(3, 'DEMO-4', true),
+      answers: [withdrawalEntry(6, 'DEMO-4', 3, 'Эндпоинт удалён в соседней задаче.')],
+    };
+    const stale = {
+      ...questionEntry(4, 'DEMO-4', true),
+      answers: [withdrawalEntry(7, 'DEMO-4', 4, 'Спрашиваю короче.', 5)],
+    };
+    const fresh = { ...questionEntry(5, 'DEMO-4', false), answers: [] };
+    const all = [fresh, stale, dropped];
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ open_questions: 1 }))),
+      http.get(`${API}/api/v1/questions`, ({ request }) => {
+        const open = new URL(request.url).searchParams.get('open') !== 'false';
+        return collection(open ? all.filter((item) => item.answers.length === 0) : all);
+      }),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+    );
+  }
+
+  it('снятого и заменённого вопроса во входящей нет', async () => {
+    withdrawn();
+    renderApp('/questions');
+
+    expect(
+      await screen.findByRole('article', {
+        name: say.questions('questionLabel', { reference: 'DEMO-4#5' }),
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/DEMO-4#3\b/)).toBeNull();
+    expect(screen.queryByText(/DEMO-4#4\b/)).toBeNull();
+  });
+
+  it('история показывает под вопросом «снят» с причиной', async () => {
+    withdrawn();
+    renderApp('/questions?view=history');
+
+    const row = await screen.findByRole('article', {
+      name: say.questions('questionLabel', { reference: 'DEMO-4#3' }),
+    });
+    expect(row).toHaveAttribute('data-closed-as', 'withdrawn');
+    // Снятый вопрос не держит работу: кромки и плашки «блокирующий» нет.
+    expect(row).not.toHaveAttribute('data-blocking');
+    // Плашка исхода — в шапке строки; то же слово стоит и в строке исхода под вопросом.
+    expect(row.querySelector('header [data-badge="neutral"]')?.textContent).toBe(
+      say.questions('closedAs.withdrawn'),
+    );
+
+    const outcome = row.querySelector('[data-answer-outcome="withdrawn"]');
+    expect(outcome).not.toBeNull();
+    expect(outcome?.textContent).toBe(
+      `${say.ui('entry.headline.question')}DEMO-4#3${say.ui('entry.headline.withdrawn')}`,
+    );
+    expect(within(row).getByText('Эндпоинт удалён в соседней задаче.')).toBeInTheDocument();
+  });
+
+  it('история показывает «заменён вопросом» со ссылкой на запись заменившего вопроса', async () => {
+    withdrawn();
+    renderApp('/questions?view=history');
+
+    const row = await screen.findByRole('article', {
+      name: say.questions('questionLabel', { reference: 'DEMO-4#4' }),
+    });
+    expect(row).toHaveAttribute('data-closed-as', 'replaced');
+    expect(row.querySelector('header [data-badge="neutral"]')?.textContent).toBe(
+      say.questions('closedAs.replaced'),
+    );
+
+    const outcome = row.querySelector<HTMLElement>('[data-answer-outcome="replaced"]');
+    if (outcome === null) throw new Error('под заменённым вопросом нет строки исхода');
+    expect(within(outcome).getByText(say.ui('entry.headline.replacedBy'))).toBeInTheDocument();
+    expect(within(outcome).getByRole('link', { name: 'DEMO-4#5' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-4?entry=5',
+    );
+    expect(within(row).getByText('Спрашиваю короче.')).toBeInTheDocument();
   });
 });

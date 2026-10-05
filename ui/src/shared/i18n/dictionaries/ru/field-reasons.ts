@@ -10,6 +10,7 @@
  * текст с самим кодом (`fieldReasonText`, `shared/errors/text.ts`), а не ломает экран.
  */
 export const fieldReasons = {
+  already_answered: 'На вопрос уже ответили: снять или заменить его нельзя.',
   conflicts_with: 'Нельзя вместе с другой присланной правкой.',
   empty_item: 'В списке есть пустое значение.',
   malformed_entry_ref: 'Ссылка на запись не разбирается.',
@@ -22,6 +23,7 @@ export const fieldReasons = {
   not_a_question: 'Запись под этим номером — не вопрос.',
   not_a_remark: 'Запись под этим номером — не замечание.',
   not_a_string: 'Ожидалась строка.',
+  not_after_question: 'Заменивший вопрос задан не позже снимаемого.',
   not_allowed: 'Такое значение недопустимо.',
   not_an_integer: 'Ожидалось целое число.',
   out_of_range: 'Значение вне допустимого диапазона.',

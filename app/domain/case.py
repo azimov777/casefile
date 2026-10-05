@@ -144,6 +144,36 @@ class RemarkOutcome(StrEnum):
 OUTCOME_WITH_CONTINUATION = RemarkOutcome.ACCEPTED
 
 
+class AnswerOutcome(StrEnum):
+    """Чем закрыт вопрос записью `answer` (`CONCEPT.md`, 3.4; решение TRK-549#16).
+
+    `answered` — ответ по существу, как было всегда. `withdrawn` — вопрос снят: устарел,
+    и ответ на него больше не нужен. `replaced` — вопрос заменён другим вопросом той же
+    задачи (`replaced_by`). Снятие и замена — тоже записи `answer`, а не новый тип и не
+    флаг у вопроса: записи неизменяемы, и вопрос закрывается так же, как всегда, —
+    первым ответом. Поэтому формула «вопрос открыт» (`app/db/repositories/entries.py`,
+    `_unanswered`) снятия не знает и знать не должна.
+    """
+
+    ANSWERED = "answered"
+    WITHDRAWN = "withdrawn"
+    REPLACED = "replaced"
+
+
+#: Исход, при котором ответ обязан назвать заменивший вопрос, — и единственный, при
+#: котором `replaced_by` вообще принимается. Устроено как `OUTCOME_WITH_CONTINUATION`.
+OUTCOME_WITH_REPLACEMENT = AnswerOutcome.REPLACED
+
+#: Исходы, которые закрывают вопрос без ответа по существу. Такой исход бывает только у
+#: **первого** ответа: снять отвеченный вопрос нельзя — в деле остался бы ответ без
+#: вопроса (слово владельца, TRK-549#14). Это проверяет сценарий под очередью изменений.
+#: У обоих причина в теле записи обязательна: снятие без причины — это вопрос, который
+#: молча исчез из входящей.
+CLOSING_WITHOUT_ANSWER: frozenset[AnswerOutcome] = frozenset(
+    {AnswerOutcome.WITHDRAWN, AnswerOutcome.REPLACED}
+)
+
+
 #: Записи, которые подшивает сам трекер в той же транзакции, что и изменение. Агент
 #: подшить такую запись напрямую не может: `build_entry` отвергает эти типы на входе.
 SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
@@ -383,10 +413,16 @@ class QuestionFacts:
 
 @dataclass(frozen=True, slots=True)
 class AnswerFacts:
-    """`answer`: на какой вопрос отвечено."""
+    """`answer`: на какой вопрос отвечено, чем он закрыт и каким вопросом заменён.
+
+    `outcome` у ответа, подшитого до появления исхода, читается как `answered`
+    (`answer_outcome`): опись называет его так же, как называла всегда.
+    """
 
     type: Literal[EntryType.ANSWER] = EntryType.ANSWER
     question_no: int | None = None
+    outcome: AnswerOutcome | None = None
+    replaced_by: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -688,6 +724,9 @@ def build_entry(
     entry_title = ""
     if entry_type is not None:
         payload_values = _PAYLOAD_BUILDERS[entry_type](dict(payload or {}), context, problems)
+        # Тело не той формы уже получило своё замечание, второе о том же поле сбивало бы.
+        if entry_type is EntryType.ANSWER and isinstance(body, str):
+            _answer_reason(payload_values, body_text, problems)
         if entry_type in TITLED_ENTRY_TYPES:
             with problems.field("title"):
                 entry_title = _entry_title(title)
@@ -773,6 +812,16 @@ def continuation_key(payload: Mapping[str, Any]) -> str | None:
     """
     key = payload.get("task")
     return key if isinstance(key, str) else None
+
+
+def answer_outcome(payload: Mapping[str, Any]) -> AnswerOutcome:
+    """Чем закрыт вопрос — из нагрузки ответа.
+
+    Ответ, подшитый до появления исхода, ключа `outcome` не несёт и читается как
+    `answered`: тогда других исходов не было. Одно определение на опись, сценарий и
+    чтение — иначе старый ответ звался бы где-то «ответом», а где-то «без исхода».
+    """
+    return AnswerOutcome(payload.get("outcome") or AnswerOutcome.ANSWERED)
 
 
 def is_blocking_question(payload: Mapping[str, Any]) -> bool:
@@ -1009,12 +1058,73 @@ def _addressees(value: Any) -> list[str]:
 def _answer_payload(
     raw: dict[str, Any], context: EntryContext, problems: FieldProblems
 ) -> dict[str, Any]:
-    """Номер вопроса той же задачи. Что это именно вопрос, проверяет сценарий."""
-    _reject_extra(raw, ("question_no",), problems)
+    """Номер вопроса той же задачи, исход и заменивший вопрос.
+
+    Здесь только форма: что `question_no` и `replaced_by` указывают на вопросы этой
+    задачи и что снимаемый вопрос ещё без ответа, проверяет сценарий — ему нужна база.
+    Исход без значения — `answered`: прежние вызовы ответа его не присылают и не должны
+    меняться. `outcome` и `replaced_by` кладутся в нагрузку всегда, в том числе
+    пустыми, — по той же причине, что `task` у резолюции: форма записи одна на все
+    интерфейсы.
+    """
+    _reject_extra(raw, ("question_no", "outcome", "replaced_by"), problems)
     payload: dict[str, Any] = {}
     with problems.field("question_no"):
         payload["question_no"] = _entry_number(raw.get("question_no"))
+
+    outcome: AnswerOutcome | None = None
+    with problems.field("outcome"):
+        value = raw.get("outcome")
+        try:
+            outcome = AnswerOutcome.ANSWERED if value is None else AnswerOutcome(value)
+        except ValueError:
+            raise FieldProblem(
+                "not_allowed", allowed=[item.value for item in AnswerOutcome]
+            ) from None
+        payload["outcome"] = outcome.value
+
+    with problems.field("replaced_by"):
+        payload["replaced_by"] = _replacement_no(
+            raw.get("replaced_by"), outcome, payload.get("question_no")
+        )
     return payload
+
+
+def _replacement_no(value: Any, outcome: AnswerOutcome | None, question_no: Any) -> int | None:
+    """Номер заменившего вопроса: обязателен при `replaced` и не принимается при остальных.
+
+    Правило пары «исход — адрес» то же, что у `task` резолюции (`_continuation_key`).
+    Сверх него — порядок: заменивший вопрос задан **после** снимаемого. Это отсекает
+    и замену вопроса самим собой, и замену на более ранний — тот уже стоял в деле, когда
+    задавали снимаемый, и ничем его заменить не мог. Что под номером именно вопрос этой
+    задачи, проверяет сценарий.
+    """
+    if outcome is None:
+        return None
+    if outcome is not OUTCOME_WITH_REPLACEMENT:
+        if value is not None:
+            raise FieldProblem(
+                "not_allowed", required_for=OUTCOME_WITH_REPLACEMENT.value, got=outcome.value
+            )
+        return None
+    if value is None:
+        raise FieldProblem("required", required_for=OUTCOME_WITH_REPLACEMENT.value)
+    number = _entry_number(value)
+    if isinstance(question_no, int) and number <= question_no:
+        raise FieldProblem("not_after_question", question_no=question_no, got=number)
+    return number
+
+
+def _answer_reason(payload: Mapping[str, Any], body: str, problems: FieldProblems) -> None:
+    """Причина снятия или замены — тело записи, и оно обязательно.
+
+    Проверка стоит отдельно от `_answer_payload`, потому что тело не нагрузка: его
+    форму проверяет `_entry_body`, а здесь только правило «у исхода без ответа по
+    существу тело непусто». Замечание идёт полем `body` — чинить агенту именно его.
+    """
+    outcome = payload.get("outcome")
+    if outcome in CLOSING_WITHOUT_ANSWER and not body:
+        problems.add("body", "required", required_for=outcome)
 
 
 def _verdict_payload(
@@ -1139,7 +1249,7 @@ _PAYLOAD_BUILDERS: dict[EntryType, _PayloadBuilder] = {
 #: подробности отказа: клиент, приславший заголовок, должен понять, чем его заменили.
 _TITLE_SOURCES: dict[EntryType, str] = {
     EntryType.SUMMARY: "done",
-    EntryType.ANSWER: "question_no",
+    EntryType.ANSWER: "question_no, outcome, replaced_by",
     EntryType.VERDICT: "check_no, outcome",
     EntryType.RESOLUTION: "remark_no, outcome",
 }
@@ -1155,7 +1265,16 @@ def _derive_title(entry_type: EntryType, payload: dict[str, Any], context: Entry
     if entry_type is EntryType.SUMMARY:
         return summary_title(payload["done"])
     if entry_type is EntryType.ANSWER:
-        return f"Answer to {format_entry_ref(context.task_key, payload['question_no'])}"
+        # Исход назван в описи: снятый вопрос иначе выглядел бы там отвеченным, и
+        # преемник читал бы тело записи, чтобы узнать, что ответа не было.
+        title = f"Answer to {format_entry_ref(context.task_key, payload['question_no'])}"
+        outcome = answer_outcome(payload)
+        if outcome is AnswerOutcome.WITHDRAWN:
+            return f"{title}: withdrawn"
+        if outcome is OUTCOME_WITH_REPLACEMENT:
+            replacement = format_entry_ref(context.task_key, payload["replaced_by"])
+            return f"{title}: replaced by {replacement}"
+        return title
     if entry_type is EntryType.VERDICT:
         return f"Verdict on check {payload['check_no']}: {payload['outcome']}"
     if entry_type is EntryType.RESOLUTION:

@@ -127,6 +127,11 @@ transition(key="TRK-42", to="open", reason="Needs the schema from TRK-40")
 
 **A question addressed to you** gets `answer(key=…, question_no=…, body=…)` in its own task.
 
+**Your own question went stale** before anyone answered it — the decision came elsewhere, or a
+newer question asks it better: `answer(key=…, question_no=…, outcome="withdrawn", body="<why>")`,
+or `outcome="replaced", replaced_by=<number of the new question>`. It leaves the inbox and stays
+in the case; a question that already has an answer stays as it is.
+
 **Question, remark or finding?** `ask` when you need a decision or a fact before going on.
 A `remark` (through `add_entry`) when finished work of *another* task came out wrong for
 you. A `finding` for anything you observe about your own task.
