@@ -178,6 +178,38 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     expect(ids(FACTS.verdict)).toEqual(['failed']);
   });
 
+  it('снятый вопрос назван словами, а не «ответом» (TRK-552)', () => {
+    const withdrawn = built({ type: 'answer', question_no: 5, outcome: 'withdrawn' });
+    expect(headlineText(withdrawn)).toBe(
+      `${say.ui('entry.headline.question')} DEMO-4#5 ${say.ui('entry.headline.withdrawn')}`,
+    );
+    expect(withdrawn.kind === 'built' && withdrawn.parts[1]).toEqual({
+      kind: 'entry',
+      key: 'DEMO-4',
+      no: 5,
+    });
+  });
+
+  it('заменённый вопрос называет заменивший ссылкой на его запись (TRK-552)', () => {
+    const replaced = built({ type: 'answer', question_no: 5, outcome: 'replaced', replaced_by: 8 });
+    expect(headlineText(replaced)).toBe(
+      `${say.ui('entry.headline.question')} DEMO-4#5 ${say.ui('entry.headline.replacedBy')} DEMO-4#8`,
+    );
+    expect(replaced.kind === 'built' && replaced.parts.at(-1)).toEqual({
+      kind: 'entry',
+      key: 'DEMO-4',
+      no: 8,
+    });
+  });
+
+  it('ответ по существу и ответ без исхода называются как раньше (TRK-552)', () => {
+    // Ответ, подшитый до появления исхода, поля не несёт — это `answered`.
+    expect(line({ type: 'answer', question_no: 4, outcome: 'answered', replaced_by: null })).toBe(
+      line(FACTS.answer),
+    );
+    expect(line(FACTS.answer)).toBe(`${say.ui('entry.headline.answerTo')} DEMO-4#4`);
+  });
+
   it('разбор замечания называет исход словами, а продолжение — ссылкой', () => {
     const resolution = built(FACTS.resolution);
     const accepted = say.ui('entry.headline.resolutionOutcome', {
@@ -236,5 +268,37 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     );
     expect(line({ type: 'section_changed' })).toBe(say.ui('entry.headline.sectionEdited'));
     expect(line({ type: 'verdict' })).toBe(say.ui('entry.headline.check', { no: '?' }));
+  });
+});
+
+/*
+ * Слова исхода ответа на каждом языке — вписаны руками, а не взяты из словаря: здесь
+ * проверяется сам текст, который прочтёт человек (TRK-552), а не связь ключа с местом.
+ */
+describe('исход ответа словами на русском и на английском', () => {
+  afterAll(() => {
+    void i18n.changeLanguage('en');
+  });
+
+  it.each([
+    [
+      'ru',
+      'Вопрос DEMO-4#5 снят',
+      'Вопрос DEMO-4#5 заменён вопросом DEMO-4#8',
+      'Ответ на DEMO-4#5',
+    ],
+    [
+      'en',
+      'Question DEMO-4#5 withdrawn',
+      'Question DEMO-4#5 replaced by DEMO-4#8',
+      'Answer to DEMO-4#5',
+    ],
+  ] as const)('%s', async (language, withdrawn, replaced, answered) => {
+    await i18n.changeLanguage(language);
+    expect(line({ type: 'answer', question_no: 5, outcome: 'withdrawn' })).toBe(withdrawn);
+    expect(line({ type: 'answer', question_no: 5, outcome: 'replaced', replaced_by: 8 })).toBe(
+      replaced,
+    );
+    expect(line({ type: 'answer', question_no: 5 })).toBe(answered);
   });
 });

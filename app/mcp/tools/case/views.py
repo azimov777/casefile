@@ -30,6 +30,7 @@ from app.domain.case import (
     VerdictFacts,
 )
 from app.mcp.enums import (
+    AnswerOutcomeSchema,
     EntryTypeSchema,
     LinkKindSchema,
     RemarkOutcomeSchema,
@@ -106,10 +107,12 @@ class QuestionFactsView(BaseModel):
 
 
 class AnswerFactsView(BaseModel):
-    """Answer: the question of the same task it answers."""
+    """Answer: the question of the same task it closes, how, and what replaced it."""
 
     type: Literal[EntryType.ANSWER]
     question_no: int | None
+    outcome: AnswerOutcomeSchema | None
+    replaced_by: int | None
 
 
 class VerdictFactsView(BaseModel):
@@ -210,7 +213,12 @@ def facts(value: EntryFacts) -> FactsView:
                 blocking=value.blocking,
             )
         case AnswerFacts():
-            return AnswerFactsView(type=value.type, question_no=value.question_no)
+            return AnswerFactsView(
+                type=value.type,
+                question_no=value.question_no,
+                outcome=value.outcome,
+                replaced_by=value.replaced_by,
+            )
         case VerdictFacts():
             return VerdictFactsView(
                 type=value.type,

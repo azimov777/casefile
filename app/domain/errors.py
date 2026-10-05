@@ -323,13 +323,17 @@ class EntryNotFoundError(NotFoundError):
 
 class EntryFieldsInvalidError(ValidationError):
     """Запись не проходит проверку формы; все замечания сразу — в `details.fields`.
+    Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не
+    ответили: у отвеченного это `already_answered`.
 
     Один код на все замечания к записи — по той же причине, что и у полей задачи: агент
     исправляет запрос за одну попытку, читая список, а не за пять кругов «исправил
     одно — вылезло другое». Что именно не так, говорит `reason` каждого замечания:
     `required`, `not_allowed`, `service_type`, `out_of_range`, `unknown_participant`,
-    `unknown_entry`, `not_a_question`; у `refs` — `not_a_reference` (строка не ссылка
-    трекера и не URL со схемой: `7`, `#7`, `docs/x.md`) и `malformed_entry_ref`.
+    `unknown_entry`, `not_a_question`; у ответа ещё `already_answered` (вопрос уже
+    закрыт ответом) и `not_after_question` (заменивший вопрос задан не позже снимаемого);
+    у `refs` — `not_a_reference` (строка не ссылка трекера и не URL со схемой: `7`, `#7`,
+    `docs/x.md`) и `malformed_entry_ref`.
     """
 
     code = "entry_fields_invalid"

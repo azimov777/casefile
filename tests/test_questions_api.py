@@ -7,7 +7,7 @@
 from typing import Any
 
 from httpx import AsyncClient
-from tests.test_case_api import append, create
+from tests.test_case_api import append, create, package, refuse
 
 from app.db.models.project import Project
 
@@ -156,7 +156,12 @@ async def test_a_question_carries_its_answers_in_order_and_only_its_own(
         (first["no"], "Да", "TRK-1"),
         (second["no"], "И ещё", "TRK-1"),
     ]
-    assert rows["TRK-1"]["answers"][0]["payload"] == {"question_no": answered}
+    # Исход и замена лежат в нагрузке всегда (TRK-552): форма ответа одна в любом интерфейсе.
+    assert rows["TRK-1"]["answers"][0]["payload"] == {
+        "question_no": answered,
+        "outcome": "answered",
+        "replaced_by": None,
+    }
     assert rows["TRK-2"]["answers"] == []
     # Во «входящей» ответов нет по определению: там только открытые вопросы.
     assert [(row["task_key"], row["answers"]) for row in await questions(auth_client)] == [
@@ -230,3 +235,202 @@ async def test_a_shared_agent_token_may_read_questions_to_anyone(
 
     assert response.status_code == 200, response.text
     assert response.json()["data"] == []
+
+
+# --- Снятие и замена вопроса (TRK-552) ------------------------------------------------
+
+
+async def case_size(client: AsyncClient, key: str) -> int:
+    return len((await package(client, key))["index"])
+
+
+async def test_a_withdrawn_question_leaves_the_inbox_and_its_history_names_why(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    """(б) и (в) через REST: снятый и заменённый вопрос уходят из входящей и счётчиков,
+    а в истории стоят с записью исхода под собой."""
+    await create(auth_client)
+    dropped = await ask(
+        auth_client, "TRK-1", "Нужен ли старый эндпоинт?", to="owner", blocking=True
+    )
+    stale = await ask(auth_client, "TRK-1", "Какой ключ канонический?", to="owner", blocking=True)
+    fresh = await ask(auth_client, "TRK-1", "Верхний годится?", to="owner", blocking=False)
+    before = (await package(auth_client, "TRK-1"))["features"]
+    assert (before["open_questions"], before["open_blocking_questions"]) == (3, 2)
+
+    withdrawn = await append(
+        auth_client,
+        "TRK-1",
+        type="answer",
+        body="Эндпоинт удалён в соседней задаче",
+        payload={"question_no": dropped, "outcome": "withdrawn"},
+    )
+    after_withdrawal = (await package(auth_client, "TRK-1"))["features"]
+    assert (after_withdrawal["open_questions"], after_withdrawal["open_blocking_questions"]) == (
+        2,
+        1,
+    )
+    replaced = await append(
+        auth_client,
+        "TRK-1",
+        type="answer",
+        body="Спрашиваю короче",
+        payload={"question_no": stale, "outcome": "replaced", "replaced_by": fresh},
+    )
+
+    assert withdrawn["title"] == f"Answer to TRK-1#{dropped}: withdrawn"
+    assert replaced["title"] == f"Answer to TRK-1#{stale}: replaced by TRK-1#{fresh}"
+    data = await package(auth_client, "TRK-1")
+    assert [q["no"] for q in data["questions"]] == [fresh]
+    assert (data["features"]["open_questions"], data["features"]["open_blocking_questions"]) == (
+        1,
+        0,
+    )
+    facts = {line["no"]: line["facts"] for line in data["index"]}
+    assert facts[replaced["no"]] == {
+        "type": "answer",
+        "question_no": stale,
+        "outcome": "replaced",
+        "replaced_by": fresh,
+    }
+    assert [q["no"] for q in await questions(auth_client)] == [fresh]
+
+    rows = {row["no"]: row for row in await questions(auth_client, open=False)}
+    assert rows[dropped]["answers"][0]["payload"] == {
+        "question_no": dropped,
+        "outcome": "withdrawn",
+        "replaced_by": None,
+    }
+    assert rows[dropped]["answers"][0]["body"] == "Эндпоинт удалён в соседней задаче"
+    assert rows[stale]["answers"][0]["payload"]["outcome"] == "replaced"
+    assert rows[stale]["answers"][0]["payload"]["replaced_by"] == fresh
+
+
+async def test_every_refusal_of_a_withdrawal_is_named_and_files_nothing(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    """(г) Каждое правило отказывает `entry_fields_invalid` с причиной; дело не растёт."""
+    await create(auth_client)
+    stale = await ask(auth_client, "TRK-1", "Какой ключ?", to="owner", blocking=False)
+    fresh = await ask(auth_client, "TRK-1", "Верхний?", to="owner", blocking=False)
+    note = await append(auth_client, "TRK-1", type="note", title="Заметка")
+    size = await case_size(auth_client, "TRK-1")
+
+    cases: list[tuple[dict[str, object], str, list[dict[str, object]]]] = [
+        (
+            {"question_no": stale, "outcome": "withdrawn"},
+            "",
+            [{"field": "body", "reason": "required", "required_for": "withdrawn"}],
+        ),
+        (
+            {"question_no": stale, "outcome": "replaced"},
+            "Причина",
+            [{"field": "replaced_by", "reason": "required", "required_for": "replaced"}],
+        ),
+        (
+            {"question_no": stale, "outcome": "withdrawn", "replaced_by": fresh},
+            "Причина",
+            [
+                {
+                    "field": "replaced_by",
+                    "reason": "not_allowed",
+                    "required_for": "replaced",
+                    "got": "withdrawn",
+                }
+            ],
+        ),
+        (
+            {"question_no": stale, "outcome": "replaced", "replaced_by": note["no"]},
+            "Причина",
+            [
+                {
+                    "field": "replaced_by",
+                    "reason": "not_a_question",
+                    "key": "TRK-1",
+                    "no": note["no"],
+                    "got": "note",
+                }
+            ],
+        ),
+        (
+            {"question_no": stale, "outcome": "replaced", "replaced_by": 99},
+            "Причина",
+            [{"field": "replaced_by", "reason": "unknown_entry", "key": "TRK-1", "no": 99}],
+        ),
+        (
+            {"question_no": fresh, "outcome": "replaced", "replaced_by": stale},
+            "Причина",
+            [
+                {
+                    "field": "replaced_by",
+                    "reason": "not_after_question",
+                    "question_no": fresh,
+                    "got": stale,
+                }
+            ],
+        ),
+        (
+            {"question_no": stale, "outcome": "replaced", "replaced_by": stale},
+            "Причина",
+            [
+                {
+                    "field": "replaced_by",
+                    "reason": "not_after_question",
+                    "question_no": stale,
+                    "got": stale,
+                }
+            ],
+        ),
+    ]
+    for payload, body, expected in cases:
+        error = await refuse(auth_client, "TRK-1", type="answer", body=body, payload=payload)
+        assert error["code"] == "entry_fields_invalid", payload
+        assert error["details"]["fields"] == expected, payload
+    assert await case_size(auth_client, "TRK-1") == size
+
+    answer = await append(
+        auth_client, "TRK-1", type="answer", body="Да", payload={"question_no": stale}
+    )
+    size = await case_size(auth_client, "TRK-1")
+    error = await refuse(
+        auth_client,
+        "TRK-1",
+        type="answer",
+        body="Устарел",
+        payload={"question_no": stale, "outcome": "withdrawn"},
+    )
+    assert error["details"]["fields"] == [
+        {
+            "field": "question_no",
+            "reason": "already_answered",
+            "key": "TRK-1",
+            "no": stale,
+            "answer_no": answer["no"],
+        }
+    ]
+    assert await case_size(auth_client, "TRK-1") == size
+    rows = {row["no"]: row for row in await questions(auth_client, open=False)}
+    assert [a["no"] for a in rows[stale]["answers"]] == [answer["no"]]
+
+
+async def test_a_repeated_withdrawal_answers_with_the_first_entry(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    """(ж) Повтор с тем же `Idempotency-Key` отдаёт первую запись, а не отказ «уже снят»."""
+    await create(auth_client)
+    stale = await ask(auth_client, "TRK-1", "Какой ключ?", to="owner", blocking=False)
+    headers = {"Idempotency-Key": "c0ffee00-0000-4000-8000-000000000552"}
+    entry = {
+        "type": "answer",
+        "body": "Устарел",
+        "payload": {"question_no": stale, "outcome": "withdrawn"},
+    }
+
+    first = await auth_client.post("/api/v1/tasks/TRK-1/entries", json=entry, headers=headers)
+    again = await auth_client.post("/api/v1/tasks/TRK-1/entries", json=entry, headers=headers)
+
+    assert first.status_code == 201, first.text
+    assert again.status_code == 201, again.text
+    assert again.json() == first.json()
+    rows = {row["no"]: row for row in await questions(auth_client, open=False)}
+    assert [a["no"] for a in rows[stale]["answers"]] == [first.json()["data"]["no"]]

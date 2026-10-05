@@ -22,7 +22,7 @@ from typing import Annotated
 from pydantic import WithJsonSchema
 
 from app.domain.authors import AuthorKind
-from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
+from app.domain.case import AnswerOutcome, EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskField, TaskPriority, TaskStatus
@@ -53,6 +53,9 @@ VerdictOutcomeSchema = Annotated[
 ]
 RemarkOutcomeSchema = Annotated[
     RemarkOutcome, described(RemarkOutcome, "How a remark was resolved")
+]
+AnswerOutcomeSchema = Annotated[
+    AnswerOutcome, described(AnswerOutcome, "How a question was closed by an answer")
 ]
 LinkKindSchema = Annotated[
     LinkKind,

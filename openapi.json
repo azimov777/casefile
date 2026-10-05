@@ -8056,7 +8056,7 @@
             "title": "Type"
           },
           "payload": {
-            "$ref": "#/components/schemas/AnswerPayload"
+            "$ref": "#/components/schemas/AnswerFilingPayload"
           }
         },
         "additionalProperties": false,
@@ -8066,7 +8066,7 @@
           "payload"
         ],
         "title": "AnswerEntryCreate",
-        "description": "Ответ. Заголовок не принимается: он собирается из ссылки на вопрос."
+        "description": "Ответ. Заголовок не принимается: он собирается из ссылки на вопрос и исхода."
       },
       "AnswerEntryRead": {
         "properties": {
@@ -8184,7 +8184,7 @@
           "payload"
         ],
         "title": "AnswerEntryRead",
-        "description": "Ответ на вопрос. Ответить может кто угодно; первый ответ закрывает вопрос."
+        "description": "Ответ на вопрос, его снятие или замена. Ответить может кто угодно; первый ответ\nзакрывает вопрос."
       },
       "AnswerFactsRead": {
         "properties": {
@@ -8207,6 +8207,35 @@
             "examples": [
               7
             ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnswerOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the question was closed; `answered` for answers filed before outcomes existed",
+            "examples": [
+              "answered"
+            ]
+          },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced By",
+            "description": "Number of the question that replaced it; set only with `replaced`",
+            "examples": [
+              null
+            ]
           }
         },
         "type": "object",
@@ -8214,7 +8243,67 @@
           "type"
         ],
         "title": "AnswerFactsRead",
-        "description": "Ответ: на какой вопрос той же задачи."
+        "description": "Ответ: на какой вопрос той же задачи, чем он закрыт и каким вопросом заменён."
+      },
+      "AnswerFilingPayload": {
+        "properties": {
+          "question_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Question No",
+            "description": "Number of a `question` entry of the same task",
+            "examples": [
+              7
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnswerOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer; absent means `answered`",
+            "examples": [
+              "withdrawn"
+            ]
+          },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced By",
+            "description": "Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_no"
+        ],
+        "title": "AnswerFilingPayload",
+        "description": "Ответ, как его **подшивают**: по существу, снятие вопроса или его замена.\n\nИсход здесь необязателен и без значения по умолчанию в схеме: прежний запрос — один\n`question_no` — остаётся верным и в сгенерированном клиенте, а не превращается в запрос\nбез обязательного поля. Пустой исход домен читает как `answered`. Отдельной моделью от\n`AnswerPayload` по той же причине, что `SummaryPartsPayload` от `SummaryPayload`: у\nподшивки и чтения разные обязательства, и одна модель на две роли разошлась бы молча."
+      },
+      "AnswerOutcome": {
+        "type": "string",
+        "enum": [
+          "answered",
+          "withdrawn",
+          "replaced"
+        ],
+        "title": "AnswerOutcome",
+        "description": "Чем закрыт вопрос записью `answer` (`CONCEPT.md`, 3.4; решение TRK-549#16).\n\n`answered` — ответ по существу, как было всегда. `withdrawn` — вопрос снят: устарел,\nи ответ на него больше не нужен. `replaced` — вопрос заменён другим вопросом той же\nзадачи (`replaced_by`). Снятие и замена — тоже записи `answer`, а не новый тип и не\nфлаг у вопроса: записи неизменяемы, и вопрос закрывается так же, как всегда, —\nпервым ответом. Поэтому формула «вопрос открыт» (`app/db/repositories/entries.py`,\n`_unanswered`) снятия не знает и знать не должна."
       },
       "AnswerPayload": {
         "properties": {
@@ -8226,6 +8315,30 @@
             "examples": [
               7
             ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AnswerOutcome",
+            "description": "How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer",
+            "default": "answered",
+            "examples": [
+              "answered"
+            ]
+          },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced By",
+            "description": "Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome",
+            "examples": [
+              null
+            ]
           }
         },
         "additionalProperties": false,
@@ -8234,7 +8347,7 @@
           "question_no"
         ],
         "title": "AnswerPayload",
-        "description": "Ответ на вопрос той же задачи."
+        "description": "Ответ, как его **читают**: исход есть всегда.\n\nТрекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,\nподшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —\n`answered` и `null`: тогда других исходов не было (`app/domain/case.py`,\n`answer_outcome`)."
       },
       "AnsweredQuestionRead": {
         "properties": {
@@ -8342,7 +8455,7 @@
             },
             "type": "array",
             "title": "Answers",
-            "description": "`answer` entries of the same task that point at this question, by entry number. The first one closed the question, the rest add to it. Empty means the question is still open"
+            "description": "`answer` entries of the same task that point at this question, by entry number. The first one closed the question, the rest add to it; its `payload.outcome` says whether it was answered, withdrawn or replaced. Empty means the question is still open"
           }
         },
         "type": "object",

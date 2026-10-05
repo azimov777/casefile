@@ -13,6 +13,7 @@ import {
   remarkEntry,
   resolutionEntry,
   taskPackage,
+  withdrawalEntry,
 } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
@@ -214,6 +215,40 @@ describe('дело лентой', () => {
     expect(cards().filter((card) => card.getAttribute('aria-label') === 'DEMO-1#4')).toHaveLength(
       1,
     );
+  });
+
+  it('снятие и замена стоят под своим вопросом и названы исходом, а не «ответом» (TRK-552)', async () => {
+    server.use(
+      feed([
+        questionEntry(3, 'DEMO-1'),
+        questionEntry(4, 'DEMO-1'),
+        questionEntry(5, 'DEMO-1'),
+        withdrawalEntry(6, 'DEMO-1', 3, 'Решение принято в соседней задаче.'),
+        withdrawalEntry(7, 'DEMO-1', 4, 'Спрашиваю короче.', 5),
+        { ...entryOfType(8, 'DEMO-1', 'answer'), payload: { question_no: 5 } } as Entry,
+      ]),
+    );
+
+    renderApp('/tasks/DEMO-1/case');
+
+    // Снятие: под вопросом №3, словами «Вопрос DEMO-1#3 снят», с причиной в теле.
+    const withdrawal = within(await screen.findByLabelText('DEMO-1#3')).getByLabelText('DEMO-1#6');
+    expect(within(withdrawal).getByText(say.ui('entry.headline.question'))).toBeInTheDocument();
+    expect(within(withdrawal).getByText(say.ui('entry.headline.withdrawn'))).toBeInTheDocument();
+    expect(within(withdrawal).queryByText(say.ui('entry.headline.answerTo'))).toBeNull();
+    expect(within(withdrawal).getByText('Решение принято в соседней задаче.')).toBeInTheDocument();
+
+    // Замена: под вопросом №4, со ссылкой на заменивший вопрос №5.
+    const replacement = within(screen.getByLabelText('DEMO-1#4')).getByLabelText('DEMO-1#7');
+    expect(within(replacement).getByText(say.ui('entry.headline.replacedBy'))).toBeInTheDocument();
+    expect(within(replacement).getByRole('link', { name: 'DEMO-1#5' })).toHaveAttribute(
+      'href',
+      '/tasks/DEMO-1?entry=5',
+    );
+
+    // Ответ по существу называется как раньше.
+    const answer = within(screen.getByLabelText('DEMO-1#5')).getByLabelText('DEMO-1#8');
+    expect(within(answer).getByText(say.ui('entry.headline.answerTo'))).toBeInTheDocument();
   });
 
   it('отбор по типу `answer` показывает ответы отдельными записями', async () => {

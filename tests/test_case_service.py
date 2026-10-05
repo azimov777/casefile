@@ -201,6 +201,222 @@ async def test_an_answer_points_at_a_question_of_the_same_task(
     assert missing.value.details["fields"][0]["reason"] == "unknown_entry"
 
 
+# --- Снятие и замена вопроса (TRK-552) ------------------------------------------------
+
+
+async def _two_questions(session: AsyncSession, task: Task, actor: Actor) -> tuple[int, int]:
+    """Блокирующий вопрос и более поздний неблокирующий: снимаемый и заменивший."""
+    stale = await service.ask(
+        session, task, actor=actor, addressees=["owner"], title="Устаревший", blocking=True
+    )
+    fresh = await service.ask(
+        session, task, actor=actor, addressees=["owner"], title="Новый", blocking=False
+    )
+    return stale.no, fresh.no
+
+
+async def _features(session: AsyncSession, actor: Actor) -> tuple[int, int]:
+    package = await tasks_service.read_task_package(session, "TRK-1", actor=actor)
+    return package.features.open_questions, package.features.open_blocking_questions
+
+
+async def test_an_answer_without_an_outcome_is_filed_as_answered(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """(а) Прежний вызов `answer` подшивает ответ по существу."""
+    stale, _ = await _two_questions(db_session, task, task_actor)
+
+    entry = await service.answer(db_session, task, actor=task_actor, question_no=stale, body="Да")
+
+    assert entry.payload == {"question_no": stale, "outcome": "answered", "replaced_by": None}
+    assert entry.title == f"Answer to TRK-1#{stale}"
+
+
+async def test_a_withdrawn_question_leaves_the_open_ones_and_stays_in_the_case(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """(б) Снятый вопрос уходит из открытых, входящей и счётчиков, но остаётся в деле."""
+    stale, fresh = await _two_questions(db_session, task, task_actor)
+    assert await _features(db_session, task_actor) == (2, 1)
+
+    withdrawal = await service.answer(
+        db_session,
+        task,
+        actor=task_actor,
+        question_no=stale,
+        outcome="withdrawn",
+        body="Решение принято в другой задаче",
+    )
+
+    assert withdrawal.title == f"Answer to TRK-1#{stale}: withdrawn"
+    assert await _features(db_session, task_actor) == (1, 0)
+    package = await tasks_service.read_task_package(db_session, "TRK-1", actor=task_actor)
+    assert [question.no for question in package.questions] == [fresh]
+
+    inbox = await service.list_questions(db_session, actor=task_actor)
+    assert [item.entry.no for item in inbox.items] == [fresh]
+
+    history = await service.list_questions(db_session, actor=task_actor, open_only=False)
+    rows = {item.entry.no: item for item in history.items}
+    assert [answer.payload["outcome"] for answer in rows[stale].answers] == ["withdrawn"]
+    assert rows[stale].answers[0].body == "Решение принято в другой задаче"
+    assert [entry.no for entry in await entries(db_session, task, nos=[stale])] == [stale]
+
+
+async def test_a_replaced_question_names_the_question_that_replaced_it(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """(в) Замена закрывает вопрос так же, как снятие, и называет заменивший."""
+    stale, fresh = await _two_questions(db_session, task, task_actor)
+
+    replacement = await service.answer(
+        db_session,
+        task,
+        actor=task_actor,
+        question_no=stale,
+        outcome="replaced",
+        replaced_by=fresh,
+        body="Спрашиваю иначе",
+    )
+
+    assert replacement.payload == {
+        "question_no": stale,
+        "outcome": "replaced",
+        "replaced_by": fresh,
+    }
+    assert replacement.title == f"Answer to TRK-1#{stale}: replaced by TRK-1#{fresh}"
+    assert await _features(db_session, task_actor) == (1, 0)
+    history = await service.list_questions(db_session, actor=task_actor, open_only=False)
+    rows = {item.entry.no: item for item in history.items}
+    assert rows[stale].answers[0].payload["replaced_by"] == fresh
+    assert rows[fresh].answers == []
+
+
+async def test_the_replacing_entry_must_be_a_question_of_the_same_task(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """(г) `replaced_by` проверяется тем же правилом, что `question_no`; дело не растёт."""
+    stale, _ = await _two_questions(db_session, task, task_actor)
+    note = await service.add_entry(
+        db_session, task, actor=task_actor, type=EntryType.NOTE, title="Заметка"
+    )
+    before = len(await entries(db_session, task))
+
+    with pytest.raises(EntryFieldsInvalidError) as not_a_question:
+        await service.answer(
+            db_session,
+            task,
+            actor=task_actor,
+            question_no=stale,
+            outcome="replaced",
+            replaced_by=note.no,
+            body="Причина",
+        )
+    assert not_a_question.value.details["fields"] == [
+        {
+            "field": "replaced_by",
+            "reason": "not_a_question",
+            "key": "TRK-1",
+            "no": note.no,
+            "got": "note",
+        }
+    ]
+
+    with pytest.raises(EntryFieldsInvalidError) as missing:
+        await service.answer(
+            db_session,
+            task,
+            actor=task_actor,
+            question_no=stale,
+            outcome="replaced",
+            replaced_by=99,
+            body="Причина",
+        )
+    assert missing.value.details["fields"] == [
+        {"field": "replaced_by", "reason": "unknown_entry", "key": "TRK-1", "no": 99}
+    ]
+
+    assert len(await entries(db_session, task)) == before
+    assert await _features(db_session, task_actor) == (2, 1)
+
+
+@pytest.mark.parametrize("outcome", ["withdrawn", "replaced"])
+async def test_an_answered_question_cannot_be_withdrawn(
+    db_session: AsyncSession, task: Task, task_actor: Actor, outcome: str
+) -> None:
+    """(д) Слово владельца TRK-549#14: отвеченный вопрос остаётся в деле с ответом."""
+    stale, fresh = await _two_questions(db_session, task, task_actor)
+    answer = await service.answer(db_session, task, actor=task_actor, question_no=stale, body="Да")
+    counted = await _features(db_session, task_actor)
+    before = len(await entries(db_session, task))
+
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        await service.answer(
+            db_session,
+            task,
+            actor=task_actor,
+            question_no=stale,
+            outcome=outcome,
+            replaced_by=fresh if outcome == "replaced" else None,
+            body="Устарел",
+        )
+
+    assert error.value.details["fields"] == [
+        {
+            "field": "question_no",
+            "reason": "already_answered",
+            "key": "TRK-1",
+            "no": stale,
+            "answer_no": answer.no,
+        }
+    ]
+    assert await _features(db_session, task_actor) == counted
+    assert len(await entries(db_session, task)) == before
+    case = {entry.no: entry for entry in await entries(db_session, task, nos=[stale, answer.no])}
+    assert case[stale].type is EntryType.QUESTION
+    assert case[answer.no].payload["outcome"] == "answered"
+
+
+async def test_a_withdrawn_question_cannot_be_withdrawn_twice(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """Снятие — тоже ответ: второе снятие того же вопроса отказывает по тому же правилу."""
+    stale, _ = await _two_questions(db_session, task, task_actor)
+    first = await service.answer(
+        db_session, task, actor=task_actor, question_no=stale, outcome="withdrawn", body="Устарел"
+    )
+
+    with pytest.raises(EntryFieldsInvalidError) as error:
+        await service.answer(
+            db_session, task, actor=task_actor, question_no=stale, outcome="withdrawn", body="Ещё"
+        )
+
+    assert error.value.details["fields"][0]["answer_no"] == first.no
+
+
+async def test_an_answer_after_a_withdrawal_adds_to_it(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """(е) Правило «первый закрывает, остальные дополняют» снятием не меняется."""
+    stale, _ = await _two_questions(db_session, task, task_actor)
+    withdrawal = await service.answer(
+        db_session, task, actor=task_actor, question_no=stale, outcome="withdrawn", body="Устарел"
+    )
+
+    late = await service.answer(
+        db_session, task, actor=task_actor, question_no=stale, body="Всё же отвечу: да"
+    )
+
+    assert late.payload["outcome"] == "answered"
+    assert await _features(db_session, task_actor) == (1, 0)
+    history = await service.list_questions(db_session, actor=task_actor, open_only=False)
+    rows = {item.entry.no: item for item in history.items}
+    assert [(a.no, a.payload["outcome"]) for a in rows[stale].answers] == [
+        (withdrawal.no, "withdrawn"),
+        (late.no, "answered"),
+    ]
+
+
 async def test_a_reference_to_a_missing_entry_is_refused(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:

@@ -21,9 +21,25 @@ type StatusChangedFacts = components['schemas']['StatusChangedFactsRead'];
 type SectionChangedFacts = components['schemas']['SectionChangedFactsRead'];
 type FieldChangedFacts = components['schemas']['FieldChangedFactsRead'];
 type LinkFacts = components['schemas']['LinkFactsRead'];
+type AnswerFacts = components['schemas']['AnswerFactsRead'];
 
 /** Чем разобрано замечание: значение из контракта, показывается словами. */
 export type RemarkOutcome = components['schemas']['RemarkOutcome'];
+
+/**
+ * Чем закрыт вопрос записью `answer`: ответом по существу, снятием или заменой другим
+ * вопросом (TRK-552). У ответа, подшитого до появления исхода, поля нет — это `answered`
+ * (`answerOutcome`).
+ */
+export type AnswerOutcome = components['schemas']['AnswerOutcome'];
+
+/**
+ * Исход ответа с умолчанием контракта: поле необязательно по форме, а ответ, подшитый до
+ * появления исхода, не несёт его вовсе — тогда других исходов не было.
+ */
+export function answerOutcome(outcome: AnswerOutcome | null | undefined): AnswerOutcome {
+  return outcome ?? 'answered';
+}
 
 /**
  * Часть собранной строки: либо слова, либо идентификатор контракта, либо ссылка.
@@ -206,15 +222,7 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
       return { kind: 'built', parts: [words(t('entry.headline.projectRestored'))] };
 
     case 'answer':
-      return {
-        kind: 'built',
-        parts: [
-          words(t('entry.headline.answerTo')),
-          ...(facts.question_no == null
-            ? []
-            : [{ kind: 'entry' as const, key: taskKey, no: facts.question_no }]),
-        ],
-      };
+      return answerHeadline(facts, taskKey, t);
 
     case 'verdict':
       return {
@@ -279,6 +287,44 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
       const unreachable: never = facts;
       return unreachable;
     }
+  }
+}
+
+/**
+ * Заголовок записи `answer`. Ответ по существу — «Ответ на KEY#N», как и был. Снятие и
+ * замена называют не ответ, а то, что случилось с вопросом (TRK-552): «Вопрос KEY#N
+ * снят», «Вопрос KEY#N заменён вопросом KEY#M». Заменивший вопрос — ссылка: по ней
+ * переходят к новому вопросу.
+ */
+function answerHeadline(facts: AnswerFacts, taskKey: string, t: TFunction<'ui'>): Headline {
+  const question =
+    facts.question_no == null
+      ? []
+      : [{ kind: 'entry' as const, key: taskKey, no: facts.question_no }];
+  switch (answerOutcome(facts.outcome)) {
+    case 'withdrawn':
+      return {
+        kind: 'built',
+        parts: [
+          words(t('entry.headline.question')),
+          ...question,
+          words(t('entry.headline.withdrawn')),
+        ],
+      };
+    case 'replaced':
+      return {
+        kind: 'built',
+        parts: [
+          words(t('entry.headline.question')),
+          ...question,
+          words(t('entry.headline.replacedBy')),
+          ...(facts.replaced_by == null
+            ? []
+            : [{ kind: 'entry' as const, key: taskKey, no: facts.replaced_by }]),
+        ],
+      };
+    case 'answered':
+      return { kind: 'built', parts: [words(t('entry.headline.answerTo')), ...question] };
   }
 }
 
@@ -349,7 +395,12 @@ export function factsOfEntry(entry: Entry): EntryFacts {
         blocking: entry.payload.blocking,
       };
     case 'answer':
-      return { type: 'answer', question_no: entry.payload.question_no };
+      return {
+        type: 'answer',
+        question_no: entry.payload.question_no,
+        outcome: answerOutcome(entry.payload.outcome),
+        replaced_by: entry.payload.replaced_by ?? null,
+      };
     case 'verdict':
       /*
        * `outdated` в нагрузке записи нет: он не хранится, а вычисляется при чтении

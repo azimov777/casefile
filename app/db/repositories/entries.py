@@ -60,6 +60,7 @@ from app.domain.case import (
     StatusChangedFacts,
     VerdictFacts,
     VerdictOutcome,
+    answer_outcome,
 )
 from app.domain.links import LinkKind
 from app.domain.tasks import CLOSED_STATUSES, TaskField, TaskStatus
@@ -422,6 +423,21 @@ class EntryRepository:
             select(Entry).where(Entry.task_id == task_id, _IS_QUESTION)
         ).order_by(Entry.no)
         return list(await self._session.scalars(statement))
+
+    async def first_answer_no(self, task_id: uuid.UUID, question_no: int) -> int | None:
+        """Номер первого ответа на вопрос задачи; `None` — вопрос ещё открыт.
+
+        Тот же признак открытости, что у `_unanswered`: ответ — запись `answer` той же
+        задачи с этим `question_no`, любого исхода. Отдельным запросом, а не через
+        список открытых: снятию нужен один вопрос и номер закрывшей его записи —
+        его называет отказ `already_answered`.
+        """
+        statement = select(func.min(Entry.no)).where(
+            Entry.task_id == task_id,
+            Entry.type == EntryType.ANSWER,
+            Entry.payload["question_no"].as_integer() == question_no,
+        )
+        return await self._session.scalar(statement)
 
     async def open_remarks(self, task_id: uuid.UUID) -> list[Entry]:
         """Замечания задачи без резолюции, в порядке подшивки.
@@ -928,9 +944,19 @@ def _facts_json() -> ColumnElement[Any]:
                 "addressees", payload["addressees"], "blocking", payload["blocking"]
             ),
         ),
+        # Исход и заменивший вопрос — перечисление и номер: опись называет снятый вопрос
+        # снятым, не читая тела. У ответа, подшитого до исхода, ключей нет, и здесь они
+        # пусты; `answered` из пустоты делает разбор ниже (`answer_outcome`).
         (
             Entry.type == EntryType.ANSWER,
-            func.jsonb_build_object("question_no", payload["question_no"]),
+            func.jsonb_build_object(
+                "question_no",
+                payload["question_no"],
+                "outcome",
+                payload["outcome"],
+                "replaced_by",
+                payload["replaced_by"],
+            ),
         ),
         (
             Entry.type == EntryType.VERDICT,
@@ -1009,7 +1035,11 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
                 blocking=values.get("blocking"),
             )
         case EntryType.ANSWER:
-            return AnswerFacts(question_no=values.get("question_no"))
+            return AnswerFacts(
+                question_no=values.get("question_no"),
+                outcome=answer_outcome(values),
+                replaced_by=values.get("replaced_by"),
+            )
         case EntryType.VERDICT:
             return VerdictFacts(
                 check_no=values.get("check_no"),

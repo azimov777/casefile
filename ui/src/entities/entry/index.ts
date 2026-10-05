@@ -31,10 +31,12 @@ export {
   type RemarkListParams,
 } from './api/remarks';
 export {
+  answerOutcome,
   entryHeadline,
   factsOfEntry,
   headingOfEntry,
   headlineText,
+  type AnswerOutcome,
   type EntryFacts,
   type RemarkOutcome,
   type Headline,

@@ -1396,6 +1396,91 @@ async def test_a_question_is_open_until_it_is_answered(
     assert answered["questions"] == []
 
 
+async def test_answer_declares_the_outcome_and_the_replacing_question(
+    mcp_session: Connect, task_secret: str
+) -> None:
+    """Проверка 2 TRK-552: схема `answer` в `tools/list` называет три исхода и замену."""
+    async with mcp_session(task_secret) as session:
+        listed = {tool.name: tool for tool in (await session.list_tools()).tools}
+
+    properties = listed["answer"].input_schema["properties"]
+    assert properties["outcome"]["enum"] == ["answered", "withdrawn", "replaced"]
+    assert properties["outcome"]["default"] == "answered"
+    assert "replaced_by" in properties
+    assert set(listed["answer"].input_schema.get("required", [])) == {"key", "question_no"}
+
+
+async def test_a_withdrawn_question_leaves_the_package_and_stays_in_the_case(
+    mcp_session: Connect, task_secret: str, task: Task
+) -> None:
+    """Проверка 2 TRK-552 настоящим вызовом: снятие и замена, пакет, дело и опись."""
+    key = task.key
+
+    async def ask(session: Any, title: str, *, blocking: bool) -> dict[str, Any]:
+        return await call(
+            session, "ask", key=key, addressees=["owner"], title=title, blocking=blocking
+        )
+
+    async with mcp_session(task_secret) as session:
+        dropped = await ask(session, "Нужен ли старый эндпоинт?", blocking=True)
+        stale = await ask(session, "Какой ключ канонический?", blocking=True)
+        fresh = await ask(session, "Верхний регистр годится?", blocking=False)
+        withdrawn = await call(
+            session,
+            "answer",
+            key=key,
+            question_no=dropped["no"],
+            outcome="withdrawn",
+            body="Эндпоинт удалён в соседней задаче",
+        )
+        replaced = await call(
+            session,
+            "answer",
+            key=key,
+            question_no=stale["no"],
+            outcome="replaced",
+            replaced_by=fresh["no"],
+            body="Спрашиваю короче: один вариант",
+        )
+        package = await call(session, "get_task", key=key)
+        case = await call(
+            session, "read_entries", key=key, nos=[dropped["no"], withdrawn["no"], replaced["no"]]
+        )
+        twice = await refuse(
+            session, "answer", key=key, question_no=stale["no"], outcome="withdrawn", body="Ещё"
+        )
+
+    assert withdrawn["title"] == f"Answer to {key}#{dropped['no']}: withdrawn"
+    assert replaced["title"] == f"Answer to {key}#{stale['no']}: replaced by {key}#{fresh['no']}"
+    assert [item["no"] for item in package["questions"]] == [fresh["no"]]
+    assert package["features"]["open_questions"] == 1
+    assert package["features"]["open_blocking_questions"] == 0
+    assert [(item["no"], item["type"]) for item in case["items"]] == [
+        (dropped["no"], "question"),
+        (withdrawn["no"], "answer"),
+        (replaced["no"], "answer"),
+    ]
+    assert [item["payload"] for item in case["items"][1:]] == [
+        {"question_no": dropped["no"], "outcome": "withdrawn", "replaced_by": None},
+        {"question_no": stale["no"], "outcome": "replaced", "replaced_by": fresh["no"]},
+    ]
+    facts = {item["no"]: item["facts"] for item in package["index"]}
+    assert facts[withdrawn["no"]] == {
+        "type": "answer",
+        "question_no": dropped["no"],
+        "outcome": "withdrawn",
+        "replaced_by": None,
+    }
+    assert facts[replaced["no"]] == {
+        "type": "answer",
+        "question_no": stale["no"],
+        "outcome": "replaced",
+        "replaced_by": fresh["no"],
+    }
+    assert "entry_fields_invalid" in twice
+    assert "already_answered" in twice
+
+
 async def test_asking_an_unknown_participant_is_refused(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
