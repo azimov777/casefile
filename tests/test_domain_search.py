@@ -287,6 +287,7 @@ def test_every_concept_field_has_a_spec() -> None:
     for name in (
         "project",
         "parent",
+        "under",
         "status",
         "assignee",
         "priority",
