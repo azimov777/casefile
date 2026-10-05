@@ -468,6 +468,60 @@ async def test_old_entries_with_bare_refs_are_still_read(
     assert (await package(auth_client, "TRK-1"))["task"]["key"] == "TRK-1"
 
 
+async def test_an_answer_filed_before_outcomes_reads_as_answered(
+    auth_client: AsyncClient, db_session: AsyncSession, project: Project
+) -> None:
+    """TRK-552: ответ без ключа `outcome` в нагрузке — подшитый до исходов — читается как
+    `answered` и в записи, и в описи, а его вопрос по-прежнему считается отвеченным."""
+    await create(auth_client)
+    question = await append(
+        auth_client,
+        "TRK-1",
+        type="question",
+        title="Какой ключ?",
+        payload={"addressees": ["owner"], "blocking": True},
+    )
+    task = await tasks_service.get_task(db_session, "TRK-1")
+    no = await EntryRepository(db_session).allocate_no(task.id)
+    await EntryRepository(db_session).add(
+        Entry(
+            task_id=task.id,
+            no=no,
+            type=EntryType.ANSWER,
+            title=f"Answer to TRK-1#{question['no']}",
+            body="Верхний",
+            payload={"question_no": question["no"]},
+            **created_by_columns(task.created_by),
+        )
+    )
+    await db_session.flush()
+
+    one = await auth_client.get(f"/api/v1/tasks/TRK-1/entries/{no}")
+    assert one.status_code == 200, one.text
+    assert one.json()["data"]["payload"] == {
+        "question_no": question["no"],
+        "outcome": "answered",
+        "replaced_by": None,
+    }
+    data = await package(auth_client, "TRK-1")
+    facts = {line["no"]: line["facts"] for line in data["index"]}
+    assert facts[no] == {
+        "type": "answer",
+        "question_no": question["no"],
+        "outcome": "answered",
+        "replaced_by": None,
+    }
+    assert data["features"]["open_questions"] == 0
+    error = await refuse(
+        auth_client,
+        "TRK-1",
+        type="answer",
+        body="Устарел",
+        payload={"question_no": question["no"], "outcome": "withdrawn"},
+    )
+    assert error["details"]["fields"][0]["reason"] == "already_answered"
+
+
 async def test_a_note_is_filed_into_a_closed_task(
     auth_client: AsyncClient, project: Project
 ) -> None:
