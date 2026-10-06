@@ -588,9 +588,9 @@ class SectionChangedPayload(BaseModel):
         default=None,
         examples=[None],
         description=(
-            "Which check was reworded, for a point edit of `checks`. Absent when the "
-            "whole list was replaced: then the set could have changed and the numbers "
-            "could have shifted"
+            "Which check was reworded, for a point edit of `checks`. `null` when the "
+            "whole list was replaced or another section was edited: then the set could "
+            "have changed and the numbers could have shifted"
         ),
     )
     before: str | list[str] | None = Field(

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tracker API",
-    "version": "0.9.5"
+    "version": "0.10.0"
   },
   "paths": {
     "/health": {
@@ -16287,7 +16287,7 @@
               }
             ],
             "title": "Check No",
-            "description": "Which check was reworded, for a point edit of `checks`. Absent when the whole list was replaced: then the set could have changed and the numbers could have shifted",
+            "description": "Which check was reworded, for a point edit of `checks`. `null` when the whole list was replaced or another section was edited: then the set could have changed and the numbers could have shifted",
             "examples": [
               null
             ]
