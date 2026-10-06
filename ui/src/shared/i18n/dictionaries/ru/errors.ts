@@ -37,6 +37,8 @@ export const errors = {
   current_password_mismatch: 'Текущий пароль указан неверно.',
   cursor_with_offset: 'Страница адресована сразу двумя способами: и курсором, и смещением.',
   database_unavailable: 'База данных недоступна.',
+  decision_not_in_force:
+    'Это решение проекта уже заменено другим: сошлитесь на то, что его заменило.',
   entry_fields_invalid: 'Запись не прошла проверку.',
   entry_not_found: 'Записи с таким номером в этой задаче нет.',
   human_token_not_allowed:

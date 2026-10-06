@@ -41,6 +41,9 @@ export const task = {
     /** Prior keys of a moved task (TRK-173): the cell shows up only when there are any. */
     previousKeys: 'Previous keys',
     flags: 'Flags',
+    /** Решения проекта, на которые опирается задача (TRK-554): строка видна, только когда они есть. */
+    decisions: 'Decisions',
+    supersededBy: 'superseded by',
     unassigned: 'not assigned',
     updated: 'Updated',
     created: 'Created',

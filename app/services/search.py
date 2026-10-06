@@ -50,6 +50,7 @@ from app.domain.errors import (
     SearchOperatorNotSupportedError,
     SearchValueInvalidError,
 )
+from app.domain.fields import FieldProblem
 from app.domain.query_language import parse_query, parse_sort_terms, parse_structured_value
 from app.domain.search import (
     DEFAULT_SORT_KEY,
@@ -87,7 +88,14 @@ from app.domain.search import (
     sortable_names,
     split_names,
 )
-from app.domain.tasks import AskedParent, TaskFeatures, TaskPriority, TaskStatus
+from app.domain.tasks import (
+    AskedParent,
+    TaskFeatures,
+    TaskPriority,
+    TaskStatus,
+    normalize_decision_ref,
+)
+from app.services import decisions as decisions_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -432,6 +440,8 @@ async def _resolve_value(
             return await _project_id(session, condition, value)
         case SearchValueKind.TASK_KEY:
             return await _task_id(session, condition, value)
+        case SearchValueKind.DECISION_REF:
+            return await _decision_ref(session, condition, value)
         case SearchValueKind.STATUS:
             return _enum_value(condition, value, TaskStatus)
         case SearchValueKind.PRIORITY:
@@ -475,6 +485,38 @@ async def _task_id(session: AsyncSession, condition: Condition, value: SearchVal
     except AppError as exc:
         raise _value_rejected(condition, value, exc, key) from exc
     return task.id
+
+
+async def _decision_ref(session: AsyncSession, condition: Condition, value: SearchValue) -> str:
+    """Решение проекта по ссылке `TRK#15` — каноническая строка, как в поле `decisions`.
+
+    Ненайденное решение — неверное значение фильтра, а не пустая выдача: на вопрос «какие
+    задачи делались по этому решению» пустая выдача читается как «никакие», и опечатку в
+    номере приняли бы за историю (`CONCEPT.md`, 4.4). Заменённое решение находится так
+    же, как действующее: история нужна именно после замены.
+    """
+    raw = _text(condition, value)
+    try:
+        ref = normalize_decision_ref(raw)
+    except FieldProblem as problem:
+        raise SearchValueInvalidError(
+            details={
+                **problem.details,
+                "field": condition.name,
+                "position": value.position,
+                "value": raw,
+            },
+        ) from None
+    if not await decisions_service.is_decision(session, ref):
+        raise SearchValueInvalidError(
+            details={
+                "field": condition.name,
+                "position": value.position,
+                "value": raw,
+                "reason": "decision_not_found",
+            },
+        )
+    return ref
 
 
 def _text(condition: Condition, value: SearchValue) -> str:

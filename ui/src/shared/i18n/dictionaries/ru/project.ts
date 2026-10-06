@@ -24,6 +24,27 @@ export const project = {
   historyLoading: 'Читаем историю…',
   historyEmpty: 'В деле проекта нет записей об этом атрибуте.',
 
+  /** Решения проекта (TRK-554): записи `decision` дела проекта со статусом от бэкенда. */
+  decisions: {
+    title: 'Решения',
+    hint: 'Действующие решения проекта задают работу агентов вместе с описанием проекта. Заменённые свёрнуты ниже вместе с тем, что их заменило; текст решения — в деле проекта.',
+    none: 'Решений по проекту пока нет.',
+    noneInForce: 'Действующих решений нет: все заменены.',
+    inForce: 'Действующие решения',
+    superseded_one: 'Не действует {{count, number}} решение',
+    superseded_few: 'Не действуют {{count, number}} решения',
+    superseded_many: 'Не действуют {{count, number}} решений',
+    superseded_other: 'Не действуют {{count, number}} решения',
+    supersededList: 'Заменённые решения',
+    supersededBy: 'Заменено решением',
+    replaces: 'Заменило',
+    noTasks: 'задач по решению нет',
+    tasks_one: '{{count, number}} задача по решению',
+    tasks_few: '{{count, number}} задачи по решению',
+    tasks_many: '{{count, number}} задач по решению',
+    tasks_other: '{{count, number}} задачи по решению',
+  },
+
   case: 'Дело проекта',
   caseLoading: 'Читаем дело проекта…',
   more: 'Показать ещё записи',

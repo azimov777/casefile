@@ -1,8 +1,8 @@
 """warning and acceptance entries
 
 Revision ID: 4b8e2d7c1f90
-Revises: 9e2c6b4f1a83
-Create Date: 2026-10-05 23:00:00.000000+00:00
+Revises: 4b8e1d6a2c57
+Create Date: 2026-10-06 02:00:00.000000+00:00
 
 Заведены типы записей `warning` и `acceptance` (TRK-561, решение TRK-561#11).
 
@@ -26,7 +26,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "4b8e2d7c1f90"
-down_revision: str | None = "9e2c6b4f1a83"
+down_revision: str | None = "4b8e1d6a2c57"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

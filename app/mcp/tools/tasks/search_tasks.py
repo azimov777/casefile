@@ -153,6 +153,19 @@ ParentFilterArg = Annotated[
     ),
 ]
 
+DecisionFilterArg = Annotated[
+    list[str] | None,
+    Field(
+        description=(
+            "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of "
+            "them, in any status, also after the decision is superseded. `empty()` matches "
+            "tasks that name no decision. An address that is not a `decision` entry of a "
+            "project's case is refused rather than read as «no tasks»"
+        ),
+        examples=[["TRK#15"]],
+    ),
+]
+
 UnderArg = Annotated[
     list[str] | None,
     Field(
@@ -351,6 +364,7 @@ def register(tools: Toolset) -> None:
         key: KeysArg = None,
         project: ProjectsArg = None,
         parent: ParentFilterArg = None,
+        decision: DecisionFilterArg = None,
         under: UnderArg = None,
         status: StatusesArg = None,
         assignee: AssigneesArg = None,
@@ -391,6 +405,7 @@ def register(tools: Toolset) -> None:
                     key=key,
                     project=project,
                     parent=parent,
+                    decision=decision,
                     under=under,
                     status=status,
                     assignee=assignee,
@@ -426,6 +441,7 @@ def _terms(
     key: Sequence[str] | None,
     project: Sequence[str] | None,
     parent: Sequence[str] | None,
+    decision: Sequence[str] | None,
     under: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
     assignee: Sequence[str] | None,
@@ -455,6 +471,7 @@ def _terms(
             ("key", key),
             ("project", project),
             ("parent", parent),
+            ("decision", decision),
             ("under", under),
             ("status", None if status is None else [item.value for item in status]),
             ("assignee", assignee),

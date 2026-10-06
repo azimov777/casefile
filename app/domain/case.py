@@ -68,7 +68,9 @@ from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.links import LinkKind
 from app.domain.projects import PROJECT_KEY_PATTERN, normalize_project_key
 from app.domain.tasks import (
+    ENTRY_REF_SEPARATOR,
     FIRST_CHECK_NUMBER,
+    FIRST_ENTRY_NUMBER,
     TaskField,
     TaskStatus,
     is_plain_number,
@@ -266,9 +268,6 @@ TITLED_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     }
 )
 
-#: Номер первой записи в задаче. Сквозной `seq` выдаёт база, а `no` считается по задаче.
-FIRST_ENTRY_NUMBER = 1
-
 #: Заголовок — одна строка: это то, что видно в описи дела.
 MAX_ENTRY_TITLE_LENGTH = 255
 
@@ -290,6 +289,14 @@ MAX_REF_LENGTH = 2_000
 #: ответа ни от кого.
 MAX_ADDRESSEES = 20
 
+#: Поле нагрузки решения проекта: номера решений того же проекта, которые оно заменяет
+#: (`CONCEPT.md`, 3.2). Им же называется аргумент `add_project_entry`.
+SUPERSEDES_FIELD = "supersedes"
+
+#: Сколько решений заменяет одно. Замена пересказывает то, что остаётся в силе, и запись,
+#: сводящая два десятка решений в одно, — уже пересмотр проекта, а не замена.
+MAX_SUPERSEDES = 20
+
 #: Части сводки в порядке чтения: сделано, осталось, что мешает, следующий шаг.
 SUMMARY_PARTS: tuple[str, ...] = ("done", "remaining", "blockers", "next_step")
 
@@ -308,9 +315,6 @@ CLOSING_SUMMARY_PART = "unmeasured"
 #: Части закрывающей сводки: те же четыре и пятая. Порядок чтения сохранён — «чего не
 #: измерили» идёт последним, после следующего шага, как приписка к подведённому итогу.
 CLOSING_SUMMARY_PARTS: tuple[str, ...] = (*SUMMARY_PARTS, CLOSING_SUMMARY_PART)
-
-#: Разделитель ссылки на запись: `TRK-42#12` — двенадцатая запись задачи `TRK-42`.
-ENTRY_REF_SEPARATOR = "#"
 
 #: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку. Форм две —
 #: запись задачи и запись проекта; дефис есть только в ключе задачи.
@@ -826,15 +830,21 @@ def build_project_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    supersedes: Any = None,
 ) -> EntryDraft:
     """Проверяет запись агента в дело проекта и приводит её к каноническому виду.
 
     Поля и их правила — те же функции, что у `build_entry`: заголовок, тело и ссылки
     записи проекта не отличаются от записи задачи ничем. Отличается набор типов
-    (`PROJECT_ENTRY_TYPES`), и нагрузки у них нет ни у одного, поэтому ни контекста
-    задачи, ни построителей нагрузки здесь не нужно. Тип задачи (`summary`, `question`,
-    `attempt`, ...) — `not_allowed` со списком допустимых, служебный — `service_type`,
-    как и в деле задачи.
+    (`PROJECT_ENTRY_TYPES`), поэтому ни контекста задачи, ни построителей нагрузки здесь
+    не нужно. Тип задачи (`summary`, `question`, `attempt`, ...) — `not_allowed` со
+    списком допустимых, служебный — `service_type`, как и в деле задачи.
+
+    Нагрузка есть у одного типа — решения проекта: `supersedes`, номера решений, которые
+    оно заменяет (`CONCEPT.md`, 3.2). Ключ кладётся у решения всегда, в том числе пустым:
+    форма записи одна на все интерфейсы. У остальных типов `supersedes` отвергается, а не
+    выбрасывается молча. Есть ли такие записи, решения ли это и действуют ли они,
+    проверяет сценарий (`app/services/decisions.py`).
     """
     problems = FieldProblems()
     entry_type = _project_entry_type(type, problems)
@@ -843,17 +853,56 @@ def build_project_entry(
     entry_title = ""
     with problems.field("title"):
         entry_title = _entry_title(title)
+    replaced: list[int] = []
+    with problems.field(SUPERSEDES_FIELD):
+        replaced = _superseded_numbers(supersedes)
+    if replaced and entry_type is not None and entry_type is not EntryType.DECISION:
+        problems.add(
+            SUPERSEDES_FIELD,
+            "not_allowed",
+            allowed_for=EntryType.DECISION.value,
+            got=entry_type.value,
+        )
     problems.raise_as(EntryFieldsInvalidError, key=project_key)
 
     assert entry_type is not None  # иначе замечание о типе уже прервало бы работу
+    payload: dict[str, Any] = {}
+    if entry_type is EntryType.DECISION:
+        payload[SUPERSEDES_FIELD] = replaced
     return EntryDraft(
         type=entry_type,
         title=entry_title,
         body=body_text,
-        payload={},
+        payload=payload,
         refs=ref_strings,
         tracker_refs=tracker_refs,
     )
+
+
+def superseded_numbers(payload: Mapping[str, Any]) -> list[int]:
+    """Номера решений, которые заменяет решение проекта, — из его нагрузки.
+
+    Решение, подшитое до механизма замены, ключа не несёт и не заменяет ничего. Одно
+    определение на сценарий статуса и на чтение — как `answer_outcome` у ответа.
+    """
+    value = payload.get(SUPERSEDES_FIELD)
+    return [item for item in value if isinstance(item, int)] if isinstance(value, list) else []
+
+
+def _superseded_numbers(value: Any) -> list[int]:
+    """Номера заменяемых решений: целые с 1, без повторов, по возрастанию.
+
+    Порядок канонический, а не присланный: заменяемые решения — множество, и два
+    порядка одного набора не должны давать двух разных записей.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise FieldProblem("not_a_list")
+    numbers = sorted({_entry_number(item) for item in value})
+    if len(numbers) > MAX_SUPERSEDES:
+        raise FieldProblem("too_many", max=MAX_SUPERSEDES, got=len(numbers))
+    return numbers
 
 
 def summary_title(done: str) -> str:

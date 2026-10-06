@@ -21,6 +21,7 @@ export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES, OPEN_WARNINGS_CONDITION } from './
 export {
   taskPackageKeys,
   taskPackageQueryOptions,
+  type CitedDecision,
   type LinkKind,
   type LinkedTask,
   type TaskDetails,

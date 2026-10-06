@@ -24,6 +24,23 @@ export const project = {
   historyLoading: 'Reading the history…',
   historyEmpty: 'The project case holds no entries about this attribute.',
 
+  /** Решения проекта (TRK-554): записи `decision` дела проекта со статусом от бэкенда. */
+  decisions: {
+    title: 'Decisions',
+    hint: 'Project decisions in force set the work of agents together with the project description. Superseded ones are folded below with what replaced them; the text of a decision is in the project case.',
+    none: 'The project has no decisions yet.',
+    noneInForce: 'No decision is in force: all of them were superseded.',
+    inForce: 'Decisions in force',
+    superseded_one: '{{count, number}} superseded decision',
+    superseded_other: '{{count, number}} superseded decisions',
+    supersededList: 'Superseded decisions',
+    supersededBy: 'Superseded by',
+    replaces: 'Replaced',
+    noTasks: 'no tasks under it',
+    tasks_one: '{{count, number}} task under it',
+    tasks_other: '{{count, number}} tasks under it',
+  },
+
   case: 'Project case',
   caseLoading: 'Reading the project case…',
   more: 'Show more entries',

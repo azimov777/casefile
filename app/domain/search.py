@@ -270,6 +270,7 @@ class SearchField(StrEnum):
     KEY = "key"
     PROJECT = "project"
     PARENT = "parent"
+    DECISION = "decision"
     UNDER = "under"
     STATUS = "status"
     ASSIGNEE = "assignee"
@@ -289,6 +290,7 @@ class SearchValueKind(StrEnum):
 
     PROJECT_KEY = "project_key"
     TASK_KEY = "task_key"
+    DECISION_REF = "decision_ref"
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
@@ -330,6 +332,16 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         # есть и означает верхний уровень проекта: задачи, у которых родителя нет.
         SearchFieldSpec(
             SearchField.PARENT, SearchValueKind.TASK_KEY, EXACT_OPERATORS, is_nullable=True
+        ),
+        # Решение проекта, на которое ссылается задача (`CONCEPT.md`, 4.4): обратный путь
+        # от решения к задачам, сделанным по нему, — в любом статусе и после замены
+        # решения. Пустое состояние — задача без ссылок на решения. Порядка нет: номера
+        # решений не упорядочивают задачи.
+        SearchFieldSpec(
+            SearchField.DECISION,
+            SearchValueKind.DECISION_REF,
+            EXACT_OPERATORS,
+            is_nullable=True,
         ),
         # Всё поддерево: потомки названной задачи на любой глубине, без неё самой (TRK-468).
         # Пустого состояния нет намеренно: «ничьего потомка нет» — не вопрос, у каждой

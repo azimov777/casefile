@@ -1096,3 +1096,39 @@ async def test_the_revoke_human_keys_migration_rolls_back_and_reapplies(
     async with migration_engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == REVOKE_HUMAN_KEYS_REVISION
+
+
+# --- Решения проекта у задачи (TRK-554) ----------------------------------------------------
+
+#: Ревизия, заводящая `tasks.decisions`, и ревизия перед ней.
+TASK_DECISIONS_REVISION = "4b8e1d6a2c57"
+TASK_DECISIONS_PREVIOUS = REVOKE_HUMAN_KEYS_REVISION
+
+
+async def test_existing_tasks_cite_no_decisions_after_the_decisions_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """До ревизии ссылаться было нечем: у существующей задачи список решений пуст, а откат
+    снимает колонку и снова применяется."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, TASK_DECISIONS_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_TASK)
+
+    await migrate(url, TASK_DECISIONS_REVISION)
+    async with migration_engine.connect() as connection:
+        decisions = await connection.scalar(text("SELECT decisions FROM tasks WHERE key = 'OLD-1'"))
+    assert decisions == []
+
+    await migrate(url, TASK_DECISIONS_PREVIOUS, down=True)
+    async with migration_engine.connect() as connection:
+        columns = set(
+            await connection.scalars(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'tasks'"
+                )
+            )
+        )
+    assert "decisions" not in columns
+    await migrate(url, TASK_DECISIONS_REVISION)

@@ -38,6 +38,8 @@ export const errors = {
   current_password_mismatch: 'The current password is wrong.',
   cursor_with_offset: 'The page is addressed two ways at once: by cursor and by offset.',
   database_unavailable: 'The database is unavailable.',
+  decision_not_in_force:
+    'This project decision has been superseded: refer to the one that replaced it.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
   human_token_not_allowed:

@@ -10,6 +10,7 @@ type LinkKind = components['schemas']['LinkKind'];
 /** Виды иерархии: у них заголовок записи о связи называет роль второй задачи словами. */
 type HierarchyKind = Extract<LinkKind, 'parent' | 'child'>;
 type AuthorKind = components['schemas']['AuthorKind'];
+type DecisionStatus = components['schemas']['DecisionStatus'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -30,6 +31,17 @@ export const ui = {
     human: 'человек',
     tracker: 'трекер',
   } satisfies Record<AuthorKind, string>,
+  /**
+   * Решение проекта (TRK-554): род значения внутри плашки статуса и сам статус —
+   * значение контракта, посчитанное бэкендом при чтении (`../docs/CONCEPT.md`, 3.2).
+   */
+  decision: {
+    kind: 'решение',
+    status: {
+      in_force: 'действует',
+      superseded: 'заменено',
+    } satisfies Record<DecisionStatus, string>,
+  },
   error: {
     unknown: 'Неизвестная ошибка.',
     unknownCode: 'Неизвестная ошибка ({{code}}).',

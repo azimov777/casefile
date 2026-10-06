@@ -215,7 +215,7 @@ export function TaskPage() {
     );
   }
 
-  const { task, features, summary, parent, children, links, index, remarks } = pkg.data;
+  const { task, features, summary, parent, children, links, decisions, index, remarks } = pkg.data;
   const questions = withHeld(pkg.data.questions, answering.held, (question) =>
     questionId(task.key, question),
   );
@@ -398,7 +398,7 @@ export function TaskPage() {
       )}
 
       <TaskNav taskKey={task.key} view="card" />
-      <TaskHeader task={task} features={features} parent={parent ?? null} />
+      <TaskHeader task={task} features={features} parent={parent ?? null} decisions={decisions} />
 
       {/* Почему на карточке нет ни «Ответить», ни «Замечания», сказано словами — и
           сказано, где задачу вернуть в работу: на экране её проекта. */}

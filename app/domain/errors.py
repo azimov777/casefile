@@ -196,7 +196,13 @@ class InvalidTaskKeyError(ValidationError):
 
 
 class TaskFieldsInvalidError(ValidationError):
-    """Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`."""
+    """Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`.
+
+    У `decisions` причины называют, почему ссылка — не решение проекта (`CONCEPT.md`,
+    3.2): `task_entry` (запись задачи `TRK-42#7`), `not_a_decision_ref` (не ссылка вида
+    `TRK#15`), `unknown_project`, `unknown_entry` и `not_a_decision` (запись дела проекта
+    другого типа).
+    """
 
     code = "task_fields_invalid"
     message = "Task fields are invalid"
@@ -333,11 +339,26 @@ class EntryFieldsInvalidError(ValidationError):
     `unknown_entry`, `not_a_question`; у ответа ещё `already_answered` (вопрос уже
     закрыт ответом) и `not_after_question` (заменивший вопрос задан не позже снимаемого);
     у `refs` — `not_a_reference` (строка не ссылка трекера и не URL со схемой: `7`, `#7`,
-    `docs/x.md`) и `malformed_entry_ref`.
+    `docs/x.md`) и `malformed_entry_ref`; у `supersedes` решения проекта — `unknown_entry`
+    и `not_a_decision`.
     """
 
     code = "entry_fields_invalid"
     message = "Case entry fields are invalid"
+
+
+class DecisionNotInForceError(ConflictError):
+    """Решение проекта уже заменено другим, а его называют как действующее.
+
+    Два места, один отказ (`CONCEPT.md`, 3.2 и 3.3): новое решение не заменяет уже
+    заменённое — иначе у решения было бы два преемника, — и задача не ставит в `decisions`
+    новую ссылку на заменённое — иначе отменённое обрастало бы ссылками. В
+    `details.decisions` каждое такое решение и его преемник (`ref`, `superseded_by`).
+    Конфликт состояния, а не ошибка формы: та же ссылка на преемника проходит.
+    """
+
+    code = "decision_not_in_force"
+    message = "Project decision is superseded by a later decision"
 
 
 class SummaryRequiredError(ConflictError):

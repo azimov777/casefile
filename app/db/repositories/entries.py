@@ -315,6 +315,24 @@ class EntryRepository:
         """Опись дела проекта: те же строки, что у задачи, — для `get_project`."""
         return await self._headings(Entry.project_id == project_id)
 
+    async def project_decisions(self, project_ids: Sequence[uuid.UUID]) -> list[Entry]:
+        """Решения проекта — записи `decision` дел этих проектов, по проекту и номеру.
+
+        Все сразу, а не страницей: статус решения считается из `supersedes` всех более
+        поздних решений проекта (`app/domain/decisions.py`), и без любого из них статус
+        вышел бы неверным. Решений в проекте единицы и десятки — это выборы, которые
+        переживают задачи, а не ход работы. Тела едут вместе с записью: чтение проекта
+        их не отдаёт, но карточке решения в интерфейсе они нужны тем же запросом.
+        """
+        if not project_ids:
+            return []
+        statement = (
+            select(Entry)
+            .where(Entry.project_id.in_(list(project_ids)), Entry.type == EntryType.DECISION)
+            .order_by(Entry.project_id, Entry.no)
+        )
+        return list(await self._session.scalars(statement))
+
     async def _headings(self, owned: ColumnElement[bool]) -> list[EntryHeading]:
         statement = (
             select(

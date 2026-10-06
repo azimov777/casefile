@@ -331,6 +331,25 @@ class EmptyPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class DecisionPayload(BaseModel):
+    """Нагрузка решения: какие решения проекта оно заменило.
+
+    Список со значением по умолчанию: решения задач и решения проекта, подшитые до замены
+    (`TRK-554`), ключа не несут, а ответ несёт его всегда — форма записи одна.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    supersedes: list[int] = Field(
+        default_factory=list,
+        examples=[[12]],
+        description=(
+            "Numbers of the earlier decisions of the same project that this project "
+            "decision superseded; empty for a task decision"
+        ),
+    )
+
+
 class SummaryPartsPayload(BaseModel):
     """Четыре части сводки, все непустые: то, что подшивают посреди работы.
 
@@ -602,6 +621,23 @@ class FieldChangedPayload(BaseModel):
     after: str | None = Field(default=None, description="New value")
 
 
+class DecisionsChangedPayload(BaseModel):
+    """Правка решений проекта задачи (`decisions`): списки ссылок «было» и «стало».
+
+    Своя форма, а не расширение `FieldChangedPayload` до «строка либо список»: там
+    значения — строки, и объединение «на всякий случай» сделало бы тип каждого поля
+    обвязки неопределённым. Разметка — `field`: у этой формы оно всегда `decisions`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: Literal[TaskField.DECISIONS] = Field(examples=[TaskField.DECISIONS])
+    before: list[str] = Field(examples=[["TRK#12"]], description="References before the edit")
+    after: list[str] = Field(
+        examples=[["TRK#12", "TRK#15"]], description="References after the edit"
+    )
+
+
 class AssigneeChangedPayload(BaseModel):
     """Смена исполнителя. `null` с любой стороны означает «исполнителя не было»."""
 
@@ -782,12 +818,24 @@ class _ProjectEntryRead(_EntryReadBase):
     )
 
 
+class DecisionEntryRead(_ProjectOwnableEntryRead):
+    """Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.
+
+    Нагрузка одна на оба дела: `supersedes` — номера решений того же проекта, которые это
+    заменило (`CONCEPT.md`, 3.2). У решения задачи и у решения проекта, подшитого до
+    замены, список пуст. Статуса здесь нет: он меняется без записи в этом деле и
+    считается при чтении проекта и задачи (`ProjectDecisionRead`, `CitedDecisionRead`).
+    """
+
+    type: Literal[EntryType.DECISION]
+    payload: DecisionPayload = Field(default_factory=DecisionPayload)
+
+
 class PlainEntryRead(_ProjectOwnableEntryRead):
-    """Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи
-    или проекта."""
+    """Запись без нагрузки: попытка, находка, артефакт, заметка, заведение задачи или
+    проекта."""
 
     type: Literal[
-        EntryType.DECISION,
         EntryType.ATTEMPT,
         EntryType.FINDING,
         EntryType.ARTIFACT,
@@ -890,11 +938,15 @@ class SectionChangedEntryRead(_EntryReadBase):
 
 
 class FieldChangedEntryRead(_ProjectOwnableEntryRead):
-    """Служебная запись о правке обвязки задачи (`priority`) или карточки проекта
-    (название, описание)."""
+    """Служебная запись о правке обвязки задачи (`priority`, `decisions`) или карточки
+    проекта (название, описание).
+
+    Нагрузка — одна из двух форм: строки «было» и «стало» у полей-значений и списки у
+    `decisions`. Различает их `field`; списки бывают только у `decisions`.
+    """
 
     type: Literal[EntryType.FIELD_CHANGED]
-    payload: FieldChangedPayload
+    payload: DecisionsChangedPayload | FieldChangedPayload
 
 
 class AssigneeChangedEntryRead(_EntryReadBase):
@@ -948,6 +1000,7 @@ class ProjectArchiveEntryRead(_ProjectEntryRead):
 
 type EntryRead = Annotated[
     PlainEntryRead
+    | DecisionEntryRead
     | SummaryEntryRead
     | QuestionEntryRead
     | AnswerEntryRead
@@ -990,6 +1043,7 @@ def entry_read_schema() -> dict[str, Any]:
 
 
 _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
+    EntryType.DECISION: DecisionEntryRead,
     EntryType.SUMMARY: SummaryEntryRead,
     EntryType.QUESTION: QuestionEntryRead,
     EntryType.ANSWER: AnswerEntryRead,
@@ -1169,6 +1223,10 @@ class ProjectEntryCreate(_TitledEntryCreate):
     Отдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой
     (`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не
     отказом `entry_fields_invalid` после.
+
+    `supersedes` — только у решения: новое решение проекта заменяет названные
+    (`CONCEPT.md`, 3.2). Без значения по умолчанию в схеме (`default_factory`): иначе
+    клиент интерфейса требовал бы его у каждой заметки (`docs/notes/api.md`).
     """
 
     type: Literal[
@@ -1177,6 +1235,16 @@ class ProjectEntryCreate(_TitledEntryCreate):
         EntryType.FINDING,
         EntryType.ARTIFACT,
     ]
+    supersedes: list[int] = Field(
+        default_factory=list,
+        examples=[[12]],
+        description=(
+            "Numbers of earlier decisions of this project that the new decision supersedes; "
+            "only with `decision`. A number outside the project's case or of another type "
+            "answers `entry_fields_invalid`; a decision superseded already, "
+            "`decision_not_in_force` with its successor"
+        ),
+    )
 
 
 type ClosingEntryCreate = Annotated[

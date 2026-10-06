@@ -376,6 +376,7 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
     task: taskDetails(key),
     parent: null,
     children: [],
+    decisions: [],
     links: [
       {
         kind: 'blocked_by',
@@ -556,6 +557,7 @@ export function projectDetail(key: string, overrides: Partial<ProjectDetail> = {
     created_by: AUTHOR,
     ...STAMPS,
     attributes: [],
+    decisions: [],
     ...overrides,
   };
 }
