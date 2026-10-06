@@ -276,8 +276,21 @@ export function outsideArchive(now: Date = new Date()): string {
 }
 
 /**
- * Какие задачи демо в каком статусе видит человек — по правде бэкенда, а не по памяти
+ * В каком столбце доски стоит задача (TRK-571, `docs/CONCEPT.md` 4.6): «Ждёт ответа»
+ * (ключ `waiting`) — задача из работы с открытым вопросом `blocking`, а на переходный
+ * период — и со старым статусом `waiting`; остальные — в столбце своего статуса.
+ * Правило выписано здесь заново, а не взято из кода интерфейса.
+ */
+export function boardColumn(status: string, openBlockingQuestions: number): string {
+  const held = ['backlog', 'open', 'in_progress'].includes(status);
+  return status === 'waiting' || (held && openBlockingQuestions > 0) ? 'waiting' : status;
+}
+
+/**
+ * Какие задачи демо в каком столбце доски видит человек — по правде бэкенда, а не по памяти
  * теста.
+ *
+ * Ключ — столбец (`boardColumn`), он же статус везде, кроме «Ждёт ответа».
  *
  * Состав демо меняется вместе с бэкендом: 2026-09-07 задача, ждавшая ответа владельца,
  * ушла из `open` в `waiting` (TRK-15), и три сценария, помнившие её ключ и число строк,
@@ -299,7 +312,7 @@ export async function tasksByStatus(
   const shown: Record<string, string> = archive ? {} : { query: outsideArchive(now) };
   const query = new URLSearchParams({
     project: 'DEMO',
-    fields: 'status',
+    fields: 'status,features',
     limit: '100',
     ...shown,
     ...params,
@@ -307,11 +320,14 @@ export async function tasksByStatus(
   const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
     headers: { Authorization: `Bearer ${readE2eToken()}` },
   });
-  const body = (await response.json()) as { data: { key: string; status: string }[] };
+  const body = (await response.json()) as {
+    data: { key: string; status: string; features: { open_blocking_questions: number } }[];
+  };
 
   const byStatus = new Map<string, string[]>();
   for (const task of body.data) {
-    byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task.key]);
+    const shown = boardColumn(task.status, task.features.open_blocking_questions);
+    byStatus.set(shown, [...(byStatus.get(shown) ?? []), task.key]);
   }
   return byStatus;
 }

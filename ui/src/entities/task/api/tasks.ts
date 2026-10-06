@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components, type operations } from '@/shared/api';
-import { OPEN_WARNINGS_CONDITION, hideArchive } from '../model/archive';
+import { OPEN_WARNINGS_CONDITION, composeWith, hideArchive } from '../model/archive';
+import { columnCondition, columnRequest } from '../model/waiting';
 
 export type Task = components['schemas']['TaskSearchRead'];
 export type TaskFeatures = components['schemas']['TaskFeaturesRead'];
@@ -26,6 +27,11 @@ export type TaskListParams = NonNullable<operations['list_tasks']['parameters'][
 export type TaskListRequest = TaskListParams & {
   /** Прятать архив: закрытые задачи, в делах которых давно не писали. */
   hideArchived?: boolean;
+  /**
+   * Столбец доски, чьё условие складывается с запросом (`../model/waiting.ts`): так же,
+   * как архив, — на отправке, а в ключе запроса стоит признаком.
+   */
+  column?: TaskStatus;
 };
 
 /**
@@ -113,6 +119,7 @@ export const taskKeys = {
 
 export async function fetchTasks({
   hideArchived = false,
+  column,
   ...params
 }: TaskListRequest): Promise<Page<Task>> {
   /*
@@ -122,22 +129,38 @@ export async function fetchTasks({
    * держала бы ключ, но перечитывание по живому потоку шло бы со старым порогом.
    * Здесь же любое чтение идёт со свежим порогом, а без чтения ничего не меняется:
    * задача, пересёкшая порог, исчезает при следующем чтении — и не раньше.
+   *
+   * Условие столбца («Ждёт ответа» и исключение таких задач из прочих) складывается
+   * первым, архив — поверх него; отказ возвращается обратным порядком, в строку человека.
    */
-  const archive = hideArchived ? hideArchive(params.query, new Date()) : null;
-  const query = archive === null ? params : { ...params, query: archive.query };
+  const relocations: ((error: unknown) => unknown)[] = [];
+  let query = params.query;
+
+  const rule = column === undefined ? null : columnCondition(column);
+  if (rule !== null) {
+    const composed = composeWith(query, rule);
+    query = composed.query;
+    relocations.unshift(composed.relocate);
+  }
+  if (hideArchived) {
+    const archive = hideArchive(query, new Date());
+    query = archive.query;
+    relocations.unshift(archive.relocate);
+  }
+  const sent = relocations.length === 0 ? params : { ...params, query };
 
   try {
     return await unwrapPage(
       apiClient.GET('/api/v1/tasks', {
         // Набор полей и размер страницы — умолчания списка: вызывающий вправе их
         // переназначить, поэтому его параметры идут последними.
-        params: { query: { fields: TASK_LIST_FIELDS, limit: TASK_PAGE_SIZE, ...query } },
+        params: { query: { fields: TASK_LIST_FIELDS, limit: TASK_PAGE_SIZE, ...sent } },
       }),
     );
   } catch (error) {
     // Отказ разбора склейки говорит о строке, которой человек не писал: его позиция
     // возвращается в ту строку, что пришла в `params.query`.
-    throw archive === null ? error : archive.relocate(error);
+    throw relocations.reduce((failure, relocate) => relocate(failure), error);
   }
 }
 
@@ -186,7 +209,7 @@ export function attentionQueryOptions(project: string) {
  * переслать ссылку «на вторую страницу столбца» бессмысленно.
  */
 export function tasksColumnQueryOptions(status: TaskStatus, params: TaskListRequest) {
-  const column = { ...params, status: [status], limit: TASK_COLUMN_PAGE_SIZE };
+  const column = { ...columnRequest(status, params), limit: TASK_COLUMN_PAGE_SIZE };
 
   return infiniteQueryOptions({
     queryKey: taskKeys.column(column),

@@ -243,6 +243,8 @@ export const ui = {
     priorityLabel: 'priority',
     emptyCase: 'case is empty',
     cardUnassigned: 'not assigned',
+    // Mark beside the status in the list: the task has an open blocking question (TRK-571).
+    awaitingAnswer: 'awaiting an answer',
     features: {
       blocked: 'blocked: there is a blocked_by link to an unclosed task',
       questions_one: '{{count, number}} question without an answer',

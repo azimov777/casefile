@@ -17,6 +17,7 @@ export {
   type TaskPriority,
   type TaskStatus,
 } from './api/tasks';
+export { WAITING_COLUMN, columnRequest, isAwaitingAnswer } from './model/waiting';
 export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES, OPEN_WARNINGS_CONDITION } from './model/archive';
 export {
   taskPackageKeys,

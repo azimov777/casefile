@@ -5,6 +5,7 @@ import { RelativeTime } from '@/shared/ui';
 import { cn, listReturnState, skipClickWhileSelecting, taskRefHref } from '@/shared/lib';
 import type { Task } from '../api/tasks';
 import { TaskFeatureMarks } from './feature-marks';
+import { isAwaitingAnswer } from '../model/waiting';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
 import { ParentBadge } from './parent-badge';
@@ -167,6 +168,11 @@ export function TaskRow({ task, parentSlot = false }: { task: Task; parentSlot?:
       </td>
       <td className="px-3 @max-list:px-0">
         <StatusMark status={task.status} />
+        {isAwaitingAnswer(task.status, task.features) ? (
+          <span data-mark="awaiting" className="ml-2 text-mark text-attention @max-list:ml-1">
+            {t('task.awaitingAnswer')}
+          </span>
+        ) : null}
       </td>
       {/* Пустой исполнитель в карточке не рисуется вовсе: прочерк между знаками
           статуса и приоритета читался бы как разделитель, а не как «никого». */}

@@ -6,6 +6,8 @@ import {
   StatusMark,
   TASK_STATUSES,
   TaskCard,
+  WAITING_COLUMN,
+  columnRequest,
   tasksColumnQueryOptions,
   tasksTotalQueryOptions,
   type TaskListParams,
@@ -194,7 +196,7 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
    */
   const pages = useInfiniteQuery({ ...tasksColumnQueryOptions(status, params), enabled: open });
   const counted = useQuery({
-    ...tasksTotalQueryOptions({ ...params, status: [status] }),
+    ...tasksTotalQueryOptions(columnRequest(status, params)),
     enabled: !open,
   });
 
@@ -452,7 +454,11 @@ function BoardColumn({ status, params, explained, open, onToggle }: BoardColumnP
             />
             {/* Тот же знак, что в списке и на карточке: где бы человек ни
               увидел `in_progress`, это один и тот же полукруг (решение Д20). */}
-            <StatusMark status={status} className="font-mono" />
+            <StatusMark
+              status={status}
+              name={status === WAITING_COLUMN ? t('board.waitingColumn') : undefined}
+              className="font-mono"
+            />
             <span className="text-meta whitespace-nowrap text-muted">
               {/* Сколько задач в статусе, говорит бэкенд. Пока не сказал, врать нечем:
                 раскрытый столбец говорит «столько-то из ?» о прочитанном, свёрнутый

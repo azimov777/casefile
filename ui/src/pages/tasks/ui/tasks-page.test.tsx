@@ -258,6 +258,33 @@ describe('список задач', () => {
     expect(row).toHaveTextContent(`${say.ui('task.priorityLabel')} critical`);
   });
 
+  it('строка с открытым вопросом blocking несёт пометку «ждёт ответа», без него — нет (TRK-571)', async () => {
+    const features = (blocking: number) => ({
+      blocked: false,
+      open_questions: blocking,
+      open_blocking_questions: blocking,
+      open_remarks: 0,
+      open_warnings: 0,
+      last_summary_at: null,
+      last_entry_at: '2026-09-01T10:00:00Z',
+    });
+    server.use(
+      listing(() =>
+        taskPage([
+          task('DEMO-7', { status: 'open', features: features(1) }),
+          task('DEMO-8', { status: 'open', features: features(0) }),
+        ]),
+      ),
+    );
+
+    open('/tasks?project=DEMO');
+
+    const asked = await screen.findByRole('row', { name: /DEMO-7/ });
+    expect(asked).toHaveTextContent(say.ui('task.awaitingAnswer'));
+    const calm = screen.getByRole('row', { name: /DEMO-8/ });
+    expect(calm).not.toHaveTextContent(say.ui('task.awaitingAnswer'));
+  });
+
   it('ожидание видно в строке своим знаком', async () => {
     server.use(
       listing(() =>
@@ -1151,8 +1178,10 @@ describe('архив', () => {
     // на столбец и один на всю выдачу. Правило обязано доехать до каждого, иначе
     // свёрнутый `done` считал бы в своём числе и архив.
     await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+    // Условие столбца (TRK-571) стоит перед правилом по «и»: правило архива идёт последним.
+    const endsWithRule = new RegExp(String.raw`(?:^|\) and \()${OUTSIDE_ARCHIVE}\)?$`);
     for (const url of seen) {
-      expect(new URL(url).searchParams.get('query'), url).toMatch(hidingArchive());
+      expect(new URL(url).searchParams.get('query'), url).toMatch(endsWithRule);
     }
   });
 

@@ -44,6 +44,12 @@ function listing(items = tasksForEveryStatus()) {
 
 /** Запросы одного столбца: те, что спрашивали его статус. */
 function requestsFor(status: string): URL[] {
+  // У «Ждёт ответа» статуса в отборе нет: столбец целиком выражен условием запроса.
+  if (status === 'waiting') {
+    return seen.filter((url) =>
+      (url.searchParams.get('query') ?? '').includes('open_blocking_questions: > 0'),
+    );
+  }
   return seen.filter((url) => url.searchParams.getAll('status').includes(status));
 }
 
@@ -99,6 +105,68 @@ describe('доска', () => {
     }
   });
 
+  describe('«Ждёт ответа» вычисляется, а не хранится (TRK-571)', () => {
+    /** Задача со столькими открытыми вопросами blocking. */
+    function asking(key: string, status: string, blocking: number) {
+      return task(key, {
+        status: status as never,
+        features: {
+          blocked: false,
+          open_questions: blocking,
+          open_blocking_questions: blocking,
+          open_remarks: 0,
+          open_warnings: 0,
+          last_summary_at: null,
+          last_entry_at: '2026-09-01T10:00:00Z',
+        },
+      });
+    }
+
+    async function keysIn(status: string): Promise<string[]> {
+      const section = await screen.findByRole('region', { name: status });
+      const toggle = within(section).getByRole('button');
+      if (toggle.getAttribute('aria-expanded') === 'false') await userEvent.setup().click(toggle);
+      await waitFor(() => expect(readRequests().length).toBeGreaterThan(0));
+      // Карточки столбца читаются отдельным запросом: ждём, пока он осядет.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return within(section)
+        .queryAllByRole('article')
+        .map((card) => /DEMO-\d+/.exec(card.textContent ?? '')?.[0] ?? '');
+    }
+
+    it('задача в open с открытым вопросом blocking стоит в «Ждёт ответа», а не в open', async () => {
+      server.use(listing([asking('DEMO-1', 'open', 1)]));
+      renderApp('/tasks?project=DEMO&view=board');
+
+      await waitFor(async () => expect(await keysIn('waiting')).toEqual(['DEMO-1']));
+      expect(await keysIn('open')).toEqual([]);
+    });
+
+    it('без открытого вопроса blocking та же задача — в open и не в «Ждёт ответа»', async () => {
+      server.use(listing([asking('DEMO-1', 'open', 0)]));
+      renderApp('/tasks?project=DEMO&view=board');
+
+      await waitFor(async () => expect(await keysIn('open')).toEqual(['DEMO-1']));
+      expect(await keysIn('waiting')).toEqual([]);
+    });
+
+    it('in_progress с вопросом blocking — в «Ждёт ответа»; старый статус waiting — тоже', async () => {
+      server.use(listing([asking('DEMO-1', 'in_progress', 1), asking('DEMO-2', 'waiting', 0)]));
+      renderApp('/tasks?project=DEMO&view=board');
+
+      await waitFor(async () => expect(await keysIn('waiting')).toEqual(['DEMO-1', 'DEMO-2']));
+      expect(await keysIn('in_progress')).toEqual([]);
+    });
+
+    it('столбец называется «Ждёт ответа», а не именем статуса', async () => {
+      server.use(listing([]));
+      renderApp('/tasks?project=DEMO&view=board');
+
+      const section = await screen.findByRole('region', { name: 'waiting' });
+      expect(section).toHaveTextContent(say.tasks('board.waitingColumn'));
+    });
+  });
+
   it('на отрисовку доски уходит по запросу на столбец и один на число выдачи', async () => {
     server.use(listing());
 
@@ -121,7 +189,11 @@ describe('доска', () => {
 
     // Число выдачи спрашивается без задач и ровно один раз: столбцам оно неизвестно —
     // свёрнутый не читает вовсе, а сложить шесть чисел значило бы считать за бэкенд.
-    const whole = seen.filter((url) => url.searchParams.getAll('status').length === 0);
+    const whole = seen.filter(
+      (url) =>
+        url.searchParams.getAll('status').length === 0 &&
+        !(url.searchParams.get('query') ?? '').includes('open_blocking_questions'),
+    );
     expect(whole).toHaveLength(1);
     expect((whole[0] as URL).searchParams.get('limit')).toBe('1');
   });

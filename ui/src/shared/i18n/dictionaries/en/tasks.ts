@@ -7,7 +7,7 @@ export const tasks = {
   explanation: {
     list: 'All tasks that agents carry are here. Agents create and move them; you watch where things stand. Marks in a row show open questions, remarks and blockers.',
     board:
-      'The same tasks in six status columns — of one project or of all, depending on what is selected. Agents move the cards; a card cannot be dragged. The waiting column holds tasks where the next move is yours or depends on an outside event.',
+      'The same tasks in six status columns — of one project or of all, depending on what is selected. Agents move the cards; a card cannot be dragged. The “Waiting for an answer” column holds tasks with an open blocking question, the move is yours; once answered, a task returns to its status column, and a task waiting on another task stays in its own column with a lock.',
   },
   title: 'Tasks',
   loading: 'Loading the tasks…',
@@ -55,6 +55,9 @@ export const tasks = {
     // Свёрнутый столбец не читал ничего: без числа от бэкенда сказать ему нечего.
     unknown: '?',
     empty: 'Empty',
+    // The column is computed from open blocking questions, not from a stored status
+    // (TRK-571); the name of the `waiting` status is not shown to the person.
+    waitingColumn: 'Waiting for an answer',
   },
 
   view: {

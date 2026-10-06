@@ -124,8 +124,20 @@ export function taskPage(items: Task[], meta: Partial<PageMeta> = {}) {
  */
 export function taskListing(url: URL, items: Task[]) {
   const wanted = url.searchParams.getAll('status');
-  const matched =
-    wanted.length === 0 ? items : items.filter((row) => wanted.includes(row.status ?? ''));
+  const query = url.searchParams.get('query') ?? '';
+  // Условия столбцов доски на языке запросов (`entities/task/model/waiting.ts`): мок
+  // не разбирает язык, а узнаёт ровно эти два условия — выбор «ждёт» вычисляется
+  // бэкендом, и тесту доски нужна его честная подмена, а не выдача без отбора.
+  const blocking = (row: Task) => row.features?.open_blocking_questions ?? 0;
+  const held = ['backlog', 'open', 'in_progress'];
+  const matched = items.filter((row) => {
+    if (wanted.length > 0 && !wanted.includes(row.status ?? '')) return false;
+    if (query.includes('open_blocking_questions: > 0')) {
+      return (held.includes(row.status ?? '') && blocking(row) > 0) || row.status === 'waiting';
+    }
+    if (query.includes('open_blocking_questions: 0')) return blocking(row) === 0;
+    return true;
+  });
 
   const from = Number(url.searchParams.get('cursor') ?? 0);
   const limit = Number(url.searchParams.get('limit') ?? matched.length);
