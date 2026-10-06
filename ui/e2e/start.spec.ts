@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { fontsReady, silenceJournal } from './contour';
+import { fontsReady, motionSettled, silenceJournal } from './contour';
 
 /**
  * Экран «Начало» (`TRK-361`) читает бэкенд, но сам ничего не меняет, — открывается
@@ -51,6 +51,12 @@ test('на экране «Начало» нет нарушений `axe`', async
   await page.goto('/start');
   await expect(page.getByRole('main')).toBeVisible();
   await fontsReady(page);
+  // Кнопки экрана заблокированы, пока грузится учётная запись, и перекрашиваются
+  // (`transition-colors`) по её приходу: axe, снявший кадр посреди перехода, мерит
+  // смесь запрещённого и доступного цвета (TRK-574). Меряем покой: кнопки доступны,
+  // движение улеглось.
+  await expect(page.getByRole('main').locator('button:disabled')).toHaveCount(0);
+  await motionSettled(page.getByRole('main'));
 
   const found = await new AxeBuilder({ page }).analyze();
   expect(found.violations).toEqual([]);
