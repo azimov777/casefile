@@ -45,6 +45,7 @@ export const errors = {
   direction_key_taken: 'This project already has a direction with that key.',
   direction_not_archived: 'The direction is not archived.',
   direction_not_found: 'This project has no direction with that key.',
+  direction_project_mismatch: 'A task can only join a direction of its own project.',
   direction_reason_required: 'Archiving or restoring a direction requires a reason.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
