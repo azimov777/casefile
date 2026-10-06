@@ -2,7 +2,7 @@
   "name": "casefile",
   "displayName": "Casefile",
   "description": "Casefile: the case file for every task, shared across sessions, agents and people. Needs a Casefile server you run (one-line Docker install). Claude Code connects through this plugin; the Claude Desktop chat needs the casefile.mcpb extension from the latest release. The skill walks an agent through taking a task, keeping its case, asking the human, handing it off and closing it with verdicts; the MCP connector signs in through OAuth, no token in the plugin.",
-  "version": "0.9.5",
+  "version": "0.10.0",
   "author": {
     "name": "azimov777",
     "url": "https://github.com/azimov777"
