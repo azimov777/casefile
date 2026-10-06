@@ -30,7 +30,7 @@ async function block(): Promise<HTMLElement> {
 }
 
 describe('блок «Сейчас»', () => {
-  it('называет причину последнего перехода, шаг сводки и записи после неё', async () => {
+  it('называет причину последнего перехода и сколько записей подшито после сводки', async () => {
     serve(
       taskState({
         status: 'open',
@@ -51,22 +51,23 @@ describe('блок «Сейчас»', () => {
         },
         after_summary: 4,
         recent: ['#7 finding claude 2026-10-06T12:01Z: Свежая находка'],
-        recent_total: 1,
+        recent_total: 3,
       }),
     );
     renderApp('/tasks/DEMO-7');
 
     const now = within(await block());
     expect(now.getByText('Жду ответа на DEMO-7#5')).toBeInTheDocument();
-    expect(now.getByText('Ждать ответа владельца')).toBeInTheDocument();
-    expect(now.getByText(/Свежая находка/)).toBeInTheDocument();
-    expect(now.queryByText(say.task('state.unmeasured'))).not.toBeInTheDocument();
+    expect(
+      now.getByText(say.task('state.recentAfterSummary', { no: 4, count: 3 })),
+    ).toBeInTheDocument();
+    // Сводка и вопросы стоят ниже своими блоками: в «Сейчас» их не дублируют.
+    expect(now.queryByText('Ждать ответа владельца')).not.toBeInTheDocument();
   });
 
-  it('показывает, кого ждём, блокеры и детей; пустых строк не рисует', async () => {
+  it('показывает блокеры, детей и решения после правки задания ссылками и номерами', async () => {
     serve(
       taskState({
-        questions: [{ no: 5, to: ['owner'], blocking: true, title: 'Брать вариант 3?' }],
         blockers: ['DEMO-2'],
         children: { done: 2, open: 1 },
         children_unclosed: ['DEMO-9'],
@@ -76,21 +77,19 @@ describe('блок «Сейчас»', () => {
     renderApp('/tasks/DEMO-7');
 
     const now = within(await block());
-    expect(now.getByText(/Брать вариант 3\?/)).toBeInTheDocument();
-    expect(now.getByText(/owner/)).toBeInTheDocument();
     expect(now.getByRole('link', { name: 'DEMO-2' })).toHaveAttribute('href', '/tasks/DEMO-2');
     expect(now.getByRole('link', { name: 'DEMO-9' })).toHaveAttribute('href', '/tasks/DEMO-9');
-    expect(now.getByText(say.task('state.decisionsAfterCard'))).toBeInTheDocument();
+    expect(now.getByText('DEMO-7#4')).toBeInTheDocument();
   });
 
-  it('у задачи без вестей так и говорит: ничего не подшито', async () => {
+  it('у задачи без вестей так и говорит и не рисует пустых ячеек', async () => {
     serve(taskState());
     renderApp('/tasks/DEMO-7');
 
     const now = within(await block());
     expect(now.getByText(say.task('state.noMove'))).toBeInTheDocument();
-    expect(now.getByText(say.task('state.nothingNew'))).toBeInTheDocument();
-    expect(now.queryByText(say.task('state.waitingFor'))).not.toBeInTheDocument();
     expect(now.queryByText(say.task('state.blockedBy'))).not.toBeInTheDocument();
+    expect(now.queryByText(say.task('state.children'))).not.toBeInTheDocument();
+    expect(now.queryByText(say.task('state.decisionsAfterCard'))).not.toBeInTheDocument();
   });
 });
