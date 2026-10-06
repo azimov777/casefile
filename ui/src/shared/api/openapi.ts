@@ -4698,7 +4698,7 @@ export interface components {
             field: string;
             /**
              * Check No
-             * @description Which check was reworded, for a point edit of `checks`. Absent when the whole list was replaced: then the set could have changed and the numbers could have shifted
+             * @description Which check was reworded, for a point edit of `checks`. `null` when the whole list was replaced or another section was edited: then the set could have changed and the numbers could have shifted
              * @example null
              */
             check_no?: number | null;

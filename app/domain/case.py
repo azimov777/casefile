@@ -984,14 +984,22 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
     подставлял умолчание полем модели, а MCP отдавал нагрузку как лежит, агент и человек
     читали один и тот же ответ по-разному (TRK-563).
 
-    Сегодня так читается только ответ: подшитый до появления исходов (`question_no` и
-    ничего более), он читается как `answered` без заменившего вопроса. Нагрузка остальных
-    типов отдаётся как лежит; новый ключ в чужой нагрузке получает ветвь здесь же.
+    Так читаются три типа. Ответ, подшитый до появления исходов (`question_no` и ничего
+    более), читается как `answered` без заменившего вопроса (TRK-563). Решение без
+    `supersedes` — решение задачи и решение проекта до замены (TRK-554) — ничего не
+    заменяет. Правка раздела без `check_no` — любая, кроме точечной правки проверки —
+    читается с `check_no: null` (TRK-565). Нагрузка остальных типов отдаётся как лежит:
+    трекер всегда кладёт в неё все ключи, которые есть у модели чтения (сверка TRK-565);
+    новый ключ в чужой нагрузке получает ветвь здесь же.
     """
     data = dict(payload)
     if entry_type is EntryType.ANSWER:
         data["outcome"] = answer_outcome(payload).value
         data.setdefault("replaced_by", None)
+    elif entry_type is EntryType.DECISION:
+        data.setdefault(SUPERSEDES_FIELD, [])
+    elif entry_type is EntryType.SECTION_CHANGED:
+        data.setdefault("check_no", None)
     return data
 
 
