@@ -133,7 +133,7 @@ export function taskListing(url: URL, items: Task[]) {
   const matched = items.filter((row) => {
     if (wanted.length > 0 && !wanted.includes(row.status ?? '')) return false;
     if (query.includes('open_blocking_questions: > 0')) {
-      return (held.includes(row.status ?? '') && blocking(row) > 0) || row.status === 'waiting';
+      return held.includes(row.status ?? '') && blocking(row) > 0;
     }
     if (query.includes('open_blocking_questions: 0')) return blocking(row) === 0;
     return true;

@@ -263,16 +263,38 @@ test('в покое доска не спрашивает ничего: ни пу
   await page.waitForTimeout(REST);
   expect(calls.length, 'пустой столбец продолжает спрашивать').toBe(onEmpty);
 
-  // Столбец короче экрана: карточки есть, но дочитывать нечего — сторожа над ним нет.
-  const short = await countTasks(request, {
-    query:
-      'status: waiting or (status: in backlog, open, in_progress and open_blocking_questions: > 0)',
-  });
-  expect(short, 'в демо не осталось короткого столбца').toBeLessThan(COLUMN_PAGE);
+  /*
+   * Столбец короче экрана: карточки есть, но дочитывать нечего — сторожа над ним нет.
+   * Какой столбец такой, решает состав демо после пишущих сценариев, а не память теста:
+   * «Ждёт ответа» пустеет, как только на вопрос демо ответили (`answer.spec.ts`), —
+   * хранимого статуса ожидания, державшего его полным, нет (TRK-573). Отборы — те же,
+   * что у столбцов доски (`entities/task/model/waiting.ts`), выписанные заново.
+   */
+  const columns: [string, Record<string, string>][] = [
+    [
+      'waiting',
+      { query: 'status: in backlog, open, in_progress and open_blocking_questions: > 0' },
+    ],
+    ['in_progress', { status: 'in_progress', query: 'open_blocking_questions: 0' }],
+    ['open', { status: 'open', query: 'open_blocking_questions: 0' }],
+  ];
+  let shortColumn: string | null = null;
+  for (const [name, params] of columns) {
+    const size = await countTasks(request, params);
+    if (size > 0 && size < COLUMN_PAGE) {
+      shortColumn = name;
+      break;
+    }
+  }
+  expect(shortColumn, 'в демо не осталось короткого непустого столбца').not.toBeNull();
 
   calls.length = 0;
   await page.goto('/tasks?project=DEMO&view=board');
-  await expect(column(page, 'waiting').getByRole('article').first()).toBeVisible();
+  await expect(
+    column(page, shortColumn as string)
+      .getByRole('article')
+      .first(),
+  ).toBeVisible();
   await expect.poll(() => calls.length).toBeGreaterThan(0);
 
   const onShort = calls.length;

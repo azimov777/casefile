@@ -96,6 +96,8 @@ export const errors = {
   task_closed: 'The task is closed: its fields and links no longer change.',
   task_field_locked: 'This field is not editable in the current status.',
   task_fields_invalid: 'The task fields did not pass validation.',
+  task_has_open_blocking_questions:
+    'The task has an unanswered blocking question: it goes into work once the question is answered.',
   task_has_parent: 'The task already has a parent: a task has only one.',
   task_has_unclosed_children: 'The task has children that are not closed.',
   task_move_batch_size_invalid: 'The list of tasks to move is empty or too long.',

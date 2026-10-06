@@ -245,16 +245,28 @@ export function curve(value: string): string {
 /**
  * Значения статуса — из контракта бэкенда, а не перечнем в тесте.
  *
- * Перечисление уже менялось дважды (2026-09-05 из него убрали статус, 2026-09-07
- * добавили `waiting`), и тест, выписавший его руками, проверял бы после такой правки
- * не всё: пять форм из шести совпали бы попарно, и шестая осталась бы непроверенной,
- * не уронив ни одного прогона.
+ * Перечисление уже менялось трижды (2026-09-05 из него убрали `review`, 2026-09-07
+ * добавили `waiting`, 2026-10-06 его сняли, TRK-573), и тест, выписавший его руками,
+ * проверял бы после такой правки не всё: формы совпали бы попарно, и одна осталась бы
+ * непроверенной, не уронив ни одного прогона.
  */
 export function contractStatuses(): string[] {
   const contract = JSON.parse(readFileSync(resolve(process.cwd(), '../openapi.json'), 'utf8')) as {
     components: { schemas: { TaskStatus: { enum: string[] } } };
   };
   return contract.components.schemas.TaskStatus.enum;
+}
+
+/**
+ * Столбцы доски слева направо: статусы контракта и «Ждёт ответа» (ключ `waiting`) сразу
+ * за `in_progress`. Статуса ожидания у бэкенда нет (TRK-573) — столбец вычисляется из
+ * вопросов `blocking` (`boardColumn`), — поэтому в перечислении статуса его и нет.
+ * Правило выписано здесь заново, а не взято из кода интерфейса.
+ */
+export function boardColumns(): string[] {
+  const statuses = contractStatuses();
+  const after = statuses.indexOf('in_progress') + 1;
+  return [...statuses.slice(0, after), 'waiting', ...statuses.slice(after)];
 }
 
 /** Сколько дней тишины в деле делают закрытую задачу архивной (UI-97). */
@@ -277,13 +289,12 @@ export function outsideArchive(now: Date = new Date()): string {
 
 /**
  * В каком столбце доски стоит задача (TRK-571, `docs/CONCEPT.md` 4.6): «Ждёт ответа»
- * (ключ `waiting`) — задача из работы с открытым вопросом `blocking`, а на переходный
- * период — и со старым статусом `waiting`; остальные — в столбце своего статуса.
- * Правило выписано здесь заново, а не взято из кода интерфейса.
+ * (ключ `waiting`) — задача из работы с открытым вопросом `blocking`; остальные — в
+ * столбце своего статуса. Правило выписано здесь заново, а не взято из кода интерфейса.
  */
 export function boardColumn(status: string, openBlockingQuestions: number): string {
   const held = ['backlog', 'open', 'in_progress'].includes(status);
-  return status === 'waiting' || (held && openBlockingQuestions > 0) ? 'waiting' : status;
+  return held && openBlockingQuestions > 0 ? 'waiting' : status;
 }
 
 /**
@@ -293,9 +304,9 @@ export function boardColumn(status: string, openBlockingQuestions: number): stri
  * Ключ — столбец (`boardColumn`), он же статус везде, кроме «Ждёт ответа».
  *
  * Состав демо меняется вместе с бэкендом: 2026-09-07 задача, ждавшая ответа владельца,
- * ушла из `open` в `waiting` (TRK-15), и три сценария, помнившие её ключ и число строк,
- * покраснели разом, ничего не сказав про интерфейс. Спрошенный состав такие правки
- * переживает сам.
+ * ушла из `open` в статус ожидания (TRK-15), а 2026-10-06 вернулась в `open` с вопросом
+ * `blocking` (TRK-573), и сценарии, помнившие её ключ и число строк, краснели разом,
+ * ничего не сказав про интерфейс. Спрошенный состав такие правки переживает сам.
  *
  * По умолчанию это состав без архива — ровно то, что список и доска показывают,
  * пока человек не попросил архив (UI-97). `archive: true` — все задачи, как их отдаёт

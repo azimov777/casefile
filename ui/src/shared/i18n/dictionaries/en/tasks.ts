@@ -56,7 +56,7 @@ export const tasks = {
     unknown: '?',
     empty: 'Empty',
     // The column is computed from open blocking questions, not from a stored status
-    // (TRK-571); the name of the `waiting` status is not shown to the person.
+    // (TRK-571, TRK-573); its key `waiting` is not shown to the person.
     waitingColumn: 'Waiting for an answer',
   },
 

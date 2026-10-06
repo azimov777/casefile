@@ -393,7 +393,19 @@ describe('доска под живым потоком', () => {
         seen.push(url);
         return taskListing(url, [
           task('DEMO-1', { status: moved ? 'in_progress' : 'open' }),
-          task('DEMO-2', { status: 'waiting' }),
+          // Ждёт ответа: из `open` её забирает столбец «Ждёт ответа» (вопрос `blocking`).
+          task('DEMO-2', {
+            status: 'open',
+            features: {
+              blocked: false,
+              open_questions: 1,
+              open_blocking_questions: 1,
+              open_remarks: 0,
+              open_warnings: 0,
+              last_summary_at: null,
+              last_entry_at: '2026-09-01T10:00:00Z',
+            },
+          }),
         ]);
       }),
     );

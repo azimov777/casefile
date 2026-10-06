@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import {
-  contractStatuses,
+  boardColumns,
   fontsReady,
   outsideArchive,
   readE2eToken,
@@ -261,7 +261,7 @@ test('родителя приносит та же выдача: запросов
   expect(board.join('\n')).not.toContain(`/tasks/${parent.key}`);
   expect(table.join('\n')).not.toContain(`/tasks/${parent.key}`);
 
-  expect(board, 'запросов на отрисовку доски').toHaveLength(contractStatuses().length + 1);
+  expect(board, 'запросов на отрисовку доски').toHaveLength(boardColumns().length + 1);
   expect(table, 'запросов на отрисовку таблицы').toHaveLength(1);
 
   // Каждый запрос, читающий строки, просит родителей в наборе полей — тем же запросом.

@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components, type operations } from '@/shared/api';
 import { OPEN_WARNINGS_CONDITION, composeWith, hideArchive } from '../model/archive';
-import { columnCondition, columnRequest } from '../model/waiting';
+import { boardColumns, columnCondition, columnRequest, type BoardColumn } from '../model/waiting';
 
 export type Task = components['schemas']['TaskSearchRead'];
 export type TaskFeatures = components['schemas']['TaskFeaturesRead'];
@@ -31,7 +31,7 @@ export type TaskListRequest = TaskListParams & {
    * Столбец доски, чьё условие складывается с запросом (`../model/waiting.ts`): так же,
    * как архив, — на отправке, а в ключе запроса стоит признаком.
    */
-  column?: TaskStatus;
+  column?: BoardColumn;
 };
 
 /**
@@ -45,7 +45,6 @@ const STATUS_SET = {
   backlog: true,
   open: true,
   in_progress: true,
-  waiting: true,
   done: true,
   cancelled: true,
 } satisfies Record<TaskStatus, true>;
@@ -58,6 +57,13 @@ const PRIORITY_SET = {
 } satisfies Record<TaskPriority, true>;
 
 export const TASK_STATUSES = Object.keys(STATUS_SET) as TaskStatus[];
+
+/**
+ * Столбцы доски: статусы контракта и вычисляемое «Ждёт ответа» между ними
+ * (`../model/waiting.ts`, `boardColumns`). Свёрнутые столбцы в адресе сверяются с этим
+ * списком, а не со статусами: «Ждёт ответа» сворачивают так же, как столбец статуса.
+ */
+export const BOARD_COLUMNS: BoardColumn[] = boardColumns(TASK_STATUSES);
 export const TASK_PRIORITIES = Object.keys(PRIORITY_SET) as TaskPriority[];
 
 /**
@@ -208,7 +214,7 @@ export function attentionQueryOptions(project: string) {
  * Курсор не из адреса: у столбца он не состояние экрана, а положение чтения —
  * переслать ссылку «на вторую страницу столбца» бессмысленно.
  */
-export function tasksColumnQueryOptions(status: TaskStatus, params: TaskListRequest) {
+export function tasksColumnQueryOptions(status: BoardColumn, params: TaskListRequest) {
   const column = { ...columnRequest(status, params), limit: TASK_COLUMN_PAGE_SIZE };
 
   return infiniteQueryOptions({

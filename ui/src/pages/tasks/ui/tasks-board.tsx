@@ -3,15 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import {
+  BOARD_COLUMNS,
   StatusMark,
-  TASK_STATUSES,
   TaskCard,
   WAITING_COLUMN,
   columnRequest,
   tasksColumnQueryOptions,
   tasksTotalQueryOptions,
+  type BoardColumn as ColumnKey,
   type TaskListParams,
-  type TaskStatus,
 } from '@/entities/task';
 import { QueryState, Reveal, type QueryLike } from '@/shared/ui';
 import { useLanguage } from '@/shared/i18n';
@@ -32,17 +32,18 @@ interface TasksBoardProps {
    * состояние — это то, что человек увидит по пересланной ссылке, и терять его на
    * переходе в таблицу и обратно незачем.
    */
-  collapsed: TaskStatus[];
-  onToggle: (status: TaskStatus, open: boolean) => void;
+  collapsed: ColumnKey[];
+  onToggle: (status: ColumnKey, open: boolean) => void;
 }
 
 /**
  * Доска: те же задачи одного проекта, разложенные по столбцам статусов.
  *
  * Перечень и порядок столбцов берутся из перечисления статуса сгенерированного клиента
- * (`TASK_STATUSES`), а не из своего списка: перечисление уже менялось и может измениться
- * снова — доска обязана пережить это перегенерацией клиента, без правки кода
- * (`docs/FRONTEND.md`, «Доска без доски»).
+ * (`BOARD_COLUMNS` из `TASK_STATUSES`), а не из своего списка: перечисление уже менялось и
+ * может измениться снова — доска обязана пережить это перегенерацией клиента, без правки
+ * кода (`docs/FRONTEND.md`, «Доска без доски»). Один столбец не статус: «Ждёт ответа»
+ * вычисляется из вопросов `blocking` и стоит за `in_progress` (`boardColumns`).
  *
  * Задач доска не получает и не раздаёт: каждый столбец читает свой отбор сам и своим
  * курсором (UI-70). Общего дочитывания под доской поэтому нет вовсе — способ дочитать
@@ -134,7 +135,7 @@ export function TasksBoard({ params, explained, collapsed, onToggle }: TasksBoar
        * высоты, и `flex-1` без неё схлопнул бы ряд в ноль.
        */}
       <div className="flex items-stretch gap-3 overflow-x-auto pb-2 fold:min-h-0 fold:flex-1">
-        {TASK_STATUSES.map((status) => (
+        {BOARD_COLUMNS.map((status) => (
           <BoardColumn
             key={status}
             status={status}
@@ -150,11 +151,11 @@ export function TasksBoard({ params, explained, collapsed, onToggle }: TasksBoar
 }
 
 interface BoardColumnProps {
-  status: TaskStatus;
+  status: ColumnKey;
   params: TaskListParams;
   explained: boolean;
   open: boolean;
-  onToggle: (status: TaskStatus, open: boolean) => void;
+  onToggle: (status: ColumnKey, open: boolean) => void;
 }
 
 /**

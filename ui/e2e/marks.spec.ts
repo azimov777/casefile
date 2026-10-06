@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { contractStatuses, fontsReady, silenceJournal } from './contour';
+import { boardColumns, fontsReady, silenceJournal } from './contour';
 
 /** Все статусы контракта разом видны в заголовках столбцов доски. */
-const STATUSES = contractStatuses();
+const STATUSES = boardColumns();
 
 /** Вырезка одного знака статуса: только рисунок, без имени рядом. */
 async function shotOf(page: Page, status: string): Promise<Buffer> {

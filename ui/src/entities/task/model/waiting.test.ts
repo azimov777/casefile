@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { columnCondition, columnRequest, isAwaitingAnswer } from './waiting';
+import { boardColumns, columnCondition, columnRequest, isAwaitingAnswer } from './waiting';
 
 const features = (blocking: number) =>
   ({
@@ -13,11 +13,22 @@ const features = (blocking: number) =>
   }) as never;
 
 describe('условие столбца доски', () => {
-  it('«Ждёт ответа» — вопрос blocking у задачи из работы или старый статус', () => {
-    const condition = columnCondition('waiting') ?? '';
-    expect(condition).toContain('status: in backlog, open, in_progress');
-    expect(condition).toContain('open_blocking_questions: > 0');
-    expect(condition).toContain('or status: waiting');
+  it('«Ждёт ответа» — вопрос blocking у задачи из работы, и ничего про статус ожидания', () => {
+    // Хранимого статуса ожидания у бэкенда нет (TRK-573): `status: waiting` он отклонил бы.
+    expect(columnCondition('waiting')).toBe(
+      'status: in backlog, open, in_progress and open_blocking_questions: > 0',
+    );
+  });
+
+  it('столбец «Ждёт ответа» стоит сразу за последним статусом работы', () => {
+    expect(boardColumns(['backlog', 'open', 'in_progress', 'done', 'cancelled'])).toEqual([
+      'backlog',
+      'open',
+      'in_progress',
+      'waiting',
+      'done',
+      'cancelled',
+    ]);
   });
 
   it('столбцы работы исключают такие задачи, закрытые — не трогают', () => {
@@ -41,8 +52,8 @@ describe('пометка «ждёт ответа»', () => {
     expect(isAwaitingAnswer('open', features(0))).toBe(false);
   });
 
-  it('есть и у старого статуса waiting; закрытой задаче не ставится', () => {
-    expect(isAwaitingAnswer('waiting', features(0))).toBe(true);
+  it('закрытой задаче не ставится', () => {
     expect(isAwaitingAnswer('done', features(1))).toBe(false);
+    expect(isAwaitingAnswer('cancelled', features(1))).toBe(false);
   });
 });

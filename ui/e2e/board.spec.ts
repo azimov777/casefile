@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { contractStatuses, fontsReady, silenceJournal, tasksByStatus } from './contour';
+import { boardColumns, fontsReady, silenceJournal, tasksByStatus } from './contour';
 
 function column(page: Page, status: string) {
   return page.getByRole('region', { name: status });
@@ -17,7 +17,7 @@ test('доска показывает по столбцу на каждый ст
   });
 
   const expected = await tasksByStatus(request);
-  const statuses = contractStatuses();
+  const statuses = boardColumns();
 
   await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, statuses[0] as string)).toBeVisible();
@@ -194,11 +194,11 @@ test('все столбцы свёрнуты: колесо дальше края
 }) => {
   await silenceJournal(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  const collapsed = contractStatuses()
+  const collapsed = boardColumns()
     .map((status) => `collapsed=${status}`)
     .join('&');
   await page.goto(`/tasks?project=DEMO&view=board&${collapsed}`);
-  for (const status of contractStatuses()) {
+  for (const status of boardColumns()) {
     await expect(column(page, status).getByRole('button')).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -255,7 +255,7 @@ test('все столбцы свёрнуты: колесо дальше края
   await expect.poll(overscroll).toBe('auto');
 });
 
-test('столбец ожидания развёрнут, а знак в его заголовке тот же, что в строке списка', async ({
+test('столбец ожидания развёрнут, а его задача в списке стоит своим статусом с пометкой', async ({
   page,
 }) => {
   await silenceJournal(page);
@@ -266,21 +266,24 @@ test('столбец ожидания развёрнут, а знак в его 
   // доска не вправе (`DEFAULT_COLLAPSED`).
   const toggle = column(page, 'waiting').getByRole('button');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(column(page, 'waiting').getByRole('article').first()).toBeVisible();
+  const card = column(page, 'waiting').getByRole('article').first();
+  await expect(card).toBeVisible();
+  const key = /DEMO-\d+/.exec((await card.textContent()) ?? '')?.[0] ?? '';
+  expect(key, 'в «Ждёт ответа» нет карточки с ключом').not.toBe('');
 
-  // Один словарь знаков на список, карточку и доску (решение Д20): рисунок в заголовке
-  // столбца и рисунок в строке таблицы совпадают до символа. Разойдясь, они дали бы
-  // человеку два разных знака для одного и того же статуса.
-  const head = await column(page, 'waiting')
+  // Статуса ожидания нет (TRK-573): в списке та же задача стоит своим статусом, а
+  // ожидание называет пометка «ждёт ответа» рядом. Знак паузы носит только заголовок
+  // столбца, и в строке его нет.
+  const pause = await column(page, 'waiting')
     .locator('[data-mark="status"] svg')
     .first()
     .innerHTML();
 
-  await page.goto('/tasks?project=DEMO&status=waiting');
-  await expect(page.locator('tbody tr')).toHaveCount(1);
-  const row = await page.locator('tbody [data-mark="status"] svg').first().innerHTML();
-
-  expect(row).toBe(head);
+  await page.goto('/tasks?project=DEMO');
+  const row = page.getByRole('row', { name: new RegExp(`\\b${key}\\b`) });
+  await expect(row.locator('[data-mark="awaiting"]')).toBeVisible();
+  const shape = await row.locator('[data-mark="status"] svg').first().innerHTML();
+  expect(shape).not.toBe(pause);
 });
 
 test('карточка ведёт в задачу, а «назад» возвращает на доску', async ({ page }) => {
@@ -687,7 +690,7 @@ test('на любой глубине прокрутки видно, какой �
   await scrollColumn(page, status);
 
   const measured = await heads(page);
-  expect(measured.columns).toHaveLength(contractStatuses().length);
+  expect(measured.columns).toHaveLength(boardColumns().length);
 
   const report = JSON.stringify(measured);
   for (const seen of measured.columns) {
@@ -920,7 +923,7 @@ const NARROW_WINDOW = { width: 320, height: 320 };
  * поэтому ждётся число в конце заголовка, у каждого столбца.
  */
 async function boardRead(page: Page): Promise<void> {
-  for (const status of contractStatuses()) {
+  for (const status of boardColumns()) {
     await expect(
       column(page, status).getByRole('button'),
       `столбец ${status} не дождался ответа`,
@@ -1030,7 +1033,7 @@ test('ниже точки остановки заголовок прижат к 
   const measured = await pinned(page);
   const lane = await row(page);
   const report = JSON.stringify({ deeper, lane, ...measured });
-  expect(measured.columns).toHaveLength(contractStatuses().length);
+  expect(measured.columns).toHaveLength(boardColumns().length);
   for (const seen of measured.columns) {
     // Столбец ушёл за верх окна, а его заголовок — нет: у верха окна, в пикселе рамки.
     expect(seen.column.top, report).toBeLessThan(0);
@@ -1095,7 +1098,7 @@ test('ниже точки остановки все шесть столбцов 
   const report = JSON.stringify({ before, after, ...measured });
   // Последний столбец встал целиком у правого края ряда: доехать можно до каждого.
   const last = measured.columns.at(-1);
-  expect(last?.status, report).toBe(contractStatuses().at(-1));
+  expect(last?.status, report).toBe(boardColumns().at(-1));
   expect(Math.abs((last?.column.right ?? 0) - after.edges.right), report).toBeLessThanOrEqual(1);
   expect(last?.column.left ?? -1, report).toBeGreaterThanOrEqual(after.edges.left);
   for (const seen of measured.columns) {
@@ -1203,7 +1206,7 @@ test('столбец доски не прокручивается вбок ни 
 
     const measured = await lanes(page);
     const report = `на ${width}px ${JSON.stringify(measured)}`;
-    expect(measured.columns).toHaveLength(contractStatuses().length);
+    expect(measured.columns).toHaveLength(boardColumns().length);
 
     for (const seen of measured.columns) {
       // Столбцу вбок ехать некуда: карточки укладываются в его ширину.

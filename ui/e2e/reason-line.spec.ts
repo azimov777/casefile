@@ -34,7 +34,7 @@ async function create(request: APIRequestContext): Promise<string> {
     data: {
       project: 'DEMO',
       title: 'Подопытная задача для причины перехода со ссылкой (UI-159)',
-      description: 'Заведена сквозным тестом UI-159: причина `waiting` со ссылкой на запись.',
+      description: 'Заведена сквозным тестом UI-159: причина отмены со ссылкой на запись.',
     },
   });
   expect(response.status()).toBe(201);
@@ -46,10 +46,14 @@ function reasonOf(key: string): string {
   return `Заблокировано владельцем: ${MARKER} (${key}#1)`;
 }
 
-async function blockOnOwner(request: APIRequestContext, key: string): Promise<void> {
+/**
+ * Переход с причиной прямо из `backlog`. До TRK-573 им был уход в статус ожидания; его
+ * сняли, и причину из `backlog` теперь требует только отмена — она же и уборка.
+ */
+async function cancelWithReason(request: APIRequestContext, key: string): Promise<void> {
   const response = await request.post(`/api/v1/tasks/${key}/transition`, {
     headers: auth(),
-    data: { to: 'waiting', reason: reasonOf(key) },
+    data: { to: 'cancelled', reason: reasonOf(key) },
   });
   expect(response.status()).toBe(200);
 }
@@ -130,9 +134,11 @@ test('причина перехода со ссылкой стоит в одну
 
   const key = await create(request);
   const refText = `${key}#1`;
+  let closed = false;
 
   try {
-    await blockOnOwner(request, key);
+    await cancelWithReason(request, key);
+    closed = true;
 
     await silenceJournal(page);
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -178,6 +184,6 @@ test('причина перехода со ссылкой стоит в одну
       `/tasks/${key}?entry=1`,
     );
   } finally {
-    await cancel(request, key);
+    if (!closed) await cancel(request, key);
   }
 });
