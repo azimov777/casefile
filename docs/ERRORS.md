@@ -92,6 +92,7 @@
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
 | `task_already_in_project` | Task is already in this project | Перенос в проект, где задача уже лежит: переносить некуда (`CONCEPT.md`, 3.3). |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
+| `task_checks_frozen` | Checks cannot be changed after the task has entered in_progress | Проверки задачи, уже входившей в `in_progress`, не правятся. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
 | `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
 | `task_has_open_blocking_questions` | Task has open blocking questions | Вход в `in_progress` при открытом вопросе `blocking`: номера вопросов в `details.questions`. |

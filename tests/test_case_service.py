@@ -26,6 +26,7 @@ from app.domain.errors import (
     EntryNotFoundError,
     ParticipantNotFoundError,
     SummaryRequiredError,
+    TaskChecksFrozenError,
 )
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskStatus
@@ -555,38 +556,31 @@ async def test_verdicts_of_the_previous_stint_do_not_close_the_new_one(
     assert task.status is TaskStatus.DONE
 
 
-async def test_rewritten_checks_do_not_inherit_the_old_verdicts(
+async def test_checks_with_verdicts_cannot_be_rewritten_after_the_task_was_taken(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    """Задача 31, обзорная проверка 2: правка `checks` не оставляет старых `passed`.
+    """Задача 31 в редакции `TRK-562`: старые `passed` не достаются переписанной проверке.
 
-    Номера проверок те же самые, а проверяют они другое: без границы вердикт по первой
-    проверке молча закрыл бы переписанную первую проверку.
+    Раньше это держала граница «вердикты после последнего входа»; теперь правка проверок
+    после первого входа в `in_progress` отказывает вовсе, и переписать проверку, на
+    номер которой уже подшит вердикт, нельзя.
     """
     task = await ready(db_session, task_actor, project, checks=["первая", "вторая"])
     await pass_all(db_session, task, task_actor)
 
-    # Пять разделов правятся только в `backlog` (`CONCEPT.md`, 3.3), и задача идёт туда
-    # шагом назад с причиной.
     for status in (TaskStatus.OPEN, TaskStatus.BACKLOG):
         await tasks_service.transition_task(
             db_session, task, actor=task_actor, to=status, reason="проверки сформулированы неверно"
         )
-    await tasks_service.update_task(
-        db_session,
-        task,
-        actor=task_actor,
-        changes=tasks_service.TaskChanges(checks=["другая первая", "другая вторая"]),
-    )
-    await take(db_session, task, task_actor)
-    await service.add_summary(db_session, task, actor=task_actor, **SUMMARY)
-
-    with pytest.raises(ChecksNotPassedError) as error:
-        await close(db_session, task, task_actor)
-    assert error.value.details["checks"] == [
-        {"check_no": 1, "reason": "no_verdict"},
-        {"check_no": 2, "reason": "no_verdict"},
-    ]
+    with pytest.raises(TaskChecksFrozenError) as error:
+        await tasks_service.update_task(
+            db_session,
+            task,
+            actor=task_actor,
+            changes=tasks_service.TaskChanges(checks=["другая первая", "другая вторая"]),
+        )
+    assert error.value.details["key"] == task.key
+    assert task.checks == ["первая", "вторая"]
 
 
 # --- Закрывающая сводка: пятая часть (TRK-78) ------------------------------------------
