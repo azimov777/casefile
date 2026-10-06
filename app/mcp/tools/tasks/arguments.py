@@ -22,6 +22,13 @@ DECISIONS_RULE = (
     "successor in `details`"
 )
 
+#: Направление задачи (`CONCEPT.md`, 3.3, 3.7): адрес направления её проекта. Ставит
+#: `create_task`, меняет `update_task`; формулировка короткая намеренно — метадата
+#: инструментов держится в бюджете токенов (`docs/notes/mcp.md`).
+DIRECTION_RULE = "Direction address `PROJECT/key`"
+
+DirectionArg = Annotated[str | None, Field(description=DIRECTION_RULE)]
+
 DecisionsArg = Annotated[
     list[str] | None,
     Field(description=DECISIONS_RULE, examples=[["TRK#15"]]),

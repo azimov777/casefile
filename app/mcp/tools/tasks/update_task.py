@@ -17,7 +17,7 @@ from app.core.sentinels import unset_field
 from app.domain.tasks import FIRST_CHECK_NUMBER, MAX_CHECK_LENGTH, CheckEdit
 from app.mcp.arguments import TaskKeyArg
 from app.mcp.enums import TaskPrioritySchema
-from app.mcp.tools.tasks.arguments import DECISIONS_RULE
+from app.mcp.tools.tasks.arguments import DECISIONS_RULE, DIRECTION_RULE
 from app.mcp.tools.tasks.views import MutationView, mutation
 from app.mcp.toolset import IDEMPOTENT_TASK_UPDATE, Toolset
 from app.services import tasks as tasks_service
@@ -93,6 +93,9 @@ class TaskChanges(BaseModel):
         )
     )
     priority: TaskPrioritySchema = unset_field(description="Task priority")
+    direction: str | None = unset_field(
+        description=f"{DIRECTION_RULE}; `null` clears",
+    )
     decisions: list[str] = unset_field(
         description=(
             "The whole new list, editable in any status but `done` and `cancelled`. "

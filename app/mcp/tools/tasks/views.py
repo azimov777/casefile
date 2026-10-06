@@ -9,6 +9,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.db.models.direction import Direction
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
@@ -49,6 +50,28 @@ def task_project(project: Project) -> TaskProjectView:
     )
 
 
+# Направление в карточке задачи — тот же набор полей, что у `TaskDirectionRead` в REST.
+class TaskDirectionView(BaseModel):
+
+    address: str
+    title: str
+    description: str
+    archived_at: datetime | None
+
+
+def task_direction(direction: Direction) -> TaskDirectionView:
+    """Направление в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).
+
+    Атрибуты и дело направления в пакет не едут — они читаются у самого направления.
+    """
+    return TaskDirectionView(
+        address=direction.address,
+        title=direction.title,
+        description=direction.description,
+        archived_at=direction.archived_at,
+    )
+
+
 # Карточка задачи — тот же набор полей, что у `TaskRead` в REST.
 class TaskView(BaseModel):
     """Task card."""
@@ -66,6 +89,7 @@ class TaskView(BaseModel):
         )
     )
     project: TaskProjectView
+    direction: TaskDirectionView | None
     title: str
     description: str
     goal: str
@@ -89,6 +113,7 @@ def task(item: Task) -> TaskView:
         key=item.key,
         previous_keys=list(item.previous_keys),
         project=task_project(item.project),
+        direction=None if item.direction is None else task_direction(item.direction),
         title=item.title,
         description=item.description,
         goal=item.goal,

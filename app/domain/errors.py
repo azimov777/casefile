@@ -192,6 +192,17 @@ class DirectionNotArchivedError(ConflictError):
     message = "Direction is not archived"
 
 
+class DirectionProjectMismatchError(ValidationError):
+    """Направление другого проекта: задаче подходит направление её собственного проекта.
+
+    Оба проекта — в `details` (`task_project`, `direction_project`), и по ним агент видит,
+    чьё направление назвал (`CONCEPT.md`, 3.3).
+    """
+
+    code = "direction_project_mismatch"
+    message = "Direction belongs to another project than the task"
+
+
 class DirectionReasonRequiredError(ValidationError):
     """Архивирование и восстановление направления требуют непустой причины `reason`."""
 

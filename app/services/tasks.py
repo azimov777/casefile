@@ -50,12 +50,14 @@ from sqlalchemy.orm.exc import StaleDataError
 from app.core.errors import AppError
 from app.core.sentinels import UNSET, is_set
 from app.db.models.author import created_by_columns
+from app.db.models.direction import Direction
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository, TaskRepository
 from app.domain.case import EntryHeading
 from app.domain.errors import (
+    DirectionProjectMismatchError,
     TaskAlreadyInProjectError,
     TaskChecksFrozenError,
     TaskClosedError,
@@ -95,6 +97,7 @@ from app.domain.tasks import (
 )
 from app.services import case as case_service
 from app.services import decisions as decisions_service
+from app.services import directions as directions_service
 from app.services import freeze
 from app.services import links as links_service
 from app.services import projects as projects_service
@@ -122,6 +125,8 @@ class TaskChanges:
     check: CheckEdit = UNSET
     assignee: str | None = UNSET
     priority: TaskPriority | str = UNSET
+    #: Адрес направления проекта задачи; `None` снимает направление.
+    direction: str | None = UNSET
     decisions: Sequence[str] = UNSET
 
     #: Поля, у которых нет одноимённого поля задачи: они разбираются отдельно.
@@ -311,6 +316,7 @@ async def create_task(
     assignee: str | None = None,
     priority: TaskPriority | str = DEFAULT_PRIORITY,
     decisions: Sequence[str] = (),
+    direction: str | None = None,
 ) -> Task:
     """Заводит задачу в `backlog`. Статус не принимается: новая задача рождается только там.
 
@@ -336,8 +342,15 @@ async def create_task(
             TaskField.CHECKS: checks,
             TaskField.ASSIGNEE: assignee,
             TaskField.PRIORITY: priority,
+            TaskField.DIRECTION: direction,
             TaskField.DECISIONS: decisions,
         }
+    )
+    # Направление ищется и проверяется до номера, как решения: отказ не сжигает ключ.
+    # Направления родителя ребёнок не берёт: у `create_task` его не берут ни из чего,
+    # кроме этого аргумента (`CONCEPT.md`, 3.3).
+    resolved_direction = await _resolve_direction(
+        session, project=project, address=stored.pop(TaskField.DIRECTION), current=None
     )
     # Решения проекта — проверка с базой, но тоже до номера: отказ не сжигает ключ.
     await decisions_service.check_cited(session, before=(), after=stored[TaskField.DECISIONS])
@@ -351,6 +364,7 @@ async def create_task(
     task = Task(
         key=format_task_key(project.key, number),
         project=project,
+        direction=resolved_direction,
         status=INITIAL_STATUS,
         version=1,
         **{field.value: value for field, value in stored.items()},
@@ -570,6 +584,10 @@ async def move_task(
     task.previous_keys = moved_previous_keys(from_key, task.previous_keys, to_key=to_key)
     task.key = to_key
     task.project = project
+    # Направление принадлежит проекту, а в новом такого нет: перенос снимает его тем же
+    # действием (`CONCEPT.md`, 3.3). Архив направления переносу не мешает.
+    dropped_direction = None if task.direction is None else task.direction.address
+    task.direction = None
     await _flush_checking_version(session, task, expected_version)
     entry = await case_service.record_moved(
         session,
@@ -581,6 +599,15 @@ async def move_task(
         to_key=to_key,
         reason=checked,
     )
+    if dropped_direction is not None:
+        await case_service.record_field_changed(
+            session,
+            task,
+            actor=actor,
+            field=TaskField.DIRECTION,
+            before=dropped_direction,
+            after=None,
+        )
     return TaskMove(task=task, entry=entry)
 
 
@@ -748,12 +775,30 @@ async def apply_task_changes(
             after=normalized[TaskField.DECISIONS],
             key=task.key,
         )
+    new_direction: Direction | None = None
+    if TaskField.DIRECTION in normalized:
+        # Под очередью: существование, проект и архив направления читаются в том же
+        # моменте, что и фиксация. Уже стоящее направление не проверяется заново — снять
+        # его и оставить можно и в архиве.
+        new_direction = await _resolve_direction(
+            session,
+            project=task.project,
+            address=normalized[TaskField.DIRECTION],
+            current=task.direction,
+        )
     recorded: list[TaskChange] = []
     for field, after in normalized.items():
-        before = getattr(task, field.value)
+        if field is TaskField.DIRECTION:
+            before = None if task.direction is None else task.direction.address
+            after = None if new_direction is None else new_direction.address
+        else:
+            before = getattr(task, field.value)
         if _same(before, after):
             continue
         recorded.append(_change(field, before, after, edit))
+        if field is TaskField.DIRECTION:
+            task.direction = new_direction
+            continue
         # JSONB-колонку нельзя менять на месте: SQLAlchemy не отслеживает мутации внутри
         # значения. `normalize_fields` всегда отдаёт новый список, поэтому присваивание
         # безопасно и для `checks`.
@@ -835,7 +880,7 @@ async def apply_task_changes(
                 action_id=resolved_action_id,
             )
         else:
-            # Обвязка: `priority` и `decisions`. Ветка без условия намеренно — новое
+            # Обвязка: `priority`, `direction` и `decisions`. Ветка без условия намеренно — новое
             # поле карточки получит запись само, а не окажется тихо немым в ленте.
             entry = await case_service.record_field_changed(
                 session,
@@ -936,6 +981,37 @@ async def _transition_facts(
         assignee=task.assignee,
         requester=requester,
     )
+
+
+async def _resolve_direction(
+    session: AsyncSession,
+    *,
+    project: Project,
+    address: str | None,
+    current: Direction | None,
+) -> Direction | None:
+    """Направление по адресу для поля задачи: есть, того же проекта, не в архиве.
+
+    Порядок отказов: `direction_not_found` (или `project_not_found` для проекта, которого
+    нет), затем `direction_project_mismatch`, затем `direction_archived`. Направление, которое
+    уже стоит у задачи, архив не проверяет: поле остаётся как есть, а снять его можно
+    всегда (`address is None`).
+    """
+    if address is None:
+        return None
+    direction = await directions_service.get_direction(session, address)
+    if current is not None and current.id == direction.id:
+        return direction
+    if direction.project_id != project.id:
+        raise DirectionProjectMismatchError(
+            details={
+                "direction": direction.address,
+                "task_project": project.key,
+                "direction_project": direction.project.key,
+            }
+        )
+    await freeze.ensure_unfrozen(session, directions=(direction,))
+    return direction
 
 
 def _ensure_version(task: Task, expected_version: int | None) -> None:

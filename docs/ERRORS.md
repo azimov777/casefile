@@ -120,6 +120,7 @@
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
 | `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
 | `direction_description_too_long` | Direction description is too long | Описание направления длиннее предела (`app/domain/directions.py`); не обрезается. |
+| `direction_project_mismatch` | Direction belongs to another project than the task | Направление другого проекта: задаче подходит направление её собственного проекта. |
 | `direction_reason_required` | Archiving or restoring a direction requires a reason | Архивирование и восстановление направления требуют непустой причины `reason`. |
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не ответили: у отвеченного это `already_answered`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |

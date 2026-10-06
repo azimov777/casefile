@@ -81,10 +81,7 @@ ProjectKeyArg = Annotated[
 CaseOwnerKeyArg = Annotated[
     str,
     Field(
-        description=(
-            "Project key or direction address `PROJECT/key`, case-insensitive; an unknown "
-            "one is refused with `project_not_found` or `direction_not_found`"
-        ),
+        description="Project key or direction address `PROJECT/key`, case-insensitive",
         examples=["TRK"],
     ),
 ]

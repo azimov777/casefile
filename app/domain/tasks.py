@@ -34,6 +34,11 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from app.domain.directions import (
+    DIRECTION_ADDRESS_SHAPE,
+    is_direction_address,
+    parse_direction_address,
+)
 from app.domain.errors import (
     AssigneeMismatchError,
     AssigneeRequiredError,
@@ -364,6 +369,10 @@ class TaskField(StrEnum):
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
+    #: Направление проекта задачи (`CONCEPT.md`, 3.3 и 3.7): адрес `ПРОЕКТ/ключ` или
+    #: `None`. Обвязка, как приоритет: меняется в любом незакрытом статусе, пишет
+    #: `field_changed`. Хранится ссылкой на строку направления, в записи — адресом.
+    DIRECTION = "direction"
     #: Решения проекта, на которые опирается задача (`CONCEPT.md`, 3.3): обвязка, а не
     #: задание, поэтому меняется в любом незакрытом статусе и пишет `field_changed`.
     DECISIONS = "decisions"
@@ -386,7 +395,7 @@ BACKLOG_ONLY_FIELDS: frozenset[TaskField] = frozenset(
 
 #: Меняются в любом незакрытом статусе: это не содержание задачи, а её обвязка.
 OPEN_FIELDS: frozenset[TaskField] = frozenset(
-    {TaskField.ASSIGNEE, TaskField.PRIORITY, TaskField.DECISIONS}
+    {TaskField.ASSIGNEE, TaskField.PRIORITY, TaskField.DIRECTION, TaskField.DECISIONS}
 )
 
 
@@ -574,6 +583,21 @@ def _normalize_priority(value: Any) -> TaskPriority:
         ) from None
 
 
+def _normalize_direction(value: Any) -> str | None:
+    """Адрес направления в каноническом виде или `None` — «направления нет».
+
+    Форму проверяет только это: что направление существует, принадлежит проекту задачи
+    и не в архиве, решает сценарий — домен в базу не ходит. Строка без косой черты
+    (ключ проекта, голое слово) — не адрес, и причина называет форму.
+    """
+    if value is None:
+        return None
+    address = _text(value).strip()
+    if not is_direction_address(address):
+        raise FieldProblem("invalid_address", expected=DIRECTION_ADDRESS_SHAPE, allowed_null=True)
+    return str(parse_direction_address(address))
+
+
 def _normalize_decisions(value: Any) -> list[str]:
     """Решения проекта задачи: канонические ссылки `TRK#15` без повторов, в порядке постановки.
 
@@ -603,6 +627,7 @@ _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.CHECKS: _normalize_checks,
     TaskField.ASSIGNEE: _normalize_assignee,
     TaskField.PRIORITY: _normalize_priority,
+    TaskField.DIRECTION: _normalize_direction,
     TaskField.DECISIONS: _normalize_decisions,
 }
 

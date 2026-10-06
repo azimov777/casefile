@@ -1327,3 +1327,23 @@ TRK-561).
 **Где:** `app/mcp/arguments.py`, `CaseOwnerKeyArg`; `app/services/directions.py`, `get_owner`;
 `app/mcp/tools/registries/create_project.py`; `app/mcp/tools/registries/get_project.py`;
 `app/mcp/tools/case/views.py`, `EntryView`.
+
+## Поле `direction` стоит в метадате 179 токенов, и бюджет TRK-555 удержан сокращением чужих формулировок (TRK-556)
+
+**Что:** поле `direction` в `get_task` (форма `TaskDirectionView`), `create_task`,
+`update_task`, `search_tasks` (аргумент, строка, список `fields`) и `move_task` (одна фраза)
+добавило к `tools/list` 347 токенов от `264213ee` с первыми формулировками и 323 с
+короткими; описание `CaseOwnerKeyArg` без перечня отказов (`project_not_found`,
+`direction_not_found`) у восьми инструментов вернуло 144. Итог — +179 при 257 оставшихся
+после TRK-555 (замер: tiktoken `o200k_base`, JSON `tools/list` без пробелов, отсортированный
+по имени; `list_tools` сервера из `create_server`).
+**Почему важно:** предел прироста 1 000 токенов на программу направлений (TRK-555#12) —
+цена каждого подключения агента; первая версия описаний его превышала. Отказы
+по-прежнему названы в `docs/ERRORS.md` и в тексте самого отказа.
+**Как правильно:** новое поле инструмента писать без примеров и без перечня отказов
+(`examples` стоят 8–10 токенов на поле), форму ответа — без докстринга у вложенной
+модели; перед сдачей мерить `tools/list` до и после. Новая вложенная модель ответа стоит
+около 100 токенов в каждом инструменте, чья схема её содержит.
+**Где:** `app/mcp/tools/tasks/views.py`, `TaskDirectionView`;
+`app/mcp/tools/tasks/arguments.py`, `DIRECTION_RULE`; `app/mcp/arguments.py`,
+`CaseOwnerKeyArg`.

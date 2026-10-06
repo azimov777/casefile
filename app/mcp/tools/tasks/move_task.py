@@ -167,7 +167,8 @@ def register(tools: Toolset) -> None:
         when it returns to a project it has been in: a task holds at most one key per
         project. The key it leaves goes to `previous_keys` and keeps addressing the task
         in every call that takes a key; no other task ever gets it. Status, sections,
-        links, parent, children and case stay as they are, and a closed task moves too.
+        links, parent, children and case stay as they are, and a closed task moves too;
+        its direction is dropped.
         One key moves one task: its children stay in their project.
 
         Moving into or out of a frozen project fails with `project_archived`.
