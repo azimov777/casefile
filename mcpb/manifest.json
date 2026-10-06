@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "tracker",
   "display_name": "Casefile",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Casefile in the Claude Desktop chat: the case file for every task, shared across sessions, agents and people. Connects to your Casefile installation and signs in through OAuth, no token in the extension.",
   "long_description": "Casefile keeps a case file for every task, shared by every session, agent and person: decisions, attempts, findings, summaries and open questions, so the next one carries on instead of starting over. This extension connects the Claude Desktop chat to a Casefile installation over MCP. It carries the mcp-remote bridge and runs on the Node.js built into Claude Desktop, so nothing else has to be installed. The address field takes the MCP address of the installation: http://127.0.0.1:8100/mcp for an installation on this machine (it has to be running), or the https address of a server. The first connection opens a browser page for the OAuth sign-in; on your own machine it closes at once. Installing: https://github.com/azimov777/casefile/blob/main/docs/agent-install.md",
   "author": {
