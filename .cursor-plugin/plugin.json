@@ -1,7 +1,7 @@
 {
   "name": "casefile",
   "displayName": "Casefile",
-  "version": "0.9.5",
+  "version": "0.10.0",
   "description": "Casefile: the case file for every task, shared across sessions, agents and people. The skill walks an agent through taking a task, keeping its case, asking the human, handing it off and closing it with verdicts; the MCP connector signs in through OAuth, no token in the plugin.",
   "author": {
     "name": "azimov777",
