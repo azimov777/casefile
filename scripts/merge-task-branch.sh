@@ -186,8 +186,12 @@ run_test() {
 # `--continue`, где имени ветки уже нет.
 #: Кроме `ui/` — файлы вне него, с которыми сверяется `ui/src/features/connect-agent/model/
 #: snippets.test.ts` (установщик и гайд агента, README): правка их без `ui/` красила `pnpm
-#: check` в main (TRK-446#24, TRK-507).
-UI_WATCHED_PATHS=(ui/ install.sh install.ps1 docs/agent-install.md README.md)
+#: check` в main (TRK-446#24, TRK-507). И `docs/ERRORS.md` с `openapi.json` (TRK-583):
+#: справочник ошибок читают `src/shared/errors/text.test.ts` и `frontend-doc.contract.test.ts`,
+#: схему API — `openapi.contract.test.ts` и тот же `frontend-doc.contract.test.ts`; код
+#: ошибки, добавленный без `ui/`, красил `pnpm check` в main после слияния TRK-562.
+#: Список явный: новый тест `ui/`, читающий файл вне `ui/`, дописывает сюда его путь.
+UI_WATCHED_PATHS=(ui/ install.sh install.ps1 docs/agent-install.md README.md docs/ERRORS.md openapi.json)
 
 branch_touches_ui() {
     [ -n "$(git diff --name-only HEAD...MERGE_HEAD -- "${UI_WATCHED_PATHS[@]}")" ]
@@ -196,7 +200,7 @@ branch_touches_ui() {
 run_ui_check() {
     local log status=0
     log="$(mktemp "${TMPDIR:-/tmp}/merge-task-branch-ui.XXXXXX")"
-    say "==> ветка трогает ui/: ${CHECK_COMMAND[*]}"
+    say "==> ветка трогает ui/ или файлы, от которых зависят его тесты: ${CHECK_COMMAND[*]}"
     (cd ui && "${CHECK_COMMAND[@]}") 2>&1 | tee "$log" || status=$?
     CHECK_SUMMARY="$(summary_of_check "$log")"
     rm -f "$log"

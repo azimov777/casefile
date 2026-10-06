@@ -491,3 +491,22 @@ GitHub идёт только при `TRACKER_ENVIRONMENT=production`.
 отказать (`key = task.key`), и дальше ходить по ключу через REST или MCP.
 **Где:** `tests/test_closing_warning.py`, `test_failed_still_refuses_closing_and_files_nothing`;
 `tests/conftest.py`, `refuse`.
+
+## Скрипт слияния не гонял `pnpm check` на ветке, правящей справочник ошибок или схему API без `ui/`
+
+**Что:** `scripts/merge-task-branch.sh` гоняет `pnpm check` только если дифф ветки задевает
+`UI_WATCHED_PATHS`. В списке не было `docs/ERRORS.md` и `openapi.json`, хотя их читают
+тесты `ui/`: `src/shared/errors/text.test.ts` и `frontend-doc.contract.test.ts` — справочник,
+`openapi.contract.test.ts` и тот же `frontend-doc.contract.test.ts` — схему. Ветка TRK-562
+добавила код ошибки в `docs/ERRORS.md` без правки `ui/`, скрипт написал «ветка не трогает
+ui/», слил её, и `main` покраснел в интерфейсе; поймало это только следующее слияние (TRK-582).
+**Почему важно:** красный `ui/` на `main` вылезает на чужом слиянии, и чинить его приходится
+отдельной задачей, а `Merge-verified:` слияния-виновника говорит «не запускался» — правду,
+которая никого не остановила.
+**Как правильно:** любой тест `ui/`, читающий файл вне `ui/` (`resolve(process.cwd(),
+'../…')`, `resolve(__dirname, '../../…')`), дописывает путь этого файла в `UI_WATCHED_PATHS`
+скрипта слияния: список явный, а не «всё вне `ui/`», чтобы `pnpm check` не гонялся на
+каждой ветке бэкенда. Сегодня в нём: `ui/`, `install.sh`, `install.ps1`,
+`docs/agent-install.md`, `README.md`, `docs/ERRORS.md`, `openapi.json`.
+**Где:** `scripts/merge-task-branch.sh`, `UI_WATCHED_PATHS`; сторожит
+`tests/test_merge_script.py`.
