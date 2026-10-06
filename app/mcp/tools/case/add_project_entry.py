@@ -77,8 +77,7 @@ def register(tools: Toolset) -> None:
 
         The entry number counts inside the project or direction, and `TRK#7` or
         `TRK/promotion#3` addresses the entry from `refs` of any case. Like a task entry
-        filed by `add_entry`, such an entry stays as filed. A `task` token files project
-        entries as it files task entries.
+        filed by `add_entry`, such an entry stays as filed.
 
         A project decision is in force until a later decision names it in `supersedes`;
         no entry changes, and the status is computed on read. Withdrawing a decision with

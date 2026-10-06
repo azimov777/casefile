@@ -91,8 +91,7 @@ def register(tools: Toolset) -> None:
 
         The name keeps the spelling it was created with; another spelling addresses the
         same attribute and does not rename it. Attributes carry no types and no search:
-        the tracker stores the text and acts on none of it. A `task` token sets
-        attributes.
+        the tracker stores the text and acts on none of it.
         """
         async with runtime.call() as (session, actor):
             owner = await directions_service.get_owner(session, key)
