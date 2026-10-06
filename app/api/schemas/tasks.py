@@ -26,6 +26,7 @@ from app.api.schemas.entries import (
 )
 from app.api.schemas.links import LinkTaskRead, TaskLinkRead
 from app.domain.case import MAX_ENTRY_BODY_LENGTH, MAX_SUMMARY_PART_LENGTH, VerdictOutcome
+from app.domain.directions import MAX_DIRECTION_DESCRIPTION_LENGTH
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
@@ -55,6 +56,13 @@ _ASSIGNEE_DESCRIPTION = (
     "the caller's signature (participant name or agent label) must match it, case-insensitively"
 )
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
+_DIRECTION_DESCRIPTION = (
+    "Address `PROJECT/key` of a direction of the task's own project, or null for none. "
+    "Another project's direction answers `direction_project_mismatch`, an unknown one "
+    "`direction_not_found`, an archived one `direction_archived` (taking the task out of "
+    "it is always allowed). Not inherited from the parent; set in any status but `done` "
+    "and `cancelled`"
+)
 _DECISIONS_DESCRIPTION = (
     "Project decisions the task relies on: references `PROJECT#N` to `decision` entries of "
     f"a project's case, up to {MAX_DECISIONS}, in the order set. A task entry (`TRK-42#7`) "
@@ -99,6 +107,36 @@ class TaskProjectRead(ProjectRefRead):
     )
 
 
+class TaskDirectionRead(BaseModel):
+    """Направление в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).
+
+    Атрибуты и дело направления в карточку не едут: они читаются у самого направления по
+    адресу. Описание не длиннее 320 знаков по той же причине, что у проекта.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    address: str = Field(
+        examples=["TRK/promotion"],
+        description="Address of the direction: the project key and the direction key",
+    )
+    title: str = Field(examples=["Популяризация"])
+    description: str = Field(
+        examples=["Каталоги, публикации и день запуска"],
+        description=(
+            f'Short "what this is" of the direction, up to {MAX_DIRECTION_DESCRIPTION_LENGTH} '
+            "characters; may be empty"
+        ),
+    )
+    archived_at: datetime | None = Field(
+        examples=[None],
+        description=(
+            "When the direction was archived; `null` while it is active. A task cannot be "
+            "put into an archived direction, but can be taken out of it"
+        ),
+    )
+
+
 class TaskRead(BaseModel):
     """Задача в ответе."""
 
@@ -122,6 +160,13 @@ class TaskRead(BaseModel):
         ),
     )
     project: TaskProjectRead
+    direction: TaskDirectionRead | None = Field(
+        examples=[None],
+        description=(
+            "The direction of the task inside its project, or `null`: at most one. Taken "
+            "from no one: a child does not inherit it from its parent"
+        ),
+    )
     title: str = Field(examples=[_TITLE_EXAMPLE])
     description: str = Field(examples=[_DESCRIPTION_EXAMPLE])
     goal: str = Field(examples=["Ключи не сгорают на отклонённых запросах"])
@@ -309,6 +354,11 @@ class TaskCreate(BaseModel):
         description=_ASSIGNEE_DESCRIPTION,
     )
     priority: TaskPriority = Field(default=TaskPriority.NORMAL)
+    direction: str | None = Field(
+        default=None,
+        examples=["TRK/promotion"],
+        description=_DIRECTION_DESCRIPTION,
+    )
     decisions: list[str] = Field(
         default_factory=list,
         max_length=MAX_DECISIONS,
@@ -385,6 +435,10 @@ class TaskUpdate(BaseModel):
         description=f"{_ASSIGNEE_DESCRIPTION}. Pass null to unassign",
     )
     priority: TaskPriority = unset_field(examples=[TaskPriority.HIGH])
+    direction: str | None = unset_field(
+        examples=["TRK/promotion"],
+        description=f"{_DIRECTION_DESCRIPTION}. Pass null to take the task out of its direction",
+    )
     decisions: list[str] = unset_field(
         max_length=MAX_DECISIONS,
         examples=[["TRK#15"]],

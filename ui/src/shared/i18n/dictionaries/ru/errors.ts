@@ -44,6 +44,7 @@ export const errors = {
   direction_key_taken: 'В проекте уже есть направление с таким ключом.',
   direction_not_archived: 'Направление не в архиве.',
   direction_not_found: 'В проекте нет направления с таким ключом.',
+  direction_project_mismatch: 'Задача входит только в направление своего проекта.',
   direction_reason_required: 'Архивирование и восстановление направления требуют причины.',
   entry_fields_invalid: 'Запись не прошла проверку.',
   entry_not_found: 'Записи с таким номером в этой задаче нет.',

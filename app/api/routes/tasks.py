@@ -116,6 +116,7 @@ async def create_task(
             checks=payload.checks,
             assignee=payload.assignee,
             priority=payload.priority,
+            direction=payload.direction,
             decisions=payload.decisions,
         )
         return DataResponse[TaskRead](data=TaskRead.model_validate(task))
@@ -348,10 +349,13 @@ async def update_task(
     """Меняет только переданные поля.
 
     Название, описание и пять разделов — только в `backlog` (иначе `409
-    task_field_locked`); исполнитель, приоритет и решения проекта — в любом незакрытом
-    статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое
+    task_field_locked`); исполнитель, приоритет, направление и решения проекта — в любом
+    незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое
     изменение подшивает запись: раздел — `section_changed`, исполнитель —
-    `assignee_changed`, приоритет и решения — `field_changed`. Новая ссылка на заменённое
+    `assignee_changed`, приоритет, направление и решения — `field_changed`. Направление —
+    адрес направления своего проекта или `null`: другой проект — `422
+    direction_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409
+    direction_archived` (снять направление можно всегда). Новая ссылка на заменённое
     решение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не
     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
@@ -435,7 +439,9 @@ async def move_task(
     этот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на
     задачу везде, где принимается ключ. Статус не важен: закрытая задача переносится
     тоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими
-    проектами, обоими ключами и причиной.
+    проектами, обоими ключами и причиной. Направление снимается тем же действием: оно
+    принадлежит проекту, а в новом такого нет; если оно стояло, в дело ложится
+    `field_changed` (`field: direction`, «стало» — `null`).
 
     Отказы: набор `task` — `403 permission_denied`; пустая причина — `422
     task_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий

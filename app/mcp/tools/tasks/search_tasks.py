@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_seri
 
 from app.domain.query_language import QUERY_EXAMPLES, QUERY_RIGHT_SHAPE, QUERY_WRONG_SHAPE
 from app.domain.search import (
+    DIRECTION_FIELD,
     FEATURES_FIELD,
     MANDATORY_FIELD,
     PARENT_FIELD,
@@ -104,7 +105,7 @@ FieldsArg = Annotated[
             + ". The key always comes back; an empty list returns whole tasks. "
             "`features` brings the computed features: "
             + ", ".join(f"`{name}`" for name in feature_names())
-            + ". `parent` is the parent's key and title, or `null`"
+            + ". `parent` is the parent's key and title, or `null`; `direction` likewise"
         )
     ),
 ]
@@ -163,6 +164,13 @@ DecisionFilterArg = Annotated[
             "project's case is refused rather than read as «no tasks»"
         ),
         examples=[["TRK#15"]],
+    ),
+]
+
+DirectionFilterArg = Annotated[
+    list[str] | None,
+    Field(
+        description="Direction addresses `PROJECT/key`; `empty()` for none",
     ),
 ]
 
@@ -238,6 +246,12 @@ class ParentView(BaseModel):
     title: str
 
 
+# Направление задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).
+class DirectionRowView(BaseModel):
+    address: str
+    title: str
+
+
 def parent_row(value: TaskParent) -> ParentView:
     """Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4)."""
     return ParentView(key=value.key, title=value.title)
@@ -282,6 +296,7 @@ class FoundTaskView(BaseModel):
     updated_at: datetime | None = None
     features: FeaturesView | None = None
     parent: ParentView | None = None
+    direction: DirectionRowView | None = None
     # Обрезка объявляется рядом со значением, поэтому у каждого длинного поля своя пара
     # признаков. Пять полей, десять имён — перечислены, а не собраны генератором:
     # схему инструмента читает модель, и имя поля в ней должно быть видно как имя.
@@ -330,6 +345,13 @@ def found_task(found: FoundTask, *, fields: Sequence[str], text_limit: int) -> F
     if found.parent is not None:
         asked = found.parent.value
         payload[PARENT_FIELD] = None if asked is None else parent_row(asked)
+    if found.direction is not None:
+        direction = found.direction.value
+        payload[DIRECTION_FIELD] = (
+            None
+            if direction is None
+            else DirectionRowView(address=direction.address, title=direction.title)
+        )
     if fields:
         selected = {*fields, MANDATORY_FIELD}
         payload = {name: value for name, value in payload.items() if name in selected}
@@ -365,6 +387,7 @@ def register(tools: Toolset) -> None:
         project: ProjectsArg = None,
         parent: ParentFilterArg = None,
         decision: DecisionFilterArg = None,
+        direction: DirectionFilterArg = None,
         under: UnderArg = None,
         status: StatusesArg = None,
         assignee: AssigneesArg = None,
@@ -406,6 +429,7 @@ def register(tools: Toolset) -> None:
                     project=project,
                     parent=parent,
                     decision=decision,
+                    direction=direction,
                     under=under,
                     status=status,
                     assignee=assignee,
@@ -442,6 +466,7 @@ def _terms(
     project: Sequence[str] | None,
     parent: Sequence[str] | None,
     decision: Sequence[str] | None,
+    direction: Sequence[str] | None,
     under: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
     assignee: Sequence[str] | None,
@@ -472,6 +497,7 @@ def _terms(
             ("project", project),
             ("parent", parent),
             ("decision", decision),
+            ("direction", direction),
             ("under", under),
             ("status", None if status is None else [item.value for item in status]),
             ("assignee", assignee),

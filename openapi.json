@@ -6200,13 +6200,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
+              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
               "examples": [
                 "project: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
+            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
           },
           {
             "name": "sort",
@@ -6251,7 +6251,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task",
+              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`",
               "examples": [
                 [
                   "title",
@@ -6260,7 +6260,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task"
+            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`"
           },
           {
             "name": "limit",
@@ -6424,6 +6424,33 @@
               "title": "Decision"
             },
             "description": "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page"
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Direction addresses `PROJECT/key`: the tasks whose own `direction` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no direction. An unknown address answers 422 instead of an empty page",
+              "examples": [
+                [
+                  "TRK/promotion"
+                ]
+              ],
+              "title": "Direction"
+            },
+            "description": "Direction addresses `PROJECT/key`: the tasks whose own `direction` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no direction. An unknown address answers 422 instead of an empty page"
           },
           {
             "name": "under",
@@ -7010,7 +7037,7 @@
           "tasks"
         ],
         "summary": "Update a task",
-        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, приоритет и решения проекта — в любом незакрытом\nстатусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое\nизменение подшивает запись: раздел — `section_changed`, исполнитель —\n`assignee_changed`, приоритет и решения — `field_changed`. Новая ссылка на заменённое\nрешение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.\n\nПроверку правят двумя способами: `check` меняет текст одной на месте, `checks`\nзаменяет список целиком и годится, когда меняется сам состав. Вместе они не\nпринимаются — это два разных ответа на один вопрос.",
+        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, приоритет, направление и решения проекта — в любом\nнезакрытом статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое\nизменение подшивает запись: раздел — `section_changed`, исполнитель —\n`assignee_changed`, приоритет, направление и решения — `field_changed`. Направление —\nадрес направления своего проекта или `null`: другой проект — `422\ndirection_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409\ndirection_archived` (снять направление можно всегда). Новая ссылка на заменённое\nрешение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.\n\nПроверку правят двумя способами: `check` меняет текст одной на месте, `checks`\nзаменяет список целиком и годится, когда меняется сам состав. Вместе они не\nпринимаются — это два разных ответа на один вопрос.",
         "operationId": "update_task",
         "security": [
           {
@@ -7278,7 +7305,7 @@
           "tasks"
         ],
         "summary": "Move a task to another project",
-        "description": "Переносит задачу в другой проект (`CONCEPT.md`, 3.3). Требует набора `main`.\n\nЗадача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —\nэтот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на\nзадачу везде, где принимается ключ. Статус не важен: закрытая задача переносится\nтоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими\nпроектами, обоими ключами и причиной.\n\nОтказы: набор `task` — `403 permission_denied`; пустая причина — `422\ntask_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий\nили целевой проект в архиве — `409 project_archived`; целевой проект тот же, где\nзадача лежит, — `409 task_already_in_project`; устаревшая `version` — `409\nversion_conflict`.",
+        "description": "Переносит задачу в другой проект (`CONCEPT.md`, 3.3). Требует набора `main`.\n\nЗадача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —\nэтот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на\nзадачу везде, где принимается ключ. Статус не важен: закрытая задача переносится\nтоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими\nпроектами, обоими ключами и причиной. Направление снимается тем же действием: оно\nпринадлежит проекту, а в новом такого нет; если оно стояло, в дело ложится\n`field_changed` (`field: direction`, «стало» — `null`).\n\nОтказы: набор `task` — `403 permission_denied`; пустая причина — `422\ntask_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий\nили целевой проект в архиве — `409 project_archived`; целевой проект тот же, где\nзадача лежит, — `409 task_already_in_project`; устаревшая `version` — `409\nversion_conflict`.",
         "operationId": "move_task",
         "security": [
           {
@@ -17109,6 +17136,21 @@
             "$ref": "#/components/schemas/TaskPriority",
             "default": "normal"
           },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address `PROJECT/key` of a direction of the task's own project, or null for none. Another project's direction answers `direction_project_mismatch`, an unknown one `direction_not_found`, an archived one `direction_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
           "decisions": {
             "items": {
               "type": "string"
@@ -17133,6 +17175,83 @@
         ],
         "title": "TaskCreate",
         "description": "Создание задачи. Статуса нет: новая задача рождается в `backlog`.\n\nКлюча тоже нет — его выдаёт счётчик проекта. Разделы можно оставить пустыми и\nдописать в `backlog`; перед `open` они обязаны быть заполнены."
+      },
+      "TaskDirectionRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the direction: the project key and the direction key",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\" of the direction, up to 320 characters; may be empty",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the direction was archived; `null` while it is active. A task cannot be put into an archived direction, but can be taken out of it",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title",
+          "description",
+          "archived_at"
+        ],
+        "title": "TaskDirectionRead",
+        "description": "Направление в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).\n\nАтрибуты и дело направления в карточку не едут: они читаются у самого направления по\nадресу. Описание не длиннее 320 знаков по той же причине, что у проекта."
+      },
+      "TaskDirectionRowRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title"
+        ],
+        "title": "TaskDirectionRowRead",
+        "description": "Направление задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).\n\nОписания и признака архива нет намеренно: строка называет, куда задача входит, а\nостальное несёт карточка (`TaskDirectionRead`) и само направление."
       },
       "TaskFeaturesRead": {
         "properties": {
@@ -17227,6 +17346,7 @@
           "status",
           "assignee",
           "priority",
+          "direction",
           "decisions"
         ],
         "title": "TaskField",
@@ -17698,6 +17818,20 @@
           "project": {
             "$ref": "#/components/schemas/TaskProjectRead"
           },
+          "direction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDirectionRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The direction of the task inside its project, or `null`: at most one. Taken from no one: a child does not inherit it from its parent",
+            "examples": [
+              null
+            ]
+          },
           "title": {
             "type": "string",
             "title": "Title",
@@ -17808,6 +17942,7 @@
           "key",
           "previous_keys",
           "project",
+          "direction",
           "title",
           "description",
           "goal",
@@ -18050,6 +18185,17 @@
               }
             ],
             "description": "The parent of the task, key and title; a task has at most one. `null` for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parent`"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDirectionRowRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The direction of the task, address and title; `null` for a task with none. Included when `fields` names `direction`, or when `fields` is omitted"
           }
         },
         "type": "object",
@@ -18203,6 +18349,21 @@
             "$ref": "#/components/schemas/TaskPriority",
             "examples": [
               "high"
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address `PROJECT/key` of a direction of the task's own project, or null for none. Another project's direction answers `direction_project_mismatch`, an unknown one `direction_not_found`, an archived one `direction_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its direction",
+            "examples": [
+              "TRK/promotion"
             ]
           },
           "decisions": {

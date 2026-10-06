@@ -335,6 +335,10 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
             return _task_key(term)
         case SearchValueKind.DECISION_REF:
             return _decision(term.operator, term.values)
+        case SearchValueKind.DIRECTION_ADDRESS:
+            # Значения — идентификаторы направлений, разрешённые сценарием; отрицание и
+            # `not in` захватывают задачи без направления (`_scalar`, `IS DISTINCT FROM`).
+            return _scalar(Task.direction_id, term.operator, term.values)
         case SearchValueKind.STATUS:
             return _scalar(Task.status, term.operator, term.values)
         case SearchValueKind.ASSIGNEE:
@@ -370,6 +374,8 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
         case SearchValueKind.TIMESTAMP:
             # «В дело ещё ничего не подшивали»: учтённых записей нет, подзапрос пуст.
             return _last_entry_at_column().is_(None)
+        case SearchValueKind.DIRECTION_ADDRESS:
+            return Task.direction_id.is_(None)
         case SearchValueKind.DECISION_REF:
             # «Ни на одно решение не ссылается»: список пуст. Колонка не бывает NULL —
             # пустое состояние у неё одно, `[]`.

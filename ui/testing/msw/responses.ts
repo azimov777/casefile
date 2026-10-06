@@ -225,6 +225,7 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
       description: 'Демонстрационный проект: на нём видно каждый экран интерфейса.',
       archived_at: null,
     },
+    direction: null,
     title: `Задача ${key}`,
     description: 'Отказ разбора запроса приходит без списка допустимых полей.',
     goal: 'Отказ поиска чинится с первой попытки',
