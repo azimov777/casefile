@@ -149,9 +149,7 @@ async def test_the_lift_moves_live_connections_and_keys_to_the_person(
     # Хозяина агента перенос не трогает.
     assert agent.author.signature == "claude"
 
-    again = await ensure_local_token(
-        db_session, known_secret=result.secret, adopt_connections=True
-    )
+    again = await ensure_local_token(db_session, known_secret=result.secret, adopt_connections=True)
     assert again.secret is None
     assert await _count_by_tracker(db_session) == 3  # отозванный, сеанс и сам ключ local-ui
 
