@@ -66,6 +66,13 @@ export function keysToInvalidate(frame: JournalFrame): Invalidation {
     immediate.push(questionKeys.all, sessionKeys.bootstrap);
   }
 
+  // Предупреждение и реакция на него — принятие или замечание — меняют раздел
+  // «Требуют внимания» во входящей и число в значке (TRK-561): это тоже ход человека,
+  // и ждёт он его так же, как вопроса.
+  if (frame.type === 'warning' || frame.type === 'acceptance' || frame.type === 'remark') {
+    immediate.push(taskKeys.attention, sessionKeys.bootstrap);
+  }
+
   // Любая запись меняет `updated_at` задачи, а часто и её признаки: оба экрана списка
   // устаревают от чего угодно. Расходятся они не в том, устарели ли, а в том, что
   // стоит перестановка: на доске это предмет наблюдения, в таблице — шум.
@@ -83,7 +90,7 @@ export function keysToInvalidate(frame: JournalFrame): Invalidation {
  */
 export function keysAfterReconnect(): Invalidation {
   return {
-    immediate: [['task'], ['project'], questionKeys.all, sessionKeys.bootstrap],
+    immediate: [['task'], ['project'], questionKeys.all, taskKeys.attention, sessionKeys.bootstrap],
     coalesced: [taskKeys.board],
     deferred: [taskKeys.table],
   };

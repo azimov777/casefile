@@ -2,6 +2,10 @@ import type { components } from '@/shared/api';
 
 type EntryType = components['schemas']['EntryType'];
 type RemarkOutcome = components['schemas']['RemarkOutcome'];
+type IncompleteOutcome = Extract<
+  components['schemas']['VerdictOutcome'],
+  'partial' | 'unverifiable'
+>;
 type LinkKind = components['schemas']['LinkKind'];
 /** Виды иерархии: у них заголовок записи о связи называет роль второй задачи словами. */
 type HierarchyKind = Extract<LinkKind, 'parent' | 'child'>;
@@ -94,6 +98,10 @@ export const ui = {
     openQuestions_few: '{{count, number}} открытых вопроса',
     openQuestions_many: '{{count, number}} открытых вопросов',
     openQuestions_other: '{{count, number}} открытых вопроса',
+    openWarnings_one: '{{count, number}} задача закрыта не целиком',
+    openWarnings_few: '{{count, number}} задачи закрыты не целиком',
+    openWarnings_many: '{{count, number}} задач закрыты не целиком',
+    openWarnings_other: '{{count, number}} задачи закрыты не целиком',
     loadingParticipant: 'Загружаем участника…',
     noParticipant: 'участника нет',
     signOut: 'Выйти',
@@ -235,6 +243,7 @@ export const ui = {
       remarks_few: '{{count, number}} замечания без разбора',
       remarks_many: '{{count, number}} замечаний без разбора',
       remarks_other: '{{count, number}} замечания без разбора',
+      warning: 'закрыта не целиком: ждёт решения — принять или вернуть',
     },
     // Родитель задачи подписью на карточке доски и в строке списка (UI-119).
     parents: {
@@ -306,6 +315,7 @@ export const ui = {
       verdict: 'вердикт',
       remark: 'замечание',
       resolution: 'резолюция',
+      acceptance: 'принятие',
       note: 'заметка',
       created: 'заведение',
       status_changed: 'смена статуса',
@@ -315,6 +325,7 @@ export const ui = {
       link_added: 'связь добавлена',
       link_removed: 'связь снята',
       moved: 'перенос в другой проект',
+      warning: 'предупреждение',
       attribute_created: 'атрибут заведён',
       attribute_changed: 'правка атрибута',
       attribute_removed: 'атрибут снят',
@@ -327,6 +338,12 @@ export const ui = {
       needs_detail: 'нужно уточнение',
       declined: 'менять не будем',
     } satisfies Record<RemarkOutcome, string>,
+    // Исходы проверки «не целиком» (TRK-561) — словами: на них реагирует человек.
+    // `passed` и `failed` остаются идентификаторами, как были.
+    verdictOutcome: {
+      partial: 'частично',
+      unverifiable: 'невозможно проверить',
+    } satisfies Record<IncompleteOutcome, string>,
     headline: {
       created: 'Задача заведена',
       projectCreated: 'Проект заведён',
@@ -358,6 +375,9 @@ export const ui = {
       withdrawn: 'снят',
       replacedBy: 'заменён вопросом',
       check: 'Обзорная проверка {{no}}',
+      // Предупреждение закрытия (TRK-561): «Закрыта не целиком: проверка 2 частично».
+      warning: 'Закрыта не целиком:',
+      warningCheck: 'проверка {{no}}',
       resolution: 'Разбор',
       resolutionOutcome: '· {{outcome}}',
       none: 'не назначен',
@@ -440,6 +460,17 @@ export const ui = {
     retrySafe: 'Повторная отправка не заведёт второе замечание: ключ повтора у попытки тот же.',
     receiptLabel: 'Замечание к {{key}} подшито',
     receiptHeadline: 'Замечание подшито',
+  },
+
+  /** Предупреждение закрытия на карточке задачи (`features/accept-warning`, TRK-561). */
+  warning: {
+    title: 'Закрыта не целиком',
+    text: 'Агент закрыл задачу, но эти проверки прошли не целиком. Примите недостаток или верните задачу на доработку замечанием — его разберёт агент.',
+    accept: 'Принять',
+    accepting: 'Принимаем…',
+    acceptTitle: 'Принято без доработки',
+    return: 'Вернуть на доработку',
+    closedBy: 'Закрыл задачу:',
   },
 
   /** Фрагменты подключения агента к MCP (`features/connect-agent`). */

@@ -26,6 +26,22 @@ type AnswerFacts = components['schemas']['AnswerFactsRead'];
 /** Чем разобрано замечание: значение из контракта, показывается словами. */
 export type RemarkOutcome = components['schemas']['RemarkOutcome'];
 
+/** Исход обзорной проверки: значение из контракта. */
+export type VerdictOutcome = components['schemas']['VerdictOutcome'];
+
+/**
+ * Исходы «не целиком» (TRK-561): проверка засчитана для закрытия, но закрытие подшило
+ * предупреждение. Их показывают словами и тоном внимания, а `passed` и `failed` — как
+ * раньше, идентификатором: человеку важно увидеть именно то, что прошло не целиком.
+ */
+export type IncompleteOutcome = Extract<VerdictOutcome, 'partial' | 'unverifiable'>;
+
+export function isIncompleteOutcome(
+  outcome: VerdictOutcome | null | undefined,
+): outcome is IncompleteOutcome {
+  return outcome === 'partial' || outcome === 'unverifiable';
+}
+
 /**
  * Чем закрыт вопрос записью `answer`: ответом по существу, снятием или заменой другим
  * вопросом (TRK-552). У ответа, подшитого до появления исхода, поля нет — это `answered`
@@ -51,6 +67,8 @@ export function answerOutcome(outcome: AnswerOutcome | null | undefined): Answer
 export type HeadlinePart =
   | { kind: 'words'; text: string }
   | { kind: 'id'; text: string }
+  /** Слова, которые обязаны цеплять взгляд: исход проверки не целиком (TRK-561). */
+  | { kind: 'flag'; text: string }
   | { kind: 'task'; key: string }
   | { kind: 'entry'; key: string; no: number };
 
@@ -79,6 +97,7 @@ export type Headline =
 
 const words = (text: string): HeadlinePart => ({ kind: 'words', text });
 const id = (text: string): HeadlinePart => ({ kind: 'id', text });
+const flag = (text: string): HeadlinePart => ({ kind: 'flag', text });
 
 /**
  * Заголовок записи по её фактам.
@@ -224,12 +243,35 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
     case 'answer':
       return answerHeadline(facts, taskKey, t);
 
+    /*
+     * Исход `passed` и `failed` — идентификатором, как всегда; `partial` и
+     * `unverifiable` — словами и тоном внимания (TRK-561): это то, на что человек
+     * реагирует, и `partial` среди двадцати `passed` моноширинным не заметить.
+     */
     case 'verdict':
       return {
         kind: 'built',
         parts: [
           words(t('entry.headline.check', { no: facts.check_no ?? '?' })),
-          ...(facts.outcome == null ? [] : [id(facts.outcome)]),
+          ...(facts.outcome == null
+            ? []
+            : isIncompleteOutcome(facts.outcome)
+              ? [flag(t(`entry.verdictOutcome.${facts.outcome}`))]
+              : [id(facts.outcome)]),
+        ],
+      };
+
+    /*
+     * Предупреждение закрытия (TRK-561): какие проверки закрыты не целиком и чем.
+     * Номера и исходы — из фактов; английский `title` бэкенда здесь не нужен.
+     */
+    case 'warning':
+      return {
+        kind: 'built',
+        parts: [
+          words(t('entry.headline.warning')),
+          ...warningChecks(facts.partial, 'partial', t),
+          ...warningChecks(facts.unverifiable, 'unverifiable', t),
         ],
       };
 
@@ -275,6 +317,7 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
     case 'finding':
     case 'artifact':
     case 'remark':
+    case 'acceptance':
     case 'note':
       return { kind: 'author' };
 
@@ -326,6 +369,29 @@ function answerHeadline(facts: AnswerFacts, taskKey: string, t: TFunction<'ui'>)
     case 'answered':
       return { kind: 'built', parts: [words(t('entry.headline.answerTo')), ...question] };
   }
+}
+
+/** Проверки предупреждения с одним исходом: «проверка 2» и исход словами за ней. */
+function warningChecks(
+  numbers: number[] | null | undefined,
+  outcome: IncompleteOutcome,
+  t: TFunction<'ui'>,
+): HeadlinePart[] {
+  return (numbers ?? []).flatMap((no) => [
+    words(t('entry.headline.warningCheck', { no })),
+    flag(t(`entry.verdictOutcome.${outcome}`)),
+  ]);
+}
+
+/**
+ * Номера проверок предупреждения по исходу — из нагрузки записи ленты, где пары лежат
+ * списком `{check_no, outcome}`. Опись приносит их уже разложенными (`WarningFactsRead`).
+ */
+function checksWith(
+  checks: { check_no: number; outcome: VerdictOutcome }[],
+  outcome: IncompleteOutcome,
+): number[] {
+  return checks.filter((item) => item.outcome === outcome).map((item) => item.check_no);
 }
 
 /** Пара «было → стало». Отсутствие значения называется словом, а не пустотой. */
@@ -420,6 +486,12 @@ export function factsOfEntry(entry: Entry): EntryFacts {
       return { type: entry.type, name: entry.payload.name };
     case 'moved':
       return { type: 'moved', from_key: entry.payload.from_key, to_key: entry.payload.to_key };
+    case 'warning':
+      return {
+        type: 'warning',
+        partial: checksWith(entry.payload.checks, 'partial'),
+        unverifiable: checksWith(entry.payload.checks, 'unverifiable'),
+      };
     default:
       return { type: entry.type };
   }
@@ -453,6 +525,7 @@ export function headlineText(headline: Headline): string {
       switch (part.kind) {
         case 'words':
         case 'id':
+        case 'flag':
           return part.text;
         case 'task':
           return part.key;

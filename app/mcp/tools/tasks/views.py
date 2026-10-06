@@ -163,6 +163,7 @@ class FeaturesView(BaseModel):
     open_questions: int
     open_blocking_questions: int
     open_remarks: int
+    open_warnings: int
     last_summary_at: datetime | None
     last_entry_at: datetime | None
 
@@ -174,6 +175,7 @@ def features(value: TaskFeatures) -> FeaturesView:
         open_questions=value.open_questions,
         open_blocking_questions=value.open_blocking_questions,
         open_remarks=value.open_remarks,
+        open_warnings=value.open_warnings,
         last_summary_at=value.last_summary_at,
         last_entry_at=value.last_entry_at,
     )

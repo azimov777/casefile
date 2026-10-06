@@ -167,8 +167,8 @@ with `link(key=<new key>, kind="relates", other="TRK-42")` — not silently into
 
 Before closing, check:
 
-- every check of the task was run **as written**, and you have its evidence: the command
-  and what it showed;
+- every check of the task was run **as written**, or you know why it cannot be, and you
+  have its evidence: the command and what it showed;
 - every remark in `get_task` has an outcome through `resolve` — `close_task` does not
   check them for you, e.g. `resolve(key="TRK-42", remark_no=14, outcome="fixed", body="Renamed the column; test added.")`;
 - you can name honestly what part of the goal no check measured.
@@ -185,6 +185,27 @@ close_task(key="TRK-42",
 
 `unmeasured` is what tells the human how far to trust the result: write `nothing` only
 when the checks really covered the whole goal.
+
+Pick each outcome by two questions: did the check run as written, and did it give the
+whole expected result. If it ran and gave only part — `partial`; if it cannot run as
+written (no environment, the object is gone, the requirements changed) — `unverifiable`.
+Both need `evidence` naming what is missing or why, and what ran instead. Do not write
+`passed` with a caveat: a caveat in the evidence means the outcome is `partial` or
+`unverifiable`. The task still closes; the closing files a `warning`, and the human
+accepts it or returns the task with a remark — you write nothing extra.
+
+```
+close_task(key="TRK-42",
+  verdicts=[{"check_no": 1, "outcome": "passed",
+             "evidence": "pytest tests/test_parser.py: 41 passed"},
+            {"check_no": 2, "outcome": "partial",
+             "evidence": "Importer reads 3 of 4 record kinds; attachments are not read yet."},
+            {"check_no": 3, "outcome": "unverifiable",
+             "evidence": "No Safari here; ran Chromium at 390 px: no horizontal scroll."}],
+  summary={"done": "Parser accepts the new format; attachments and Safari remain.",
+           "remaining": "nothing", "blockers": "nothing", "next_step": "no steps",
+           "unmeasured": "Attachments (check 2) and Safari on the owner's phone (check 3)."})
+```
 
 If a check fails, do not close: file it with `add_verdict` as `failed`, file a summary,
 and `transition(key="TRK-42", to="open", reason="Check 2 fails: …")`.

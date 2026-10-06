@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas.entries import EntryFactsRead
 from app.db.models.project import Project
 from app.db.models.task import Task
+from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.case import (
     ARCHIVE_ENTRY_TYPES,
     ATTRIBUTE_ENTRY_TYPES,
@@ -352,7 +353,7 @@ def test_the_contract_declares_the_facts_of_every_entry_type(layer: str, union: 
 
 
 async def test_the_index_carries_only_the_fields_of_its_own_type(
-    auth_client: AsyncClient, project: Project
+    auth_client: AsyncClient, project: Project, shared_secret: str
 ) -> None:
     """Проверка 6: в деле со **всеми** типами записей у каждой строки ровно свои ключи.
 
@@ -361,7 +362,7 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
     описи, и в конце сверяется, что нашлись все типы: пропущенный тип роняет проверку,
     а не тихо выпадает из перебора.
     """
-    key = await _case_with_every_entry_type(auth_client, project)
+    key = await _case_with_every_entry_type(auth_client, project, shared_secret)
 
     package = await auth_client.get(f"/api/v1/tasks/{key}")
     assert package.status_code == 200, package.text
@@ -383,8 +384,15 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
     assert seen == {entry_type.value for entry_type in in_a_task_case}, sorted(seen)
 
 
-async def _case_with_every_entry_type(client: AsyncClient, project: Project) -> str:
-    """Заводит задачу и подшивает в неё запись каждого типа `EntryType`. Возвращает ключ."""
+async def _case_with_every_entry_type(
+    client: AsyncClient, project: Project, shared_secret: str
+) -> str:
+    """Заводит задачу и подшивает в неё запись каждого типа `EntryType`. Возвращает ключ.
+
+    `warning` и `acceptance` бывают только после закрытия с проверкой не целиком, и
+    принимает предупреждение не закрывший (TRK-561): принятие идёт общим агентским
+    токеном с меткой, а не токеном `owner`, которым задача закрыта.
+    """
     created = await client.post(
         "/api/v1/tasks",
         json={
@@ -459,6 +467,28 @@ async def _case_with_every_entry_type(client: AsyncClient, project: Project) -> 
             "next_step": "next",
         },
     )
+    # `warning` — закрытием с проверкой `unverifiable`, `acceptance` — принятием его
+    # другой подписью.
+    closed = await client.post(
+        f"/api/v1/tasks/{key}/close",
+        json={
+            "summary": {
+                "done": "closed",
+                "remaining": "nothing",
+                "blockers": "nothing",
+                "next_step": "no steps",
+                "unmeasured": "check 1",
+            },
+            "verdicts": [{"check_no": 1, "outcome": "unverifiable", "evidence": "no stand"}],
+        },
+    )
+    assert closed.status_code == 200, closed.text
+    accepted = await client.post(
+        f"/api/v1/tasks/{key}/entries",
+        json={"type": "acceptance", "title": "accepted"},
+        headers={"Authorization": f"Bearer {shared_secret}", ACTOR_LABEL_HEADER: "reviewer"},
+    )
+    assert accepted.status_code == 201, accepted.text
     # `moved` — переносом в соседний проект (TRK-172): ключ задачи меняется, и дальше
     # она читается по новому.
     neighbour = await client.post("/api/v1/projects", json={"key": "OPS", "title": "Соседний"})

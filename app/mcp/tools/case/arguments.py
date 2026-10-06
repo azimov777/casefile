@@ -53,6 +53,7 @@ EntryTypeArg = Annotated[
         EntryType.FINDING,
         EntryType.ARTIFACT,
         EntryType.REMARK,
+        EntryType.ACCEPTANCE,
         EntryType.NOTE,
     ],
     Field(
@@ -69,7 +70,10 @@ EntryTypeArg = Annotated[
             "from the side of whoever needs the result; the task's assignee resolves it "
             "with `resolve`. A remark on a closed task is accepted: the case grows, the "
             "task stays as it is. An observation about the caller's own task is a "
-            "`finding`, not a `remark`;\n"
+            "`finding`, not a `remark`. A remark filed after a `warning` clears it;\n"
+            "- `acceptance` — the gap named by an open `warning` is accepted, which clears "
+            "it; refused with `warning_not_open` without one, and with "
+            "`acceptance_by_closer` from the signature that closed the task;\n"
             "- `note` — an entry that fits none of the types above"
         )
     ),
@@ -86,7 +90,21 @@ EntryTitleArg = Annotated[
 ]
 
 VerdictOutcomeArg = Annotated[
-    VerdictOutcomeSchema, Field(description="Outcome of the check; there is no third state")
+    VerdictOutcomeSchema,
+    Field(
+        description=(
+            "Outcome of the check:\n"
+            "- `passed` — ran as written, expected result in full; evidence naming "
+            "something not done, a substitute or a red run is not `passed`;\n"
+            "- `partial` — ran as written, part of the expected result; `evidence` names "
+            "the missing part;\n"
+            "- `unverifiable` — cannot run as written (object or environment out of reach, "
+            "requirements changed); `evidence` names why and what ran instead;\n"
+            "- `failed` — ran as written, expected result absent.\n"
+            "An empty `evidence` with `partial` or `unverifiable` is refused with "
+            "`entry_fields_invalid`"
+        )
+    ),
 ]
 
 EntryTypesArg = Annotated[

@@ -60,6 +60,7 @@ from app.db.repositories.entries import (
     last_summary_at,
     open_question_count,
     open_remark_count,
+    open_warning_count,
     remarks_in_work_count,
 )
 from app.db.repositories.links import descendants_of, open_blockers_of, parent_of
@@ -238,6 +239,7 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
         .scalar_subquery()
         .label("open_blocking_questions"),
         open_remark_count(Task.id).correlate(Task).scalar_subquery().label("open_remarks"),
+        open_warning_count(Task.id).correlate(Task).scalar_subquery().label("open_warnings"),
         last_summary_at(Task.id).correlate(Task).scalar_subquery().label("last_summary_at"),
         last_entry_at(Task.id).correlate(Task).scalar_subquery().label("last_entry_at"),
     )
@@ -267,6 +269,7 @@ def _features_of(row: Any) -> TaskFeatures:
         open_questions=row.open_questions,
         open_blocking_questions=row.open_blocking_questions,
         open_remarks=row.open_remarks,
+        open_warnings=row.open_warnings,
         last_summary_at=row.last_summary_at,
         last_entry_at=row.last_entry_at,
     )
@@ -491,7 +494,7 @@ def _counter(
 
 
 def _counted(field: SearchField) -> ColumnElement[Any]:
-    """Какой счёт стоит за именем поля. Все четыре — чужие определения, не свои.
+    """Какой счёт стоит за именем поля. Все они — чужие определения, не свои.
 
     `remarks_in_work` — единственный, кто заглядывает в другую задачу: он соединяется с
     ней по ключу из нагрузки резолюции и смотрит на её статус (`CONCEPT.md`, 4.4).
@@ -504,6 +507,8 @@ def _counted(field: SearchField) -> ColumnElement[Any]:
             counted = open_question_count(Task.id, blocking=True)
         case SearchField.OPEN_REMARKS:
             counted = open_remark_count(Task.id)
+        case SearchField.OPEN_WARNINGS:
+            counted = open_warning_count(Task.id)
         case SearchField.REMARKS_IN_WORK:
             counted = remarks_in_work_count(Task.id)
         case _:

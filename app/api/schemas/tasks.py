@@ -166,6 +166,14 @@ class TaskFeaturesRead(BaseModel):
             "and nobody has answered yet"
         ),
     )
+    open_warnings: int = Field(
+        examples=[0],
+        description=(
+            "1 while the task carries an open warning: it was closed with checks "
+            "`partial` or `unverifiable`, and no `acceptance` or `remark` has been filed "
+            "after the warning; otherwise 0"
+        ),
+    )
     last_summary_at: datetime | None = Field(
         default=None,
         description="When the latest summary was filed; null if the case has none",
@@ -411,7 +419,11 @@ class TaskClosingVerdict(BaseModel):
         default="",
         max_length=MAX_ENTRY_BODY_LENGTH,
         examples=["docker compose run --rm test: 214 passed"],
-        description="Proof of the outcome; it becomes the body of the verdict entry",
+        description=(
+            "Proof of the outcome; it becomes the body of the verdict entry. Required with "
+            "`partial` and `unverifiable`: it names the missing part or why the check "
+            "cannot run as written"
+        ),
     )
 
 

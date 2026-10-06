@@ -91,7 +91,7 @@ function queryNoneYetLink(): HTMLElement | null {
  * сверял бы код с самим собой. Дата порога — любая: её точность проверяет
  * `src/entities/task/model/archive.test.ts`, а здесь — что правило стоит и где.
  */
-const OUTSIDE_ARCHIVE = String.raw`status: not in done, cancelled or last_entry_at: >= "\d{4}-\d{2}-\d{2}T[\d:.]+Z"`;
+const OUTSIDE_ARCHIVE = String.raw`status: not in done, cancelled or last_entry_at: >= "\d{4}-\d{2}-\d{2}T[\d:.]+Z" or open_warnings: > 0`;
 
 /** Что уходит в `query` при скрытом архиве: запрос (если есть) по «и» с правилом. */
 function hidingArchive(query?: string): RegExp {
@@ -214,6 +214,7 @@ describe('список задач', () => {
               open_questions: 2,
               open_blocking_questions: 0,
               open_remarks: 3,
+              open_warnings: 0,
               last_summary_at: null,
               last_entry_at: null,
             },
@@ -318,6 +319,7 @@ describe('список задач', () => {
               open_questions: 1,
               open_blocking_questions: 1,
               open_remarks: 0,
+              open_warnings: 0,
               last_summary_at: '2026-09-01T09:00:00Z',
               last_entry_at: '2026-09-01T09:00:00Z',
             },
@@ -330,6 +332,7 @@ describe('список задач', () => {
               open_questions: 0,
               open_blocking_questions: 0,
               open_remarks: 0,
+              open_warnings: 0,
               last_summary_at: null,
               last_entry_at: null,
             },

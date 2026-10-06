@@ -42,6 +42,8 @@ const FACTS = {
   answer: { type: 'answer', question_no: 4 },
   verdict: { type: 'verdict', check_no: 3, outcome: 'failed' },
   resolution: { type: 'resolution', remark_no: 7, outcome: 'accepted', continuation_key: 'DEMO-9' },
+  acceptance: { type: 'acceptance' },
+  warning: { type: 'warning', partial: [2], unverifiable: [3] },
   status_changed: { type: 'status_changed', from_status: 'open', to_status: 'done' },
   section_changed: { type: 'section_changed', field: 'goal' },
   field_changed: { type: 'field_changed', field: 'priority' },
@@ -300,5 +302,50 @@ describe('исход ответа словами на русском и на а�
       replaced,
     );
     expect(line({ type: 'answer', question_no: 5 })).toBe(answered);
+  });
+});
+
+/*
+ * Исходы проверки не целиком, предупреждение и принятие (TRK-561) — вписаны руками на
+ * каждом языке: проверяется текст, который прочтёт человек, а не связь ключа с местом.
+ */
+describe('исходы не целиком, предупреждение и принятие словами на русском и на английском', () => {
+  afterAll(() => {
+    void i18n.changeLanguage('en');
+  });
+
+  it.each([
+    [
+      'ru',
+      'Обзорная проверка 2 частично',
+      'Обзорная проверка 3 невозможно проверить',
+      'Закрыта не целиком: проверка 2 частично проверка 3 невозможно проверить',
+      'принятие',
+      'предупреждение',
+    ],
+    [
+      'en',
+      'Review check 2 partial',
+      'Review check 3 cannot be verified',
+      'Closed not in full: check 2 partial check 3 cannot be verified',
+      'acceptance',
+      'warning',
+    ],
+  ] as const)('%s', async (language, partial, unverifiable, warning, acceptance, warningType) => {
+    await i18n.changeLanguage(language);
+    expect(line({ type: 'verdict', check_no: 2, outcome: 'partial' })).toBe(partial);
+    expect(line({ type: 'verdict', check_no: 3, outcome: 'unverifiable' })).toBe(unverifiable);
+    expect(line({ type: 'warning', partial: [2], unverifiable: [3] })).toBe(warning);
+    // Принятие подписывает автор: заголовок его, а род записи назван словарём.
+    expect(built({ type: 'acceptance' }).kind).toBe('author');
+    expect(dictionaries[language].ui.entry.type.acceptance).toBe(acceptance);
+    expect(dictionaries[language].ui.entry.type.warning).toBe(warningType);
+  });
+
+  it('исходы не целиком — плашкой, `passed` и `failed` — идентификатором, как были', () => {
+    const partial = built({ type: 'verdict', check_no: 2, outcome: 'partial' });
+    expect(partial.kind === 'built' && partial.parts.at(-1)?.kind).toBe('flag');
+    expect(ids({ type: 'verdict', check_no: 1, outcome: 'passed' })).toEqual(['passed']);
+    expect(ids({ type: 'verdict', check_no: 1, outcome: 'failed' })).toEqual(['failed']);
   });
 });

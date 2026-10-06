@@ -1,7 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
-import { ArrowLeftRight, Home, Inbox, Info, KeyRound, Plug, UserRound, Users } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Home,
+  Inbox,
+  Info,
+  KeyRound,
+  Plug,
+  TriangleAlert,
+  UserRound,
+  Users,
+} from 'lucide-react';
 import {
   bootstrapQueryOptions,
   bootstrapWithArchivedQueryOptions,
@@ -247,6 +257,20 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
                 {t('app.openQuestions', { count: bootstrap.data.open_questions })}
               </span>
               <span aria-hidden="true">{bootstrap.data.open_questions}</span>
+            </span>
+          )}
+          {/*
+           * Задачи, закрытые не целиком (TRK-561): своим знаком рядом с числом вопросов,
+           * а не в сумме с ним — сложенное число назвало бы вопросами то, что ими не
+           * является. Нет таких задач — нет и знака.
+           */}
+          {bootstrap.data === undefined || bootstrap.data.open_warnings === 0 ? null : (
+            <span className="inline-flex items-center gap-0.5 font-mono text-mark font-semibold text-attention tabular-nums">
+              <TriangleAlert className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+              <span className="sr-only">
+                {t('app.openWarnings', { count: bootstrap.data.open_warnings })}
+              </span>
+              <span aria-hidden="true">{bootstrap.data.open_warnings}</span>
             </span>
           )}
         </NavLink>

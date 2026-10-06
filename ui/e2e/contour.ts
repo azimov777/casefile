@@ -271,7 +271,8 @@ const ARCHIVE_AFTER_DAYS = 3;
  */
 export function outsideArchive(now: Date = new Date()): string {
   const threshold = new Date(now.getTime() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
-  return `status: not in done, cancelled or last_entry_at: >= "${threshold.toISOString()}"`;
+  // Задача с открытым предупреждением в архив не уходит (TRK-561#9).
+  return `status: not in done, cancelled or last_entry_at: >= "${threshold.toISOString()}" or open_warnings: > 0`;
 }
 
 /**

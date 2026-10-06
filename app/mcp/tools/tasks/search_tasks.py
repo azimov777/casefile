@@ -204,6 +204,11 @@ OpenRemarksArg = Annotated[
     Field(description="Exact number of unresolved remarks; ranges go in `query`"),
 ]
 
+OpenWarningsArg = Annotated[
+    int | None,
+    Field(description="1 for tasks with an open `warning`, 0 for the rest"),
+]
+
 RemarksInWorkArg = Annotated[
     int | None,
     Field(
@@ -368,6 +373,7 @@ def register(tools: Toolset) -> None:
         open_questions: OpenQuestionsArg = None,
         open_blocking_questions: OpenBlockingQuestionsArg = None,
         open_remarks: OpenRemarksArg = None,
+        open_warnings: OpenWarningsArg = None,
         remarks_in_work: RemarksInWorkArg = None,
         text: TextArg = None,
         sort: SortArg = None,
@@ -408,6 +414,7 @@ def register(tools: Toolset) -> None:
                     open_questions=open_questions,
                     open_blocking_questions=open_blocking_questions,
                     open_remarks=open_remarks,
+                    open_warnings=open_warnings,
                     remarks_in_work=remarks_in_work,
                     text=text,
                 ),
@@ -443,6 +450,7 @@ def _terms(
     open_questions: int | None,
     open_blocking_questions: int | None,
     open_remarks: int | None,
+    open_warnings: int | None,
     remarks_in_work: int | None,
     text: str | None,
 ) -> list[StructuredTerm]:
@@ -478,6 +486,7 @@ def _terms(
             ("open_questions", open_questions),
             ("open_blocking_questions", open_blocking_questions),
             ("open_remarks", open_remarks),
+            ("open_warnings", open_warnings),
             ("remarks_in_work", remarks_in_work),
         )
         if value is not None

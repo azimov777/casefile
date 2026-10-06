@@ -37,6 +37,14 @@ function expected(): Record<EntryType, (string | RegExp)[]> {
     question: [say.ui('entry.addressees'), 'owner', say.ui('entry.blocking')],
     answer: [say.ui('entry.headline.answerTo'), 'DEMO-1#1'],
     verdict: [say.ui('entry.headline.check', { no: 2 }), 'failed'],
+    acceptance: [/Тело записи/],
+    // Предупреждение закрытия (TRK-561): проверки и исходы словами.
+    warning: [
+      say.ui('entry.headline.warning'),
+      say.ui('entry.headline.warningCheck', { no: 2 }),
+      say.ui('entry.verdictOutcome.partial'),
+      say.ui('entry.verdictOutcome.unverifiable'),
+    ],
     remark: [/Тело записи/],
     // Исход — словами: замечание оставил человек, и «accepted» ему ни о чём не говорит.
     resolution: [

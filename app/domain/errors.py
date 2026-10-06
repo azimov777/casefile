@@ -374,8 +374,8 @@ class SummaryRequiredError(ConflictError):
 
 
 class ChecksNotPassedError(ConflictError):
-    """`in_progress → done` требует по каждой проверке положительного вердикта,
-    подшитого после последнего входа в `in_progress`.
+    """`in_progress → done` требует по каждой проверке вердикта не `failed`, подшитого
+    после последнего входа в `in_progress`.
 
     Этот заход, а не всё дело: вердикты, подшитые раньше последнего входа в
     `in_progress`, остаются в деле, но не засчитываются, потому что относились к другой
@@ -383,12 +383,44 @@ class ChecksNotPassedError(ConflictError):
 
     Незасчитанные проверки перечислены в `details.checks` парами `check_no` и `reason`:
     `no_verdict` — вердикта в этом заходе нет вовсе, `failed` — последний исход
-    провальный. Что делать дальше, ошибка не говорит: это решение исполнителя, а не
+    провальный. `partial` и `unverifiable` закрытию не мешают: с ними закрытие подшивает
+    предупреждение. Что делать дальше, ошибка не говорит: это решение исполнителя, а не
     трекера.
     """
 
     code = "checks_not_passed"
-    message = "Some checks have no passing verdict recorded since the last entry into in_progress"
+    message = (
+        "Some checks have no verdict, or a failed one, recorded since the last entry into "
+        "in_progress"
+    )
+
+
+class WarningNotOpenError(ConflictError):
+    """`acceptance` в задаче, где нечего принимать: открытого предупреждения нет.
+
+    Предупреждение подшивает закрытие с проверками `partial` или `unverifiable`, и оно
+    открыто, пока после него нет `acceptance` или `remark` (`CONCEPT.md`, 3.4). Принятие
+    без него было бы записью, которая ничего не сняла, — а по ней читающий решил бы, что
+    что-то было принято. В `details` — ключ задачи и номер последнего предупреждения с
+    номером снявшей его записи, если предупреждение было.
+    """
+
+    code = "warning_not_open"
+    message = "Task has no open warning to accept"
+
+
+class AcceptanceByCloserError(ConflictError):
+    """Предупреждение принимает та же подпись, что закрыла задачу.
+
+    Предупреждение — это контроль над закрытием не целиком со стороны (решение
+    TRK-561#11): исполнитель, снимающий своё предупреждение сам, этот контроль обнулил
+    бы. Сравниваются подписи, без учёта сессий, — как у исполнителя на входе в
+    `in_progress` (`CONCEPT.md`, 3.3). Вернуть задачу замечанием может любой. В `details`
+    — ключ задачи, номер предупреждения и подпись.
+    """
+
+    code = "acceptance_by_closer"
+    message = "The warning cannot be accepted by the signature that closed the task"
 
 
 class ActorNotAddressableError(ValidationError):

@@ -4,6 +4,7 @@ export {
   TASK_PAGE_SIZE,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  attentionQueryOptions,
   fetchTasks,
   taskKeys,
   tasksColumnQueryOptions,
@@ -16,7 +17,7 @@ export {
   type TaskPriority,
   type TaskStatus,
 } from './api/tasks';
-export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES } from './model/archive';
+export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES, OPEN_WARNINGS_CONDITION } from './model/archive';
 export {
   taskPackageKeys,
   taskPackageQueryOptions,

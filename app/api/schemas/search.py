@@ -233,6 +233,16 @@ class TaskFilters:
             ),
         ),
     ] = None
+    open_warnings: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description=(
+                "1 for tasks closed with checks `partial` or `unverifiable` whose warning "
+                "has no `acceptance` or `remark` after it yet, 0 for the rest"
+            ),
+        ),
+    ] = None
     remarks_in_work: Annotated[
         int | None,
         Query(
@@ -282,6 +292,7 @@ class TaskFilters:
                 ("open_questions", self.open_questions),
                 ("open_blocking_questions", self.open_blocking_questions),
                 ("open_remarks", self.open_remarks),
+                ("open_warnings", self.open_warnings),
                 ("remarks_in_work", self.remarks_in_work),
             )
             if value is not None

@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components, type operations } from '@/shared/api';
-import { hideArchive } from '../model/archive';
+import { OPEN_WARNINGS_CONDITION, hideArchive } from '../model/archive';
 
 export type Task = components['schemas']['TaskSearchRead'];
 export type TaskFeatures = components['schemas']['TaskFeaturesRead'];
@@ -102,6 +102,13 @@ export const taskKeys = {
   column: (params: TaskListRequest) => ['tasks', 'board', 'column', params] as const,
   /** Сколько задач в отборе — без самих задач. */
   total: (params: TaskListRequest) => ['tasks', 'board', 'total', params] as const,
+  /**
+   * «Требуют внимания» во входящей (TRK-561): задачи с открытым предупреждением. Свой
+   * префикс, а не `table`: живой поток перечитывает его сразу, как входящую, а не по
+   * просьбе, как таблицу.
+   */
+  attention: ['tasks', 'attention'] as const,
+  attentionList: (params: TaskListRequest) => ['tasks', 'attention', params] as const,
 };
 
 export async function fetchTasks({
@@ -142,6 +149,28 @@ export function tasksQueryOptions(params: TaskListRequest) {
     // в поле текста мигала бы пустотой. Строки предыдущего отбора держатся, пока
     // не придут новые.
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Задачи с открытым предупреждением, от давних к свежим: дольше всех ждёт реакции та,
+ * что закрыта раньше, — как во входящей вопросов (TRK-561). Архив не прячет их по
+ * определению (`outsideArchive`), поэтому правило архива сюда не складывается.
+ */
+export function attentionQueryOptions(project: string) {
+  const params: TaskListRequest = {
+    query: OPEN_WARNINGS_CONDITION,
+    sort: ['last_entry_at'],
+    ...(project === '' ? {} : { project: [project] }),
+  };
+
+  return infiniteQueryOptions({
+    queryKey: taskKeys.attentionList(params),
+    queryFn: ({ pageParam }) =>
+      fetchTasks({ ...params, cursor: pageParam === '' ? undefined : pageParam }),
+    initialPageParam: '',
+    getNextPageParam: (last: Page<Task>) =>
+      last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined,
   });
 }
 

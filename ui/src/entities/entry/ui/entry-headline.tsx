@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { cn, taskRefHref } from '@/shared/lib';
+import { Badge } from '@/shared/ui';
 import type { Headline, HeadlinePart } from '../model/headline';
 
 /**
@@ -53,6 +54,9 @@ function Piece({ part, linked }: { part: HeadlinePart; linked: boolean }) {
       return <span>{part.text}</span>;
     case 'id':
       return <code className={IDENTIFIER}>{part.text}</code>;
+    // Исход проверки не целиком: плашка тоном внимания, как бейдж признака (TRK-561).
+    case 'flag':
+      return <Badge tone="attention">{part.text}</Badge>;
     case 'task':
       return linked ? (
         <Link className={KEY} to={`/tasks/${part.key}`}>

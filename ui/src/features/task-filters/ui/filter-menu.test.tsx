@@ -65,6 +65,16 @@ describe('панель «Фильтр»', () => {
       blocked: true,
       withQuestions: false,
       withRemarks: true,
+      withWarnings: false,
+    });
+
+    // Предупреждение (TRK-561) — тем же порядком, своим полем.
+    await user.click(screen.getByRole('button', { name: say.tasks('filters.withWarnings') }));
+    expect(onApply).toHaveBeenLastCalledWith({
+      blocked: true,
+      withQuestions: false,
+      withRemarks: false,
+      withWarnings: true,
     });
   });
 
