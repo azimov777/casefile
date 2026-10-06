@@ -38,6 +38,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = PROJECT_ROOT / "scripts" / "merge-task-branch.sh"
 
@@ -536,6 +538,49 @@ def test_pnpm_check_runs_when_the_branch_touches_the_installer_without_ui(tmp_pa
     done = _run_script(repo, fake_bin, ["task/TRK-0", "-m", "merge(x): проверка (TRK-0)"])
     assert done.returncode == 0, done.stdout + done.stderr
     assert pnpm_log.exists(), "pnpm не вызван, хотя ветка трогала install.sh"
+
+
+@pytest.mark.parametrize("watched", ["docs/ERRORS.md", "openapi.json"])
+def test_pnpm_check_runs_when_the_branch_touches_a_file_the_ui_tests_read(
+    tmp_path: Path, watched: str
+) -> None:
+    """Справочник ошибок и схема API читают тесты `ui/`: ветка, правящая только их, тоже
+    гоняет `pnpm check` (TRK-583, слияние TRK-562 уронило main так, что узнали на следующем)."""
+    repo = _make_repo_with_ui(tmp_path, branch_touches_ui=False)
+    _git(repo, ["checkout", "--quiet", "task/TRK-0"])
+    target = repo / watched
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("правка\n", encoding="utf-8")
+    _git(repo, ["add", watched])
+    _git(repo, ["commit", "--quiet", "-m", "правка вне ui"])
+    _git(repo, ["checkout", "--quiet", "main"])
+    fake_bin = _make_fake_bin(tmp_path, label="fakebin-ui-reads")
+    pnpm_log = tmp_path / "pnpm-invocations.log"
+    _add_fake_pnpm(fake_bin, log=pnpm_log)
+
+    done = _run_script(repo, fake_bin, ["task/TRK-0", "-m", "merge(x): проверка (TRK-0)"])
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert pnpm_log.exists(), f"pnpm не вызван, хотя ветка трогала {watched}"
+    assert "pnpm check — " in _commit_body(repo)
+    assert "не запускался" not in _commit_body(repo)
+
+
+def test_pnpm_check_is_skipped_for_a_branch_touching_only_app(tmp_path: Path) -> None:
+    """Правка `app/` без файлов-триггеров по-прежнему обходится без `pnpm check`."""
+    repo = _make_repo_with_ui(tmp_path, branch_touches_ui=False)
+    _git(repo, ["checkout", "--quiet", "task/TRK-0"])
+    (repo / "app").mkdir()
+    (repo / "app" / "x.py").write_text("x = 1\n", encoding="utf-8")
+    _git(repo, ["add", "app/x.py"])
+    _git(repo, ["commit", "--quiet", "-m", "правка app"])
+    _git(repo, ["checkout", "--quiet", "main"])
+    fake_bin = _make_fake_bin(tmp_path, label="fakebin-app-only")
+    pnpm_log = tmp_path / "pnpm-invocations.log"
+    _add_fake_pnpm(fake_bin, log=pnpm_log)
+
+    done = _run_script(repo, fake_bin, ["task/TRK-0", "-m", "merge(x): проверка (TRK-0)"])
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert not pnpm_log.exists(), "pnpm вызван, хотя ветка трогала только app/"
 
 
 def test_a_red_pnpm_check_stops_the_merge_when_the_branch_touches_ui(tmp_path: Path) -> None:
