@@ -52,7 +52,6 @@ def task_project(project: Project) -> TaskProjectView:
 
 # Направление в карточке задачи — тот же набор полей, что у `TaskDirectionRead` в REST.
 class TaskDirectionView(BaseModel):
-
     address: str
     title: str
     description: str

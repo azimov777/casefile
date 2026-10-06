@@ -248,7 +248,6 @@ class ParentView(BaseModel):
 
 # Направление задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).
 class DirectionRowView(BaseModel):
-
     address: str
     title: str
 
