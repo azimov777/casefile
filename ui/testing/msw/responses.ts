@@ -15,6 +15,7 @@ type Bootstrap = components['schemas']['BootstrapRead'];
 type Task = components['schemas']['TaskSearchRead'];
 type PageMeta = components['schemas']['PageMeta'];
 type TaskPackage = components['schemas']['TaskPackageRead'];
+type TaskState = components['schemas']['TaskStateRead'];
 type TaskDetails = components['schemas']['TaskRead'];
 type Entry = components['schemas']['EntryRead'];
 type EntryHeading = components['schemas']['EntryHeadingRead'];
@@ -385,9 +386,30 @@ export function verdictEntry(no: number, taskKey: string): Entry {
   };
 }
 
+/** Блок «Сейчас» пакета (`state`, TRK-579): по умолчанию задача в работе, ничего нового нет. */
+export function taskState(overrides: Partial<TaskState> = {}): TaskState {
+  return {
+    status: 'in_progress',
+    last_transition: null,
+    last_summary: null,
+    after_summary: null,
+    recent: [],
+    recent_total: 0,
+    questions: [],
+    remarks: [],
+    warning: null,
+    blockers: [],
+    children: {},
+    children_unclosed: [],
+    decisions_after_card: [],
+    ...overrides,
+  };
+}
+
 /** Пакет карточки: всё, чем экран рисуется, одним ответом. */
 export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): TaskPackage {
   return {
+    state: taskState(),
     task: taskDetails(key),
     parent: null,
     children: [],

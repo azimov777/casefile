@@ -34,6 +34,32 @@ export const task = {
     count_other: '{{count, number}} задачи',
   },
 
+  /** Блок «Сейчас» под шапкой карточки (TRK-579): считается бэкендом при чтении, не редактируется. */
+  state: {
+    title: 'Сейчас',
+    lastMove: 'Последний переход',
+    noMove: 'Статус ещё не менялся.',
+    by: 'сделал {{name}}',
+    nextStep: 'Дальше по сводке',
+    inTheWay: 'Помеха по сводке',
+    unmeasured: 'Вне проверок',
+    waitingFor: 'Ждём ответа',
+    blocking: 'блокирует работу',
+    blockedBy: 'Блокируют',
+    children: 'Дочерние задачи по статусам',
+    recentAfterSummary_one: 'После сводки №{{no}}: {{count, number}} запись',
+    recentAfterSummary_few: 'После сводки №{{no}}: {{count, number}} записи',
+    recentAfterSummary_many: 'После сводки №{{no}}: {{count, number}} записей',
+    recentAfterSummary_other: 'После сводки №{{no}}: {{count, number}} записи',
+    recentNoSummary_one: 'Сводки ещё нет; в деле {{count, number}} запись',
+    recentNoSummary_few: 'Сводки ещё нет; в деле {{count, number}} записи',
+    recentNoSummary_many: 'Сводки ещё нет; в деле {{count, number}} записей',
+    recentNoSummary_other: 'Сводки ещё нет; в деле {{count, number}} записи',
+    nothingNew: 'После сводки ничего не подшито.',
+    more: 'и ещё {{count, number}}',
+    decisionsAfterCard: 'Принято после правки задания',
+  },
+
   header: {
     // Подписи полосы свойств карточки (UI-143): род значения назван видимо, а не только
     // диктору, — владелец выбрал полосу с подписями (UI-143#10).

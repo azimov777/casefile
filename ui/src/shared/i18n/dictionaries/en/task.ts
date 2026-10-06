@@ -32,6 +32,28 @@ export const task = {
     count_other: '{{count, number}} tasks',
   },
 
+  /** Блок «Сейчас» под шапкой карточки (TRK-579): считается бэкендом при чтении, не редактируется. */
+  state: {
+    title: 'Right now',
+    lastMove: 'Last move',
+    noMove: 'The status has not changed yet.',
+    by: 'by {{name}}',
+    nextStep: 'Ahead per the summary',
+    inTheWay: 'Obstacle per the summary',
+    unmeasured: 'Outside the checks',
+    waitingFor: 'Waiting for an answer',
+    blocking: 'blocks the work',
+    blockedBy: 'Blocked by',
+    children: 'Child tasks by status',
+    recentAfterSummary_one: 'After summary #{{no}}: {{count, number}} entry',
+    recentAfterSummary_other: 'After summary #{{no}}: {{count, number}} entries',
+    recentNoSummary_one: 'No summary yet; the case has {{count, number}} entry',
+    recentNoSummary_other: 'No summary yet; the case has {{count, number}} entries',
+    nothingNew: 'Nothing has been filed after the summary.',
+    more: 'and {{count, number}} more',
+    decisionsAfterCard: 'Decided after the assignment was edited',
+  },
+
   header: {
     // Подписи полосы свойств карточки (UI-143): род значения назван видимо, а не только
     // диктору, — владелец выбрал полосу с подписями (UI-143#10).

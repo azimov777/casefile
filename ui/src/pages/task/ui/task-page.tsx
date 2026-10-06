@@ -21,6 +21,7 @@ import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, projectHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
+import { TaskStateBlock } from './task-state';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
 
@@ -411,6 +412,10 @@ export function TaskPage() {
           rights.write && !frozen && !(CLOSED_STATUSES as readonly string[]).includes(task.status)
         }
       />
+
+      {/* «Сейчас» (TRK-579): где задача стоит сию минуту — до двух колонок, потому что
+          с этого человек начинает, а не с описи. */}
+      <TaskStateBlock state={pkg.data.state} taskKey={task.key} />
 
       {/* Почему на карточке нет ни «Ответить», ни «Замечания», сказано словами — и
           сказано, где задачу вернуть в работу: на экране её проекта. */}
