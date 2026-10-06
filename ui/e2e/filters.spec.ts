@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test';
-import { fontsReady, silenceJournal } from './contour';
+import { fontsReady, silenceJournal, tasksByStatus } from './contour';
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -61,6 +61,33 @@ test('приоритет, исполнитель и признак ставят�
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(page.getByRole('button', { name: 'Фильтр', exact: true })).toBeFocused();
+});
+
+test('флажок «ждёт ответа» отбирает ровно задачи столбца доски «Ждёт ответа» (TRK-577)', async ({
+  page,
+  request,
+}) => {
+  await silenceJournal(page);
+  const waiting = [...((await tasksByStatus(request)).get('waiting') ?? [])].sort();
+  expect(waiting.length, 'в демо нет ждущих ответа задач').toBeGreaterThan(0);
+
+  await page.goto('/tasks?project=DEMO');
+  await expect(page.locator('tbody tr').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  const menu = page.getByRole('dialog', { name: 'Условия отбора задач' });
+  await menu.getByRole('button', { name: 'ждёт ответа', exact: true }).click();
+  await expect(page).toHaveURL(/waiting=true/);
+
+  const shown = async () =>
+    (await page.locator('tbody tr th').allTextContents())
+      .map((text) => /DEMO-\d+/.exec(text)?.[0] ?? '')
+      .sort();
+  await expect.poll(shown).toEqual(waiting);
+  await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('ждёт ответа');
+
+  await page.reload();
+  await expect.poll(shown).toEqual(waiting);
+  await expect(page.getByRole('list', { name: 'Условия отбора' })).toContainText('ждёт ответа');
 });
 
 test('запрос: ошибка объясняется у поля, верный отменяет простой отбор', async ({ page }) => {

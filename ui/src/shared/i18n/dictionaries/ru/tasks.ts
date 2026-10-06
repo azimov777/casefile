@@ -92,6 +92,7 @@ export const tasks = {
     withQuestions: 'есть открытые вопросы',
     withRemarks: 'есть неразобранные замечания',
     withWarnings: 'закрыта не целиком, ждёт решения',
+    withWaiting: 'ждёт ответа',
     pending: 'не применено, Enter применит',
     pendingShort: '↵ применить',
     apply: 'Применить',
@@ -141,6 +142,7 @@ export const tasks = {
       questions: 'есть открытые вопросы',
       remarks: 'есть неразобранные замечания',
       warnings: 'закрыта не целиком, ждёт решения',
+      waiting: 'ждёт ответа',
     },
   },
 } as const;

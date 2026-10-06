@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WAITING_CONDITION } from '@/entities/task';
 import {
   DEFAULT_COLLAPSED,
   DEFAULT_SORT,
@@ -33,6 +34,7 @@ describe('чтение отбора из адреса', () => {
       withQuestions: true,
       withRemarks: true,
       withWarnings: true,
+      withWaiting: false,
       query: '',
       sort: 'key',
       page: 3,
@@ -133,6 +135,18 @@ describe('перевод отбора в параметры запроса', () 
     // Два флажка — одно условие через `and`: иначе второй молча вытеснил бы первый.
     expect(filtersToListParams(filters({ withQuestions: true, withRemarks: true })).query).toBe(
       `${OPEN_QUESTIONS_CONDITION} and ${OPEN_REMARKS_CONDITION}`,
+    );
+  });
+
+  it('«ждёт ответа» (TRK-577) — условие столбца доски, живёт в адресе и складывается с остальными', () => {
+    expect(filtersToListParams(filters({ withWaiting: true })).query).toBe(WAITING_CONDITION);
+    expect(WAITING_CONDITION).toBe(
+      'status: in backlog, open, in_progress and open_blocking_questions: > 0',
+    );
+    expect(writeFilters(filters({ withWaiting: true })).get('waiting')).toBe('true');
+    expect(readFilters(new URLSearchParams('waiting=true')).withWaiting).toBe(true);
+    expect(filtersToListParams(filters({ withQuestions: true, withWaiting: true })).query).toBe(
+      `${OPEN_QUESTIONS_CONDITION} and ${WAITING_CONDITION}`,
     );
   });
 

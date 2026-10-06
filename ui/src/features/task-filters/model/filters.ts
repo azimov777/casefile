@@ -4,6 +4,7 @@ import {
   TASK_PAGE_SIZE,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  WAITING_CONDITION,
   type BoardColumn,
   type TaskListRequest,
   type TaskPriority,
@@ -37,6 +38,8 @@ export interface TaskFilters {
   withRemarks: boolean;
   /** Только с открытым предупреждением (TRK-561); см. `OPEN_WARNINGS_CONDITION`. */
   withWarnings: boolean;
+  /** Только ждущие ответа (TRK-577): открытый вопрос `blocking` у задачи из работы; см. `WAITING_CONDITION`. */
+  withWaiting: boolean;
   /** Строка на языке запросов бэкенда. Клиент её не разбирает. */
   query: string;
   sort: string;
@@ -149,6 +152,7 @@ export const EMPTY_FILTERS: TaskFilters = {
   withQuestions: false,
   withRemarks: false,
   withWarnings: false,
+  withWaiting: false,
   query: '',
   sort: DEFAULT_SORT,
   page: 1,
@@ -178,6 +182,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     withQuestions: params.get('questions') === 'true',
     withRemarks: params.get('remarks') === 'true',
     withWarnings: params.get('warnings') === 'true',
+    withWaiting: params.get('waiting') === 'true',
     query: params.get('query') ?? '',
     sort: isTaskSort(sort) ? sort : DEFAULT_SORT,
     page: readPage(params.get('page')),
@@ -204,6 +209,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   if (filters.withQuestions) params.set('questions', 'true');
   if (filters.withRemarks) params.set('remarks', 'true');
   if (filters.withWarnings) params.set('warnings', 'true');
+  if (filters.withWaiting) params.set('waiting', 'true');
   if (filters.query.trim() !== '') params.set('query', filters.query.trim());
   if (filters.sort !== DEFAULT_SORT) params.set('sort', filters.sort);
   if (filters.page > 1) params.set('page', String(filters.page));
@@ -294,6 +300,7 @@ function conditionsOf(filters: TaskFilters): string | undefined {
     filters.withQuestions ? OPEN_QUESTIONS_CONDITION : null,
     filters.withRemarks ? OPEN_REMARKS_CONDITION : null,
     filters.withWarnings ? OPEN_WARNINGS_CONDITION : null,
+    filters.withWaiting ? WAITING_CONDITION : null,
   ].filter((condition) => condition !== null);
 
   return conditions.length === 0 ? undefined : conditions.join(' and ');
