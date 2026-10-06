@@ -856,53 +856,93 @@ async def test_both_inputs_narrow_each_other_instead_of_replacing(
     assert found == [board["blocked"].key]
 
 
-async def test_waiting_is_selected_by_status_without_touching_the_search(
-    db_session: AsyncSession, task_actor: Actor, project: Project, board: dict[str, Task]
-) -> None:
-    """Обзорная проверка 6: новый статус находится отбором, и поиск для этого не правился.
-
-    Это главное свойство статуса: очередь ожидания человек получает списком, а не
-    вычитыванием сводок. Поиск разбирает значение статуса перечислением `TaskStatus`,
-    поэтому новый член работает сам — тест стережёт, что это так и осталось, и заодно
-    что `waiting` не подмешивается в выдачу `status: open`.
-    """
-    parked = await make(db_session, task_actor, project, "ждёт человека")
-    parked = await open_task(db_session, task_actor, parked)
-    await tasks_service.transition_task(
-        db_session, parked, actor=task_actor, to=TaskStatus.WAITING, reason="Жду решения владельца"
-    )
-
-    assert await keys(db_session, task_actor, query="status: waiting") == [parked.key]
-    assert parked.key not in await keys(db_session, task_actor, query="status: open")
-
-    both = await keys(db_session, task_actor, query="status: in waiting, open")
-    assert parked.key in both
-    assert board["plain"].key in both
-
-    # Структурный вход обязан находить то же самое: второй реализации отбора нет.
-    assert await keys(
-        db_session, task_actor, structured=[StructuredTerm(name="status", values=["waiting"])]
-    ) == [parked.key]
-
-
-async def test_waiting_does_not_touch_the_blocked_feature(
+async def test_waiting_is_not_a_status_of_the_query_language(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    """Признак `blocked` остался про `blocked_by` и нового смысла не приобрёл.
+    """Обзорная проверка 1 TRK-573: статус `waiting` снят без псевдонима и в поиске.
 
-    Ожидание человека и блокировка задачей — разные вещи (`CONCEPT.md`, 4.6), и слить их
-    в один признак значило бы потерять различие ровно там, где оно и нужно.
+    `status: waiting` — отказ `search_value_invalid` со списком допустимых статусов, где
+    `waiting` нет; структурный вход отвечает тем же, потому что второй реализации отбора
+    нет. Пустая выдача здесь соврала бы: «ждущих нет», хотя ждущие стоят в `open`.
     """
-    parked = await make(db_session, task_actor, project, "ждёт человека")
-    parked = await open_task(db_session, task_actor, parked)
+    del project
+    allowed = ["backlog", "open", "in_progress", "done", "cancelled"]
+
+    with pytest.raises(SearchValueInvalidError) as by_query:
+        await keys(db_session, task_actor, query="status: waiting")
+    assert by_query.value.code == "search_value_invalid"
+    assert by_query.value.details["field"] == "status"
+    assert by_query.value.details["reason"] == "not_allowed"
+    assert by_query.value.details["allowed"] == allowed
+
+    with pytest.raises(SearchValueInvalidError) as by_term:
+        await keys(
+            db_session, task_actor, structured=[StructuredTerm(name="status", values=["waiting"])]
+        )
+    assert by_term.value.details["allowed"] == allowed
+
+
+#: Запрос назначателя (`CONCEPT.md`, 4.3): кандидат — в `open`, без открытого блокера и
+#: без открытого вопроса с `blocking`.
+CANDIDATES = "status: open and blocked: false and open_blocking_questions: 0"
+
+
+async def test_an_answer_returns_a_waiting_task_to_the_candidates_without_a_move(
+    db_session: AsyncSession, task_actor: Actor, project: Project
+) -> None:
+    """Обзорная проверка 3 TRK-573: ожидание держит вопрос, а кончает его ответ — без хода.
+
+    Агент упирается в решение человека: вопрос с `blocking`, сводка, `in_progress → open`
+    с причиной (`CONCEPT.md`, 4.6, «Ответа, долго»). Пока вопрос открыт, запрос
+    кандидатов задачу не находит; после `answer` находит, хотя статус никто не трогал:
+    между двумя чтениями в деле нет ни одной записи `status_changed`.
+    """
+    waiting = await make(db_session, task_actor, project, "ждёт человека", assignee="owner")
+    waiting = await open_task(db_session, task_actor, waiting)
     await tasks_service.transition_task(
-        db_session, parked, actor=task_actor, to=TaskStatus.WAITING, reason="Жду доступ"
+        db_session, waiting, actor=task_actor, to=TaskStatus.IN_PROGRESS
+    )
+    question = await case_service.ask(
+        db_session,
+        waiting,
+        actor=task_actor,
+        addressees=["owner"],
+        title="Какой срок хранения выбрать",
+        blocking=True,
+    )
+    await case_service.add_summary(
+        db_session,
+        waiting,
+        actor=task_actor,
+        done="Собраны варианты",
+        remaining="Выбор владельца",
+        blockers=f"Ответ owner на {waiting.key}#{question.no}",
+        next_step="Подшить решение по ответу",
+    )
+    await tasks_service.transition_task(
+        db_session,
+        waiting,
+        actor=task_actor,
+        to=TaskStatus.OPEN,
+        reason=f"Жду ответа на {waiting.key}#{question.no}",
     )
 
-    features = await found_features(db_session, task_actor, parked.key)
+    assert waiting.key not in await keys(db_session, task_actor, query=CANDIDATES)
+    features = await found_features(db_session, task_actor, waiting.key)
     assert features is not None
-    assert features.blocked is False
-    assert await keys(db_session, task_actor, query="blocked: true") == []
+    assert features.open_blocking_questions == 1
+    seen = await case_service.latest_entry_no(db_session, waiting, actor=task_actor)
+
+    await case_service.answer(
+        db_session, waiting, actor=task_actor, question_no=question.no, body="Год"
+    )
+
+    assert waiting.key in await keys(db_session, task_actor, query=CANDIDATES)
+    after = await case_service.list_entries(
+        db_session, waiting, actor=task_actor, after_no=seen, limit=200
+    )
+    assert [entry.type.value for entry in after.items] == ["answer"]
+    assert waiting.status is TaskStatus.OPEN
 
 
 # --- Вычисляемые признаки ---------------------------------------------------------------

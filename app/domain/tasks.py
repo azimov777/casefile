@@ -44,6 +44,7 @@ from app.domain.errors import (
     SummaryRequiredError,
     TaskBlockedError,
     TaskFieldsInvalidError,
+    TaskHasOpenBlockingQuestionsError,
     TaskHasUnclosedChildrenError,
     TaskMoveBatchSizeInvalidError,
     TaskMoveReasonRequiredError,
@@ -255,7 +256,6 @@ class TaskStatus(StrEnum):
     BACKLOG = "backlog"
     OPEN = "open"
     IN_PROGRESS = "in_progress"
-    WAITING = "waiting"
     DONE = "done"
     CANCELLED = "cancelled"
 
@@ -264,9 +264,9 @@ class TaskStatus(StrEnum):
 INITIAL_STATUS = TaskStatus.BACKLOG
 
 #: Порядок цепочки: `backlog` < `open` < `in_progress` < `done`. Переход к меньшему
-#: статусу — шаг назад. `cancelled` и `waiting` в цепочке не стоят: это выходы в сторону,
-#: и `is_step_back` для них отвечает `False` — причину у перехода в них требует не
-#: правило шага назад, а собственные ветки `check_reason_for_step_back_cancel_or_wait`.
+#: статусу — шаг назад. `cancelled` в цепочке не стоит: это выход в сторону, и
+#: `is_step_back` для него отвечает `False` — причину у перехода в него требует не
+#: правило шага назад, а собственная ветка `check_reason_for_step_back_or_cancel`.
 STATUS_CHAIN: tuple[TaskStatus, ...] = (
     TaskStatus.BACKLOG,
     TaskStatus.OPEN,
@@ -280,29 +280,21 @@ _CHAIN_RANK = {status: rank for rank, status in enumerate(STATUS_CHAIN)}
 CLOSED_STATUSES: frozenset[TaskStatus] = frozenset({TaskStatus.DONE, TaskStatus.CANCELLED})
 
 #: Таблица переходов. Порядок целей в каждой строке — порядок в ответе «доступные
-#: переходы»: сначала вперёд по цепочке, потом в сторону (`waiting`), потом назад, потом
-#: отмена. У `waiting` хода вперёд нет — он вне цепочки, — поэтому его цели идут по
-#: убыванию ранга: возврат в работу это главный ход дождавшейся задачи.
+#: переходы»: сначала вперёд по цепочке, потом назад, потом отмена.
 #:
-#: Прямого хода `waiting → done` нет намеренно (`CONCEPT.md`, 3.3): он обошёл бы
-#: проверку вердиктов, которая висит на `in_progress → done`.
+#: Ждущая задача стоит в `open` (`CONCEPT.md`, 3.3, «Ожидание»): статуса ожидания нет,
+#: его снял `TRK-573` по решению владельца `TRK-569#9`. Ждёт её носитель в деле — вопрос
+#: с `blocking` или связь `blocked_by`, — и дверь в работу держат проверки входа
+#: (`check_no_open_blockers`, `check_no_open_blocking_questions`), а не строка таблицы.
 TRANSITIONS: Mapping[TaskStatus, tuple[TaskStatus, ...]] = {
-    TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.WAITING, TaskStatus.CANCELLED),
+    TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
     TaskStatus.OPEN: (
         TaskStatus.IN_PROGRESS,
-        TaskStatus.WAITING,
         TaskStatus.BACKLOG,
         TaskStatus.CANCELLED,
     ),
     TaskStatus.IN_PROGRESS: (
         TaskStatus.DONE,
-        TaskStatus.WAITING,
-        TaskStatus.OPEN,
-        TaskStatus.BACKLOG,
-        TaskStatus.CANCELLED,
-    ),
-    TaskStatus.WAITING: (
-        TaskStatus.IN_PROGRESS,
         TaskStatus.OPEN,
         TaskStatus.BACKLOG,
         TaskStatus.CANCELLED,
@@ -325,9 +317,8 @@ def allowed_transitions(status: TaskStatus) -> tuple[TaskStatus, ...]:
 def is_step_back(from_status: TaskStatus, to_status: TaskStatus) -> bool:
     """Шаг назад — переход к меньшему статусу цепочки.
 
-    `cancelled` и `waiting` вне цепочки, поэтому шагом назад не считаются ни переходы в
-    них, ни выходы из `waiting`: `waiting → backlog` откатом не является, потому что
-    ожидание ступенью работы не было.
+    `cancelled` вне цепочки, поэтому переход в него шагом назад не считается: причину у
+    отмены требует своя ветка `check_reason_for_step_back_or_cancel`.
     """
     if from_status not in _CHAIN_RANK or to_status not in _CHAIN_RANK:
         return False
@@ -697,6 +688,9 @@ class TransitionFacts:
     #: и переход в `in_progress` запрещается: назвать блокеры при этом нечем, поэтому
     #: отказ приходит с `details.reason`, а не с пустым списком, который соврал бы.
     open_blockers: Sequence[str] | None = None
+    #: Номера открытых вопросов с `blocking` — без `answer` в деле задачи. `None` — «факт
+    #: не считали»: читается так же, как у блокеров, и по той же причине.
+    open_blocking_questions: Sequence[int] | None = None
     #: Ключи детей не в `done` и не в `cancelled`. `None` читается так же, как у
     #: блокеров, и по той же причине.
     unclosed_children: Sequence[str] | None = None
@@ -721,24 +715,21 @@ class TransitionFacts:
 type TransitionCheck = Callable[[TransitionFacts], None]
 
 
-def check_reason_for_step_back_cancel_or_wait(facts: TransitionFacts) -> None:
-    """Шаг назад, отмена и уход в `waiting` требуют причины.
+def check_reason_for_step_back_or_cancel(facts: TransitionFacts) -> None:
+    """Шаг назад и отмена требуют причины.
 
     Причина уезжает в запись `status_changed` — это то, по чему преемник понимает,
-    почему задача сошла с прямого пути, не переживая ситуацию заново. У `waiting` она
-    несёт вдобавок то, чего больше нигде нет: **чего** ждём. Ожидание без этого
-    неотличимо от его отсутствия — задача просто стоит.
+    почему задача сошла с прямого пути, не переживая ситуацию заново.
 
-    Требование висит только на **входе** в `waiting`. Выход из него причины не требует:
-    дождались — обычный ход в работу, и объяснять в нём нечего. Шагом назад выход из
-    `waiting` тоже не считается (`is_step_back`), поэтому и та ветка его не поймает.
+    Уход ждущей задачи `in_progress → open` — шаг назад, и причина у него есть по этому
+    же правилу: она называет носитель ожидания. Ожидания она не держит — держит носитель
+    (вопрос с `blocking`, связь `blocked_by`), а текст причины не стареет вместе с
+    событием (`CONCEPT.md`, 3.3, «Ожидание»).
     """
     if facts.reason is not None:
         return
     if facts.to_status is TaskStatus.CANCELLED:
         rule = "cancel"
-    elif facts.to_status is TaskStatus.WAITING:
-        rule = "wait"
     elif is_step_back(facts.from_status, facts.to_status):
         rule = "step_back"
     else:
@@ -872,7 +863,7 @@ def check_taken_by_assignee(facts: TransitionFacts) -> None:
 
     Исключений по роду и по флагу администратора нет: чужую задачу берут, переназначив
     её, и смена исполнителя остаётся в деле. Задачи, уже стоящие в `in_progress`, не
-    задеты — проверка висит на входе, в том числе на возврате из `waiting`.
+    задеты — проверка висит на входе, в том числе на возврате дождавшейся задачи в работу.
     """
     if facts.to_status is not TaskStatus.IN_PROGRESS:
         return
@@ -893,12 +884,12 @@ def check_no_open_blockers(facts: TransitionFacts) -> None:
     """`* → in_progress`: ни одной связи `blocked_by` на незакрытую задачу.
 
     Единственная валидация, которая читает связи. Она не «ждёт» и ничего не назначает:
-    блокировка — это просто отказ взять задачу в работу, пока блокер открыт. Статус
-    `waiting` тут ни при чём и заменой ему не является: он про ход, который делает
-    человек, а `blocked_by` — про ход, который делает другая задача (`CONCEPT.md`, 4.6).
+    блокировка — это просто отказ взять задачу в работу, пока блокер открыт. Ход за
+    другой задачей держит `blocked_by`, ход за человеком или внешним событием — вопрос с
+    `blocking` (`check_no_open_blocking_questions`; `CONCEPT.md`, 4.6).
 
-    Проверка висит на входе в `in_progress`, а значит и на возврате из `waiting`:
-    задача, пока она ждала, могла обзавестись блокером.
+    Проверка висит на каждом входе в `in_progress`, в том числе на возврате дождавшейся
+    задачи в работу: задача, пока она ждала, могла обзавестись блокером.
     """
     if facts.to_status is not TaskStatus.IN_PROGRESS:
         return
@@ -927,6 +918,45 @@ def check_no_open_blockers(facts: TransitionFacts) -> None:
     )
 
 
+def check_no_open_blocking_questions(facts: TransitionFacts) -> None:
+    """`* → in_progress`: ни одного вопроса с `blocking` без ответа.
+
+    Решение владельца `TRK-569#9`, развилка 3 (`CONCEPT.md`, 3.3): статуса ожидания нет,
+    и дверь в работу держит сам носитель — как блокер у `check_no_open_blockers`. Иначе
+    агент, берущий «что в `open`», взял бы задачу, которая ждёт ответа человека, и
+    работал бы поверх неотвеченного блокирующего вопроса.
+
+    Это валидация, а не автоматика: ни вопрос, ни ответ статус не меняют. Ответ на
+    последний блокирующий вопрос просто открывает этот вход; ставший ненужным вопрос
+    снимают ответом с исходом `withdrawn`. Неблокирующий вопрос вход не держит — в факт
+    он не попадает вовсе (`app/services/case.py`, `open_blocking_question_nos`).
+    """
+    if facts.to_status is not TaskStatus.IN_PROGRESS:
+        return
+    questions = facts.open_blocking_questions
+    if questions is None:
+        # Факт не посчитан: как у блокеров, ход запрещается отдельной причиной, а не
+        # пустым списком номеров, который соврал бы, что вопросов нет.
+        raise TaskHasOpenBlockingQuestionsError(
+            details={
+                "key": facts.key,
+                "from": facts.from_status.value,
+                "to": facts.to_status.value,
+                "reason": "questions_not_collected",
+            },
+        )
+    if not questions:
+        return
+    raise TaskHasOpenBlockingQuestionsError(
+        details={
+            "key": facts.key,
+            "from": facts.from_status.value,
+            "to": facts.to_status.value,
+            "questions": list(questions),
+        },
+    )
+
+
 def check_children_closed_before_closing(facts: TransitionFacts) -> None:
     """`* → done` и `* → cancelled`: все дети в `done` или в `cancelled`.
 
@@ -940,10 +970,6 @@ def check_children_closed_before_closing(facts: TransitionFacts) -> None:
     `done` и родителя не держит: декомпозиция, от которой отказались, тоже работа,
     доведённая до конца. `cancelled` **родителя** обязан ждать закрытых детей ровно по
     той же причине, по какой их ждёт `done`.
-
-    `waiting` ребёнка **не** закрывает: он не в `CLOSED_STATUSES`, и родитель с таким
-    ребёнком не закроется никак. Так и задумано — ждущий ребёнок это незаконченная
-    работа, а не отменённая (`CONCEPT.md`, 3.3).
     """
     if not is_closed(facts.to_status):
         return
@@ -983,7 +1009,7 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     # вперёд неё отказ про недостающую сводку отправил бы вызывающего чинить дело
     # вместо вызова.
     check_done_is_reached_by_closing,
-    check_reason_for_step_back_cancel_or_wait,
+    check_reason_for_step_back_or_cancel,
     check_sections_filled_before_open,
     check_summary_before_leaving_in_progress,
     check_verdicts_before_done,
@@ -991,6 +1017,7 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     # заблокирована чужая задача, — ему отвечают тем, что задача не его.
     check_taken_by_assignee,
     check_no_open_blockers,
+    check_no_open_blocking_questions,
     check_children_closed_before_closing,
 )
 

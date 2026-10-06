@@ -5291,7 +5291,7 @@
           "tasks"
         ],
         "summary": "Move a task to another status",
-        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nзасчитанного последнего вердикта по каждой проверке (`passed`, `partial`,\n`unverifiable`), подшитого после последнего входа в `in_progress` (`409\nchecks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только\nисполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи\n(имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с\n`details.assignee` и `details.requester`. Вход в\n`in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.\n\nЦель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу\nодной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.",
+        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nзасчитанного последнего вердикта по каждой проверке (`passed`, `partial`,\n`unverifiable`), подшитого после последнего входа в `in_progress` (`409\nchecks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только\nисполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи\n(имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с\n`details.assignee` и `details.requester`. Вход в\n`in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), и при вопросе с `blocking` без ответа (`409\ntask_has_open_blocking_questions`, номера вопросов в `details.questions`; ни вопрос,\nни ответ статус не меняют), закрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.\n\nЦель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу\nодной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.",
         "operationId": "transition_task",
         "security": [
           {
@@ -15578,7 +15578,6 @@
           "backlog",
           "open",
           "in_progress",
-          "waiting",
           "done",
           "cancelled"
         ],

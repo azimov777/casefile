@@ -1132,3 +1132,133 @@ async def test_existing_tasks_cite_no_decisions_after_the_decisions_migration(
         )
     assert "decisions" not in columns
     await migrate(url, TASK_DECISIONS_REVISION)
+
+
+# --- Статус `waiting` снят (TRK-573) --------------------------------------------------------
+
+#: Ревизия, снимающая статус ожидания, и ревизия перед ней.
+DROP_WAITING_REVISION = "a9cb1ec147c4"
+DROP_WAITING_PREVIOUS = "4b8e2d7c1f90"
+
+_INSERT_TASKS_WAITING_AND_OPEN = text(
+    "INSERT INTO tasks (key, project_id, title, description, status, created_by_kind, "
+    "created_by_signature) SELECT rows.key, projects.id, rows.title, 'd', rows.status, 'agent', "
+    "'claude' "
+    "FROM projects, (VALUES ('OLD-1', 'Ждёт владельца', 'waiting'), "
+    "('OLD-2', 'Свободная', 'open')) AS rows (key, title, status) WHERE projects.key = 'OLD'"
+)
+_INSERT_WAITING_HISTORY = text(
+    "INSERT INTO entries (task_id, no, type, title, payload, created_by_kind, "
+    "created_by_signature) SELECT tasks.id, rows.no, rows.type, rows.title, "
+    "CAST(rows.payload AS jsonb), 'agent', 'claude' FROM tasks, (VALUES "
+    "(1, 'created', 'Task created', '{}'), "
+    "(2, 'status_changed', 'Status changed: in_progress -> waiting', "
+    """'{"from": "in_progress", "to": "waiting", "reason": "Жду ответа на OLD-1#3"}')) """
+    "AS rows (no, type, title, payload) WHERE tasks.key = 'OLD-1'"
+)
+
+
+async def _seed_waiting(engine: AsyncEngine) -> None:
+    """Проект, задача в `waiting` с историей и задача в `open` — установка до TRK-573."""
+    async with engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_TASKS_WAITING_AND_OPEN)
+        await connection.execute(_INSERT_WAITING_HISTORY)
+
+
+async def test_a_waiting_task_moves_into_open_and_its_case_names_the_task(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Обзорная проверка 2 TRK-573: `waiting → open` записью от трекера с причиной.
+
+    Запись подшита следующим номером, без подписи, своим `action_id`, причина называет
+    TRK-573; версия выросла. Задачу не в `waiting` миграция не трогает, а старая запись
+    о входе в `waiting` остаётся как была — журнал неизменяем.
+    """
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DROP_WAITING_PREVIOUS)
+    await _seed_waiting(migration_engine)
+
+    await migrate(url, DROP_WAITING_REVISION)
+
+    async with migration_engine.connect() as connection:
+        tasks = {
+            row.key: (row.status, row.version)
+            for row in await connection.execute(text("SELECT key, status, version FROM tasks"))
+        }
+        rows = list(
+            await connection.execute(
+                text(
+                    "SELECT tasks.key, entries.no, entries.type, entries.title, entries.payload, "
+                    "entries.created_by_kind, entries.created_by_signature, entries.action_id "
+                    "FROM entries JOIN tasks ON tasks.id = entries.task_id ORDER BY entries.seq"
+                )
+            )
+        )
+
+    assert tasks == {"OLD-1": ("open", 2), "OLD-2": ("open", 1)}
+    assert [(row.key, row.no, row.type) for row in rows] == [
+        ("OLD-1", 1, "created"),
+        ("OLD-1", 2, "status_changed"),
+        ("OLD-1", 3, "status_changed"),
+    ]
+    entry = rows[-1]
+    assert entry.title == "Status changed: waiting -> open"
+    assert entry.created_by_kind == "tracker"
+    assert entry.created_by_signature is None, "трекер подписи не ставит (`CONCEPT.md`, 3.1)"
+    assert entry.action_id is not None
+    assert entry.payload["from"] == "waiting"
+    assert entry.payload["to"] == "open"
+    assert "TRK-573" in entry.payload["reason"]
+    assert rows[1].payload["to"] == "waiting", "старая запись не переписана"
+
+
+async def test_the_status_constraint_refuses_waiting_after_the_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Обзорная проверка 2 TRK-573: значение снято на уровне схемы, а не только в коде."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DROP_WAITING_PREVIOUS)
+    await _seed_waiting(migration_engine)
+    await migrate(url, DROP_WAITING_REVISION)
+
+    with pytest.raises(Exception, match="ck_tasks_task_status"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO tasks (key, project_id, title, description, status, "
+                    "created_by_kind, created_by_signature) SELECT 'OLD-3', id, 'Новая', 'd', "
+                    "'waiting', 'agent', 'claude' FROM projects WHERE key = 'OLD'"
+                )
+            )
+    with pytest.raises(Exception, match="ck_tasks_task_status"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text("UPDATE tasks SET status = 'waiting' WHERE key = 'OLD-2'")
+            )
+
+
+async def test_the_waiting_migration_rolls_back_only_the_constraint(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Откат возвращает `waiting` в ограничение и не переводит задачи назад; подъём снова идёт."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DROP_WAITING_PREVIOUS)
+    await _seed_waiting(migration_engine)
+    await migrate(url, DROP_WAITING_REVISION)
+
+    await migrate(url, DROP_WAITING_PREVIOUS, down=True)
+    async with migration_engine.begin() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+        status = await connection.scalar(text("SELECT status FROM tasks WHERE key = 'OLD-1'"))
+        # Ограничение снова принимает статус: откат вернул именно его.
+        await connection.execute(text("UPDATE tasks SET status = 'waiting' WHERE key = 'OLD-2'"))
+    assert revision == DROP_WAITING_PREVIOUS
+    assert status == "open"
+
+    await migrate(url, DROP_WAITING_REVISION)
+    async with migration_engine.connect() as connection:
+        revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+        statuses = set(await connection.scalars(text("SELECT status FROM tasks")))
+    assert revision == DROP_WAITING_REVISION
+    assert statuses == {"open"}

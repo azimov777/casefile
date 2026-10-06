@@ -50,7 +50,8 @@ RULES = {
     "3.7 текст мимо контракта — finding и ответ": "`finding`",
     "5.5 сводка после каждого значимого шага": "summary follows every significant step",
     "9.1 ход за задачей — blocked_by и open": "`blocked_by`",
-    "10.1 ход за человеком — waiting": "`waiting`",
+    "10.1 ход не за агентом — носитель, вопрос blocking (TRK-573)": "a `blocking` question",
+    "10.2 сводка, затем open и причина": "then a summary and `open` with a reason",
     "10.7 in_progress только пока ход за агентом": "only while the next move is the agent's",
     "12.10 распавшееся не вести одним делом": "its own case rather than one shared case",
 }

@@ -28,8 +28,9 @@ BlockingArg = Annotated[
     Field(
         description=(
             "Whether work on the task can go on without the answer. `true` counts toward "
-            "the `open_blocking_questions` feature, by which such tasks are selected; the "
-            "tracker does nothing else with it"
+            "the `open_blocking_questions` feature, by which such tasks are selected, and "
+            "refuses entry into `in_progress` with `task_has_open_blocking_questions` "
+            "while the question is open; the tracker does nothing else with it"
         )
     ),
 ]
@@ -54,6 +55,11 @@ def register(tools: Toolset) -> None:
         A question stays open until an `answer` with its number is filed in the same
         task; it counts toward `open_questions`, and with `blocking` toward
         `open_blocking_questions`.
+
+        A `blocking` question is the carrier of a wait on its addressee or on an event
+        outside the tracker that the addressee learns of; any participant files the
+        answer. The answer to the last such question makes a task in `open` a candidate
+        again, with no status move.
 
         What the cases of the parent, its ancestors and sibling tasks already record is
         readable through `get_task` and `read_entries`, without a question.

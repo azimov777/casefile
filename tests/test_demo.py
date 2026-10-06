@@ -178,7 +178,7 @@ async def test_decomposed_test_is_a_child_of_the_task_in_progress(
     однажды стояло навыворот (UI-119#8), и здесь проверена именно эта пара задач, а не
     словарь видов связей вообще (им занята `test_demo_fills_every_link_kind`).
     """
-    _done, in_progress, _candidate, _waiting, child, _checking, _cancelled, _accepted = seeded.tasks
+    _done, in_progress, _candidate, _asking, child, _checking, _cancelled, _accepted = seeded.tasks
     assert in_progress.status is TaskStatus.IN_PROGRESS
     assert child.status is TaskStatus.BACKLOG
 

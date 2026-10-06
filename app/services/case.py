@@ -218,6 +218,19 @@ async def open_questions(session: AsyncSession, task: Task, *, actor: Actor) -> 
     return await EntryRepository(session).open_questions(task.id)
 
 
+async def open_blocking_question_nos(session: AsyncSession, task: Task) -> list[int]:
+    """Номера открытых вопросов задачи с `blocking` — факт проверки входа в `in_progress`.
+
+    Тот же список открытых вопросов и то же доменное `is_blocking_question`, из которых
+    считается признак `open_blocking_questions` (`features`): отказ на входе и признак в
+    карточке обязаны видеть одни и те же вопросы. Без `actor`: это факт перехода,
+    который сценарий считает под уже занятой очередью изменений, а не чтение для
+    вызывающего.
+    """
+    questions = await EntryRepository(session).open_questions(task.id)
+    return [question.no for question in questions if is_blocking_question(question.payload)]
+
+
 async def open_remarks(session: AsyncSession, task: Task, *, actor: Actor) -> list[Entry]:
     """Замечания задачи без резолюции целиком. Из них же считается признак `open_remarks`.
 
