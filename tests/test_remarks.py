@@ -415,7 +415,12 @@ async def test_a_remark_reaches_a_closed_task_and_leaves_its_card_alone(
 
     assert filed.status_code == 201, filed.text
     after = await card(auth_client, key)
-    changed = {"remarks", "features", "index"}
+    changed = {"remarks", "features", "index", "state"}
+    # Блок `state` пересчитывается из дела — замечание в нём видно, — но статус и последний
+    # переход он не меняет: задача осталась закрытой тем же закрытием.
+    for part in ("status", "last_transition"):
+        assert after["state"][part] == before["state"][part]
+    assert [item["title"] for item in after["state"]["remarks"]] == ["Вышло не то"]
     assert {name: value for name, value in after.items() if name not in changed} == {
         name: value for name, value in before.items() if name not in changed
     }
