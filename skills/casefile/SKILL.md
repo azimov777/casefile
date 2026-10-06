@@ -187,6 +187,7 @@ outcome and the unmeasured part in your reply.
 
 ## Not connected
 
-If the casefile MCP server is missing from your tools or answers `401`, or answers must
-reach you between sessions, or this skill is missing from your harness, see the
-connection guide: https://github.com/azimov777/casefile/blob/main/docs/agent-install.md
+If the casefile MCP server is missing from your tools or answers `401`, use the
+`casefile-setup` skill: it finds where you work and names the one step that connects
+Casefile there. If answers must reach you between sessions, or this skill is missing from
+your harness, see the connection guide: https://github.com/azimov777/casefile/blob/main/docs/agent-install.md

@@ -1253,3 +1253,28 @@ Store папка данных не `%APPDATA%\Claude`, а `%LOCALAPPDATA%\Packag
 (`EntryRepository.add`): через инструмент её не получить.
 **Где:** `app/domain/case.py` (`read_payload`), `app/api/schemas/entries.py` (`entry_read`),
 `app/mcp/tools/case/views.py` (`entry`), `tests/test_mcp_tools.py`, `tests/test_domain_case.py`.
+
+## Второй скил плагина срабатывает сам только без инструментов, отключать его нельзя (TRK-566)
+
+**Что:** в `skills/` два скила: `casefile` («как вести задачу через MCP») и `casefile-setup` («как
+подключить Casefile там, где работаешь»). `description` второго начинается словами «Use only when the
+Casefile MCP tools are missing from your tool list or answer 401», его тело ведёт по месту работы:
+Claude Code, Codex, Cursor, чат Claude Desktop (расширение `casefile.mcpb`), claude.ai в вебе и на
+телефоне (до сервера на машине человека не дотягивается). Раздел «Not connected» скила `casefile`
+первой фразой отсылает к нему. Плагин берёт оба скила (`"skills": "./skills/"`), ветка `plugin` и
+`npx skills add` ставят оба, MCP-сервер читает весь каталог и отдаёт оба; ZIP для каталога OpenAI
+собирается без `casefile-setup` (`scripts/build-openai-plugin.sh`).
+**Почему важно:** отключить один скил плагина в Claude Code нельзя (`skillOverrides` на плагины не
+действует, TRK-564#18), поэтому «не мешает» держит только `description`; он стоит строку в контексте
+каждой сессии. Человек из каталога Anthropic получал скил без инструментов, и ни описание, ни скил не
+говорили, как подключиться (TRK-564#6, #12). Сработает ли `description` на настоящей модели, тесты не
+меряют: они держат лишь начало фразы, формат и запреты.
+**Как правильно:** условие срабатывания менять только вместе с тестом `tests/test_skill_setup_file.py`.
+В тексте `casefile-setup` те же запреты, что у `casefile`: никаких `curl … | sh`, `npx`, `docker`,
+ключей, `Bearer`, `scripts/`, личных путей; установка и вход даны ссылками на README и
+`docs/agent-install.md`. Обещать custom connector claude.ai к своему `https`-серверу нельзя: вход
+оттуда не проверен. Новый каталог в `skills/` попадает в MCP-сервер без правки кода: тест
+`test_there_is_one_skills_directory_for_the_plugin_and_the_server` перечисляет их явно.
+**Где:** `skills/casefile-setup/SKILL.md`, `skills/casefile/SKILL.md`, `skills/AGENTS.md`,
+`scripts/build-openai-plugin.sh`, `tests/test_skill_setup_file.py`, `tests/test_mcp_skills.py`,
+`tests/test_plugin_manifest.py`.

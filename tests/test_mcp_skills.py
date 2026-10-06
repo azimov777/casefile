@@ -136,7 +136,7 @@ async def test_skills_list_matches_the_file_on_disk(
         _, read = await call("resources/read", {"uri": SKILL_URI})
 
     assert status == 200, listed
-    (skill,) = listed["result"]["skills"]
+    skill = next(item for item in listed["result"]["skills"] if item["uri"] == SKILL_URI)
     assert skill["uri"] == SKILL_URI
     assert skill["frontmatter"] == front
     assert front["name"] == "casefile"
@@ -192,7 +192,7 @@ def test_there_is_one_skills_directory_for_the_plugin_and_the_server() -> None:
     assert SKILLS_DIR.samefile(repository / "skills")
     found = SKILLS_DIR.glob("*/SKILL.md")
     manifests = sorted(path.relative_to(repository).as_posix() for path in found)
-    assert manifests == ["skills/casefile/SKILL.md"]
+    assert manifests == ["skills/casefile-setup/SKILL.md", "skills/casefile/SKILL.md"]
 
 
 def test_a_skill_over_the_sep_limits_is_refused_at_load(tmp_path: Path) -> None:

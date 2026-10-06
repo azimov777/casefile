@@ -250,6 +250,7 @@ def test_openai_zip_is_skills_only_without_the_connector(tmp_path: Path) -> None
         manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
     assert not [n for n in names if n.endswith("mcp.json")]
     assert "skills/casefile/SKILL.md" in names
+    assert not [n for n in names if n.startswith("skills/casefile-setup")]
     assert "mcpServers" not in manifest
     assert "mcp" not in manifest["keywords"]
     assert "connector" not in manifest["description"].lower()
