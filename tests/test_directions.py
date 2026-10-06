@@ -627,3 +627,19 @@ async def test_mcp_archives_and_restores_a_direction_by_its_address(
     assert "direction_not_archived" in again
     assert "direction_key_taken" in taken
     assert "supersedes" in superseding
+
+
+async def test_a_direction_entry_reads_the_same_through_mcp_and_rest(
+    mcp_session: Connect, auth_client: AsyncClient, task_secret: str, project: Project
+) -> None:
+    """Запись дела направления — одна форма в обеих дверях, с адресом в `direction`."""
+    async with mcp_session(task_secret) as session:
+        await call(session, "create_project", key="TRK/x", title="X")
+        await call(session, "add_project_entry", key="TRK/x", type="decision", title="Решение")
+        from_mcp = await call(session, "read_project_entries", key="TRK/x")
+
+    response = await auth_client.get(f"{DIRECTION.format(key='TRK', direction='x')}/entries")
+    assert response.status_code == 200, response.text
+
+    assert from_mcp["items"] == response.json()["data"]
+    assert from_mcp["items"][1]["payload"] == {"supersedes": []}
