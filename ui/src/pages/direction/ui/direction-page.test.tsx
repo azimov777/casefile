@@ -136,10 +136,12 @@ describe('страница направления', () => {
     expect(href.searchParams.get('project')).toBe('DEMO');
     expect(href.searchParams.get('direction')).toBe(ADDRESS);
 
-    // Верхняя полоса: проект, его экран ссылкой и само место; панель помечает проект.
-    expect(
-      screen.getByRole('link', { name: say.ui('app.crumbProject'), exact: true }),
-    ).toHaveAttribute('href', '/projects/DEMO');
+    // Верхняя полоса: проект, его экран ссылкой и само место. Строка имени сравнивается
+    // целиком: «Проект DEMO» под карточкой с ней не совпадает.
+    expect(screen.getByRole('link', { name: say.ui('app.crumbProject') })).toHaveAttribute(
+      'href',
+      '/projects/DEMO',
+    );
   });
 
   it('тело записи читается адресом записи направления, номер уходит в адрес страницы', async () => {
