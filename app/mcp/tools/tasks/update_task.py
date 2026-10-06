@@ -56,7 +56,8 @@ class CheckEditArg(BaseModel):
 class TaskChanges(BaseModel):
     """Fields to change; a field left out stays as it is. Title, description, sections
     and checks are editable only in `backlog`; elsewhere they are refused with
-    `task_field_locked`.
+    `task_field_locked`. Checks of a task that has ever entered `in_progress` are not
+    editable at all: `task_checks_frozen`.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -70,14 +71,16 @@ class TaskChanges(BaseModel):
     checks: list[str] = unset_field(
         description=(
             "All review checks as a list: changes their composition — a check added, "
-            "removed or moved"
+            "removed or moved. Refused with `task_checks_frozen` once the task has "
+            "entered `in_progress`"
         )
     )
     check: CheckEditArg = unset_field(
         description=(
             "Rewrites one check in place; the other checks stay byte for byte, and the "
             "`section_changed` entry names the check number. Refused together with "
-            "`checks` (`task_fields_invalid`)"
+            "`checks` (`task_fields_invalid`); refused with `task_checks_frozen` once the "
+            "task has entered `in_progress`"
         )
     )
     assignee: str | None = unset_field(
@@ -115,7 +118,10 @@ def register(tools: Toolset) -> None:
 
         Title, description and sections are fixed from `open` on. A task past `backlog`
         has them edited by a return to `backlog` through `transition` with a reason,
-        this call, and a move forward again to `open` and `in_progress`.
+        this call, and a move forward again to `open` and `in_progress`. Checks are
+        the exception: once a task has entered `in_progress`, they are not edited at
+        all (`task_checks_frozen`); a check that cannot be run is closed with the
+        outcome `unverifiable`, not rewritten.
 
         Each changed field files `section_changed` or `field_changed`, an assignee
         change files `assignee_changed`. An edit of one check names its number, and the

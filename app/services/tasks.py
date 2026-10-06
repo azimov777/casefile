@@ -53,10 +53,11 @@ from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
-from app.db.repositories import TaskRepository
+from app.db.repositories import EntryRepository, TaskRepository
 from app.domain.case import EntryHeading
 from app.domain.errors import (
     TaskAlreadyInProjectError,
+    TaskChecksFrozenError,
     TaskClosedError,
     TaskFieldLockedError,
     TaskFieldsInvalidError,
@@ -728,6 +729,14 @@ async def apply_task_changes(
         given[TaskField.CHECKS] = apply_check_edit(task.checks, edit)
     if given:
         _ensure_editable(task, given)
+        if TaskField.CHECKS in given:
+            entered = await EntryRepository(session).first_entry_into_status(
+                task.id, TaskStatus.IN_PROGRESS
+            )
+            if entered is not None:
+                raise TaskChecksFrozenError(
+                    details={"key": task.key, "first_in_progress_entry": entered}
+                )
     normalized = normalize_fields(given)
     if TaskField.DECISIONS in normalized:
         # Под очередью: «решение ещё действует» читается в том же моменте, что и

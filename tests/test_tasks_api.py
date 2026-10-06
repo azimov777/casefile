@@ -509,3 +509,25 @@ async def test_entries_are_paged_by_number(auth_client: AsyncClient, project: Pr
     )
     assert [entry["no"] for entry in second.json()["data"]] == [4]
     assert second.json()["meta"] == {"next_cursor": None, "has_more": False, "total": None}
+
+
+async def test_checks_are_frozen_over_rest_after_the_first_in_progress(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    """`TRK-562`: REST отвечает 409 `task_checks_frozen`, задача не меняется, цель правится."""
+    await create(auth_client)
+    await move(auth_client, "TRK-1", "open", "in_progress", "backlog", reason="Назад")
+    before = (await auth_client.get("/api/v1/tasks/TRK-1")).json()["data"]["task"]["checks"]
+
+    for body in ({"checks": ["Другая"]}, {"check": {"no": 1, "text": "Другая"}}):
+        refused = await auth_client.patch("/api/v1/tasks/TRK-1", json=body)
+        assert refused.status_code == 409, refused.text
+        error = refused.json()["error"]
+        assert error["code"] == "task_checks_frozen"
+        assert error["details"]["key"] == "TRK-1"
+        assert isinstance(error["details"]["first_in_progress_entry"], int)
+
+    after = (await auth_client.get("/api/v1/tasks/TRK-1")).json()["data"]["task"]["checks"]
+    assert after == before
+    goal = await auth_client.patch("/api/v1/tasks/TRK-1", json={"goal": "Новая цель"})
+    assert goal.status_code == 200, goal.text

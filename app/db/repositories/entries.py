@@ -378,6 +378,15 @@ class EntryRepository:
         )
         return await self._session.scalar(statement)
 
+    async def first_entry_into_status(self, task_id: uuid.UUID, status: TaskStatus) -> int | None:
+        """Номер первой записи о переходе **в** этот статус: от неё проверки задачи заморожены."""
+        statement = select(func.min(Entry.no)).where(
+            Entry.task_id == task_id,
+            Entry.type == EntryType.STATUS_CHANGED,
+            Entry.payload["to"].astext == status.value,
+        )
+        return await self._session.scalar(statement)
+
     async def has_entry_after(
         self,
         task_id: uuid.UUID,

@@ -243,6 +243,18 @@ class TaskFieldLockedError(ConflictError):
     message = "Field cannot be changed in the current status"
 
 
+class TaskChecksFrozenError(ConflictError):
+    """Проверки задачи, уже входившей в `in_progress`, не правятся.
+
+    Проверка — условие, с которым задачу взяли в работу; невыполнимую закрывают исходом
+    `unverifiable`, а не переписывают. Ключ задачи и номер записи первого входа — в
+    `details`. Остальные поля правятся в `backlog`, как и прежде.
+    """
+
+    code = "task_checks_frozen"
+    message = "Checks cannot be changed after the task has entered in_progress"
+
+
 class TransitionNotAllowedError(ConflictError):
     """Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`."""
 

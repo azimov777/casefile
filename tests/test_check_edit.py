@@ -16,11 +16,8 @@
 from typing import Any
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.project import Project
-from app.services import tasks as tasks_service
-from app.services.auth import Actor
 from conftest import Connect, call, refuse
 
 #: Четыре проверки: их хватает, чтобы правка третьей оставила соседей с обеих сторон.
@@ -137,8 +134,6 @@ async def test_a_number_outside_the_list_is_refused_by_name(
 async def test_a_verdict_filed_before_the_rewrite_reads_as_outdated(
     mcp_session: Connect,
     task_secret: str,
-    db_session: AsyncSession,
-    task_actor: Actor,
     with_checks: str,
 ) -> None:
     """Обзорная проверка 3: вердикт по переписанной проверке виден устаревшим.
@@ -148,11 +143,6 @@ async def test_a_verdict_filed_before_the_rewrite_reads_as_outdated(
     правки байт в байт.
     """
     key = with_checks
-    task = await tasks_service.get_task(db_session, key)
-    for status in ("open", "in_progress"):
-        await tasks_service.transition_task(db_session, task, actor=task_actor, to=status)
-    await db_session.commit()
-
     async with mcp_session(task_secret) as session:
         verdict = await call(
             session, "add_verdict", key=key, check_no=3, outcome="passed", evidence="Проверил"
@@ -160,17 +150,6 @@ async def test_a_verdict_filed_before_the_rewrite_reads_as_outdated(
         before = await call(session, "read_entries", key=key, nos=[verdict["no"]])
         package_before = await call(session, "get_task", key=key)
 
-        # Путь из карточки: сводка, шаг назад в `backlog`, правка.
-        await call(
-            session,
-            "add_summary",
-            key=key,
-            done="Подшил вердикт",
-            remaining="Переписать проверку 3",
-            blockers="Ничего",
-            next_step="Переписать проверку 3: сборка WebKit дефект не воспроизводит",
-        )
-        await call(session, "transition", key=key, to="backlog", reason="Проверка невыполнима")
         await call(session, "update_task", key=key, changes={"check": {"no": 3, "text": REWRITTEN}})
 
         after = await call(session, "read_entries", key=key, nos=[verdict["no"]])
@@ -187,8 +166,6 @@ async def test_a_verdict_filed_before_the_rewrite_reads_as_outdated(
 async def test_a_whole_list_rewrite_outdates_every_verdict(
     mcp_session: Connect,
     task_secret: str,
-    db_session: AsyncSession,
-    task_actor: Actor,
     with_checks: str,
 ) -> None:
     """Правка списка целиком задевает любой номер: состав мог измениться.
@@ -198,25 +175,10 @@ async def test_a_whole_list_rewrite_outdates_every_verdict(
     «свой» вердикт было бы ложью, потому что своего у такой правки нет.
     """
     key = with_checks
-    task = await tasks_service.get_task(db_session, key)
-    for status in ("open", "in_progress"):
-        await tasks_service.transition_task(db_session, task, actor=task_actor, to=status)
-    await db_session.commit()
-
     async with mcp_session(task_secret) as session:
         first = await call(
             session, "add_verdict", key=key, check_no=1, outcome="passed", evidence="Прогон зелёный"
         )
-        await call(
-            session,
-            "add_summary",
-            key=key,
-            done="Подшил вердикт",
-            remaining="Переставить проверки",
-            blockers="Ничего",
-            next_step="Переставить проверки местами",
-        )
-        await call(session, "transition", key=key, to="backlog", reason="Состав проверок неверен")
         await call(session, "update_task", key=key, changes={"checks": [*CHECKS, "Пятая проверка"]})
         package = await call(session, "get_task", key=key)
 
@@ -227,22 +189,16 @@ async def test_a_whole_list_rewrite_outdates_every_verdict(
 async def test_a_task_with_an_outdated_verdict_does_not_close(
     mcp_session: Connect,
     task_secret: str,
-    db_session: AsyncSession,
-    task_actor: Actor,
     with_checks: str,
 ) -> None:
     """Обзорная проверка 4: переписанная проверка требует нового вердикта.
 
-    Случай UI-39 целиком: вердикт подшит, проверка оказалась невыполнимой, переписана,
-    задача взята заново. Старый вердикт в зачёт не идёт — и отказ называет номер, а не
+    Случай UI-39, каким он остался после `TRK-562`: проверки правятся только до первого
+    входа в работу, поэтому вердикты подшиты в `open`/`backlog`, проверка переписана,
+    задача взята. Вердикт до входа в зачёт не идёт — и отказ называет номер, а не
     сообщает «что-то не так с проверками».
     """
     key = with_checks
-    task = await tasks_service.get_task(db_session, key)
-    for status in ("open", "in_progress"):
-        await tasks_service.transition_task(db_session, task, actor=task_actor, to=status)
-    await db_session.commit()
-
     async with mcp_session(task_secret) as session:
         for check_no in (1, 2, 3, 4):
             await call(
@@ -253,16 +209,6 @@ async def test_a_task_with_an_outdated_verdict_does_not_close(
                 outcome="passed",
                 evidence="Проверил",
             )
-        await call(
-            session,
-            "add_summary",
-            key=key,
-            done="Подшил четыре вердикта",
-            remaining="Переписать проверку 3",
-            blockers="Ничего",
-            next_step="Переписать проверку 3 и проверить заново",
-        )
-        await call(session, "transition", key=key, to="backlog", reason="Проверка невыполнима")
         await call(session, "update_task", key=key, changes={"check": {"no": 3, "text": REWRITTEN}})
         await call(session, "transition", key=key, to="open")
         await call(session, "transition", key=key, to="in_progress")
@@ -281,3 +227,62 @@ async def test_a_task_with_an_outdated_verdict_does_not_close(
 
     assert "checks_not_passed" in failure, failure
     assert '"check_no": 3' in failure, failure
+
+
+async def _enter_and_leave_in_progress(session: Any, key: str) -> None:
+    """Путь исполнителя, который хочет переписать проверку: взять в работу и вернуть."""
+    await call(session, "transition", key=key, to="open")
+    await call(session, "transition", key=key, to="in_progress")
+    await call(
+        session,
+        "add_summary",
+        key=key,
+        done="Взял в работу",
+        remaining="Переписать проверку 3",
+        blockers="Ничего",
+        next_step="Переписать проверку 3",
+    )
+    await call(session, "transition", key=key, to="backlog", reason="Проверка невыполнима")
+
+
+async def test_checks_are_frozen_after_the_first_entry_into_in_progress(
+    mcp_session: Connect, task_secret: str, with_checks: str
+) -> None:
+    """`TRK-562`, проверки 1 и 2: ни одна проверка, ни весь список — а цель правится."""
+    key = with_checks
+    async with mcp_session(task_secret) as session:
+        await _enter_and_leave_in_progress(session, key)
+        entered = next(
+            item["no"]
+            for item in (await call(session, "get_task", key=key))["index"]
+            if item["facts"].get("to_status") == "in_progress"
+        )
+
+        one = await refuse(
+            session, "update_task", key=key, changes={"check": {"no": 1, "text": REWRITTEN}}
+        )
+        whole = await refuse(session, "update_task", key=key, changes={"checks": ["Другая"]})
+        await call(session, "update_task", key=key, changes={"goal": "Новая цель"})
+        package = await call(session, "get_task", key=key)
+
+    for failure in (one, whole):
+        assert "task_checks_frozen" in failure, failure
+        assert key in failure and str(entered) in failure, failure
+    assert package["task"]["checks"] == CHECKS
+    assert package["task"]["goal"] == "Новая цель"
+
+
+async def test_checks_of_a_task_never_in_progress_are_editable(
+    mcp_session: Connect, task_secret: str, with_checks: str
+) -> None:
+    """`TRK-562`, проверка 3: до первого входа в работу правка проверок — как прежде."""
+    key = with_checks
+    async with mcp_session(task_secret) as session:
+        await call(session, "update_task", key=key, changes={"check": {"no": 1, "text": REWRITTEN}})
+        await call(session, "update_task", key=key, changes={"checks": [REWRITTEN, "Вторая"]})
+        await call(session, "transition", key=key, to="open")
+        await call(session, "transition", key=key, to="backlog", reason="Поправить")
+        await call(session, "update_task", key=key, changes={"check": {"no": 2, "text": "Иная"}})
+        package = await call(session, "get_task", key=key)
+
+    assert package["task"]["checks"] == [REWRITTEN, "Иная"]

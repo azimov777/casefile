@@ -200,7 +200,9 @@ written (no environment, the object is gone, the requirements changed) — `unve
 Both need `evidence` naming what is missing or why, and what ran instead. Do not write
 `passed` with a caveat: a caveat in the evidence means the outcome is `partial` or
 `unverifiable`. The task still closes; the closing files a `warning`, and the human
-accepts it or returns the task with a remark — you write nothing extra.
+accepts it or returns the task with a remark — you write nothing extra. Checks are not
+edited once the task has entered `in_progress` (`task_checks_frozen`): a check you cannot
+run is closed as `unverifiable`, not rewritten.
 
 ```
 close_task(key="TRK-42",
