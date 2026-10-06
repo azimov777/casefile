@@ -66,6 +66,9 @@ for k in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
 json.dump(m, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
 cp -R "$root/skills" "$stage/skills"
+# Скил настройки подключения нужен там, где есть плагин с коннектором; в архиве без коннектора он
+# ни к чему (TRK-566).
+rm -rf "$stage/skills/casefile-setup"
 cp "$root/LICENSE" "$stage/LICENSE"
 
 zip_path="$(cd "$out_dir" && pwd)/$name-$version.zip"
