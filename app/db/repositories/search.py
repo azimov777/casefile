@@ -330,6 +330,8 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
             return _scalar(Task.project_id, term.operator, term.values)
         case SearchValueKind.TASK_KEY:
             return _task_key(term)
+        case SearchValueKind.DECISION_REF:
+            return _decision(term.operator, term.values)
         case SearchValueKind.STATUS:
             return _scalar(Task.status, term.operator, term.values)
         case SearchValueKind.ASSIGNEE:
@@ -365,6 +367,10 @@ def _empty_state(term: SearchTerm) -> ColumnElement[bool]:
         case SearchValueKind.TIMESTAMP:
             # «В дело ещё ничего не подшивали»: учтённых записей нет, подзапрос пуст.
             return _last_entry_at_column().is_(None)
+        case SearchValueKind.DECISION_REF:
+            # «Ни на одно решение не ссылается»: список пуст. Колонка не бывает NULL —
+            # пустое состояние у неё одно, `[]`.
+            return func.jsonb_array_length(Task.decisions) == 0
         case _:
             # Недостижимо: `empty()` пропускается только к полям с `is_nullable`. Явная
             # ошибка вместо тихого `false` — чтобы новое поле с пустым состоянием,
@@ -422,6 +428,17 @@ def _parent(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
     поле, `under` (`_under`).
     """
     matching = or_(*(_has_parent(value) for value in values))
+    return not_(matching) if operator in NEGATIVE_OPERATORS else matching
+
+
+def _decision(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
+    """Задачи, у которых в `decisions` стоит названное решение (`CONCEPT.md`, 4.4).
+
+    Вхождение в список (`@>`) — ровно под GIN-индекс `ix_tasks_decisions`. Значение уже
+    канонизировано сценарием в ту же строку, что пишется в поле (`TRK#15`), поэтому
+    сравнение одно, без оглядки на регистр.
+    """
+    matching = or_(*(Task.decisions.contains([value]) for value in values))
     return not_(matching) if operator in NEGATIVE_OPERATORS else matching
 
 

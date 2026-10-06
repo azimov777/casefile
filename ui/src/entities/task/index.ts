@@ -20,6 +20,7 @@ export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES } from './model/archive';
 export {
   taskPackageKeys,
   taskPackageQueryOptions,
+  type CitedDecision,
   type LinkKind,
   type LinkedTask,
   type TaskDetails,

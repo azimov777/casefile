@@ -29,6 +29,7 @@ function projectDetail(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
     created_by: { kind: 'tracker', signature: null },
     ...STAMPS,
     attributes: [{ name: 'repo', value: 'github.com/demo', ...STAMPS }],
+    decisions: [],
     ...overrides,
   };
 }

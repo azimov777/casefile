@@ -58,7 +58,9 @@ EntryTypeArg = Annotated[
     Field(
         description=(
             "What the entry records:\n"
-            "- `decision` — an option chosen among several, with the reason;\n"
+            "- `decision` — an option chosen among several, with the reason; a choice "
+            "that outlives the task and that other tasks are to follow is a project "
+            "decision, filed by `add_project_entry`;\n"
             "- `attempt` — something tried and how it ended, failed attempts included;\n"
             "- `finding` — an established fact with its source, including what was "
             "learned from reading;\n"

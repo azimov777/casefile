@@ -302,10 +302,13 @@ const sideTitle = cva(PART_TITLE, {
 /**
  * Сторона сравнения: `checks` приходит списком, остальные разделы — строкой.
  *
- * `identifier` — у правки обвязки (`field_changed`, сегодня только `priority`):
- * её значения не текст агента, а значения контракта (`normal`, `high`), и стоят они
- * тем же моноширинным идентификатором, что приоритет в карточке, а не абзацем
+ * `identifier` — у правки обвязки (`field_changed`: `priority` и `decisions`): её
+ * значения не текст агента, а значения контракта (`normal`, `high`, `TRK#15`), и стоят
+ * они тем же моноширинным идентификатором, что приоритет в карточке, а не абзацем
  * прозы — на русском экране абзац `high` читался бы непереведённой подписью (UI-140).
+ * Список идентификаторов (`decisions`, TRK-554) — ссылками в строку: `TRK#15` ведёт на
+ * запись решения в деле его проекта. Пустой список — та же пометка «пусто», что у
+ * пустой строки: снятые все ссылки не должны выглядеть пропавшей стороной.
  */
 function Side({
   title,
@@ -326,12 +329,25 @@ function Side({
     // проверять цвет вместо того, что он значит.
     <div data-side={tone} className={side({ tone })}>
       <span className={sideTitle({ tone })}>{title}</span>
-      {value === null || value === undefined || value === '' ? (
+      {value === null ||
+      value === undefined ||
+      value === '' ||
+      (Array.isArray(value) && value.length === 0) ? (
         <p className="text-muted italic">{t('entry.emptyValue')}</p>
       ) : identifier && !Array.isArray(value) ? (
         <p>
           <code className={REF}>{value}</code>
         </p>
+      ) : identifier && Array.isArray(value) ? (
+        <ul className="flex list-none flex-wrap gap-x-3 gap-y-1 p-0">
+          {value.map((item) => (
+            <li key={item}>
+              <code className={REF}>
+                <TaskText>{item}</TaskText>
+              </code>
+            </li>
+          ))}
+        </ul>
       ) : Array.isArray(value) ? (
         <ol className="pl-6">
           {value.map((item, index) => (

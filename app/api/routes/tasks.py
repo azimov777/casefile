@@ -24,6 +24,7 @@ from app.api.deps import (
 )
 from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
+from app.api.schemas.decisions import CitedDecisionRead, DecisionRefRead
 from app.api.schemas.entries import (
     EntryCreate,
     EntryHeadingRead,
@@ -61,6 +62,7 @@ from app.services import case as case_service
 from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import tasks as service
+from app.services.decisions import CitedDecision
 from app.services.links import TaskLink
 from app.services.tasks import (
     TaskAlreadyThere,
@@ -114,6 +116,7 @@ async def create_task(
             checks=payload.checks,
             assignee=payload.assignee,
             priority=payload.priority,
+            decisions=payload.decisions,
         )
         return DataResponse[TaskRead](data=TaskRead.model_validate(task))
 
@@ -289,8 +292,9 @@ async def read_task(
 ) -> DataResponse[TaskPackageRead]:
     """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 
-    Карточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые
-    признаки, последняя сводка целиком, открытые вопросы и неразобранные замечания
+    Карточка, связи с обеих сторон со статусом задачи на другой стороне, решения проекта,
+    на которые опирается задача, со статусом и преемником, вычисляемые признаки, последняя
+    сводка целиком, открытые вопросы и неразобранные замечания
     целиком, опись дела и переходы по таблице. Тела остальных записей читаются отдельно
     в `GET /tasks/{key}/entries`.
     Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
@@ -304,6 +308,7 @@ async def read_task(
             parent=None if package.parent is None else _package_parent(package.parent),
             children=[LinkTaskRead.model_validate(link.other) for link in package.children],
             links=[TaskLinkRead.model_validate(link) for link in package.links],
+            decisions=[_cited_decision(item) for item in package.decisions],
             features=TaskFeaturesRead.model_validate(package.features, from_attributes=True),
             # `entry_read` отдаёт вариант по типу записи, а сценарий гарантирует, что
             # сюда попали именно сводка, вопросы и замечания: сузить тип здесь нечем и
@@ -317,6 +322,22 @@ async def read_task(
     )
 
 
+def _cited_decision(value: CitedDecision) -> CitedDecisionRead:
+    """Решение, на которое ссылается задача, и его преемник — тот же набор, что в MCP."""
+    return CitedDecisionRead(
+        ref=value.ref,
+        title=value.title,
+        status=value.status,
+        superseded_by=None
+        if value.superseded_by is None
+        else DecisionRefRead(
+            ref=value.superseded_by.ref,
+            title=value.superseded_by.title,
+            status=value.superseded_by.status,
+        ),
+    )
+
+
 @router.patch("/{task_key}", summary="Update a task")
 async def update_task(
     task_key: TaskKeyPath,
@@ -327,10 +348,11 @@ async def update_task(
     """Меняет только переданные поля.
 
     Название, описание и пять разделов — только в `backlog` (иначе `409
-    task_field_locked`); исполнитель и приоритет — в любом незакрытом статусе; в
-    `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение
-    подшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,
-    приоритет — `field_changed`. Поля без записи не бывает: изменение, не
+    task_field_locked`); исполнитель, приоритет и решения проекта — в любом незакрытом
+    статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое
+    изменение подшивает запись: раздел — `section_changed`, исполнитель —
+    `assignee_changed`, приоритет и решения — `field_changed`. Новая ссылка на заменённое
+    решение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не
     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
 

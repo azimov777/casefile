@@ -8,6 +8,15 @@ export type ProjectDetail = components['schemas']['ProjectDetailRead'];
 export type ProjectAttribute = components['schemas']['AttributeRead'];
 
 /**
+ * Решение проекта в чтении проекта (TRK-554): запись `decision` его дела со статусом,
+ * посчитанным бэкендом при чтении, преемником и числом задач, которые на неё ссылаются.
+ */
+export type ProjectDecision = components['schemas']['ProjectDecisionRead'];
+
+/** Действует ли решение проекта: `in_force` или `superseded`. */
+export type DecisionStatus = components['schemas']['DecisionStatus'];
+
+/**
  * Ключи запросов проекта.
  *
  * Префикс `['project', key]` накрывает и карточку, и дело проекта с телами его записей

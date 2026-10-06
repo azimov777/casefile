@@ -40,6 +40,17 @@ class ProjectRepository:
         statement = select(Project).where(Project.key == key)
         return (await self._session.scalars(statement)).one_or_none()
 
+    async def get_by_keys(self, keys: Collection[str]) -> dict[str, Project]:
+        """Проекты по набору канонизированных ключей, одним запросом: ключ → проект.
+
+        Нужен ссылкам на решения проекта: задача называет решения разных проектов, и
+        запрос на каждую ссылку превратил бы чтение задачи в десяток обращений к базе.
+        """
+        if not keys:
+            return {}
+        statement = select(Project).where(Project.key.in_(sorted(keys)))
+        return {project.key: project for project in await self._session.scalars(statement)}
+
     async def first_archived(
         self, project_ids: Collection[uuid.UUID]
     ) -> tuple[str, datetime] | None:

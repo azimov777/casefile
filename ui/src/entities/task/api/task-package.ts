@@ -8,6 +8,11 @@ export type TaskLink = components['schemas']['TaskLinkRead'];
 export type LinkKind = components['schemas']['LinkKind'];
 /** Задача на другом конце связи: ключ, название, статус. Так приходят `parent` и `children`. */
 export type LinkedTask = components['schemas']['LinkTaskRead'];
+/**
+ * Решение проекта, на которое опирается задача (`decisions` пакета, TRK-554): ссылка,
+ * заголовок, статус от бэкенда и, у заменённого, преемник со своим статусом.
+ */
+export type CitedDecision = components['schemas']['CitedDecisionRead'];
 
 export const taskPackageKeys = {
   package: (key: string) => ['task', key] as const,

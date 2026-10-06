@@ -10,12 +10,13 @@ from pydantic import BaseModel, Field
 
 from app.domain.tasks import PARENT_GOAL_LIMIT, clip_parent_goal
 from app.mcp.arguments import TaskKeyArg
-from app.mcp.enums import LinkKindSchema, TaskStatusSchema
+from app.mcp.enums import DecisionStatusSchema, LinkKindSchema, TaskStatusSchema
 from app.mcp.tools.case.views import EntryView, HeadingView, entry, heading
 from app.mcp.tools.tasks.views import FeaturesView, TaskView, features, task
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import AuthorView, author
 from app.services import tasks as tasks_service
+from app.services.decisions import CitedDecision, DecisionRef
 from app.services.links import TaskLink
 from app.services.tasks import TaskPackage
 
@@ -70,6 +71,43 @@ def link(value: TaskLink) -> LinkView:
     )
 
 
+class DecisionRefView(BaseModel):
+    """Project decision named by its reference."""
+
+    ref: str = Field(
+        description="Address of the `decision` entry in the project's case",
+        examples=["TRK#15"],
+    )
+    title: str
+    status: DecisionStatusSchema
+
+
+class CitedDecisionView(DecisionRefView):
+    """Project decision the task relies on, with its status computed on read."""
+
+    superseded_by: DecisionRefView | None = Field(
+        description=(
+            "The later decision that named this one in `supersedes`, with its own status; "
+            "`null` while this one is in force"
+        )
+    )
+
+
+def decision_ref(value: DecisionRef) -> DecisionRefView:
+    """Решение, названное ссылкой: адрес, заголовок и статус."""
+    return DecisionRefView(ref=value.ref, title=value.title, status=value.status)
+
+
+def cited_decision(value: CitedDecision) -> CitedDecisionView:
+    """Решение, на которое ссылается задача, и его преемник — тот же набор, что в REST."""
+    return CitedDecisionView(
+        ref=value.ref,
+        title=value.title,
+        status=value.status,
+        superseded_by=None if value.superseded_by is None else decision_ref(value.superseded_by),
+    )
+
+
 def parent_card(value: TaskLink) -> ParentCardView:
     """Родитель в карточке ребёнка: как `link_other`, плюс цель не длиннее потолка."""
     goal, truncated = clip_parent_goal(value.other.goal)
@@ -88,6 +126,12 @@ class TaskPackageView(BaseModel):
     parent: ParentCardView | None
     children: list[LinkOtherView]
     links: list[LinkView]
+    decisions: list[CitedDecisionView] = Field(
+        description=(
+            "Project decisions the task relies on, in the order of its `decisions` field. "
+            "The project's other decisions in force are listed by `get_project`"
+        )
+    )
     features: FeaturesView
     summary: EntryView | None
     questions: list[EntryView]
@@ -109,6 +153,7 @@ def task_package(package: TaskPackage) -> TaskPackageView:
         parent=None if package.parent is None else parent_card(package.parent),
         children=[link_other(item) for item in package.children],
         links=[link(item) for item in package.links],
+        decisions=[cited_decision(item) for item in package.decisions],
         features=features(package.features),
         summary=None if package.summary is None else entry(package.summary, task_key=key),
         questions=[entry(question, task_key=key) for question in package.questions],
@@ -125,8 +170,9 @@ def register(tools: Toolset) -> None:
     @tools.tool(title="Get task", annotations=READ_ONLY)
     async def get_task(key: TaskKeyArg) -> TaskPackageView:
         """Returns everything about one task in a single call: card, parent and children,
-        links from both sides, computed features, latest summary, open questions,
-        unresolved remarks, case index and transition targets.
+        links from both sides, the project decisions it relies on, computed features,
+        latest summary, open questions, unresolved remarks, case index and transition
+        targets.
 
         `parent` and `children` are fields of their own and are absent from `links`,
         which holds `blocks`, `blocked_by` and `relates`, each named by this task's

@@ -12,13 +12,15 @@ import { exactTime, readEntryNo } from '@/shared/lib';
 import { Callout, Markdown, QueryState } from '@/shared/ui';
 import { ProjectAttributes } from './project-attributes';
 import { ProjectCase } from './project-case';
+import { ProjectDecisions } from './project-decisions';
 
 /** Колонка экрана: та же ширина и тот же шаг, что у карточки задачи. */
 const SCREEN = 'flex max-w-(--ui-page-max) flex-col gap-4';
 
 /**
  * Экран проекта на чтение (UI-174, `docs/CONCEPT.md`, 3): карточка — ключ, название,
- * описание, — атрибуты с историей по клику и опись дела проекта с телами по клику.
+ * описание, — атрибуты с историей по клику, решения проекта со статусом (TRK-554) и опись
+ * дела проекта с телами по клику.
  *
  * Всё состояние — в адресе: `?entry=N` называет раскрытую запись дела, `?attribute=имя`
  * — атрибут, чья история открыта. Ссылку можно переслать, перезагрузка возвращает тот
@@ -73,6 +75,19 @@ export function ProjectPage() {
   const rememberAttribute = useCallback(
     (name: string | null) => remember('attribute', name),
     [remember],
+  );
+
+  /**
+   * Адрес этого экрана с раскрытой записью дела — ссылка решения ведёт к его тексту в
+   * описи ниже. Остальное состояние адреса (открытый атрибут) остаётся как было.
+   */
+  const entryHref = useCallback(
+    (no: number) => {
+      const updated = new URLSearchParams(searchParams);
+      updated.set('entry', String(no));
+      return `?${updated.toString()}`;
+    },
+    [searchParams],
   );
 
   if (project.error instanceof ApiError && project.error.code === 'project_not_found') {
@@ -157,6 +172,13 @@ export function ProjectPage() {
             canWrite={canWrite}
             open={attribute}
             onOpenChange={rememberAttribute}
+          />
+          {/* Решения — под атрибутами: тоже то, что о проекте верно сейчас, и на узком
+              экране они встают над делом, где лежит их текст (TRK-554). */}
+          <ProjectDecisions
+            projectKey={card.key}
+            decisions={card.decisions}
+            entryHref={entryHref}
           />
         </div>
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">

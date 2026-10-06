@@ -93,6 +93,7 @@ from app.domain.case import (
     format_entry_ref,
     is_blocking_question,
     mark_outdated_verdicts,
+    superseded_numbers,
 )
 from app.domain.errors import (
     ActorNotAddressableError,
@@ -111,6 +112,7 @@ from app.domain.tasks import (
     TaskStatus,
     checks_without_verdict,
 )
+from app.services import decisions as decisions_service
 from app.services import freeze
 from app.services import participants as participants_service
 from app.services.auth import Actor
@@ -679,6 +681,7 @@ async def append_project_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    supersedes: Any = None,
 ) -> Entry:
     """Подшивает запись агента в дело проекта: `note`, `decision`, `finding`, `artifact`.
 
@@ -686,11 +689,21 @@ async def append_project_entry(
     проверяет домен (`build_project_entry`), существование ссылок — здесь, тем же
     `_check_refs`, что у задачи: ссылка `TRK#7` из дела задачи и `TRK-42#3` из дела
     проекта проверяются одним кодом.
+
+    Решение проекта с `supersedes` заменяет названные решения (`CONCEPT.md`, 3.2). Что
+    они есть и ещё действуют, проверяется под очередью изменений, занятой до проверок:
+    иначе два одновременных решения заменили бы одно и то же, и у него оказалось бы два
+    преемника. Заморозка архива — тем же первым шагом, чтобы архив назвал отказ раньше
+    правил замены.
     """
-    draft = build_project_entry(project.key, type=type, title=title, body=body, refs=refs)
+    draft = build_project_entry(
+        project.key, type=type, title=title, body=body, refs=refs, supersedes=supersedes
+    )
+    await freeze.lock_unfrozen(session, project=project)
     problems = FieldProblems()
     await _check_refs(session, project, draft, problems)
     problems.raise_as(EntryFieldsInvalidError, key=project.key)
+    await decisions_service.check_superseded(session, project, superseded_numbers(draft.payload))
     return await _append(
         session,
         project,
@@ -698,6 +711,7 @@ async def append_project_entry(
         type=draft.type,
         title=draft.title,
         body=draft.body,
+        payload=draft.payload,
         refs=draft.refs,
     )
 
@@ -972,7 +986,8 @@ async def record_field_changed(
 ) -> Entry:
     """Правка обвязки задачи: то, что меняется в любом незакрытом статусе.
 
-    Сегодня это только `priority`. Отдельно от `section_changed` не ради симметрии:
+    Сегодня это `priority` и `decisions`; у `decisions` «было» и «стало» — списки ссылок
+    (`CONCEPT.md`, 3.4). Отдельно от `section_changed` не ради симметрии:
     тот про задание — договор с агентом, неизменяемый от `open` и дальше, — а это
     обвязка, которую перекладывают когда угодно. Один тип на оба означал бы «section»
     у приоритета.
