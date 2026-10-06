@@ -17,6 +17,9 @@ from fastapi.openapi.utils import get_openapi
 # «поле с таким именем» разрешает свободную форму и там, где о ней никто не думал.
 FREEFORM_SCHEMAS = {
     "details",
+    # Число детей по статусам (`{"done": 2, "open": 1}`): ключи — статусы задач, значения
+    # — целые; свободен только набор ключей, а форма значения названа (TRK-579).
+    "TaskStateRead.children",
 }
 
 OPERATION_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")

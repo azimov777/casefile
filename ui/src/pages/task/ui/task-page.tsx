@@ -21,6 +21,7 @@ import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, projectHref, readEntryNo } from '@/shared/lib';
 import { TaskHeader } from './task-header';
+import { TaskStateBlock } from './task-state';
 import { TaskLinks } from './task-links';
 import { TaskSections } from './task-sections';
 
@@ -440,8 +441,21 @@ export function TaskPage() {
        * `card:min-w-0` обязателен обеим: без него длинная строка в колонке растянула
        * бы её шире доли и увела бы страницу в горизонтальную прокрутку.
        */}
-      <div className="flex flex-col gap-4 card:flex-row card:items-start">
-        <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
+      {/*
+       * Сетка вместо двух потоков (TRK-579): блок «Сейчас» первым в разметке, поэтому на узком
+       * экране стоит над всем, с чего человек начинает. На широком он — верх правой колонки,
+       * а левая тянется на обе строки и начинается с сводки и вопросов, как раньше: блок над
+       * обеими колонками сдвинул бы их на один экран (`e2e/layout.spec.ts`, UI-132). Строка
+       * правой колонки под блоком — `1fr`, и задание встаёт вплотную к нему.
+       */}
+      <div className="grid grid-cols-1 gap-4 card:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] card:grid-rows-[auto_1fr] card:items-start">
+        <TaskStateBlock
+          state={pkg.data.state}
+          taskKey={task.key}
+          className="card:col-start-2 card:row-start-1"
+        />
+
+        <div className="flex flex-col gap-4 min-w-0 card:col-start-1 card:row-span-2 card:row-start-1">
           {/*
            * Сводка, вопросы и замечания стоят до описи, а не после неё: это то, ради
            * чего карточку открывают, и единственный способ, каким человек участвует
@@ -523,7 +537,7 @@ export function TaskPage() {
           </section>
         </div>
 
-        <div className="flex flex-col gap-4 card:min-w-0 card:flex-[2_1_0]">
+        <div className="flex flex-col gap-4 min-w-0 card:col-start-2 card:row-start-2">
           <section className={block()} aria-labelledby="sections">
             <h2 className={blockTitle()} id="sections">
               {t('assignment')}

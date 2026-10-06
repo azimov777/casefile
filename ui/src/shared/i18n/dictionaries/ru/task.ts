@@ -34,6 +34,26 @@ export const task = {
     count_other: '{{count, number}} задачи',
   },
 
+  /** Блок «Сейчас» под шапкой карточки (TRK-579): считается бэкендом при чтении, не редактируется. */
+  state: {
+    title: 'Сейчас',
+    filed: 'Подшито',
+    lastMove: 'Последний переход',
+    noMove: 'Статус ещё не менялся.',
+    by: 'сделал',
+    blockedBy: 'Блокируют',
+    children: 'Дочерние задачи по статусам',
+    recentAfterSummary_one: 'После сводки №{{no}}: {{count, number}} запись',
+    recentAfterSummary_few: 'После сводки №{{no}}: {{count, number}} записи',
+    recentAfterSummary_many: 'После сводки №{{no}}: {{count, number}} записей',
+    recentAfterSummary_other: 'После сводки №{{no}}: {{count, number}} записи',
+    recentNoSummary_one: 'Сводки нет: всего {{count, number}} запись',
+    recentNoSummary_few: 'Сводки нет: всего {{count, number}} записи',
+    recentNoSummary_many: 'Сводки нет: всего {{count, number}} записей',
+    recentNoSummary_other: 'Сводки нет: всего {{count, number}} записи',
+    decisionsAfterCard: 'Принято после правки задания',
+  },
+
   header: {
     // Подписи полосы свойств карточки (UI-143): род значения назван видимо, а не только
     // диктору, — владелец выбрал полосу с подписями (UI-143#10).

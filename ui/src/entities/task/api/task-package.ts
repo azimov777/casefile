@@ -3,6 +3,8 @@ import { apiClient, unwrap, type components } from '@/shared/api';
 
 /** Пакет преемника: всё, чем рисуется карточка, одним ответом. */
 export type TaskPackage = components['schemas']['TaskPackageRead'];
+/** Блок «Сейчас» пакета: считается при чтении, не хранится (`state`, TRK-579). */
+export type TaskState = components['schemas']['TaskStateRead'];
 export type TaskDetails = components['schemas']['TaskRead'];
 export type TaskLink = components['schemas']['TaskLinkRead'];
 export type LinkKind = components['schemas']['LinkKind'];
@@ -26,7 +28,11 @@ export const taskPackageKeys = {
 export function taskPackageQueryOptions(key: string) {
   return queryOptions({
     queryKey: taskPackageKeys.package(key),
-    queryFn: (): Promise<TaskPackage> =>
-      unwrap(apiClient.GET('/api/v1/tasks/{task_key}', { params: { path: { task_key: key } } })),
+    // Без `brief` бэкенд отдаёт полный пакет; контракт описывает оба ответа объединением,
+    // и краткий (`TaskBriefRead`) экрану карточки не нужен (TRK-579).
+    queryFn: async (): Promise<TaskPackage> =>
+      (await unwrap(
+        apiClient.GET('/api/v1/tasks/{task_key}', { params: { path: { task_key: key } } }),
+      )) as TaskPackage,
   });
 }

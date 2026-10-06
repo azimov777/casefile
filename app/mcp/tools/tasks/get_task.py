@@ -5,13 +5,17 @@
 """
 
 from datetime import datetime
+from typing import Annotated
 
+import pydantic_core
+from mcp_types import CallToolResult, TextContent
 from pydantic import BaseModel, Field
 
 from app.domain.tasks import PARENT_GOAL_LIMIT, clip_parent_goal
 from app.mcp.arguments import TaskKeyArg
 from app.mcp.enums import DecisionStatusSchema, LinkKindSchema, TaskStatusSchema
 from app.mcp.tools.case.views import EntryView, HeadingView, entry, heading
+from app.mcp.tools.tasks.state import TaskBriefCardView, TaskStateView, task_state
 from app.mcp.tools.tasks.views import FeaturesView, TaskView, features, task
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import AuthorView, author
@@ -116,28 +120,29 @@ def parent_card(value: TaskLink) -> ParentCardView:
 
 # Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 class TaskPackageView(BaseModel):
-    """Everything about one task: card, parent and children, links, features, latest
-    summary, open questions, unresolved remarks, transition targets and case index.
-    """
+    """Task package, `state` first; `brief=true` leaves out all but the fields it names."""
 
-    task: TaskView
+    state: TaskStateView
+    task: TaskView | TaskBriefCardView
     #: Родитель и дети — полями, а не видами в `links` (TRK-135): имя поля и есть ответ
     #: на «кто родитель», направление разбирать не нужно.
-    parent: ParentCardView | None
-    children: list[LinkOtherView]
-    links: list[LinkView]
+    parent: ParentCardView | LinkOtherView | None
+    #: Поля ниже в кратком ответе отсутствуют (`brief=true`), поэтому в схеме не обязательны.
+    children: list[LinkOtherView] = Field(default=None)  # type: ignore[assignment]
+    links: list[LinkView] = Field(default=None)  # type: ignore[assignment]
     decisions: list[CitedDecisionView] = Field(
+        default=None,  # type: ignore[assignment]
         description=(
             "Project decisions the task relies on, in the order of its `decisions` field. "
             "The project's other decisions in force are listed by `get_project`"
-        )
+        ),
     )
     features: FeaturesView
-    summary: EntryView | None
-    questions: list[EntryView]
-    remarks: list[EntryView]
+    summary: EntryView | None = None
+    questions: list[EntryView] = Field(default=None)  # type: ignore[assignment]
+    remarks: list[EntryView] = Field(default=None)  # type: ignore[assignment]
     transitions: list[TaskStatusSchema]
-    index: list[HeadingView]
+    index: list[HeadingView] = Field(default=None)  # type: ignore[assignment]
 
 
 def task_package(package: TaskPackage) -> TaskPackageView:
@@ -149,6 +154,7 @@ def task_package(package: TaskPackage) -> TaskPackageView:
     """
     key = package.task.key
     return TaskPackageView(
+        state=task_state(package.state),
         task=task(package.task),
         parent=None if package.parent is None else parent_card(package.parent),
         children=[link_other(item) for item in package.children],
@@ -163,16 +169,61 @@ def task_package(package: TaskPackage) -> TaskPackageView:
     )
 
 
+def brief_package(package: TaskPackage) -> CallToolResult:
+    """Краткий ответ `brief=true`: шапка, родитель без цели, признаки, `state`, переходы.
+
+    Поля, которых в кратком ответе нет, не присылаются вовсе, а не пустыми: ключ с `null`
+    стоил бы токенов, ради которых режим и заведён. Ответ собирается вручную, потому что
+    SDK сериализует модель с её умолчаниями; форму он по-прежнему сверяет со схемой. Текст —
+    компактный JSON без отступов: ради токенов режим и заведён, а отступ в два пробела
+    прибавляет к краткому ответу четверть.
+    """
+    item = package.task
+    data = {
+        "state": task_state(package.state),
+        "task": TaskBriefCardView(
+            key=item.key,
+            title=item.title,
+            status=item.status,
+            assignee=item.assignee,
+            priority=item.priority,
+            direction=None if item.direction is None else item.direction.address,
+            version=item.version,
+            updated_at=item.updated_at,
+        ),
+        "parent": None if package.parent is None else link_other(package.parent),
+        "features": features(package.features),
+        "transitions": list(package.transitions),
+    }
+    structured = pydantic_core.to_jsonable_python(data)
+    text = pydantic_core.to_json(data).decode()
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)], structured_content=structured
+    )
+
+
+BriefArg = Annotated[
+    bool,
+    Field(description="`true`: `state`, a short header, `parent`, `features`, `transitions` only"),
+]
+
+
 def register(tools: Toolset) -> None:
     """Объявляет `get_task`."""
     runtime = tools.runtime
 
     @tools.tool(title="Get task", annotations=READ_ONLY)
-    async def get_task(key: TaskKeyArg) -> TaskPackageView:
-        """Returns everything about one task in a single call: card, parent and children,
-        links from both sides, the project decisions it relies on, computed features,
-        latest summary, open questions, unresolved remarks, case index and transition
-        targets.
+    async def get_task(key: TaskKeyArg, brief: BriefArg = False) -> TaskPackageView:
+        """Returns everything about one task in a single call: `state` first, card, parent
+        and children, links from both sides, the project decisions it relies on, computed
+        features, latest summary, open questions, unresolved remarks, case index and
+        transition targets.
+
+        `state` is computed on read: last transition with its reason, parts of the latest
+        summary, entries after it, open questions and remarks, blockers, children by status
+        and the decisions filed after the sections were last edited. `brief=true` returns
+        `state`, a short `task` header, `parent`, `features` and `transitions`; the sections
+        that set the work come without it.
 
         `parent` and `children` are fields of their own and are absent from `links`,
         which holds `blocks`, `blocked_by` and `relates`, each named by this task's
@@ -194,4 +245,7 @@ def register(tools: Toolset) -> None:
         features.
         """
         async with runtime.call() as (session, actor):
-            return task_package(await tasks_service.read_task_package(session, key, actor=actor))
+            package = await tasks_service.read_task_package(session, key, actor=actor)
+            if brief:
+                return brief_package(package)  # type: ignore[return-value]
+            return task_package(package)

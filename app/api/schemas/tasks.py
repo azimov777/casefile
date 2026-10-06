@@ -28,6 +28,7 @@ from app.api.schemas.links import LinkTaskRead, TaskLinkRead
 from app.domain.case import MAX_ENTRY_BODY_LENGTH, MAX_SUMMARY_PART_LENGTH, VerdictOutcome
 from app.domain.directions import MAX_DIRECTION_DESCRIPTION_LENGTH
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
+from app.domain.state import REASON_LIMIT, RECENT_LIMIT, UNMEASURED_LIMIT
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     MAX_ASSIGNEE_LENGTH,
@@ -257,6 +258,125 @@ class PackageParentRead(LinkTaskRead):
     )
 
 
+class StateTransitionRead(BaseModel):
+    """Последний переход статуса: когда, кто и почему (TRK-579)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    no: int = Field(description="Number of the `status_changed` entry")
+    from_status: TaskStatus | None
+    to_status: TaskStatus | None
+    at: str = Field(examples=["2026-10-06T11:59Z"], description="UTC, to the minute")
+    by: str = Field(description="Signature of the author")
+    reason: str | None = Field(
+        description=f"Reason of the move, cut at {REASON_LIMIT} characters; `null` if none"
+    )
+
+
+class StateSummaryRead(BaseModel):
+    """Части последней сводки, нужные для входа: следующий шаг, мешающее, `unmeasured`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    no: int
+    at: str = Field(examples=["2026-10-06T11:59Z"], description="UTC, to the minute")
+    next_step: str = Field(description=f"Cut at {REASON_LIMIT} characters")
+    blockers: str = Field(description=f"Cut at {REASON_LIMIT} characters")
+    unmeasured: str | None = Field(
+        description=(
+            f"Cut at {UNMEASURED_LIMIT} characters; `null` unless the summary closed the task"
+        )
+    )
+
+
+class StateQuestionRead(BaseModel):
+    """Открытый вопрос: кого спросили и мешает ли он работе."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    no: int
+    to: list[str] = Field(description="Addressees")
+    blocking: bool
+    title: str
+
+
+class StateNoteRead(BaseModel):
+    """Открытое замечание или предупреждение: номер записи, автор, заголовок."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    no: int
+    by: str
+    title: str
+
+
+class TaskStateRead(BaseModel):
+    """Состояние задачи на момент чтения (`CONCEPT.md`, 4.2; TRK-579).
+
+    Никто не пишет и ничего не хранится: блок считается из дела и связей при каждом
+    чтении, поэтому не устаревает. Он так же информативен, как то, что агенты уже пишут:
+    причина перехода, `next_step`, заголовки записей.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: TaskStatus
+    last_transition: StateTransitionRead | None
+    last_summary: StateSummaryRead | None
+    after_summary: int | None = Field(
+        description="Summary the entries below follow; `null` without one"
+    )
+    recent: list[str] = Field(
+        description=(
+            f"Up to {RECENT_LIMIT} latest entries of agents and humans after the summary "
+            "(all of them without one), in order: `#no type author time: title`"
+        )
+    )
+    recent_total: int = Field(description="How many such entries there are in all")
+    questions: list[StateQuestionRead] = Field(description="Open questions")
+    remarks: list[StateNoteRead] = Field(description="Open remarks")
+    warning: StateNoteRead | None = Field(description="Open warning, if the task has one")
+    blockers: list[str] = Field(description="Keys of open `blocked_by` tasks")
+    children: dict[str, int] = Field(description="Children by status; empty without children")
+    children_unclosed: list[str] = Field(description="Keys of children not `done` or `cancelled`")
+    decisions_after_card: list[int] = Field(
+        description=(
+            "Numbers of `decision` entries filed after the last edit of the sections: "
+            "the statement may not account for them"
+        )
+    )
+
+
+class TaskBriefCardRead(BaseModel):
+    """Шапка задачи в кратком ответе: без разделов, проекта и описания."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str = Field(examples=["TRK-42"])
+    title: str
+    status: TaskStatus
+    assignee: str | None
+    priority: TaskPriority
+    direction: str | None = Field(description="Address of the direction, or `null`")
+    version: int
+    updated_at: datetime
+
+
+class TaskBriefRead(BaseModel):
+    """Краткий ответ чтения задачи, `brief=true` (`CONCEPT.md`, 4.2; TRK-579).
+
+    Шапка, родитель без цели, признаки, `state` и переходы: 200–500 токенов вместо
+    2–8 тысяч. Разделов, связей, описи, карточки проекта и сводки целиком здесь нет:
+    чтобы взять задачу в работу, читают полный ответ.
+    """
+
+    state: TaskStateRead
+    task: TaskBriefCardRead
+    parent: LinkTaskRead | None
+    features: TaskFeaturesRead
+    transitions: list[TaskStatus]
+
+
 class TaskPackageRead(BaseModel):
     """Пакет преемника (`CONCEPT.md`, 4.2).
 
@@ -266,6 +386,9 @@ class TaskPackageRead(BaseModel):
     точечно.
     """
 
+    state: TaskStateRead = Field(
+        description="Where the task stands now, computed on read; first in the answer"
+    )
     task: TaskRead
     parent: PackageParentRead | None = Field(
         default=None,

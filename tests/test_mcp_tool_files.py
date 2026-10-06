@@ -21,7 +21,7 @@ from app.mcp.toolset import Toolset
 TOOLS_ROOT = Path(tools_package.__file__).parent
 
 #: Файлы группы, которые не инструменты: реестр и общее для нескольких её инструментов.
-GROUP_SHARED_FILES = {"__init__.py", "arguments.py", "views.py"}
+GROUP_SHARED_FILES = {"__init__.py", "arguments.py", "state.py", "views.py"}
 
 
 def _groups() -> list[ModuleType]:

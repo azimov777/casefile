@@ -9,7 +9,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, status
+from fastapi import APIRouter, Path, Query, status
 
 from app.api.deps import (
     ActorDep,
@@ -43,6 +43,8 @@ from app.api.schemas.search import (
 from app.api.schemas.tasks import (
     PackageParentRead,
     TaskAlreadyThereRead,
+    TaskBriefCardRead,
+    TaskBriefRead,
     TaskClosing,
     TaskCreate,
     TaskFeaturesRead,
@@ -53,6 +55,7 @@ from app.api.schemas.tasks import (
     TaskMoveRefusedRead,
     TaskPackageRead,
     TaskRead,
+    TaskStateRead,
     TaskTransition,
     TaskUpdate,
 )
@@ -285,32 +288,74 @@ def _package_parent(link: TaskLink) -> PackageParentRead:
     )
 
 
+BriefQuery = Annotated[
+    bool,
+    Query(
+        description=(
+            "`true` returns the short answer: the card header, parent, features, `state` "
+            "and transitions, without sections, links, the case index, the project card "
+            "and the summary in full. To take a task into work, read it without `brief`"
+        )
+    ),
+]
+
+
 @router.get("/{task_key}", summary="Read a task")
 async def read_task(
     task_key: TaskKeyPath,
     session: SessionDep,
     actor: ActorDep,
-) -> DataResponse[TaskPackageRead]:
+    brief: BriefQuery = False,
+) -> DataResponse[TaskPackageRead | TaskBriefRead]:
     """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 
-    Карточка, связи с обеих сторон со статусом задачи на другой стороне, решения проекта,
-    на которые опирается задача, со статусом и преемником, вычисляемые признаки, последняя
-    сводка целиком, открытые вопросы и неразобранные замечания
+    Первым идёт блок `state` — где задача стоит сейчас, он считается при чтении и нигде
+    не хранится. Карточка, связи с обеих сторон со статусом задачи на другой стороне,
+    решения проекта, на которые опирается задача, со статусом и преемником, вычисляемые
+    признаки, последняя сводка целиком, открытые вопросы и неразобранные замечания
     целиком, опись дела и переходы по таблице. Тела остальных записей читаются отдельно
     в `GET /tasks/{key}/entries`.
     Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
     блокеры, дети) проверяются в момент перехода, а не при чтении.
+
+    С `brief=true` — краткий ответ (`TaskBriefRead`): шапка, родитель, признаки, `state`
+    и переходы.
     """
     package = await service.read_task_package(session, task_key, actor=actor)
+    features = TaskFeaturesRead.model_validate(package.features, from_attributes=True)
+    state = TaskStateRead.model_validate(package.state, from_attributes=True)
+    if brief:
+        task = package.task
+        return DataResponse[TaskPackageRead | TaskBriefRead](
+            data=TaskBriefRead(
+                state=state,
+                task=TaskBriefCardRead(
+                    key=task.key,
+                    title=task.title,
+                    status=task.status,
+                    assignee=task.assignee,
+                    priority=task.priority,
+                    direction=None if task.direction is None else task.direction.address,
+                    version=task.version,
+                    updated_at=task.updated_at,
+                ),
+                parent=None
+                if package.parent is None
+                else LinkTaskRead.model_validate(package.parent.other),
+                features=features,
+                transitions=list(package.transitions),
+            )
+        )
     key = package.task.key
-    return DataResponse[TaskPackageRead](
+    return DataResponse[TaskPackageRead | TaskBriefRead](
         data=TaskPackageRead(
+            state=state,
             task=TaskRead.model_validate(package.task),
             parent=None if package.parent is None else _package_parent(package.parent),
             children=[LinkTaskRead.model_validate(link.other) for link in package.children],
             links=[TaskLinkRead.model_validate(link) for link in package.links],
             decisions=[_cited_decision(item) for item in package.decisions],
-            features=TaskFeaturesRead.model_validate(package.features, from_attributes=True),
+            features=features,
             # `entry_read` отдаёт вариант по типу записи, а сценарий гарантирует, что
             # сюда попали именно сводка, вопросы и замечания: сузить тип здесь нечем и
             # незачем.

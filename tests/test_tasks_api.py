@@ -117,6 +117,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
         "parent",
         "questions",
         "remarks",
+        "state",
         "summary",
         "task",
         "transitions",

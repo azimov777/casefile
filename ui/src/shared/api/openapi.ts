@@ -971,13 +971,17 @@ export interface paths {
          * Read a task
          * @description Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
          *
-         *     Карточка, связи с обеих сторон со статусом задачи на другой стороне, решения проекта,
-         *     на которые опирается задача, со статусом и преемником, вычисляемые признаки, последняя
-         *     сводка целиком, открытые вопросы и неразобранные замечания
+         *     Первым идёт блок `state` — где задача стоит сейчас, он считается при чтении и нигде
+         *     не хранится. Карточка, связи с обеих сторон со статусом задачи на другой стороне,
+         *     решения проекта, на которые опирается задача, со статусом и преемником, вычисляемые
+         *     признаки, последняя сводка целиком, открытые вопросы и неразобранные замечания
          *     целиком, опись дела и переходы по таблице. Тела остальных записей читаются отдельно
          *     в `GET /tasks/{key}/entries`.
          *     Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
          *     блокеры, дети) проверяются в момент перехода, а не при чтении.
+         *
+         *     С `brief=true` — краткий ответ (`TaskBriefRead`): шапка, родитель, признаки, `state`
+         *     и переходы.
          */
         get: operations["read_task"];
         put?: never;
@@ -2894,10 +2898,6 @@ export interface components {
         DataResponse_TaskMoveBatchRead_: {
             data: components["schemas"]["TaskMoveBatchRead"];
         };
-        /** DataResponse[TaskPackageRead] */
-        DataResponse_TaskPackageRead_: {
-            data: components["schemas"]["TaskPackageRead"];
-        };
         /** DataResponse[TaskRead] */
         DataResponse_TaskRead_: {
             data: components["schemas"]["TaskRead"];
@@ -2905,6 +2905,11 @@ export interface components {
         /** DataResponse[TokenIssued] */
         DataResponse_TokenIssued_: {
             data: components["schemas"]["TokenIssued"];
+        };
+        /** DataResponse[Union[TaskPackageRead, TaskBriefRead]] */
+        DataResponse_Union_TaskPackageRead__TaskBriefRead__: {
+            /** Data */
+            data: components["schemas"]["TaskPackageRead"] | components["schemas"]["TaskBriefRead"];
         };
         /**
          * DecisionEntryRead
@@ -5309,6 +5314,93 @@ export interface components {
             account: components["schemas"]["AccountRead"];
         };
         /**
+         * StateNoteRead
+         * @description Открытое замечание или предупреждение: номер записи, автор, заголовок.
+         */
+        StateNoteRead: {
+            /** No */
+            no: number;
+            /** By */
+            by: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * StateQuestionRead
+         * @description Открытый вопрос: кого спросили и мешает ли он работе.
+         */
+        StateQuestionRead: {
+            /** No */
+            no: number;
+            /**
+             * To
+             * @description Addressees
+             */
+            to: string[];
+            /** Blocking */
+            blocking: boolean;
+            /** Title */
+            title: string;
+        };
+        /**
+         * StateSummaryRead
+         * @description Части последней сводки, нужные для входа: следующий шаг, мешающее, `unmeasured`.
+         */
+        StateSummaryRead: {
+            /** No */
+            no: number;
+            /**
+             * At
+             * @description UTC, to the minute
+             * @example 2026-10-06T11:59Z
+             */
+            at: string;
+            /**
+             * Next Step
+             * @description Cut at 160 characters
+             */
+            next_step: string;
+            /**
+             * Blockers
+             * @description Cut at 160 characters
+             */
+            blockers: string;
+            /**
+             * Unmeasured
+             * @description Cut at 200 characters; `null` unless the summary closed the task
+             */
+            unmeasured: string | null;
+        };
+        /**
+         * StateTransitionRead
+         * @description Последний переход статуса: когда, кто и почему (TRK-579).
+         */
+        StateTransitionRead: {
+            /**
+             * No
+             * @description Number of the `status_changed` entry
+             */
+            no: number;
+            from_status: components["schemas"]["TaskStatus"] | null;
+            to_status: components["schemas"]["TaskStatus"] | null;
+            /**
+             * At
+             * @description UTC, to the minute
+             * @example 2026-10-06T11:59Z
+             */
+            at: string;
+            /**
+             * By
+             * @description Signature of the author
+             */
+            by: string;
+            /**
+             * Reason
+             * @description Reason of the move, cut at 160 characters; `null` if none
+             */
+            reason: string | null;
+        };
+        /**
          * StatusChangedEntryRead
          * @description Служебная запись о переходе статуса.
          */
@@ -5633,6 +5725,51 @@ export interface components {
              * @description Key the task holds in the target project
              */
             to_key: string;
+        };
+        /**
+         * TaskBriefCardRead
+         * @description Шапка задачи в кратком ответе: без разделов, проекта и описания.
+         */
+        TaskBriefCardRead: {
+            /**
+             * Key
+             * @example TRK-42
+             */
+            key: string;
+            /** Title */
+            title: string;
+            status: components["schemas"]["TaskStatus"];
+            /** Assignee */
+            assignee: string | null;
+            priority: components["schemas"]["TaskPriority"];
+            /**
+             * Direction
+             * @description Address of the direction, or `null`
+             */
+            direction: string | null;
+            /** Version */
+            version: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * TaskBriefRead
+         * @description Краткий ответ чтения задачи, `brief=true` (`CONCEPT.md`, 4.2; TRK-579).
+         *
+         *     Шапка, родитель без цели, признаки, `state` и переходы: 200–500 токенов вместо
+         *     2–8 тысяч. Разделов, связей, описи, карточки проекта и сводки целиком здесь нет:
+         *     чтобы взять задачу в работу, читают полный ответ.
+         */
+        TaskBriefRead: {
+            state: components["schemas"]["TaskStateRead"];
+            task: components["schemas"]["TaskBriefCardRead"];
+            parent: components["schemas"]["LinkTaskRead"] | null;
+            features: components["schemas"]["TaskFeaturesRead"];
+            /** Transitions */
+            transitions: components["schemas"]["TaskStatus"][];
         };
         /**
          * TaskClosing
@@ -6024,6 +6161,8 @@ export interface components {
          *     точечно.
          */
         TaskPackageRead: {
+            /** @description Where the task stands now, computed on read; first in the answer */
+            state: components["schemas"]["TaskStateRead"];
             task: components["schemas"]["TaskRead"];
             /** @description The parent of this task: key, title, status and its goal; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links` */
             parent?: components["schemas"]["PackageParentRead"] | null;
@@ -6276,6 +6415,68 @@ export interface components {
             parent?: components["schemas"]["TaskParentRead"] | null;
             /** @description The direction of the task, address and title; `null` for a task with none. Included when `fields` names `direction`, or when `fields` is omitted */
             direction?: components["schemas"]["TaskDirectionRowRead"] | null;
+        };
+        /**
+         * TaskStateRead
+         * @description Состояние задачи на момент чтения (`CONCEPT.md`, 4.2; TRK-579).
+         *
+         *     Никто не пишет и ничего не хранится: блок считается из дела и связей при каждом
+         *     чтении, поэтому не устаревает. Он так же информативен, как то, что агенты уже пишут:
+         *     причина перехода, `next_step`, заголовки записей.
+         */
+        TaskStateRead: {
+            status: components["schemas"]["TaskStatus"];
+            last_transition: components["schemas"]["StateTransitionRead"] | null;
+            last_summary: components["schemas"]["StateSummaryRead"] | null;
+            /**
+             * After Summary
+             * @description Summary the entries below follow; `null` without one
+             */
+            after_summary: number | null;
+            /**
+             * Recent
+             * @description Up to 4 latest entries of agents and humans after the summary (all of them without one), in order: `#no type author time: title`
+             */
+            recent: string[];
+            /**
+             * Recent Total
+             * @description How many such entries there are in all
+             */
+            recent_total: number;
+            /**
+             * Questions
+             * @description Open questions
+             */
+            questions: components["schemas"]["StateQuestionRead"][];
+            /**
+             * Remarks
+             * @description Open remarks
+             */
+            remarks: components["schemas"]["StateNoteRead"][];
+            /** @description Open warning, if the task has one */
+            warning: components["schemas"]["StateNoteRead"] | null;
+            /**
+             * Blockers
+             * @description Keys of open `blocked_by` tasks
+             */
+            blockers: string[];
+            /**
+             * Children
+             * @description Children by status; empty without children
+             */
+            children: {
+                [key: string]: number;
+            };
+            /**
+             * Children Unclosed
+             * @description Keys of children not `done` or `cancelled`
+             */
+            children_unclosed: string[];
+            /**
+             * Decisions After Card
+             * @description Numbers of `decision` entries filed after the last edit of the sections: the statement may not account for them
+             */
+            decisions_after_card: number[];
         };
         /**
          * TaskStatus
@@ -10595,7 +10796,10 @@ export interface operations {
     };
     read_task: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `true` returns the short answer: the card header, parent, features, `state` and transitions, without sections, links, the case index, the project card and the summary in full. To take a task into work, read it without `brief` */
+                brief?: boolean;
+            };
             header?: {
                 /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
                 "X-Actor-Label"?: string | null;
@@ -10614,7 +10818,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_TaskPackageRead_"];
+                    "application/json": components["schemas"]["DataResponse_Union_TaskPackageRead__TaskBriefRead__"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

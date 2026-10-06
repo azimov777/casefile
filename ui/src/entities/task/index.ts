@@ -35,6 +35,7 @@ export {
   type TaskDetails,
   type TaskLink,
   type TaskPackage,
+  type TaskState,
 } from './api/task-package';
 export { TASK_COLUMNS } from './ui/columns';
 export { TASK_PRIORITY_TONE, TASK_STATUS_TONE, priorityTone, statusTone } from './ui/tones';

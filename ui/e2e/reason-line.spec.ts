@@ -164,7 +164,9 @@ test('причина перехода со ссылкой стоит в одну
     // причина, но раскрытая по клику, а не готовой лентой.
     await page.goto(`/tasks/${key}`);
     await page.getByRole('button', { name: /причиной/ }).click();
-    await expect(page.getByText(MARKER)).toBeVisible();
+    // На карточке причину последнего перехода показывает и блок «Сейчас» (TRK-579), и
+    // раскрытая запись: смотрим на запись, она стоит ниже блока.
+    await expect(page.getByText(MARKER).last()).toBeVisible();
     await fontsReady(page);
 
     const indexTops = await reasonLineTops(page, MARKER, refText);
