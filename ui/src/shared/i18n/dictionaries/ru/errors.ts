@@ -39,6 +39,12 @@ export const errors = {
   database_unavailable: 'База данных недоступна.',
   decision_not_in_force:
     'Это решение проекта уже заменено другим: сошлитесь на то, что его заменило.',
+  direction_archived: 'Направление в архиве: ни карточка, ни атрибуты, ни дело не меняются.',
+  direction_description_too_long: 'Описание направления длиннее 320 знаков.',
+  direction_key_taken: 'В проекте уже есть направление с таким ключом.',
+  direction_not_archived: 'Направление не в архиве.',
+  direction_not_found: 'В проекте нет направления с таким ключом.',
+  direction_reason_required: 'Архивирование и восстановление направления требуют причины.',
   entry_fields_invalid: 'Запись не прошла проверку.',
   entry_not_found: 'Записи с таким номером в этой задаче нет.',
   human_token_not_allowed:
@@ -51,6 +57,7 @@ export const errors = {
   invalid_actor_label: 'Метка временного агента не соответствует шаблону.',
   invalid_attribute_name: 'Имя атрибута — только латиница, цифры, «_» и «-».',
   invalid_cursor: 'Курсор страницы не разбирается.',
+  invalid_direction_key: 'Ключ направления — только строчная латиница, цифры и дефис внутри.',
   invalid_email: 'Это не похоже на адрес почты.',
   invalid_idempotency_key: 'Ключ повтора пуст или слишком длинный.',
   invalid_journal_cursor: 'Позиция в ленте журнала не разбирается.',

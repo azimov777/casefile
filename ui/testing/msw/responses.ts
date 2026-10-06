@@ -570,6 +570,7 @@ export function projectDetail(key: string, overrides: Partial<ProjectDetail> = {
     ...STAMPS,
     attributes: [],
     decisions: [],
+    directions: [],
     ...overrides,
   };
 }

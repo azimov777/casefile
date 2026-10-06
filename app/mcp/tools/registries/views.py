@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.db.models.direction import Direction
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.project import Project
@@ -17,16 +18,17 @@ from app.db.models.project import Project
 # правилу, что и `MutationView`: ответ должен читаться сам по себе. Название и
 # описание вызывающий прислал сам; итог, если нужен, отдаёт `get_project` (TRK-144).
 class ProjectKeyView(BaseModel):
-    """Project key in its stored, upper-case form; the project in full is returned by
-    `get_project`.
+    """Project key or direction address in its stored form; the project or direction in
+    full is returned by `get_project`.
     """
 
     key: str
 
 
-def project_key(item: Project) -> ProjectKeyView:
-    """Ответ `create_project`/`update_project`: только ключ, без эха названия и описания."""
-    return ProjectKeyView(key=item.key)
+def project_key(item: Project | Direction) -> ProjectKeyView:
+    """Ответ `create_project`/`update_project`: ключ проекта или адрес
+    направления, без эха названия и описания."""
+    return ProjectKeyView(key=item.address if isinstance(item, Direction) else item.key)
 
 
 # Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания.
@@ -51,19 +53,21 @@ def participant_name(item: Participant) -> ParticipantNameView:
 # Ответ `archive_project`/`restore_project`: ключ, итоговое время архивирования и номер
 # подшитой записи — по тому же правилу, что `MutationView`: что стало и где это в деле.
 class ProjectArchiveView(BaseModel):
-    """Project after archiving or restoring, by the entry that records it; the entry in
-    full is returned by `read_project_entries`.
+    """Project or direction after archiving or restoring, by the entry that records it;
+    the entry in full is returned by `read_project_entries`.
     """
 
     key: str
     archived_at: datetime | None = Field(
-        description="When the project was archived; `null` once it is restored"
+        description="When it was archived; `null` once it is restored"
     )
-    no: int = Field(
-        description="Number of the `archived` or `restored` entry in the project's case"
-    )
+    no: int = Field(description="Number of the `archived` or `restored` entry in its case")
 
 
-def project_archive(item: Project, entry: Entry) -> ProjectArchiveView:
-    """Ответ `archive_project`/`restore_project`."""
-    return ProjectArchiveView(key=item.key, archived_at=item.archived_at, no=entry.no)
+def project_archive(item: Project | Direction, entry: Entry) -> ProjectArchiveView:
+    """Ответ `archive_project`/`restore_project` — у проекта и у направления."""
+    return ProjectArchiveView(
+        key=item.address if isinstance(item, Direction) else item.key,
+        archived_at=item.archived_at,
+        no=entry.no,
+    )

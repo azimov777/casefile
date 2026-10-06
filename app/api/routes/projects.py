@@ -6,23 +6,27 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Path, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     ActorDep,
     AfterNoQuery,
+    AttributeNamePath,
+    AttributeQuery,
     CursorQuery,
     EntryNosQuery,
     EntryTypesQuery,
     IncludeArchivedQuery,
     LimitQuery,
+    ProjectKeyPath,
     SessionDep,
 )
 from app.api.idempotency import OnceDep
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.decisions import ProjectDecisionRead
+from app.api.schemas.directions import direction_ref
 from app.api.schemas.entries import EntryRead, ProjectEntryCreate, entry_read
 from app.api.schemas.projects import (
     AttributeRead,
@@ -39,39 +43,12 @@ from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.services import attributes as attributes_service
 from app.services import case as case_service
 from app.services import decisions as decisions_service
+from app.services import directions as directions_service
 from app.services import projects as service
 from app.services.auth import Actor
 from app.services.decisions import ProjectDecision
 
 router = APIRouter(prefix="/projects", tags=["projects"])
-
-ProjectKeyPath = Annotated[
-    str,
-    Path(description="Project key; matching ignores case", examples=["TRK"]),
-]
-
-AttributeNamePath = Annotated[
-    str,
-    Path(
-        description=(
-            "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; "
-            "matching ignores case"
-        ),
-        examples=["repo"],
-    ),
-]
-
-AttributeQuery = Annotated[
-    str | None,
-    Query(
-        description=(
-            "Read only entries about the attribute with this name: `attribute_created`, "
-            "`attribute_changed`, `attribute_removed`; matching ignores case. Combines "
-            "with `types` and the other filters"
-        ),
-        examples=["repo"],
-    ),
-]
 
 ProjectEntryNoPath = Annotated[
     int,
@@ -136,7 +113,8 @@ async def read_project(
     session: SessionDep,
     actor: ActorDep,
 ) -> DataResponse[ProjectDetailRead]:
-    """Карточка проекта вместе с описанием, нынешними значениями атрибутов и решениями.
+    """Карточка проекта вместе с описанием, нынешними значениями атрибутов, решениями и
+    неархивными направлениями (адрес и название; `CONCEPT.md`, 3.7).
 
     Описание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и
     таскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи
@@ -388,16 +366,19 @@ async def read_project_entry(
 async def _detail(
     session: AsyncSession, project: Project, *, actor: Actor
 ) -> DataResponse[ProjectDetailRead]:
-    """Проект с атрибутами и решениями: тот же ответ у чтения, заведения и правки карточки."""
+    """Проект с атрибутами, решениями и направлениями: тот же ответ у чтения, заведения и
+    правки карточки."""
     attributes = await attributes_service.list_attributes(session, project, actor=actor)
     decisions = await decisions_service.project_decisions(session, project, actor=actor)
     counts = await decisions_service.citing_task_counts(session, decisions, actor=actor)
+    directions = await directions_service.list_directions(session, project, actor=actor)
     return DataResponse[ProjectDetailRead](
         data=ProjectDetailRead.model_validate(
             {
                 **ProjectRead.model_validate(project).model_dump(),
                 "attributes": [AttributeRead.model_validate(item) for item in attributes],
                 "decisions": [_decision(item, counts) for item in decisions],
+                "directions": [direction_ref(item) for item in directions],
             }
         )
     )

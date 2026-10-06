@@ -154,7 +154,10 @@ def render(message: JournalMessage) -> str:
     assert message.item is not None
     entry = message.item.entry
     data = entry_read(
-        entry, task_key=message.item.task_key, project_key=message.item.project_key
+        entry,
+        task_key=message.item.task_key,
+        project_key=message.item.project_key,
+        direction=message.item.direction,
     ).model_dump_json()
     return f"id: {entry.seq}\nevent: {entry.type.value}\ndata: {data}\n\n"
 
@@ -207,7 +210,12 @@ async def read_journal(
     )
     return CollectionResponse[EntryRead].of(
         [
-            entry_read(item.entry, task_key=item.task_key, project_key=item.project_key)
+            entry_read(
+                item.entry,
+                task_key=item.task_key,
+                project_key=item.project_key,
+                direction=item.direction,
+            )
             for item in page.items
         ],
         next_cursor=page.next_cursor,

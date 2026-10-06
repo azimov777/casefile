@@ -2027,8 +2027,8 @@ async def test_get_project_carries_the_context_shared_by_its_tasks(
         read = await call(session, "get_project", key="trk")
 
     index = read.pop("index")
-    # Атрибутов у нового проекта нет (TRK-157), решений тоже (TRK-554): списки пусты, а не
-    # пропущены.
+    # Атрибутов у нового проекта нет (TRK-157), решений (TRK-554) и направлений (TRK-555)
+    # тоже: списки пусты, а не пропущены.
     assert read == {
         "key": project.key,
         "title": project.title,
@@ -2036,6 +2036,7 @@ async def test_get_project_carries_the_context_shared_by_its_tasks(
         "archived_at": None,
         "attributes": [],
         "decisions": [],
+        "directions": [],
     }
     # Дело проекта открывается записью `created` (TRK-156): опись едет той же строкой, что
     # у задачи.
@@ -2128,6 +2129,7 @@ async def test_the_main_scope_runs_the_registries(
         "archived_at": None,
         "attributes": [],
         "decisions": [],
+        "directions": [],
     }
     # Правка названия осталась в деле проекта (TRK-156), а не пропала без следа.
     assert [(line["type"], line["facts"]) for line in index] == [

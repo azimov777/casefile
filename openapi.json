@@ -2780,7 +2780,7 @@
           "projects"
         ],
         "summary": "Read a project",
-        "description": "Карточка проекта вместе с описанием, нынешними значениями атрибутов и решениями.\n\nОписание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и\nтаскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи\nдела проекта (`/projects/{key}/entries`). Решения проекта — все, со статусом,\nпосчитанным при чтении, и числом задач, которые на каждое ссылаются (`CONCEPT.md`,\n3.2): на этом строится раздел «Решения» экрана проекта.",
+        "description": "Карточка проекта вместе с описанием, нынешними значениями атрибутов, решениями и\nнеархивными направлениями (адрес и название; `CONCEPT.md`, 3.7).\n\nОписание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и\nтаскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи\nдела проекта (`/projects/{key}/entries`). Решения проекта — все, со статусом,\nпосчитанным при чтении, и числом задач, которые на каждое ссылаются (`CONCEPT.md`,\n3.2): на этом строится раздел «Решения» экрана проекта.",
         "operationId": "read_project",
         "security": [
           {
@@ -4083,6 +4083,1859 @@
               "title": "Entry No"
             },
             "description": "Entry number inside the project, from 1"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions": {
+      "get": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "List the directions of a project",
+        "description": "Направления проекта. Архивные — только с `include_archived=true`; по адресу\nархивное направление читается и без него.",
+        "operationId": "list_directions",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also list archived directions. Without it they are hidden from the list; a direction is still read by its address either way",
+              "default": false,
+              "title": "Include Archived"
+            },
+            "description": "Also list archived directions. Without it they are hidden from the list; a direction is still read by its address either way"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_DirectionRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Create a direction",
+        "description": "Заводит направление в проекте; первая запись его дела — `created`.\n\nКлюч хранится в нижнем регистре и неизменяем; занятый в проекте (без учёта регистра)\n— `409 direction_key_taken`, не по шаблону — `422 invalid_direction_key`. В архивный\nпроект направление не заводится — `409 project_archived`. Повтор с тем же\n`Idempotency-Key` отвечает первым направлением, а не `409`.",
+        "operationId": "create_direction",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DirectionRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions/{direction_key}": {
+      "get": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Read a direction",
+        "description": "Карточка направления с нынешними значениями атрибутов. История атрибутов и всё\nостальное дело — `/projects/{key}/directions/{direction}/entries`.",
+        "operationId": "read_direction",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Update a direction",
+        "description": "Меняет название и описание; проект и ключ неизменяемы, поле `key` в теле — `422`.\n\nКаждое изменённое поле подшивает `field_changed` в дело направления. Архивное\nнаправление — `409 direction_archived`, архивный проект — `409 project_archived`.",
+        "operationId": "update_direction",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions/{direction_key}/archive": {
+      "post": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Archive a direction",
+        "description": "Архивирует направление с причиной: карточка, атрибуты и дело замораживаются\n(`409 direction_archived` на любое изменение, кроме восстановления). Причина — в записи\n`archived`; пустая — `422 direction_reason_required`. Уже в архиве —\n`409 direction_archived`, проект в архиве — `409 project_archived`.",
+        "operationId": "archive_direction",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectionArchiving"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions/{direction_key}/restore": {
+      "post": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Restore an archived direction",
+        "description": "Восстанавливает направление из архива с причиной (запись `restored`). Не в архиве —\n`409 direction_not_archived`; проект в архиве — `409 project_archived`: сначала\nвосстанавливают проект.",
+        "operationId": "restore_direction",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectionArchiving"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}": {
+      "put": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Set a direction attribute",
+        "description": "Заводит атрибут направления или меняет его значение — правила атрибута проекта.\n\nАтрибута нет — `attribute_created`, причина необязательна; есть с другим значением —\n`attribute_changed`, без причины `422 attribute_reason_required`; то же значение —\nничего не подшивается. Записи ложатся в дело направления.",
+        "operationId": "set_direction_attribute",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "attribute_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case",
+              "examples": [
+                "repo"
+              ],
+              "title": "Attribute Name"
+            },
+            "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttributeSet"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_AttributeRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}/remove": {
+      "post": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Remove a direction attribute",
+        "description": "Снимает атрибут направления с причиной и отдаёт подшитую `attribute_removed`.\n\nАтрибута нет — `404 attribute_not_found`, пустая причина —\n`422 attribute_reason_required`. Повтор с тем же `Idempotency-Key` отвечает первой\nзаписью, а не `404`.",
+        "operationId": "remove_direction_attribute",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "attribute_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case",
+              "examples": [
+                "repo"
+              ],
+              "title": "Attribute Name"
+            },
+            "description": "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttributeRemoval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions/{direction_key}/entries": {
+      "post": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Append a direction case entry",
+        "description": "Подшивает запись в дело направления: заметку, решение, находку или артефакт.\n\nНомер `no` считается внутри направления, ссылка на запись — `TRK/promotion#3`.\n`supersedes` здесь нет: механика решений проекта на дело направления не\nраспространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.\nАрхивное направление — `409 direction_archived`.",
+        "operationId": "create_direction_entry",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectionEntryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Read direction case entries",
+        "description": "Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела проекта, включая историю одного атрибута (`attribute`).",
+        "operationId": "list_direction_entries",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "nos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only these entry numbers",
+              "examples": [
+                [
+                  3,
+                  12
+                ]
+              ],
+              "title": "Nos"
+            },
+            "description": "Read only these entry numbers"
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EntryType"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries of these types",
+              "examples": [
+                [
+                  "summary"
+                ]
+              ],
+              "title": "Types"
+            },
+            "description": "Read only entries of these types"
+          },
+          {
+            "name": "attribute",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters",
+              "examples": [
+                "repo"
+              ],
+              "title": "Attribute"
+            },
+            "description": "Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters"
+          },
+          {
+            "name": "after_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries after this number — what happened since",
+              "examples": [
+                12
+              ],
+              "title": "After No"
+            },
+            "description": "Read only entries after this number — what happened since"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/directions/{direction_key}/entries/{entry_no}": {
+      "get": {
+        "tags": [
+          "directions"
+        ],
+        "summary": "Read one direction case entry",
+        "description": "Одна запись дела направления по номеру — адрес из ссылки `TRK/promotion#3`.\n\nНомера, которого в деле нет, — `404 entry_not_found`.",
+        "operationId": "read_direction_entry",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "direction_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Direction key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Direction Key"
+            },
+            "description": "Direction key inside the project; matching ignores case"
+          },
+          {
+            "name": "entry_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Entry number inside the direction, from 1",
+              "examples": [
+                3
+              ],
+              "title": "Entry No"
+            },
+            "description": "Entry number inside the direction, from 1"
           },
           {
             "name": "X-Actor-Label",
@@ -7844,7 +9697,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -7892,7 +9745,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -7908,6 +9761,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -7937,7 +9798,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8269,7 +10130,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -8310,7 +10171,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -8326,6 +10187,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -8355,7 +10224,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8592,7 +10461,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -8608,6 +10477,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -8637,7 +10514,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -8854,7 +10731,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -8870,6 +10747,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -8899,7 +10784,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9047,7 +10932,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -9055,17 +10940,39 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
             "examples": [
               null
             ]
           },
           "project_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
             "examples": [
               "TRK"
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -9093,7 +11000,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9206,7 +11113,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -9214,17 +11121,39 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
             "examples": [
               null
             ]
           },
           "project_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
             "examples": [
               "TRK"
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -9252,7 +11181,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9461,7 +11390,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -9469,17 +11398,39 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
             "examples": [
               null
             ]
           },
           "project_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
             "examples": [
               "TRK"
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -9507,7 +11458,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -9936,6 +11887,25 @@
         ],
         "title": "CollectionResponse[AnsweredQuestionRead]"
       },
+      "CollectionResponse_DirectionRead_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DirectionRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CollectionResponse[DirectionRead]"
+      },
       "CollectionResponse_EntryRead_": {
         "properties": {
           "data": {
@@ -10136,6 +12106,30 @@
         ],
         "title": "DataResponse[BootstrapRead]"
       },
+      "DataResponse_DirectionDetailRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DirectionDetailRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[DirectionDetailRead]"
+      },
+      "DataResponse_DirectionRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DirectionRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[DirectionRead]"
+      },
       "DataResponse_EntryRead_": {
         "properties": {
           "data": {
@@ -10310,7 +12304,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -10325,7 +12319,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's case",
+            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
             "examples": [
               "TRK-42"
             ]
@@ -10340,7 +12334,22 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -10370,7 +12379,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10536,6 +12545,359 @@
         "title": "DecisionsChangedPayload",
         "description": "Правка решений проекта задачи (`decisions`): списки ссылок «было» и «стало».\n\nСвоя форма, а не расширение `FieldChangedPayload` до «строка либо список»: там\nзначения — строки, и объединение «на всякий случай» сделало бы тип каждого поля\nобвязки неопределённым. Разметка — `field`: у этой формы оно всегда `decisions`."
       },
+      "DirectionArchiving": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Reason",
+            "description": "Why the direction is archived or restored; a blank one answers `422 direction_reason_required`. Filed in the `archived` or `restored` entry of the direction's case",
+            "examples": [
+              "Направление закрыто: работа перешла в коммерцию"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "DirectionArchiving",
+        "description": "Архивирование или восстановление направления: причина обязательна в обе стороны."
+      },
+      "DirectionCreate": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Direction key: lower-case Latin letters, digits and hyphens, starting and ending with a letter or a digit (`invalid_direction_key` otherwise; the pattern is `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$` after lower-casing). Stored lower-case, never changes; a key taken in the project, in any case, answers `409 direction_key_taken`",
+            "examples": [
+              "promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `direction_description_too_long`",
+            "default": "",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "DirectionCreate",
+        "description": "Создание направления в проекте из пути.\n\nКлюч принимается в любом регистре и хранится в нижнем; уникален внутри проекта без\nучёта регистра и дальше неизменяем."
+      },
+      "DirectionDetailRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the project the direction lives in; never changes",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Direction key inside its project, lower-case; never changes",
+            "examples": [
+              "promotion"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters; may be empty",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual",
+            "examples": [
+              null
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/AttributeRead"
+            },
+            "type": "array",
+            "title": "Attributes",
+            "description": "Current attribute values, ordered by name ignoring case. Every change is an entry of the direction's case: `attribute_created`, `attribute_changed`, `attribute_removed`"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_key",
+          "key",
+          "address",
+          "title",
+          "description",
+          "archived_at",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "attributes"
+        ],
+        "title": "DirectionDetailRead",
+        "description": "Одно направление с нынешними значениями атрибутов.\n\nОтдельная модель по той же причине, что у проекта (`ProjectDetailRead`): список\nнаправлений атрибутов не показывает."
+      },
+      "DirectionEntryCreate": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Markdown body of the entry",
+            "default": ""
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "examples": [
+              []
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Номер задачи выдаётся до валидации"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "note",
+              "decision",
+              "finding",
+              "artifact"
+            ],
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "type"
+        ],
+        "title": "DirectionEntryCreate",
+        "description": "Запись агента или человека в деле направления: заметка, решение, находка, артефакт.\n\nТе же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики\nрешений проекта у дела направления нет, и лишнее поле схема отвергает до сценария."
+      },
+      "DirectionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the project the direction lives in; never changes",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Direction key inside its project, lower-case; never changes",
+            "examples": [
+              "promotion"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters; may be empty",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual",
+            "examples": [
+              null
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_key",
+          "key",
+          "address",
+          "title",
+          "description",
+          "archived_at",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DirectionRead",
+        "description": "Направление в ответе: карточка."
+      },
+      "DirectionRefRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the direction: the project key and the direction key. Its card, attributes and case are read at `/projects/TRK/directions/promotion`",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title"
+        ],
+        "title": "DirectionRefRead",
+        "description": "Направление строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7)."
+      },
+      "DirectionUpdate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `direction_description_too_long`",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DirectionUpdate",
+        "description": "Частичное обновление: применяется только переданное. Ключа и проекта здесь нет —\nони неизменяемы, и схема отвергает лишнее поле, а не игнорирует его молча."
+      },
       "EmptyPayload": {
         "properties": {},
         "additionalProperties": false,
@@ -10622,7 +12984,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -10870,7 +13232,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -10885,7 +13247,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's case",
+            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
             "examples": [
               "TRK-42"
             ]
@@ -10900,7 +13262,22 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -10930,7 +13307,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11253,7 +13630,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -11269,6 +13646,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -11298,7 +13683,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11490,7 +13875,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -11506,6 +13891,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -11535,7 +13928,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12105,7 +14498,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -12159,7 +14552,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -12174,7 +14567,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's case",
+            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
             "examples": [
               "TRK-42"
             ]
@@ -12189,7 +14582,22 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -12219,7 +14627,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12297,7 +14705,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -12305,17 +14713,39 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
             "examples": [
               null
             ]
           },
           "project_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
             "examples": [
               "TRK"
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
             ]
           },
           "author": {
@@ -12343,7 +14773,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12652,6 +15082,14 @@
             "type": "array",
             "title": "Decisions",
             "description": "Every project decision — a `decision` entry of the project's case — in number order, in force or superseded, with its status computed on read and the number of tasks that name it"
+          },
+          "directions": {
+            "items": {
+              "$ref": "#/components/schemas/DirectionRefRead"
+            },
+            "type": "array",
+            "title": "Directions",
+            "description": "Active directions of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/directions?include_archived=true`"
           }
         },
         "type": "object",
@@ -12665,10 +15103,11 @@
           "created_at",
           "updated_at",
           "attributes",
-          "decisions"
+          "decisions",
+          "directions"
         ],
         "title": "ProjectDetailRead",
-        "description": "Один проект с нынешними значениями атрибутов и его решениями.\n\nОтдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и\nрешений не показывают, и запрос их на каждый проект списка стоил бы им без пользы."
+        "description": "Один проект с нынешними значениями атрибутов, его решениями и направлениями.\n\nОтдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и\nрешений не показывают, и запрос их на каждый проект списка стоил бы им без пользы."
       },
       "ProjectEntryCreate": {
         "properties": {
@@ -12686,7 +15125,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -12881,7 +15320,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -12933,7 +15372,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -12949,6 +15388,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -12978,7 +15425,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13191,7 +15638,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -13239,7 +15686,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -13255,6 +15702,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -13284,7 +15739,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13398,7 +15853,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -13439,7 +15894,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -13455,6 +15910,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -13484,7 +15947,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13656,7 +16119,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -13672,6 +16135,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -13701,7 +16172,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13943,7 +16414,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -13959,6 +16430,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -13988,7 +16467,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -14149,7 +16628,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -14190,7 +16669,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -14206,6 +16685,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -14235,7 +16722,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16016,7 +18503,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -16057,7 +18544,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -16073,6 +18560,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -16102,7 +18597,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16297,7 +18792,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
             "examples": [
               12
             ]
@@ -16313,6 +18808,14 @@
             "type": "null",
             "title": "Project Key",
             "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "type": "null",
+            "title": "Direction",
+            "description": "Always `null`: entries of this type belong to a task, never to a direction",
             "examples": [
               null
             ]
@@ -16342,7 +18845,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",

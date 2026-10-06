@@ -737,3 +737,29 @@ ASCII-шаблоном, поэтому `str.lower()` в домене и `lower()
 описывает конечное состояние, то есть второе значение.
 **Где:** `app/db/migrations/versions/20260928_1200_onboarding_state.py`;
 `app/db/models/account.py`; `tests/test_migrations.py`.
+
+## Направление — третий владелец записи дела, а атрибуты направления — своя таблица
+
+**Что:** у записи дела три возможных владельца: `entries.task_id`, `project_id` и
+`direction_id`, и `ck_entries_one_owner` считает все три (`num_nonnulls(...) = 1`). У записи
+направления `project_id` пуст: проект направления — колонка `directions.project_id`, а не
+второй владелец записи. Номер `no` уникален и внутри направления
+(`uq_entries_direction_id_no`), выдаёт его `allocate_direction_no` под блокировкой строки
+направления после очереди изменений. Атрибуты направления — отдельная таблица
+`direction_attributes` той же формы, что `project_attributes`; `AttributeRepository`
+выбирает таблицу по владельцу в одной точке (`_owned`) (TRK-555).
+**Почему важно:** выборка «всё о проекте» по одному `Entry.project_id` не видит дел его
+направлений — это та же ловушка, что была с делом проекта и `JOIN tasks`. Общая таблица
+атрибутов с двумя колонками владельца потребовала бы двух частичных уникальных индексов по
+`lower(name)` и проверки «ровно один владелец» ради экономии одной таблицы; у атрибутов
+общей ленты, ради которой записи живут в одной таблице, нет. Откат ревизии отказывает, пока
+есть записи направлений: без колонки у такой записи не остаётся владельца.
+**Как правильно:** выборка поперёк записей с адресом владельца — внешние соединения с
+`directions` и вторым псевдонимом `projects` для ключа проекта направления
+(`journal_page`). Направление, только что созданное сценарием, получает проект объектом
+(`Direction(project=...)`): адрес собирается из `Direction.project`, а связь у новой строки
+сама не подгрузится.
+**Где:** `app/db/models/entry.py`; `app/db/models/direction.py`; `app/db/models/attribute.py`,
+`DirectionAttribute`; `app/db/repositories/attributes.py`, `_owned`;
+`app/db/repositories/entries.py`, `allocate_direction_no`, `journal_page`;
+`app/db/migrations/versions/20261006_1130_directions.py`; `tests/test_migrations.py`.

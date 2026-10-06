@@ -113,8 +113,21 @@ class AttributeRead(BaseModel):
     updated_at: datetime
 
 
+class DirectionRefRead(BaseModel):
+    """Направление строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7)."""
+
+    address: str = Field(
+        examples=["TRK/promotion"],
+        description=(
+            "Address of the direction: the project key and the direction key. Its card, "
+            "attributes and case are read at `/projects/TRK/directions/promotion`"
+        ),
+    )
+    title: str = Field(examples=["Популяризация"])
+
+
 class ProjectDetailRead(ProjectRead):
-    """Один проект с нынешними значениями атрибутов и его решениями.
+    """Один проект с нынешними значениями атрибутов, его решениями и направлениями.
 
     Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и
     решений не показывают, и запрос их на каждый проект списка стоил бы им без пользы.
@@ -132,6 +145,12 @@ class ProjectDetailRead(ProjectRead):
             "Every project decision — a `decision` entry of the project's case — in number "
             "order, in force or superseded, with its status computed on read and the number "
             "of tasks that name it"
+        )
+    )
+    directions: list[DirectionRefRead] = Field(
+        description=(
+            "Active directions of the project — endless parts of its work — ordered by key. "
+            "Archived ones are listed by `/projects/{key}/directions?include_archived=true`"
         )
     )
 

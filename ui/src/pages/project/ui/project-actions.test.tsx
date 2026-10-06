@@ -30,6 +30,7 @@ function projectDetail(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
     ...STAMPS,
     attributes: [{ name: 'repo', value: 'github.com/demo', ...STAMPS }],
     decisions: [],
+    directions: [],
     ...overrides,
   };
 }

@@ -1,5 +1,5 @@
-"""Аргументы, общие для инструментов разных групп: ключ задачи, ключ проекта, страница, ключ
-повтора.
+"""Аргументы, общие для инструментов разных групп: ключ задачи, ключ проекта или адрес
+направления, страница, ключ повтора.
 
 Описание аргумента — то, что модель читает о поле в `tools/list`: смысл, формат,
 допустимые значения, как поле заполняется, на что влияет и каким кодом трекер откажет.
@@ -69,6 +69,21 @@ ProjectKeyArg = Annotated[
     Field(
         description=(
             "Project key, case-insensitive. An unknown key is refused with `project_not_found`"
+        ),
+        examples=["TRK"],
+    ),
+]
+
+# Ключ проекта или адрес его направления (`CONCEPT.md`, 3.7): инструменты, чьё действие у
+# проекта и у направления одно (чтение, правка карточки, архив, атрибуты, дело), принимают
+# на месте ключа проекта и адрес. Отдельной аннотацией, а не новым описанием `ProjectKeyArg`:
+# `create_task` и `move_task` принимают только проект.
+CaseOwnerKeyArg = Annotated[
+    str,
+    Field(
+        description=(
+            "Project key or direction address `PROJECT/key`, case-insensitive; an unknown "
+            "one is refused with `project_not_found` or `direction_not_found`"
         ),
         examples=["TRK"],
     ),

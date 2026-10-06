@@ -31,9 +31,9 @@ ProjectReasonArg = Annotated[
     str,
     Field(
         description=(
-            "Why the project is archived or restored; a blank one is refused with "
-            "`project_reason_required`. Filed in the `archived` or `restored` entry of the "
-            "project's case"
+            "Why it is archived or restored; a blank one is refused with "
+            "`project_reason_required` or `direction_reason_required`. Filed in the "
+            "`archived` or `restored` entry of its case"
         )
     ),
 ]

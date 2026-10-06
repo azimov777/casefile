@@ -1,8 +1,10 @@
-"""Сценарии по атрибутам проекта: задать значение, снять, прочитать.
+"""Сценарии по атрибутам проекта и направления: задать значение, снять, прочитать.
 
-Атрибут — справочный факт проекта (`CONCEPT.md`, 3.2). Нынешнее значение лежит строкой
-`project_attributes`, история — служебными записями дела проекта, подшитыми в той же
-транзакции: `attribute_created`, `attribute_changed`, `attribute_removed`.
+Атрибут — справочный факт проекта или направления (`CONCEPT.md`, 3.2 и 3.7). Нынешнее
+значение лежит строкой `project_attributes` или `direction_attributes`, история —
+служебными записями дела владельца, подшитыми в той же транзакции: `attribute_created`,
+`attribute_changed`, `attribute_removed`. Механика у обоих владельцев одна, и сценарии
+одни: владелец — `CaseOwner` из `app/services/case.py`.
 
 ## Одно действие «задать значение», три исхода
 
@@ -22,9 +24,9 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.attribute import ProjectAttribute
+from app.db.models.attribute import Attribute
+from app.db.models.direction import Direction
 from app.db.models.entry import Entry
-from app.db.models.project import Project
 from app.db.repositories import AttributeRepository
 from app.domain.attributes import (
     attribute_lookup_name,
@@ -37,6 +39,7 @@ from app.domain.errors import AttributeNotFoundError
 from app.services import case as case_service
 from app.services import freeze
 from app.services.auth import Actor
+from app.services.case import CaseOwner, owner_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,20 +50,29 @@ class AttributeSet:
     деле ничего не появилось.
     """
 
-    attribute: ProjectAttribute
+    attribute: Attribute
     entry: Entry | None
 
 
 async def list_attributes(
-    session: AsyncSession, project: Project, *, actor: Actor
-) -> list[ProjectAttribute]:
-    """Нынешние значения всех атрибутов проекта, по имени без учёта регистра."""
-    return await AttributeRepository(session).list_for_project(project.id)
+    session: AsyncSession, project: CaseOwner, *, actor: Actor
+) -> list[Attribute]:
+    """Нынешние значения всех атрибутов проекта или направления, по имени без учёта
+    регистра."""
+    return await AttributeRepository(session).list_for(project)
+
+
+async def _lock_unfrozen(session: AsyncSession, owner: CaseOwner) -> None:
+    """Первый шаг сценария атрибута: очередь изменений и заморозка владельца."""
+    if isinstance(owner, Direction):
+        await freeze.lock_unfrozen(session, direction=owner)
+    else:
+        await freeze.lock_unfrozen(session, project=owner)
 
 
 async def set_attribute(
     session: AsyncSession,
-    project: Project,
+    project: CaseOwner,
     *,
     actor: Actor,
     name: str,
@@ -76,14 +88,12 @@ async def set_attribute(
     """
     name = validate_attribute_name(name)
     value = validate_attribute_value(value)
-    await freeze.lock_unfrozen(session, project=project)
+    await _lock_unfrozen(session, project)
 
     repository = AttributeRepository(session)
-    attribute = await repository.get_by_name(project.id, attribute_lookup_name(name))
+    attribute = await repository.get_by_name(project, attribute_lookup_name(name))
     if attribute is None:
-        attribute = await repository.add(
-            ProjectAttribute(project_id=project.id, name=name, value=value)
-        )
+        attribute = await repository.add(project, name=name, value=value)
         entry = await case_service.record_attribute_created(
             session,
             project,
@@ -117,7 +127,7 @@ async def set_attribute(
 
 async def remove_attribute(
     session: AsyncSession,
-    project: Project,
+    project: CaseOwner,
     *,
     actor: Actor,
     name: str,
@@ -131,12 +141,12 @@ async def remove_attribute(
     «назови причину».
     """
     name = validate_attribute_name(name)
-    await freeze.lock_unfrozen(session, project=project)
+    await _lock_unfrozen(session, project)
 
     repository = AttributeRepository(session)
-    attribute = await repository.get_by_name(project.id, attribute_lookup_name(name))
+    attribute = await repository.get_by_name(project, attribute_lookup_name(name))
     if attribute is None:
-        raise AttributeNotFoundError(details={"key": project.key, "name": name})
+        raise AttributeNotFoundError(details={"key": owner_name(project), "name": name})
     checked_reason = require_attribute_reason(reason, name=attribute.name, action="remove")
     stored_name, before = attribute.name, attribute.value
     await repository.remove(attribute)

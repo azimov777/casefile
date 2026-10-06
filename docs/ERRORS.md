@@ -51,7 +51,8 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `account_not_found` | Account not found | Учётной записи с таким идентификатором или почтой нет. |
-| `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта нет. |
+| `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта или направления нет. |
+| `direction_not_found` | Direction not found | Направления с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7). |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
@@ -79,6 +80,9 @@
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `decision_not_in_force` | Project decision is superseded by a later decision | Решение проекта уже заменено другим, а его называют как действующее. |
+| `direction_archived` | Direction is archived: its card, attributes and case are frozen | Направление в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7). |
+| `direction_key_taken` | Direction key is already taken in this project | Ключ направления уже занят в этом проекте: ключи уникальны без учёта регистра. |
+| `direction_not_archived` | Direction is not archived | Восстанавливать нечего: направление не в архиве. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `installation_not_empty` | Only an installation without projects can take an archive | Приём архива в установку, где уже есть проекты. |
 | `last_admin` | The installation must keep at least one active administrator | Действие оставило бы установку без действующего администратора. |
@@ -114,10 +118,13 @@
 | `attribute_value_too_long` | Attribute value is too long | Значение атрибута длиннее предела (`app/domain/attributes.py`). |
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
 | `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
+| `direction_description_too_long` | Direction description is too long | Описание направления длиннее предела (`app/domain/directions.py`); не обрезается. |
+| `direction_reason_required` | Archiving or restoring a direction requires a reason | Архивирование и восстановление направления требуют непустой причины `reason`. |
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не ответили: у отвеченного это `already_answered`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_attribute_name` | Attribute name is invalid | Имя атрибута не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
+| `invalid_direction_key` | Direction key is invalid | Адрес нового направления не `ПРОЕКТ/ключ` или ключ не по шаблону. |
 | `invalid_email` | Email is invalid | Почта не похожа на адрес: нет `@`, пустая часть, пробел или слишком длинная. |
 | `invalid_idempotency_key` | Idempotency key is invalid | Ключ идемпотентности пуст или длиннее допустимого. |
 | `invalid_journal_cursor` | Last-Event-ID is not a journal sequence number | `Last-Event-ID` потока не разбирается как сквозной номер записи. |

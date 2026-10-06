@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.db.models.direction import Direction
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
@@ -65,6 +66,7 @@ from app.domain.case import (
     WarningFacts,
     answer_outcome,
 )
+from app.domain.directions import format_direction_address
 from app.domain.links import LinkKind
 from app.domain.tasks import CLOSED_STATUSES, TaskField, TaskStatus
 
@@ -124,6 +126,19 @@ class EntryRepository:
             raise RuntimeError(f"Project {project_id} disappeared while allocating an entry number")
         return await self._next_no(Entry.project_id == project_id)
 
+    async def allocate_direction_no(self, direction_id: uuid.UUID) -> int:
+        """Следующий номер записи в деле направления — тем же способом, что у проекта.
+
+        Блокируется строка направления: номер считается внутри него (`TRK/promotion#3`).
+        Порядок захвата тот же — после очереди изменений (`lock_changes`).
+        """
+        lock = select(Direction.id).where(Direction.id == direction_id).with_for_update()
+        if await self._session.scalar(lock) is None:
+            raise RuntimeError(
+                f"Direction {direction_id} disappeared while allocating an entry number"
+            )
+        return await self._next_no(Entry.direction_id == direction_id)
+
     async def _next_no(self, owned: ColumnElement[bool]) -> int:
         """`max(no) + 1` среди записей владельца; вызывается под блокировкой его строки."""
         highest = select(func.coalesce(func.max(Entry.no), FIRST_ENTRY_NUMBER - 1)).where(owned)
@@ -163,6 +178,10 @@ class EntryRepository:
         """Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`."""
         return await self._get(Entry.project_id == project_id, no)
 
+    async def get_by_direction_no(self, direction_id: uuid.UUID, no: int) -> Entry | None:
+        """Одна запись дела направления по номеру — адрес из ссылки `TRK/promotion#3`."""
+        return await self._get(Entry.direction_id == direction_id, no)
+
     async def _get(self, owned: ColumnElement[bool], no: int) -> Entry | None:
         statement = select(Entry).where(owned, Entry.no == no)
         return (await self._session.scalars(statement)).one_or_none()
@@ -178,6 +197,10 @@ class EntryRepository:
     async def existing_project_nos(self, project_id: uuid.UUID, nos: Sequence[int]) -> set[int]:
         """Какие из перечисленных номеров есть в деле проекта — для ссылок `TRK#7`."""
         return await self._existing(Entry.project_id == project_id, nos)
+
+    async def existing_direction_nos(self, direction_id: uuid.UUID, nos: Sequence[int]) -> set[int]:
+        """Какие из перечисленных номеров есть в деле направления — для `TRK/promotion#3`."""
+        return await self._existing(Entry.direction_id == direction_id, nos)
 
     async def _existing(self, owned: ColumnElement[bool], nos: Sequence[int]) -> set[int]:
         if not nos:
@@ -235,6 +258,28 @@ class EntryRepository:
         """
         return await self._list_page(
             Entry.project_id == project_id,
+            nos=nos,
+            types=types,
+            attribute=attribute,
+            after_no=after_no,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    async def list_direction_page(
+        self,
+        direction_id: uuid.UUID,
+        *,
+        nos: Sequence[int] | None = None,
+        types: Sequence[EntryType] | None = None,
+        attribute: str | None = None,
+        after_no: int | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[Entry]:
+        """Страница записей дела направления — те же фильтры, что у дела проекта."""
+        return await self._list_page(
+            Entry.direction_id == direction_id,
             nos=nos,
             types=types,
             attribute=attribute,
@@ -314,6 +359,10 @@ class EntryRepository:
     async def project_headings(self, project_id: uuid.UUID) -> list[EntryHeading]:
         """Опись дела проекта: те же строки, что у задачи, — для `get_project`."""
         return await self._headings(Entry.project_id == project_id)
+
+    async def direction_headings(self, direction_id: uuid.UUID) -> list[EntryHeading]:
+        """Опись дела направления: те же строки — для чтения направления."""
+        return await self._headings(Entry.direction_id == direction_id)
 
     async def project_decisions(self, project_ids: Sequence[uuid.UUID]) -> list[Entry]:
         """Решения проекта — записи `decision` дел этих проектов, по проекту и номеру.
@@ -675,20 +724,22 @@ class EntryRepository:
         project_id: uuid.UUID | None = None,
         types: Sequence[EntryType] | None = None,
         limit: int | None = None,
-    ) -> Page[tuple[Entry, str | None, str | None]]:
+    ) -> Page[tuple[Entry, str | None, str | None, str | None]]:
         """Хвост журнала: записи со сквозным номером больше `after`, по возрастанию.
 
         Отдельной таблицы событий нет — лента это та же таблица записей
         (`CONCEPT.md`, 4.1), поэтому и метод живёт здесь, а не в своём репозитории.
 
-        Отдаёт тройки «запись, ключ задачи, ключ проекта»: у записи связи с владельцем
-        нет, только `task_id` или `project_id`, а кадром ленты нечего адресовать без
-        ключа. Непуст ровно один ключ — ключ владельца: у записи задачи это ключ задачи,
-        у записи дела проекта — ключ проекта. Соединения оба внешние: запись проекта
-        задачи не имеет, запись задачи — проекта напрямую.
+        Отдаёт четвёрки «запись, ключ задачи, ключ проекта, адрес направления»: у записи
+        связи с владельцем нет, только `task_id`, `project_id` или `direction_id`, а кадром
+        ленты нечего адресовать без ключа. Непуст ровно один — ключ владельца: у записи
+        задачи это ключ задачи, у записи дела проекта — ключ проекта, у записи дела
+        направления — его адрес `TRK/promotion`. Соединения все внешние: у записи один
+        владелец, остальных нет. Ключ проекта направления — через свой псевдоним таблицы
+        проектов: прямой проект записи (`Entry.project_id`) у записи направления пуст.
 
-        Отбор по проекту берёт и дело проекта, и дела его задач: «всё о проекте» — одна
-        лента.
+        Отбор по проекту берёт дело проекта, дела его задач и дела его направлений: «всё
+        о проекте» — одна лента.
 
         `task_ids` сужает хвост набором задач, а не одной: сессия ведёт несколько дел и
         ждёт новостей по ним одним вызовом. `None` — «все задачи»; пустой набор сюда не
@@ -698,17 +749,24 @@ class EntryRepository:
         сужают уже прочитанный хвост.
         """
         size = resolve_limit(limit)
+        direction_project = aliased(Project)
         statement = (
-            select(Entry, Task.key, Project.key)
+            select(Entry, Task.key, Project.key, direction_project.key, Direction.key)
             .outerjoin(Task, Task.id == Entry.task_id)
             .outerjoin(Project, Project.id == Entry.project_id)
+            .outerjoin(Direction, Direction.id == Entry.direction_id)
+            .outerjoin(direction_project, direction_project.id == Direction.project_id)
             .where(Entry.seq > after)
         )
         if task_ids is not None:
             statement = statement.where(Entry.task_id.in_(list(task_ids)))
         if project_id is not None:
             statement = statement.where(
-                or_(Task.project_id == project_id, Entry.project_id == project_id)
+                or_(
+                    Task.project_id == project_id,
+                    Entry.project_id == project_id,
+                    Direction.project_id == project_id,
+                )
             )
         if types is not None:
             # Пустой список — это «ничего», а не «всё»: клиент, отобравший нулевой набор
@@ -716,8 +774,21 @@ class EntryRepository:
             statement = statement.where(Entry.type.in_(list(types)))
         statement = statement.order_by(Entry.seq).limit(size + 1)
         rows = [
-            (entry, task_key, project_key)
-            for entry, task_key, project_key in await self._session.execute(statement)
+            (
+                entry,
+                task_key,
+                project_key,
+                None
+                if direction_key is None
+                else format_direction_address(direction_project_key, direction_key),
+            )
+            for (
+                entry,
+                task_key,
+                project_key,
+                direction_project_key,
+                direction_key,
+            ) in await self._session.execute(statement)
         ]
         if len(rows) <= size:
             return Page(items=rows, next_cursor=None)

@@ -196,6 +196,36 @@ TaskKeyPath = Annotated[
     ),
 ]
 
+# Ключ проекта, имя атрибута и отбор истории атрибута принимают два роутера — проекты и
+# их направления (`app/api/routes/directions.py`), поэтому они здесь, рядом с ключом задачи.
+ProjectKeyPath = Annotated[
+    str,
+    Path(description="Project key; matching ignores case", examples=["TRK"]),
+]
+
+AttributeNamePath = Annotated[
+    str,
+    Path(
+        description=(
+            "Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; "
+            "matching ignores case"
+        ),
+        examples=["repo"],
+    ),
+]
+
+AttributeQuery = Annotated[
+    str | None,
+    Query(
+        description=(
+            "Read only entries about the attribute with this name: `attribute_created`, "
+            "`attribute_changed`, `attribute_removed`; matching ignores case. Combines "
+            "with `types` and the other filters"
+        ),
+        examples=["repo"],
+    ),
+]
+
 
 def reject_unknown_query_params(request: Request) -> None:
     """Неизвестный параметр запроса — отказ с его именем, а не выдача без отбора.

@@ -97,7 +97,12 @@ def register(tools: Toolset) -> None:
             )
             return page(
                 (
-                    entry(item.entry, task_key=item.task_key, project_key=item.project_key)
+                    entry(
+                        item.entry,
+                        task_key=item.task_key,
+                        project_key=item.project_key,
+                        direction=item.direction,
+                    )
                     for item in listed.items
                 ),
                 next_cursor=listed.next_cursor,
