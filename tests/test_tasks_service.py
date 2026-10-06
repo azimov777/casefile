@@ -11,10 +11,10 @@ from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import (
     InvalidTaskKeyError,
-    SummaryRequiredError,
     TaskClosedError,
     TaskFieldLockedError,
     TaskFieldsInvalidError,
+    TaskHasOpenBlockingQuestionsError,
     TaskNotFoundError,
     TaskSectionsIncompleteError,
     TaskVersionConflictError,
@@ -165,7 +165,7 @@ async def test_the_package_carries_transitions_and_the_case_index(
     package = await service.read_task_package(db_session, task.key, actor=task_actor)
 
     assert package.task.id == task.id
-    assert package.transitions == (TaskStatus.OPEN, TaskStatus.WAITING, TaskStatus.CANCELLED)
+    assert package.transitions == (TaskStatus.OPEN, TaskStatus.CANCELLED)
     assert [heading.no for heading in package.index] == [1]
     assert package.index[0].type is EntryType.CREATED
     assert package.index[0].author.signature == "owner"
@@ -199,12 +199,7 @@ async def test_a_move_outside_the_table_names_the_allowed_targets(
     with pytest.raises(TransitionNotAllowedError) as error:
         await service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
 
-    assert error.value.details["allowed"] == [
-        "in_progress",
-        "waiting",
-        "backlog",
-        "cancelled",
-    ]
+    assert error.value.details["allowed"] == ["in_progress", "backlog", "cancelled"]
 
 
 async def test_a_step_back_needs_a_reason_and_records_it(
@@ -232,86 +227,64 @@ async def test_a_step_back_needs_a_reason_and_records_it(
     assert last.author.signature == "owner"
 
 
-async def test_waiting_needs_a_reason_and_records_what_is_awaited(
+async def test_waiting_is_not_a_target_any_more(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
-    """Обзорная проверка 3: без причины тот же код, что у шага назад; с ней — в дело.
-
-    Причина у `waiting` несёт то, чего больше нигде нет: чего именно ждут. Поэтому
-    проверяется не только отказ, но и то, что причина доехала до `status_changed`
-    неискажённой — по ней преемник и человек понимают, чего ждёт задача.
-    """
+    """Статус `waiting` снят без псевдонима (TRK-573): строка — замечание к полю статуса."""
     await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
     await summary(db_session, task, task_actor)
 
-    with pytest.raises(TransitionReasonRequiredError) as error:
-        await service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.WAITING)
-    assert error.value.code == "transition_reason_required"
-    assert error.value.details["rule"] == "wait"
+    with pytest.raises(TaskFieldsInvalidError) as error:
+        await service.transition_task(
+            db_session, task, actor=task_actor, to="waiting", reason="Жду человека"
+        )
 
+    (problem,) = error.value.details["fields"]
+    assert problem["field"] == "status"
+    assert "waiting" not in problem["allowed"]
+    assert task.status is TaskStatus.IN_PROGRESS
+
+
+async def test_a_waiting_task_goes_to_open_with_a_blocking_question_and_comes_back(
+    db_session: AsyncSession, task: Task, task_actor: Actor
+) -> None:
+    """Ход за человеком: вопрос `blocking`, сводка, `open` с причиной (`CONCEPT.md`, 4.6).
+
+    Вход обратно в работу отклоняется, пока вопрос открыт, и проходит после ответа; сам
+    ответ статус не меняет, а вход начинает новый заход — вердикты прошлого не в счёт.
+    """
+    await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
+    question = await case_service.ask(
+        db_session,
+        task,
+        actor=task_actor,
+        addressees=["owner"],
+        title="Нужен доступ к стенду",
+        blocking=True,
+    )
+    await summary(db_session, task, task_actor)
     await service.transition_task(
         db_session,
         task,
         actor=task_actor,
-        to=TaskStatus.WAITING,
-        reason="Жду ответа владельца на TRK-1#3",
+        to=TaskStatus.OPEN,
+        reason=f"Жду {task.key}#{question.no}",
     )
 
-    assert task.status is TaskStatus.WAITING
-    last = (await entries(db_session, task))[-1]
-    assert last.type is EntryType.STATUS_CHANGED
-    assert last.payload == {
-        "from": "in_progress",
-        "to": "waiting",
-        "reason": "Жду ответа владельца на TRK-1#3",
-    }
+    with pytest.raises(TaskHasOpenBlockingQuestionsError) as error:
+        await service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.IN_PROGRESS)
+    assert error.value.details["questions"] == [question.no]
+    assert task.status is TaskStatus.OPEN
 
-
-async def test_leaving_in_progress_for_waiting_still_needs_a_summary(
-    db_session: AsyncSession, task: Task, task_actor: Actor
-) -> None:
-    """Обзорная проверка 4: `waiting` не обходной путь мимо сводки.
-
-    Правило висит на всех выходах из `in_progress`, и `waiting` — тот выход, где сводка
-    нужнее всего: задача уходит ждать надолго, и вернётся к ней, скорее всего, другой
-    агент с чистым контекстом.
-    """
-    await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
-
-    with pytest.raises(SummaryRequiredError) as error:
-        await service.transition_task(
-            db_session, task, actor=task_actor, to=TaskStatus.WAITING, reason="Жду человека"
-        )
-    assert error.value.details["to"] == "waiting"
-
-    await summary(db_session, task, task_actor)
-    await service.transition_task(
-        db_session, task, actor=task_actor, to=TaskStatus.WAITING, reason="Жду человека"
+    await case_service.answer(
+        db_session, task, actor=task_actor, question_no=question.no, body="Доступ выдан"
     )
+    assert task.status is TaskStatus.OPEN
 
-    assert task.status is TaskStatus.WAITING
-
-
-async def test_a_task_returns_from_waiting_and_closes_the_usual_way(
-    db_session: AsyncSession, task: Task, task_actor: Actor
-) -> None:
-    """Дождавшаяся задача идёт в работу и закрывается оттуда — вердикты никто не отменял."""
-    await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
-    await summary(db_session, task, task_actor)
-    await service.transition_task(
-        db_session, task, actor=task_actor, to=TaskStatus.WAITING, reason="Жду доступ к стенду"
-    )
-
-    with pytest.raises(TransitionNotAllowedError) as error:
-        await service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.DONE)
-    assert error.value.details["allowed"] == ["in_progress", "open", "backlog", "cancelled"]
-
-    # Возврат причины не требует: дождались — обычный ход в работу.
     await service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.IN_PROGRESS)
     assert task.status is TaskStatus.IN_PROGRESS
-
     last = (await entries(db_session, task))[-1]
-    assert last.payload == {"from": "waiting", "to": "in_progress", "reason": None}
+    assert last.payload == {"from": "open", "to": "in_progress", "reason": None}
 
 
 async def test_a_transition_is_accepted_as_a_string_too(

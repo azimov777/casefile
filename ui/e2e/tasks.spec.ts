@@ -16,8 +16,10 @@ test('отбор по статусу open даёт ровно открытые �
 }) => {
   // Что открыто — по правде бэкенда, а не по памяти теста: выписанные здесь ключи
   // проверяли бы свежесть этой памяти, а не отбор. Именно так и вышло, когда задача,
-  // ждавшая ответа владельца, ушла из `open` в `waiting` (TRK-15).
-  const open = (await tasksByStatus(request)).get('open') ?? [];
+  // ждавшая ответа владельца, ушла из `open` в статус ожидания (TRK-15), а потом
+  // вернулась в `open` с вопросом `blocking` (TRK-573). Отбор таблицы — по хранимому
+  // статусу, поэтому берутся все задачи в `open`, и те, что на доске в «Ждёт ответа».
+  const open = [...(await tasksByStatus(request, { status: 'open' })).values()].flat();
   expect(open.length).toBeGreaterThan(0);
 
   await page.goto('/tasks?project=DEMO&status=open');

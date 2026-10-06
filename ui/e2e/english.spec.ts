@@ -179,7 +179,7 @@ test('входящая: разделы английские, вопросы ру
   // подписано, а его первое значение названо словами, а не пустой строкой.
   const filter = page.getByRole('form', { name: 'Inbox selection' });
   await expect(filter.getByRole('combobox', { name: 'Project' })).toBeVisible();
-  await expect(filter).toContainText('The project selects both halves of the inbox.');
+  await expect(filter).toContainText('The project filters every part of the inbox.');
 
   /*
    * Текст вопроса пишет агент. Явное ожидание, а не «кириллица где-нибудь на

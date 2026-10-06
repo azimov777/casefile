@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Locator } from '@playwright/test';
-import { compose, fontsReady, readE2eToken, side, signedInByHand } from './contour';
+import { compose, fontsReady, readE2eToken, side, signedInByHand, tasksByStatus } from './contour';
 
 const token = readE2eToken();
 
@@ -183,8 +183,11 @@ test('вопрос ко мне объявляется уведомлением �
   // заданный вопрос честно меняет признаки своей задачи — у неё появляется плашка
   // «вопросов 1», строка становится выше, и на общем списке замер смешивал бы две
   // причины. Здесь единственное, что может сдвинуть вёрстку, — само уведомление.
+  // Сколько закрытых задач в демо, спрашивается у бэкенда: с TRK-561 их две (DEMO-8
+  // закрыта не целиком), и выписанное здесь число устарело бы вместе с демо.
+  const done = (await tasksByStatus(request)).get('done') ?? [];
   await page.goto('/tasks?project=DEMO&status=done');
-  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.locator('tbody tr')).toHaveCount(done.length);
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
 
   // Замер до события: уведомление приходит само, и сдвинуть чужое оно не вправе.

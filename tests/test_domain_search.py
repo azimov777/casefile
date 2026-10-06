@@ -295,6 +295,7 @@ def test_every_concept_field_has_a_spec() -> None:
         "open_questions",
         "open_blocking_questions",
         "open_remarks",
+        "open_warnings",
         "remarks_in_work",
         "text",
     ):

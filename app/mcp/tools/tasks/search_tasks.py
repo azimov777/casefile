@@ -153,6 +153,19 @@ ParentFilterArg = Annotated[
     ),
 ]
 
+DecisionFilterArg = Annotated[
+    list[str] | None,
+    Field(
+        description=(
+            "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of "
+            "them, in any status, also after the decision is superseded. `empty()` matches "
+            "tasks that name no decision. An address that is not a `decision` entry of a "
+            "project's case is refused rather than read as «no tasks»"
+        ),
+        examples=[["TRK#15"]],
+    ),
+]
+
 UnderArg = Annotated[
     list[str] | None,
     Field(
@@ -189,6 +202,11 @@ OpenBlockingQuestionsArg = Annotated[
 OpenRemarksArg = Annotated[
     int | None,
     Field(description="Exact number of unresolved remarks; ranges go in `query`"),
+]
+
+OpenWarningsArg = Annotated[
+    int | None,
+    Field(description="1 for tasks with an open `warning`, 0 for the rest"),
 ]
 
 RemarksInWorkArg = Annotated[
@@ -346,6 +364,7 @@ def register(tools: Toolset) -> None:
         key: KeysArg = None,
         project: ProjectsArg = None,
         parent: ParentFilterArg = None,
+        decision: DecisionFilterArg = None,
         under: UnderArg = None,
         status: StatusesArg = None,
         assignee: AssigneesArg = None,
@@ -354,6 +373,7 @@ def register(tools: Toolset) -> None:
         open_questions: OpenQuestionsArg = None,
         open_blocking_questions: OpenBlockingQuestionsArg = None,
         open_remarks: OpenRemarksArg = None,
+        open_warnings: OpenWarningsArg = None,
         remarks_in_work: RemarksInWorkArg = None,
         text: TextArg = None,
         sort: SortArg = None,
@@ -385,6 +405,7 @@ def register(tools: Toolset) -> None:
                     key=key,
                     project=project,
                     parent=parent,
+                    decision=decision,
                     under=under,
                     status=status,
                     assignee=assignee,
@@ -393,6 +414,7 @@ def register(tools: Toolset) -> None:
                     open_questions=open_questions,
                     open_blocking_questions=open_blocking_questions,
                     open_remarks=open_remarks,
+                    open_warnings=open_warnings,
                     remarks_in_work=remarks_in_work,
                     text=text,
                 ),
@@ -419,6 +441,7 @@ def _terms(
     key: Sequence[str] | None,
     project: Sequence[str] | None,
     parent: Sequence[str] | None,
+    decision: Sequence[str] | None,
     under: Sequence[str] | None,
     status: Sequence[TaskStatus] | None,
     assignee: Sequence[str] | None,
@@ -427,6 +450,7 @@ def _terms(
     open_questions: int | None,
     open_blocking_questions: int | None,
     open_remarks: int | None,
+    open_warnings: int | None,
     remarks_in_work: int | None,
     text: str | None,
 ) -> list[StructuredTerm]:
@@ -447,6 +471,7 @@ def _terms(
             ("key", key),
             ("project", project),
             ("parent", parent),
+            ("decision", decision),
             ("under", under),
             ("status", None if status is None else [item.value for item in status]),
             ("assignee", assignee),
@@ -461,6 +486,7 @@ def _terms(
             ("open_questions", open_questions),
             ("open_blocking_questions", open_blocking_questions),
             ("open_remarks", open_remarks),
+            ("open_warnings", open_warnings),
             ("remarks_in_work", remarks_in_work),
         )
         if value is not None

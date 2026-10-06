@@ -1,6 +1,6 @@
 import { useId, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CircleHelp, Flag, Lock } from 'lucide-react';
+import { CircleHelp, Flag, Lock, TriangleAlert } from 'lucide-react';
 import { PriorityMark, StatusMark, TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { cn } from '@/shared/lib';
 import { FilterGroup, ToggleGroup, ToggleGroupItem } from '@/shared/ui';
@@ -9,7 +9,7 @@ import { FIELD, FIELD_PENDING } from './field';
 import { PendingMark } from './query-problem-hint';
 
 /** Признаки задачи, которыми отбирают: значение группы → поле отбора. */
-const FLAGS = ['blocked', 'withQuestions', 'withRemarks'] as const;
+const FLAGS = ['blocked', 'withQuestions', 'withRemarks', 'withWarnings'] as const;
 type FlagName = (typeof FLAGS)[number];
 
 /**
@@ -20,6 +20,7 @@ const FLAG_ICON = {
   blocked: Lock,
   withQuestions: CircleHelp,
   withRemarks: Flag,
+  withWarnings: TriangleAlert,
 } satisfies Record<FlagName, typeof Lock>;
 
 interface FilterMenuProps {

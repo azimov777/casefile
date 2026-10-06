@@ -203,7 +203,7 @@ describe('полоса над таблицей считает с последн�
   }
 
   beforeEach(() => {
-    rows = [task('DEMO-1', { status: 'open' }), task('DEMO-2', { status: 'waiting' })];
+    rows = [task('DEMO-1', { status: 'open' }), task('DEMO-2', { status: 'backlog' })];
     seen = [];
     held = null;
     broken = false;
@@ -323,7 +323,7 @@ describe('полоса над таблицей считает с последн�
     // А то, что случилось после прихода, полоса предлагает, как прежде.
     agentMoves(1102, 'DEMO-2', 'open');
     expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
-    expect(within(row('DEMO-2')).getByText('waiting')).toBeInTheDocument();
+    expect(within(row('DEMO-2')).getByText('backlog')).toBeInTheDocument();
     expect(tableRequests()).toHaveLength(1);
   });
 
@@ -369,9 +369,9 @@ describe('полоса над таблицей считает с последн�
     release();
     expect(await within(await screen.findByRole('table')).findByText('in_progress')).toBeVisible();
 
-    // Ответ снят до второй записи: `DEMO-2` в нём ещё `waiting`, и полоса говорит
+    // Ответ снят до второй записи: `DEMO-2` в нём ещё `backlog`, и полоса говорит
     // ровно о ней. Первый кадр — в ответе, и его полоса не считает: задача одна.
-    expect(within(row('DEMO-2')).getByText('waiting')).toBeInTheDocument();
+    expect(within(row('DEMO-2')).getByText('backlog')).toBeInTheDocument();
     expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: say.ui('live.show') }));
@@ -397,7 +397,7 @@ describe('полоса над таблицей считает с последн�
     release();
     expect(await within(row('DEMO-1')).findByText('in_progress')).toBeInTheDocument();
     expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
-    expect(within(row('DEMO-2')).getByText('waiting')).toBeInTheDocument();
+    expect(within(row('DEMO-2')).getByText('backlog')).toBeInTheDocument();
   });
 
   it('чтение после обрыва снимает «неизвестно что», а обрыв посреди чтения его оставляет', async () => {

@@ -1,7 +1,10 @@
 import {
+  BOARD_COLUMNS,
+  OPEN_WARNINGS_CONDITION,
   TASK_PAGE_SIZE,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  type BoardColumn,
   type TaskListRequest,
   type TaskPriority,
   type TaskStatus,
@@ -32,6 +35,8 @@ export interface TaskFilters {
   withQuestions: boolean;
   /** Только с неразобранными замечаниями; см. `OPEN_REMARKS_CONDITION`. */
   withRemarks: boolean;
+  /** Только с открытым предупреждением (TRK-561); см. `OPEN_WARNINGS_CONDITION`. */
+  withWarnings: boolean;
   /** Строка на языке запросов бэкенда. Клиент её не разбирает. */
   query: string;
   sort: string;
@@ -47,7 +52,7 @@ export interface TaskFilters {
    * ссылка на доску должна открыться тем же самым, а не разворачивать столбцы,
    * которые отправитель свернул.
    */
-  collapsed: TaskStatus[];
+  collapsed: BoardColumn[];
   /**
    * Показывать архив — закрытые задачи, в делах которых давно не писали (UI-97).
    *
@@ -67,13 +72,13 @@ export interface TaskFilters {
  * «ничего не свёрнуто». Иначе развернувший всё не смог бы переслать это ссылкой:
  * пустой список и отсутствующий были бы неразличимы.
  *
- * `waiting` сюда не входит, хотя работа в нём не идёт. Свёрнуто здесь то, что **уже
+ * «Ждёт ответа» (ключ `waiting`, TRK-571) сюда не входит. Свёрнуто здесь то, что **уже
  * не в работе**, а ждущее из работы не вышло — оно ждёт хода, и ход этот человеческий
  * (`../docs/CONCEPT.md`, 3.3). Свернув его, доска спрятала бы от человека
- * единственный столбец, адресованный лично ему, — и он узнавал бы о своём ходе
- * только отбором, ради отмены которого статус и заводился.
+ * единственный столбец, адресованный лично ему: столбец вычисляется из открытых
+ * вопросов `blocking` (`entities/task/model/waiting.ts`), а не из хранимого статуса.
  */
-export const DEFAULT_COLLAPSED: TaskStatus[] = ['done', 'cancelled'];
+export const DEFAULT_COLLAPSED: BoardColumn[] = ['done', 'cancelled'];
 
 /**
  * Порядок по умолчанию: где агенты работают прямо сейчас. Считается по
@@ -143,6 +148,7 @@ export const EMPTY_FILTERS: TaskFilters = {
   blocked: false,
   withQuestions: false,
   withRemarks: false,
+  withWarnings: false,
   query: '',
   sort: DEFAULT_SORT,
   page: 1,
@@ -171,11 +177,12 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     blocked: params.get('blocked') === 'true',
     withQuestions: params.get('questions') === 'true',
     withRemarks: params.get('remarks') === 'true',
+    withWarnings: params.get('warnings') === 'true',
     query: params.get('query') ?? '',
     sort: isTaskSort(sort) ? sort : DEFAULT_SORT,
     page: readPage(params.get('page')),
     collapsed: params.has('collapsed')
-      ? keepKnown(params.getAll('collapsed'), TASK_STATUSES)
+      ? keepKnown(params.getAll('collapsed'), BOARD_COLUMNS)
       : DEFAULT_COLLAPSED,
     // Любое другое значение — умолчание: архив скрыт. Опечатка в адресе не вправе
     // вывалить человеку всю историю проекта.
@@ -196,6 +203,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   if (filters.blocked) params.set('blocked', 'true');
   if (filters.withQuestions) params.set('questions', 'true');
   if (filters.withRemarks) params.set('remarks', 'true');
+  if (filters.withWarnings) params.set('warnings', 'true');
   if (filters.query.trim() !== '') params.set('query', filters.query.trim());
   if (filters.sort !== DEFAULT_SORT) params.set('sort', filters.sort);
   if (filters.page > 1) params.set('page', String(filters.page));
@@ -215,8 +223,8 @@ function isTaskSort(value: string | null): value is TaskSort {
   return value !== null && (TASK_SORTS as readonly string[]).includes(value);
 }
 
-/** Одинаковы ли наборы статусов: порядок в них ничего не значит. */
-function sameStatuses(left: TaskStatus[], right: TaskStatus[]): boolean {
+/** Одинаковы ли наборы столбцов: порядок в них ничего не значит. */
+function sameStatuses(left: BoardColumn[], right: BoardColumn[]): boolean {
   return left.length === right.length && left.every((status) => right.includes(status));
 }
 
@@ -285,6 +293,7 @@ function conditionsOf(filters: TaskFilters): string | undefined {
   const conditions = [
     filters.withQuestions ? OPEN_QUESTIONS_CONDITION : null,
     filters.withRemarks ? OPEN_REMARKS_CONDITION : null,
+    filters.withWarnings ? OPEN_WARNINGS_CONDITION : null,
   ].filter((condition) => condition !== null);
 
   return conditions.length === 0 ? undefined : conditions.join(' and ');

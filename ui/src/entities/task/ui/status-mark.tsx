@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/lib';
-import type { TaskStatus } from '../api/tasks';
+import type { BoardColumn } from '../model/waiting';
 
 /**
  * Форма статуса (решение Д1). Круг заполняется по мере продвижения: пунктирное кольцо
@@ -9,7 +9,10 @@ import type { TaskStatus } from '../api/tasks';
  * с галочкой — сделано. Две формы выпадают из шкалы намеренно: снятое не точка на
  * ней, а выход из неё, и перечёркивание говорит именно это; ожидание — тоже выход,
  * но временный, и пауза говорит именно это. Пауза, а не часы и не песочные часы:
- * `waiting` означает «работа остановлена, ход не за агентом», а не «идёт время».
+ * «Ждёт ответа» означает «работа остановлена, ход не за агентом», а не «идёт время».
+ *
+ * Ключи — столбцы доски (`BoardColumn`), а не только статусы: паузу носит вычисляемый
+ * столбец «Ждёт ответа» (`WAITING_COLUMN`), хранимого статуса ожидания нет (TRK-573).
  *
  * Различие держится без цвета: на чёрно-белом экране и у человека, не различающего
  * цвета, — это проверяет сквозной тест с `filter: grayscale(1)`.
@@ -31,6 +34,7 @@ const STATUS_SHAPE = {
       <path d="m7.6 12.4 3.1 3.1 5.7-6.6" stroke="var(--color-surface)" strokeWidth="2.2" />
     </>
   ),
+  // Знак столбца «Ждёт ответа», не статуса: см. шапку.
   waiting: (
     <>
       <circle cx="12" cy="12" r="9" />
@@ -47,7 +51,7 @@ const STATUS_SHAPE = {
       <path d="M7.6 16.4 16.4 7.6" />
     </>
   ),
-} satisfies Record<TaskStatus, ReactElement>;
+} satisfies Record<BoardColumn, ReactElement>;
 
 /**
  * Цвет формы. Тот же словарь положений дел, что у тонов: `open` остаётся нейтральным
@@ -60,7 +64,7 @@ const SHAPE_COLOR = {
   waiting: 'text-attention',
   done: 'text-positive',
   cancelled: 'text-dropped',
-} satisfies Record<TaskStatus, string>;
+} satisfies Record<BoardColumn, string>;
 
 /**
  * Цвет имени. Служебного уровня здесь нет и быть не может: имя статуса — содержание
@@ -74,9 +78,9 @@ const NAME_COLOR = {
   waiting: 'text-attention',
   done: 'text-positive',
   cancelled: 'text-muted',
-} satisfies Record<TaskStatus, string>;
+} satisfies Record<BoardColumn, string>;
 
-function isKnown(status: string): status is TaskStatus {
+function isKnown(status: string): status is BoardColumn {
   return status in STATUS_SHAPE;
 }
 
@@ -93,6 +97,8 @@ interface StatusMarkProps {
    * иначе диктор прочёл бы его дважды подряд.
    */
   labelled?: boolean;
+  /** Подпись вместо имени статуса из контракта: у вычисляемого столбца доски своя (TRK-571). */
+  name?: string;
   className?: string;
 }
 
@@ -101,6 +107,7 @@ export function StatusMark({
   status,
   withName = true,
   labelled = true,
+  name,
   className,
 }: StatusMarkProps) {
   const { t } = useTranslation('ui');
@@ -137,7 +144,7 @@ export function StatusMark({
             : 'sr-only'
         }
       >
-        {status}
+        {name ?? status}
       </span>
     </span>
   );

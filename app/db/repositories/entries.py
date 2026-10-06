@@ -42,6 +42,7 @@ from app.domain.case import (
     ATTRIBUTE_ENTRY_TYPES,
     FIRST_ENTRY_NUMBER,
     OUTCOME_WITH_CONTINUATION,
+    WARNING_REACTIONS,
     AnswerFacts,
     AssigneeChangedFacts,
     AttributeFacts,
@@ -60,6 +61,8 @@ from app.domain.case import (
     StatusChangedFacts,
     VerdictFacts,
     VerdictOutcome,
+    WarningCheck,
+    WarningFacts,
     answer_outcome,
 )
 from app.domain.links import LinkKind
@@ -312,6 +315,24 @@ class EntryRepository:
         """Опись дела проекта: те же строки, что у задачи, — для `get_project`."""
         return await self._headings(Entry.project_id == project_id)
 
+    async def project_decisions(self, project_ids: Sequence[uuid.UUID]) -> list[Entry]:
+        """Решения проекта — записи `decision` дел этих проектов, по проекту и номеру.
+
+        Все сразу, а не страницей: статус решения считается из `supersedes` всех более
+        поздних решений проекта (`app/domain/decisions.py`), и без любого из них статус
+        вышел бы неверным. Решений в проекте единицы и десятки — это выборы, которые
+        переживают задачи, а не ход работы. Тела едут вместе с записью: чтение проекта
+        их не отдаёт, но карточке решения в интерфейсе они нужны тем же запросом.
+        """
+        if not project_ids:
+            return []
+        statement = (
+            select(Entry)
+            .where(Entry.project_id.in_(list(project_ids)), Entry.type == EntryType.DECISION)
+            .order_by(Entry.project_id, Entry.no)
+        )
+        return list(await self._session.scalars(statement))
+
     async def _headings(self, owned: ColumnElement[bool]) -> list[EntryHeading]:
         statement = (
             select(
@@ -449,6 +470,45 @@ class EntryRepository:
             Entry.no
         )
         return list(await self._session.scalars(statement))
+
+    async def latest_warning(self, task_id: uuid.UUID) -> Entry | None:
+        """Последнее предупреждение задачи, открытое или нет. У задачи оно одно — закрытие
+        бывает один раз, — но «последнее» не полагается на это молча."""
+        statement = (
+            select(Entry)
+            .where(Entry.task_id == task_id, _IS_WARNING)
+            .order_by(Entry.no.desc())
+            .limit(1)
+        )
+        return (await self._session.scalars(statement)).first()
+
+    async def first_warning_reaction(self, task_id: uuid.UUID, *, after_no: int) -> int | None:
+        """Номер первой реакции на предупреждение — `acceptance` или `remark` после него.
+
+        `None` — реакции нет, предупреждение открыто. Тот же набор типов
+        (`WARNING_REACTIONS`), что у признака карточки и у подзапроса поиска.
+        """
+        statement = select(func.min(Entry.no)).where(
+            Entry.task_id == task_id,
+            Entry.type.in_(WARNING_REACTIONS),
+            Entry.no > after_no,
+        )
+        return await self._session.scalar(statement)
+
+    async def count_open_warnings(self) -> int:
+        """Сколько задач несут открытое предупреждение — число для первого экрана.
+
+        Задачи архивных проектов не считаются, как вопросы во «входящей» (`CONCEPT.md`,
+        3.6): реагировать на них нельзя, пока проект не восстановлен. Считаются записи
+        `warning`, а не задачи, — у задачи предупреждение одно.
+        """
+        statement = _without_reaction(
+            select(func.count())
+            .select_from(Entry)
+            .join(Task, Task.id == Entry.task_id)
+            .where(_IS_WARNING, in_active_project(Task.project_id))
+        )
+        return await self._session.scalar(statement) or 0
 
     # --- Вопросы поперёк задач -------------------------------------------------------
 
@@ -680,6 +740,7 @@ class EntryRepository:
 _IS_QUESTION = Entry.type == EntryType.QUESTION
 _IS_REMARK = Entry.type == EntryType.REMARK
 _IS_RESOLUTION = Entry.type == EntryType.RESOLUTION
+_IS_WARNING = Entry.type == EntryType.WARNING
 
 
 def addressed_to(value: str) -> ColumnElement[bool]:
@@ -729,6 +790,19 @@ def open_remark_count(task_id: Any) -> Select[tuple[int]]:
     """
     return _unresolved(
         select(func.count()).select_from(Entry).where(Entry.task_id == task_id, _IS_REMARK)
+    )
+
+
+def open_warning_count(task_id: Any) -> Select[tuple[int]]:
+    """Запрос «сколько у задачи открытых предупреждений» (0 или 1), годный и как подзапрос.
+
+    Признак `open_warnings` в строке поиска и поле отбора того же имени. Питоновский
+    двойник — `app/domain/case.py`, `open_warning`: карточка считает признак из описи.
+    `task_id` принимает и идентификатор, и колонку внешнего запроса, как у
+    `open_remark_count`.
+    """
+    return _without_reaction(
+        select(func.count()).select_from(Entry).where(Entry.task_id == task_id, _IS_WARNING)
     )
 
 
@@ -869,6 +943,25 @@ def _unresolved(statement: Select[Any]) -> Select[Any]:
     )
 
 
+def _without_reaction(statement: Select[Any]) -> Select[Any]:
+    """Оставляет предупреждения, после которых в той же задаче нет реакции.
+
+    Реакция — `acceptance` или `remark` (`WARNING_REACTIONS`) с номером больше номера
+    предупреждения. Ссылки на предупреждение у реакции нет: у задачи оно одно, и «после
+    него» называет его однозначно. Форма — `NOT EXISTS`, как у вопросов и замечаний.
+    """
+    reaction = aliased(Entry)
+    return statement.where(
+        ~select(1)
+        .where(
+            reaction.task_id == Entry.task_id,
+            reaction.type.in_(WARNING_REACTIONS),
+            reaction.no > Entry.no,
+        )
+        .exists()
+    )
+
+
 def _unanswered(statement: Select[Any]) -> Select[Any]:
     """Оставляет вопросы, на которые в той же задаче нет ни одной записи `answer`.
 
@@ -981,6 +1074,11 @@ def _facts_json() -> ColumnElement[Any]:
             Entry.type == EntryType.MOVED,
             func.jsonb_build_object("from_key", payload["from_key"], "to_key", payload["to_key"]),
         ),
+        # Предупреждение — пары «номер проверки и исход»: список не длиннее проверок задачи.
+        (
+            Entry.type == EntryType.WARNING,
+            func.jsonb_build_object("checks", payload["checks"]),
+        ),
         # Записи об атрибутах проекта — только имя: оно ограничено шаблоном, а значения и
         # причина — свободный текст и остаются в записи.
         (
@@ -1053,12 +1151,43 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
             )
         case EntryType.MOVED:
             return MovedFacts(from_key=values.get("from_key"), to_key=values.get("to_key"))
+        case EntryType.WARNING:
+            checks = _warning_checks(values.get("checks"))
+            return WarningFacts(
+                partial=_numbers_of(checks, VerdictOutcome.PARTIAL),
+                unverifiable=_numbers_of(checks, VerdictOutcome.UNVERIFIABLE),
+            )
         case (
             EntryType.ATTRIBUTE_CREATED | EntryType.ATTRIBUTE_CHANGED | EntryType.ATTRIBUTE_REMOVED
         ):
             return AttributeFacts(type=entry_type, name=values.get("name"))
         case _:
             return NoFacts(type=entry_type)
+
+
+def _warning_checks(raw: Any) -> tuple[WarningCheck, ...] | None:
+    """Пары предупреждения из нагрузки; пара с незнакомым исходом пропускается, а не роняет
+    чтение — по той же причине, что у `_as_enum`."""
+    if not isinstance(raw, list):
+        return None
+    checks: list[WarningCheck] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        outcome = _as_enum(VerdictOutcome, item.get("outcome"))
+        check_no = item.get("check_no")
+        if outcome is not None and isinstance(check_no, int):
+            checks.append(WarningCheck(check_no=check_no, outcome=outcome))
+    return tuple(checks)
+
+
+def _numbers_of(
+    checks: tuple[WarningCheck, ...] | None, outcome: VerdictOutcome
+) -> tuple[int, ...] | None:
+    """Номера проверок предупреждения с этим исходом; `None` — нагрузка не разобралась."""
+    if checks is None:
+        return None
+    return tuple(item.check_no for item in checks if item.outcome is outcome)
 
 
 def _as_enum(enum: Any, value: Any) -> Any:

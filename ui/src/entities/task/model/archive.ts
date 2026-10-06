@@ -13,6 +13,13 @@ import type { TaskStatus } from '../api/tasks';
 /** Сколько дней тишины в деле делают закрытую задачу архивной. Одно место, не настройка. */
 export const ARCHIVE_AFTER_DAYS = 3;
 
+/**
+ * «У задачи открытое предупреждение» на языке запросов (TRK-561): закрыта с проверками
+ * `partial` или `unverifiable`, и на предупреждение ещё не отреагировали. Одно место на
+ * правило архива, отбор списка и раздел «Требуют внимания» во входящей.
+ */
+export const OPEN_WARNINGS_CONDITION = 'open_warnings: > 0';
+
 /** Статусы, в которых задача закрыта: в архив уходят из них и только из них. */
 export const CLOSED_STATUSES = ['done', 'cancelled'] as const satisfies readonly TaskStatus[];
 
@@ -32,7 +39,9 @@ export function archiveThreshold(now: Date): string {
 
 /**
  * «Не в архиве» на языке запросов бэкенда: задача не закрыта — или в её деле писали
- * после порога.
+ * после порога, — или у неё открытое предупреждение (TRK-561). Последнее — слово
+ * владельца (TRK-561#9): задача, закрытая не целиком, не уходит из виду, пока на неё не
+ * отреагировали, сколько бы дней ни прошло.
  *
  * Мгновение в кавычках: двоеточие не входит в слово языка, и без кавычек время
  * разобралось бы на слово и лишнее двоеточие.
@@ -44,7 +53,7 @@ export function archiveThreshold(now: Date): string {
  */
 export function outsideArchive(now: Date): string {
   const closed = CLOSED_STATUSES.join(', ');
-  return `status: not in ${closed} or last_entry_at: >= "${archiveThreshold(now)}"`;
+  return `status: not in ${closed} or last_entry_at: >= "${archiveThreshold(now)}" or ${OPEN_WARNINGS_CONDITION}`;
 }
 
 /** Запрос, сложенный с правилом архива, и обратный путь его отказа. */
@@ -77,8 +86,15 @@ const OPENING = '(';
  * глубины языка в склейке этот предел перешагнёт. Руками такого не пишут.
  */
 export function hideArchive(query: string | null | undefined, now: Date): ArchiveQuery {
-  const rule = outsideArchive(now);
+  return composeWith(query, outsideArchive(now));
+}
 
+/**
+ * Складывает запрос с любым правилом по «и» — то же, что `hideArchive`, для правила
+ * не архива: условие столбца доски (`./waiting.ts`) складывается тем же путём и теми же
+ * объяснениями отказа.
+ */
+export function composeWith(query: string | null | undefined, rule: string): ArchiveQuery {
   if (query === undefined || query === null || query.trim() === '') {
     return { query: rule, relocate: unchanged };
   }

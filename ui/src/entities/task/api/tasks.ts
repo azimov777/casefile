@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import { apiClient, unwrapPage, type Page, type components, type operations } from '@/shared/api';
-import { hideArchive } from '../model/archive';
+import { OPEN_WARNINGS_CONDITION, composeWith, hideArchive } from '../model/archive';
+import { boardColumns, columnCondition, columnRequest, type BoardColumn } from '../model/waiting';
 
 export type Task = components['schemas']['TaskSearchRead'];
 export type TaskFeatures = components['schemas']['TaskFeaturesRead'];
@@ -26,6 +27,11 @@ export type TaskListParams = NonNullable<operations['list_tasks']['parameters'][
 export type TaskListRequest = TaskListParams & {
   /** Прятать архив: закрытые задачи, в делах которых давно не писали. */
   hideArchived?: boolean;
+  /**
+   * Столбец доски, чьё условие складывается с запросом (`../model/waiting.ts`): так же,
+   * как архив, — на отправке, а в ключе запроса стоит признаком.
+   */
+  column?: BoardColumn;
 };
 
 /**
@@ -39,7 +45,6 @@ const STATUS_SET = {
   backlog: true,
   open: true,
   in_progress: true,
-  waiting: true,
   done: true,
   cancelled: true,
 } satisfies Record<TaskStatus, true>;
@@ -52,6 +57,13 @@ const PRIORITY_SET = {
 } satisfies Record<TaskPriority, true>;
 
 export const TASK_STATUSES = Object.keys(STATUS_SET) as TaskStatus[];
+
+/**
+ * Столбцы доски: статусы контракта и вычисляемое «Ждёт ответа» между ними
+ * (`../model/waiting.ts`, `boardColumns`). Свёрнутые столбцы в адресе сверяются с этим
+ * списком, а не со статусами: «Ждёт ответа» сворачивают так же, как столбец статуса.
+ */
+export const BOARD_COLUMNS: BoardColumn[] = boardColumns(TASK_STATUSES);
 export const TASK_PRIORITIES = Object.keys(PRIORITY_SET) as TaskPriority[];
 
 /**
@@ -102,10 +114,18 @@ export const taskKeys = {
   column: (params: TaskListRequest) => ['tasks', 'board', 'column', params] as const,
   /** Сколько задач в отборе — без самих задач. */
   total: (params: TaskListRequest) => ['tasks', 'board', 'total', params] as const,
+  /**
+   * «Требуют внимания» во входящей (TRK-561): задачи с открытым предупреждением. Свой
+   * префикс, а не `table`: живой поток перечитывает его сразу, как входящую, а не по
+   * просьбе, как таблицу.
+   */
+  attention: ['tasks', 'attention'] as const,
+  attentionList: (params: TaskListRequest) => ['tasks', 'attention', params] as const,
 };
 
 export async function fetchTasks({
   hideArchived = false,
+  column,
   ...params
 }: TaskListRequest): Promise<Page<Task>> {
   /*
@@ -115,22 +135,38 @@ export async function fetchTasks({
    * держала бы ключ, но перечитывание по живому потоку шло бы со старым порогом.
    * Здесь же любое чтение идёт со свежим порогом, а без чтения ничего не меняется:
    * задача, пересёкшая порог, исчезает при следующем чтении — и не раньше.
+   *
+   * Условие столбца («Ждёт ответа» и исключение таких задач из прочих) складывается
+   * первым, архив — поверх него; отказ возвращается обратным порядком, в строку человека.
    */
-  const archive = hideArchived ? hideArchive(params.query, new Date()) : null;
-  const query = archive === null ? params : { ...params, query: archive.query };
+  const relocations: ((error: unknown) => unknown)[] = [];
+  let query = params.query;
+
+  const rule = column === undefined ? null : columnCondition(column);
+  if (rule !== null) {
+    const composed = composeWith(query, rule);
+    query = composed.query;
+    relocations.unshift(composed.relocate);
+  }
+  if (hideArchived) {
+    const archive = hideArchive(query, new Date());
+    query = archive.query;
+    relocations.unshift(archive.relocate);
+  }
+  const sent = relocations.length === 0 ? params : { ...params, query };
 
   try {
     return await unwrapPage(
       apiClient.GET('/api/v1/tasks', {
         // Набор полей и размер страницы — умолчания списка: вызывающий вправе их
         // переназначить, поэтому его параметры идут последними.
-        params: { query: { fields: TASK_LIST_FIELDS, limit: TASK_PAGE_SIZE, ...query } },
+        params: { query: { fields: TASK_LIST_FIELDS, limit: TASK_PAGE_SIZE, ...sent } },
       }),
     );
   } catch (error) {
     // Отказ разбора склейки говорит о строке, которой человек не писал: его позиция
     // возвращается в ту строку, что пришла в `params.query`.
-    throw archive === null ? error : archive.relocate(error);
+    throw relocations.reduce((failure, relocate) => relocate(failure), error);
   }
 }
 
@@ -146,6 +182,28 @@ export function tasksQueryOptions(params: TaskListRequest) {
 }
 
 /**
+ * Задачи с открытым предупреждением, от давних к свежим: дольше всех ждёт реакции та,
+ * что закрыта раньше, — как во входящей вопросов (TRK-561). Архив не прячет их по
+ * определению (`outsideArchive`), поэтому правило архива сюда не складывается.
+ */
+export function attentionQueryOptions(project: string) {
+  const params: TaskListRequest = {
+    query: OPEN_WARNINGS_CONDITION,
+    sort: ['last_entry_at'],
+    ...(project === '' ? {} : { project: [project] }),
+  };
+
+  return infiniteQueryOptions({
+    queryKey: taskKeys.attentionList(params),
+    queryFn: ({ pageParam }) =>
+      fetchTasks({ ...params, cursor: pageParam === '' ? undefined : pageParam }),
+    initialPageParam: '',
+    getNextPageParam: (last: Page<Task>) =>
+      last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined,
+  });
+}
+
+/**
  * Один столбец доски: тот же отбор плюс свой статус, страницами, которые копятся.
  *
  * Отбор по статусу здесь не противоречит тому, что доска снимает его с формы
@@ -156,8 +214,8 @@ export function tasksQueryOptions(params: TaskListRequest) {
  * Курсор не из адреса: у столбца он не состояние экрана, а положение чтения —
  * переслать ссылку «на вторую страницу столбца» бессмысленно.
  */
-export function tasksColumnQueryOptions(status: TaskStatus, params: TaskListRequest) {
-  const column = { ...params, status: [status], limit: TASK_COLUMN_PAGE_SIZE };
+export function tasksColumnQueryOptions(status: BoardColumn, params: TaskListRequest) {
+  const column = { ...columnRequest(status, params), limit: TASK_COLUMN_PAGE_SIZE };
 
   return infiniteQueryOptions({
     queryKey: taskKeys.column(column),

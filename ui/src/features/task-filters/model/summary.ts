@@ -8,7 +8,15 @@ import type { TaskFilters } from './filters';
  * проверка остаётся на месте.
  */
 export type ConditionId =
-  'status' | 'priority' | 'assignee' | 'text' | 'blocked' | 'questions' | 'remarks' | 'query';
+  | 'status'
+  | 'priority'
+  | 'assignee'
+  | 'text'
+  | 'blocked'
+  | 'questions'
+  | 'remarks'
+  | 'warnings'
+  | 'query';
 
 export interface FilterCondition {
   id: ConditionId;
@@ -31,6 +39,7 @@ export const CONDITION_RESET = {
   blocked: { blocked: false },
   questions: { withQuestions: false },
   remarks: { withRemarks: false },
+  warnings: { withWarnings: false },
   query: { query: '' },
 } satisfies Record<ConditionId, Partial<TaskFilters>>;
 
@@ -104,6 +113,10 @@ export function describeFilters(filters: TaskFilters, t: TFunction<'tasks'>): Fi
 
   if (filters.withRemarks) {
     conditions.push({ id: 'remarks', label: t('filters.condition.remarks') });
+  }
+
+  if (filters.withWarnings) {
+    conditions.push({ id: 'warnings', label: t('filters.condition.warnings') });
   }
 
   return conditions;

@@ -245,16 +245,28 @@ export function curve(value: string): string {
 /**
  * Значения статуса — из контракта бэкенда, а не перечнем в тесте.
  *
- * Перечисление уже менялось дважды (2026-09-05 из него убрали статус, 2026-09-07
- * добавили `waiting`), и тест, выписавший его руками, проверял бы после такой правки
- * не всё: пять форм из шести совпали бы попарно, и шестая осталась бы непроверенной,
- * не уронив ни одного прогона.
+ * Перечисление уже менялось трижды (2026-09-05 из него убрали `review`, 2026-09-07
+ * добавили `waiting`, 2026-10-06 его сняли, TRK-573), и тест, выписавший его руками,
+ * проверял бы после такой правки не всё: формы совпали бы попарно, и одна осталась бы
+ * непроверенной, не уронив ни одного прогона.
  */
 export function contractStatuses(): string[] {
   const contract = JSON.parse(readFileSync(resolve(process.cwd(), '../openapi.json'), 'utf8')) as {
     components: { schemas: { TaskStatus: { enum: string[] } } };
   };
   return contract.components.schemas.TaskStatus.enum;
+}
+
+/**
+ * Столбцы доски слева направо: статусы контракта и «Ждёт ответа» (ключ `waiting`) сразу
+ * за `in_progress`. Статуса ожидания у бэкенда нет (TRK-573) — столбец вычисляется из
+ * вопросов `blocking` (`boardColumn`), — поэтому в перечислении статуса его и нет.
+ * Правило выписано здесь заново, а не взято из кода интерфейса.
+ */
+export function boardColumns(): string[] {
+  const statuses = contractStatuses();
+  const after = statuses.indexOf('in_progress') + 1;
+  return [...statuses.slice(0, after), 'waiting', ...statuses.slice(after)];
 }
 
 /** Сколько дней тишины в деле делают закрытую задачу архивной (UI-97). */
@@ -271,17 +283,30 @@ const ARCHIVE_AFTER_DAYS = 3;
  */
 export function outsideArchive(now: Date = new Date()): string {
   const threshold = new Date(now.getTime() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
-  return `status: not in done, cancelled or last_entry_at: >= "${threshold.toISOString()}"`;
+  // Задача с открытым предупреждением в архив не уходит (TRK-561#9).
+  return `status: not in done, cancelled or last_entry_at: >= "${threshold.toISOString()}" or open_warnings: > 0`;
 }
 
 /**
- * Какие задачи демо в каком статусе видит человек — по правде бэкенда, а не по памяти
+ * В каком столбце доски стоит задача (TRK-571, `docs/CONCEPT.md` 4.6): «Ждёт ответа»
+ * (ключ `waiting`) — задача из работы с открытым вопросом `blocking`; остальные — в
+ * столбце своего статуса. Правило выписано здесь заново, а не взято из кода интерфейса.
+ */
+export function boardColumn(status: string, openBlockingQuestions: number): string {
+  const held = ['backlog', 'open', 'in_progress'].includes(status);
+  return held && openBlockingQuestions > 0 ? 'waiting' : status;
+}
+
+/**
+ * Какие задачи демо в каком столбце доски видит человек — по правде бэкенда, а не по памяти
  * теста.
  *
+ * Ключ — столбец (`boardColumn`), он же статус везде, кроме «Ждёт ответа».
+ *
  * Состав демо меняется вместе с бэкендом: 2026-09-07 задача, ждавшая ответа владельца,
- * ушла из `open` в `waiting` (TRK-15), и три сценария, помнившие её ключ и число строк,
- * покраснели разом, ничего не сказав про интерфейс. Спрошенный состав такие правки
- * переживает сам.
+ * ушла из `open` в статус ожидания (TRK-15), а 2026-10-06 вернулась в `open` с вопросом
+ * `blocking` (TRK-573), и сценарии, помнившие её ключ и число строк, краснели разом,
+ * ничего не сказав про интерфейс. Спрошенный состав такие правки переживает сам.
  *
  * По умолчанию это состав без архива — ровно то, что список и доска показывают,
  * пока человек не попросил архив (UI-97). `archive: true` — все задачи, как их отдаёт
@@ -298,7 +323,7 @@ export async function tasksByStatus(
   const shown: Record<string, string> = archive ? {} : { query: outsideArchive(now) };
   const query = new URLSearchParams({
     project: 'DEMO',
-    fields: 'status',
+    fields: 'status,features',
     limit: '100',
     ...shown,
     ...params,
@@ -306,11 +331,14 @@ export async function tasksByStatus(
   const response = await request.get(`/api/v1/tasks?${query.toString()}`, {
     headers: { Authorization: `Bearer ${readE2eToken()}` },
   });
-  const body = (await response.json()) as { data: { key: string; status: string }[] };
+  const body = (await response.json()) as {
+    data: { key: string; status: string; features: { open_blocking_questions: number } }[];
+  };
 
   const byStatus = new Map<string, string[]>();
   for (const task of body.data) {
-    byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task.key]);
+    const shown = boardColumn(task.status, task.features.open_blocking_questions);
+    byStatus.set(shown, [...(byStatus.get(shown) ?? []), task.key]);
   }
   return byStatus;
 }

@@ -155,11 +155,11 @@ def test_the_detectors_catch_what_they_are_for() -> None:
 
 #: Имя вида snake_case вне пути к файлу: `get_task`, `in_progress`, `after_no`.
 SNAKE = re.compile(r"(?<![\w/.])([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(?![\w.])")
-#: Одно слово в обратных кавычках: `waiting`, `decision`, `parent`.
+#: Одно слово в обратных кавычках: `open`, `decision`, `parent`.
 QUOTED_WORD = re.compile(r"`([a-z][a-z0-9_]*)`")
 #: Вызов инструмента в примере: `get_task(` и т. п.
 CALL = re.compile(r"(?<![\w.])([a-z][a-z0-9_]*)\(")
-#: Целевой статус перехода в примере: `to="waiting"`.
+#: Целевой статус перехода в примере: `to="open"`.
 TARGET = re.compile(r'\bto="([a-z_]+)"')
 
 
@@ -202,4 +202,4 @@ def test_every_status_in_the_skill_is_a_task_status() -> None:
     assert targets, "в скиле нет примеров перехода"
     assert targets <= statuses, f"переходы в несуществующий статус: {targets - statuses}"
     mentioned = {word for word in QUOTED_WORD.findall(body) if word in statuses}
-    assert {"in_progress", "waiting", "open"} <= mentioned | targets
+    assert {"in_progress", "open"} <= mentioned | targets

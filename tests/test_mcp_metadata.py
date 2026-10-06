@@ -115,10 +115,11 @@ CONFLICT_CODES = {
     ("unlink", None): "link_not_found",
 }
 
-#: Примеры формата: ключ задачи, ключ проекта, ссылка на запись, UUID, ключ сортировки.
+#: Примеры формата: ключ задачи, ключ проекта, ссылка на запись задачи и проекта (`TRK#15`
+#: — решение проекта), UUID, ключ сортировки.
 FORMAT_EXAMPLE = re.compile(
     r"^(?:[A-Z][A-Z0-9]*-\d+(?:#\d+)?"
-    r"|[A-Z][A-Z0-9]+"
+    r"|[A-Z][A-Z0-9]+(?:#\d+)?"
     r"|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
     r"|-?[a-z_]+)$"
 )
@@ -306,14 +307,17 @@ async def test_no_tool_description_repeats_what_every_entry_does(tools: list[Too
 async def test_no_description_names_another_status_for_waiting_for_an_answer(
     tools: list[Tool],
 ) -> None:
-    """Абзац про ожидание ответа называет только `waiting` (TRK-31).
+    """Абзац про ожидание ответа называет только `open` или `in_progress` (TRK-31, TRK-573).
 
-    Ожидание ответа — `waiting`, решение владельца (`CONCEPT.md`, 3.3). Прежде статус
-    сверялся со скилом; скила нет, и эталон — сам статус домена.
+    Статуса ожидания нет (`CONCEPT.md`, 3.3, решение владельца TRK-569#9): ждёт носитель
+    — вопрос с `blocking`, — а задача стоит в `open`, и только короткое ожидание внутри
+    живой сессии оставляет её в `in_progress` (4.6). Эталон — эти два члена `TaskStatus`;
+    любой другой статус в абзаце про ответ и ожидание значит, что описание разошлось с
+    доменом, как у `wait_journal` в TRK-31.
     """
     about_answer = re.compile(r"\banswer", re.IGNORECASE)
     about_waiting = re.compile(r"wait", re.IGNORECASE)
-    waiting = TaskStatus.WAITING.value
+    waiting_in = {TaskStatus.OPEN.value, TaskStatus.IN_PROGRESS.value}
 
     diverged: list[str] = []
     for tool in tools:
@@ -326,10 +330,33 @@ async def test_no_description_names_another_status_for_waiting_for_an_answer(
                     for status in TaskStatus
                     if re.search(rf"(?<![a-z_]){status.value}(?![a-z_])", paragraph)
                 }
-                if named - {waiting}:
-                    diverged.append(f"{where}: {sorted(named - {waiting})}")
+                if named - waiting_in:
+                    diverged.append(f"{where}: {sorted(named - waiting_in)}")
 
-    assert not diverged, "ожидание ответа названо не `waiting`:\n" + "\n".join(diverged)
+    assert not diverged, "ожидание ответа названо не `open`/`in_progress`:\n" + "\n".join(diverged)
+
+
+async def test_no_metadata_names_the_removed_waiting_status(tools: list[Tool]) -> None:
+    """Статус `waiting` снят без псевдонима (TRK-573): ни одно описание его не называет.
+
+    Слово «waiting» в прозе законно (`wait_journal` — «waiting for new ones»); статус же
+    в метадате всегда стоит в обратных кавычках или значением перечисления, и оба вида
+    проверяются здесь по живому `tools/list`.
+    """
+    named = [
+        where
+        for tool in tools
+        for where, text in model_reads(tool)
+        if "`waiting`" in text or "'waiting'" in text
+    ]
+    enums = [
+        tool.name
+        for tool in tools
+        if '"waiting"' in json.dumps([tool.input_schema, tool.output_schema or {}])
+    ]
+
+    assert not named, f"метадата называет снятый статус: {named}"
+    assert not enums, f"перечисление статуса держит `waiting`: {enums}"
 
 
 async def test_shared_arguments_are_described_once_for_the_whole_server(

@@ -1,9 +1,11 @@
 export {
+  BOARD_COLUMNS,
   TASK_COLUMN_PAGE_SIZE,
   TASK_LIST_FIELDS,
   TASK_PAGE_SIZE,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  attentionQueryOptions,
   fetchTasks,
   taskKeys,
   tasksColumnQueryOptions,
@@ -16,10 +18,12 @@ export {
   type TaskPriority,
   type TaskStatus,
 } from './api/tasks';
-export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES } from './model/archive';
+export { WAITING_COLUMN, columnRequest, isAwaitingAnswer, type BoardColumn } from './model/waiting';
+export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES, OPEN_WARNINGS_CONDITION } from './model/archive';
 export {
   taskPackageKeys,
   taskPackageQueryOptions,
+  type CitedDecision,
   type LinkKind,
   type LinkedTask,
   type TaskDetails,

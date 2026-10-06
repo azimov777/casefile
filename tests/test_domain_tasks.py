@@ -14,6 +14,7 @@ from app.domain.errors import (
     SummaryRequiredError,
     TaskBlockedError,
     TaskFieldsInvalidError,
+    TaskHasOpenBlockingQuestionsError,
     TaskHasUnclosedChildrenError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
@@ -40,6 +41,7 @@ from app.domain.tasks import (
     normalize_fields,
     normalize_reason,
     normalize_task_key,
+    parse_status,
     parse_task_key,
 )
 
@@ -61,6 +63,7 @@ def facts(
     has_summary: bool = True,
     pending_checks: tuple[CheckGap, ...] | None = (),
     blockers: tuple[str, ...] | None = (),
+    blocking_questions: tuple[int, ...] | None = (),
     children: tuple[str, ...] | None = (),
     closing: bool = True,
     assignee: str | None = "claude",
@@ -83,6 +86,7 @@ def facts(
         has_summary_since_in_progress=has_summary,
         checks_without_passed_verdict=pending_checks,
         open_blockers=blockers,
+        open_blocking_questions=blocking_questions,
         unclosed_children=children,
         closing=closing,
         assignee=assignee,
@@ -119,22 +123,14 @@ def test_a_malformed_task_key_is_rejected(raw: str) -> None:
 def test_the_transition_table_matches_the_concept() -> None:
     """Таблица зашита; тест повторяет её из `CONCEPT.md`, чтобы правка была осознанной."""
     assert TRANSITIONS == {
-        TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.WAITING, TaskStatus.CANCELLED),
+        TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
         TaskStatus.OPEN: (
             TaskStatus.IN_PROGRESS,
-            TaskStatus.WAITING,
             TaskStatus.BACKLOG,
             TaskStatus.CANCELLED,
         ),
         TaskStatus.IN_PROGRESS: (
             TaskStatus.DONE,
-            TaskStatus.WAITING,
-            TaskStatus.OPEN,
-            TaskStatus.BACKLOG,
-            TaskStatus.CANCELLED,
-        ),
-        TaskStatus.WAITING: (
-            TaskStatus.IN_PROGRESS,
             TaskStatus.OPEN,
             TaskStatus.BACKLOG,
             TaskStatus.CANCELLED,
@@ -145,38 +141,24 @@ def test_the_transition_table_matches_the_concept() -> None:
     assert allowed_transitions(TaskStatus.DONE) == ()
 
 
-def test_waiting_is_entered_from_the_first_three_and_never_leads_to_done() -> None:
-    """Обзорная проверка 2: форма `waiting` в таблице переходов.
+def test_there_is_no_waiting_status_and_no_alias_for_it() -> None:
+    """Статус ожидания снят (TRK-573, решение владельца TRK-569#9): ждёт носитель в деле.
 
-    Отдельным тестом, а не только сверкой всей таблицы: сверка ловит любую правку, но не
-    говорит, какое именно свойство статуса нарушено. Здесь названы три свойства, каждое
-    из которых выведено из решения владельца (`CONCEPT.md`, 3.3).
+    Псевдонима нет: строка `waiting` не разбирается в статус, а отказ перечисляет
+    допустимые статусы без неё. Вне цепочки стоит только `cancelled`.
     """
-    for status in (TaskStatus.BACKLOG, TaskStatus.OPEN, TaskStatus.IN_PROGRESS):
-        assert TaskStatus.WAITING in allowed_transitions(status)
+    assert "waiting" not in {status.value for status in TaskStatus}
+    assert set(TaskStatus) - set(STATUS_CHAIN) == {TaskStatus.CANCELLED}
 
-    assert allowed_transitions(TaskStatus.WAITING) == (
-        TaskStatus.IN_PROGRESS,
-        TaskStatus.OPEN,
-        TaskStatus.BACKLOG,
-        TaskStatus.CANCELLED,
-    )
-    # Дождавшаяся задача возвращается в работу и закрывается оттуда: прямой ход в `done`
-    # обошёл бы проверку вердиктов, которая висит на `in_progress → done`.
-    assert TaskStatus.DONE not in allowed_transitions(TaskStatus.WAITING)
+    with pytest.raises(TaskFieldsInvalidError) as error:
+        parse_status("waiting")
 
-    for closed in (TaskStatus.DONE, TaskStatus.CANCELLED):
-        assert TaskStatus.WAITING not in allowed_transitions(closed)
-
-
-def test_waiting_is_not_a_step_of_the_chain() -> None:
-    """`waiting` вне цепочки: ни вход в него, ни выход из него шагом назад не считаются."""
-    assert TaskStatus.WAITING not in STATUS_CHAIN
-    assert is_step_back(TaskStatus.IN_PROGRESS, TaskStatus.WAITING) is False
-    assert is_step_back(TaskStatus.WAITING, TaskStatus.BACKLOG) is False
-    # И он не конечный: поля правятся, а родителя в `done` такой ребёнок не пустит.
-    assert not is_closed(TaskStatus.WAITING)
-    assert editable_fields(TaskStatus.WAITING) == OPEN_FIELDS
+    (problem,) = error.value.details["fields"]
+    assert problem["field"] == "status"
+    assert problem["allowed"] == ["backlog", "open", "in_progress", "done", "cancelled"]
+    # Ждущая задача стоит в `open`: поля в нём правятся так же, как у любой задачи там.
+    assert editable_fields(TaskStatus.OPEN) == OPEN_FIELDS
+    assert not is_closed(TaskStatus.OPEN)
 
 
 @pytest.mark.parametrize(
@@ -188,8 +170,6 @@ def test_waiting_is_not_a_step_of_the_chain() -> None:
         (TaskStatus.OPEN, TaskStatus.BACKLOG, True),
         (TaskStatus.OPEN, TaskStatus.IN_PROGRESS, False),
         (TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, False),
-        (TaskStatus.IN_PROGRESS, TaskStatus.WAITING, False),
-        (TaskStatus.WAITING, TaskStatus.OPEN, False),
     ],
 )
 def test_a_step_back_is_a_move_to_a_lower_status_of_the_chain(
@@ -204,7 +184,7 @@ def test_a_transition_outside_the_table_lists_the_allowed_ones() -> None:
         ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.DONE))
 
     assert error.value.code == "transition_not_allowed"
-    assert error.value.details["allowed"] == ["in_progress", "waiting", "backlog", "cancelled"]
+    assert error.value.details["allowed"] == ["in_progress", "backlog", "cancelled"]
 
 
 # --- Проверки перехода --------------------------------------------------------------
@@ -217,14 +197,9 @@ def test_a_transition_outside_the_table_lists_the_allowed_ones() -> None:
         (TaskStatus.OPEN, TaskStatus.BACKLOG, "step_back"),
         (TaskStatus.BACKLOG, TaskStatus.CANCELLED, "cancel"),
         (TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED, "cancel"),
-        # Обзорная проверка 3: вход в `waiting` отклоняется тем же кодом, что и шаг
-        # назад без причины, но своим правилом — по нему клиент видит, что нарушено.
-        (TaskStatus.BACKLOG, TaskStatus.WAITING, "wait"),
-        (TaskStatus.OPEN, TaskStatus.WAITING, "wait"),
-        (TaskStatus.IN_PROGRESS, TaskStatus.WAITING, "wait"),
     ],
 )
-def test_a_step_back_a_cancellation_and_a_wait_require_a_reason(
+def test_a_step_back_and_a_cancellation_require_a_reason(
     from_status: TaskStatus, to_status: TaskStatus, rule: str
 ) -> None:
     with pytest.raises(TransitionReasonRequiredError) as error:
@@ -245,17 +220,6 @@ def test_a_blank_reason_counts_as_no_reason() -> None:
 def test_a_forward_move_does_not_need_a_reason() -> None:
     ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS))
     ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE))
-
-
-def test_leaving_waiting_does_not_need_a_reason() -> None:
-    """Требование причины висит на входе в `waiting`, а не на выходе.
-
-    Дождались — обычный ход в работу, объяснять в нём нечего. Шагом назад выход из
-    `waiting` тоже не считается, поэтому и та ветка его не ловит.
-    """
-    ensure_transition_allowed(facts(TaskStatus.WAITING, TaskStatus.IN_PROGRESS))
-    ensure_transition_allowed(facts(TaskStatus.WAITING, TaskStatus.OPEN))
-    ensure_transition_allowed(facts(TaskStatus.WAITING, TaskStatus.BACKLOG))
 
 
 def test_opening_lists_every_unfilled_section_at_once() -> None:
@@ -287,7 +251,7 @@ def test_the_section_check_only_guards_the_move_into_open() -> None:
 
 def test_the_check_list_is_the_extension_point() -> None:
     """Следующие задачи добавляют проверки в список, а не в таблицу."""
-    assert len(TRANSITION_CHECKS) == 8
+    assert len(TRANSITION_CHECKS) == 9
     assert all(callable(check) for check in TRANSITION_CHECKS)
 
 
@@ -472,6 +436,54 @@ def test_blockers_are_checked_only_on_the_way_into_work() -> None:
     )
 
 
+def test_an_open_blocking_question_keeps_the_task_out_of_work() -> None:
+    """Развилка 3 TRK-569#9 на уровне домена: отказ `409` называет номера вопросов."""
+    with pytest.raises(TaskHasOpenBlockingQuestionsError) as error:
+        ensure_transition_allowed(
+            facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, blocking_questions=(4, 7))
+        )
+
+    assert error.value.code == "task_has_open_blocking_questions"
+    assert error.value.status_code == 409
+    assert error.value.details == {
+        "key": "TRK-1",
+        "from": "open",
+        "to": "in_progress",
+        "questions": [4, 7],
+    }
+
+    ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, blocking_questions=()))
+
+
+def test_blocking_questions_are_checked_only_on_the_way_into_work() -> None:
+    """Вопрос держит вход в работу, а не её ход: задача в работе закрывается и уходит в
+    `open` с открытым блокирующим вопросом — так и ждут ответа (`CONCEPT.md`, 4.6)."""
+    ensure_transition_allowed(
+        facts(
+            TaskStatus.IN_PROGRESS, TaskStatus.OPEN, reason="жду TRK-1#4", blocking_questions=(4,)
+        )
+    )
+    ensure_transition_allowed(
+        facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, blocking_questions=(4,))
+    )
+    ensure_transition_allowed(
+        facts(TaskStatus.OPEN, TaskStatus.CANCELLED, reason="не нужна", blocking_questions=(4,))
+    )
+
+
+def test_the_blockers_are_named_before_the_blocking_questions() -> None:
+    """Порядок из таблицы валидаций `CONCEPT.md`, 3.3: блокер — строкой выше вопроса."""
+    with pytest.raises(TaskBlockedError):
+        ensure_transition_allowed(
+            facts(
+                TaskStatus.OPEN,
+                TaskStatus.IN_PROGRESS,
+                blockers=("TRK-2",),
+                blocking_questions=(4,),
+            )
+        )
+
+
 def test_unclosed_children_keep_the_parent_open() -> None:
     """Обзорная проверка 2 на уровне домена: отказ называет незакрытых детей."""
     with pytest.raises(TaskHasUnclosedChildrenError) as error:
@@ -581,6 +593,24 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
     assert blocked.value.details["reason"] == "blockers_not_collected"
     assert "blockers" not in blocked.value.details
 
+    with pytest.raises(TaskHasOpenBlockingQuestionsError) as questions:
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.OPEN,
+                to_status=TaskStatus.IN_PROGRESS,
+                reason=None,
+                sections=FILLED,
+                checks=("первая",),
+                open_blockers=(),
+                assignee="claude",
+                requester="claude",
+            )
+        )
+
+    assert questions.value.details["reason"] == "questions_not_collected"
+    assert "questions" not in questions.value.details
+
     with pytest.raises(TaskHasUnclosedChildrenError) as children:
         ensure_transition_allowed(
             TransitionFacts(
@@ -602,27 +632,25 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
 # --- Вход в работу только исполнителю (TRK-123) -----------------------------------------
 
 
-@pytest.mark.parametrize("from_status", [TaskStatus.OPEN, TaskStatus.WAITING])
-def test_a_task_without_an_assignee_does_not_go_into_work(from_status: TaskStatus) -> None:
-    """Без исполнителя задача в работу не идёт — и с `open`, и на возврате из `waiting`."""
+def test_a_task_without_an_assignee_does_not_go_into_work() -> None:
+    """Без исполнителя задача в работу не идёт — в том числе дождавшаяся в `open`."""
     with pytest.raises(AssigneeRequiredError) as error:
-        ensure_transition_allowed(facts(from_status, TaskStatus.IN_PROGRESS, assignee=None))
+        ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, assignee=None))
 
     assert error.value.code == "assignee_required"
     assert error.value.status_code == 409
     assert error.value.details == {
         "key": "TRK-1",
-        "from": from_status.value,
+        "from": "open",
         "to": "in_progress",
     }
 
 
-@pytest.mark.parametrize("from_status", [TaskStatus.OPEN, TaskStatus.WAITING])
-def test_someone_other_than_the_assignee_cannot_take_the_task(from_status: TaskStatus) -> None:
+def test_someone_other_than_the_assignee_cannot_take_the_task() -> None:
     """Отказ называет обоих: кому задача поручена и кто просит."""
     with pytest.raises(AssigneeMismatchError) as error:
         ensure_transition_allowed(
-            facts(from_status, TaskStatus.IN_PROGRESS, assignee="alice", requester="claude")
+            facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, assignee="alice", requester="claude")
         )
 
     assert error.value.code == "assignee_mismatch"

@@ -160,11 +160,16 @@ def register(tools: Toolset) -> None:
         way into `done`.
 
         A refusal of any part files nothing and leaves the status as it was. The exit
-        conditions are checked after filing: a passing latest verdict on every review
-        check within the current pass (`checks_not_passed`), closed children
-        (`task_has_unclosed_children`), the task in `in_progress`
+        conditions are checked after filing: a latest verdict other than `failed` on
+        every review check within the current pass (`checks_not_passed`), closed
+        children (`task_has_unclosed_children`), the task in `in_progress`
         (`transition_not_allowed`). An empty summary part is refused with
         `entry_fields_invalid`.
+
+        A latest verdict `partial` or `unverifiable` on any check adds a service entry
+        `warning` after the verdicts, naming those checks and outcomes. The task then
+        enters `done` with the `open_warnings` feature at 1 until an `acceptance` or a
+        `remark` is filed after the warning.
 
         For a parent task the final summary covers the whole work: the children's
         results are in their own closing summaries.

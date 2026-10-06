@@ -19,7 +19,7 @@ function filters(overrides: Partial<TaskFilters> = {}): TaskFilters {
 describe('чтение отбора из адреса', () => {
   it('разбирает повторяющиеся параметры и флажки', () => {
     const params = new URLSearchParams(
-      'project=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&text=поиск&assignee=owner&sort=key&page=3',
+      'project=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&warnings=true&text=поиск&assignee=owner&sort=key&page=3',
     );
 
     expect(readFilters(params)).toEqual({
@@ -32,6 +32,7 @@ describe('чтение отбора из адреса', () => {
       blocked: true,
       withQuestions: true,
       withRemarks: true,
+      withWarnings: true,
       query: '',
       sort: 'key',
       page: 3,

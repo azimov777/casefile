@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CircleHelp, Flag, Lock } from 'lucide-react';
+import { CircleHelp, Flag, Lock, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/shared/i18n';
 import { cn, formatNumber } from '@/shared/lib';
@@ -14,10 +14,10 @@ import type { TaskFeatures } from '../api/tasks';
  * Ничего не вычисляется: `features` считает бэкенд, интерфейс не выдумывает за него
  * (`CONCEPT.md`, 6).
  *
- * Знаков три, а признаков в контракте четыре: блокирующие вопросы — не отдельный
- * знак, а состояние знака вопросов. Четвёртый значок рядом с третьим перестаёт
- * читаться, а различие «вопрос есть» и «вопрос держит работу» важнее, чем ещё одно
- * число: поэтому оно меняет тон знака и его доступное имя.
+ * Блокирующие вопросы — не отдельный знак, а состояние знака вопросов: ещё один
+ * значок рядом с вопросами перестаёт читаться, а различие «вопрос есть» и «вопрос
+ * держит работу» важнее, чем ещё одно число, — поэтому оно меняет тон знака и его
+ * доступное имя.
  */
 function Mark({
   icon: Icon,
@@ -147,6 +147,21 @@ export function TaskFeatureMarks({
           label={t('task.features.remarks', { count: features.open_remarks })}
           tone="text-accent"
           count={formatNumber(features.open_remarks, language)}
+          pressable={pressable}
+        />
+      ) : null}
+
+      {/*
+       * Открытое предупреждение (TRK-561): задача закрыта не целиком и ждёт решения
+       * человека. Числа нет — предупреждение у задачи одно; тон внимания, как у
+       * вопроса: ход за человеком, но работу оно не держит.
+       */}
+      {features.open_warnings > 0 ? (
+        <Mark
+          icon={TriangleAlert}
+          label={t('task.features.warning')}
+          tone="text-attention"
+          count={null}
           pressable={pressable}
         />
       ) : null}

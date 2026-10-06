@@ -24,8 +24,8 @@ def register(tools: Toolset) -> None:
         """Files the outcome of one review check, as run by the task's assignee within the
         current pass.
 
-        A pass starts with each entry into `in_progress`, a return from `waiting`
-        included. Only verdicts of the current pass count for closing, and the latest
+        A pass starts with each entry into `in_progress`, a return after a wait in
+        `open` included. Only verdicts of the current pass count for closing, and the latest
         verdict on a check replaces the earlier ones: a `failed` verdict is filed when
         it happens, like a `passed` one. Verdicts of earlier passes stay in the case
         without counting. `close_task` also takes verdicts, together with the closing.

@@ -93,6 +93,7 @@ from app.domain.tasks import (
     section_values,
 )
 from app.services import case as case_service
+from app.services import decisions as decisions_service
 from app.services import freeze
 from app.services import links as links_service
 from app.services import projects as projects_service
@@ -120,6 +121,7 @@ class TaskChanges:
     check: CheckEdit = UNSET
     assignee: str | None = UNSET
     priority: TaskPriority | str = UNSET
+    decisions: Sequence[str] = UNSET
 
     #: Поля, у которых нет одноимённого поля задачи: они разбираются отдельно.
     _NOT_TASK_FIELDS = frozenset({"check"})
@@ -220,6 +222,10 @@ class TaskPackage:
     children: list[links_service.TaskLink]
     #: Остальные связи — `blocks`, `blocked_by`, `relates`; `parent`/`child` здесь нет.
     links: list[links_service.TaskLink]
+    #: Решения проекта, на которые опирается задача, со статусом, посчитанным при чтении
+    #: (`CONCEPT.md`, 4.2). Полем пакета, как родитель: карточка несёт только то, что
+    #: хранится в строке задачи, а статус решения — чужое состояние.
+    decisions: list[decisions_service.CitedDecision]
     features: TaskFeatures
     summary: Entry | None
     questions: list[Entry]
@@ -268,11 +274,13 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     # Опись читается до признаков: `last_entry_at` считается из неё, и отдельного
     # запроса ради признака здесь по-прежнему нет ни одного.
     index = await case_service.case_index(session, task, actor=actor)
+    decisions = await decisions_service.cited_decisions(session, task.decisions, actor=actor)
     return TaskPackage(
         task=task,
         parent=hierarchy.parent,
         children=hierarchy.children,
         links=hierarchy.others,
+        decisions=decisions,
         features=case_service.features(
             questions, summary, index, blocked=links_service.blocked(links), remarks=remarks
         ),
@@ -301,6 +309,7 @@ async def create_task(
     checks: Sequence[str] = (),
     assignee: str | None = None,
     priority: TaskPriority | str = DEFAULT_PRIORITY,
+    decisions: Sequence[str] = (),
 ) -> Task:
     """Заводит задачу в `backlog`. Статус не принимается: новая задача рождается только там.
 
@@ -326,8 +335,11 @@ async def create_task(
             TaskField.CHECKS: checks,
             TaskField.ASSIGNEE: assignee,
             TaskField.PRIORITY: priority,
+            TaskField.DECISIONS: decisions,
         }
     )
+    # Решения проекта — проверка с базой, но тоже до номера: отказ не сжигает ключ.
+    await decisions_service.check_cited(session, before=(), after=stored[TaskField.DECISIONS])
 
     # Номер — последним, после всех проверок: см. строку документации выше.
     number = await projects_service.next_task_number(session, project, actor=actor)
@@ -414,12 +426,16 @@ async def close_task(
     следа: отказ на любой записи, на любом вердикте или на самом переходе откатывает
     всё вместе, включая занятый ключ идемпотентности.
 
-    Порядок подшивки — записи, вердикты, сводка — задаёт не удобство, а дисциплина
-    (`CONCEPT.md`, 5.3): сводка идёт последней, потому что она пересказывает исход
-    проверок, а не план. Требования выхода при этом никто не подменяет: их считает та же
-    проверка перехода, и считает **после** подшивки, поэтому вердикты этого вызова в
-    неё попадают наравне с подшитыми раньше по ходу работы. Задача, у которой проверка
-    осталась без положительного вердикта, не закроется и с полным пакетом.
+    Порядок подшивки — записи, вердикты, предупреждение, сводка — задаёт не удобство, а
+    дисциплина (`CONCEPT.md`, 5.3): сводка идёт последней, потому что она пересказывает
+    исход проверок, а не план. Требования выхода при этом никто не подменяет: их считает
+    та же проверка перехода, и считает **после** подшивки, поэтому вердикты этого вызова
+    в неё попадают наравне с подшитыми раньше по ходу работы. Задача, у которой проверка
+    осталась без вердикта или с `failed`, не закроется и с полным пакетом.
+
+    Предупреждение (`warning`) подшивается, только если последний вердикт этого захода
+    по какой-то проверке — `partial` или `unverifiable` (решение TRK-561#11). Аргумента
+    для него нет: его вызывает исход, который выбрал исполнитель, а не отдельная воля.
 
     Очередь изменений занимается первой, до подшивки: под ней задача перечитывается, и
     дальше и номера записей, и факты перехода относятся к одному моменту.
@@ -457,6 +473,16 @@ async def close_task(
                 outcome=verdict.outcome,
                 evidence=verdict.evidence,
                 action_id=action_id,
+            )
+        )
+    # Предупреждение — после вердиктов, потому что считается по ним, включая подшитые
+    # раньше по ходу работы, и до сводки, которая пересказывает исход закрытия. Отказ
+    # перехода ниже откатывает и его: предупреждение без закрытия не остаётся.
+    incomplete = await case_service.incomplete_checks(session, task)
+    if incomplete:
+        filed.append(
+            await case_service.record_warning(
+                session, task, actor=actor, checks=incomplete, action_id=action_id
             )
         )
     filed.append(
@@ -702,8 +728,19 @@ async def apply_task_changes(
         given[TaskField.CHECKS] = apply_check_edit(task.checks, edit)
     if given:
         _ensure_editable(task, given)
+    normalized = normalize_fields(given)
+    if TaskField.DECISIONS in normalized:
+        # Под очередью: «решение ещё действует» читается в том же моменте, что и
+        # фиксация. Проверяются только новые ссылки — стоявшие остаются и после замены
+        # решения (`CONCEPT.md`, 3.3).
+        await decisions_service.check_cited(
+            session,
+            before=task.decisions,
+            after=normalized[TaskField.DECISIONS],
+            key=task.key,
+        )
     recorded: list[TaskChange] = []
-    for field, after in normalize_fields(given).items():
+    for field, after in normalized.items():
         before = getattr(task, field.value)
         if _same(before, after):
             continue
@@ -789,8 +826,8 @@ async def apply_task_changes(
                 action_id=resolved_action_id,
             )
         else:
-            # Обвязка: сегодня это только `priority`. Ветка без условия намеренно —
-            # новое поле карточки получит запись само, а не окажется тихо немым в ленте.
+            # Обвязка: `priority` и `decisions`. Ветка без условия намеренно — новое
+            # поле карточки получит запись само, а не окажется тихо немым в ленте.
             entry = await case_service.record_field_changed(
                 session,
                 task,
@@ -857,8 +894,10 @@ async def _transition_facts(
     if from_status is TaskStatus.IN_PROGRESS and to_status is TaskStatus.DONE:
         pending_checks = await case_service.verdict_gaps(session, task)
     blockers: list[str] | None = None
+    blocking_questions: list[int] | None = None
     if to_status is TaskStatus.IN_PROGRESS:
         blockers = await links_service.open_blockers(session, task)
+        blocking_questions = await case_service.open_blocking_question_nos(session, task)
     children: list[str] | None = None
     if is_closed(to_status):
         children = await links_service.unclosed_children(session, task)
@@ -879,6 +918,7 @@ async def _transition_facts(
         has_summary_since_in_progress=has_summary,
         checks_without_passed_verdict=pending_checks,
         open_blockers=blockers,
+        open_blocking_questions=blocking_questions,
         unclosed_children=children,
         closing=closing,
         # Исполнитель — уже после полей этого вызова: переход проверяется после их

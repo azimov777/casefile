@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.project import Project
 from app.db.models.task import Task
+from app.domain.authors import label_author
 from app.domain.case import AGENT_ENTRY_TYPES, SERVICE_ENTRY_TYPES, EntryType
 from app.domain.errors import SearchFieldUnknownError, SearchValueInvalidError
 from app.domain.links import LinkKind
@@ -115,6 +116,41 @@ async def _file(session: AsyncSession, actor: Actor, task: Task, entry_type: Ent
                 remark_no=remark.no,
                 outcome="fixed",
                 body="Поправил",
+            )
+        case EntryType.ACCEPTANCE:
+            # Принимать есть что только у задачи, закрытой не целиком, и принимает не
+            # закрывший (TRK-561): закрывает `actor`, принимает временный агент с меткой.
+            await tasks_service.update_task(
+                session,
+                task,
+                actor=actor,
+                changes=tasks_service.TaskChanges(assignee=actor.author.signature),
+            )
+            await tasks_service.transition_task(session, task, actor=actor, to=TaskStatus.OPEN)
+            await tasks_service.transition_task(
+                session, task, actor=actor, to=TaskStatus.IN_PROGRESS
+            )
+            await tasks_service.close_task(
+                session,
+                task,
+                actor=actor,
+                summary=case_service.SummaryFiling(
+                    done="закрыта не целиком",
+                    remaining="nothing",
+                    blockers="nothing",
+                    next_step="no steps",
+                    unmeasured="проверка 1",
+                ),
+                verdicts=[
+                    case_service.VerdictFiling(check_no=1, outcome="partial", evidence="половина")
+                ],
+            )
+            return await case_service.add_entry(
+                session,
+                task,
+                actor=Actor(author=label_author("reviewer")),
+                type=EntryType.ACCEPTANCE,
+                title="Принято",
             )
         case _:
             return await case_service.add_entry(

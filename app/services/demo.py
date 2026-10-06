@@ -9,8 +9,11 @@
 Что наполняется (`TRK-29`):
 
 - проект `DEMO` с описанием — общим контекстом всех его задач;
-- семь задач: все шесть статусов, `in_progress` — двумя, потому что интересны обе:
-  с живой сводкой и с провальным вердиктом, держащим выход в `done`;
+- восемь задач: все шесть статусов, `in_progress` — двумя, потому что интересны обе:
+  с живой сводкой и с провальным вердиктом, держащим выход в `done`; `done` — тоже
+  двумя: вторая закрыта с проверкой `unverifiable`, и её предупреждение человек принял
+  (`warning` и `acceptance`, TRK-561). Она заведена последней, чтобы ключи первых семи
+  не сдвинулись: по ним ходят сквозные сценарии интерфейса;
 - записи **всех** типов, включая служебные `section_changed`, `assignee_changed`,
   `link_added` и `link_removed`: экран дела иначе показывал бы половину словаря;
 - атрибуты проекта с историей в его деле: заведение, изменение с причиной и снятие;
@@ -118,7 +121,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     done = await _done_task(session, project, agent=agent, temporary=temporary, human=human)
     in_progress = await _in_progress_task(session, project, agent=agent, owner=owner, human=human)
     candidate = await _candidate_task(session, project, agent=agent)
-    waiting = await _waiting_task(session, project, agent=agent, human=human)
+    awaiting = await _awaiting_answer_task(session, project, agent=agent, human=human)
     child = await _child_task(session, project, agent=agent, parent=in_progress)
     checking = await _checking_task(
         session, project, agent=agent, temporary=temporary, blocker=in_progress
@@ -138,7 +141,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     await links_service.remove_link(
         session, in_progress, candidate, actor=agent, kind=LinkKind.RELATES
     )
-    await links_service.add_link(session, candidate, waiting, actor=agent, kind=LinkKind.RELATES)
+    await links_service.add_link(session, candidate, awaiting, actor=agent, kind=LinkKind.RELATES)
 
     await _attributes(session, project, agent=agent)
 
@@ -153,9 +156,11 @@ async def seed_demo(session: AsyncSession) -> DemoData:
 
     await _moved_there_and_back(session, cancelled, home=project, owner=owner)
 
+    accepted = await _accepted_warning_task(session, project, agent=agent, human=human)
+
     return DemoData(
         project=project,
-        tasks=[done, in_progress, candidate, waiting, child, checking, cancelled],
+        tasks=[done, in_progress, candidate, awaiting, child, checking, cancelled, accepted],
     )
 
 
@@ -390,6 +395,75 @@ async def _done_task(
     return task
 
 
+async def _accepted_warning_task(
+    session: AsyncSession,
+    project: Project,
+    *,
+    agent: Actor,
+    human: Participant,
+) -> Task:
+    """Закрытая не целиком задача: проверку нельзя было прогнать как написано.
+
+    Закрытие с вердиктом `unverifiable` подшивает предупреждение `warning`, а человек его
+    принимает записью `acceptance` (`CONCEPT.md`, 3.4; TRK-561). Принятие, а не открытое
+    предупреждение, — затем, чтобы «входящая» и её значок в демо остались прежними:
+    открытое предупреждение показывают сквозные сценарии на своей задаче.
+    """
+    task = await tasks_service.create_task(
+        session,
+        actor=agent,
+        project=project,
+        title="Подсказка о сгоревшем номере в списке задач",
+        description="Продолжение замечания к DEMO-1: дыра в нумерации видна в списке.",
+        goal="Человек видит в списке, что номер задачи сгорел, а не потерян",
+        context="Сгоревшие номера не хранятся: их видно только по разрыву в ключах",
+        constraints="Номера не переиспользуются, счётчик проекта не трогать",
+        output="Подсказка в шапке списка задач",
+        checks=[
+            "Тест страницы списка: подсказка видна при разрыве номеров",
+            "Подсказку видно в Safari владельца на телефоне",
+        ],
+        assignee=DEMO_AGENT_NAME,
+    )
+    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
+    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
+    await tasks_service.close_task(
+        session,
+        task,
+        actor=agent,
+        verdicts=[
+            case_service.VerdictFiling(
+                check_no=1,
+                outcome=VerdictOutcome.PASSED,
+                evidence="`pnpm test tasks-page` — 12 passed, подсказка в снимке",
+            ),
+            case_service.VerdictFiling(
+                check_no=2,
+                outcome=VerdictOutcome.UNVERIFIABLE,
+                evidence=(
+                    "Safari владельца агенту недоступен; прогнан Chromium на ширине "
+                    "390 px — подсказка видна и не переносится"
+                ),
+            ),
+        ],
+        summary=case_service.SummaryFiling(
+            done="Подсказка о сгоревшем номере есть в списке задач; Safari не проверен",
+            remaining="Ничего",
+            blockers="Нет",
+            next_step="Шагов нет, задача закрыта",
+            unmeasured="Вид в Safari на телефоне: проверка 2 закрыта как невыполнимая",
+        ),
+    )
+    await case_service.add_entry(
+        session,
+        task,
+        actor=Actor(author=human.author, participant=human),
+        type=EntryType.ACCEPTANCE,
+        title="Принято: в Safari посмотрю сам при следующем выпуске",
+    )
+    return task
+
+
 async def _remarks_on_done(
     session: AsyncSession,
     done: Task,
@@ -527,15 +601,16 @@ async def _candidate_task(session: AsyncSession, project: Project, *, agent: Act
     return task
 
 
-async def _waiting_task(
+async def _awaiting_answer_task(
     session: AsyncSession, project: Project, *, agent: Actor, human: Participant
 ) -> Task:
-    """Задача в `waiting`: сценарий `CONCEPT.md`, 4.6, строка «Ответа, долго».
+    """Задача ждёт ответа человека: сценарий `CONCEPT.md`, 4.6, строка «Ответа, долго».
 
     Агент упёрся в вопрос, на который сам ответить не может, задал его с признаком
-    `blocking`, написал сводку и ушёл в `waiting`. Ход за человеком, поэтому не в `open`:
-    в `open` стоит то, что можно брать. Человек видит вопрос в своей «входящей», а саму
-    задачу — отбором `status: waiting`.
+    `blocking`, написал сводку и ушёл в `open` с причиной, называющей вопрос. Ожидание
+    держит вопрос, а не статус: кандидатом задача не считается, пока он открыт
+    (`open_blocking_questions`), и в работу её не взять (`task_has_open_blocking_questions`).
+    Человек видит вопрос в своей «входящей», а саму задачу — в столбце «Ждёт ответа».
     """
     task = await tasks_service.create_task(
         session,
@@ -552,7 +627,7 @@ async def _waiting_task(
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
-    await case_service.ask(
+    question = await case_service.ask(
         session,
         task,
         actor=agent,
@@ -577,8 +652,8 @@ async def _waiting_task(
         session,
         task,
         actor=agent,
-        to=TaskStatus.WAITING,
-        reason="Жду ответа владельца на вопрос о сроке хранения дел отменённых задач",
+        to=TaskStatus.OPEN,
+        reason=f"Жду ответа владельца на {task.key}#{question.no} о сроке хранения дел",
     )
     return task
 

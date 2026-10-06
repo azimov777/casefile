@@ -101,6 +101,7 @@ class NoFactsRead(_EntryFactsBase):
         EntryType.FINDING,
         EntryType.ARTIFACT,
         EntryType.REMARK,
+        EntryType.ACCEPTANCE,
         EntryType.NOTE,
         EntryType.CREATED,
         EntryType.ARCHIVED,
@@ -247,6 +248,32 @@ class MovedFactsRead(_EntryFactsBase):
     )
 
 
+class WarningCheckRead(BaseModel):
+    """Проверка, закрытая не целиком: номер и исход."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    check_no: int = Field(ge=FIRST_CHECK_NUMBER, examples=[2], description="Number of the check")
+    outcome: VerdictOutcome = Field(
+        examples=[VerdictOutcome.PARTIAL],
+        description="Last verdict of the closing pass: `partial` or `unverifiable`",
+    )
+
+
+class WarningFactsRead(_EntryFactsBase):
+    """Предупреждение закрытия: номера проверок, закрытых `partial` и `unverifiable`."""
+
+    type: Literal[EntryType.WARNING]
+    partial: list[int] | None = Field(
+        default=None, examples=[[2]], description="Checks closed `partial`, by ascending number"
+    )
+    unverifiable: list[int] | None = Field(
+        default=None,
+        examples=[[3]],
+        description="Checks closed `unverifiable`, by ascending number",
+    )
+
+
 # Состав полей каждой формы объявлен схемой, а не угадывается по тому, какие ключи
 # пришли непустыми. Разметка повторяет `type` строки описи, и это осознанная плата за
 # то, чтобы `facts` читался сам по себе: клиент принимает его отдельным значением — и из
@@ -265,7 +292,8 @@ type EntryFactsRead = Annotated[
     | VerdictFactsRead
     | ResolutionFactsRead
     | AttributeFactsRead
-    | MovedFactsRead,
+    | MovedFactsRead
+    | WarningFactsRead,
     Field(discriminator="type"),
 ]
 """Факты записи: размеченное по `type` объединение всех форм."""
@@ -301,6 +329,25 @@ class EmptyPayload(BaseModel):
     """Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class DecisionPayload(BaseModel):
+    """Нагрузка решения: какие решения проекта оно заменило.
+
+    Список со значением по умолчанию: решения задач и решения проекта, подшитые до замены
+    (`TRK-554`), ключа не несут, а ответ несёт его всегда — форма записи одна.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    supersedes: list[int] = Field(
+        default_factory=list,
+        examples=[[12]],
+        description=(
+            "Numbers of the earlier decisions of the same project that this project "
+            "decision superseded; empty for a task decision"
+        ),
+    )
 
 
 class SummaryPartsPayload(BaseModel):
@@ -574,6 +621,23 @@ class FieldChangedPayload(BaseModel):
     after: str | None = Field(default=None, description="New value")
 
 
+class DecisionsChangedPayload(BaseModel):
+    """Правка решений проекта задачи (`decisions`): списки ссылок «было» и «стало».
+
+    Своя форма, а не расширение `FieldChangedPayload` до «строка либо список»: там
+    значения — строки, и объединение «на всякий случай» сделало бы тип каждого поля
+    обвязки неопределённым. Разметка — `field`: у этой формы оно всегда `decisions`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: Literal[TaskField.DECISIONS] = Field(examples=[TaskField.DECISIONS])
+    before: list[str] = Field(examples=[["TRK#12"]], description="References before the edit")
+    after: list[str] = Field(
+        examples=[["TRK#12", "TRK#15"]], description="References after the edit"
+    )
+
+
 class AssigneeChangedPayload(BaseModel):
     """Смена исполнителя. `null` с любой стороны означает «исполнителя не было»."""
 
@@ -634,6 +698,21 @@ class AttributeRemovedPayload(BaseModel):
     reason: str = Field(
         examples=["Проект больше не публикуется в реестре"],
         description="Why the attribute was removed",
+    )
+
+
+class WarningPayload(BaseModel):
+    """Предупреждение закрытия: проверки, чей последний вердикт закрывающего захода —
+    `partial` или `unverifiable`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checks: list[WarningCheckRead] = Field(
+        min_length=1,
+        description=(
+            "Checks closed not in full, by ascending number. The warning stays open "
+            "until an `acceptance` or a `remark` is filed after it"
+        ),
     )
 
 
@@ -739,12 +818,24 @@ class _ProjectEntryRead(_EntryReadBase):
     )
 
 
+class DecisionEntryRead(_ProjectOwnableEntryRead):
+    """Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.
+
+    Нагрузка одна на оба дела: `supersedes` — номера решений того же проекта, которые это
+    заменило (`CONCEPT.md`, 3.2). У решения задачи и у решения проекта, подшитого до
+    замены, список пуст. Статуса здесь нет: он меняется без записи в этом деле и
+    считается при чтении проекта и задачи (`ProjectDecisionRead`, `CitedDecisionRead`).
+    """
+
+    type: Literal[EntryType.DECISION]
+    payload: DecisionPayload = Field(default_factory=DecisionPayload)
+
+
 class PlainEntryRead(_ProjectOwnableEntryRead):
-    """Запись без нагрузки: решение, попытка, находка, артефакт, заметка, заведение задачи
-    или проекта."""
+    """Запись без нагрузки: попытка, находка, артефакт, заметка, заведение задачи или
+    проекта."""
 
     type: Literal[
-        EntryType.DECISION,
         EntryType.ATTEMPT,
         EntryType.FINDING,
         EntryType.ARTIFACT,
@@ -817,6 +908,21 @@ class ResolutionEntryRead(_EntryReadBase):
     payload: ResolutionPayload
 
 
+class AcceptanceEntryRead(_EntryReadBase):
+    """Принятие: недостаток, названный предупреждением, принят. Снимает предупреждение."""
+
+    type: Literal[EntryType.ACCEPTANCE]
+    payload: EmptyPayload = Field(default_factory=EmptyPayload)
+
+
+class WarningEntryRead(_EntryReadBase):
+    """Служебная запись закрытия: задача закрыта с проверками `partial` или
+    `unverifiable`. Открыта, пока после неё нет `acceptance` или `remark`."""
+
+    type: Literal[EntryType.WARNING]
+    payload: WarningPayload
+
+
 class StatusChangedEntryRead(_EntryReadBase):
     """Служебная запись о переходе статуса."""
 
@@ -832,11 +938,15 @@ class SectionChangedEntryRead(_EntryReadBase):
 
 
 class FieldChangedEntryRead(_ProjectOwnableEntryRead):
-    """Служебная запись о правке обвязки задачи (`priority`) или карточки проекта
-    (название, описание)."""
+    """Служебная запись о правке обвязки задачи (`priority`, `decisions`) или карточки
+    проекта (название, описание).
+
+    Нагрузка — одна из двух форм: строки «было» и «стало» у полей-значений и списки у
+    `decisions`. Различает их `field`; списки бывают только у `decisions`.
+    """
 
     type: Literal[EntryType.FIELD_CHANGED]
-    payload: FieldChangedPayload
+    payload: DecisionsChangedPayload | FieldChangedPayload
 
 
 class AssigneeChangedEntryRead(_EntryReadBase):
@@ -890,12 +1000,15 @@ class ProjectArchiveEntryRead(_ProjectEntryRead):
 
 type EntryRead = Annotated[
     PlainEntryRead
+    | DecisionEntryRead
     | SummaryEntryRead
     | QuestionEntryRead
     | AnswerEntryRead
     | VerdictEntryRead
     | RemarkEntryRead
     | ResolutionEntryRead
+    | AcceptanceEntryRead
+    | WarningEntryRead
     | StatusChangedEntryRead
     | SectionChangedEntryRead
     | FieldChangedEntryRead
@@ -930,12 +1043,15 @@ def entry_read_schema() -> dict[str, Any]:
 
 
 _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
+    EntryType.DECISION: DecisionEntryRead,
     EntryType.SUMMARY: SummaryEntryRead,
     EntryType.QUESTION: QuestionEntryRead,
     EntryType.ANSWER: AnswerEntryRead,
     EntryType.VERDICT: VerdictEntryRead,
     EntryType.REMARK: RemarkEntryRead,
     EntryType.RESOLUTION: ResolutionEntryRead,
+    EntryType.ACCEPTANCE: AcceptanceEntryRead,
+    EntryType.WARNING: WarningEntryRead,
     EntryType.STATUS_CHANGED: StatusChangedEntryRead,
     EntryType.SECTION_CHANGED: SectionChangedEntryRead,
     EntryType.FIELD_CHANGED: FieldChangedEntryRead,
@@ -1057,7 +1173,8 @@ class AnswerEntryCreate(_EntryCreateBase):
 
 
 class VerdictEntryCreate(_EntryCreateBase):
-    """Вердикт. Заголовок не принимается; тело записи — доказательство исхода."""
+    """Вердикт. Заголовок не принимается; тело записи — доказательство исхода, у
+    `partial` и `unverifiable` обязательное (`422 entry_fields_invalid`, поле `evidence`)."""
 
     type: Literal[EntryType.VERDICT]
     payload: VerdictPayload
@@ -1067,6 +1184,16 @@ class RemarkEntryCreate(_TitledEntryCreate):
     """Замечание: «вышло не то». Нагрузки нет, заголовок пишет автор."""
 
     type: Literal[EntryType.REMARK]
+
+
+class AcceptanceEntryCreate(_TitledEntryCreate):
+    """Принятие открытого предупреждения: нагрузки нет, заголовок пишет автор.
+
+    Без открытого предупреждения — `409 warning_not_open`; от подписи, закрывшей
+    задачу, — `409 acceptance_by_closer`.
+    """
+
+    type: Literal[EntryType.ACCEPTANCE]
 
 
 class ResolutionEntryCreate(_EntryCreateBase):
@@ -1083,7 +1210,8 @@ type EntryCreate = Annotated[
     | AnswerEntryCreate
     | VerdictEntryCreate
     | RemarkEntryCreate
-    | ResolutionEntryCreate,
+    | ResolutionEntryCreate
+    | AcceptanceEntryCreate,
     Field(discriminator="type"),
 ]
 """Подшиваемая запись: те же типы, что доступны агенту, размеченные по `type`."""
@@ -1095,6 +1223,10 @@ class ProjectEntryCreate(_TitledEntryCreate):
     Отдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой
     (`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не
     отказом `entry_fields_invalid` после.
+
+    `supersedes` — только у решения: новое решение проекта заменяет названные
+    (`CONCEPT.md`, 3.2). Без значения по умолчанию в схеме (`default_factory`): иначе
+    клиент интерфейса требовал бы его у каждой заметки (`docs/notes/api.md`).
     """
 
     type: Literal[
@@ -1103,6 +1235,16 @@ class ProjectEntryCreate(_TitledEntryCreate):
         EntryType.FINDING,
         EntryType.ARTIFACT,
     ]
+    supersedes: list[int] = Field(
+        default_factory=list,
+        examples=[[12]],
+        description=(
+            "Numbers of earlier decisions of this project that the new decision supersedes; "
+            "only with `decision`. A number outside the project's case or of another type "
+            "answers `entry_fields_invalid`; a decision superseded already, "
+            "`decision_not_in_force` with its successor"
+        ),
+    )
 
 
 type ClosingEntryCreate = Annotated[

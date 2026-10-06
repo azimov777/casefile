@@ -156,6 +156,19 @@ class TaskFilters:
             ),
         ),
     ] = None
+    decision: Annotated[
+        list[str] | None,
+        Query(
+            max_length=MAX_VALUES_PER_CONDITION,
+            examples=[["TRK#15"]],
+            description=(
+                "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one "
+                "of them, in any status, also once the decision is superseded. `empty()` "
+                "finds tasks that name no decision. An address that is not a `decision` "
+                "entry of a project's case answers 422 instead of an empty page"
+            ),
+        ),
+    ] = None
     under: Annotated[
         list[str] | None,
         Query(
@@ -220,6 +233,16 @@ class TaskFilters:
             ),
         ),
     ] = None
+    open_warnings: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description=(
+                "1 for tasks closed with checks `partial` or `unverifiable` whose warning "
+                "has no `acceptance` or `remark` after it yet, 0 for the rest"
+            ),
+        ),
+    ] = None
     remarks_in_work: Annotated[
         int | None,
         Query(
@@ -251,6 +274,7 @@ class TaskFilters:
                 ("key", self.key),
                 ("project", self.project),
                 ("parent", self.parent),
+                ("decision", self.decision),
                 ("under", self.under),
                 ("status", None if self.status is None else [item.value for item in self.status]),
                 ("assignee", self.assignee),
@@ -268,6 +292,7 @@ class TaskFilters:
                 ("open_questions", self.open_questions),
                 ("open_blocking_questions", self.open_blocking_questions),
                 ("open_remarks", self.open_remarks),
+                ("open_warnings", self.open_warnings),
                 ("remarks_in_work", self.remarks_in_work),
             )
             if value is not None

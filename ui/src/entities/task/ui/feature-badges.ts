@@ -13,6 +13,7 @@ export function hasFeatureBadges(features: TaskFeatures): boolean {
     features.blocked ||
     features.open_questions > 0 ||
     features.open_blocking_questions > 0 ||
-    features.open_remarks > 0
+    features.open_remarks > 0 ||
+    features.open_warnings > 0
   );
 }

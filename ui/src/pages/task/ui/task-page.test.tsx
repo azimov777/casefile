@@ -783,6 +783,7 @@ describe('замечание к задаче', () => {
               open_questions: 0,
               open_blocking_questions: 0,
               open_remarks: filed ? 2 : 0,
+              open_warnings: 0,
               last_summary_at: null,
               last_entry_at: null,
             },
@@ -1233,6 +1234,7 @@ describe('смысл признака в шапке достижим без на
           open_questions: 2,
           open_blocking_questions: 1,
           open_remarks: 0,
+          open_warnings: 0,
           last_summary_at: null,
         },
       }),
@@ -1334,5 +1336,93 @@ describe('задача архивного проекта (UI-176)', () => {
     expect(
       screen.queryByText(say.task('archived.notice', { key: 'DEMO' }), { exact: false }),
     ).toBeNull();
+  });
+});
+
+describe('предупреждение закрытия не целиком (TRK-561)', () => {
+  /** Закрытая задача с открытым предупреждением: проверки 2 и 3 не целиком. */
+  function warned(accepted: { body: unknown; key: string | null }[]) {
+    let open = 1;
+    server.use(
+      http.get(`${API}/api/v1/tasks/DEMO-8`, () =>
+        data(
+          taskPackage('DEMO-8', {
+            task: taskDetails('DEMO-8', {
+              status: 'done',
+              checks: ['Тесты зелёные', 'Вид в Safari владельца', 'Замер на установке'],
+            }),
+            features: {
+              blocked: false,
+              open_questions: 0,
+              open_blocking_questions: 0,
+              open_remarks: 0,
+              open_warnings: open,
+              last_summary_at: null,
+              last_entry_at: null,
+            },
+            index: [
+              heading(
+                12,
+                { type: 'warning', partial: [2], unverifiable: [3] },
+                'Closed not in full: check 2 partial, check 3 unverifiable',
+              ),
+            ],
+          }),
+        ),
+      ),
+      http.post(`${API}/api/v1/tasks/DEMO-8/entries`, async ({ request }) => {
+        accepted.push({ body: await request.json(), key: request.headers.get('Idempotency-Key') });
+        open = 0;
+        return data(
+          {
+            ...remarkEntry(13, 'DEMO-8', 'Принято без доработки'),
+            type: 'acceptance' as const,
+          },
+          201,
+        );
+      }),
+    );
+  }
+
+  it('плашка называет проверки словами и «Принять» подшивает запись acceptance', async () => {
+    const accepted: { body: unknown; key: string | null }[] = [];
+    warned(accepted);
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8');
+
+    const panel = await screen.findByRole('region', { name: say.ui('warning.title') });
+    expect(within(panel).getByText(say.ui('entry.verdictOutcome.partial'))).toBeInTheDocument();
+    expect(
+      within(panel).getByText(say.ui('entry.verdictOutcome.unverifiable')),
+    ).toBeInTheDocument();
+    // Текст проверки берётся из задания по номеру: в предупреждении только номера.
+    expect(within(panel).getByText('Вид в Safari владельца')).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole('button', { name: say.ui('warning.accept') }));
+
+    await waitFor(() => expect(accepted).toHaveLength(1));
+    expect(accepted[0]?.body).toEqual({
+      type: 'acceptance',
+      title: say.ui('warning.acceptTitle'),
+      body: '',
+    });
+    expect(accepted[0]?.key).not.toBeNull();
+    // Перечитанный пакет говорит, что предупреждение снято, — плашка уходит.
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: say.ui('warning.title') })).toBeNull(),
+    );
+  });
+
+  it('«Вернуть на доработку» раскрывает форму замечания', async () => {
+    warned([]);
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8');
+
+    const panel = await screen.findByRole('region', { name: say.ui('warning.title') });
+    await user.click(within(panel).getByRole('button', { name: say.ui('warning.return') }));
+
+    expect(
+      await screen.findByRole('form', { name: say.ui('remark.formLabel', { key: 'DEMO-8' }) }),
+    ).toBeInTheDocument();
   });
 });

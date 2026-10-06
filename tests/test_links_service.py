@@ -683,9 +683,10 @@ async def test_a_waiting_child_keeps_the_parent_from_closing(
     task_actor: Actor,
     project: Project,
 ) -> None:
-    """Обзорная проверка 5 задачи TRK-15: `waiting` ребёнка не закрывает.
+    """Обзорная проверка 5 задачи TRK-15: ждущий ребёнок родителя не отпускает.
 
-    Закрывают только `done` и `cancelled`. Ждущий ребёнок — незаконченная работа, а не
+    Закрывают только `done` и `cancelled`. Ребёнок, ждущий ответа человека в `open` с
+    вопросом `blocking` (статуса ожидания нет с TRK-573), — незаконченная работа, а не
     отменённая, и родитель, ушедший в `done` поверх него, соврал бы про целое
     (`CONCEPT.md`, 3.3). Отказ обязан назвать ключ ребёнка: иначе родитель большой
     декомпозиции придётся искать виновника перебором.
@@ -694,8 +695,13 @@ async def test_a_waiting_child_keeps_the_parent_from_closing(
     child = await make(db_session, task_actor, project, "ребёнок")
     await service.add_link(db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT)
     await move(db_session, child, task_actor, TaskStatus.OPEN)
-    await tasks_service.transition_task(
-        db_session, child, actor=task_actor, to=TaskStatus.WAITING, reason="Жду ответа человека"
+    await case_service.ask(
+        db_session,
+        child,
+        actor=task_actor,
+        addressees=["owner"],
+        title="Жду ответа человека",
+        blocking=True,
     )
     await move(db_session, parent, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
     with pytest.raises(TaskHasUnclosedChildrenError) as error:

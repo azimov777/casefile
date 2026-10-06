@@ -21,8 +21,8 @@ FastAPI, и правило, записанное только в схеме, д�
 
 ## Правки полей зависят от статуса
 
-Название, описание и пять разделов меняются только в `backlog`; исполнитель, теги и
-приоритет — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего.
+Название, описание и пять разделов меняются только в `backlog`; исполнитель, приоритет и
+решения проекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего.
 Правило выражено одной функцией (`editable_fields`), чтобы частичное обновление и
 инструмент MCP спрашивали её, а не держали по своей копии таблицы.
 """
@@ -44,6 +44,7 @@ from app.domain.errors import (
     SummaryRequiredError,
     TaskBlockedError,
     TaskFieldsInvalidError,
+    TaskHasOpenBlockingQuestionsError,
     TaskHasUnclosedChildrenError,
     TaskMoveBatchSizeInvalidError,
     TaskMoveReasonRequiredError,
@@ -193,6 +194,59 @@ def is_plain_number(part: str) -> bool:
     return part.isascii() and part.isdigit() and part.lstrip("0") == part
 
 
+# --- Ссылка на решение проекта ----------------------------------------------------------
+
+#: Разделитель ссылки на запись дела: `TRK-42#12` — двенадцатая запись задачи `TRK-42`,
+#: `TRK#7` — седьмая запись дела проекта `TRK`. Объявлен здесь, а не в `case.py`: им же
+#: разбирается поле задачи `decisions` (ниже), а `case.py` сам импортирует этот модуль.
+ENTRY_REF_SEPARATOR = "#"
+
+#: Форма ссылки на решение проекта в подробностях отказа: по ней агент чинит опечатку.
+DECISION_REF_SHAPE = f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number>"
+
+#: Номер первой записи дела — у задачи и у проекта (`CONCEPT.md`, 3.4). Сквозной `seq`
+#: выдаёт база, а `no` считается внутри владельца.
+FIRST_ENTRY_NUMBER = 1
+
+#: Сколько решений проекта называет одна задача (`CONCEPT.md`, 3.3). Решения проекта —
+#: выборы, которые переживают задачу; задача, опирающаяся на два десятка таких выборов,
+#: называет не своё основание, а весь проект, и тот уже отдаёт `get_project`.
+MAX_DECISIONS = 20
+
+
+def normalize_decision_ref(value: Any) -> str:
+    """Ссылка на решение проекта в каноническом виде: `trk#15` → `TRK#15`.
+
+    Решение проекта — только запись дела проекта (`CONCEPT.md`, 3.2, «Слухи»), поэтому
+    форма одна — ключ проекта и номер. Запись задачи (`TRK-42#7`) отвергается своей
+    причиной `task_entry`, а не общей «не та форма»: это ровно та ссылка, которой практику
+    одной задачи выдают за решение, и отказ называет её прямо. Существует ли запись и
+    решение ли это, проверяет сценарий — домен в базу не ходит.
+    """
+    text = _text(value).strip()
+    if not text:
+        raise FieldProblem("empty_item")
+    head, separator, tail = text.partition(ENTRY_REF_SEPARATOR)
+    if separator and is_plain_number(tail) and int(tail) >= FIRST_ENTRY_NUMBER:
+        try:
+            parse_task_key(head)
+        except InvalidTaskKeyError:
+            pass
+        else:
+            raise FieldProblem("task_entry", ref=text, expected=DECISION_REF_SHAPE)
+        try:
+            return f"{validate_project_key(head)}{ENTRY_REF_SEPARATOR}{int(tail)}"
+        except InvalidProjectKeyError:
+            pass
+    raise FieldProblem("not_a_decision_ref", ref=text, expected=DECISION_REF_SHAPE)
+
+
+def split_decision_ref(ref: str) -> tuple[str, int]:
+    """Канонический `TRK#15` → `("TRK", 15)`. Ссылка уже прошла `normalize_decision_ref`."""
+    key, _, no = ref.partition(ENTRY_REF_SEPARATOR)
+    return key, int(no)
+
+
 # --- Статусы ------------------------------------------------------------------------
 
 
@@ -202,7 +256,6 @@ class TaskStatus(StrEnum):
     BACKLOG = "backlog"
     OPEN = "open"
     IN_PROGRESS = "in_progress"
-    WAITING = "waiting"
     DONE = "done"
     CANCELLED = "cancelled"
 
@@ -211,9 +264,9 @@ class TaskStatus(StrEnum):
 INITIAL_STATUS = TaskStatus.BACKLOG
 
 #: Порядок цепочки: `backlog` < `open` < `in_progress` < `done`. Переход к меньшему
-#: статусу — шаг назад. `cancelled` и `waiting` в цепочке не стоят: это выходы в сторону,
-#: и `is_step_back` для них отвечает `False` — причину у перехода в них требует не
-#: правило шага назад, а собственные ветки `check_reason_for_step_back_cancel_or_wait`.
+#: статусу — шаг назад. `cancelled` в цепочке не стоит: это выход в сторону, и
+#: `is_step_back` для него отвечает `False` — причину у перехода в него требует не
+#: правило шага назад, а собственная ветка `check_reason_for_step_back_or_cancel`.
 STATUS_CHAIN: tuple[TaskStatus, ...] = (
     TaskStatus.BACKLOG,
     TaskStatus.OPEN,
@@ -227,29 +280,21 @@ _CHAIN_RANK = {status: rank for rank, status in enumerate(STATUS_CHAIN)}
 CLOSED_STATUSES: frozenset[TaskStatus] = frozenset({TaskStatus.DONE, TaskStatus.CANCELLED})
 
 #: Таблица переходов. Порядок целей в каждой строке — порядок в ответе «доступные
-#: переходы»: сначала вперёд по цепочке, потом в сторону (`waiting`), потом назад, потом
-#: отмена. У `waiting` хода вперёд нет — он вне цепочки, — поэтому его цели идут по
-#: убыванию ранга: возврат в работу это главный ход дождавшейся задачи.
+#: переходы»: сначала вперёд по цепочке, потом назад, потом отмена.
 #:
-#: Прямого хода `waiting → done` нет намеренно (`CONCEPT.md`, 3.3): он обошёл бы
-#: проверку вердиктов, которая висит на `in_progress → done`.
+#: Ждущая задача стоит в `open` (`CONCEPT.md`, 3.3, «Ожидание»): статуса ожидания нет,
+#: его снял `TRK-573` по решению владельца `TRK-569#9`. Ждёт её носитель в деле — вопрос
+#: с `blocking` или связь `blocked_by`, — и дверь в работу держат проверки входа
+#: (`check_no_open_blockers`, `check_no_open_blocking_questions`), а не строка таблицы.
 TRANSITIONS: Mapping[TaskStatus, tuple[TaskStatus, ...]] = {
-    TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.WAITING, TaskStatus.CANCELLED),
+    TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
     TaskStatus.OPEN: (
         TaskStatus.IN_PROGRESS,
-        TaskStatus.WAITING,
         TaskStatus.BACKLOG,
         TaskStatus.CANCELLED,
     ),
     TaskStatus.IN_PROGRESS: (
         TaskStatus.DONE,
-        TaskStatus.WAITING,
-        TaskStatus.OPEN,
-        TaskStatus.BACKLOG,
-        TaskStatus.CANCELLED,
-    ),
-    TaskStatus.WAITING: (
-        TaskStatus.IN_PROGRESS,
         TaskStatus.OPEN,
         TaskStatus.BACKLOG,
         TaskStatus.CANCELLED,
@@ -272,9 +317,8 @@ def allowed_transitions(status: TaskStatus) -> tuple[TaskStatus, ...]:
 def is_step_back(from_status: TaskStatus, to_status: TaskStatus) -> bool:
     """Шаг назад — переход к меньшему статусу цепочки.
 
-    `cancelled` и `waiting` вне цепочки, поэтому шагом назад не считаются ни переходы в
-    них, ни выходы из `waiting`: `waiting → backlog` откатом не является, потому что
-    ожидание ступенью работы не было.
+    `cancelled` вне цепочки, поэтому переход в него шагом назад не считается: причину у
+    отмены требует своя ветка `check_reason_for_step_back_or_cancel`.
     """
     if from_status not in _CHAIN_RANK or to_status not in _CHAIN_RANK:
         return False
@@ -320,6 +364,9 @@ class TaskField(StrEnum):
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
+    #: Решения проекта, на которые опирается задача (`CONCEPT.md`, 3.3): обвязка, а не
+    #: задание, поэтому меняется в любом незакрытом статусе и пишет `field_changed`.
+    DECISIONS = "decisions"
 
 
 #: Четыре текстовых раздела; пятый — `checks` — устроен иначе (список), поэтому отдельно.
@@ -338,7 +385,9 @@ BACKLOG_ONLY_FIELDS: frozenset[TaskField] = frozenset(
 )
 
 #: Меняются в любом незакрытом статусе: это не содержание задачи, а её обвязка.
-OPEN_FIELDS: frozenset[TaskField] = frozenset({TaskField.ASSIGNEE, TaskField.PRIORITY})
+OPEN_FIELDS: frozenset[TaskField] = frozenset(
+    {TaskField.ASSIGNEE, TaskField.PRIORITY, TaskField.DECISIONS}
+)
 
 
 def editable_fields(status: TaskStatus) -> frozenset[TaskField]:
@@ -525,6 +574,25 @@ def _normalize_priority(value: Any) -> TaskPriority:
         ) from None
 
 
+def _normalize_decisions(value: Any) -> list[str]:
+    """Решения проекта задачи: канонические ссылки `TRK#15` без повторов, в порядке постановки.
+
+    Повтор схлопывается, а не отвергается: ссылка — не адрес по номеру, как проверка, и
+    второй `TRK#15` ничего не сдвигает. Пустой элемент и чужая форма отвергаются с
+    причиной (`normalize_decision_ref`).
+    """
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        raise FieldProblem("not_a_list")
+    refs: list[str] = []
+    for item in value:
+        ref = normalize_decision_ref(item)
+        if ref not in refs:
+            refs.append(ref)
+    if len(refs) > MAX_DECISIONS:
+        raise FieldProblem("too_many", max=MAX_DECISIONS, got=len(refs))
+    return refs
+
+
 _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.TITLE: _normalize_title,
     TaskField.DESCRIPTION: _normalize_description,
@@ -535,6 +603,7 @@ _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.CHECKS: _normalize_checks,
     TaskField.ASSIGNEE: _normalize_assignee,
     TaskField.PRIORITY: _normalize_priority,
+    TaskField.DECISIONS: _normalize_decisions,
 }
 
 
@@ -546,7 +615,8 @@ class CheckGapReason(StrEnum):
 
     Стабильные строки: они уезжают в `details.checks` отказа `checks_not_passed`, и по
     ним читающий отличает «вердикта в этом заходе нет» от «последний вердикт провальный»
-    — состояния разные, и делают по ним разное.
+    — состояния разные, и делают по ним разное. Исходов `partial` и `unverifiable` здесь
+    нет: закрыть они дают (`VerdictOutcome`).
     """
 
     NO_VERDICT = "no_verdict"
@@ -607,8 +677,9 @@ class TransitionFacts:
     #: Есть ли в деле сводка, подшитая после последнего входа в `in_progress`. `False`
     #: по умолчанию — незаполненный факт запрещает выход из работы, а не разрешает его.
     has_summary_since_in_progress: bool = False
-    #: Проверки без положительного вердикта **в этом заходе** — среди подшитых после
-    #: последнего входа в `in_progress`, каждая с причиной. `None` — «факт не считали»:
+    #: Проверки без засчитанного вердикта **в этом заходе** — среди подшитых после
+    #: последнего входа в `in_progress`, каждая с причиной; засчитаны `passed`, `partial`
+    #: и `unverifiable` (`check_verdicts_before_done`). `None` — «факт не считали»:
     #: проверка истолкует это как «положительных вердиктов нет ни по одной проверке» и
     #: переход запретит. Пустой кортеж означал бы обратное — что все проверки
     #: пройдены, — поэтому значением по умолчанию он быть не может.
@@ -617,6 +688,9 @@ class TransitionFacts:
     #: и переход в `in_progress` запрещается: назвать блокеры при этом нечем, поэтому
     #: отказ приходит с `details.reason`, а не с пустым списком, который соврал бы.
     open_blockers: Sequence[str] | None = None
+    #: Номера открытых вопросов с `blocking` — без `answer` в деле задачи. `None` — «факт
+    #: не считали»: читается так же, как у блокеров, и по той же причине.
+    open_blocking_questions: Sequence[int] | None = None
     #: Ключи детей не в `done` и не в `cancelled`. `None` читается так же, как у
     #: блокеров, и по той же причине.
     unclosed_children: Sequence[str] | None = None
@@ -641,24 +715,21 @@ class TransitionFacts:
 type TransitionCheck = Callable[[TransitionFacts], None]
 
 
-def check_reason_for_step_back_cancel_or_wait(facts: TransitionFacts) -> None:
-    """Шаг назад, отмена и уход в `waiting` требуют причины.
+def check_reason_for_step_back_or_cancel(facts: TransitionFacts) -> None:
+    """Шаг назад и отмена требуют причины.
 
     Причина уезжает в запись `status_changed` — это то, по чему преемник понимает,
-    почему задача сошла с прямого пути, не переживая ситуацию заново. У `waiting` она
-    несёт вдобавок то, чего больше нигде нет: **чего** ждём. Ожидание без этого
-    неотличимо от его отсутствия — задача просто стоит.
+    почему задача сошла с прямого пути, не переживая ситуацию заново.
 
-    Требование висит только на **входе** в `waiting`. Выход из него причины не требует:
-    дождались — обычный ход в работу, и объяснять в нём нечего. Шагом назад выход из
-    `waiting` тоже не считается (`is_step_back`), поэтому и та ветка его не поймает.
+    Уход ждущей задачи `in_progress → open` — шаг назад, и причина у него есть по этому
+    же правилу: она называет носитель ожидания. Ожидания она не держит — держит носитель
+    (вопрос с `blocking`, связь `blocked_by`), а текст причины не стареет вместе с
+    событием (`CONCEPT.md`, 3.3, «Ожидание»).
     """
     if facts.reason is not None:
         return
     if facts.to_status is TaskStatus.CANCELLED:
         rule = "cancel"
-    elif facts.to_status is TaskStatus.WAITING:
-        rule = "wait"
     elif is_step_back(facts.from_status, facts.to_status):
         rule = "step_back"
     else:
@@ -743,7 +814,11 @@ def check_done_is_reached_by_closing(facts: TransitionFacts) -> None:
 
 
 def check_verdicts_before_done(facts: TransitionFacts) -> None:
-    """`in_progress → done`: по каждой проверке последний вердикт этого захода — `passed`.
+    """`in_progress → done`: по каждой проверке последний вердикт этого захода засчитан.
+
+    Засчитан — `passed`, `partial` или `unverifiable`; не засчитан — `failed` и его
+    отсутствие. С `partial` и `unverifiable` закрытие подшивает предупреждение
+    (`app/services/tasks.py`, `close_task`), но задачу не держит.
 
     Обзорные проверки прогоняет исполнитель и подшивает вердикты, не выходя из работы
     (`CONCEPT.md`, 3.3): отдельного статуса под чужой обзор нет, а требование вердикта
@@ -788,7 +863,7 @@ def check_taken_by_assignee(facts: TransitionFacts) -> None:
 
     Исключений по роду и по флагу администратора нет: чужую задачу берут, переназначив
     её, и смена исполнителя остаётся в деле. Задачи, уже стоящие в `in_progress`, не
-    задеты — проверка висит на входе, в том числе на возврате из `waiting`.
+    задеты — проверка висит на входе, в том числе на возврате дождавшейся задачи в работу.
     """
     if facts.to_status is not TaskStatus.IN_PROGRESS:
         return
@@ -809,12 +884,12 @@ def check_no_open_blockers(facts: TransitionFacts) -> None:
     """`* → in_progress`: ни одной связи `blocked_by` на незакрытую задачу.
 
     Единственная валидация, которая читает связи. Она не «ждёт» и ничего не назначает:
-    блокировка — это просто отказ взять задачу в работу, пока блокер открыт. Статус
-    `waiting` тут ни при чём и заменой ему не является: он про ход, который делает
-    человек, а `blocked_by` — про ход, который делает другая задача (`CONCEPT.md`, 4.6).
+    блокировка — это просто отказ взять задачу в работу, пока блокер открыт. Ход за
+    другой задачей держит `blocked_by`, ход за человеком или внешним событием — вопрос с
+    `blocking` (`check_no_open_blocking_questions`; `CONCEPT.md`, 4.6).
 
-    Проверка висит на входе в `in_progress`, а значит и на возврате из `waiting`:
-    задача, пока она ждала, могла обзавестись блокером.
+    Проверка висит на каждом входе в `in_progress`, в том числе на возврате дождавшейся
+    задачи в работу: задача, пока она ждала, могла обзавестись блокером.
     """
     if facts.to_status is not TaskStatus.IN_PROGRESS:
         return
@@ -843,6 +918,45 @@ def check_no_open_blockers(facts: TransitionFacts) -> None:
     )
 
 
+def check_no_open_blocking_questions(facts: TransitionFacts) -> None:
+    """`* → in_progress`: ни одного вопроса с `blocking` без ответа.
+
+    Решение владельца `TRK-569#9`, развилка 3 (`CONCEPT.md`, 3.3): статуса ожидания нет,
+    и дверь в работу держит сам носитель — как блокер у `check_no_open_blockers`. Иначе
+    агент, берущий «что в `open`», взял бы задачу, которая ждёт ответа человека, и
+    работал бы поверх неотвеченного блокирующего вопроса.
+
+    Это валидация, а не автоматика: ни вопрос, ни ответ статус не меняют. Ответ на
+    последний блокирующий вопрос просто открывает этот вход; ставший ненужным вопрос
+    снимают ответом с исходом `withdrawn`. Неблокирующий вопрос вход не держит — в факт
+    он не попадает вовсе (`app/services/case.py`, `open_blocking_question_nos`).
+    """
+    if facts.to_status is not TaskStatus.IN_PROGRESS:
+        return
+    questions = facts.open_blocking_questions
+    if questions is None:
+        # Факт не посчитан: как у блокеров, ход запрещается отдельной причиной, а не
+        # пустым списком номеров, который соврал бы, что вопросов нет.
+        raise TaskHasOpenBlockingQuestionsError(
+            details={
+                "key": facts.key,
+                "from": facts.from_status.value,
+                "to": facts.to_status.value,
+                "reason": "questions_not_collected",
+            },
+        )
+    if not questions:
+        return
+    raise TaskHasOpenBlockingQuestionsError(
+        details={
+            "key": facts.key,
+            "from": facts.from_status.value,
+            "to": facts.to_status.value,
+            "questions": list(questions),
+        },
+    )
+
+
 def check_children_closed_before_closing(facts: TransitionFacts) -> None:
     """`* → done` и `* → cancelled`: все дети в `done` или в `cancelled`.
 
@@ -856,10 +970,6 @@ def check_children_closed_before_closing(facts: TransitionFacts) -> None:
     `done` и родителя не держит: декомпозиция, от которой отказались, тоже работа,
     доведённая до конца. `cancelled` **родителя** обязан ждать закрытых детей ровно по
     той же причине, по какой их ждёт `done`.
-
-    `waiting` ребёнка **не** закрывает: он не в `CLOSED_STATUSES`, и родитель с таким
-    ребёнком не закроется никак. Так и задумано — ждущий ребёнок это незаконченная
-    работа, а не отменённая (`CONCEPT.md`, 3.3).
     """
     if not is_closed(facts.to_status):
         return
@@ -899,7 +1009,7 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     # вперёд неё отказ про недостающую сводку отправил бы вызывающего чинить дело
     # вместо вызова.
     check_done_is_reached_by_closing,
-    check_reason_for_step_back_cancel_or_wait,
+    check_reason_for_step_back_or_cancel,
     check_sections_filled_before_open,
     check_summary_before_leaving_in_progress,
     check_verdicts_before_done,
@@ -907,6 +1017,7 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     # заблокирована чужая задача, — ему отвечают тем, что задача не его.
     check_taken_by_assignee,
     check_no_open_blockers,
+    check_no_open_blocking_questions,
     check_children_closed_before_closing,
 )
 
@@ -986,6 +1097,11 @@ class TaskFeatures:
     #: Сколько замечаний ждут разбора. Считается тем же способом, что и вопросы: сами
     #: замечания уезжают в пакет целиком, а признак — их число (`CONCEPT.md`, 4.3).
     open_remarks: int
+    #: Открытое ли у задачи предупреждение: 1 — закрыта с проверками `partial` или
+    #: `unverifiable`, и после этого никто не принял недостаток (`acceptance`) и не вернул
+    #: задачу замечанием (`remark`); иначе 0. Число, а не флаг, — как у вопросов и
+    #: замечаний: поле отбора у них одной формы (`open_warnings: > 0`).
+    open_warnings: int
     last_summary_at: datetime | None
     #: Когда в дело последний раз подшивали запись агента или человека. Служебные
     #: записи не считаются: `link_added` подшивается в оба дела, когда связь ставят

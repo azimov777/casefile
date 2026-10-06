@@ -85,6 +85,7 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
       },
     ],
     open_questions: 2,
+    open_warnings: 0,
     ...overrides,
   };
 }
@@ -123,8 +124,20 @@ export function taskPage(items: Task[], meta: Partial<PageMeta> = {}) {
  */
 export function taskListing(url: URL, items: Task[]) {
   const wanted = url.searchParams.getAll('status');
-  const matched =
-    wanted.length === 0 ? items : items.filter((row) => wanted.includes(row.status ?? ''));
+  const query = url.searchParams.get('query') ?? '';
+  // Условия столбцов доски на языке запросов (`entities/task/model/waiting.ts`): мок
+  // не разбирает язык, а узнаёт ровно эти два условия — выбор «ждёт» вычисляется
+  // бэкендом, и тесту доски нужна его честная подмена, а не выдача без отбора.
+  const blocking = (row: Task) => row.features?.open_blocking_questions ?? 0;
+  const held = ['backlog', 'open', 'in_progress'];
+  const matched = items.filter((row) => {
+    if (wanted.length > 0 && !wanted.includes(row.status ?? '')) return false;
+    if (query.includes('open_blocking_questions: > 0')) {
+      return held.includes(row.status ?? '') && blocking(row) > 0;
+    }
+    if (query.includes('open_blocking_questions: 0')) return blocking(row) === 0;
+    return true;
+  });
 
   const from = Number(url.searchParams.get('cursor') ?? 0);
   const limit = Number(url.searchParams.get('limit') ?? matched.length);
@@ -189,6 +202,7 @@ export function task(key: string, overrides: Partial<Task> = {}): Task {
       open_questions: 0,
       open_blocking_questions: 0,
       open_remarks: 0,
+      open_warnings: 0,
       last_summary_at: null,
       last_entry_at: '2026-09-01T10:00:00Z',
     },
@@ -374,6 +388,7 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
     task: taskDetails(key),
     parent: null,
     children: [],
+    decisions: [],
     links: [
       {
         kind: 'blocked_by',
@@ -387,6 +402,7 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
       open_questions: 0,
       open_blocking_questions: 0,
       open_remarks: 0,
+      open_warnings: 0,
       last_summary_at: '2026-09-01T10:00:00Z',
     },
     summary: summaryEntry(7, key),
@@ -496,6 +512,18 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         type,
         payload: { name: 'repo', before: 'github.com/demo', reason: 'Репозиторий закрыт' },
       };
+    case 'warning':
+      return {
+        ...base,
+        body: '',
+        type,
+        payload: {
+          checks: [
+            { check_no: 2, outcome: 'partial' },
+            { check_no: 3, outcome: 'unverifiable' },
+          ],
+        },
+      };
     case 'moved':
       return {
         ...base,
@@ -520,8 +548,8 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         payload: { reason: 'Демо отложено до выпуска' },
       };
     default:
-      // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`:
-      // общая форма.
+      // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `acceptance`,
+      // `note`: общая форма.
       return { ...base, type, refs: ['DEMO-2', 'https://example.test/build/42'] };
   }
 }
@@ -541,6 +569,7 @@ export function projectDetail(key: string, overrides: Partial<ProjectDetail> = {
     created_by: AUTHOR,
     ...STAMPS,
     attributes: [],
+    decisions: [],
     ...overrides,
   };
 }

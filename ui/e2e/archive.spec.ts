@@ -1,12 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import {
-  contractStatuses,
-  readE2eToken,
-  shownKeys,
-  silenceJournal,
-  tasksByStatus,
-} from './contour';
+import { boardColumns, readE2eToken, shownKeys, silenceJournal, tasksByStatus } from './contour';
 
 /**
  * Архив: закрытые задачи, в делах которых больше трёх дней не писали, список и доска
@@ -59,7 +53,7 @@ function report(type: string, numbers: unknown): void {
 /** Карточек в каждом столбце доски — по статусам контракта. */
 async function cardsByStatus(page: Page): Promise<Record<string, number>> {
   const counted: Record<string, number> = {};
-  for (const status of contractStatuses()) {
+  for (const status of boardColumns()) {
     counted[status] = await column(page, status).getByRole('article').count();
   }
   return counted;
@@ -68,7 +62,7 @@ async function cardsByStatus(page: Page): Promise<Record<string, number>> {
 /** Сколько задач каждого статуса в составе — по правде бэкенда. */
 function sizes(byStatus: Map<string, string[]>): Record<string, number> {
   return Object.fromEntries(
-    contractStatuses().map((status) => [status, byStatus.get(status)?.length ?? 0]),
+    boardColumns().map((status) => [status, byStatus.get(status)?.length ?? 0]),
   );
 }
 
@@ -228,7 +222,7 @@ test('экран без событий потока не шлёт лишних �
   await page.goto('/tasks?project=DEMO&view=board');
   await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
   // Столбец на статус и одно число выдачи — то, что доска и должна прочитать (UI-70).
-  await expect.poll(() => calls.length - board).toBe(contractStatuses().length + 1);
+  await expect.poll(() => calls.length - board).toBe(boardColumns().length + 1);
   const boardAfterLoad = calls.length - board;
   await page.waitForTimeout(REST);
   const boardAfterRest = calls.length - board;

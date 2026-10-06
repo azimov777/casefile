@@ -70,13 +70,15 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `acceptance_by_closer` | The warning cannot be accepted by the signature that closed the task | Предупреждение принимает та же подпись, что закрыла задачу. |
 | `account_email_taken` | Account email is already taken | Почта уже занята другой учётной записью: адреса уникальны без учёта регистра. |
 | `archive_revision_unknown` | The archive comes from a newer Casefile; update this installation first | Ревизии схемы архива приёмник не знает: архив снят более новым Casefile. |
 | `assignee_mismatch` | Task is assigned to someone else | Вход в `in_progress` не от исполнителя задачи. |
 | `assignee_required` | Task has no assignee | Вход в `in_progress` у задачи без исполнителя. |
-| `checks_not_passed` | Some checks have no passing verdict recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке положительного вердикта, подшитого после последнего входа в `in_progress`. |
+| `checks_not_passed` | Some checks have no verdict, or a failed one, recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке вердикта не `failed`, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
+| `decision_not_in_force` | Project decision is superseded by a later decision | Решение проекта уже заменено другим, а его называют как действующее. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `installation_not_empty` | Only an installation without projects can take an archive | Приём архива в установку, где уже есть проекты. |
 | `last_admin` | The installation must keep at least one active administrator | Действие оставило бы установку без действующего администратора. |
@@ -92,10 +94,12 @@
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
 | `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
+| `task_has_open_blocking_questions` | Task has open blocking questions | Вход в `in_progress` при открытом вопросе `blocking`: номера вопросов в `details.questions`. |
 | `task_has_parent` | Task already has a parent | У задачи уже есть родитель: второй не ставится, нынешний назван в `details.parent`. |
 | `task_has_unclosed_children` | Task has children that are not closed | Закрытие задачи при детях не в `done` и не в `cancelled`. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
 | `version_conflict` | Task version is outdated | Версия задачи разошлась: её изменили между чтением и записью. |
+| `warning_not_open` | Task has no open warning to accept | `acceptance` в задаче, где нечего принимать: открытого предупреждения нет. |
 
 ## 422 — не прошло проверку
 
@@ -136,7 +140,7 @@
 | `task_move_batch_size_invalid` | Number of tasks in one move is outside the allowed range | Список ключей переноса пуст или длиннее потолка: границы и присланное — в `details`. |
 | `task_move_reason_required` | Moving a task to another project requires a reason | Перенос задачи в другой проект требует непустой причины `reason` (`CONCEPT.md`, 3.3). |
 | `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
-| `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`. |
+| `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов и отмена требуют причины `reason`. |
 | `validation_error` | Validation failed | Входные данные синтаксически корректны, но нарушают правило предметной области. |
 | `weak_password` | Password does not meet the rules | Новый пароль не годится: короче минимума или длиннее потолка. |
 

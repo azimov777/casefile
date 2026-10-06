@@ -23,6 +23,7 @@ from pydantic import WithJsonSchema
 
 from app.domain.authors import AuthorKind
 from app.domain.case import AnswerOutcome, EntryType, RemarkOutcome, VerdictOutcome
+from app.domain.decisions import DecisionStatus
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskField, TaskPriority, TaskStatus
@@ -56,6 +57,14 @@ RemarkOutcomeSchema = Annotated[
 ]
 AnswerOutcomeSchema = Annotated[
     AnswerOutcome, described(AnswerOutcome, "How a question was closed by an answer")
+]
+DecisionStatusSchema = Annotated[
+    DecisionStatus,
+    described(
+        DecisionStatus,
+        "Status of a project decision, computed on read: `superseded` once a later decision "
+        "of the project names it in `supersedes`",
+    ),
 ]
 LinkKindSchema = Annotated[
     LinkKind,

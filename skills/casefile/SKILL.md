@@ -38,6 +38,10 @@ Read before you act, because the case already holds choices you must not redo:
 - decisions and attempts, failed ones included — `read_entries(key="TRK-42", types=["decision", "attempt"])`;
 - if there is a `parent`: its summary and its decisions bind this task —
   `get_task(key="TRK-40")`, `read_entries(key="TRK-40", types=["decision"])`;
+- the project's decisions in force bind it as well: the ones it relies on come in
+  `decisions` of `get_task` with their status, all of them in `get_project(key="TRK")`;
+  a superseded one names its successor, and `search_tasks(decision=["TRK#15"])` lists
+  the tasks done under it;
 - a reference like `TRK-7#12` in the text is an entry — `read_entries(key="TRK-7", nos=[12])`.
 
 **Check:** you can say in two sentences what the goal is, where the work stands and what
@@ -60,7 +64,10 @@ your name over theirs silently takes the task from them.
 File what happens when it happens, with `add_entry`: a `decision` when you choose between
 options (say what was rejected and why), an `attempt` when you try something — failures
 too, they spare the next agent the same try — a `finding` for an established fact and its
-source, an `artifact` for a pointer to the result.
+source, an `artifact` for a pointer to the result. A choice that outlives the task and
+that other tasks are to follow is a project decision: `add_project_entry(key="TRK",
+type="decision", ...)`, with `supersedes=[N]` when it replaces decision N, and the task
+cites it with `update_task(key="TRK-42", changes={"decisions": ["TRK#16"]})`.
 
 ```
 add_entry(key="TRK-42", type="decision",
@@ -91,7 +98,7 @@ silently: file a `finding` and answer where it came from.
 
 A task stays `in_progress` only while the next move is yours. Hand it off explicitly.
 
-**A human has to decide.** Ask, summarize, wait:
+**A human has to decide.** Ask, summarize, hand the task back as `open`:
 
 ```
 ask(key="TRK-42", addressees=["<name from list_participants>"], blocking=True,
@@ -100,11 +107,18 @@ ask(key="TRK-42", addressees=["<name from list_participants>"], blocking=True,
 add_summary(key="TRK-42", done="…", remaining="…",
             blockers="Answer to TRK-42#9 from <name>",
             next_step="Apply the chosen option in api/routes.py")
-transition(key="TRK-42", to="waiting", reason="Waiting for the answer to TRK-42#9")
+transition(key="TRK-42", to="open", reason="Waiting for the answer to TRK-42#9")
 ```
 
 Put the options and your recommendation in the question so it can be answered in one
-line. Mark it `blocking` only when the work truly cannot go on without it.
+line. Mark it `blocking` only when the work truly cannot go on without it: the open
+`blocking` question is what holds the task, and the answer is what releases it. Do not
+take a task that still has an unanswered `blocking` question into work.
+
+**An outside event has to happen** — a catalogue review, someone else's pull request. Ask
+the same way: a `blocking` question to whoever will learn of the event, with what to
+check and where. Whoever learns of it may answer, an agent included. Then the same
+summary and `open`.
 
 **Waiting inside the session.** Do not poll `get_task`; one call blocks until an entry lands:
 
@@ -112,10 +126,11 @@ line. Mark it `blocking` only when the work truly cannot go on without it.
 wait_journal(task="TRK-42", types=["answer"], after=<last seq you saw>, timeout=60)
 ```
 
-An empty result means nothing happened yet; call again from the same `after`. If you
-cannot wait, end your turn and tell the person which question is open. When the answer
-arrives, move the task back yourself — `transition(key="TRK-42", to="in_progress")` —
-and remember it starts a new pass: verdicts filed before no longer count.
+An empty result means nothing happened yet; call again from the same `after`. The task
+stays `in_progress` while you wait. If you cannot wait, file the question, the summary
+and `open` as above, end your turn and tell the person which question is open. The answer
+makes the task a candidate for work again; whoever takes it up moves it to `in_progress`,
+which starts a new pass: verdicts filed before no longer count.
 
 **Another task has to finish first.** Block only on a real dependency:
 
@@ -160,8 +175,8 @@ with `link(key=<new key>, kind="relates", other="TRK-42")` — not silently into
 
 Before closing, check:
 
-- every check of the task was run **as written**, and you have its evidence: the command
-  and what it showed;
+- every check of the task was run **as written**, or you know why it cannot be, and you
+  have its evidence: the command and what it showed;
 - every remark in `get_task` has an outcome through `resolve` — `close_task` does not
   check them for you, e.g. `resolve(key="TRK-42", remark_no=14, outcome="fixed", body="Renamed the column; test added.")`;
 - you can name honestly what part of the goal no check measured.
@@ -178,6 +193,27 @@ close_task(key="TRK-42",
 
 `unmeasured` is what tells the human how far to trust the result: write `nothing` only
 when the checks really covered the whole goal.
+
+Pick each outcome by two questions: did the check run as written, and did it give the
+whole expected result. If it ran and gave only part — `partial`; if it cannot run as
+written (no environment, the object is gone, the requirements changed) — `unverifiable`.
+Both need `evidence` naming what is missing or why, and what ran instead. Do not write
+`passed` with a caveat: a caveat in the evidence means the outcome is `partial` or
+`unverifiable`. The task still closes; the closing files a `warning`, and the human
+accepts it or returns the task with a remark — you write nothing extra.
+
+```
+close_task(key="TRK-42",
+  verdicts=[{"check_no": 1, "outcome": "passed",
+             "evidence": "pytest tests/test_parser.py: 41 passed"},
+            {"check_no": 2, "outcome": "partial",
+             "evidence": "Importer reads 3 of 4 record kinds; attachments are not read yet."},
+            {"check_no": 3, "outcome": "unverifiable",
+             "evidence": "No Safari here; ran Chromium at 390 px: no horizontal scroll."}],
+  summary={"done": "Parser accepts the new format; attachments and Safari remain.",
+           "remaining": "nothing", "blockers": "nothing", "next_step": "no steps",
+           "unmeasured": "Attachments (check 2) and Safari on the owner's phone (check 3)."})
+```
 
 If a check fails, do not close: file it with `add_verdict` as `failed`, file a summary,
 and `transition(key="TRK-42", to="open", reason="Check 2 fails: …")`.

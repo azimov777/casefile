@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { say } from '@testing/say';
-import { TASK_PRIORITIES, TASK_STATUSES } from '../api/tasks';
+import { BOARD_COLUMNS, TASK_PRIORITIES } from '../api/tasks';
 import { LINK_KIND_ORDER, LinkKindMark } from './link-kind';
 import { PriorityMark } from './priority-mark';
 import { StatusMark } from './status-mark';
@@ -14,18 +14,19 @@ function shapeOf(container: HTMLElement): string {
 }
 
 describe('знак статуса', () => {
-  it('у каждого статуса контракта своя форма, и две формы не совпадают', () => {
+  it('у каждого столбца доски своя форма, и две формы не совпадают', () => {
     // Список берётся из контракта, а не переписывается здесь: статус, добавленный
-    // в контракт, обязан уронить сборку `satisfies Record<TaskStatus, ...>`,
-    // а не остаться без формы молча.
-    const shapes = TASK_STATUSES.map((status) => {
+    // в контракт, обязан уронить сборку `satisfies Record<BoardColumn, ...>`,
+    // а не остаться без формы молча. «Ждёт ответа» — столбец, а не статус (TRK-573),
+    // и его пауза сверяется со статусами здесь же.
+    const shapes = BOARD_COLUMNS.map((status) => {
       const { container, unmount } = render(<StatusMark status={status} />);
       const shape = shapeOf(container);
       unmount();
       return shape;
     });
 
-    expect(new Set(shapes).size).toBe(TASK_STATUSES.length);
+    expect(new Set(shapes).size).toBe(BOARD_COLUMNS.length);
   });
 
   it('доступное имя называет род и значение', () => {
@@ -78,7 +79,7 @@ describe('знак приоритета', () => {
   });
 
   it('форма статуса и форма приоритета не совпадают ни в одной паре', () => {
-    const statuses = TASK_STATUSES.map((status) => {
+    const statuses = BOARD_COLUMNS.map((status) => {
       const { container, unmount } = render(<StatusMark status={status} />);
       const shape = shapeOf(container);
       unmount();

@@ -196,7 +196,13 @@ class InvalidTaskKeyError(ValidationError):
 
 
 class TaskFieldsInvalidError(ValidationError):
-    """Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`."""
+    """Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`.
+
+    У `decisions` причины называют, почему ссылка — не решение проекта (`CONCEPT.md`,
+    3.2): `task_entry` (запись задачи `TRK-42#7`), `not_a_decision_ref` (не ссылка вида
+    `TRK#15`), `unknown_project`, `unknown_entry` и `not_a_decision` (запись дела проекта
+    другого типа).
+    """
 
     code = "task_fields_invalid"
     message = "Task fields are invalid"
@@ -245,7 +251,7 @@ class TransitionNotAllowedError(ConflictError):
 
 
 class TransitionReasonRequiredError(ValidationError):
-    """Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`."""
+    """Шаг назад по цепочке статусов и отмена требуют причины `reason`."""
 
     code = "transition_reason_required"
     message = "Transition requires a reason"
@@ -333,11 +339,26 @@ class EntryFieldsInvalidError(ValidationError):
     `unknown_entry`, `not_a_question`; у ответа ещё `already_answered` (вопрос уже
     закрыт ответом) и `not_after_question` (заменивший вопрос задан не позже снимаемого);
     у `refs` — `not_a_reference` (строка не ссылка трекера и не URL со схемой: `7`, `#7`,
-    `docs/x.md`) и `malformed_entry_ref`.
+    `docs/x.md`) и `malformed_entry_ref`; у `supersedes` решения проекта — `unknown_entry`
+    и `not_a_decision`.
     """
 
     code = "entry_fields_invalid"
     message = "Case entry fields are invalid"
+
+
+class DecisionNotInForceError(ConflictError):
+    """Решение проекта уже заменено другим, а его называют как действующее.
+
+    Два места, один отказ (`CONCEPT.md`, 3.2 и 3.3): новое решение не заменяет уже
+    заменённое — иначе у решения было бы два преемника, — и задача не ставит в `decisions`
+    новую ссылку на заменённое — иначе отменённое обрастало бы ссылками. В
+    `details.decisions` каждое такое решение и его преемник (`ref`, `superseded_by`).
+    Конфликт состояния, а не ошибка формы: та же ссылка на преемника проходит.
+    """
+
+    code = "decision_not_in_force"
+    message = "Project decision is superseded by a later decision"
 
 
 class SummaryRequiredError(ConflictError):
@@ -353,8 +374,8 @@ class SummaryRequiredError(ConflictError):
 
 
 class ChecksNotPassedError(ConflictError):
-    """`in_progress → done` требует по каждой проверке положительного вердикта,
-    подшитого после последнего входа в `in_progress`.
+    """`in_progress → done` требует по каждой проверке вердикта не `failed`, подшитого
+    после последнего входа в `in_progress`.
 
     Этот заход, а не всё дело: вердикты, подшитые раньше последнего входа в
     `in_progress`, остаются в деле, но не засчитываются, потому что относились к другой
@@ -362,12 +383,44 @@ class ChecksNotPassedError(ConflictError):
 
     Незасчитанные проверки перечислены в `details.checks` парами `check_no` и `reason`:
     `no_verdict` — вердикта в этом заходе нет вовсе, `failed` — последний исход
-    провальный. Что делать дальше, ошибка не говорит: это решение исполнителя, а не
+    провальный. `partial` и `unverifiable` закрытию не мешают: с ними закрытие подшивает
+    предупреждение. Что делать дальше, ошибка не говорит: это решение исполнителя, а не
     трекера.
     """
 
     code = "checks_not_passed"
-    message = "Some checks have no passing verdict recorded since the last entry into in_progress"
+    message = (
+        "Some checks have no verdict, or a failed one, recorded since the last entry into "
+        "in_progress"
+    )
+
+
+class WarningNotOpenError(ConflictError):
+    """`acceptance` в задаче, где нечего принимать: открытого предупреждения нет.
+
+    Предупреждение подшивает закрытие с проверками `partial` или `unverifiable`, и оно
+    открыто, пока после него нет `acceptance` или `remark` (`CONCEPT.md`, 3.4). Принятие
+    без него было бы записью, которая ничего не сняла, — а по ней читающий решил бы, что
+    что-то было принято. В `details` — ключ задачи и номер последнего предупреждения с
+    номером снявшей его записи, если предупреждение было.
+    """
+
+    code = "warning_not_open"
+    message = "Task has no open warning to accept"
+
+
+class AcceptanceByCloserError(ConflictError):
+    """Предупреждение принимает та же подпись, что закрыла задачу.
+
+    Предупреждение — это контроль над закрытием не целиком со стороны (решение
+    TRK-561#11): исполнитель, снимающий своё предупреждение сам, этот контроль обнулил
+    бы. Сравниваются подписи, без учёта сессий, — как у исполнителя на входе в
+    `in_progress` (`CONCEPT.md`, 3.3). Вернуть задачу замечанием может любой. В `details`
+    — ключ задачи, номер предупреждения и подпись.
+    """
+
+    code = "acceptance_by_closer"
+    message = "The warning cannot be accepted by the signature that closed the task"
 
 
 class ActorNotAddressableError(ValidationError):
@@ -461,13 +514,25 @@ class TaskBlockedError(ConflictError):
     """Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`.
 
     Конфликт состояния, а не ошибка формы запроса: тот же переход пройдёт, как только
-    блокеры закроются. Задача при этом не «ждёт»: разница со статусом `waiting`
-    названа в `check_no_open_blockers` (`app/domain/tasks.py`) — здесь блокера
-    дожидается назначатель, читающий ленту.
+    блокеры закроются. Закрытие блокера статус задачи не меняет: его дожидается
+    назначатель, читающий ленту (`CONCEPT.md`, 4.6).
     """
 
     code = "task_blocked"
     message = "Task has an open blocker"
+
+
+class TaskHasOpenBlockingQuestionsError(ConflictError):
+    """Вход в `in_progress` при открытом вопросе `blocking`: номера вопросов в `details.questions`.
+
+    Без статуса ожидания дверь в работу держит сам носитель (`CONCEPT.md`, 3.3; решение
+    владельца `TRK-569#9`, развилка 3), как блокер держит её у `task_blocked`. Конфликт
+    состояния: тот же переход пройдёт после `answer` на каждый из названных вопросов —
+    ответом по существу или снятием (`withdrawn`). Неблокирующий вопрос вход не держит.
+    """
+
+    code = "task_has_open_blocking_questions"
+    message = "Task has open blocking questions"
 
 
 class AssigneeRequiredError(ConflictError):

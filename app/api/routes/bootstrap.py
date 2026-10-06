@@ -36,7 +36,8 @@ async def read_bootstrap(
     (`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.
 
     Архивные проекты — только с `include_archived=true`, как в `GET /api/v1/projects`;
-    вопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6).
+    вопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6), как
+    и `open_warnings` — их предупреждения.
     """
     state = await service.read_bootstrap(session, actor=actor, include_archived=include_archived)
     return DataResponse[BootstrapRead](
@@ -50,5 +51,6 @@ async def read_bootstrap(
             token=CurrentTokenRead(id=state.token_id),
             projects=[ProjectRead.model_validate(project) for project in state.projects],
             open_questions=state.open_questions,
+            open_warnings=state.open_warnings,
         )
     )

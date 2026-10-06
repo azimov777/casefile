@@ -24,6 +24,7 @@ from app.api.deps import (
 )
 from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
+from app.api.schemas.decisions import CitedDecisionRead, DecisionRefRead
 from app.api.schemas.entries import (
     EntryCreate,
     EntryHeadingRead,
@@ -61,6 +62,7 @@ from app.services import case as case_service
 from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import tasks as service
+from app.services.decisions import CitedDecision
 from app.services.links import TaskLink
 from app.services.tasks import (
     TaskAlreadyThere,
@@ -114,6 +116,7 @@ async def create_task(
             checks=payload.checks,
             assignee=payload.assignee,
             priority=payload.priority,
+            decisions=payload.decisions,
         )
         return DataResponse[TaskRead](data=TaskRead.model_validate(task))
 
@@ -160,8 +163,8 @@ async def list_tasks(
     глубине, без самой X: дети, внуки и так далее.
 
     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
-    `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
-    связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
+    `open_blocking_questions`, `open_remarks`, `open_warnings`): колонок под них нет, они
+    считаются из связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
     `project: TRK and status: open and blocked: false and open_blocking_questions: 0`.
     Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
     названная задача ещё не закрыта».
@@ -289,8 +292,9 @@ async def read_task(
 ) -> DataResponse[TaskPackageRead]:
     """Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 
-    Карточка, связи с обеих сторон со статусом задачи на другой стороне, вычисляемые
-    признаки, последняя сводка целиком, открытые вопросы и неразобранные замечания
+    Карточка, связи с обеих сторон со статусом задачи на другой стороне, решения проекта,
+    на которые опирается задача, со статусом и преемником, вычисляемые признаки, последняя
+    сводка целиком, открытые вопросы и неразобранные замечания
     целиком, опись дела и переходы по таблице. Тела остальных записей читаются отдельно
     в `GET /tasks/{key}/entries`.
     Переходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,
@@ -304,6 +308,7 @@ async def read_task(
             parent=None if package.parent is None else _package_parent(package.parent),
             children=[LinkTaskRead.model_validate(link.other) for link in package.children],
             links=[TaskLinkRead.model_validate(link) for link in package.links],
+            decisions=[_cited_decision(item) for item in package.decisions],
             features=TaskFeaturesRead.model_validate(package.features, from_attributes=True),
             # `entry_read` отдаёт вариант по типу записи, а сценарий гарантирует, что
             # сюда попали именно сводка, вопросы и замечания: сузить тип здесь нечем и
@@ -317,6 +322,22 @@ async def read_task(
     )
 
 
+def _cited_decision(value: CitedDecision) -> CitedDecisionRead:
+    """Решение, на которое ссылается задача, и его преемник — тот же набор, что в MCP."""
+    return CitedDecisionRead(
+        ref=value.ref,
+        title=value.title,
+        status=value.status,
+        superseded_by=None
+        if value.superseded_by is None
+        else DecisionRefRead(
+            ref=value.superseded_by.ref,
+            title=value.superseded_by.title,
+            status=value.superseded_by.status,
+        ),
+    )
+
+
 @router.patch("/{task_key}", summary="Update a task")
 async def update_task(
     task_key: TaskKeyPath,
@@ -327,10 +348,11 @@ async def update_task(
     """Меняет только переданные поля.
 
     Название, описание и пять разделов — только в `backlog` (иначе `409
-    task_field_locked`); исполнитель и приоритет — в любом незакрытом статусе; в
-    `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое изменение
-    подшивает запись: раздел — `section_changed`, исполнитель — `assignee_changed`,
-    приоритет — `field_changed`. Поля без записи не бывает: изменение, не
+    task_field_locked`); исполнитель, приоритет и решения проекта — в любом незакрытом
+    статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое
+    изменение подшивает запись: раздел — `section_changed`, исполнитель —
+    `assignee_changed`, приоритет и решения — `field_changed`. Новая ссылка на заменённое
+    решение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не
     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
 
@@ -371,14 +393,17 @@ async def transition_task(
     transition_reason_required`); `backlog → open` требует заполненных разделов (`422
     task_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после
     последнего входа в него (`409 summary_required`); `in_progress → done` —
-    положительного последнего вердикта по каждой проверке, подшитого после последнего
-    входа в `in_progress` (`409 checks_not_passed`, незасчитанные проверки в
+    засчитанного последнего вердикта по каждой проверке (`passed`, `partial`,
+    `unverifiable`), подшитого после последнего входа в `in_progress` (`409
+    checks_not_passed`, незасчитанные проверки в
     `details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только
     исполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи
     (имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с
     `details.assignee` и `details.requester`. Вход в
     `in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в
-    `details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и
+    `details.blockers`), и при вопросе с `blocking` без ответа (`409
+    task_has_open_blocking_questions`, номера вопросов в `details.questions`; ни вопрос,
+    ни ответ статус не меняют), закрытие — и `done`, и `cancelled` — при детях не в `done` и
     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
     Переход подшивает `status_changed` с `from`, `to` и `reason`.
 
@@ -446,12 +471,16 @@ async def close_task(
     closing_not_a_transition`. Частичного закрытия не бывает — отказ на любой части не
     оставляет в деле ни одной записи и статуса не меняет.
 
-    Порядок подшивки: присланные записи, вердикты, сводка. Требования выхода прежние и
-    проверяются после подшивки: положительный последний вердикт по каждой проверке
-    среди подшитых после последнего входа в `in_progress` (`409 checks_not_passed`),
+    Порядок подшивки: присланные записи, вердикты, предупреждение, сводка. Требования
+    выхода проверяются после подшивки: последний вердикт по каждой проверке среди
+    подшитых после последнего входа в `in_progress` — `passed`, `partial` или
+    `unverifiable`, а не `failed` и не его отсутствие (`409 checks_not_passed`),
     закрытые дети (`409 task_has_unclosed_children`), задача в `in_progress` (`409
     transition_not_allowed`). Вердикты этого запроса засчитываются наравне с подшитыми
-    раньше по ходу работы, поэтому список может быть пуст.
+    раньше по ходу работы, поэтому список может быть пуст. Если среди последних
+    вердиктов есть `partial` или `unverifiable`, закрытие подшивает служебную запись
+    `warning` с их номерами и исходами: задача приходит в `done` с открытым
+    предупреждением (`features.open_warnings`).
 
     Повтор с тем же `Idempotency-Key` отвечает первым результатом и второго закрытия не
     заводит. В ответе — карточка задачи; подшитые записи читаются `GET
@@ -499,8 +528,13 @@ async def create_task_entry(
     actor: ActorDep,
     once: OnceDep,
 ) -> DataResponse[EntryRead]:
-    """Подшивает запись агента: сводку, решение, попытку, находку, артефакт, вопрос,
-    ответ, вердикт или заметку.
+    """Подшивает запись агента или человека: сводку, решение, попытку, находку,
+    артефакт, вопрос, ответ, вердикт, замечание, резолюцию, принятие или заметку.
+
+    `acceptance` принимает открытое предупреждение задачи: без него — `409
+    warning_not_open`, от подписи, закрывшей задачу, — `409 acceptance_by_closer`.
+    Вердикт `partial` или `unverifiable` требует непустого тела — это его доказательство
+    (`422 entry_fields_invalid`, поле `evidence`).
 
     Форма нагрузки зависит от типа: тело запроса — размеченное по `type` объединение.
     Заголовок принимается только там, где его нечем вывести: у `summary` он равен

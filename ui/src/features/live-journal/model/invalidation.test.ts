@@ -61,6 +61,17 @@ describe('keysToInvalidate — запись дела задачи', () => {
     ]);
     expect(answer.immediate).toEqual([['task', 'DEMO-1'], questionKeys.all, sessionKeys.bootstrap]);
   });
+
+  it('предупреждение и реакция на него поднимают «Требуют внимания» и счётчик (TRK-561)', () => {
+    for (const type of ['warning', 'acceptance', 'remark'] as const) {
+      const result = keysToInvalidate(frame(type, { taskKey: 'DEMO-1', projectKey: null }));
+      expect(result.immediate, type).toEqual([
+        ['task', 'DEMO-1'],
+        taskKeys.attention,
+        sessionKeys.bootstrap,
+      ]);
+    }
+  });
 });
 
 describe('keysAfterReconnect', () => {
@@ -71,6 +82,7 @@ describe('keysAfterReconnect', () => {
       ['task'],
       ['project'],
       questionKeys.all,
+      taskKeys.attention,
       sessionKeys.bootstrap,
     ]);
     expect(result.coalesced).toEqual([taskKeys.board]);

@@ -256,10 +256,10 @@ class SearchField(StrEnum):
     """Поле, по которому можно отбирать задачи (`CONCEPT.md`, 4.4).
 
     Набор закрыт: новое поле отбора — правка концепции, а не запроса. Имена после
-    `priority` — не колонки: они считаются из связей и дела прямо в запросе. Пять из них
-    вычисляемые признаки карточки (`CONCEPT.md`, 4.3), а `remarks_in_work` — только поле
-    отбора: оно смотрит на статус **чужой** задачи и признаком не стало намеренно
-    (`CONCEPT.md`, 4.4).
+    `priority` — не колонки: они считаются из связей и дела прямо в запросе. Это
+    вычисляемые признаки карточки (`CONCEPT.md`, 4.3) — кроме `text` и `remarks_in_work`:
+    второе только поле отбора, оно смотрит на статус **чужой** задачи и признаком не
+    стало намеренно (`CONCEPT.md`, 4.4).
 
     `KEY` — ключ самой задачи: им сессия, ведущая несколько дел, спрашивает про них
     разом. Значение у него того же вида, что у `PARENT`, и разрешается тем же путём;
@@ -270,6 +270,7 @@ class SearchField(StrEnum):
     KEY = "key"
     PROJECT = "project"
     PARENT = "parent"
+    DECISION = "decision"
     UNDER = "under"
     STATUS = "status"
     ASSIGNEE = "assignee"
@@ -278,6 +279,7 @@ class SearchField(StrEnum):
     OPEN_QUESTIONS = "open_questions"
     OPEN_BLOCKING_QUESTIONS = "open_blocking_questions"
     OPEN_REMARKS = "open_remarks"
+    OPEN_WARNINGS = "open_warnings"
     REMARKS_IN_WORK = "remarks_in_work"
     LAST_ENTRY_AT = "last_entry_at"
     TEXT = "text"
@@ -288,6 +290,7 @@ class SearchValueKind(StrEnum):
 
     PROJECT_KEY = "project_key"
     TASK_KEY = "task_key"
+    DECISION_REF = "decision_ref"
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
@@ -330,6 +333,16 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         SearchFieldSpec(
             SearchField.PARENT, SearchValueKind.TASK_KEY, EXACT_OPERATORS, is_nullable=True
         ),
+        # Решение проекта, на которое ссылается задача (`CONCEPT.md`, 4.4): обратный путь
+        # от решения к задачам, сделанным по нему, — в любом статусе и после замены
+        # решения. Пустое состояние — задача без ссылок на решения. Порядка нет: номера
+        # решений не упорядочивают задачи.
+        SearchFieldSpec(
+            SearchField.DECISION,
+            SearchValueKind.DECISION_REF,
+            EXACT_OPERATORS,
+            is_nullable=True,
+        ),
         # Всё поддерево: потомки названной задачи на любой глубине, без неё самой (TRK-468).
         # Пустого состояния нет намеренно: «ничьего потомка нет» — не вопрос, у каждой
         # задачи он тривиально верен, а верхний уровень уже называет `parent: empty()`.
@@ -350,6 +363,10 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
             SearchField.OPEN_BLOCKING_QUESTIONS, SearchValueKind.COUNT, ORDERED_OPERATORS
         ),
         SearchFieldSpec(SearchField.OPEN_REMARKS, SearchValueKind.COUNT, ORDERED_OPERATORS),
+        # Открытое предупреждение: закрыта с проверками `partial` или `unverifiable`, и
+        # реакции — `acceptance` или `remark` — после этого не было. Очередь «требуют
+        # внимания» — `open_warnings: > 0` (`CONCEPT.md`, 4.3).
+        SearchFieldSpec(SearchField.OPEN_WARNINGS, SearchValueKind.COUNT, ORDERED_OPERATORS),
         # «Разобрано, но работа не закрыта»: замечания с резолюцией `accepted`, чья
         # задача-продолжение ещё не в `done` и не в `cancelled`. Единственное условие
         # отбора, зависящее от статуса другой задачи.

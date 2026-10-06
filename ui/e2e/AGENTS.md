@@ -14,7 +14,7 @@
 это состояние, открывает `/tasks` напрямую — так делает большинство файлов ниже, кроме
 `install-key.spec.ts` (её первый сценарий идёт через `/` нарочно) и `start-onboarding.spec.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `filter-stability.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts` и `start-onboarding.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `filter-stability.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts`, `start-onboarding.spec.ts` и `warning.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -105,6 +105,7 @@ invalid_search_query`); ограничение снято (TRK-21).
 - `questions.spec.ts` — входящая: адресованный вопрос, отбор в адресе, ссылка вопроса открывает свою запись, область действия проекта, красная кромка блокирующего замером вычисленных стилей, `axe`; без параметров — входящая, история вторым видом и `axe` истории
 - `remarks.spec.ts` — чтение замечаний: карточка закрытой задачи, разбор под замечанием, признак и отбор, входящая, `axe`
 - `remark.spec.ts` — замечание с карточки: подшивка с ключом повтора, подтверждение, черновик; проект «запись»
+- `warning.spec.ts` — закрытие не целиком (TRK-561): агент закрывает задачу с `unverifiable`, она ждёт в «Требуют внимания», человек принимает на карточке, раздел пустеет; ширина 390 без прокрутки вбок, `axe`; снимки только с `SHOTS_DIR`; проект «запись»
 - `remark-cancel.spec.ts` — отмена формы замечания (UI-142): пустой черновик сворачивает
   сразу, непустой — только после подтверждения окном, а не браузерным `confirm`; «Продолжить
   писать» его не трогает; ничего не отправляет, читает в обеих темах
@@ -184,6 +185,7 @@ invalid_search_query`); ограничение снято (TRK-21).
 - `project-place.spec.ts` — проект как место (UI-172): заводит `UI` и `TRK`, переход через панель сохраняет вид и отбор, смена вида — проект и отбор; проект «запись»
 - `project-actions.spec.ts` — действия с проектом (UI-175): проект заводится из панели и открывается, повтор ключа объяснён, описание в 321 знак не уходит; атрибут без причины, изменение и снятие только с причиной — в истории и в деле; заметка встаёт в дело с подписью человека; `axe` в каждом окне и возврат фокуса на кнопку в обеих темах на 1440 и 390; заводит проекты с меткой прогона, проект «запись»
 - `project-archive.spec.ts` — архив проекта (UI-176): архив и восстановление только с причиной, проект уходит из панели и возвращается, флажок «Архивные проекты» показывает его с пометкой и переживает перезагрузку; на задаче архивного проекта нет ни ответа, ни замечания, на задаче активного — есть; `axe` в окнах, на экране архивного проекта и в панели с флажком в обеих темах на 1440 и 390; заводит проекты с меткой прогона, проект «запись»
+- `project-decisions.spec.ts` — решения проекта (TRK-554): заводит в `TRK` решение, задачу со ссылкой на него и решение, которое его заменило; раздел «Решения» — действующее сверху, заменённое свёрнуто с преемником, ссылка «1 задача по решению» в список задач с отбором `decision:`, ссылка решения раскрывает запись в деле; строка «Решения» в шапке задачи; `axe` и отсутствие прокрутки вбок в обеих темах на 390; проект «запись»
 - `project-screen.spec.ts` — экран проекта (UI-174): заводит в `TRK` описание, атрибут с правкой, решение и задачу со ссылкой `TRK#N`; вход знаком из панели, карточка, опись с телом, ссылка на запись проекта, история атрибута; `axe` и отсутствие прокрутки вбок в обеих темах на 1440 и 390; проект «запись»
 - `parents-long.spec.ts` — родитель с названием из путей у двух задач и отказ второму родителю `409 task_has_parent`
   с обеих сторон связи (UI-167): подпись в одну строку с многоточием и подсказкой, без «+N», ширина столбца и

@@ -68,7 +68,9 @@ from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.links import LinkKind
 from app.domain.projects import PROJECT_KEY_PATTERN, normalize_project_key
 from app.domain.tasks import (
+    ENTRY_REF_SEPARATOR,
     FIRST_CHECK_NUMBER,
+    FIRST_ENTRY_NUMBER,
     TaskField,
     TaskStatus,
     is_plain_number,
@@ -89,6 +91,7 @@ class EntryType(StrEnum):
     VERDICT = "verdict"
     REMARK = "remark"
     RESOLUTION = "resolution"
+    ACCEPTANCE = "acceptance"
     NOTE = "note"
     CREATED = "created"
     STATUS_CHANGED = "status_changed"
@@ -98,6 +101,7 @@ class EntryType(StrEnum):
     LINK_ADDED = "link_added"
     LINK_REMOVED = "link_removed"
     MOVED = "moved"
+    WARNING = "warning"
     ATTRIBUTE_CREATED = "attribute_created"
     ATTRIBUTE_CHANGED = "attribute_changed"
     ATTRIBUTE_REMOVED = "attribute_removed"
@@ -106,10 +110,43 @@ class EntryType(StrEnum):
 
 
 class VerdictOutcome(StrEnum):
-    """Исход обзорной проверки. Значений ровно два: третьего состояния у проверки нет."""
+    """Исход обзорной проверки (`CONCEPT.md`, 3.4; решение TRK-533#27).
+
+    Выбор — два вопроса, ответы на которые исполнитель знает в момент вердикта: прогнал
+    ли он проверку так, как она написана, и получил ли ожидаемое целиком.
+
+    - `passed` — прогнана как написана, ожидаемое получено целиком. Доказательство, где
+      названо несделанное, подменённый объект или окружение либо красный прогон, — уже
+      не `passed`.
+    - `partial` — прогнана как написана, ожидаемое получено частью.
+    - `unverifiable` — как написана, её прогнать нельзя: объекта или окружения нет под
+      рукой, или требования сменились.
+    - `failed` — прогнана как написана, ожидаемого нет.
+
+    `partial` и `unverifiable` задачу закрыть дают, но с предупреждением
+    (`INCOMPLETE_OUTCOMES`); `failed` — не даёт. До них честного исхода у недоделанной и
+    невыполнимой проверки не было, и её закрывали `passed` с оговоркой рядом (TRK-545#11).
+    """
 
     PASSED = "passed"
+    PARTIAL = "partial"
+    UNVERIFIABLE = "unverifiable"
     FAILED = "failed"
+
+
+#: Исходы «не целиком»: проверка засчитывается для закрытия, но закрытие подшивает
+#: предупреждение `warning`, и доказательство у вердикта обязательно — именно в нём
+#: названо, чего нет или почему прогнать нельзя. Трекер текст не читает (как и
+#: `unmeasured`): он требует, чтобы объяснение было, а не проверяет, какое оно.
+INCOMPLETE_OUTCOMES: frozenset[VerdictOutcome] = frozenset(
+    {VerdictOutcome.PARTIAL, VerdictOutcome.UNVERIFIABLE}
+)
+
+#: Записи, которые снимают предупреждение, подшитые **после** него: `acceptance` —
+#: недостаток принят, `remark` — задачу возвращают на доработку замечанием, и дальше она
+#: живёт по правилам замечаний (решение TRK-561#11). Одно определение на карточку
+#: (`open_warning`) и на поиск (`app/db/repositories/entries.py`, `open_warning_count`).
+WARNING_REACTIONS: frozenset[EntryType] = frozenset({EntryType.ACCEPTANCE, EntryType.REMARK})
 
 
 class QuestionOrder(StrEnum):
@@ -186,6 +223,7 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.LINK_ADDED,
         EntryType.LINK_REMOVED,
         EntryType.MOVED,
+        EntryType.WARNING,
         EntryType.ATTRIBUTE_CREATED,
         EntryType.ATTRIBUTE_CHANGED,
         EntryType.ATTRIBUTE_REMOVED,
@@ -225,12 +263,10 @@ TITLED_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.ARTIFACT,
         EntryType.QUESTION,
         EntryType.REMARK,
+        EntryType.ACCEPTANCE,
         EntryType.NOTE,
     }
 )
-
-#: Номер первой записи в задаче. Сквозной `seq` выдаёт база, а `no` считается по задаче.
-FIRST_ENTRY_NUMBER = 1
 
 #: Заголовок — одна строка: это то, что видно в описи дела.
 MAX_ENTRY_TITLE_LENGTH = 255
@@ -253,6 +289,14 @@ MAX_REF_LENGTH = 2_000
 #: ответа ни от кого.
 MAX_ADDRESSEES = 20
 
+#: Поле нагрузки решения проекта: номера решений того же проекта, которые оно заменяет
+#: (`CONCEPT.md`, 3.2). Им же называется аргумент `add_project_entry`.
+SUPERSEDES_FIELD = "supersedes"
+
+#: Сколько решений заменяет одно. Замена пересказывает то, что остаётся в силе, и запись,
+#: сводящая два десятка решений в одно, — уже пересмотр проекта, а не замена.
+MAX_SUPERSEDES = 20
+
 #: Части сводки в порядке чтения: сделано, осталось, что мешает, следующий шаг.
 SUMMARY_PARTS: tuple[str, ...] = ("done", "remaining", "blockers", "next_step")
 
@@ -271,9 +315,6 @@ CLOSING_SUMMARY_PART = "unmeasured"
 #: Части закрывающей сводки: те же четыре и пятая. Порядок чтения сохранён — «чего не
 #: измерили» идёт последним, после следующего шага, как приписка к подведённому итогу.
 CLOSING_SUMMARY_PARTS: tuple[str, ...] = (*SUMMARY_PARTS, CLOSING_SUMMARY_PART)
-
-#: Разделитель ссылки на запись: `TRK-42#12` — двенадцатая запись задачи `TRK-42`.
-ENTRY_REF_SEPARATOR = "#"
 
 #: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку. Форм две —
 #: запись задачи и запись проекта; дефис есть только в ключе задачи.
@@ -482,6 +523,35 @@ class MovedFacts:
     to_key: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class WarningCheck:
+    """Проверка, закрытая не целиком: номер и исход — `partial` или `unverifiable`."""
+
+    check_no: int
+    outcome: VerdictOutcome
+
+    def as_payload(self) -> dict[str, Any]:
+        """Вид, в котором пара лежит в нагрузке `warning` и уезжает в факты описи."""
+        return {"check_no": self.check_no, "outcome": self.outcome.value}
+
+
+@dataclass(frozen=True, slots=True)
+class WarningFacts:
+    """`warning`: номера проверок, закрытых `partial`, и закрытых `unverifiable`.
+
+    Списки короткие по построению — не длиннее списка проверок задачи — и состоят из
+    номеров, поэтому едут в опись целиком: по ним интерфейс называет предупреждение на
+    языке человека, не разбирая английский заголовок. Два списка номеров, а не список
+    пар, как в нагрузке, — ради цены схемы: факты стоят в `outputSchema` каждого
+    инструмента с описью, и вложенная модель пары стоила бы там вдвое дороже
+    (замер TRK-561).
+    """
+
+    type: Literal[EntryType.WARNING] = EntryType.WARNING
+    partial: tuple[int, ...] | None = None
+    unverifiable: tuple[int, ...] | None = None
+
+
 type EntryFacts = (
     NoFacts
     | StatusChangedFacts
@@ -495,6 +565,7 @@ type EntryFacts = (
     | ResolutionFacts
     | AttributeFacts
     | MovedFacts
+    | WarningFacts
 )
 """Факты записи: размеченное по `type` объединение всех форм."""
 
@@ -514,6 +585,7 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     EntryType.VERDICT: VerdictFacts,
     EntryType.REMARK: NoFacts,
     EntryType.RESOLUTION: ResolutionFacts,
+    EntryType.ACCEPTANCE: NoFacts,
     EntryType.NOTE: NoFacts,
     EntryType.CREATED: NoFacts,
     EntryType.STATUS_CHANGED: StatusChangedFacts,
@@ -523,6 +595,7 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     EntryType.LINK_ADDED: LinkFacts,
     EntryType.LINK_REMOVED: LinkFacts,
     EntryType.MOVED: MovedFacts,
+    EntryType.WARNING: WarningFacts,
     EntryType.ATTRIBUTE_CREATED: AttributeFacts,
     EntryType.ATTRIBUTE_CHANGED: AttributeFacts,
     EntryType.ATTRIBUTE_REMOVED: AttributeFacts,
@@ -727,6 +800,8 @@ def build_entry(
         # Тело не той формы уже получило своё замечание, второе о том же поле сбивало бы.
         if entry_type is EntryType.ANSWER and isinstance(body, str):
             _answer_reason(payload_values, body_text, problems)
+        if entry_type is EntryType.VERDICT and isinstance(body, str):
+            _verdict_evidence(payload_values, body_text, problems)
         if entry_type in TITLED_ENTRY_TYPES:
             with problems.field("title"):
                 entry_title = _entry_title(title)
@@ -755,15 +830,21 @@ def build_project_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    supersedes: Any = None,
 ) -> EntryDraft:
     """Проверяет запись агента в дело проекта и приводит её к каноническому виду.
 
     Поля и их правила — те же функции, что у `build_entry`: заголовок, тело и ссылки
     записи проекта не отличаются от записи задачи ничем. Отличается набор типов
-    (`PROJECT_ENTRY_TYPES`), и нагрузки у них нет ни у одного, поэтому ни контекста
-    задачи, ни построителей нагрузки здесь не нужно. Тип задачи (`summary`, `question`,
-    `attempt`, ...) — `not_allowed` со списком допустимых, служебный — `service_type`,
-    как и в деле задачи.
+    (`PROJECT_ENTRY_TYPES`), поэтому ни контекста задачи, ни построителей нагрузки здесь
+    не нужно. Тип задачи (`summary`, `question`, `attempt`, ...) — `not_allowed` со
+    списком допустимых, служебный — `service_type`, как и в деле задачи.
+
+    Нагрузка есть у одного типа — решения проекта: `supersedes`, номера решений, которые
+    оно заменяет (`CONCEPT.md`, 3.2). Ключ кладётся у решения всегда, в том числе пустым:
+    форма записи одна на все интерфейсы. У остальных типов `supersedes` отвергается, а не
+    выбрасывается молча. Есть ли такие записи, решения ли это и действуют ли они,
+    проверяет сценарий (`app/services/decisions.py`).
     """
     problems = FieldProblems()
     entry_type = _project_entry_type(type, problems)
@@ -772,17 +853,56 @@ def build_project_entry(
     entry_title = ""
     with problems.field("title"):
         entry_title = _entry_title(title)
+    replaced: list[int] = []
+    with problems.field(SUPERSEDES_FIELD):
+        replaced = _superseded_numbers(supersedes)
+    if replaced and entry_type is not None and entry_type is not EntryType.DECISION:
+        problems.add(
+            SUPERSEDES_FIELD,
+            "not_allowed",
+            allowed_for=EntryType.DECISION.value,
+            got=entry_type.value,
+        )
     problems.raise_as(EntryFieldsInvalidError, key=project_key)
 
     assert entry_type is not None  # иначе замечание о типе уже прервало бы работу
+    payload: dict[str, Any] = {}
+    if entry_type is EntryType.DECISION:
+        payload[SUPERSEDES_FIELD] = replaced
     return EntryDraft(
         type=entry_type,
         title=entry_title,
         body=body_text,
-        payload={},
+        payload=payload,
         refs=ref_strings,
         tracker_refs=tracker_refs,
     )
+
+
+def superseded_numbers(payload: Mapping[str, Any]) -> list[int]:
+    """Номера решений, которые заменяет решение проекта, — из его нагрузки.
+
+    Решение, подшитое до механизма замены, ключа не несёт и не заменяет ничего. Одно
+    определение на сценарий статуса и на чтение — как `answer_outcome` у ответа.
+    """
+    value = payload.get(SUPERSEDES_FIELD)
+    return [item for item in value if isinstance(item, int)] if isinstance(value, list) else []
+
+
+def _superseded_numbers(value: Any) -> list[int]:
+    """Номера заменяемых решений: целые с 1, без повторов, по возрастанию.
+
+    Порядок канонический, а не присланный: заменяемые решения — множество, и два
+    порядка одного набора не должны давать двух разных записей.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise FieldProblem("not_a_list")
+    numbers = sorted({_entry_number(item) for item in value})
+    if len(numbers) > MAX_SUPERSEDES:
+        raise FieldProblem("too_many", max=MAX_SUPERSEDES, got=len(numbers))
+    return numbers
 
 
 def summary_title(done: str) -> str:
@@ -822,6 +942,37 @@ def answer_outcome(payload: Mapping[str, Any]) -> AnswerOutcome:
     чтение — иначе старый ответ звался бы где-то «ответом», а где-то «без исхода».
     """
     return AnswerOutcome(payload.get("outcome") or AnswerOutcome.ANSWERED)
+
+
+def warning_title(checks: Sequence[WarningCheck]) -> str:
+    """Заголовок предупреждения: какие проверки закрыты не целиком и чем.
+
+    Английский, как у прочих служебных записей (`Status changed: backlog -> open`):
+    выведенный заголовок — служебный слой. На языке человека его называет интерфейс по
+    фактам (`WarningFacts`).
+    """
+    listed = ", ".join(f"check {item.check_no} {item.outcome.value}" for item in checks)
+    return f"Closed not in full: {listed}"
+
+
+def open_warning(index: Sequence[EntryHeading]) -> EntryHeading | None:
+    """Открытое предупреждение задачи — строка описи `warning` без реакции после неё.
+
+    Реакция — `acceptance` или `remark` (`WARNING_REACTIONS`), подшитая **после**
+    предупреждения: замечание, оставленное по ходу работы, до закрытия, его не снимает.
+    Предупреждение у задачи одно — закрытие бывает один раз, — поэтому достаточно
+    дойти с конца описи до первой из двух записей.
+
+    Питоновский двойник подзапроса `open_warning_count` (`app/db/repositories/entries.py`):
+    карточка считает признак из описи, которую и так читает, поиск — запросом. Тест
+    сверяет обе формы на одних данных.
+    """
+    for heading in reversed(index):
+        if heading.type in WARNING_REACTIONS:
+            return None
+        if heading.type is EntryType.WARNING:
+            return heading
+    return None
 
 
 def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -997,7 +1148,8 @@ type _PayloadBuilder = Callable[[dict[str, Any], EntryContext, FieldProblems], d
 def _no_payload(
     raw: dict[str, Any], context: EntryContext, problems: FieldProblems
 ) -> dict[str, Any]:
-    """У `decision`, `attempt`, `finding`, `artifact` и `note` нагрузки нет."""
+    """У `decision`, `attempt`, `finding`, `artifact`, `remark`, `acceptance` и `note`
+    нагрузки нет."""
     _reject_extra(raw, (), problems)
     return {}
 
@@ -1147,10 +1299,23 @@ def _answer_reason(payload: Mapping[str, Any], body: str, problems: FieldProblem
         problems.add("body", "required", required_for=outcome)
 
 
+def _verdict_evidence(payload: Mapping[str, Any], body: str, problems: FieldProblems) -> None:
+    """Доказательство у `partial` и `unverifiable` обязательно — тело записи вердикта.
+
+    Устроено как `_answer_reason`: тело не нагрузка, его форму проверяет `_entry_body`, а
+    здесь только правило «у исхода не целиком тело непусто». Замечание идёт полем
+    `evidence` — под этим именем доказательство принимают `add_verdict` и закрытие, и
+    чинить агенту именно его; у `POST /tasks/{key}/entries` это тело записи вердикта.
+    """
+    outcome = payload.get("outcome")
+    if outcome in INCOMPLETE_OUTCOMES and not body:
+        problems.add("evidence", "required", required_for=outcome)
+
+
 def _verdict_payload(
     raw: dict[str, Any], context: EntryContext, problems: FieldProblems
 ) -> dict[str, Any]:
-    """Номер обзорной проверки в пределах списка задачи и исход из двух значений."""
+    """Номер обзорной проверки в пределах списка задачи и исход из `VerdictOutcome`."""
     _reject_extra(raw, ("check_no", "outcome"), problems)
     payload: dict[str, Any] = {}
     with problems.field("check_no"):
@@ -1262,6 +1427,7 @@ _PAYLOAD_BUILDERS: dict[EntryType, _PayloadBuilder] = {
     EntryType.VERDICT: _verdict_payload,
     EntryType.REMARK: _no_payload,
     EntryType.RESOLUTION: _resolution_payload,
+    EntryType.ACCEPTANCE: _no_payload,
     EntryType.NOTE: _no_payload,
 }
 

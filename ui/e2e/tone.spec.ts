@@ -49,14 +49,18 @@ test('статус читается тоном формы: работа, зав�
   expect(cancelled).not.toBe(done);
   expect(cancelled).not.toBe(inProgress);
 
-  // Ожидание — единственный статус тона тревоги: ход не за агентом, а за человеком,
-  // и это ровно то положение дел, которое меняет решение смотрящего. Янтарный он делит
-  // с приоритетом `high` и открытым вопросом намеренно: тон называет положение дел,
-  // а не сущность (`docs/notes/ui.md`).
-  const waiting = await shapeColor(mark(page, 'status', 'waiting'));
-  expect(waiting).not.toBe(open);
-  expect(waiting).not.toBe(inProgress);
-  expect(waiting).not.toBe(done);
+  // Ожидание ответа — не статус (TRK-573), а положение: ход не за агентом, а за
+  // человеком, и это ровно то, что меняет решение смотрящего. Его тон тревоги несёт
+  // пометка «ждёт ответа» рядом со статусом строки. Янтарный она делит с приоритетом
+  // `high` и открытым вопросом намеренно: тон называет положение дел, а не сущность
+  // (`docs/notes/ui.md`).
+  const awaiting = await page
+    .locator('tbody [data-mark="awaiting"]')
+    .first()
+    .evaluate((node) => getComputedStyle(node).color);
+  expect(awaiting).not.toBe(open);
+  expect(awaiting).not.toBe(inProgress);
+  expect(awaiting).not.toBe(done);
 
   // Заливки у статуса больше нет вовсе: смысл несёт форма, цвет только помогает
   // (решение Д1). Плашка ушла — с ней ушёл и фон под ней.

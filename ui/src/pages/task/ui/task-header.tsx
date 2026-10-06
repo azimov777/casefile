@@ -1,10 +1,12 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { DecisionStatusMark, decisionHref } from '@/entities/project';
 import {
   PriorityMark,
   StatusMark,
   TaskFeatureMarks,
   hasFeatureBadges,
+  type CitedDecision,
   type TaskDetails,
   type LinkedTask,
   type TaskFeatures,
@@ -16,6 +18,8 @@ interface TaskHeaderProps {
   features: TaskFeatures;
   /** Родитель задачи из пакета (`parent`, TRK-135) для строки «где»; `null` — верхний уровень. */
   parent: LinkedTask | null;
+  /** Решения проекта, на которые опирается задача (`decisions` пакета, TRK-554). */
+  decisions: CitedDecision[];
 }
 
 /** Отсутствующее значение: курсив вместо прочерка — его читают, а не сканируют. */
@@ -26,6 +30,9 @@ const CELL = 'flex flex-col gap-1';
 
 /** Подпись значения: мельче и тише самого значения, чтобы читалось значение. */
 const LABEL = 'text-label text-muted';
+
+/** Ссылка на решение проекта `TRK#15`: ключ контракта моноширинным и целиком. */
+const DECISION_REF = 'font-mono text-mark whitespace-nowrap';
 
 /**
  * Шапка карточки — группы, которые читаются с первого взгляда (UI-143, вариант B,
@@ -43,7 +50,7 @@ const LABEL = 'text-label text-muted';
  * действий от шапки отделяет 24 px (`mt-2` поверх шага страницы 16): больше любого
  * зазора внутри шапки.
  */
-export function TaskHeader({ task, features, parent }: TaskHeaderProps) {
+export function TaskHeader({ task, features, parent, decisions }: TaskHeaderProps) {
   const { t } = useTranslation('task');
   const { t: brick } = useTranslation('ui');
 
@@ -169,6 +176,61 @@ export function TaskHeader({ task, features, parent }: TaskHeaderProps) {
             <RelativeTime value={task.created_at} />
           </dd>
         </div>
+
+        {/*
+         * Решения проекта, на которые опирается задача (TRK-554): своей строкой во всю
+         * ширину полосы — у решения название фразой, и в ячейку рядом со статусом оно не
+         * встаёт. Строки нет вовсе, когда задача ни на что не ссылается, как у прежних
+         * ключей. Статус посчитан бэкендом при чтении: заменённое решение зачёркнуто, и
+         * рядом то, что его заменило, со своим статусом.
+         */}
+        {decisions.length > 0 ? (
+          <div className={`${CELL} basis-full`}>
+            <dt className={LABEL}>{t('header.decisions')}</dt>
+            <dd>
+              <ul className="flex list-none flex-col gap-1 p-0">
+                {decisions.map((decision) => (
+                  <li
+                    key={decision.ref}
+                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1"
+                    data-decision={decision.ref}
+                    data-status={decision.status}
+                  >
+                    <Link to={decisionHref(decision.ref)} className={DECISION_REF}>
+                      {decision.ref}
+                    </Link>
+                    <span
+                      className={
+                        decision.status === 'in_force'
+                          ? 'wrap-anywhere'
+                          : 'text-muted line-through wrap-anywhere'
+                      }
+                    >
+                      {decision.title}
+                    </span>
+                    <DecisionStatusMark status={decision.status} />
+                    {decision.superseded_by == null ? null : (
+                      <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span aria-hidden="true" className="text-faint">
+                          →
+                        </span>
+                        <span className="sr-only">{t('header.supersededBy')}</span>
+                        <Link
+                          to={decisionHref(decision.superseded_by.ref)}
+                          className={DECISION_REF}
+                        >
+                          {decision.superseded_by.ref}
+                        </Link>
+                        <span className="wrap-anywhere">{decision.superseded_by.title}</span>
+                        <DecisionStatusMark status={decision.superseded_by.status} />
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        ) : null}
       </dl>
     </header>
   );

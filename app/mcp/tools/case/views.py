@@ -28,6 +28,7 @@ from app.domain.case import (
     SectionChangedFacts,
     StatusChangedFacts,
     VerdictFacts,
+    WarningFacts,
     read_payload,
 )
 from app.mcp.enums import (
@@ -52,6 +53,7 @@ class NoFactsView(BaseModel):
         EntryType.FINDING,
         EntryType.ARTIFACT,
         EntryType.REMARK,
+        EntryType.ACCEPTANCE,
         EntryType.NOTE,
         EntryType.CREATED,
         EntryType.ARCHIVED,
@@ -151,6 +153,14 @@ class MovedFactsView(BaseModel):
     to_key: str | None
 
 
+class WarningFactsView(BaseModel):
+    """Warning: numbers of the checks closed `partial` and `unverifiable`."""
+
+    type: Literal[EntryType.WARNING]
+    partial: list[int] | None
+    unverifiable: list[int] | None
+
+
 type FactsView = Annotated[
     NoFactsView
     | StatusChangedFactsView
@@ -163,7 +173,8 @@ type FactsView = Annotated[
     | VerdictFactsView
     | ResolutionFactsView
     | AttributeFactsView
-    | MovedFactsView,
+    | MovedFactsView
+    | WarningFactsView,
     Field(discriminator="type"),
 ]
 """Факты записи: те же формы и те же поля в том же порядке, что в схеме REST."""
@@ -238,6 +249,12 @@ def facts(value: EntryFacts) -> FactsView:
             return AttributeFactsView(type=value.type, name=value.name)
         case MovedFacts():
             return MovedFactsView(type=value.type, from_key=value.from_key, to_key=value.to_key)
+        case WarningFacts():
+            return WarningFactsView(
+                type=value.type,
+                partial=None if value.partial is None else list(value.partial),
+                unverifiable=None if value.unverifiable is None else list(value.unverifiable),
+            )
     # Форма фактов, заведённая в домене без представления здесь, — дефект объединения, а
     # не рабочее состояние: молча вернуть `None` значило бы отдать агенту опись без строки.
     raise TypeError(f"форма фактов без представления MCP: {type(value).__name__}")
